@@ -29,10 +29,10 @@ describe('createTypeaheadController', () => {
     expect(ctrl.hasError).toBe(false);
   });
 
-  it('returns a selectOnly action when a character matches', () => {
+  it('returns a cursor-only action when a character matches', () => {
     const ctrl = createTypeaheadController(() => undefined);
     const action = ctrl.handleChar('d', entries, 1000);
-    expect(action).toEqual({ type: 'selectOnly', entryId: 'document' });
+    expect(action).toEqual({ type: 'setCursor', entryId: 'document' });
     expect(ctrl.prefix).toBe('d');
   });
 
@@ -49,7 +49,7 @@ describe('createTypeaheadController', () => {
     ctrl.handleChar('o', entries, 1001);
     const action = ctrl.handleChar('c', entries, 1002);
     expect(ctrl.prefix).toBe('doc');
-    expect(action).toEqual({ type: 'selectOnly', entryId: 'document' });
+    expect(action).toEqual({ type: 'setCursor', entryId: 'document' });
   });
 
   it('returns undefined and sets hasError when no match is found', () => {

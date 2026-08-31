@@ -483,6 +483,7 @@ describe('AppShell', () => {
     activePane.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
     m.redraw.sync();
     expect(activePane.querySelector('.fm-cursor-row')?.textContent).toContain('generated-0000000');
+    expect(activePane.querySelector('.fm-selected-row')).toBeNull();
 
     // Every remaining page must still be fetched in the background, so entries further in
     // (matching this same prefix, or a later one) are eventually reachable too.
@@ -525,6 +526,7 @@ describe('AppShell', () => {
         'generated-0000999',
       ),
     );
+    expect(activePane.querySelector('.fm-selected-row')).toBeNull();
   });
 
   it('keeps cursor and selection independent while using keyboard selection', async () => {

@@ -551,7 +551,7 @@ export function createPaneContentBuilder(
           // The directory isn't fully loaded yet, so the prefix may have matched only among the
           // entries loaded so far (or not at all) while a better/only match exists further in.
           // Background-load every remaining page (task: type-to-select only searching loaded
-          // entries) and, once in, select the true first match for the prefix if one exists.
+          // entries) and, once in, put the cursor on the true first match if one exists.
           const loadToken = {};
           context.getCursorLoadTokens().set(key, loadToken);
           void context
@@ -566,7 +566,7 @@ export function createPaneContentBuilder(
               if (match === undefined) return;
               const next = reduceSelection(
                 context.getSelections().get(key) ?? selection,
-                { type: 'selectOnly', entryId: match.id },
+                { type: 'setCursor', entryId: match.id },
                 loadedEntries.map((entry) => entry.id),
               );
               context.getSelections().set(key, next);

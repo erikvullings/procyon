@@ -21,7 +21,7 @@ export type SelectionAction =
   | { readonly type: 'selectOnly'; readonly entryId: EntryId }
   /** Signals that a typed prefix should also be searched against entries not loaded yet (task:
    * type-to-select only searching loaded entries) - a pure no-op for the reducer itself; the
-   * workspace layer intercepts it to background-load the rest of the directory and select the
+   * workspace layer intercepts it to background-load the rest of the directory and locate the
    * true first match once it's in, exactly like `moveCursorTo`'s `'last'` edge does. */
   | { readonly type: 'typeaheadPending'; readonly prefix: string }
   | { readonly type: 'toggle'; readonly entryId: EntryId }

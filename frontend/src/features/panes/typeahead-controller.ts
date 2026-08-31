@@ -12,7 +12,7 @@ export interface TypeaheadController {
   /** Cancels any pending error-fade timer without resetting the prefix. */
   clearTimer(): void;
   /**
-   * Processes a single printable character. Returns a selection action when a matching entry is
+   * Processes a single printable character. Returns a cursor action when a matching entry is
    * found, or undefined when no match exists (and internally starts the error-flash timer).
    * `extend` (Shift+letter) selects the range from the current anchor through the match, instead
    * of replacing the selection with just the match.
@@ -91,7 +91,7 @@ export function createTypeaheadController(onRedraw: () => void): TypeaheadContro
         _hasError = false;
         return extend === true
           ? { type: 'extendRangeTo', entryId: result.matchedEntryId }
-          : { type: 'selectOnly', entryId: result.matchedEntryId };
+          : { type: 'setCursor', entryId: result.matchedEntryId };
       }
       flashError();
       return undefined;

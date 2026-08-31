@@ -566,7 +566,7 @@ describe('Pane grid view type-to-select and quick filter', () => {
 
     pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
 
-    expect(onSelectionAction).toHaveBeenCalledWith({ type: 'selectOnly', entryId: 'one' });
+    expect(onSelectionAction).toHaveBeenCalledWith({ type: 'setCursor', entryId: 'one' });
   });
 
   it('renders the quick filter input in grid view exactly as in table view', () => {
@@ -1699,7 +1699,7 @@ describe('Pane navigation input', () => {
     ]);
   });
 
-  it('selects clicked rows and type-selects the first in-word match', () => {
+  it('selects clicked rows and moves the cursor to the first in-word match', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     const onSelectionAction = vi.fn();
@@ -1712,7 +1712,7 @@ describe('Pane navigation input', () => {
 
     expect(onSelectionAction.mock.calls.map(([action]) => action)).toEqual([
       { type: 'positionCursor', entryId: 'two' },
-      { type: 'selectOnly', entryId: 'one' },
+      { type: 'setCursor', entryId: 'one' },
     ]);
     vi.useRealTimers();
   });
@@ -1837,7 +1837,7 @@ describe('Pane navigation input', () => {
 
     expect(root.querySelector('.fm-typeahead-status')?.textContent).toBe('disk ');
     expect(onSelectionAction).toHaveBeenCalledWith({
-      type: 'selectOnly',
+      type: 'setCursor',
       entryId: 'disk-image',
     });
     expect(onSelectionAction).not.toHaveBeenCalledWith({
@@ -1911,7 +1911,7 @@ describe('Pane navigation input', () => {
     pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     m.redraw.sync();
 
-    expect(onSelectionAction).toHaveBeenCalledWith({ type: 'selectOnly', entryId: 'document' });
+    expect(onSelectionAction).toHaveBeenCalledWith({ type: 'setCursor', entryId: 'document' });
     expect(onSelectionAction).toHaveBeenCalledWith({ type: 'typeaheadPending', prefix: 'd' });
   });
 
