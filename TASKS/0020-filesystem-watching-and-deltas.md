@@ -48,3 +48,6 @@ Open directories must reflect external changes without a manual refresh.
   `pnpm run lint:frontend` remains blocked only by pre-existing Biome findings in
   `frontend/vite.config.ts`, `scripts/architecture-docs.test.mjs`, and
   `scripts/ci-workflow.test.mjs`.
+- 2026-08-31: Native watch startup failures no longer leave an open directory permanently stale.
+  The application records the failure and falls back to one-second provider-neutral polling; a
+  deterministic regression test covers a failed native watch followed by an externally added file.

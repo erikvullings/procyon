@@ -45,6 +45,10 @@ distinct from the `WATCH` capability bit (which only says `watch` can be *called
 - `Unsupported` — no change tracking at all (e.g. search results, archives); the location is never
   watched or polled, matching the pre-0109 behavior for such providers.
 
+If a provider advertises `NativeWatch` or `DeltaApi` but cannot start its watch, `WatchHub` records
+the failure and falls back to one-second polling. This is intentionally faster than normal remote
+polling because it is an error-recovery path for a folder the user currently has open.
+
 For `Poll` providers, `WatchHub::acquire` builds a `ProviderChangeStream` via
 `directory::poll_change_stream` instead of calling the provider's `watch`. Each tick re-lists the
 directory and compares entries by id (not list order, since a provider makes no ordering
