@@ -6,8 +6,8 @@ use std::{fs, time::Duration};
 use fm_application::FileManagerService;
 use fm_domain::Location;
 use fm_transport_dto::{
-    ConflictResolutionDto, OperationConflictPolicyDto, OperationKindDto, OperationStateDto,
-    ResolveOperationConflictRequestDto, RuntimeKindDto, StartOperationRequestDto,
+    OperationConflictPolicyDto, OperationKindDto, OperationStateDto, RuntimeKindDto,
+    StartOperationRequestDto,
 };
 
 fn request(
@@ -130,6 +130,8 @@ async fn read_only_entries_require_an_explicit_override() {
 #[tokio::test]
 async fn read_only_descendants_do_not_prevent_the_confirmation_prompt() {
     use std::os::unix::fs::PermissionsExt;
+
+    use fm_transport_dto::{ConflictResolutionDto, ResolveOperationConflictRequestDto};
 
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("delete-me");
