@@ -2897,11 +2897,9 @@ describe('AppShell', () => {
       loadingState: { type: 'loaded' },
     }));
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('photos.zip'));
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'photos.zip')).toBeDefined());
 
-    const archiveRow = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((row) =>
-      row.textContent?.includes('photos.zip'),
-    );
+    const archiveRow = directoryRowNamed(root, 'photos.zip');
     archiveRow?.click();
     m.redraw.sync();
     archiveRow
@@ -2954,11 +2952,9 @@ describe('AppShell', () => {
     }));
     const invokeAction = vi.spyOn(client, 'invokeAction');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('book.epub'));
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'book.epub')).toBeDefined());
 
-    const epubRow = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((row) =>
-      row.textContent?.includes('book.epub'),
-    );
+    const epubRow = directoryRowNamed(root, 'book.epub');
     epubRow?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
     await vi.waitFor(() =>
