@@ -10,6 +10,8 @@ import type {
   ApplySyncPlanRequestDto,
   ApplySyncPlanResponseDto,
   ArchiveCredentialRequestDto,
+  ArchiveSummaryRequestDto,
+  ArchiveSummaryResponseDto,
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
@@ -368,6 +370,65 @@ return fetchMutator<cacheArchivePasswordResponse>(getCacheArchivePasswordUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(archiveCredentialRequestDto)
+  }
+);}
+
+
+
+export type archiveSummaryResponse200 = {
+  data: ArchiveSummaryResponseDto
+  status: 200
+}
+
+export type archiveSummaryResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type archiveSummaryResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type archiveSummaryResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type archiveSummaryResponseSuccess = (archiveSummaryResponse200) & {
+  headers: Headers;
+};
+export type archiveSummaryResponseError = (archiveSummaryResponse400 | archiveSummaryResponse403 | archiveSummaryResponse404) & {
+  headers: Headers;
+};
+
+export type archiveSummaryResponse = (archiveSummaryResponseSuccess | archiveSummaryResponseError)
+
+export const getArchiveSummaryUrl = () => {
+
+
+
+
+  return `/api/v1/archives/summary`
+}
+
+/**
+ * @summary Computes the F3 archive summary through the archive provider's virtual root.
+ */
+export const archiveSummary = async (archiveSummaryRequestDto: ArchiveSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<archiveSummaryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<archiveSummaryResponse>(getArchiveSummaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(archiveSummaryRequestDto)
   }
 );}
 

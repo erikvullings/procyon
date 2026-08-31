@@ -7,6 +7,8 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveSummaryRequest,
+  ArchiveSummaryResult,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -170,6 +172,7 @@ export type MockClientMethod =
   | 'readFileRange'
   | 'searchInFile'
   | 'calculateFolderSize'
+  | 'archiveSummary'
   | 'scanDiskUsage'
   | 'cancelDiskUsage'
   | 'discoverApplicationUninstallCandidates'
@@ -1514,6 +1517,7 @@ export class MockFileManagerClient implements FileManagerClient {
           `No mock directory at ${request.location.uri}`,
         );
       }
+
       let totalBytes = 0;
       let fileCount = 0;
       const stack = [request.location.uri];
@@ -1530,6 +1534,66 @@ export class MockFileManagerClient implements FileManagerClient {
         }
       }
       return { totalBytes, fileCount };
+    });
+  }
+
+  archiveSummary(
+    request: ArchiveSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<ArchiveSummaryResult> {
+    return this.perform('archiveSummary', signal, () => {
+      const archiveRootUri = request.location.uri.startsWith('file://')
+        ? `archive://${request.location.uri.slice('file://'.length)}!/`
+        : request.location.uri;
+      const rootEntries = directories[archiveRootUri];
+      if (rootEntries === undefined) {
+        throw new MockClientError(
+          'directoryNotFound',
+          `No mock archive at ${request.location.uri}`,
+        );
+      }
+      let uncompressedSize = 0;
+      let fileCount = 0;
+      let directoryCount = 0;
+      const stack = [archiveRootUri];
+      while (stack.length > 0) {
+        const uri = stack.pop() as string;
+        for (const fixture of directories[uri] ?? []) {
+          const entry = fixtureEntry(uri, fixture);
+          if (entry.kind === 'directory') {
+            directoryCount += 1;
+            stack.push(entry.location.uri);
+          } else {
+            fileCount += 1;
+            uncompressedSize += entry.size ?? 0;
+          }
+        }
+      }
+      const outerName = request.location.uri.toLowerCase();
+      const format = outerName.endsWith('.7z')
+        ? '7z'
+        : outerName.endsWith('.rar')
+          ? 'rar'
+          : outerName.endsWith('.tar.gz') || outerName.endsWith('.tgz')
+            ? 'tar.gz'
+            : outerName.endsWith('.tar.bz2') ||
+                outerName.endsWith('.tbz2') ||
+                outerName.endsWith('.tbz')
+              ? 'tar.bz2'
+              : outerName.endsWith('.tar.xz') || outerName.endsWith('.txz')
+                ? 'tar.xz'
+                : outerName.endsWith('.gz')
+                  ? 'gzip'
+                  : outerName.endsWith('.tar')
+                    ? 'tar'
+                    : 'zip';
+      return {
+        format,
+        fileCount,
+        directoryCount,
+        uncompressedSize,
+        compressedSize: format === 'tar' ? null : Math.max(1, Math.floor(uncompressedSize / 2)),
+      };
     });
   }
 

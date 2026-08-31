@@ -1,4 +1,5 @@
 import type { ApplicationUninstallCandidateDto } from '../api/generated/models/applicationUninstallCandidateDto';
+import type { ArchiveSummaryResponseDto } from '../api/generated/models/archiveSummaryResponseDto';
 import type { CalculateFolderSizeResponseDto } from '../api/generated/models/calculateFolderSizeResponseDto';
 import type { ComparisonPageDto } from '../api/generated/models/comparisonPageDto';
 import type { DiagnosticsDto } from '../api/generated/models/diagnosticsDto';
@@ -246,6 +247,14 @@ export interface CalculateFolderSizeRequest {
 
 /** The result of a {@link CalculateFolderSizeRequest}. */
 export type CalculateFolderSizeResult = CalculateFolderSizeResponseDto;
+
+/** Requests a recursively computed summary for a local archive file. */
+export interface ArchiveSummaryRequest {
+  location: Location;
+}
+
+/** Content-derived format and recursive archive entry totals. */
+export type ArchiveSummaryResult = ArchiveSummaryResponseDto;
 
 /**
  * Requests discovery of a `.app` bundle's related files across the well-known macOS locations

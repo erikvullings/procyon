@@ -13,11 +13,11 @@ use fm_domain::OperationId;
 use fm_transport_dto::{
     AcceptSshHostKeyRequestDto, ActionDescriptorDto, ActionResultDto, ApplicationErrorDto,
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveCredentialRequestDto,
-    BeginOneDriveAuthorizationResponseDto, CalculateFolderSizeRequestDto,
-    CalculateFolderSizeResponseDto, ChecksumFileDto, ChecksumPageDto, ComparisonPageDto,
-    ConnectionDto, ConnectionStateDto, CreateConnectionRequestDto, CreateWorkspaceRequestDto,
-    DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
-    DiscoverApplicationUninstallCandidatesRequestDto,
+    ArchiveSummaryRequestDto, ArchiveSummaryResponseDto, BeginOneDriveAuthorizationResponseDto,
+    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, ChecksumFileDto,
+    ChecksumPageDto, ComparisonPageDto, ConnectionDto, ConnectionStateDto,
+    CreateConnectionRequestDto, CreateWorkspaceRequestDto, DiagnosticErrorDto, DiagnosticsDto,
+    DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataDto,
     EntryMetadataRequest, EntrySummaryDto, FinderTagsDto, GenerateSyncPlanRequestDto,
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, HostKeyProbeDto,
@@ -810,6 +810,19 @@ pub(crate) async fn calculate_folder_size(
     state
         .service
         .calculate_folder_size(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Computes an archive summary through the same application service as Axum.
+#[tauri::command]
+pub(crate) async fn archive_summary(
+    state: State<'_, AppState>,
+    request: ArchiveSummaryRequestDto,
+) -> Result<ArchiveSummaryResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .archive_summary(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

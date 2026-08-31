@@ -75,6 +75,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::files::save_editable_file))
         .routes(utoipa_axum::routes!(routes::files::search_in_file))
         .routes(utoipa_axum::routes!(routes::files::calculate_folder_size))
+        .routes(utoipa_axum::routes!(routes::files::archive_summary))
         .routes(utoipa_axum::routes!(routes::files::scan_disk_usage))
         .routes(utoipa_axum::routes!(routes::files::cancel_disk_usage))
         .routes(utoipa_axum::routes!(routes::files::get_file_git_history))

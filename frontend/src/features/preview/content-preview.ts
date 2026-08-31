@@ -5,6 +5,7 @@ import {
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
 } from '../directory-table/entry-icons';
+import { ARCHIVE_SUFFIXES } from '../navigation/archive-location';
 
 /**
  * Which inline preview renderer applies to an entry (task 0071's renderer registry, shared by
@@ -20,6 +21,7 @@ export type PreviewKind =
   | 'pdf'
   | 'comic'
   | 'epub'
+  | 'archiveSummary'
   | 'metadata'
   | 'unsupported';
 
@@ -62,6 +64,10 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   }
   if (extension === 'epub') {
     return 'epub';
+  }
+  const lowerName = entry.name.toLocaleLowerCase('en-US');
+  if (ARCHIVE_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) {
+    return 'archiveSummary';
   }
   return 'text';
 }

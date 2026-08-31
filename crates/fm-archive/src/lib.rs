@@ -67,6 +67,15 @@ pub struct ArchiveFileSystemProvider {
     limits: ArchiveLimits,
 }
 
+/// Content-derived archive details that do not require walking the virtual directory tree.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArchiveSummaryMetadata {
+    /// Canonical content-derived format label (`zip`, `7z`, `tar.gz`, and so on).
+    pub format: &'static str,
+    /// Sum of packed entry payloads, or the compressed stream size for compressed tar families.
+    pub compressed_size: Option<u64>,
+}
+
 impl Default for ArchiveFileSystemProvider {
     fn default() -> Self {
         Self::with_limits(ArchiveLimits::default())
@@ -78,6 +87,24 @@ impl ArchiveFileSystemProvider {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Detects the archive format from content and returns its packed payload size when the
+    /// underlying format exposes that value without extracting entries.
+    pub async fn summary_metadata(
+        &self,
+        location: &Location,
+    ) -> Result<ArchiveSummaryMetadata, VfsError> {
+        let parsed = ParsedArchiveLocation::parse(location)?;
+        let password = self.password_for(&parsed.archive_path);
+        tokio::task::spawn_blocking(move || {
+            summary_metadata_for_path(
+                &parsed.archive_path,
+                password.as_ref().map(|value| value.as_str()),
+            )
+        })
+        .await
+        .map_err(join_error)?
     }
 
     /// Creates a provider with explicit decompression-bomb limits.
@@ -1147,6 +1174,81 @@ fn detect_format(archive_path: &Path) -> Result<ArchiveFormat, VfsError> {
             message: "unsupported or unrecognized archive format".into(),
         })
     }
+}
+
+fn summary_metadata_for_path(
+    archive_path: &Path,
+    password: Option<&str>,
+) -> Result<ArchiveSummaryMetadata, VfsError> {
+    let format = detect_format(archive_path)?;
+    let (label, compressed_size) = match format {
+        ArchiveFormat::Zip => {
+            let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
+            let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+            let mut packed = 0_u64;
+            for index in 0..archive.len() {
+                let entry = archive.by_index_raw(index).map_err(zip_error)?;
+                if !entry.is_dir() {
+                    packed = packed.saturating_add(entry.compressed_size());
+                }
+            }
+            ("zip", Some(packed))
+        }
+        ArchiveFormat::SevenZip => {
+            let password = password
+                .map(sevenz_rust2::Password::from)
+                .unwrap_or_else(sevenz_rust2::Password::empty);
+            let archive = sevenz_rust2::Archive::open_with_password(archive_path, &password)
+                .map_err(seven_zip_error)?;
+            let packed = archive
+                .files
+                .iter()
+                .filter(|entry| !entry.is_directory)
+                .fold(0_u64, |total, entry| {
+                    total.saturating_add(entry.compressed_size)
+                });
+            ("7z", Some(packed))
+        }
+        ArchiveFormat::Rar => {
+            let archive = open_rar(archive_path, password)?;
+            let packed = archive
+                .members()
+                .filter(|member| !member.meta.is_directory)
+                .fold(0_u64, |total, member| {
+                    total.saturating_add(member.meta.packed_size)
+                });
+            ("rar", Some(packed))
+        }
+        ArchiveFormat::Gzip => (
+            "gzip",
+            Some(
+                std::fs::metadata(archive_path)
+                    .map_err(|error| io_error(error, archive_path))?
+                    .len(),
+            ),
+        ),
+        ArchiveFormat::Tar(TarCompression::None) => ("tar", None),
+        ArchiveFormat::Tar(compression) => {
+            let label = match compression {
+                TarCompression::Gzip => "tar.gz",
+                TarCompression::Bzip2 => "tar.bz2",
+                TarCompression::Xz => "tar.xz",
+                TarCompression::None => unreachable!("plain tar handled above"),
+            };
+            (
+                label,
+                Some(
+                    std::fs::metadata(archive_path)
+                        .map_err(|error| io_error(error, archive_path))?
+                        .len(),
+                ),
+            )
+        }
+    };
+    Ok(ArchiveSummaryMetadata {
+        format: label,
+        compressed_size,
+    })
 }
 
 fn require_zip_mutation(

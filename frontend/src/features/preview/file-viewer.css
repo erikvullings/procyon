@@ -9,6 +9,36 @@
   background: var(--fm-surface);
 }
 
+.fm-file-viewer-archive-summary {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fm-file-viewer-archive-summary dl {
+  display: grid;
+  grid-template-columns: max-content minmax(8rem, 1fr);
+  gap: 0.65rem 1.5rem;
+  width: min(32rem, 100%);
+  margin: 0;
+}
+
+.fm-file-viewer-archive-summary-field {
+  display: contents;
+}
+
+.fm-file-viewer-archive-summary dt {
+  color: var(--fm-text-muted);
+}
+
+.fm-file-viewer-archive-summary dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .fm-file-viewer-info-panel {
   position: absolute;
   left: 0;

@@ -77,16 +77,16 @@ pub use entry::{
 };
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
 pub use files::{
-    ArchiveCredentialRequestDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GitLogEntryDto, JsonTokenKindDto,
-    JsonTokenSpanDto, LoadEditableFileRequestDto, LoadEditableFileResponseDto,
-    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
-    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
-    ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
-    SearchInFileMatchDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, StructuredHeaderModeDto,
-    StructuredRowDto, StructuredViewFormatDto, StructuredViewKindDto,
+    ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
+    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, GetFileGitHistoryRequestDto,
+    GetFileGitHistoryResponseDto, GitLogEntryDto, JsonTokenKindDto, JsonTokenSpanDto,
+    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
+    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, SaveEditableFileRequestDto,
+    SaveEditableFileResponseDto, SearchInFileMatchDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    StructuredHeaderModeDto, StructuredRowDto, StructuredViewFormatDto, StructuredViewKindDto,
     StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};

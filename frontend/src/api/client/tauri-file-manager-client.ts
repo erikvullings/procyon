@@ -8,6 +8,8 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveSummaryRequest,
+  ArchiveSummaryResult,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -431,6 +433,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<CalculateFolderSizeResult> {
     return invoke<CalculateFolderSizeResult>('calculate_folder_size', { request });
+  }
+
+  archiveSummary(
+    request: ArchiveSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<ArchiveSummaryResult> {
+    return invoke<ArchiveSummaryResult>('archive_summary', { request });
   }
 
   scanDiskUsage(request: ScanDiskUsageRequest, _signal?: AbortSignal): Promise<void> {

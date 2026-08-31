@@ -405,6 +405,62 @@
         },
         "type": "object"
       },
+      "ArchiveSummaryRequestDto": {
+        "description": "Requests an archive's recursively computed summary for the F3 viewer (task 0141).",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The outer local archive file; the application derives its `archive://...!/` root."
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "ArchiveSummaryResponseDto": {
+        "description": "Content-derived archive format and provider-neutral recursive entry totals.",
+        "properties": {
+          "compressedSize": {
+            "description": "Packed payload bytes when the format exposes them cheaply.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "directoryCount": {
+            "description": "Number of directory entries.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fileCount": {
+            "description": "Number of file entries.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "format": {
+            "description": "Canonical format label derived by the archive provider from content.",
+            "type": "string"
+          },
+          "uncompressedSize": {
+            "description": "Sum of every file entry's uncompressed size.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "fileCount",
+          "directoryCount",
+          "uncompressedSize"
+        ],
+        "type": "object"
+      },
       "BeginOneDriveAuthorizationResponseDto": {
         "description": "The outcome of beginning a OneDrive authorization attempt (task 0110,\n`POST /api/v1/connections/{connectionId}/onedrive/authorize`): the caller\nopens `authorization_url` in the system browser (the backend never opens\na browser or embedded webview itself) and polls `attempt_id` for\ncompletion. Never carries a token - the authorization code/token exchange\nhappens entirely on the backend, asynchronously.",
         "properties": {
@@ -7393,6 +7449,64 @@
           }
         },
         "summary": "Caches an archive password for this backend session only."
+      }
+    },
+    "/api/v1/archives/summary": {
+      "post": {
+        "operationId": "archiveSummary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveSummaryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveSummaryResponseDto"
+                }
+              }
+            },
+            "description": "The archive summary"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "The request was invalid"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "The archive is unreadable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "The archive does not exist"
+          }
+        },
+        "summary": "Computes the F3 archive summary through the archive provider's virtual root."
       }
     },
     "/api/v1/checksums": {

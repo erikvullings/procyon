@@ -76,6 +76,50 @@ afterEach(() => {
 });
 
 describe('FileViewer', () => {
+  it('renders archive format, entry totals, sizes, and compression ratio', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'bundle.zip', extension: 'zip' }),
+        content: {
+          kind: 'archiveSummary',
+          format: 'zip',
+          fileCount: 3,
+          directoryCount: 2,
+          uncompressedSize: 4_096,
+          compressedSize: 1_024,
+        },
+      }),
+    );
+
+    const summary = root.querySelector('.fm-file-viewer-archive-summary');
+    expect(summary?.textContent).toContain('ZIP');
+    expect(summary?.textContent).toContain('3 files');
+    expect(summary?.textContent).toContain('2 directories');
+    expect(summary?.textContent).toContain('4 KB');
+    expect(summary?.textContent).toContain('1 KB');
+    expect(summary?.textContent).toContain('4:1');
+  });
+
+  it('renders unavailable compression values for an uncompressed tar archive', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'bundle.tar', extension: 'tar' }),
+        content: {
+          kind: 'archiveSummary',
+          format: 'tar',
+          fileCount: 1,
+          directoryCount: 0,
+          uncompressedSize: 10,
+          compressedSize: undefined,
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-file-viewer-archive-summary')?.textContent).toContain('N/A');
+  });
+
   it('shows a loading message while loading', () => {
     mount(baseAttrs({ status: 'loading', entry: entry() }));
     expect(root.querySelector('.fm-file-viewer-body')?.textContent).toBe('Loading…');

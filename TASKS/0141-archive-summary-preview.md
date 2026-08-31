@@ -1,6 +1,6 @@
 # 0141 Archive summary preview
 
-Status: open
+Status: done
 Priority: low
 Owner: unassigned
 Agent: unassigned
@@ -52,4 +52,13 @@ without having to browse in.
 
 ## Agent Notes
 
-- (none yet)
+- 2026-08-31 Copilot: Added the F3 `archiveSummary` renderer and cancellable loading flow for every
+  non-comic archive suffix, preserving the existing comic/EPUB renderers. Added a transport-neutral
+  archive-summary operation across Axum, Tauri, HTTP, and mock adapters. The application derives the
+  archive root from an accessible-root-checked local file location, reuses `folder_size.rs`'s
+  provider-neutral recursive walker for file/directory counts and uncompressed bytes, and asks
+  `fm-archive` for its existing content-sniffed format plus cheap packed sizes (ZIP/7z/RAR and
+  compressed tar families; plain tar reports N/A). Added 3 Rust tests and 14 frontend tests covering
+  ZIP/tar/7z summaries, detection reuse, suffix selection, cancellation, and panel rendering.
+  Verified affected Rust package suites, the frontend suite and typecheck, repository lint, generated
+  API consistency by regeneration, and the full repository test suite.

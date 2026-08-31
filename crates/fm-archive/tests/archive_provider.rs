@@ -605,6 +605,59 @@ async fn seven_zip_archive_is_detected_by_content_and_navigable() {
 }
 
 #[tokio::test]
+async fn archive_summary_metadata_reuses_content_detection_for_zip_tar_and_seven_zip() {
+    let root = tempdir().expect("temporary root");
+    let zip_path = root.path().join("zip.bin");
+    let zip_file = std::fs::File::create(&zip_path).expect("create zip fixture");
+    let mut zip_writer = ZipWriter::new(zip_file);
+    zip_writer
+        .start_file(
+            "report.txt",
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated),
+        )
+        .expect("start zip entry");
+    zip_writer
+        .write_all(&vec![b'a'; 4_096])
+        .expect("write zip entry");
+    zip_writer.finish().expect("finish zip fixture");
+
+    let tar_path = root.path().join("tar.bin");
+    std::fs::write(&tar_path, tar_bytes()).expect("write tar fixture");
+
+    let seven_path = root.path().join("seven.bin");
+    let mut seven_writer =
+        sevenz_rust2::ArchiveWriter::create(&seven_path).expect("create 7z fixture");
+    seven_writer
+        .push_archive_entry(
+            sevenz_rust2::ArchiveEntry::new_file("report.txt"),
+            Some(vec![b'b'; 4_096].as_slice()),
+        )
+        .expect("write 7z entry");
+    seven_writer.finish().expect("finish 7z fixture");
+
+    let provider = ArchiveFileSystemProvider::new();
+    let zip = provider
+        .summary_metadata(&zip_location(&zip_path))
+        .await
+        .expect("summarize zip");
+    let tar = provider
+        .summary_metadata(&zip_location(&tar_path))
+        .await
+        .expect("summarize tar");
+    let seven = provider
+        .summary_metadata(&zip_location(&seven_path))
+        .await
+        .expect("summarize 7z");
+
+    assert_eq!(zip.format, "zip");
+    assert!(zip.compressed_size.is_some_and(|size| size < 4_096));
+    assert_eq!(tar.format, "tar");
+    assert_eq!(tar.compressed_size, None);
+    assert_eq!(seven.format, "7z");
+    assert!(seven.compressed_size.is_some_and(|size| size < 4_096));
+}
+
+#[tokio::test]
 async fn deleting_a_non_empty_zip_directory_rewrites_the_archive_tree() {
     let root = tempdir().expect("temporary root");
     let archive_path = root.path().join("delete.zip");

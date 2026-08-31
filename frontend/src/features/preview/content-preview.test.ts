@@ -50,7 +50,26 @@ describe('resolvePreviewKind', () => {
 
   it('resolves any other file extension to text', () => {
     expect(resolvePreviewKind(entry({ name: 'report.txt', extension: 'txt' }))).toBe('text');
-    expect(resolvePreviewKind(entry({ name: 'archive.zip', extension: 'zip' }))).toBe('text');
+  });
+
+  it.each(['zip', 'tar', 'tar.gz', 'tgz', '7z', 'rar', 'gz', 'tar.bz2', 'tar.xz'])(
+    'resolves a non-comic .%s archive to an archive summary',
+    (extension) => {
+      expect(
+        resolvePreviewKind(
+          entry({
+            name: `archive.${extension}`,
+            extension: extension.split('.').at(-1) ?? extension,
+          }),
+        ),
+      ).toBe('archiveSummary');
+    },
+  );
+
+  it('keeps comic and EPUB archives on their dedicated renderers', () => {
+    expect(resolvePreviewKind(entry({ name: 'comic.cbz', extension: 'cbz' }))).toBe('comic');
+    expect(resolvePreviewKind(entry({ name: 'comic.cbr', extension: 'cbr' }))).toBe('comic');
+    expect(resolvePreviewKind(entry({ name: 'book.epub', extension: 'epub' }))).toBe('epub');
   });
 });
 

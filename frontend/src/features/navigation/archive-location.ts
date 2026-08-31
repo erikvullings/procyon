@@ -1,7 +1,7 @@
 import type { EntrySummary } from '../../models/entry';
 import type { Location } from '../../models/location';
 
-const ARCHIVE_SUFFIXES = [
+export const ARCHIVE_SUFFIXES = [
   '.tar.bz2',
   '.tar.gz',
   '.tar.xz',

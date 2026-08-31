@@ -4,6 +4,8 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveSummaryRequest,
+  ArchiveSummaryResult,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -106,6 +108,7 @@ import {
   removeApplicationDockIcon as requestApplicationDockIconRemoval,
   discoverApplicationUninstallCandidates as requestApplicationUninstallDiscovery,
   cacheArchivePassword as requestArchivePasswordCache,
+  archiveSummary as requestArchiveSummary,
   cancelChecksums as requestChecksumCancel,
   renderChecksumFile as requestChecksumFileRender,
   saveChecksumFile as requestChecksumFileSave,
@@ -735,6 +738,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected calculateFolderSize response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async archiveSummary(
+    request: ArchiveSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<ArchiveSummaryResult> {
+    const response = await requestArchiveSummary(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected archiveSummary response status: ${response.status}`);
     }
     return response.data;
   }

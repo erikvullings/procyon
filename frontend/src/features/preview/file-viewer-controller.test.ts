@@ -52,6 +52,7 @@ function setup(): {
       readFileRange: vi.fn(),
       searchInFile: vi.fn(),
       listDirectory: vi.fn(),
+      archiveSummary: vi.fn(),
       gitFileHistory: vi.fn().mockResolvedValue({ commits: [] }),
       openStructuredView: vi.fn(),
       getStructuredViewStatus: vi.fn(),
@@ -72,6 +73,61 @@ function textOf(state: FileViewerState | undefined): string | undefined {
 }
 
 describe('file viewer controller', () => {
+  it('loads an archive summary for the selected archive file', async () => {
+    const context = setup();
+    vi.mocked(context.client.archiveSummary).mockResolvedValue({
+      format: 'zip',
+      fileCount: 3,
+      directoryCount: 2,
+      uncompressedSize: 4_096,
+      compressedSize: 512,
+    });
+    createFileViewerController({
+      client: context.client,
+      entry: entry({
+        name: 'bundle.zip',
+        extension: 'zip',
+        location: { providerId: 'local', uri: 'file:///tmp/bundle.zip' },
+      }),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+    expect(context.client.archiveSummary).toHaveBeenCalledWith(
+      { location: { providerId: 'local', uri: 'file:///tmp/bundle.zip' } },
+      expect.any(AbortSignal),
+    );
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        kind: 'archiveSummary',
+        format: 'zip',
+        fileCount: 3,
+        directoryCount: 2,
+        uncompressedSize: 4_096,
+        compressedSize: 512,
+      },
+    });
+  });
+
+  it('cancels archive summary loading when the viewer is disposed', async () => {
+    const context = setup();
+    let requestSignal: AbortSignal | undefined;
+    vi.mocked(context.client.archiveSummary).mockImplementation((_request, signal) => {
+      requestSignal = signal;
+      return new Promise(() => undefined);
+    });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'bundle.zip', extension: 'zip' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+
+    controller.dispose();
+
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it('loads the first text window immediately on creation', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({

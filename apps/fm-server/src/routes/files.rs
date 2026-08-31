@@ -4,14 +4,15 @@
 use axum::extract::{Extension, Path, State};
 use axum::{Json, http::StatusCode};
 use fm_transport_dto::{
-    ApplicationErrorDto, ArchiveCredentialRequestDto, CalculateFolderSizeRequestDto,
-    CalculateFolderSizeResponseDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
-    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, SaveEditableFileRequestDto,
-    SaveEditableFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
-    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
+    ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
+    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, LoadEditableFileRequestDto,
+    LoadEditableFileResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    ReadFileRangeRequestDto, ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
+    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
+    ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
+    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
+    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
     StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 use tower_http::request_id::RequestId;
@@ -300,6 +301,34 @@ pub(crate) async fn calculate_folder_size(
     state
         .service
         .calculate_folder_size(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Computes the F3 archive summary through the archive provider's virtual root.
+#[utoipa::path(
+    post,
+    path = "/api/v1/archives/summary",
+    operation_id = "archiveSummary",
+    request_body = ArchiveSummaryRequestDto,
+    responses(
+        (status = 200, description = "The archive summary", body = ArchiveSummaryResponseDto),
+        (status = 400, description = "The request was invalid", body = ApplicationErrorDto),
+        (status = 403, description = "The archive is unreadable", body = ApplicationErrorDto),
+        (status = 404, description = "The archive does not exist", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn archive_summary(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ArchiveSummaryRequestDto>,
+) -> Result<Json<ArchiveSummaryResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .archive_summary(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

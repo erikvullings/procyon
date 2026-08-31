@@ -4,6 +4,8 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveSummaryRequest,
+  ArchiveSummaryResult,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -288,6 +290,12 @@ export interface FileManagerClient {
     request: CalculateFolderSizeRequest,
     signal?: AbortSignal,
   ): Promise<CalculateFolderSizeResult>;
+
+  /** Computes an archive's format, entry counts, and compressed/uncompressed sizes (task 0141). */
+  archiveSummary(
+    request: ArchiveSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<ArchiveSummaryResult>;
 
   /** Builds a bounded hierarchical disk-usage tree for a local directory (task 0118). */
   /** Starts an event-driven disk-usage scan. Progress, completion, and failure arrive through the

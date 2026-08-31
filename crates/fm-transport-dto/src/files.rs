@@ -446,6 +446,30 @@ pub struct CalculateFolderSizeResponseDto {
     pub file_count: u64,
 }
 
+/// Requests an archive's recursively computed summary for the F3 viewer (task 0141).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveSummaryRequestDto {
+    /// The outer local archive file; the application derives its `archive://...!/` root.
+    pub location: LocationDto,
+}
+
+/// Content-derived archive format and provider-neutral recursive entry totals.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveSummaryResponseDto {
+    /// Canonical format label derived by the archive provider from content.
+    pub format: String,
+    /// Number of file entries.
+    pub file_count: u64,
+    /// Number of directory entries.
+    pub directory_count: u64,
+    /// Sum of every file entry's uncompressed size.
+    pub uncompressed_size: u64,
+    /// Packed payload bytes when the format exposes them cheaply.
+    pub compressed_size: Option<u64>,
+}
+
 /// Requests a file's git commit history (`POST /api/v1/files/git-history`), for the Alt+Space
 /// metadata panel's history section (task 0135).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -556,6 +580,25 @@ mod tests {
         assert!(json.contains("\"totalBytes\""));
         assert!(json.contains("\"fileCount\""));
         let parsed: CalculateFolderSizeResponseDto =
+            serde_json::from_str(&json).expect("deserialization must succeed");
+        assert_eq!(response, parsed);
+    }
+
+    #[test]
+    fn archive_summary_response_round_trips_and_uses_camel_case_field_names() {
+        let response = ArchiveSummaryResponseDto {
+            format: "zip".to_owned(),
+            file_count: 3,
+            directory_count: 2,
+            uncompressed_size: 4_096,
+            compressed_size: Some(512),
+        };
+        let json = serde_json::to_string(&response).expect("serialization must succeed");
+        assert!(json.contains("\"fileCount\""));
+        assert!(json.contains("\"directoryCount\""));
+        assert!(json.contains("\"uncompressedSize\""));
+        assert!(json.contains("\"compressedSize\""));
+        let parsed: ArchiveSummaryResponseDto =
             serde_json::from_str(&json).expect("deserialization must succeed");
         assert_eq!(response, parsed);
     }

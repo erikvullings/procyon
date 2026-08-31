@@ -846,6 +846,50 @@ function renderAudioBody(state: Extract<FileViewerState, { status: 'ready' }>): 
   );
 }
 
+function formatArchiveBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unit;
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(value)} ${units[unit]}`;
+}
+
+function renderArchiveSummary(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
+  const content = state.content;
+  if (content.kind !== 'archiveSummary') return undefined;
+  const compressionRatio =
+    content.compressedSize === undefined || content.compressedSize === 0
+      ? t('viewer', 'archiveNotAvailable')
+      : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
+          content.uncompressedSize / content.compressedSize,
+        )}:1`;
+  const fields = [
+    [t('viewer', 'archiveFormat'), content.format.toLocaleUpperCase()],
+    [t('viewer', 'archiveFiles'), t('viewer', 'archiveFileCount', content.fileCount)],
+    [
+      t('viewer', 'archiveDirectories'),
+      t('viewer', 'archiveDirectoryCount', content.directoryCount),
+    ],
+    [t('viewer', 'archiveUncompressedSize'), formatArchiveBytes(content.uncompressedSize)],
+    [
+      t('viewer', 'archiveCompressedSize'),
+      content.compressedSize === undefined
+        ? t('viewer', 'archiveNotAvailable')
+        : formatArchiveBytes(content.compressedSize),
+    ],
+    [t('viewer', 'archiveCompressionRatio'), compressionRatio],
+  ] as const;
+  return m(
+    '.fm-file-viewer-body.fm-file-viewer-archive-summary',
+    m(
+      'dl',
+      fields.map(([label, value]) =>
+        m('.fm-file-viewer-archive-summary-field', [m('dt', label), m('dd', value)]),
+      ),
+    ),
+  );
+}
+
 function renderVideoBody(
   attrs: FileViewerAttrs,
   state: Extract<FileViewerState, { status: 'ready' }>,
@@ -1044,7 +1088,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                 ? renderComicBody(state)
                                 : state.content.kind === 'epub'
                                   ? renderEpubBody(state)
-                                  : renderImageBody(attrs, state),
+                                  : state.content.kind === 'archiveSummary'
+                                    ? renderArchiveSummary(state)
+                                    : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

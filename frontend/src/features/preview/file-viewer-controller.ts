@@ -45,6 +45,7 @@ export type FileViewerClient = Pick<
   | 'readFileRange'
   | 'searchInFile'
   | 'listDirectory'
+  | 'archiveSummary'
   | 'gitFileHistory'
   | 'openStructuredView'
   | 'getStructuredViewStatus'
@@ -200,6 +201,16 @@ export interface FileViewerEpubContent {
   readonly loadingChapter: boolean;
 }
 
+/** Content-derived archive details plus provider-neutral recursive totals. */
+export interface FileViewerArchiveSummaryContent {
+  readonly kind: 'archiveSummary';
+  readonly format: string;
+  readonly fileCount: number;
+  readonly directoryCount: number;
+  readonly uncompressedSize: number;
+  readonly compressedSize: number | undefined;
+}
+
 /** Simple "does any page contain this text" PDF search (`page.getTextContent()`, no per-match
  * highlight - matching the pages a query appears on is the whole feature). */
 export interface FileViewerPdfSearchState {
@@ -239,6 +250,7 @@ export type FileViewerState =
         | FileViewerPdfContent
         | FileViewerComicContent
         | FileViewerEpubContent
+        | FileViewerArchiveSummaryContent
         | FileViewerStructuredTableContent
         | FileViewerStructuredJsonContent
         | FileViewerStructuredFallbackContent;
@@ -769,6 +781,7 @@ export function createFileViewerController(
       publish({ status: 'error', entry, message: t('viewer', 'epubUnavailable') });
       return;
     }
+
     const containerBytes = await readEntireFileBytes(
       client,
       { ...entry, location: archiveEntryLocation(archiveRoot, 'META-INF/container.xml') },
@@ -825,6 +838,27 @@ export function createFileViewerController(
     await loadEpubChapter(controller, 0);
   }
 
+  async function loadArchiveSummary(controller: AbortController): Promise<void> {
+    if (archiveRootForEntry(entry) === undefined) {
+      publish({ status: 'unsupported', entry });
+      return;
+    }
+    const summary = await client.archiveSummary({ location: entry.location }, controller.signal);
+    if (!isCurrent(controller)) return;
+    publish({
+      status: 'ready',
+      entry,
+      content: {
+        kind: 'archiveSummary',
+        format: summary.format,
+        fileCount: summary.fileCount,
+        directoryCount: summary.directoryCount,
+        uncompressedSize: summary.uncompressedSize,
+        compressedSize: summary.compressedSize ?? undefined,
+      },
+    });
+  }
+
   async function load(): Promise<void> {
     const controller = beginRequest();
     publish({ status: 'loading', entry });
@@ -845,6 +879,8 @@ export function createFileViewerController(
         await loadComic(controller);
       } else if (kind === 'epub') {
         await loadEpub(controller);
+      } else if (kind === 'archiveSummary') {
+        await loadArchiveSummary(controller);
       } else if (kind === 'text') {
         await loadInitialText(controller);
         // Run initial search if pre-populated from content search results.

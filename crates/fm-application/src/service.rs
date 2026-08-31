@@ -22,9 +22,10 @@ use fm_search_acceleration::{SearchAcceleration, UnsupportedSearchAccelerator};
 use fm_settings::{Settings, SettingsStore};
 use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
-    ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ChecksumFileDto, ChecksumPageDto,
-    ComparisonPageDto, ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto,
-    DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
+    ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
+    ArchiveSummaryResponseDto, ChecksumFileDto, ChecksumPageDto, ComparisonPageDto,
+    ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DirectorySnapshotDto,
+    DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
     FinderTagsDto, GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto,
     GetFileGitHistoryResponseDto, InvokeActionRequestDto, ListDirectoryRequest, NavigateRequest,
@@ -874,6 +875,20 @@ impl FileManagerService {
         crate::folder_size::calculate_folder_size(&self.providers, request.location.into()).await
     }
 
+    /// Summarizes an archive through its virtual root, reusing the provider-neutral directory
+    /// walker for entry counts and uncompressed bytes.
+    pub async fn archive_summary(
+        &self,
+        request: ArchiveSummaryRequestDto,
+    ) -> Result<ArchiveSummaryResponseDto, ApplicationError> {
+        crate::archive_summary::calculate_archive_summary(
+            &self.providers,
+            &self.archive_provider,
+            request.location.into(),
+        )
+        .await
+    }
+
     /// Builds a bounded hierarchical disk-usage tree for one local directory on a blocking
     /// worker, leaving the async host runtime responsive while the scan traverses. Delegates to
     /// [`DiskUsageCoordinator`] so the scan is cancellable and its `scan_id` is rejected if
@@ -1477,6 +1492,7 @@ impl From<WorkspaceSummary> for WorkspaceSummaryDto {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::io::Write;
     use std::path::Path;
 
     use fm_events::{SessionId, SubscriptionEvent};
@@ -2428,6 +2444,73 @@ mod tests {
             .await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn archive_summary_counts_nested_zip_tar_and_seven_zip_entries() {
+        let (dir, service) = service();
+        let contents = [
+            ("top.txt", b"top".as_slice()),
+            ("docs/a.txt", b"alpha"),
+            ("docs/nested/b.txt", b"bravo!"),
+        ];
+
+        let zip_path = dir.path().join("summary.zip");
+        let zip_file = std::fs::File::create(&zip_path).expect("create zip fixture");
+        let mut zip_writer = zip::ZipWriter::new(zip_file);
+        for (name, bytes) in contents {
+            zip_writer
+                .start_file(
+                    name,
+                    zip::write::SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Deflated),
+                )
+                .expect("start zip entry");
+            zip_writer.write_all(bytes).expect("write zip entry");
+        }
+        zip_writer.finish().expect("finish zip fixture");
+
+        let tar_path = dir.path().join("summary.tar");
+        let tar_file = std::fs::File::create(&tar_path).expect("create tar fixture");
+        let mut tar_writer = tar::Builder::new(tar_file);
+        for (name, bytes) in contents {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar_writer
+                .append_data(&mut header, name, bytes)
+                .expect("write tar entry");
+        }
+        tar_writer.finish().expect("finish tar fixture");
+
+        let seven_path = dir.path().join("summary.7z");
+        let mut seven_writer =
+            sevenz_rust2::ArchiveWriter::create(&seven_path).expect("create 7z fixture");
+        for (name, bytes) in contents {
+            seven_writer
+                .push_archive_entry(sevenz_rust2::ArchiveEntry::new_file(name), Some(bytes))
+                .expect("write 7z entry");
+        }
+        seven_writer.finish().expect("finish 7z fixture");
+
+        for (path, format, compressed_size_known) in [
+            (&zip_path, "zip", true),
+            (&tar_path, "tar", false),
+            (&seven_path, "7z", true),
+        ] {
+            let summary = service
+                .archive_summary(ArchiveSummaryRequestDto {
+                    location: location_dto_for(path),
+                })
+                .await
+                .expect("archive summary must succeed");
+            assert_eq!(summary.format, format);
+            assert_eq!(summary.file_count, 3);
+            assert_eq!(summary.directory_count, 2);
+            assert_eq!(summary.uncompressed_size, 14);
+            assert_eq!(summary.compressed_size.is_some(), compressed_size_known);
+        }
     }
 
     #[tokio::test]

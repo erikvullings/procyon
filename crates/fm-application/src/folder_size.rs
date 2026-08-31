@@ -18,6 +18,12 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::ApplicationError;
 
+pub(crate) struct DirectoryStats {
+    pub(crate) total_bytes: u64,
+    pub(crate) file_count: u64,
+    pub(crate) directory_count: u64,
+}
+
 /// Recursively sums the size of every file/symlink under `location`, paginating each directory
 /// level via the provider's `list()` the same way `DeleteExecutor::plan` does.
 pub(crate) async fn calculate_folder_size(
@@ -33,18 +39,23 @@ pub(crate) async fn calculate_folder_size(
         .require(ProviderCapabilities::LIST)
         .map_err(ApplicationError::from)?;
 
-    calculate_directory_size(provider.as_ref(), location, CancellationToken::new())
+    let stats = calculate_directory_stats(provider.as_ref(), location, CancellationToken::new())
         .await
-        .map_err(ApplicationError::from)
+        .map_err(ApplicationError::from)?;
+    Ok(CalculateFolderSizeResponseDto {
+        total_bytes: stats.total_bytes,
+        file_count: stats.file_count,
+    })
 }
 
-pub(crate) async fn calculate_directory_size(
+pub(crate) async fn calculate_directory_stats(
     provider: &dyn FileSystemProvider,
     location: Location,
     cancellation: CancellationToken,
-) -> Result<CalculateFolderSizeResponseDto, VfsError> {
+) -> Result<DirectoryStats, VfsError> {
     let mut total_bytes: u64 = 0;
     let mut file_count: u64 = 0;
+    let mut directory_count: u64 = 0;
     let mut stack = vec![location];
     while let Some(current) = stack.pop() {
         if cancellation.is_cancelled() {
@@ -64,7 +75,10 @@ pub(crate) async fn calculate_directory_size(
                 .await?;
             for entry in page.entries {
                 match entry.kind {
-                    EntryKind::Directory => stack.push(entry.location),
+                    EntryKind::Directory => {
+                        directory_count += 1;
+                        stack.push(entry.location);
+                    }
                     EntryKind::File | EntryKind::Symlink => {
                         total_bytes += entry.size.unwrap_or(0);
                         file_count += 1;
@@ -77,8 +91,21 @@ pub(crate) async fn calculate_directory_size(
             continuation_token = page.continuation_token;
         }
     }
-    Ok(CalculateFolderSizeResponseDto {
+    Ok(DirectoryStats {
         total_bytes,
         file_count,
+        directory_count,
+    })
+}
+
+pub(crate) async fn calculate_directory_size(
+    provider: &dyn FileSystemProvider,
+    location: Location,
+    cancellation: CancellationToken,
+) -> Result<CalculateFolderSizeResponseDto, VfsError> {
+    let stats = calculate_directory_stats(provider, location, cancellation).await?;
+    Ok(CalculateFolderSizeResponseDto {
+        total_bytes: stats.total_bytes,
+        file_count: stats.file_count,
     })
 }

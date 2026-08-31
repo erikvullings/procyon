@@ -32,6 +32,8 @@ export * from './archiveFormatDto.ts';
 export * from './archiveFormatDto';
 export * from './archiveInfoDto.ts';
 export * from './archiveInfoDto';
+export * from './archiveSummaryRequestDto.ts';
+export * from './archiveSummaryResponseDto.ts';
 export * from './beginOneDriveAuthorizationResponseDto.ts';
 export * from './calculateFolderSizeRequestDto.ts';
 export * from './calculateFolderSizeResponseDto.ts';
