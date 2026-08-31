@@ -915,7 +915,7 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-path-error')?.textContent).toBe('Path does not exist'),
     );
-    expect(root.textContent).toContain('one.txt');
+    expect(root.querySelector('.fm-entry-name [title="one.txt"]')).not.toBeNull();
   });
 
   it('places a mithril-materialized Tabler heart IconButton beside the new-tab button', () => {
