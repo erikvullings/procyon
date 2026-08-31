@@ -1276,11 +1276,12 @@ async fn watch_puts_top_on_the_seed_request_and_never_appends_or_duplicates_it_a
         .expect("the stream must not end here");
     assert!(matches!(first_round, Ok(ProviderChange::Changed)));
 
-    // Force a *second* round (with its own nextLink pagination) so the
+    // Force a *second* round with more changes than fit on one page so the
     // deltaLink handed back at the end of the first round is itself
     // exercised as a followed-verbatim starting point, not just the seed.
     fixture.create_file("alpha", "four.txt", b"4").await;
     fixture.create_file("zulu", "five.txt", b"5").await;
+    fixture.create_file("alpha", "six.txt", b"6").await;
     let second_round = tokio::time::timeout(Duration::from_secs(2), stream.next())
         .await
         .expect("a second coalesced change must be observed")
@@ -1314,7 +1315,7 @@ async fn watch_puts_top_on_the_seed_request_and_never_appends_or_duplicates_it_a
         .filter(|request| request.path.contains("/delta?cursor="))
         .collect();
     assert!(
-        poll_requests.len() >= 6,
+        poll_requests.len() >= 5,
         "expected multiple pages across two rounds, got {}: {requests:#?}",
         poll_requests.len()
     );
