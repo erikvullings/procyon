@@ -21,6 +21,7 @@ export type PreviewKind =
   | 'pdf'
   | 'comic'
   | 'epub'
+  | 'docx'
   | 'archiveSummary'
   | 'metadata'
   | 'unsupported';
@@ -64,6 +65,9 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   }
   if (extension === 'epub') {
     return 'epub';
+  }
+  if (extension === 'docx') {
+    return 'docx';
   }
   const lowerName = entry.name.toLocaleLowerCase('en-US');
   if (ARCHIVE_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) {

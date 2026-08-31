@@ -17,6 +17,7 @@ mod content_streaming;
 mod directory;
 mod disk_usage;
 mod disk_usage_coordinator;
+mod docx_preview;
 mod error;
 mod file_editor;
 mod folder_size;

@@ -6,9 +6,11 @@ use axum::{Json, http::StatusCode};
 use fm_transport_dto::{
     ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, LoadEditableFileRequestDto,
-    LoadEditableFileResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    ReadFileRangeRequestDto, ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
+    DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
+    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenDocxPreviewRequestDto,
+    OpenDocxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
@@ -72,6 +74,59 @@ pub(crate) async fn read_file_range(
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Opens a bounded semantic DOCX preview session.
+#[utoipa::path(post, path = "/api/v1/files/docx/open", operation_id = "openDocxPreview",
+    request_body = OpenDocxPreviewRequestDto,
+    responses((status = 200, body = OpenDocxPreviewResponseDto), (status = 400, body = ApplicationErrorDto), (status = 403, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn open_docx_preview(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<OpenDocxPreviewRequestDto>,
+) -> Result<Json<OpenDocxPreviewResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .open_docx_preview(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads one bounded embedded image from a DOCX preview session.
+#[utoipa::path(post, path = "/api/v1/files/docx/resource", operation_id = "readDocxPreviewResource",
+    request_body = ReadDocxPreviewResourceRequestDto,
+    responses((status = 200, body = ReadDocxPreviewResourceResponseDto), (status = 404, body = ApplicationErrorDto), (status = 409, body = ApplicationErrorDto)))]
+pub(crate) async fn read_docx_preview_resource(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadDocxPreviewResourceRequestDto>,
+) -> Result<Json<ReadDocxPreviewResourceResponseDto>, ApiError> {
+    state
+        .service
+        .read_docx_preview_resource(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+/// Cancels and releases a DOCX preview session.
+#[utoipa::path(post, path = "/api/v1/files/docx/close", operation_id = "closeDocxPreview",
+    request_body = DocxPreviewSessionRequestDto,
+    responses((status = 204), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn close_docx_preview(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<DocxPreviewSessionRequestDto>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .service
+        .close_docx_preview(request)
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
 }
 
 /// Opens a provider-neutral structured-data viewer session.

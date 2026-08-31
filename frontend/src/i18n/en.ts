@@ -441,6 +441,8 @@ export const en = {
     comicUnavailable: 'Comic preview is unavailable for this entry.',
     epubUnavailable: 'EPUB preview is unavailable for this entry.',
     epubPackageMissing: "Couldn't find this EPUB's package document.",
+    docxContentOnly:
+      'Content view only. Word layout features are omitted: {features}. Open externally for full fidelity.',
     structuredSortLimit: 'Sorting is available for files up to {size}.',
     structuredSortAfterIndex:
       'Sorting becomes available when this bounded file has finished indexing.',

@@ -73,6 +73,7 @@ dirs = "6.0.0"
 drag = "2.1.1"
 dunce = "1.0.5"
 flate2 = "1"
+ferrodoc = { version = "0.7.0", default-features = false, features = ["docx", "html"] }
 fs2 = "0.4.3"
 futures = "0.3.31"
 git2 = {version = "0.20.4", default-features = false, features = ["vendored-libgit2"]}

@@ -1771,6 +1771,51 @@
         ],
         "type": "object"
       },
+      "DocxPreviewResourceDto": {
+        "description": "One embedded image retained by a bounded DOCX preview session.",
+        "properties": {
+          "byteLength": {
+            "description": "Exact retained byte count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mediaType": {
+            "description": "Browser media type for the bounded image bytes.",
+            "type": "string"
+          },
+          "resourceId": {
+            "description": "Opaque resource identifier scoped to the preview session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "description": "Package-relative source used by the generated semantic HTML.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resourceId",
+          "source",
+          "mediaType",
+          "byteLength"
+        ],
+        "type": "object"
+      },
+      "DocxPreviewSessionRequestDto": {
+        "description": "Identifies a DOCX preview session.",
+        "properties": {
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
       "DuplicateGroupDto": {
         "description": "A set of byte-identical files.",
         "properties": {
@@ -3298,6 +3343,66 @@
         ],
         "type": "string"
       },
+      "OpenDocxPreviewRequestDto": {
+        "description": "Opens a bounded, provider-neutral DOCX content-preview session.",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral DOCX source location."
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "OpenDocxPreviewResponseDto": {
+        "description": "Initial semantic DOCX content and bounded resource descriptors.",
+        "properties": {
+          "html": {
+            "description": "Semantic HTML fragment. Hosts must sanitize it before DOM insertion.",
+            "type": "string"
+          },
+          "omittedFeatures": {
+            "description": "Word layout features deliberately omitted from this content view.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "description": "Embedded images referenced by the HTML, fetched separately by id.",
+            "items": {
+              "$ref": "#/components/schemas/DocxPreviewResourceDto"
+            },
+            "type": "array"
+          },
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "sourceBytes": {
+            "description": "Source package bytes at session creation.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRevision": {
+            "description": "Revision recorded before parsing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "sourceRevision",
+          "sourceBytes",
+          "html",
+          "resources",
+          "omittedFeatures"
+        ],
+        "type": "object"
+      },
       "OpenStructuredViewRequestDto": {
         "description": "Opens a provider-neutral, read-only structured-data viewer session.",
         "properties": {
@@ -4250,6 +4355,49 @@
             "type": "object"
           }
         ]
+      },
+      "ReadDocxPreviewResourceRequestDto": {
+        "description": "Requests one bounded embedded DOCX resource.",
+        "properties": {
+          "resourceId": {
+            "description": "Opaque resource identifier from the open response.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "ReadDocxPreviewResourceResponseDto": {
+        "description": "Embedded image bytes and their browser media type.",
+        "properties": {
+          "data": {
+            "description": "Bounded raw image bytes.",
+            "items": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "mediaType": {
+            "description": "Browser media type for the bytes.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "mediaType"
+        ],
+        "type": "object"
       },
       "ReadFileRangeRequestDto": {
         "description": "Requests a byte range from a single file (`POST /api/v1/files/range`).",
@@ -9066,6 +9214,143 @@
           }
         },
         "summary": "Streams every event visible to the explicit local development session."
+      }
+    },
+    "/api/v1/files/docx/close": {
+      "post": {
+        "operationId": "closeDocxPreview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocxPreviewSessionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Cancels and releases a DOCX preview session."
+      }
+    },
+    "/api/v1/files/docx/open": {
+      "post": {
+        "operationId": "openDocxPreview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenDocxPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenDocxPreviewResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Opens a bounded semantic DOCX preview session."
+      }
+    },
+    "/api/v1/files/docx/resource": {
+      "post": {
+        "operationId": "readDocxPreviewResource",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadDocxPreviewResourceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadDocxPreviewResourceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Reads one bounded embedded image from a DOCX preview session."
       }
     },
     "/api/v1/files/editable/load": {

@@ -51,6 +51,7 @@ use crate::checksum_coordinator::ChecksumCoordinator;
 use crate::connection_facade::ConnectionFacade;
 use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
+use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
@@ -89,6 +90,7 @@ pub struct FileManagerService {
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
     editor: FileEditorService,
+    docx_preview: DocxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
@@ -446,6 +448,7 @@ impl FileManagerService {
             remote_terminals,
             directories,
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
+            docx_preview: DocxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
             archive_provider,
@@ -781,6 +784,30 @@ impl FileManagerService {
         request: ReadFileRangeRequestDto,
     ) -> Result<ReadFileRangeResponseDto, ApplicationError> {
         content_streaming::read_file_range(&self.providers, request).await
+    }
+
+    /// Opens a bounded, provider-neutral semantic DOCX preview session.
+    pub async fn open_docx_preview(
+        &self,
+        request: fm_transport_dto::OpenDocxPreviewRequestDto,
+    ) -> Result<fm_transport_dto::OpenDocxPreviewResponseDto, ApplicationError> {
+        self.docx_preview.open(request).await
+    }
+
+    /// Reads one bounded embedded image from a DOCX preview session.
+    pub async fn read_docx_preview_resource(
+        &self,
+        request: fm_transport_dto::ReadDocxPreviewResourceRequestDto,
+    ) -> Result<fm_transport_dto::ReadDocxPreviewResourceResponseDto, ApplicationError> {
+        self.docx_preview.read_resource(request).await
+    }
+
+    /// Cancels and releases a DOCX preview session.
+    pub async fn close_docx_preview(
+        &self,
+        request: fm_transport_dto::DocxPreviewSessionRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.docx_preview.close(request).await
     }
 
     /// Opens a bounded, provider-neutral read-only structured-data session.

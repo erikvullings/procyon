@@ -22,6 +22,7 @@ import {
   readFullVideoDataUri,
   resolvePreviewKind,
 } from './content-preview';
+import { prepareDocxPreviewHtml, searchDocxHtml } from './docx-preview';
 import {
   type EpubImageResource,
   inlineEpubChapterImages,
@@ -54,6 +55,9 @@ export type FileViewerClient = Pick<
   | 'readStructuredJsonWindow'
   | 'searchStructuredRows'
   | 'closeStructuredView'
+  | 'openDocxPreview'
+  | 'readDocxPreviewResource'
+  | 'closeDocxPreview'
 >;
 
 /** Bytes fetched per text window load (initial load and each "load more" append). */
@@ -201,6 +205,22 @@ export interface FileViewerEpubContent {
   readonly loadingChapter: boolean;
 }
 
+/** Sanitized semantic DOCX content plus an honest list of omitted Word layout features. */
+export interface FileViewerDocxContent {
+  readonly kind: 'docx';
+  readonly sessionId: string;
+  readonly sourceHtml: string;
+  readonly html: string;
+  readonly plainText: string;
+  readonly omittedFeatures: readonly string[];
+}
+
+/** DOCX content that exceeded a safety budget or could not be parsed safely. */
+export interface FileViewerExternalDocxContent {
+  readonly kind: 'docxExternal';
+  readonly message: string;
+}
+
 /** Content-derived archive details plus provider-neutral recursive totals. */
 export interface FileViewerArchiveSummaryContent {
   readonly kind: 'archiveSummary';
@@ -250,6 +270,8 @@ export type FileViewerState =
         | FileViewerPdfContent
         | FileViewerComicContent
         | FileViewerEpubContent
+        | FileViewerDocxContent
+        | FileViewerExternalDocxContent
         | FileViewerArchiveSummaryContent
         | FileViewerStructuredTableContent
         | FileViewerStructuredJsonContent
@@ -384,6 +406,7 @@ export function createFileViewerController(
   let pdfSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredStatusTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredSessionId: string | undefined;
+  let docxSessionId: string | undefined;
   const textWindowCache = new Map<number, FileViewerTextContent>();
 
   function rememberTextWindow(content: FileViewerTextContent): void {
@@ -838,6 +861,47 @@ export function createFileViewerController(
     await loadEpubChapter(controller, 0);
   }
 
+  async function loadDocx(controller: AbortController): Promise<void> {
+    try {
+      const opened = await client.openDocxPreview({ location: entry.location }, controller.signal);
+      if (!isCurrent(controller)) {
+        void client.closeDocxPreview({ sessionId: opened.sessionId }).catch(() => undefined);
+        return;
+      }
+      docxSessionId = opened.sessionId;
+      const html = await prepareDocxPreviewHtml(opened.html, opened.resources, (resourceId) =>
+        client.readDocxPreviewResource(
+          { sessionId: opened.sessionId, resourceId },
+          controller.signal,
+        ),
+      );
+      if (!isCurrent(controller)) return;
+      const plainText =
+        new DOMParser().parseFromString(html, 'text/html').body.textContent?.trim() ?? '';
+      publish({
+        status: 'ready',
+        entry,
+        metadataPanelOpen: initialMetadataOpen,
+        content: {
+          kind: 'docx',
+          sessionId: opened.sessionId,
+          sourceHtml: html,
+          html,
+          plainText,
+          omittedFeatures: opened.omittedFeatures,
+        },
+      });
+    } catch (error: unknown) {
+      if (!isCurrent(controller)) return;
+      publish({
+        status: 'ready',
+        entry,
+        metadataPanelOpen: initialMetadataOpen,
+        content: { kind: 'docxExternal', message: errorMessage(error) },
+      });
+    }
+  }
+
   async function loadArchiveSummary(controller: AbortController): Promise<void> {
     if (archiveRootForEntry(entry) === undefined) {
       publish({ status: 'unsupported', entry });
@@ -879,6 +943,8 @@ export function createFileViewerController(
         await loadComic(controller);
       } else if (kind === 'epub') {
         await loadEpub(controller);
+      } else if (kind === 'docx') {
+        await loadDocx(controller);
       } else if (kind === 'archiveSummary') {
         await loadArchiveSummary(controller);
       } else if (kind === 'text') {
@@ -1250,6 +1316,12 @@ export function createFileViewerController(
             content: contentRest,
             search,
           });
+        } else if (readyState.content.kind === 'docx') {
+          publish({
+            ...readyState,
+            content: { ...readyState.content, html: readyState.content.sourceHtml },
+            search,
+          });
         } else {
           publish({ ...current, search });
         }
@@ -1265,6 +1337,23 @@ export function createFileViewerController(
   async function jumpToMatch(index: number): Promise<void> {
     const match = search?.matches[index];
     if (match === undefined) return;
+    if (current.status === 'ready' && current.content.kind === 'docx' && search !== undefined) {
+      const result = searchDocxHtml(
+        current.content.sourceHtml,
+        search.query,
+        search.regex,
+        search.caseSensitive,
+        search.wholeWord,
+        index,
+      );
+      search = { ...search, matches: result.matches, currentMatchIndex: index };
+      publish({
+        ...current,
+        content: { ...current.content, html: result.html },
+        search,
+      });
+      return;
+    }
     const windowOffset = Math.max(0, match.offset - JUMP_CONTEXT_BEFORE_BYTES);
     const length = Math.max(TEXT_WINDOW_BYTES, match.offset + match.length - windowOffset);
     search = { ...(search ?? DEFAULT_SEARCH_STATE), currentMatchIndex: index };
@@ -1322,6 +1411,30 @@ export function createFileViewerController(
     if (current.status === 'ready') publish({ ...current, search });
     const controller = beginRequest();
     try {
+      if (current.status === 'ready' && current.content.kind === 'docx') {
+        const result = searchDocxHtml(
+          current.content.sourceHtml,
+          options_.query,
+          options_.regex,
+          options_.caseSensitive,
+          options_.wholeWord,
+          0,
+        );
+        if (!isCurrent(controller)) return;
+        search = {
+          ...options_,
+          matches: result.matches,
+          truncated: result.truncated,
+          currentMatchIndex: result.matches.length > 0 ? 0 : undefined,
+          searching: false,
+        };
+        publish({
+          ...current,
+          content: { ...current.content, html: result.html },
+          search,
+        });
+        return;
+      }
       const result = await client.searchInFile(
         {
           location: entry.location,
@@ -1410,6 +1523,8 @@ export function createFileViewerController(
     if (current.status !== 'ready') return;
     if (current.content.kind === 'text') {
       await copyText(current.content.text);
+    } else if (current.content.kind === 'docx') {
+      await copyText(current.content.plainText);
     } else if (current.content.kind === 'image') {
       await copyImageDataUri(current.content.dataUri);
     }
@@ -1430,6 +1545,11 @@ export function createFileViewerController(
           !ready.content.atStart || !ready.content.atEnd,
           editableLanguageForExtension(entry.extension, entry.name),
         ),
+      });
+    } else if (ready.content.kind === 'docx') {
+      publish({
+        ...ready,
+        metadata: textMetadataFor(entry, ready.content.plainText, false, 'text'),
       });
       return;
     }
@@ -1707,6 +1827,10 @@ export function createFileViewerController(
       if (structuredSessionId !== undefined) {
         void client.closeStructuredView({ sessionId: structuredSessionId }).catch(() => undefined);
         structuredSessionId = undefined;
+      }
+      if (docxSessionId !== undefined) {
+        void client.closeDocxPreview({ sessionId: docxSessionId }).catch(() => undefined);
+        docxSessionId = undefined;
       }
     },
   };

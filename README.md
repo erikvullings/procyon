@@ -43,8 +43,9 @@ specification and [TASKS/README.md](TASKS/README.md) for the implementation task
   support
 
 **Viewing & editing**
-- F3 Lister-style instant large-file viewer with lazy search and native playback for short videos;
-  large/MKV videos offer OS-default external playback without loading the file into memory
+- F3 Lister-style instant large-file viewer with lazy search, bounded semantic DOCX previews, and
+  native playback for short videos; large/MKV videos offer OS-default external playback without
+  loading the file into memory
 - In-app text editor with Markdown preview (F4)
 - File/folder Properties dialog (byte-precise sizes, timestamps, permissions, aggregate totals for
   multi-selection)

@@ -30,6 +30,9 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocxPreview,
+  DocxPreviewResource,
+  DocxPreviewSessionRequest,
   DuplicateGroup,
   DuplicatePage,
   EditableFile,
@@ -49,12 +52,14 @@ import type {
   Location,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
+  OpenDocxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
@@ -170,6 +175,9 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'openDocxPreview'
+  | 'readDocxPreviewResource'
+  | 'closeDocxPreview'
   | 'searchInFile'
   | 'calculateFolderSize'
   | 'archiveSummary'
@@ -760,6 +768,7 @@ export class MockFileManagerClient implements FileManagerClient {
     { cancelled: boolean; groups: readonly DuplicateGroup[]; roots: readonly Location[] }
   >();
   private readonly fileContents = new Map<string, Uint8Array>();
+  private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
   private readonly structuredSessions = new Map<
     string,
     {
@@ -1338,6 +1347,61 @@ export class MockFileManagerClient implements FileManagerClient {
         eof: end >= bytes.length,
         ...(request.offset === 0 ? { probablyBinary: false } : {}),
       };
+    });
+  }
+
+  openDocxPreview(request: OpenDocxPreviewRequest, signal?: AbortSignal): Promise<DocxPreview> {
+    return this.perform('openDocxPreview', signal, () => {
+      const sessionId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
+      this.docxSessions.set(
+        sessionId,
+        new Map([
+          [
+            resourceId,
+            {
+              data: [137, 80, 78, 71, 13, 10, 26, 10],
+              mediaType: 'image/png',
+            },
+          ],
+        ]),
+      );
+      return {
+        sessionId,
+        sourceRevision: `mock:${request.location.uri}`,
+        sourceBytes: 1024,
+        html: '<h1>Mock document</h1><p>Content-oriented DOCX preview.</p><img src="media/image1.png" alt="Mock image">',
+        resources: [
+          {
+            resourceId,
+            source: 'media/image1.png',
+            mediaType: 'image/png',
+            byteLength: 8,
+          },
+        ],
+        omittedFeatures: ['exact pagination', 'floating objects', 'headers and footers'],
+      };
+    });
+  }
+
+  readDocxPreviewResource(
+    request: ReadDocxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<DocxPreviewResource> {
+    return this.perform('readDocxPreviewResource', signal, () => {
+      const resource = this.docxSessions.get(request.sessionId)?.get(request.resourceId);
+      if (resource === undefined) {
+        throw new MockClientError('notFound', 'DOCX preview resource not found');
+      }
+      return structuredClone(resource);
+    });
+  }
+
+  closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
+    return this.perform('closeDocxPreview', signal, () => {
+      if (!this.docxSessions.delete(request.sessionId)) {
+        throw new MockClientError('notFound', 'DOCX preview session not found');
+      }
     });
   }
 

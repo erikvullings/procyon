@@ -18,26 +18,28 @@ use fm_transport_dto::{
     ChecksumPageDto, ComparisonPageDto, ConnectionDto, ConnectionStateDto,
     CreateConnectionRequestDto, CreateWorkspaceRequestDto, DiagnosticErrorDto, DiagnosticsDto,
     DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
-    DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataDto,
-    EntryMetadataRequest, EntrySummaryDto, FinderTagsDto, GenerateSyncPlanRequestDto,
-    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, HostKeyProbeDto,
-    InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LocationDto,
-    NavigateRequest, OneDriveAuthorizationAttemptDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto, PluginDescriptorDto,
-    PluginLogEntryDto, PluginStatusDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
-    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto,
-    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
-    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto,
-    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, ScanDiskUsageRequestDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
-    SearchStructuredRowsResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
-    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
-    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
-    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto,
-    StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
-    UpdateConnectionRequestDto, UpdateStructuredViewRequestDto, VerificationReportDto,
-    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    DiscoverApplicationUninstallCandidatesResponseDto, DocxPreviewSessionRequestDto,
+    DuplicatePageDto, EntryMetadataDto, EntryMetadataRequest, EntrySummaryDto, FinderTagsDto,
+    GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
+    HostKeyProbeDto, InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest,
+    LocationDto, NavigateRequest, OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto,
+    OpenDocxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    OperationDto, OperationQueueStatusDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
+    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
+    ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
+    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
+    SaveChecksumFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
+    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
+    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
+    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
+    StructuredViewStatusDto, SyncPlanDto, UpdateConnectionRequestDto,
+    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -674,6 +676,42 @@ pub(crate) async fn read_file_range(
     state
         .service
         .read_file_range(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn open_docx_preview(
+    state: State<'_, AppState>,
+    request: OpenDocxPreviewRequestDto,
+) -> Result<OpenDocxPreviewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .open_docx_preview(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn read_docx_preview_resource(
+    state: State<'_, AppState>,
+    request: ReadDocxPreviewResourceRequestDto,
+) -> Result<ReadDocxPreviewResourceResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_docx_preview_resource(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn close_docx_preview(
+    state: State<'_, AppState>,
+    request: DocxPreviewSessionRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .close_docx_preview(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

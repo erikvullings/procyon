@@ -678,6 +678,29 @@ describe('MockFileManagerClient comparison methods', () => {
 describe('MockFileManagerClient file range and content search methods', () => {
   const LOCATION = { providerId: 'file', uri: 'mock:///report.txt' } as const;
 
+  it('provides and cleans up the same bounded DOCX session contract as other hosts', async () => {
+    const client = new MockFileManagerClient();
+    const opened = await client.openDocxPreview({
+      location: { ...LOCATION, uri: 'mock:///report.docx' },
+    });
+    const resource = opened.resources[0];
+
+    expect(opened.html).toContain('Mock document');
+    await expect(
+      client.readDocxPreviewResource({
+        sessionId: opened.sessionId,
+        resourceId: resource?.resourceId ?? '',
+      }),
+    ).resolves.toMatchObject({ mediaType: 'image/png' });
+    await client.closeDocxPreview({ sessionId: opened.sessionId });
+    await expect(
+      client.readDocxPreviewResource({
+        sessionId: opened.sessionId,
+        resourceId: resource?.resourceId ?? '',
+      }),
+    ).rejects.toMatchObject({ code: 'notFound' });
+  });
+
   it('reads a bounded byte range and reports probablyBinary only at offset zero', async () => {
     const client = new MockFileManagerClient();
 

@@ -78,10 +78,12 @@ pub use entry::{
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
 pub use files::{
     ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
-    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, GitLogEntryDto, JsonTokenKindDto, JsonTokenSpanDto,
-    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, DocxPreviewResourceDto,
+    DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
+    GitLogEntryDto, JsonTokenKindDto, JsonTokenSpanDto, LoadEditableFileRequestDto,
+    LoadEditableFileResponseDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
     ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, SaveEditableFileRequestDto,
     SaveEditableFileResponseDto, SearchInFileMatchDto, SearchInFileRequestDto,

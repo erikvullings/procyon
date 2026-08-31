@@ -22,6 +22,9 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocxPreview,
+  DocxPreviewResource,
+  DocxPreviewSessionRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -40,12 +43,14 @@ import type {
   Location,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
+  OpenDocxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
@@ -249,6 +254,12 @@ export interface FileManagerClient {
 
   /** Reads one bounded byte range from a file, for the in-app large file viewer (task 0088). */
   readFileRange(request: ReadFileRangeRequest, signal?: AbortSignal): Promise<FileRangeChunk>;
+  openDocxPreview(request: OpenDocxPreviewRequest, signal?: AbortSignal): Promise<DocxPreview>;
+  readDocxPreviewResource(
+    request: ReadDocxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<DocxPreviewResource>;
+  closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void>;
   openStructuredView(
     request: OpenStructuredViewRequest,
     signal?: AbortSignal,

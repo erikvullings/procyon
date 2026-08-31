@@ -70,6 +70,7 @@ describe('resolvePreviewKind', () => {
     expect(resolvePreviewKind(entry({ name: 'comic.cbz', extension: 'cbz' }))).toBe('comic');
     expect(resolvePreviewKind(entry({ name: 'comic.cbr', extension: 'cbr' }))).toBe('comic');
     expect(resolvePreviewKind(entry({ name: 'book.epub', extension: 'epub' }))).toBe('epub');
+    expect(resolvePreviewKind(entry({ name: 'report.docx', extension: 'docx' }))).toBe('docx');
   });
 });
 

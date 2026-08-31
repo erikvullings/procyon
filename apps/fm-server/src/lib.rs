@@ -62,6 +62,11 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::directory::get_entry_metadata))
         .routes(utoipa_axum::routes!(routes::directory::set_pane_activity))
         .routes(utoipa_axum::routes!(routes::files::read_file_range))
+        .routes(utoipa_axum::routes!(routes::files::open_docx_preview))
+        .routes(utoipa_axum::routes!(
+            routes::files::read_docx_preview_resource
+        ))
+        .routes(utoipa_axum::routes!(routes::files::close_docx_preview))
         .routes(utoipa_axum::routes!(routes::files::open_structured_view))
         .routes(utoipa_axum::routes!(routes::files::structured_view_status))
         .routes(utoipa_axum::routes!(routes::files::update_structured_view))

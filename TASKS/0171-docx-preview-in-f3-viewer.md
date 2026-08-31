@@ -1,6 +1,6 @@
 # 0171 DOCX preview in the F3 viewer
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0088
@@ -57,3 +57,12 @@ which would discard useful structure before the existing sanitized-HTML viewer s
 - 2026-08-29: Created from the Office-preview design discussion. The recommended scope is semantic
   document reading, not Word-compatible layout. `ferrodoc` 0.7 is the leading native Rust candidate;
   HTML is preferred over a DOCX-to-Markdown-to-HTML pipeline to preserve tables and images.
+- 2026-09-01 Copilot: Added an application-owned `ferrodoc` converter and bounded DOCX sessions with
+  opaque image resources, source-revision checks, cancellation, cleanup, and matching HTTP, Tauri,
+  and mock adapters. The F3 viewer now sanitizes and renders semantic content, identifies omitted
+  layout features, supports bounded search/navigation, selection, copy, metadata, and external
+  fallback. Verified 8 DOCX application tests, the DTO and HTTP route tests, 14 focused frontend
+  tests, frontend typecheck, generated API freshness, affected Rust suites, and workspace lint. The
+  full frontend suite passed all DOCX coverage but retained one timing-sensitive typeahead failure
+  from the newly merged `main` change; that test passes in isolation. One unrelated timing-sensitive
+  safe-undo test likewise failed under nextest but passed when rerun with `cargo test`.

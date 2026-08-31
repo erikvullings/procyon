@@ -50,6 +50,9 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
+      openDocxPreview: vi.fn(),
+      readDocxPreviewResource: vi.fn(),
+      closeDocxPreview: vi.fn().mockResolvedValue(undefined),
       searchInFile: vi.fn(),
       listDirectory: vi.fn(),
       archiveSummary: vi.fn(),
@@ -73,6 +76,73 @@ function textOf(state: FileViewerState | undefined): string | undefined {
 }
 
 describe('file viewer controller', () => {
+  it('loads and sanitizes a DOCX content preview with separately fetched images', async () => {
+    const context = setup();
+    vi.mocked(context.client.openDocxPreview).mockResolvedValue({
+      sessionId: 'docx-session',
+      sourceRevision: 'r1',
+      sourceBytes: 2048,
+      html: '<h1>Report</h1><p>Body</p><img src="media/image1.png"><script>evil()</script>',
+      resources: [
+        {
+          resourceId: 'image-1',
+          source: 'media/image1.png',
+          mediaType: 'image/png',
+          byteLength: 4,
+        },
+      ],
+      omittedFeatures: ['exact pagination', 'tracked changes'],
+    });
+    vi.mocked(context.client.readDocxPreviewResource).mockResolvedValue({
+      data: [137, 80, 78, 71],
+      mediaType: 'image/png',
+    });
+
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.docx', extension: 'docx' }),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: {
+          kind: 'docx',
+          html: expect.stringContaining('data:image/png;base64,'),
+          plainText: expect.stringContaining('Report'),
+          omittedFeatures: ['exact pagination', 'tracked changes'],
+        },
+      }),
+    );
+    expect((context.states.at(-1) as { content: { html: string } }).content.html).not.toContain(
+      'script',
+    );
+    controller.dispose();
+    expect(context.client.closeDocxPreview).toHaveBeenCalledWith({ sessionId: 'docx-session' });
+  });
+
+  it('shows an external-application fallback when bounded DOCX parsing fails', async () => {
+    const context = setup();
+    vi.mocked(context.client.openDocxPreview).mockRejectedValue(
+      new Error('DOCX preview exceeds the expanded ZIP budget'),
+    );
+
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'bomb.docx', extension: 'docx' }),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: {
+          kind: 'docxExternal',
+          message: 'DOCX preview exceeds the expanded ZIP budget',
+        },
+      }),
+    );
+  });
+
   it('loads an archive summary for the selected archive file', async () => {
     const context = setup();
     vi.mocked(context.client.archiveSummary).mockResolvedValue({
@@ -105,6 +175,82 @@ describe('file viewer controller', () => {
         directoryCount: 2,
         uncompressedSize: 4_096,
         compressedSize: 512,
+      },
+    });
+  });
+
+  it('searches and navigates sanitized DOCX content without a backend file search', async () => {
+    const context = setup();
+    vi.mocked(context.client.openDocxPreview).mockResolvedValue({
+      sessionId: 'docx-session',
+      sourceRevision: 'r1',
+      sourceBytes: 32,
+      html: '<h1>Report</h1><p>Another report</p>',
+      resources: [],
+      omittedFeatures: [],
+    });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.docx', extension: 'docx' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.setSearchOptions({ query: 'report' });
+    await controller.runSearch();
+    expect(context.states.at(-1)).toMatchObject({
+      content: { kind: 'docx', html: expect.stringContaining('fm-docx-search-match-active') },
+      search: { currentMatchIndex: 0 },
+    });
+    expect(
+      (context.states.at(-1) as { search: { matches: readonly unknown[] } }).search.matches,
+    ).toHaveLength(2);
+
+    await controller.goToNextMatch();
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        kind: 'docx',
+        html: expect.stringMatching(/Another <mark class="fm-docx-search-match-active">report/),
+      },
+      search: { currentMatchIndex: 1 },
+    });
+    expect(context.client.searchInFile).not.toHaveBeenCalled();
+
+    controller.setSearchOptions({ query: '' });
+    expect((context.states.at(-1) as { content: { html: string } }).content.html).not.toContain(
+      '<mark',
+    );
+  });
+
+  it('copies DOCX text and computes metadata from the complete bounded document', async () => {
+    const context = setup();
+    vi.mocked(context.client.openDocxPreview).mockResolvedValue({
+      sessionId: 'docx-session',
+      sourceRevision: 'r1',
+      sourceBytes: 32,
+      html: '<h1>Report</h1><p>First line<br>Second line</p>',
+      resources: [],
+      omittedFeatures: [],
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.docx', extension: 'docx', size: 32 }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    await controller.copyContent();
+    controller.toggleMetadataPanel();
+
+    expect(writeText).toHaveBeenCalledWith('ReportFirst lineSecond line');
+    expect(context.states.at(-1)).toMatchObject({
+      metadataPanelOpen: true,
+      metadata: {
+        kind: 'text',
+        sizeBytes: 32,
+        characterCount: 27,
       },
     });
   });

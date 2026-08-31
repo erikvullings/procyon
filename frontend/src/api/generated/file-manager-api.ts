@@ -26,6 +26,7 @@ import type {
   DirectorySnapshotDto,
   DiscoverApplicationUninstallCandidatesRequestDto,
   DiscoverApplicationUninstallCandidatesResponseDto,
+  DocxPreviewSessionRequestDto,
   DuplicatePageDto,
   EntryMetadataDto,
   EntryMetadataRequest,
@@ -52,12 +53,16 @@ import type {
   LoadEditableFileResponseDto,
   NavigateRequest,
   OneDriveAuthorizationAttemptDto,
+  OpenDocxPreviewRequestDto,
+  OpenDocxPreviewResponseDto,
   OpenStructuredViewRequestDto,
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
   PluginDescriptorDto,
   PluginLogEntryDto,
+  ReadDocxPreviewResourceRequestDto,
+  ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
   ReadFileRangeResponseDto,
   ReadStructuredJsonWindowRequestDto,
@@ -2128,6 +2133,168 @@ export const subscribeEvents = async ( options?: Parameters<typeof fetchMutator>
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type closeDocxPreviewResponse204 = {
+  data: void
+  status: 204
+}
+
+export type closeDocxPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type closeDocxPreviewResponseSuccess = (closeDocxPreviewResponse204) & {
+  headers: Headers;
+};
+export type closeDocxPreviewResponseError = (closeDocxPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type closeDocxPreviewResponse = (closeDocxPreviewResponseSuccess | closeDocxPreviewResponseError)
+
+export const getCloseDocxPreviewUrl = () => {
+
+
+
+
+  return `/api/v1/files/docx/close`
+}
+
+/**
+ * @summary Cancels and releases a DOCX preview session.
+ */
+export const closeDocxPreview = async (docxPreviewSessionRequestDto: DocxPreviewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closeDocxPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<closeDocxPreviewResponse>(getCloseDocxPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(docxPreviewSessionRequestDto)
+  }
+);}
+
+
+
+export type openDocxPreviewResponse200 = {
+  data: OpenDocxPreviewResponseDto
+  status: 200
+}
+
+export type openDocxPreviewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type openDocxPreviewResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type openDocxPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type openDocxPreviewResponseSuccess = (openDocxPreviewResponse200) & {
+  headers: Headers;
+};
+export type openDocxPreviewResponseError = (openDocxPreviewResponse400 | openDocxPreviewResponse403 | openDocxPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type openDocxPreviewResponse = (openDocxPreviewResponseSuccess | openDocxPreviewResponseError)
+
+export const getOpenDocxPreviewUrl = () => {
+
+
+
+
+  return `/api/v1/files/docx/open`
+}
+
+/**
+ * @summary Opens a bounded semantic DOCX preview session.
+ */
+export const openDocxPreview = async (openDocxPreviewRequestDto: OpenDocxPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openDocxPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<openDocxPreviewResponse>(getOpenDocxPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(openDocxPreviewRequestDto)
+  }
+);}
+
+
+
+export type readDocxPreviewResourceResponse200 = {
+  data: ReadDocxPreviewResourceResponseDto
+  status: 200
+}
+
+export type readDocxPreviewResourceResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type readDocxPreviewResourceResponse409 = {
+  data: ApplicationErrorDto
+  status: 409
+}
+
+export type readDocxPreviewResourceResponseSuccess = (readDocxPreviewResourceResponse200) & {
+  headers: Headers;
+};
+export type readDocxPreviewResourceResponseError = (readDocxPreviewResourceResponse404 | readDocxPreviewResourceResponse409) & {
+  headers: Headers;
+};
+
+export type readDocxPreviewResourceResponse = (readDocxPreviewResourceResponseSuccess | readDocxPreviewResourceResponseError)
+
+export const getReadDocxPreviewResourceUrl = () => {
+
+
+
+
+  return `/api/v1/files/docx/resource`
+}
+
+/**
+ * @summary Reads one bounded embedded image from a DOCX preview session.
+ */
+export const readDocxPreviewResource = async (readDocxPreviewResourceRequestDto: ReadDocxPreviewResourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readDocxPreviewResourceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<readDocxPreviewResourceResponse>(getReadDocxPreviewResourceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readDocxPreviewResourceRequestDto)
   }
 );}
 

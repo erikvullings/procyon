@@ -22,6 +22,9 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocxPreview,
+  DocxPreviewResource,
+  DocxPreviewSessionRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -40,6 +43,7 @@ import type {
   LoadEditableFileRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
+  OpenDocxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -47,6 +51,7 @@ import type {
   PluginIconTheme,
   PluginId,
   PluginLogEntry,
+  ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
@@ -132,6 +137,9 @@ import {
   listDirectoryChildren as requestDirectoryChildren,
   cancelDiskUsage as requestDiskUsageCancel,
   scanDiskUsage as requestDiskUsageScan,
+  closeDocxPreview as requestDocxPreviewClose,
+  openDocxPreview as requestDocxPreviewOpen,
+  readDocxPreviewResource as requestDocxPreviewResource,
   cancelDuplicateScan as requestDuplicateScanCancel,
   getDuplicateScan as requestDuplicateScanGet,
   startDuplicateScan as requestDuplicateScanStart,
@@ -596,6 +604,41 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  async openDocxPreview(
+    request: OpenDocxPreviewRequest,
+    signal?: AbortSignal,
+  ): Promise<DocxPreview> {
+    const response = await requestDocxPreviewOpen(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected openDocxPreview response status: ${response.status}`);
+    return response.data;
+  }
+
+  async readDocxPreviewResource(
+    request: ReadDocxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<DocxPreviewResource> {
+    const response = await requestDocxPreviewResource(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected readDocxPreviewResource response status: ${response.status}`);
+    return response.data;
+  }
+
+  async closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
+    const response = await requestDocxPreviewClose(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected closeDocxPreview response status: ${response.status}`);
   }
 
   async openStructuredView(

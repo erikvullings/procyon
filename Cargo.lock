@@ -1806,7 +1806,7 @@ dependencies = [
  "bit-set",
  "cssparser",
  "foldhash",
- "html5ever",
+ "html5ever 0.38.0",
  "precomputed-hash",
  "selectors",
  "tendril",
@@ -2099,6 +2099,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrodoc"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0700bb7ff66e11484a605cf647945bc5110787c727d3f92cdc9509104252018"
+dependencies = [
+ "ferrodoc-ast",
+ "ferrodoc-docx",
+ "ferrodoc-html",
+ "serde_json",
+]
+
+[[package]]
+name = "ferrodoc-ast"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aaa1bc2fdbdc5b49c422091b4990b2143328215af00117e1ce72e1ac9374e2d"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ferrodoc-docx"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b43919eebf171999820466f0c06dfd96d2e670aabf04014a4fecdad3a36e4b33"
+dependencies = [
+ "ferrodoc-ast",
+ "quick-xml",
+ "zip 8.6.0",
+]
+
+[[package]]
+name = "ferrodoc-html"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ec275c3b52c1df3ff395b7f6b6d47c90222e74f491369602cc7896d52c76732"
+dependencies = [
+ "ferrodoc-ast",
+ "html5ever 0.39.0",
+ "markup5ever_rcdom",
+]
+
+[[package]]
 name = "ff"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2171,6 +2215,7 @@ dependencies = [
  "chrono",
  "csv-async",
  "dirs",
+ "ferrodoc",
  "fm-archive",
  "fm-auth-oauth",
  "fm-checksum",
@@ -2204,6 +2249,7 @@ dependencies = [
  "mp4",
  "openh264",
  "parallel-disk-usage",
+ "quick-xml",
  "rayon",
  "reqwest",
  "russh",
@@ -2592,6 +2638,7 @@ dependencies = [
  "utoipa-axum",
  "utoipa-swagger-ui",
  "uuid",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -3501,7 +3548,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1054432bae2f14e0061e33d23402fbaa67a921d319d56adc6bcf887ddad1cbc2"
 dependencies = [
  "log",
- "markup5ever",
+ "markup5ever 0.38.0",
+]
+
+[[package]]
+name = "html5ever"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46a1761807faccc9a19e86944bbf40610014066306f96edcdedc2fb714bcb7b8"
+dependencies = [
+ "log",
+ "markup5ever 0.39.0",
 ]
 
 [[package]]
@@ -4443,6 +4500,29 @@ dependencies = [
  "log",
  "tendril",
  "web_atoms",
+]
+
+[[package]]
+name = "markup5ever"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7122d987ec5f704ee56f6e5b41a7d93722e9aae27ae07cafa4036c4d3f9757de"
+dependencies = [
+ "log",
+ "tendril",
+ "web_atoms",
+]
+
+[[package]]
+name = "markup5ever_rcdom"
+version = "0.39.0+unofficial"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ac010f19d6c4af81eeb4018a39d7a115de9d285af45c126a4ac02e6fc5716b7"
+dependencies = [
+ "html5ever 0.39.0",
+ "markup5ever 0.39.0",
+ "tendril",
+ "xml5ever",
 ]
 
 [[package]]
@@ -7293,6 +7373,7 @@ dependencies = [
  "parking_lot",
  "phf_shared",
  "precomputed-hash",
+ "serde",
 ]
 
 [[package]]
@@ -9612,6 +9693,16 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix",
+]
+
+[[package]]
+name = "xml5ever"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ab627f34ff61b80d756180d556f9c68801d836d271b3b8c094504ceca69d221"
+dependencies = [
+ "log",
+ "markup5ever 0.39.0",
 ]
 
 [[package]]

@@ -26,6 +26,9 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocxPreview,
+  DocxPreviewResource,
+  DocxPreviewSessionRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -44,12 +47,14 @@ import type {
   Location,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
+  OpenDocxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
@@ -362,6 +367,21 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  openDocxPreview(request: OpenDocxPreviewRequest, _signal?: AbortSignal): Promise<DocxPreview> {
+    return invoke<DocxPreview>('open_docx_preview', { request });
+  }
+
+  readDocxPreviewResource(
+    request: ReadDocxPreviewResourceRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocxPreviewResource> {
+    return invoke<DocxPreviewResource>('read_docx_preview_resource', { request });
+  }
+
+  closeDocxPreview(request: DocxPreviewSessionRequest, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('close_docx_preview', { request });
   }
 
   openStructuredView(

@@ -4,12 +4,17 @@ import type { CalculateFolderSizeResponseDto } from '../api/generated/models/cal
 import type { ComparisonPageDto } from '../api/generated/models/comparisonPageDto';
 import type { DiagnosticsDto } from '../api/generated/models/diagnosticsDto';
 import type { DiscoverApplicationUninstallCandidatesResponseDto } from '../api/generated/models/discoverApplicationUninstallCandidatesResponseDto';
+import type { DocxPreviewSessionRequestDto } from '../api/generated/models/docxPreviewSessionRequestDto';
 import type { GetFileGitHistoryResponseDto } from '../api/generated/models/getFileGitHistoryResponseDto';
 import type { GitLogEntryDto } from '../api/generated/models/gitLogEntryDto';
 import type { JsonTokenSpanDto } from '../api/generated/models/jsonTokenSpanDto';
 import type { LoadEditableFileResponseDto } from '../api/generated/models/loadEditableFileResponseDto';
+import type { OpenDocxPreviewRequestDto } from '../api/generated/models/openDocxPreviewRequestDto';
+import type { OpenDocxPreviewResponseDto } from '../api/generated/models/openDocxPreviewResponseDto';
 import type { OpenStructuredViewRequestDto } from '../api/generated/models/openStructuredViewRequestDto';
 import type { OpenStructuredViewResponseDto } from '../api/generated/models/openStructuredViewResponseDto';
+import type { ReadDocxPreviewResourceRequestDto } from '../api/generated/models/readDocxPreviewResourceRequestDto';
+import type { ReadDocxPreviewResourceResponseDto } from '../api/generated/models/readDocxPreviewResourceResponseDto';
 import type { ReadFileRangeResponseDto } from '../api/generated/models/readFileRangeResponseDto';
 import type { ReadStructuredJsonWindowRequestDto } from '../api/generated/models/readStructuredJsonWindowRequestDto';
 import type { ReadStructuredJsonWindowResponseDto } from '../api/generated/models/readStructuredJsonWindowResponseDto';
@@ -188,6 +193,14 @@ export interface ReadFileRangeRequest {
  * DTO exactly, so no separate mapper is needed.
  */
 export type FileRangeChunk = ReadFileRangeResponseDto;
+
+/** Provider-neutral bounded semantic DOCX preview session contracts (task 0171). */
+export type OpenDocxPreviewRequest = OpenDocxPreviewRequestDto;
+export type DocxPreview = OpenDocxPreviewResponseDto;
+export type DocxPreviewResourceDescriptor = OpenDocxPreviewResponseDto['resources'][number];
+export type DocxPreviewSessionRequest = DocxPreviewSessionRequestDto;
+export type ReadDocxPreviewResourceRequest = ReadDocxPreviewResourceRequestDto;
+export type DocxPreviewResource = ReadDocxPreviewResourceResponseDto;
 
 export interface LoadEditableFileRequest {
   location: Location;

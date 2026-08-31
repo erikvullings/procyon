@@ -832,6 +832,29 @@ function renderEpubBody(state: Extract<FileViewerState, { status: 'ready' }>): m
   );
 }
 
+function renderDocxBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
+  const content = state.content;
+  if (content.kind !== 'docx') return undefined;
+  const revealActiveMatch = (vnode: m.VnodeDOM): void => {
+    (vnode.dom as Element)
+      .querySelector('.fm-docx-search-match-active')
+      ?.scrollIntoView({ block: 'center', inline: 'nearest' });
+  };
+  return m('.fm-file-viewer-body.fm-file-viewer-body-docx', [
+    m('.fm-file-viewer-docx-content.browser-default', {
+      innerHTML: content.html,
+      oncreate: revealActiveMatch,
+      onupdate: revealActiveMatch,
+    }),
+    content.omittedFeatures.length === 0
+      ? undefined
+      : m(
+          'p.fm-file-viewer-docx-limitations',
+          t('viewer', 'docxContentOnly', { features: content.omittedFeatures.join(', ') }),
+        ),
+  ]);
+}
+
 function renderAudioBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
   const content = state.content;
   if (content.kind !== 'audio') return undefined;
@@ -1056,7 +1079,8 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
               ),
             ),
           ]),
-          state.status === 'ready' && state.content.kind === 'text'
+          state.status === 'ready' &&
+          (state.content.kind === 'text' || state.content.kind === 'docx')
             ? renderSearchBar(attrs, search, (el) => {
                 searchInput = el;
               })
@@ -1078,19 +1102,24 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                       ? renderStructuredJson(attrs, state)
                       : state.content.kind === 'structuredFallback'
                         ? renderExternalFallback(attrs, state.content.message)
-                        : state.content.kind === 'audio'
-                          ? renderAudioBody(state)
-                          : state.content.kind === 'video' || state.content.kind === 'videoExternal'
-                            ? renderVideoBody(attrs, state)
-                            : state.content.kind === 'pdf'
-                              ? renderPdfBody(state)
-                              : state.content.kind === 'comic'
-                                ? renderComicBody(state)
-                                : state.content.kind === 'epub'
-                                  ? renderEpubBody(state)
-                                  : state.content.kind === 'archiveSummary'
-                                    ? renderArchiveSummary(state)
-                                    : renderImageBody(attrs, state),
+                        : state.content.kind === 'docxExternal'
+                          ? renderExternalFallback(attrs, state.content.message)
+                          : state.content.kind === 'audio'
+                            ? renderAudioBody(state)
+                            : state.content.kind === 'video' ||
+                                state.content.kind === 'videoExternal'
+                              ? renderVideoBody(attrs, state)
+                              : state.content.kind === 'pdf'
+                                ? renderPdfBody(state)
+                                : state.content.kind === 'comic'
+                                  ? renderComicBody(state)
+                                  : state.content.kind === 'epub'
+                                    ? renderEpubBody(state)
+                                    : state.content.kind === 'docx'
+                                      ? renderDocxBody(state)
+                                      : state.content.kind === 'archiveSummary'
+                                        ? renderArchiveSummary(state)
+                                        : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

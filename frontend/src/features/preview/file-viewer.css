@@ -267,7 +267,12 @@
   padding: 1rem;
 }
 
-.fm-file-viewer-epub-chapter {
+.fm-file-viewer-body-docx {
+  padding: 1rem;
+}
+
+.fm-file-viewer-epub-chapter,
+.fm-file-viewer-docx-content {
   max-width: 42rem;
   width: 100%;
   color: var(--fm-text);
@@ -278,8 +283,37 @@
   -webkit-user-select: text;
 }
 
-.fm-file-viewer-epub-chapter img {
+.fm-file-viewer-epub-chapter img,
+.fm-file-viewer-docx-content img {
   max-width: 100%;
+}
+
+.fm-file-viewer-docx-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fm-file-viewer-docx-content th,
+.fm-file-viewer-docx-content td {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  text-align: start;
+}
+
+.fm-file-viewer-docx-limitations {
+  max-width: 42rem;
+  margin: 1.5rem auto 0;
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
+.fm-file-viewer-docx-content .fm-docx-search-match {
+  background: color-mix(in srgb, var(--fm-accent) 25%, transparent);
+}
+
+.fm-file-viewer-docx-content .fm-docx-search-match-active {
+  background: var(--fm-accent);
+  color: var(--fm-on-accent);
 }
 
 .fm-file-viewer-copy,

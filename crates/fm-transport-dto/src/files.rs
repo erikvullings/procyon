@@ -470,6 +470,74 @@ pub struct ArchiveSummaryResponseDto {
     pub compressed_size: Option<u64>,
 }
 
+/// Opens a bounded, provider-neutral DOCX content-preview session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenDocxPreviewRequestDto {
+    /// Provider-neutral DOCX source location.
+    pub location: LocationDto,
+}
+
+/// One embedded image retained by a bounded DOCX preview session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DocxPreviewResourceDto {
+    /// Opaque resource identifier scoped to the preview session.
+    pub resource_id: Uuid,
+    /// Package-relative source used by the generated semantic HTML.
+    pub source: String,
+    /// Browser media type for the bounded image bytes.
+    pub media_type: String,
+    /// Exact retained byte count.
+    pub byte_length: u64,
+}
+
+/// Initial semantic DOCX content and bounded resource descriptors.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenDocxPreviewResponseDto {
+    /// Opaque backend session identifier.
+    pub session_id: Uuid,
+    /// Revision recorded before parsing.
+    pub source_revision: String,
+    /// Source package bytes at session creation.
+    pub source_bytes: u64,
+    /// Semantic HTML fragment. Hosts must sanitize it before DOM insertion.
+    pub html: String,
+    /// Embedded images referenced by the HTML, fetched separately by id.
+    pub resources: Vec<DocxPreviewResourceDto>,
+    /// Word layout features deliberately omitted from this content view.
+    pub omitted_features: Vec<String>,
+}
+
+/// Identifies a DOCX preview session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DocxPreviewSessionRequestDto {
+    /// Opaque backend session identifier.
+    pub session_id: Uuid,
+}
+
+/// Requests one bounded embedded DOCX resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadDocxPreviewResourceRequestDto {
+    /// Opaque backend session identifier.
+    pub session_id: Uuid,
+    /// Opaque resource identifier from the open response.
+    pub resource_id: Uuid,
+}
+
+/// Embedded image bytes and their browser media type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadDocxPreviewResourceResponseDto {
+    /// Bounded raw image bytes.
+    pub data: Vec<u8>,
+    /// Browser media type for the bytes.
+    pub media_type: String,
+}
+
 /// Requests a file's git commit history (`POST /api/v1/files/git-history`), for the Alt+Space
 /// metadata panel's history section (task 0135).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -601,6 +669,34 @@ mod tests {
         let parsed: ArchiveSummaryResponseDto =
             serde_json::from_str(&json).expect("deserialization must succeed");
         assert_eq!(response, parsed);
+    }
+
+    #[test]
+    fn docx_preview_contract_round_trips_without_a_native_path_or_inline_image_bytes() {
+        let session_id = Uuid::new_v4();
+        let resource_id = Uuid::new_v4();
+        let response = OpenDocxPreviewResponseDto {
+            session_id,
+            source_revision: "42:7".to_owned(),
+            source_bytes: 42,
+            html: r#"<p><img src="media/image1.png"></p>"#.to_owned(),
+            resources: vec![DocxPreviewResourceDto {
+                resource_id,
+                source: "media/image1.png".to_owned(),
+                media_type: "image/png".to_owned(),
+                byte_length: 8,
+            }],
+            omitted_features: vec!["exact pagination".to_owned()],
+        };
+
+        let json = serde_json::to_value(&response).expect("serialize DOCX preview");
+        assert_eq!(json["sessionId"], session_id.to_string());
+        assert_eq!(json["resources"][0]["resourceId"], resource_id.to_string());
+        assert!(json["resources"][0].get("data").is_none());
+        assert!(json.get("path").is_none());
+        let parsed: OpenDocxPreviewResponseDto =
+            serde_json::from_value(json).expect("deserialize DOCX preview");
+        assert_eq!(parsed, response);
     }
 
     #[test]

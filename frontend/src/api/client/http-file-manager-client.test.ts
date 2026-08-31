@@ -34,6 +34,9 @@ const requestEnablePlugin = vi.fn();
 const requestDisablePlugin = vi.fn();
 const requestGetPluginLogs = vi.fn();
 const requestReadFileRange = vi.fn();
+const requestOpenDocxPreview = vi.fn();
+const requestReadDocxPreviewResource = vi.fn();
+const requestCloseDocxPreview = vi.fn();
 const requestSearchInFile = vi.fn();
 const requestOpenStructuredView = vi.fn();
 const requestStructuredViewStatus = vi.fn();
@@ -82,6 +85,9 @@ vi.mock('../generated/file-manager-api', () => ({
   disablePlugin: (...args: unknown[]) => requestDisablePlugin(...args),
   getPluginLogs: (...args: unknown[]) => requestGetPluginLogs(...args),
   readFileRange: (...args: unknown[]) => requestReadFileRange(...args),
+  openDocxPreview: (...args: unknown[]) => requestOpenDocxPreview(...args),
+  readDocxPreviewResource: (...args: unknown[]) => requestReadDocxPreviewResource(...args),
+  closeDocxPreview: (...args: unknown[]) => requestCloseDocxPreview(...args),
   searchInFile: (...args: unknown[]) => requestSearchInFile(...args),
   openStructuredView: (...args: unknown[]) => requestOpenStructuredView(...args),
   getStructuredViewStatus: (...args: unknown[]) => requestStructuredViewStatus(...args),
@@ -1041,6 +1047,52 @@ describe('HttpFileManagerClient', () => {
           length: 3,
         }),
       ).rejects.toThrow('Unexpected readFileRange response status: 400');
+    });
+
+    it('uses the generated DOCX session endpoints with the caller signal', async () => {
+      const client = new HttpFileManagerClient();
+      const controller = new AbortController();
+      const location = { providerId: 'local', uri: 'file:///report.docx' };
+      const preview = {
+        sessionId: 'docx-session',
+        sourceRevision: 'r1',
+        sourceBytes: 1024,
+        html: '<p>Report</p>',
+        resources: [],
+        omittedFeatures: ['exact pagination'],
+      };
+      requestOpenDocxPreview.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: preview,
+      });
+      requestReadDocxPreviewResource.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: { data: [137, 80], mediaType: 'image/png' },
+      });
+      requestCloseDocxPreview.mockResolvedValue({
+        status: 204,
+        headers: new Headers(),
+        data: undefined,
+      });
+
+      await expect(client.openDocxPreview({ location }, controller.signal)).resolves.toEqual(
+        preview,
+      );
+      await expect(
+        client.readDocxPreviewResource(
+          { sessionId: 'docx-session', resourceId: 'image-1' },
+          controller.signal,
+        ),
+      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      await expect(
+        client.closeDocxPreview({ sessionId: 'docx-session' }, controller.signal),
+      ).resolves.toBeUndefined();
+      expect(requestOpenDocxPreview).toHaveBeenCalledWith(
+        { location },
+        expect.objectContaining({ signal: controller.signal }),
+      );
     });
 
     it('searches a file for content matches', async () => {

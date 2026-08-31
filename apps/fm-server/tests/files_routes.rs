@@ -7,6 +7,8 @@ use common::TestServer;
 use fm_domain::Location;
 use fm_events::{BackendEventPayload, SessionId, SubscriptionEvent};
 use serde_json::{Value, json};
+use std::io::Write;
+use zip::write::SimpleFileOptions;
 
 fn location_json(path: &std::path::Path) -> Value {
     let location = Location::from_native_path(path).expect("temp path must be representable");
@@ -14,6 +16,40 @@ fn location_json(path: &std::path::Path) -> Value {
         "providerId": location.provider_id.as_str(),
         "uri": location.uri,
     })
+}
+
+fn write_docx_fixture(path: &std::path::Path) {
+    let file = std::fs::File::create(path).expect("create DOCX fixture");
+    let mut archive = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    for (name, contents) in [
+        (
+            "[Content_Types].xml",
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+        ),
+        (
+            "word/document.xml",
+            r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body><w:p><w:r><w:t>Hello DOCX</w:t></w:r></w:p><w:p><w:r><w:drawing><wp:inline><a:graphic><a:graphicData><pic:pic><pic:blipFill><a:blip r:embed="rImage"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p><w:sectPr/></w:body></w:document>"#,
+        ),
+        (
+            "word/_rels/document.xml.rels",
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>"#,
+        ),
+    ] {
+        archive
+            .start_file(name, options)
+            .expect("start DOCX fixture entry");
+        archive
+            .write_all(contents.as_bytes())
+            .expect("write DOCX fixture entry");
+    }
+    archive
+        .start_file("word/media/image1.png", options)
+        .expect("start DOCX image");
+    archive
+        .write_all(b"\x89PNG\r\n\x1a\nfixture")
+        .expect("write DOCX image");
+    archive.finish().expect("finish DOCX fixture");
 }
 
 #[tokio::test]
@@ -186,6 +222,54 @@ async fn reads_a_byte_range_from_a_file() {
     assert_eq!(body["offset"], 4);
     assert_eq!(body["length"], 3);
     assert_eq!(body["eof"], false);
+}
+
+#[tokio::test]
+async fn docx_preview_routes_open_read_a_bounded_resource_and_close_one_session() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let target = root.path().join("report.docx");
+    write_docx_fixture(&target);
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let opened = client
+        .post(format!("{}/api/v1/files/docx/open", server.base_url))
+        .json(&json!({ "location": location_json(&target) }))
+        .send()
+        .await
+        .expect("open request")
+        .error_for_status()
+        .expect("open response");
+    let opened: Value = opened.json().await.expect("open JSON");
+    assert!(
+        opened["html"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Hello DOCX")
+    );
+    assert_eq!(opened["resources"].as_array().map(Vec::len), Some(1));
+    let session_id = opened["sessionId"].clone();
+    let resource_id = opened["resources"][0]["resourceId"].clone();
+
+    let resource = client
+        .post(format!("{}/api/v1/files/docx/resource", server.base_url))
+        .json(&json!({ "sessionId": session_id, "resourceId": resource_id }))
+        .send()
+        .await
+        .expect("resource request")
+        .error_for_status()
+        .expect("resource response");
+    let resource: Value = resource.json().await.expect("resource JSON");
+    assert_eq!(resource["mediaType"], "image/png");
+    assert_eq!(resource["data"][0], 137);
+
+    let closed = client
+        .post(format!("{}/api/v1/files/docx/close", server.base_url))
+        .json(&json!({ "sessionId": opened["sessionId"] }))
+        .send()
+        .await
+        .expect("close request");
+    assert_eq!(closed.status(), reqwest::StatusCode::NO_CONTENT);
 }
 
 /// A large (multi-megabyte) fixture file, created ad hoc since task 0065's

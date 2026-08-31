@@ -541,6 +541,41 @@ describe('TauriFileManagerClient', () => {
       expect(invoke).toHaveBeenCalledWith('read_file_range', { request });
     });
 
+    it('uses the shared DOCX session DTOs for open, resource read, and close', async () => {
+      const client = new TauriFileManagerClient();
+      const location = { providerId: 'local', uri: 'file:///report.docx' };
+      const preview = {
+        sessionId: 'docx-session',
+        sourceRevision: 'r1',
+        sourceBytes: 1024,
+        html: '<p>Report</p>',
+        resources: [],
+        omittedFeatures: ['exact pagination'],
+      };
+      invoke
+        .mockResolvedValueOnce(preview)
+        .mockResolvedValueOnce({ data: [137, 80], mediaType: 'image/png' })
+        .mockResolvedValueOnce(undefined);
+
+      await expect(client.openDocxPreview({ location })).resolves.toEqual(preview);
+      await expect(
+        client.readDocxPreviewResource({
+          sessionId: 'docx-session',
+          resourceId: 'image-1',
+        }),
+      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      await expect(client.closeDocxPreview({ sessionId: 'docx-session' })).resolves.toBeUndefined();
+      expect(invoke).toHaveBeenNthCalledWith(1, 'open_docx_preview', {
+        request: { location },
+      });
+      expect(invoke).toHaveBeenNthCalledWith(2, 'read_docx_preview_resource', {
+        request: { sessionId: 'docx-session', resourceId: 'image-1' },
+      });
+      expect(invoke).toHaveBeenNthCalledWith(3, 'close_docx_preview', {
+        request: { sessionId: 'docx-session' },
+      });
+    });
+
     it('invokes search_in_file and returns the matches', async () => {
       const request = {
         location: { providerId: 'local', uri: 'file:///report.txt' },
