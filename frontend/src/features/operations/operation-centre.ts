@@ -45,12 +45,8 @@ function entryNameFromUri(uri: string): string {
   return segment === undefined ? uri : decodeURIComponent(segment);
 }
 
-function completedWithWarningsResult(operation: Operation): string {
-  const warningCount = operation.errors?.length ?? 0;
-  if (warningCount > 0) {
-    return t('operation', 'completedWarningCount', warningCount);
-  }
-  return operation.result?.message ?? t('operation', 'completedWithWarnings');
+function operationTimestamp(operation: Operation): string {
+  return operation.completedAt ?? operation.startedAt ?? operation.createdAt;
 }
 
 /** Search operations show a running match count instead of the current-entry filename - the
@@ -156,142 +152,165 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
       .filter((operation) => operation.state !== 'waitingForConflictResolution')
       .filter(isWorthShowing)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-    if (operations.length === 0) {
-      return null;
-    }
     return m(
       '.fm-operation-centre',
       { 'aria-label': t('operation', 'centre') },
-      operations.map((operation) => {
-        const progress = operation.progress;
-        const failure = attrs.state.failuresById[operation.id];
-        const warnings = operation.errors ?? [];
-        const isSearch = operation.kind === 'search';
-        const isCompare = operation.kind === 'compare';
-        const hidesByteProgress = isSearch || isCompare;
-        const terminal =
-          operation.state === 'completed' ||
-          operation.state === 'completedWithWarnings' ||
-          operation.state === 'failed' ||
-          operation.state === 'cancelled' ||
-          operation.state === 'interrupted';
-        return m('article.fm-operation', { 'data-operation-id': operation.id }, [
-          m('.fm-operation-summary', [
-            m(
-              'strong',
-              `${operationKindLabel(operation.kind)} · ${operationStateLabel(operation.state)}`,
-            ),
-            operation.queuePosition === undefined
-              ? undefined
-              : m('span', t('operation', 'queuePosition', { position: operation.queuePosition })),
-            isSearch && operation.state === 'running'
-              ? m('span', searchProgressSummary(operation))
-              : undefined,
-            isCompare && operation.state === 'running'
-              ? m('span', compareProgressSummary(operation))
-              : undefined,
-            !hidesByteProgress && currentEntryName(operation) !== undefined
-              ? m('span', currentEntryName(operation))
-              : undefined,
-            hidesByteProgress
-              ? undefined
-              : m(
-                  'span',
-                  t('operation', 'itemsProgress', {
-                    items: `${progress.completedItems}${hasValue(progress.totalItems) ? ` / ${progress.totalItems}` : ''}`,
-                  }),
+      operations.length === 0
+        ? m('p.fm-operation-empty', t('operation', 'empty'))
+        : operations.map((operation) => {
+            const progress = operation.progress;
+            const failure = attrs.state.failuresById[operation.id];
+            const warnings = operation.errors ?? [];
+            const isSearch = operation.kind === 'search';
+            const isCompare = operation.kind === 'compare';
+            const hidesByteProgress = isSearch || isCompare;
+            const terminal =
+              operation.state === 'completed' ||
+              operation.state === 'completedWithWarnings' ||
+              operation.state === 'failed' ||
+              operation.state === 'cancelled' ||
+              operation.state === 'interrupted';
+            return m('article.fm-operation', { 'data-operation-id': operation.id }, [
+              m('.fm-operation-summary', [
+                m(
+                  'strong',
+                  `${operationKindLabel(operation.kind)} - ${operationStateLabel(operation.state)}`,
                 ),
-            hidesByteProgress
-              ? undefined
-              : m(
-                  'span',
-                  `${formatBytes(progress.completedBytes)}${hasValue(progress.totalBytes) ? ` / ${formatBytes(progress.totalBytes)}` : ''}`,
+                operation.queuePosition === undefined
+                  ? undefined
+                  : m(
+                      'span',
+                      t('operation', 'queuePosition', { position: operation.queuePosition }),
+                    ),
+                isSearch && operation.state === 'running'
+                  ? m('span', searchProgressSummary(operation))
+                  : undefined,
+                isCompare && operation.state === 'running'
+                  ? m('span', compareProgressSummary(operation))
+                  : undefined,
+                !terminal && !hidesByteProgress && currentEntryName(operation) !== undefined
+                  ? m('span', currentEntryName(operation))
+                  : undefined,
+                hidesByteProgress
+                  ? undefined
+                  : m(
+                      'span',
+                      t('operation', 'itemsProgress', {
+                        items: `${progress.completedItems}${hasValue(progress.totalItems) ? ` / ${progress.totalItems}` : ''}`,
+                      }),
+                    ),
+                hidesByteProgress
+                  ? undefined
+                  : m(
+                      'span',
+                      `${formatBytes(progress.completedBytes)}${hasValue(progress.totalBytes) ? ` / ${formatBytes(progress.totalBytes)}` : ''}`,
+                    ),
+                !terminal && hasValue(progress.bytesPerSecond) && !hidesByteProgress
+                  ? m('span', `${formatBytes(progress.bytesPerSecond)}/s`)
+                  : undefined,
+                m(
+                  'time.fm-operation-timestamp',
+                  { dateTime: operationTimestamp(operation) },
+                  new Date(operationTimestamp(operation)).toLocaleString(),
                 ),
-            hasValue(progress.bytesPerSecond) && !hidesByteProgress
-              ? m('span', `${formatBytes(progress.bytesPerSecond)}/s`)
-              : undefined,
-          ]),
-          hasValue(progress.totalBytes)
-            ? m('progress', {
-                value: progress.completedBytes,
-                max: Math.max(progress.totalBytes, 1),
-                'aria-label': t('operation', 'progress', {
-                  kind: operationKindLabel(operation.kind),
-                }),
-              })
-            : undefined,
-          operation.state !== 'completed' && operation.state !== 'completedWithWarnings'
-            ? operation.state === 'cancelled'
-              ? m('.fm-operation-result', cancelledResult(operation))
-              : undefined
-            : m(
-                '.fm-operation-result',
-                operation.state === 'completedWithWarnings'
-                  ? completedWithWarningsResult(operation)
-                  : (operation.result?.message ??
-                      (isSearch
-                        ? t('operation', 'filesFound', operation.progress.completedItems)
-                        : isCompare
-                          ? t('operation', 'entriesCompared', operation.progress.completedItems)
-                          : t('operation', 'itemsCompleted', {
-                              count: operation.progress.completedItems,
-                              bytes: formatBytes(operation.progress.completedBytes),
-                            }))),
-              ),
-          operation.state !== 'completedWithWarnings' || warnings.length === 0
-            ? undefined
-            : m('.fm-operation-warning', [
-                m('details', [
-                  m(
-                    'summary',
-                    warnings.length === 1
-                      ? t('operation', 'showWarning')
-                      : t('operation', 'showWarnings'),
-                  ),
-                  m(
-                    'ul',
-                    warnings.map((warning) =>
+              ]),
+              operation.sources.length === 0
+                ? undefined
+                : m('details.fm-operation-sources', [
+                    m(
+                      'summary.fm-operation-source-summary',
+                      { 'aria-label': t('operation', 'toggleFileList') },
                       m(
-                        'li',
-                        `${entryNameFromUri(warning.entry.location.uri)}: ${warning.message}`,
+                        'span.fm-operation-source-preview',
+                        operation.sources
+                          .map((source) => entryNameFromUri(source.location.uri))
+                          .join(', '),
                       ),
                     ),
-                  ),
-                ]),
+                    m(
+                      'ul',
+                      operation.sources.map((source) =>
+                        m(
+                          'li',
+                          { title: source.location.uri },
+                          entryNameFromUri(source.location.uri),
+                        ),
+                      ),
+                    ),
+                  ]),
+              !terminal && hasValue(progress.totalBytes)
+                ? m('progress', {
+                    value: progress.completedBytes,
+                    max: Math.max(progress.totalBytes, 1),
+                    'aria-label': t('operation', 'progress', {
+                      kind: operationKindLabel(operation.kind),
+                    }),
+                  })
+                : undefined,
+              terminal &&
+              operation.state !== 'completed' &&
+              operation.state !== 'completedWithWarnings'
+                ? operation.state === 'cancelled'
+                  ? m('.fm-operation-result', cancelledResult(operation))
+                  : undefined
+                : undefined,
+              operation.state !== 'completedWithWarnings' || warnings.length === 0
+                ? undefined
+                : m('.fm-operation-warning', [
+                    m('details', [
+                      m(
+                        'summary',
+                        warnings.length === 1
+                          ? t('operation', 'showWarning')
+                          : t('operation', 'showWarnings'),
+                      ),
+                      m(
+                        'ul',
+                        warnings.map((warning) =>
+                          m(
+                            'li',
+                            `${entryNameFromUri(warning.entry.location.uri)}: ${warning.message}`,
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ]),
+              failure === undefined
+                ? undefined
+                : m('.fm-operation-failure', [
+                    m('span', failure.message),
+                    m('details', [
+                      m('summary', t('button', 'details')),
+                      m('pre', JSON.stringify(failure.details ?? { code: failure.code }, null, 2)),
+                    ]),
+                  ]),
+              m('.fm-operation-controls', [
+                operation.undo?.available === true
+                  ? button(t('button', 'undo'), 'undo', () => attrs.onUndo?.(operation.id))
+                  : undefined,
+                operation.state === 'queued' ||
+                operation.state === 'planning' ||
+                operation.state === 'running'
+                  ? button(t('button', 'cancel'), 'cancel', () => attrs.onCancel(operation.id))
+                  : undefined,
+                operation.state === 'running'
+                  ? button(t('button', 'pause'), 'pause', () => attrs.onPause(operation.id))
+                  : undefined,
+                operation.state === 'paused'
+                  ? button(t('button', 'resume'), 'resume', () => attrs.onResume(operation.id))
+                  : undefined,
+                terminal && operation.undo?.available !== true
+                  ? button(t('button', 'dismiss'), 'dismiss', () => attrs.onDismiss(operation.id))
+                  : undefined,
               ]),
-          failure === undefined
-            ? undefined
-            : m('.fm-operation-failure', [
-                m('span', failure.message),
-                m('details', [
-                  m('summary', t('button', 'details')),
-                  m('pre', JSON.stringify(failure.details ?? { code: failure.code }, null, 2)),
-                ]),
-              ]),
-          m('.fm-operation-controls', [
-            operation.undo?.available === true
-              ? button(t('button', 'undo'), 'undo', () => attrs.onUndo?.(operation.id))
-              : undefined,
-            operation.state === 'queued' ||
-            operation.state === 'planning' ||
-            operation.state === 'running'
-              ? button(t('button', 'cancel'), 'cancel', () => attrs.onCancel(operation.id))
-              : undefined,
-            operation.state === 'running'
-              ? button(t('button', 'pause'), 'pause', () => attrs.onPause(operation.id))
-              : undefined,
-            operation.state === 'paused'
-              ? button(t('button', 'resume'), 'resume', () => attrs.onResume(operation.id))
-              : undefined,
-            terminal
-              ? button(t('button', 'dismiss'), 'dismiss', () => attrs.onDismiss(operation.id))
-              : undefined,
-          ]),
-          terminal && operation.undo?.available === false && operation.undo.reason !== undefined
-            ? m('.fm-operation-undo-reason', operation.undo.reason)
-            : undefined,
-        ]);
-      }),
+              terminal &&
+              operation.kind !== 'undo' &&
+              operation.undo?.available === false &&
+              operation.undo.reason !== undefined
+                ? m('.fm-operation-undo-reason', operation.undo.reason)
+                : undefined,
+            ]);
+          }),
     );
   },
 };

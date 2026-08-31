@@ -48,6 +48,45 @@ afterEach(() => {
 });
 
 describe('TauriFileManagerClient', () => {
+  describe('operation transport', () => {
+    it('maps the Tauri operation discriminator to the frontend kind', async () => {
+      invoke.mockResolvedValue([
+        {
+          id: 'operation-1',
+          type: 'trash',
+          state: 'completed',
+          sources: [
+            {
+              id: 'entry-1',
+              location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+            },
+          ],
+          destination: null,
+          progress: { completedItems: 1, completedBytes: 0 },
+          conflictPolicy: 'ask',
+          createdAt: '2026-08-31T15:00:00Z',
+          startedAt: '2026-08-31T15:00:01Z',
+          completedAt: '2026-08-31T15:00:02Z',
+          queuePosition: null,
+          resultSummary: 'Moved 1 item to Trash.',
+          errors: [],
+          undo: { available: true, reason: null, operationId: null },
+          undoOf: null,
+        },
+      ]);
+
+      const [operation] = await new TauriFileManagerClient().listOperations();
+
+      expect(operation).toMatchObject({
+        kind: 'trash',
+        completedAt: '2026-08-31T15:00:02Z',
+        result: { message: 'Moved 1 item to Trash.' },
+        undo: { available: true },
+      });
+      expect(operation).not.toHaveProperty('type');
+    });
+  });
+
   describe('settings transport', () => {
     it('normalizes optional saved-search collections omitted from Tauri JSON', async () => {
       invoke.mockResolvedValue({
@@ -333,17 +372,30 @@ describe('TauriFileManagerClient', () => {
         destination: { providerId: 'local', uri: 'file:///Archive' },
         conflictPolicy: 'ask',
       } as const;
-      const operation = {
+      const dto = {
         id: 'operation-1',
-        kind: 'copy',
+        type: 'copy',
         state: 'queued',
         sources: request.sources,
         destination: request.destination,
         progress: { completedItems: 0, completedBytes: 0 },
         conflictPolicy: 'ask',
         createdAt: '2026-07-31T12:00:00Z',
+        errors: [],
+        undo: { available: false, reason: 'Operation has not completed.', operationId: null },
       };
-      invoke.mockResolvedValue(operation);
+      const operation = {
+        id: dto.id,
+        kind: dto.type,
+        state: dto.state,
+        sources: dto.sources,
+        destination: dto.destination,
+        progress: dto.progress,
+        conflictPolicy: dto.conflictPolicy,
+        createdAt: dto.createdAt,
+        undo: { available: false, reason: 'Operation has not completed.' },
+      };
+      invoke.mockResolvedValue(dto);
       const client = new TauriFileManagerClient();
 
       await expect(client.startOperation(request)).resolves.toEqual(operation);

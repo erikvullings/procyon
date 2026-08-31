@@ -3608,7 +3608,8 @@ mod tests {
         let first = dir.path().join("trash-me.txt");
         let second = dir.path().join("trash-me-too.txt");
         std::fs::write(&first, b"1").expect("write first fixture");
-        std::fs::write(&second, b"2").expect("write second fixture");
+        std::fs::create_dir(&second).expect("create second fixture");
+        std::fs::write(second.join("nested.txt"), b"2345").expect("write nested fixture");
 
         let started = service
             .start_operation(trash_request(&[&first, &second]), None)
@@ -3616,6 +3617,10 @@ mod tests {
         let result = wait_for_terminal_operation(&service, started.id.into()).await;
 
         assert_eq!(result.state, OperationStateDto::Completed);
+        assert_eq!(result.progress.total_items, Some(2));
+        assert_eq!(result.progress.completed_items, 2);
+        assert_eq!(result.progress.total_bytes, Some(5));
+        assert_eq!(result.progress.completed_bytes, 5);
         assert_eq!(adapter.trashed.lock().unwrap().as_slice(), [first, second]);
         // Trashing never routes through a `FileSystemProvider::remove` call,
         // so the fixtures are untouched by this test double; only the real

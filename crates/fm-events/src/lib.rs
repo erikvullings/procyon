@@ -883,6 +883,16 @@ pub enum BackendEventPayload {
         /// The new layout.
         layout: WorkspaceLayoutPayload,
     },
+    /// The workspace's operation-centre presentation preferences changed.
+    #[serde(rename = "workspace.operationCentreChanged")]
+    WorkspaceOperationCentreChanged {
+        /// The workspace's new revision.
+        revision: u64,
+        /// Whether the operation centre is visible.
+        visible: bool,
+        /// The operation centre's height in pixels.
+        height: u32,
+    },
     /// The focused pane changed.
     #[serde(rename = "workspace.activePaneChanged")]
     WorkspaceActivePaneChanged {
@@ -1164,6 +1174,7 @@ impl BackendEventPayload {
             Self::WorkspaceClosed { .. } => "workspace.closed",
             Self::WorkspaceDeleted { .. } => "workspace.deleted",
             Self::WorkspaceLayoutChanged { .. } => "workspace.layoutChanged",
+            Self::WorkspaceOperationCentreChanged { .. } => "workspace.operationCentreChanged",
             Self::WorkspaceActivePaneChanged { .. } => "workspace.activePaneChanged",
             Self::WorkspaceTabAdded { .. } => "workspace.tabAdded",
             Self::WorkspaceTabClosed { .. } => "workspace.tabClosed",
@@ -1448,6 +1459,7 @@ mod tests {
                 "workspace.closed",
                 "workspace.deleted",
                 "workspace.layoutChanged",
+                "workspace.operationCentreChanged",
                 "workspace.activePaneChanged",
                 "workspace.tabAdded",
                 "workspace.tabClosed",
@@ -1638,6 +1650,11 @@ mod tests {
                 Self::WorkspaceLayoutChanged {
                     revision: 2,
                     layout: WorkspaceLayoutPayload::Pane { pane_id },
+                },
+                Self::WorkspaceOperationCentreChanged {
+                    revision: 2,
+                    visible: true,
+                    height: 240,
                 },
                 Self::WorkspaceActivePaneChanged {
                     revision: 2,

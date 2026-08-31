@@ -13,7 +13,7 @@
 use fm_domain::EntryKind;
 use fm_domain::Location;
 use fm_transport_dto::CalculateFolderSizeResponseDto;
-use fm_vfs::{ListOptions, ProviderCapabilities, ProviderRegistry};
+use fm_vfs::{FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::ApplicationError;
@@ -33,13 +33,22 @@ pub(crate) async fn calculate_folder_size(
         .require(ProviderCapabilities::LIST)
         .map_err(ApplicationError::from)?;
 
-    let cancellation = CancellationToken::new();
+    calculate_directory_size(provider.as_ref(), location, CancellationToken::new())
+        .await
+        .map_err(ApplicationError::from)
+}
+
+pub(crate) async fn calculate_directory_size(
+    provider: &dyn FileSystemProvider,
+    location: Location,
+    cancellation: CancellationToken,
+) -> Result<CalculateFolderSizeResponseDto, VfsError> {
     let mut total_bytes: u64 = 0;
     let mut file_count: u64 = 0;
     let mut stack = vec![location];
     while let Some(current) = stack.pop() {
         if cancellation.is_cancelled() {
-            return Err(fm_vfs::VfsError::Cancelled.into());
+            return Err(VfsError::Cancelled);
         }
         let mut continuation_token = None;
         loop {
@@ -52,8 +61,7 @@ pub(crate) async fn calculate_folder_size(
                     },
                     cancellation.clone(),
                 )
-                .await
-                .map_err(ApplicationError::from)?;
+                .await?;
             for entry in page.entries {
                 match entry.kind {
                     EntryKind::Directory => stack.push(entry.location),

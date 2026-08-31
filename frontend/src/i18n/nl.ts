@@ -39,6 +39,8 @@ export const nl = {
     findFiles: 'Bestanden zoeken',
     comparePanes: 'Vensters vergelijken',
     comparePanesTooltip: 'Selecteer de verskillende bestanden tussen de twee vensters (Shift+F2)',
+    operationCentre: 'Bewerkingen (Alt+Z)',
+    operationCentreUpdateFailed: 'Kon de zichtbaarheid van het bewerkingencentrum niet bijwerken.',
     commandPalette: 'Commandopallet',
     workspaceSwitcher: 'Werkruimte wisselen',
     workspaceSwitcherLabel: 'Werkruimte wisselen, huidige werkruimte: {name}',
@@ -302,6 +304,8 @@ export const nl = {
   },
   operation: {
     centre: 'Bewerkingen',
+    empty: 'Geen bewerkingen om te tonen.',
+    toggleFileList: 'Bestandslijst tonen of verbergen',
     cancelOperation: 'Bewerking annuleren',
     resolveConflict: 'Conflict oplossen',
     source: 'Bron',
@@ -364,7 +368,6 @@ export const nl = {
     filesFound: { 1: '1 bestand gevonden.', n: '{n} bestanden gevonden.' },
     entriesCompared: { 1: '1 item vergeleken.', n: '{n} items vergeleken.' },
     itemsCompleted: '{count} items voltooid ({bytes}).',
-    undoInProgress: 'Ongedaan maken is bezig.',
   },
   viewer: {
     closeViewer: 'Viewer sluiten',

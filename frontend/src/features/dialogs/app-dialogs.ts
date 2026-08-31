@@ -64,6 +64,7 @@ import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/s
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
+  getOperationCentreVisible(): boolean;
   getOperations(): OperationCentreState;
   setOperations(next: OperationCentreState): void;
   getPendingConflict(): OperationConflict | undefined;
@@ -149,55 +150,48 @@ export function renderAppDialogs(
   const ds = dialogs.getState();
 
   return [
-    m(OperationCentre, {
-      state: ctx.getOperations(),
-      onCancel: (operationId) => {
-        ctx.setOperations(transitionOperationState(ctx.getOperations(), operationId, 'cancelling'));
-        void client.cancelOperation(operationId).catch(() => undefined);
-      },
-      onPause: (operationId) => {
-        ctx.setOperations(transitionOperationState(ctx.getOperations(), operationId, 'paused'));
-        void client.pauseOperation(operationId).catch(() => undefined);
-      },
-      onResume: (operationId) => {
-        ctx.setOperations(transitionOperationState(ctx.getOperations(), operationId, 'running'));
-        void client.resumeOperation(operationId).catch(() => undefined);
-      },
-      onUndo: (operationId) => {
-        void client
-          .undoOperation(operationId)
-          .then((undo) => {
-            const operations = ctx.getOperations();
-            const original = operations.byId[operationId];
-            ctx.setOperations({
-              ...operations,
-              byId: {
-                ...operations.byId,
-                ...(original === undefined
-                  ? {}
-                  : {
-                      [operationId]: {
-                        ...original,
-                        undo: {
-                          available: false,
-                          reason: t('operation', 'undoInProgress'),
-                          operationId: undo.id,
-                        },
-                      },
-                    }),
-                [undo.id]: undo,
-              },
-            });
-            ctx.redraw();
-          })
-          .catch(() => undefined);
-      },
-      onDismiss: (operationId) => {
-        ctx.cancelAutoDismiss(operationId);
-        ctx.rememberDismissedOperation(operationId);
-        ctx.setOperations(dismissOperation(ctx.getOperations(), operationId));
-      },
-    }),
+    ctx.getOperationCentreVisible()
+      ? m(OperationCentre, {
+          state: ctx.getOperations(),
+          onCancel: (operationId) => {
+            ctx.setOperations(
+              transitionOperationState(ctx.getOperations(), operationId, 'cancelling'),
+            );
+            void client.cancelOperation(operationId).catch(() => undefined);
+          },
+          onPause: (operationId) => {
+            ctx.setOperations(transitionOperationState(ctx.getOperations(), operationId, 'paused'));
+            void client.pauseOperation(operationId).catch(() => undefined);
+          },
+          onResume: (operationId) => {
+            ctx.setOperations(
+              transitionOperationState(ctx.getOperations(), operationId, 'running'),
+            );
+            void client.resumeOperation(operationId).catch(() => undefined);
+          },
+          onUndo: (operationId) => {
+            void client
+              .undoOperation(operationId)
+              .then((undo) => {
+                const operations = ctx.getOperations();
+                const byId = { ...operations.byId };
+                delete byId[operationId];
+                byId[undo.id] = byId[undo.id] ?? undo;
+                ctx.setOperations({
+                  ...operations,
+                  byId,
+                });
+                ctx.redraw();
+              })
+              .catch(() => undefined);
+          },
+          onDismiss: (operationId) => {
+            ctx.cancelAutoDismiss(operationId);
+            ctx.rememberDismissedOperation(operationId);
+            ctx.setOperations(dismissOperation(ctx.getOperations(), operationId));
+          },
+        })
+      : undefined,
     m(CreateDirectoryDialog, {
       open: ds.createDirectoryOpen,
       onCancel: () => dialogs.cancelCreateDirectory(),

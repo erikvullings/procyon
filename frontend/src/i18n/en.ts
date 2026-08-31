@@ -38,6 +38,8 @@ export const en = {
     findFiles: 'Find files',
     comparePanes: 'Compare panes',
     comparePanesTooltip: 'Select the entries that differ between the two panes (Shift+F2)',
+    operationCentre: 'Operations (Alt+Z)',
+    operationCentreUpdateFailed: 'Could not update operation-centre visibility.',
     commandPalette: 'Command palette',
     workspaceSwitcher: 'Workspace switcher',
     workspaceSwitcherLabel: 'Workspace switcher, current workspace: {name}',
@@ -299,6 +301,8 @@ export const en = {
   },
   operation: {
     centre: 'Operations',
+    empty: 'No operations to show.',
+    toggleFileList: 'Show or hide file list',
     cancelOperation: 'Cancel operation',
     resolveConflict: 'Resolve conflict',
     source: 'Source',
@@ -360,7 +364,6 @@ export const en = {
     filesFound: { 1: 'Found 1 file.', n: 'Found {n} files.' },
     entriesCompared: { 1: 'Compared 1 entry.', n: 'Compared {n} entries.' },
     itemsCompleted: 'Completed {count} items ({bytes}).',
-    undoInProgress: 'Undo is in progress.',
   },
   viewer: {
     closeViewer: 'Close viewer',

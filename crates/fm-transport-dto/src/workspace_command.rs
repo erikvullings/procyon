@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::location::LocationDto;
 use crate::workspace::{
-    ColumnConfigurationDto, DirectoryViewModeDto, IconSizeDto, PersistedFilterDto,
-    SortDescriptorDto, WorkspaceLayoutDto,
+    ColumnConfigurationDto, DirectoryViewModeDto, IconSizeDto, OperationCentrePreferencesDto,
+    PersistedFilterDto, SortDescriptorDto, WorkspaceLayoutDto,
 };
 
 /// How a tab's location changed, so navigation history can be updated
@@ -278,6 +278,16 @@ pub enum WorkspaceCommandDto {
         /// The revision this command was issued against.
         expected_revision: u64,
     },
+    /// Updates operation-centre visibility and sizing.
+    #[serde(rename_all = "camelCase")]
+    UpdateOperationCentre {
+        /// The target workspace.
+        workspace_id: Uuid,
+        /// The new operation-centre preferences.
+        preferences: OperationCentrePreferencesDto,
+        /// The revision this command was issued against.
+        expected_revision: u64,
+    },
 }
 
 impl From<WorkspaceCommand> for WorkspaceCommandDto {
@@ -395,6 +405,15 @@ impl From<WorkspaceCommand> for WorkspaceCommandDto {
             } => Self::UpdateLayout {
                 workspace_id: workspace_id.into(),
                 layout: layout.into(),
+                expected_revision,
+            },
+            WorkspaceCommand::UpdateOperationCentre {
+                workspace_id,
+                preferences,
+                expected_revision,
+            } => Self::UpdateOperationCentre {
+                workspace_id: workspace_id.into(),
+                preferences: preferences.into(),
                 expected_revision,
             },
         }
@@ -518,6 +537,15 @@ impl From<WorkspaceCommandDto> for WorkspaceCommand {
                 layout: layout.into(),
                 expected_revision,
             },
+            WorkspaceCommandDto::UpdateOperationCentre {
+                workspace_id,
+                preferences,
+                expected_revision,
+            } => Self::UpdateOperationCentre {
+                workspace_id: workspace_id.into(),
+                preferences: preferences.into(),
+                expected_revision,
+            },
         }
     }
 }
@@ -638,6 +666,14 @@ mod tests {
             WorkspaceCommand::UpdateLayout {
                 workspace_id,
                 layout: fm_domain::WorkspaceLayout::Pane { pane_id },
+                expected_revision: 1,
+            },
+            WorkspaceCommand::UpdateOperationCentre {
+                workspace_id,
+                preferences: fm_domain::OperationCentrePreferences {
+                    visible: true,
+                    height: 240,
+                },
                 expected_revision: 1,
             },
         ];

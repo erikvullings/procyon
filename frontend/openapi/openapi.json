@@ -6896,6 +6896,39 @@
               "type"
             ],
             "type": "object"
+          },
+          {
+            "description": "Updates operation-centre visibility and sizing.",
+            "properties": {
+              "expectedRevision": {
+                "description": "The revision this command was issued against.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "preferences": {
+                "$ref": "#/components/schemas/OperationCentrePreferencesDto",
+                "description": "The new operation-centre preferences."
+              },
+              "type": {
+                "enum": [
+                  "updateOperationCentre"
+                ],
+                "type": "string"
+              },
+              "workspaceId": {
+                "description": "The target workspace.",
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspaceId",
+              "preferences",
+              "expectedRevision",
+              "type"
+            ],
+            "type": "object"
           }
         ]
       },

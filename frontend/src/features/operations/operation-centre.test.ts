@@ -179,7 +179,7 @@ describe('OperationCentre states', () => {
     expect(root.querySelectorAll('.fm-operation')).toHaveLength(5);
     expect(root.textContent).toContain('report.pdf');
     expect(root.textContent).toContain('512 B/s');
-    expect(root.textContent).toContain('Copied 4 items.');
+    expect(root.querySelector('[data-operation-id="completed"] .fm-operation-result')).toBeNull();
     expect(root.textContent).toContain('Could not copy report.pdf.');
     expect(root.querySelector('details')?.textContent).toContain('Permission denied');
     expect(
@@ -215,7 +215,7 @@ describe('OperationCentre states', () => {
     expect(result?.textContent).toBe('Cancelled after 2 / 4 items (1 KiB / 2 KiB).');
   });
 
-  it('renders nothing when there are no operations', () => {
+  it('renders an empty state when there are no operations', () => {
     m.mount(root, {
       view: () =>
         m(OperationCentre, {
@@ -227,8 +227,8 @@ describe('OperationCentre states', () => {
         }),
     });
 
-    expect(root.querySelector('.fm-operation-centre')).toBeNull();
-    expect(root.textContent).toBe('');
+    expect(root.querySelector('.fm-operation-centre')).not.toBeNull();
+    expect(root.textContent).toBe('No operations to show.');
   });
 
   it('shows a match count instead of the current-entry filename for a running search', () => {
@@ -303,8 +303,7 @@ describe('OperationCentre states', () => {
         }),
     });
 
-    const result = root.querySelector('[data-operation-id="warned-copy"] .fm-operation-result');
-    expect(result?.textContent).toContain('Completed with 1 warning.');
+    expect(root.querySelector('[data-operation-id="warned-copy"] .fm-operation-result')).toBeNull();
     const warningText = root.querySelector(
       '[data-operation-id="warned-copy"] .fm-operation-warning',
     );
@@ -317,6 +316,17 @@ describe('OperationCentre states', () => {
     const onUndo = vi.fn();
     const undoable: Operation = {
       ...operation('completed', 'undoable'),
+      sources: [
+        {
+          id: 'report',
+          location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+        },
+        {
+          id: 'notes',
+          location: { providerId: 'local', uri: 'file:///Documents/notes.txt' },
+        },
+      ],
+      completedAt: '2026-08-31T15:00:02Z',
       undo: { available: true },
     };
     const irreversible: Operation = {
@@ -340,9 +350,31 @@ describe('OperationCentre states', () => {
       .querySelector<HTMLButtonElement>('[data-operation-id="undoable"] [data-action="undo"]')
       ?.click();
     expect(onUndo).toHaveBeenCalledWith('undoable');
+    expect(root.querySelector('[data-operation-id="undoable"] [data-action="dismiss"]')).toBeNull();
+    expect(
+      root.querySelector<HTMLTimeElement>('[data-operation-id="undoable"] time')?.dateTime,
+    ).toBe('2026-08-31T15:00:02Z');
+    const sources = root.querySelector('[data-operation-id="undoable"] .fm-operation-sources');
+    expect(sources?.tagName).toBe('DETAILS');
+    expect(sources?.hasAttribute('open')).toBe(false);
+    expect(sources?.querySelector('.fm-operation-source-preview')?.textContent).toBe(
+      'report.pdf, notes.txt',
+    );
+    expect(sources?.querySelector('summary')?.getAttribute('aria-label')).toBe(
+      'Show or hide file list',
+    );
+    expect([...(sources?.querySelectorAll('li') ?? [])].map((item) => item.textContent)).toEqual([
+      'report.pdf',
+      'notes.txt',
+    ]);
+    expect(root.querySelector('[data-operation-id="undoable"] progress')).toBeNull();
+    expect(root.querySelector('[data-operation-id="undoable"] .fm-operation-result')).toBeNull();
     expect(
       root.querySelector('[data-operation-id="irreversible"] [data-action="undo"]'),
     ).toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] [data-action="dismiss"]'),
+    ).not.toBeNull();
     expect(
       root.querySelector('[data-operation-id="irreversible"] .fm-operation-undo-reason')
         ?.textContent,

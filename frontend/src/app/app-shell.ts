@@ -15,6 +15,7 @@ import {
   compareIcon,
   cornerLeftUpIcon,
   layoutGridIcon,
+  listIcon,
   searchIcon,
   settingsIcon,
 } from '../components/tabler-icons';
@@ -104,7 +105,11 @@ import {
   type PaneDirectoryView,
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
-import { createOperationsState, dismissOperation } from '../features/operations/operation-state';
+import {
+  createOperationsState,
+  dismissOperation,
+  shouldAutoDismissOperation,
+} from '../features/operations/operation-state';
 import {
   createOperationsController,
   type OperationsController,
@@ -186,7 +191,6 @@ import type {
   Operation,
   OperationConflict,
   OperationId,
-  OperationState,
   PaneId,
   PluginDescriptor,
   PluginId,
@@ -287,16 +291,6 @@ function persistDismissedOperationIds(ids: ReadonlySet<OperationId>): void {
   } catch {
     // localStorage can be unavailable in some runtimes; in-memory dismissal still works.
   }
-}
-
-/** States that auto-dismiss; `failed` is intentionally excluded. */
-function isAutoDismissibleState(state: OperationState): boolean {
-  return (
-    state === 'completed' ||
-    state === 'completedWithWarnings' ||
-    state === 'cancelled' ||
-    state === 'interrupted'
-  );
 }
 
 /**
@@ -794,7 +788,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       setTimeout(() => {
         autoDismissTimers.delete(operationId);
         const current = operations.byId[operationId];
-        if (current !== undefined && isAutoDismissibleState(current.state)) {
+        if (current !== undefined && shouldAutoDismissOperation(current)) {
           operations = dismissOperation(operations, operationId);
           m.redraw();
         }
@@ -1803,6 +1797,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
+  function toggleOperationCentre(): void {
+    const previous = workspace;
+    if (previous === undefined) return;
+    const preferences = {
+      ...previous.operationCentre,
+      visible: !previous.operationCentre.visible,
+    };
+    replaceWorkspace({ ...previous, operationCentre: preferences });
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'updateOperationCentre',
+        workspaceId: previous.id,
+        preferences,
+        expectedRevision: previous.revision,
+      },
+      replaceWorkspace,
+    ).catch((error: unknown) => {
+      if (workspace?.revision === previous.revision) replaceWorkspace(previous);
+      toast({
+        html: workspaceErrorMessage(error, t('shell', 'operationCentreUpdateFailed')),
+      });
+    });
+  }
+
   /** A short display label for the tree sidebar's root row - the host segment of a remote
    * provider's URI (e.g. `sftp://my-server/` -> "my-server"), or "/" for a local root. */
   function treeRootName(location: Location): string {
@@ -2394,6 +2413,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       }
     },
     toggleDirectoryTree,
+    toggleOperationCentre,
     redraw: () => m.redraw(),
     setSort: (paneId, sort) => {
       const liveWorkspace = workspace;
@@ -2941,6 +2961,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   const appDialogsContext: AppDialogsContext = {
+    getOperationCentreVisible: () => workspace?.operationCentre.visible === true,
     getOperations: () => operations,
     setOperations: (next) => {
       operations = next;
@@ -3211,8 +3232,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             // ones that still need attention (failed) or are still genuinely active.
             const relevant = listed.filter(
               (operation) =>
-                !isAutoDismissibleState(operation.state) &&
-                !dismissedOperationIds.has(operation.id),
+                !shouldAutoDismissOperation(operation) && !dismissedOperationIds.has(operation.id),
             );
             operations = createOperationsState(relevant);
             m.redraw();
@@ -3523,6 +3543,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   ],
                 ),
               ],
+            ),
+            tooltip(
+              t('shell', 'operationCentre'),
+              m(
+                IconButton,
+                {
+                  className: 'fm-operation-centre-button',
+                  disabled: workspace === undefined,
+                  'aria-label': t('shell', 'operationCentre'),
+                  'aria-pressed': String(workspace?.operationCentre.visible === true),
+                  onclick: toggleOperationCentre,
+                },
+                listIcon(),
+              ),
             ),
             tooltip(
               t('shell', 'diagnostics'),

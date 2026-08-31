@@ -31,6 +31,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
+use crate::folder_size::calculate_directory_size;
 
 pub(crate) struct OperationPlanner {
     providers: ProviderRegistry,
@@ -1407,16 +1408,30 @@ impl OperationExecutor for TrashExecutor {
     async fn plan(
         &self,
         operation: &Operation,
-        _cancellation: &CancellationToken,
+        cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
-        Ok(OperationPlan::new(
-            operation
-                .sources
-                .iter()
-                .cloned()
-                .map(|entry| PlanItem::new(entry, 0))
-                .collect(),
-        ))
+        let mut items = Vec::with_capacity(operation.sources.len());
+        for source in &operation.sources {
+            let provider = self.providers.resolve(&source.location)?;
+            provider
+                .capabilities_for(&source.location)?
+                .require(ProviderCapabilities::LIST)?;
+            let summary = provider.inspect(source, cancellation.clone()).await?;
+            let bytes = match summary.kind {
+                EntryKind::Directory => {
+                    calculate_directory_size(
+                        provider.as_ref(),
+                        summary.location,
+                        cancellation.clone(),
+                    )
+                    .await?
+                    .total_bytes
+                }
+                EntryKind::File | EntryKind::Symlink => summary.size.unwrap_or(0),
+            };
+            items.push(PlanItem::new(source.clone(), bytes));
+        }
+        Ok(OperationPlan::new(items))
     }
 
     async fn execute(

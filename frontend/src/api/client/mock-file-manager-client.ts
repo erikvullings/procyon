@@ -1056,6 +1056,13 @@ export class MockFileManagerClient implements FileManagerClient {
         case 'updateLayout':
           changed = { ...current, layout: command.layout, revision: current.revision + 1 };
           break;
+        case 'updateOperationCentre':
+          changed = {
+            ...current,
+            operationCentre: command.preferences,
+            revision: current.revision + 1,
+          };
+          break;
         case 'addTab':
         case 'addTransientTab': {
           const pane = current.panesById[command.paneId];
