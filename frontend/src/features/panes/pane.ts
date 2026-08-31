@@ -599,7 +599,8 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
         editing = false;
         pathError = undefined;
       }
-      if (typeaheadPath !== attrs.path) {
+      const pathChanged = typeaheadPath !== attrs.path;
+      if (pathChanged) {
         typeaheadPath = attrs.path;
         typeaheadCtrl.reset();
       }
@@ -1652,6 +1653,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               : m(DirectoryTable, {
                   ...sharedListAttrs,
                   active: attrs.active,
+                  centerCursor: pathChanged,
                   sort: attrs.tableConfig.sort,
                   ...(attrs.tableConfig.pluginColumns === undefined
                     ? {}

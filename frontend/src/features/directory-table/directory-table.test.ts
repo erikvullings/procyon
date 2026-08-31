@@ -878,6 +878,51 @@ describe('DirectoryTable rows', () => {
     expect(grid?.scrollTop).toBeGreaterThan(0);
   });
 
+  it('scrolls to the cursor when navigation replaces the directory at the same index and size', () => {
+    let entries = Array.from({ length: 100 }, (_, index) =>
+      entry({ id: `child-${index}`, name: `child-${index}.txt` }),
+    );
+    let centerCursor = false;
+    m.mount(root, {
+      view: () =>
+        m(DirectoryTable, {
+          state: { type: 'loaded' },
+          source: entryArraySource(entries),
+          cursorIndex: 50,
+          centerCursor,
+          viewportHeight: 120,
+        }),
+    });
+    const grid = root.querySelector<HTMLElement>('[role="grid"]');
+    if (grid === null) throw new Error('directory grid was not rendered');
+    let appliedScrollTop = grid.scrollTop;
+    let clampNextScroll = false;
+    Object.defineProperty(grid, 'scrollTop', {
+      configurable: true,
+      get: () => appliedScrollTop,
+      set: (next: number) => {
+        if (clampNextScroll) {
+          clampNextScroll = false;
+          return;
+        }
+        appliedScrollTop = next;
+      },
+    });
+    grid.scrollTop = 0;
+    grid.dispatchEvent(new Event('scroll'));
+
+    entries = Array.from({ length: 100 }, (_, index) =>
+      entry({ id: `parent-${index}`, name: `parent-${index}.txt` }),
+    );
+    centerCursor = true;
+    // WKWebView clamps this pre-patch write against the old directory's shorter content height.
+    // The component must retry after Mithril has rendered the replacement directory.
+    clampNextScroll = true;
+    m.redraw.sync();
+
+    expect(grid.scrollTop).toBe(950);
+  });
+
   it('re-scrolls to a pinned cursor once the source grows, even though the cursor index itself is unchanged', () => {
     // Regression test: `moveCursorTo`/edge:'last' can land the cursor on an index that
     // exceeds what's loaded so far (the source reports its eventual total via

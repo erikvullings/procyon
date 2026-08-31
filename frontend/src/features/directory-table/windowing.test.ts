@@ -66,4 +66,17 @@ describe('scrollOffsetForIndex', () => {
       }),
     ).toBe(510);
   });
+
+  it('centers a row when possible and clamps near either end', () => {
+    const inputs = {
+      entryCount: 100,
+      rowHeight: 20,
+      scrollTop: 0,
+      viewportHeight: 120,
+      alignment: 'center' as const,
+    };
+    expect(scrollOffsetForIndex({ ...inputs, index: 50 })).toBe(950);
+    expect(scrollOffsetForIndex({ ...inputs, index: 1 })).toBe(0);
+    expect(scrollOffsetForIndex({ ...inputs, index: 98 })).toBe(1_880);
+  });
 });

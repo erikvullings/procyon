@@ -34,12 +34,24 @@ export function calculateVisibleWindow(
  * Returns the nearest scroll offset that fully reveals an index, preserving
  * the current offset when the row is already visible.
  */
-export function scrollOffsetForIndex(inputs: WindowingInputs & { readonly index: number }): number {
+export function scrollOffsetForIndex(
+  inputs: WindowingInputs & {
+    readonly index: number;
+    readonly alignment?: 'nearest' | 'center';
+  },
+): number {
   if (inputs.entryCount === 0) {
     return 0;
   }
   const index = Math.max(0, Math.min(inputs.entryCount - 1, inputs.index));
   const rowTop = index * inputs.rowHeight;
+  if (inputs.alignment === 'center') {
+    const centered = rowTop - (inputs.viewportHeight - inputs.rowHeight) / 2;
+    return Math.max(
+      0,
+      Math.min(inputs.entryCount * inputs.rowHeight - inputs.viewportHeight, centered),
+    );
+  }
   const rowBottom = rowTop + inputs.rowHeight;
   if (rowTop < inputs.scrollTop) {
     return rowTop;
