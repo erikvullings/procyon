@@ -3668,6 +3668,8 @@ mod tests {
             let mut permissions = std::fs::metadata(&file)
                 .expect("read restored fixture metadata")
                 .permissions();
+            // On Windows this clears the read-only file attribute; the Unix warning is inapplicable.
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             std::fs::set_permissions(file, permissions).expect("make restored fixture writable");
         }
