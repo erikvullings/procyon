@@ -912,6 +912,8 @@ export const en = {
     overwrite: 'Overwrite',
     saveAs: 'Save As…',
     saveAsPrompt: 'Save as URI',
+    yes: 'Yes',
+    no: 'No',
     cancel: 'Cancel',
     saveChangesBeforeClosing: 'Save changes before closing?',
     discard: 'Discard',

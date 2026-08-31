@@ -569,6 +569,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     activePaneId: () => activeDirectory()?.paneId,
     openNewTab: (paneId) => tabController.openTab(paneId),
     closeActiveTab: (paneId) => {
+      const focusedEditorPaneId = (
+        document.activeElement?.closest('.fm-file-editor') as HTMLElement | null
+      )?.dataset.editorPaneId as PaneId | undefined;
+      if (focusedEditorPaneId !== undefined && requestCloseEditor(focusedEditorPaneId)) return;
       const activeTabId = workspace?.panesById[paneId]?.activeTabId;
       if (activeTabId !== undefined) tabController.requestCloseTab(paneId, activeTabId);
     },
@@ -1194,6 +1198,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     editorByPane.get(paneId)?.controller.dispose();
     editorByPane.delete(paneId);
     m.redraw();
+  }
+
+  function requestCloseEditor(paneId: PaneId): boolean {
+    const editor = editorByPane.get(paneId);
+    if (editor === undefined) return false;
+    if (editor.controller.requestClose()) closeEditor(paneId);
+    return true;
   }
 
   function diskUsageRootName(location: Location): string {

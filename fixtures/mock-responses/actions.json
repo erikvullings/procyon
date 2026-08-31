@@ -31,7 +31,7 @@
   ,{ "id": "core.copyName", "title": "Copy Filename", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
   ,{ "id": "core.copyPath", "title": "Copy Full Path", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
   ,{ "id": "core.copyRelativePath", "title": "Copy Relative Path", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
-  ,{ "id": "core.parent", "title": "Parent", "category": "navigation", "defaultShortcuts": [{ "key": "Backspace" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.parent", "title": "Parent", "category": "navigation", "defaultShortcuts": [{ "key": "Backspace" }, { "key": "PageUp", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
   ,{ "id": "core.switchPane", "title": "Switch pane", "category": "navigation", "defaultShortcuts": [{ "key": "Tab" }, { "key": "Tab", "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
   ,{ "id": "core.moveCursorUp", "title": "Up", "category": "selection", "defaultShortcuts": [{ "key": "ArrowUp" }], "contextRequirements": {}, "source": { "kind": "core" } }
   ,{ "id": "core.moveCursorDown", "title": "Down", "category": "selection", "defaultShortcuts": [{ "key": "ArrowDown" }], "contextRequirements": {}, "source": { "kind": "core" } }

@@ -809,6 +809,7 @@ export function createPaneContentBuilder(
                 : m(FileEditor, {
                     state: editor.state,
                     controller: editor.controller,
+                    paneId,
                     onClose: () => context.closeEditor(paneId),
                   });
             })(),

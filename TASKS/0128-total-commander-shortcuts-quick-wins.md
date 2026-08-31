@@ -49,7 +49,7 @@ that require real new functionality (new dialogs, new panes, new backend capabil
 | Alt+F7 | Find files | `core.findFiles` ✓ |
 | Numpad `+` / `-` / `*` | Select/deselect/invert by mask | `core.selectByMask` / `core.deselectByMask` / `core.invertSelection` ✓ |
 | Tab | Switch pane | `core.switchPane` ✓ |
-| Backspace | Parent directory | `core.parent` ✓ |
+| Backspace / Ctrl+PageUp | Parent directory | `core.parent` ✓ |
 | Up/Down/PageUp/PageDown/Home/End/Enter | Cursor & open | ✓ |
 | Ctrl+Alt+Letter | Quick search by filename | fm's plain-character typeahead (`pane.ts:618-629`) covers this already, different trigger key but same outcome — no change needed |
 | Ctrl+M | Multi Rename Tool | Fully implemented, see [0072](0072-multi-rename.md) (done) — the multi-rename dialog opens on F2 with more than one entry selected (`Pane.beginRename`) rather than a dedicated Ctrl+M chord. See "new, cheap shortcuts" below for optionally binding Ctrl+M as an alias entry point to the same dialog. |
