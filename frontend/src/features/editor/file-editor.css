@@ -96,7 +96,6 @@
 }
 
 .fm-file-editor-conflict,
-.fm-file-editor-close-dialog,
 .fm-file-editor-message,
 .fm-file-editor-error {
   display: flex;
@@ -105,11 +104,7 @@
   padding: 0.5rem;
 }
 
-.fm-file-editor-close-dialog {
-  position: absolute;
-  z-index: 5;
-  align-self: center;
-  top: 40%;
-  background: var(--fm-surface);
-  box-shadow: var(--fm-shadow);
+.fm-file-editor-close-modal .fm-file-editor-close-choice.is-selected {
+  border-color: var(--fm-accent);
+  background: var(--fm-selection);
 }

@@ -304,7 +304,14 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             "core.parent",
             "Parent Directory",
             "navigation",
-            vec![key("Backspace")],
+            vec![
+                key("Backspace"),
+                KeyChord {
+                    key: "PageUp".to_owned(),
+                    ctrl: true,
+                    ..KeyChord::default()
+                },
+            ],
             ActionContextRequirements::none(),
         ),
         core_action(
@@ -1535,6 +1542,26 @@ mod tests {
         registry
             .require_available(&action_id, &ActionInvocationContext::default())
             .expect("core.rootDirectory must not require a selection");
+    }
+
+    #[test]
+    fn parent_directory_keeps_backspace_and_adds_ctrl_page_up() {
+        let registry = ActionRegistry::with_core_actions(PlatformCapabilities::empty());
+        let action_id = ActionId::new("core.parent");
+        let parent = registry
+            .get(&action_id)
+            .expect("core.parent must be registered");
+        assert_eq!(
+            parent.default_shortcuts,
+            vec![
+                key("Backspace"),
+                KeyChord {
+                    key: "PageUp".to_owned(),
+                    ctrl: true,
+                    ..KeyChord::default()
+                },
+            ]
+        );
     }
 
     #[test]

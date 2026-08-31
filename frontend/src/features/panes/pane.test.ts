@@ -70,7 +70,11 @@ const keybindingActions = [
     defaultShortcuts: [{ key: 'L', ctrl: true }],
   },
   { id: 'core.open', title: 'Open', defaultShortcuts: [{ key: 'ENTER' }] },
-  { id: 'core.parent', title: 'Parent directory', defaultShortcuts: [{ key: 'BACKSPACE' }] },
+  {
+    id: 'core.parent',
+    title: 'Parent directory',
+    defaultShortcuts: [{ key: 'BACKSPACE' }, { key: 'PageUp', ctrl: true }],
+  },
   { id: 'core.moveCursorDown', title: 'Move down', defaultShortcuts: [{ key: 'ARROWDOWN' }] },
   { id: 'core.moveCursorUp', title: 'Move up', defaultShortcuts: [{ key: 'ARROWUP' }] },
   { id: 'core.moveCursorPageDown', title: 'Page down', defaultShortcuts: [{ key: 'PAGEDOWN' }] },
@@ -2029,7 +2033,7 @@ describe('Pane navigation input', () => {
     ]);
   });
 
-  it('opens the directory under the cursor with Enter and navigates parent with Backspace', () => {
+  it('opens with Enter and navigates parent with Backspace or Ctrl+PageUp', () => {
     const onOpenEntry = vi.fn();
     const onParent = vi.fn();
     mount(attrs({ cursorIndex: 0, onOpenEntry, onParent }));
@@ -2037,9 +2041,12 @@ describe('Pane navigation input', () => {
 
     pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    pane?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'PageUp', ctrlKey: true, bubbles: true }),
+    );
 
     expect(onOpenEntry).toHaveBeenCalledWith(entries[0]);
-    expect(onParent).toHaveBeenCalledOnce();
+    expect(onParent).toHaveBeenCalledTimes(2);
   });
 
   it('supports history keyboard shortcuts and auxiliary mouse buttons', () => {

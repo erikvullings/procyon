@@ -101,4 +101,105 @@ describe('FileEditor', () => {
 
     expect(editorController.save).toHaveBeenCalledOnce();
   });
+
+  it('closes a saved editor from Meta+W without closing the pane tab', () => {
+    const editorController = controller();
+    const onClose = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FileEditor, {
+          state: state(false),
+          controller: editorController,
+          onClose,
+        }),
+    });
+
+    root.querySelector<HTMLElement>('.cm-content')?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'w',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(editorController.requestClose).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('opens a save modal from Meta+W when the editor is dirty', () => {
+    const editorController = controller();
+    vi.mocked(editorController.requestClose).mockReturnValue(false);
+    const onClose = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FileEditor, {
+          state: { ...state(false), dirty: true },
+          controller: editorController,
+          onClose,
+        }),
+    });
+
+    root.querySelector<HTMLElement>('.cm-content')?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'w',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(editorController.requestClose).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('defaults the unsaved changes modal to Yes and tabs to highlighted No', () => {
+    m.mount(root, {
+      view: () =>
+        m(FileEditor, {
+          state: { ...state(false), dirty: true, closePending: true },
+          controller: controller(),
+          onClose: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const yes = root.querySelector<HTMLButtonElement>('.fm-file-editor-close-save');
+    const no = root.querySelector<HTMLButtonElement>('.fm-file-editor-close-discard');
+    expect(document.activeElement).toBe(yes);
+    expect(yes?.classList.contains('is-selected')).toBe(true);
+
+    yes?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    m.redraw.sync();
+
+    expect(document.activeElement).toBe(no);
+    expect(no?.classList.contains('is-selected')).toBe(true);
+  });
+
+  it('saves on Yes, discards on No, and returns to the editor on Cancel', async () => {
+    const editorController = controller();
+    const onClose = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FileEditor, {
+          state: { ...state(false), dirty: true, closePending: true },
+          controller: editorController,
+          onClose,
+        }),
+    });
+    m.redraw.sync();
+
+    root.querySelector<HTMLButtonElement>('.fm-file-editor-close-save')?.click();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(editorController.save).toHaveBeenCalledOnce();
+
+    onClose.mockClear();
+    root.querySelector<HTMLButtonElement>('.fm-file-editor-close-discard')?.click();
+    expect(onClose).toHaveBeenCalledOnce();
+
+    root.querySelector<HTMLButtonElement>('.fm-file-editor-close-cancel')?.click();
+    expect(editorController.cancelClose).toHaveBeenCalledOnce();
+  });
 });

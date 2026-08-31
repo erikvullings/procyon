@@ -912,6 +912,8 @@ export const nl = {
     overwrite: 'Overschrijven',
     saveAs: 'Opslaan als…',
     saveAsPrompt: 'Opslaan als URI',
+    yes: 'Ja',
+    no: 'Nee',
     cancel: 'Annuleren',
     saveChangesBeforeClosing: 'Wijzigingen opslaan voordat u sluit?',
     discard: 'Negeren',
