@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Procyon — the dual-pane file manager that gathers everything</title>
+<meta name="description" content="Procyon is an open-source dual-pane file manager. Rust operation engine, keyboard-first controls, SFTP and SSH terminal, archives, plugins — one place for every file.">
+<link rel="icon" type="image/png" href="raccoon---face---bg.png">
+<link rel="apple-touch-icon" href="raccoon---body.png">
+<script>
+(function(){
+  var stored = localStorage.getItem('procyon-theme');
+  var dark = stored ? stored === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+})();
+</script>
+<style>
+:root{
+  --bg:      oklch(98% 0.005 250);
+  --surface: oklch(100% 0 0);
+  --surface-alt: oklch(96.4% 0.006 250);
+  --fg:      oklch(22% 0.02 240);
+  --muted:   oklch(50% 0.018 240);
+  --muted-2: oklch(42% 0.02 240);
+  --border:  oklch(90% 0.008 240);
+  --border-2: oklch(84% 0.01 240);
+  --accent:      oklch(58% 0.16 145);
+  --accent-deep: oklch(44% 0.15 145);
+  --accent-soft: oklch(94.5% 0.05 145);
+  --danger: oklch(55% 0.19 25);
+  --warn:   oklch(55% 0.15 75);
+
+  /* solid-button tokens: decoupled from --accent-deep so button contrast
+     (white label) and link/badge-text contrast can be tuned independently per theme */
+  --btn-primary-bg: oklch(44% 0.15 145);
+  --btn-primary-bg-hover: oklch(49% 0.15 145);
+  /* fixed dark showcase surface for the final CTA band — stays dark in both themes */
+  --ink: oklch(20% 0.02 240);
+
+  --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+  --container: 1160px;
+  --target: 44px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:      oklch(17% 0.014 250);
+    --surface: oklch(21% 0.014 250);
+    --surface-alt: oklch(25% 0.014 250);
+    --fg:      oklch(93% 0.008 240);
+    --muted:   oklch(66% 0.016 240);
+    --muted-2: oklch(74% 0.014 240);
+    --border:  oklch(32% 0.016 240);
+    --border-2: oklch(38% 0.018 240);
+    --accent:      oklch(72% 0.15 145);
+    --accent-deep: oklch(76% 0.14 145);
+    --accent-soft: oklch(28% 0.055 145);
+    --danger: oklch(68% 0.17 25);
+    --warn:   oklch(68% 0.14 75);
+    --btn-primary-bg: oklch(52% 0.15 145);
+    --btn-primary-bg-hover: oklch(58% 0.15 145);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:      oklch(17% 0.014 250);
+  --surface: oklch(21% 0.014 250);
+  --surface-alt: oklch(25% 0.014 250);
+  --fg:      oklch(93% 0.008 240);
+  --muted:   oklch(66% 0.016 240);
+  --muted-2: oklch(74% 0.014 240);
+  --border:  oklch(32% 0.016 240);
+  --border-2: oklch(38% 0.018 240);
+  --accent:      oklch(72% 0.15 145);
+  --accent-deep: oklch(76% 0.14 145);
+  --accent-soft: oklch(28% 0.055 145);
+  --danger: oklch(68% 0.17 25);
+  --warn:   oklch(68% 0.14 75);
+  --btn-primary-bg: oklch(52% 0.15 145);
+  --btn-primary-bg-hover: oklch(58% 0.15 145);
+}
+:root, :root[data-theme]{ color-scheme: light dark; }
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--font-body);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+a{color:var(--accent-deep);text-decoration:none;border-radius:4px}
+a:hover{text-decoration:underline}
+a:focus-visible,button:focus-visible,input:focus-visible{
+  outline:2px solid var(--accent-deep);
+  outline-offset:2px;
+}
+::selection{background:var(--accent-soft);color:var(--fg)}
+h1,h2,h3{font-family:var(--font-display);font-weight:700;margin:0;color:var(--fg)}
+h1{font-size:clamp(40px,5.4vw,64px);line-height:1.04;letter-spacing:-0.025em;}
+h2{font-size:clamp(26px,3vw,34px);line-height:1.12;letter-spacing:-0.015em;}
+h3{font-size:19px;line-height:1.25;letter-spacing:-0.005em}
+p{margin:0}
+code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:var(--container);margin:0 auto;padding:0 28px}
+.icon{width:1.15em;height:1.15em;vertical-align:-0.2em;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.eyebrow{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  font-weight:500;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--border-2);flex:none}
+.kbd{
+  font-size:12px;
+  letter-spacing:0.02em;
+  color:var(--muted-2);
+  background:var(--surface-alt);
+  border:1px solid var(--border);
+  border-bottom-width:2px;
+  border-radius:5px;
+  padding:2px 7px;
+  white-space:nowrap;
+}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  min-height:var(--target);
+  padding:0 22px;
+  border-radius:9px;
+  font-family:var(--font-body);
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:0.015em;
+  cursor:pointer;
+  border:1px solid transparent;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .05s ease;
+}
+.btn:active{transform:translateY(1px)}
+.btn-primary{
+  background:var(--btn-primary-bg);
+  border-color:var(--btn-primary-bg);
+  color:#fff;
+}
+.btn-primary:hover{background:var(--btn-primary-bg-hover);text-decoration:none}
+.btn-ghost{
+  background:var(--surface);
+  border-color:var(--border-2);
+  color:var(--fg);
+}
+.btn-ghost:hover{background:var(--surface-alt);border-color:var(--border-2);text-decoration:none}
+
+/* ---------- nav ---------- */
+.nav{
+  position:sticky;
+  top:0;z-index:50;
+  background:color-mix(in oklab, var(--bg) 88%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.nav-inner{
+  max-width:var(--container);
+  margin:0 auto;
+  padding:0 28px;
+  height:68px;
+  display:flex;
+  align-items:center;
+  gap:26px;
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  color:var(--fg);
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:18px;
+  letter-spacing:-0.01em;
+  min-height:var(--target);
+}
+.brand:hover{text-decoration:none}
+.brand .brand-mark{
+  width:30px;height:30px;
+  border-radius:8px;
+  object-fit:contain;
+  flex:none;
+  box-shadow:0 2px 6px -2px oklch(30% 0.03 250 / 0.5);
+}
+.brand small{font-family:var(--font-mono);font-weight:500;font-size:11px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-top:2px}
+.nav-links{display:flex;align-items:center;gap:4px;margin-left:8px}
+.nav-links a{
+  color:var(--fg);
+  font-size:14px;
+  font-weight:500;
+  min-height:var(--target);
+  display:inline-flex;
+  align-items:center;
+  padding:0 13px;
+  border-radius:7px;
+}
+.nav-links a:hover{background:var(--surface-alt);color:var(--accent-deep);text-decoration:none}
+.nav-cta{margin-left:auto;display:flex;align-items:center;gap:10px}
+.nav-cta .link{
+  color:var(--fg);
+  font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;gap:7px;
+  min-height:var(--target);padding:0 10px;
+}
+.nav-cta a:hover{color:var(--accent-deep);text-decoration:none}
+.nav-cta .btn{min-height:var(--target);padding:0 18px;font-size:14px}
+.theme-toggle{
+  width:var(--target);height:var(--target);flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface);border:1px solid var(--border-2);border-radius:9px;
+  color:var(--fg);cursor:pointer;padding:0;
+}
+.theme-toggle:hover{background:var(--surface-alt)}
+.theme-toggle .icon{width:18px;height:18px}
+.theme-toggle .i-moon{display:none}
+:root[data-theme="dark"] .theme-toggle .i-sun{display:none}
+:root[data-theme="dark"] .theme-toggle .i-moon{display:block}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .theme-toggle .i-sun{display:none}
+  :root:not([data-theme="light"]) .theme-toggle .i-moon{display:block}
+}
+
+/* ---------- hero ---------- */
+.hero{
+  padding:76px 0 72px;
+  overflow:hidden;
+}
+.hero-grid{
+  display:grid;
+  grid-template-columns:minmax(0,0.92fr) minmax(0,1.08fr);
+  gap:56px;
+  align-items:center;
+}
+.hero-copy .eyebrow{margin-bottom:22px}
+.hero h1{max-width:15ch;margin:0 0 24px}
+.hero h1 .hl{color:var(--accent-deep);position:relative}
+.hero .lede{
+  font-size:18px;
+  line-height:1.6;
+  color:var(--muted-2);
+  max-width:56ch;
+  margin-bottom:34px;
+}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap}
+.hero-note{
+  margin-top:18px;
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--muted);
+  letter-spacing:0.01em;
+}
+.hero-note .dot{color:var(--muted-2)}
+
+/* ---------- app mock ---------- */
+.mock{
+  background:var(--surface);
+  border:1px solid var(--border-2);
+  border-radius:14px;
+  box-shadow:0 24px 60px -28px oklch(30% 0.03 250),0 3px 8px -2px oklch(30% 0.03 250 / 0.14);
+  overflow:hidden;
+}
+.mock-shot{background:var(--surface)}
+.mock-shot img{display:block;width:100%;height:auto}
+
+/* ---------- screenshots ---------- */
+.shot{
+  margin:34px 0 0;
+  border:1px solid var(--border-2);
+  border-radius:13px;
+  overflow:hidden;
+  background:var(--surface);
+  box-shadow:0 22px 50px -32px oklch(25% 0.03 250 / 0.6);
+}
+.shot img{display:block;width:100%;height:auto}
+.shot figcaption{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 16px;
+  border-top:1px solid var(--border);
+  background:var(--surface-alt);
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--muted-2);
+}
+
+/* ---------- kbd strip ---------- */
+.kbd-strip{
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.kbd-strip-inner{
+  max-width:var(--container);margin:0 auto;padding:14px 28px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-family:var(--font-mono);font-size:13px;color:var(--muted-2);
+}
+.kbd-strip .sep{margin:0 4px;color:var(--border-2)}
+.kbd-strip b{font-weight:600;color:var(--fg)}
+
+/* ---------- stats ---------- */
+.stats{border-bottom:1px solid var(--border)}
+.stats-inner{
+  max-width:var(--container);margin:0 auto;padding:38px 28px;
+  display:grid;grid-template-columns:repeat(4,1fr);
+}
+.stat .num{font-family:var(--font-mono);font-size:26px;font-weight:600;letter-spacing:-0.02em;color:var(--fg);font-variant-numeric:tabular-nums}
+.stat .lbl{font-size:13px;color:var(--muted);margin-top:4px;letter-spacing:0.01em}
+.stat + .stat{border-left:1px solid var(--border);padding-left:28px}
+.stat:first-child{padding-right:28px}
+
+/* ---------- sections ---------- */
+.section{padding:86px 0}
+.section.alt{background:var(--surface-alt)}
+.sec-head{max-width:680px;margin-bottom:52px}
+.sec-head .eyebrow{margin-bottom:18px}
+.sec-head .sub{color:var(--muted-2);margin-top:16px;font-size:16.5px;max-width:60ch}
+.sec-head .sub code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:13.5px;color:var(--muted-2)}
+
+/* ---------- features ---------- */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.feat{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:24px;
+  display:flex;flex-direction:column;gap:12px;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.feat:hover{border-color:var(--border-2);box-shadow:0 10px 26px -18px oklch(30% 0.03 250 / 0.5)}
+.feat .ico{
+  width:38px;height:38px;border-radius:9px;
+  background:var(--surface-alt);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted-2);
+}
+.feat .ico .icon{width:19px;height:19px}
+.feat h3{font-size:16.5px;font-weight:650}
+.feat p{font-size:14.5px;color:var(--muted-2);line-height:1.55;flex:1}
+.feat .keys{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+
+/* ---------- operations ---------- */
+.ops-grid{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:48px;align-items:start}
+.ops-body{color:var(--muted-2);font-size:16px;line-height:1.7}
+.ops-body p+p{margin-top:14px}
+.ops-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
+.pill{
+  font-family:var(--font-mono);font-size:12px;letter-spacing:0.02em;
+  color:var(--muted-2);background:var(--surface);
+  border:1px solid var(--border);border-radius:999px;padding:6px 12px;
+}
+.pill svg{width:12px;height:12px;margin-right:5px;vertical-align:-1px;stroke:currentColor;fill:none;stroke-width:2}
+.list-hints{display:flex;flex-direction:column;gap:9px;margin-top:26px}
+.hint{display:flex;align-items:baseline;gap:14px;font-size:14.5px;color:var(--muted-2)}
+.hint .k{width:88px;flex:none;text-align:right}
+.hint .k kbd{font-size:11.5px}
+.hint .d{flex:1}
+.ops-panel{
+  background:var(--surface);
+  border:1px solid var(--border-2);
+  border-radius:13px;
+  overflow:hidden;
+  box-shadow:0 20px 50px -30px oklch(25% 0.03 250 / 0.6);
+}
+.ops-panel .ops-label{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);
+}
+.op{display:flex;flex-direction:column;gap:10px;padding:15px 18px;border-bottom:1px solid var(--border)}
+.op:last-child{border-bottom:none}
+.op-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.op-name{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:600}
+.op-name .icon{width:16px;height:16px;color:var(--muted-2)}
+.op-meta{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);display:flex;gap:14px;align-items:center}
+.status{font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;padding:3px 9px;border-radius:999px}
+.status.run{background:var(--accent-soft);color:var(--accent-deep)}
+.status.que{background:var(--surface-alt);color:var(--muted-2);border:1px solid var(--border)}
+.status.done{background:oklch(94% 0.03 145);color:var(--accent-deep)}
+.status.fail{background:oklch(95% 0.03 25);color:var(--danger)}
+.track{height:6px;border-radius:999px;background:var(--surface-alt);overflow:hidden}
+.track i{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.track i.warn{background:var(--warn)}
+.op-sub{display:flex;justify-content:space-between;gap:12px;font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.op-sub .rate{color:var(--accent-deep)}
+
+/* ---------- view & edit ---------- */
+.view-grid{display:grid;grid-template-columns:0.92fr 1.08fr;gap:48px;align-items:start}
+.view-shots{display:grid;grid-template-columns:1fr;gap:22px}
+.view-body{color:var(--muted-2);font-size:16px;line-height:1.7}
+.view-body p+p{margin-top:14px}
+.view-body .strong{color:var(--fg);font-weight:600}
+
+/* ---------- remote ---------- */
+.remote-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:48px;align-items:start}
+.conn{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border-2);border-radius:12px;overflow:hidden}
+.conn-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 18px;border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:12.5px;
+}
+.conn-bar .cname{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--fg)}
+.conn-bar .caddr{color:var(--muted)}
+.kdot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kdot.on{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.kdot.warn{background:var(--warn);box-shadow:0 0 0 3px oklch(94% 0.05 75)}
+.kdot.off{background:var(--border-2)}
+.conn-list{padding:6px 0}
+.crow{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 18px;font-family:var(--font-mono);font-size:13px;
+  border-bottom:1px solid var(--border);
+}
+.crow:last-child{border-bottom:none}
+.crow .fld{width:150px;flex:none;color:var(--fg)}
+.crow .note{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow .hbuf{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.hbuf .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border-2);color:var(--muted-2);background:var(--surface-alt)}
+.hbuf .tag.checked{border-color:var(--accent);color:var(--accent-deep);background:var(--accent-soft)}
+.remote-body{color:var(--muted-2);font-size:16px;line-height:1.7}
+.remote-body p+p{margin-top:14px}
+.remote-body .strong{color:var(--fg);font-weight:600}
+.remote-hints{display:flex;flex-direction:column;gap:12px;margin-top:26px}
+.rhint{display:flex;gap:13px;align-items:flex-start;font-size:14.5px;color:var(--muted-2);line-height:1.55}
+.rhint .icon{width:17px;height:17px;color:var(--accent-deep);margin-top:2px}
+.rhint b{color:var(--fg);font-weight:600}
+
+/* ---------- plugins ---------- */
+.plug-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.plug{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:24px;display:flex;flex-direction:column;gap:12px;
+}
+.plug .pl-name{display:flex;align-items:center;gap:10px;font-weight:650;font-size:15.5px}
+.plug .pl-name .icon{width:17px;height:17px;color:var(--muted-2)}
+.plug p{font-size:14.5px;color:var(--muted-2);line-height:1.55;flex:1}
+.plug .perm{font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:0.03em}
+.arch-note{
+  margin-top:34px;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:22px 24px;display:flex;gap:16px;align-items:flex-start;
+}
+.arch-note .icon{width:19px;height:19px;color:var(--accent-deep);margin-top:2px;flex:none}
+.arch-note b{color:var(--fg)}
+.arch-note p{color:var(--muted-2);font-size:14.5px;line-height:1.6}
+
+/* ---------- platforms ---------- */
+.plat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.plat{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:26px;display:flex;flex-direction:column;gap:16px;
+}
+.plat h3{display:flex;align-items:center;justify-content:space-between;font-size:16.5px}
+.plat .tag{
+  font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;font-weight:600;
+}
+.tag.full{background:var(--accent-soft);color:var(--accent-deep)}
+.tag.part{background:oklch(94% 0.05 75);color:oklch(50% 0.11 75)}
+.cap{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:6px 0;margin-top:-6px}
+.cap span{color:var(--muted-2)}
+.cap .st{font-family:var(--font-mono);font-size:11.5px;color:var(--accent-deep)}
+.cap .st.no{color:var(--muted)}
+.plat .install{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.code{
+  display:flex;align-items:center;gap:10px;
+  background:oklch(24% 0.02 250);color:oklch(85% 0.01 250);
+  border-radius:8px;padding:11px 14px;
+  font-family:var(--font-mono);font-size:12.5px;
+  overflow:hidden;
+}
+.code .pm{color:oklch(80% 0.14 145);flex:none}
+.code code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}
+.plat .alt{font-size:12.5px;color:var(--muted)}
+
+/* ---------- open source ---------- */
+.os-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+.os-body{color:var(--muted-2);font-size:16px;line-height:1.7}
+.os-body p+p{margin-top:14px}
+.os-body b,.os-body a{color:var(--fg);font-weight:600}
+.os-panel{
+  background:var(--surface);border:1px solid var(--border-2);border-radius:13px;
+  padding:26px;display:flex;flex-direction:column;gap:20px;
+}
+.os-row{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.os-row .l{color:var(--muted);font-size:13px;letter-spacing:0.02em}
+.os-row .v{font-family:var(--font-mono);font-size:13.5px;color:var(--fg);text-align:right}
+.license-line{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  border-top:1px solid var(--border);padding-top:18px;
+  font-family:var(--font-mono);font-size:13px;color:var(--muted);
+}
+
+/* ---------- final CTA ---------- */
+.final-cta{
+  background:var(--ink);
+  color:oklch(88% 0.01 250);
+  padding:88px 0;
+}
+.final-cta .eyebrow{color:oklch(70% 0.01 250)}
+.final-cta .eyebrow::before{background:oklch(45% 0.02 250)}
+.final-cta h2{color:#fff}
+.final-cta .lede{color:oklch(74% 0.012 250);max-width:56ch;margin:18px 0 34px;font-size:16.5px}
+.final-cta .wrap{display:flex;justify-content:space-between;gap:40px;align-items:center}
+.final-cta .copy{max-width:520px}
+.final-cta .btn{background:var(--accent);border-color:var(--accent);color:oklch(15% 0.02 250)}
+.final-cta .btn:hover{background:oklch(64% 0.16 145);color:oklch(15% 0.02 250)}
+.final-cta .btn.secondary{
+  background:transparent;border-color:oklch(45% 0.02 250);color:#fff;
+}
+.final-cta .btn.secondary:hover{background:oklch(30% 0.02 250);border-color:oklch(50% 0.02 250)}
+.cta-right{display:flex;flex-direction:column;align-items:center;gap:26px;flex:none}
+.cta-mascot{
+  width:min(300px,36vw);
+  aspect-ratio:1;
+  object-fit:cover;
+  border-radius:18px;
+  border:1px solid oklch(48% 0.02 250);
+  box-shadow:0 34px 80px -36px oklch(8% 0.02 250 / 0.9);
+}
+
+/* ---------- footer ---------- */
+.footer{border-top:1px solid var(--border);background:var(--bg)}
+.footer-inner{
+  max-width:var(--container);margin:0 auto;padding:40px 28px 46px;
+  display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap;align-items:center;
+}
+.footer .brand small{color:var(--muted)}
+.footer-links{display:flex;gap:22px;flex-wrap:wrap}
+.footer-links a{color:var(--fg);font-size:14px;font-weight:500;min-height:var(--target);display:inline-flex;align-items:center}
+.footer-links a:hover{color:var(--accent-deep);text-decoration:none}
+.footer .copy{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:0.03em}
+
+/* ---------- responsive ---------- */
+@media (max-width:1020px){
+  .hero-grid{grid-template-columns:1fr;gap:44px}
+  .ops-grid,.remote-grid,.view-grid{grid-template-columns:1fr;gap:40px}
+  .feat-grid,.plug-grid,.plat-grid{grid-template-columns:repeat(2,1fr)}
+  .os-grid{grid-template-columns:1fr;gap:40px}
+  .stats-inner{grid-template-columns:repeat(2,1fr);gap:24px 0}
+  .stat:first-child{padding-right:0}
+  .stat:nth-child(3){border-left:none;padding-left:0;padding-top:0}
+  .final-cta .wrap{flex-direction:column;align-items:flex-start}
+}
+@media (max-width:720px){
+  .nav-links{display:none}
+  .feat-grid,.plug-grid,.plat-grid{grid-template-columns:1fr}
+  .stats-inner{grid-template-columns:1fr;gap:22px}
+  .stat + .stat{border-left:none;padding-left:0}
+  .hero{padding:52px 0 56px}
+  .section{padding:64px 0}
+  .kbd-strip-inner{gap:8px}
+  .hint .k{width:70px}
+  .cta-mascot{width:208px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body id="top">
+
+<!-- ======= SVG sprite ======= -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A2 2 0 0 1 5 4.5h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/><path d="M9 16 5 12l4-4"/><path d="M5 12h9"/></symbol>
+  <symbol id="i-dup" viewBox="0 0 24 24"><rect x="3" y="3" width="14" height="14" rx="2"/><rect x="7" y="7" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-rename" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-tabs" viewBox="0 0 24 24"><path d="M4 9a2 2 0 0 1 2-2h3l1.5 2H18a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7V5h16v2M6 7l-1 13h14L18 7M9 11h6M4 7h16"/></symbol>
+  <symbol id="i-kbd" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M10 14h.01M14 14h.01M18 14h.01" stroke-width="2.4" stroke-linecap="round"/><path d="M8 18h8"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18c1.2 0 1.8-.9 1.8-1.8 0-.5-.2-.9-.5-1.2-.4-.3-.5-.8-.5-1.3 0-1.1.9-2 2-2h1.7A4.5 4.5 0 0 0 21 10.2C20.6 6.2 16.7 3 12 3z"/><circle cx="7.5" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10" r="1"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><path d="M9 19c-2.5 0-4-1.5-4-4v-3a4 4 0 0 1 4-4c1.5 0 3 .5 4.5.5 1.6 0 3.5-.5 4.5-.5v12c-1.5 0-3 .5-4.5.5-1.4 0-3 .5-4.5 0M5 8v8" opacity="0"/><rect x="2.5" y="4" width="17" height="14" rx="2"/><path d="M7 10h3M7 14h6"/> <path d="M20 10l1.5 1.5-1.5 1.5" opacity="0"/></symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
+</svg>
+
+<!-- ======= Nav ======= -->
+<nav class="nav" data-od-id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top" data-od-id="brand">
+      <img class="brand-mark" src="raccoon---face---bg.png" alt="" width="30" height="30">
+      <span>Procyon</span>
+      <small>·FM</small>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#operations">Operations</a>
+      <a href="#remote">Remote</a>
+      <a href="#plugins">Plugins</a>
+      <a href="#platforms">Install</a>
+    </div>
+    <div class="nav-cta">
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" aria-pressed="false">
+        <svg aria-hidden="true" focusable="false" class="icon i-sun"><use href="#i-sun"/></svg>
+        <svg aria-hidden="true" focusable="false" class="icon i-moon"><use href="#i-moon"/></svg>
+      </button>
+      <a class="link" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">
+        <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-git"/></svg>GitHub
+      </a>
+      <a class="btn btn-ghost" href="#install" data-od-id="nav-cta-install">Download</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ======= Hero ======= -->
+  <section class="hero" data-od-id="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">Open source · MIT / Apache-2.0</span>
+        <h1 data-od-id="hero-title">Gather <span class="hl">every file</span> in two panes.</h1>
+        <p class="lede">
+          Procyon — Latin for <em>raccoon</em> — is a keyboard-first dual-pane file manager.
+          Local folders, archives, and SSH hosts share one pane-wise workflow, powered by a
+          Rust operation engine and a virtualized table that holds its own at a million entries.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#install" data-od-id="hero-cta-primary">Install Procyon</a>
+          <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon" data-od-id="hero-cta-github">
+            View source
+            <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-arrow-up-right"/></svg>
+          </a>
+        </div>
+        <p class="hero-note" data-od-id="hero-credit">
+          <span class="dot">●</span> Ships as a Tauri desktop app &amp; runs in the browser
+        </p>
+      </div>
+
+      <div class="mock" data-od-id="hero-screenshot">
+        <div class="mock-shot">
+          <img src="image-1.png"
+               alt="Procyon running in a window: dual panes, directory table, operation centre and command palette">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Keybinding strip ======= -->
+  <div class="kbd-strip" data-od-id="kbd-strip">
+    <div class="kbd-strip-inner">
+      <b>Keyboard-first</b>
+      <span class="sep">·</span>
+      <span><kbd>F2</kbd> rename</span>
+      <span><kbd>F3</kbd> view</span>
+      <span><kbd>F4</kbd> edit</span>
+      <span><kbd>F5</kbd> copy</span>
+      <span><kbd>F7</kbd> folder</span>
+      <span class="sep">·</span>
+      <span><kbd>⌘P</kbd> palette</span>
+      <span><kbd>⌘\</kbd> terminal</span>
+      <span><kbd>Space</kbd> select</span>
+      <span class="sep">·</span>
+      <span><kbd>⇧*</kbd> invert</span>
+      <span><kbd>⌘L</kbd> path</span>
+    </div>
+  </div>
+
+  <!-- ======= Stats ======= -->
+  <div class="stats" data-od-id="stats">
+    <div class="stats-inner">
+      <div class="stat"><div class="num">2</div><div class="lbl">panes, as it should be</div></div>
+      <div class="stat"><div class="num">1,000,000</div><div class="lbl">virtualized rows — benchmarked</div></div>
+      <div class="stat"><div class="num">3</div><div class="lbl">runtimes, one codebase</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">accounts needed — local-first</div></div>
+    </div>
+  </div>
+
+  <!-- ======= Features ======= -->
+  <section class="section" id="features" data-od-id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">01 · Core</span>
+        <h2>Everything a dual-pane file manager should do — with keyboard in hand.</h2>
+        <p class="sub">Every mutation runs through the Rust operation engine. No filesystem writes from the UI, ever.</p>
+      </div>
+      <div class="feat-grid">
+        <article class="feat" data-od-id="feature-card-virtualized">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-split"/></svg></div>
+          <h3>Virtualized dual-pane table</h3>
+          <p>Only visible rows render, so a million-entry directory stays fluid. Draggable splitter, per-pane tabs, breadcrumb path bar, sortable columns with a git-status badge, and Ctrl/Cmd+L path editing.</p>
+          <div class="keys"><span class="kbd">Tab</span><span class="kbd">⌘L</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-copy">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-copy"/></svg></div>
+          <h3>Copy, move, duplicate</h3>
+          <p>Single files and whole trees stream through conflict-safe copy and move. Shared-destination checks kill accidental writes before they start.</p>
+          <div class="keys"><span class="kbd">F5</span><span class="kbd">⌘C · ⌘V</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-trash">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-trash"/></svg></div>
+          <h3>Trash, not regret</h3>
+          <p>Move to the OS Trash or Recycle Bin by default; permanent delete stays one deliberate, confirmed step away.</p>
+          <div class="keys"><span class="kbd">⌘⌫</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-rename">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-rename"/></svg></div>
+          <h3>Rename &amp; multi-rename</h3>
+          <p>Inline F2 editing plus a batch tool with search/replace, prefix/suffix, sequence and case — live preview before you apply.</p>
+          <div class="keys"><span class="kbd">F2</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-select">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-kbd"/></svg></div>
+          <h3>Total-Commander-style selection</h3>
+          <p>Cursor and selection stay independent, keyed by stable IDs. Invert, select-by-mask, range select, and type-to-select prefix matching.</p>
+          <div class="keys"><span class="kbd">Space</span><span class="kbd">⇧*</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-tabs">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-tabs"/></svg></div>
+          <h3>Tabs, favourites, workspaces</h3>
+          <p>Multiple tabs per pane, bookmarks and recent locations, saved workspaces that restore your layout — plus an Alt+F10 directory-tree sidebar with lazy expansion across every provider.</p>
+          <div class="keys"><span class="kbd">⌘T</span><span class="kbd">Alt+F10</span></div>
+        </article>
+      </div>
+
+      <div class="sec-head" style="margin-top:72px">
+        <span class="eyebrow">02 · Find &amp; open</span>
+        <h2>Search, filter, preview, edit — without leaving the keyboard.</h2>
+      </div>
+      <div class="feat-grid">
+        <article class="feat" data-od-id="feature-card-search">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-search"/></svg></div>
+          <h3>Recursive &amp; content search</h3>
+          <p>Deep filesystem search plus literal content search across files, served by a dedicated Rust search engine.</p>
+          <div class="keys"><span class="kbd">⌘F</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-palette">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-palette"/></svg></div>
+          <h3>Command palette</h3>
+          <p>Fuzzy-search every action — built-in and plugin-provided — with shortcuts, availability, and parameter prompts.</p>
+          <div class="keys"><span class="kbd">⌘P</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-viewer">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-eye"/></svg></div>
+          <h3>Instant large-file viewer</h3>
+          <p>A Lister-style viewer that opens huge files with lazy search, plus an in-app text editor with Markdown preview.</p>
+          <div class="keys"><span class="kbd">F3 view</span><span class="kbd">F4 edit</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-archive">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-archive"/></svg></div>
+          <h3>Browse &amp; mutate archives</h3>
+          <p>zip, tar and friends open like folders — browse, extract and add files, password-protected archives included.</p>
+          <div class="keys"><span class="kbd">Enter</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-drag">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-move"/></svg></div>
+          <h3>Drag in, drag out</h3>
+          <p>Drag between panes, onto tabs, or into Finder and Explorer. Native drops queue through the same conflict-safe engine.</p>
+          <div class="keys"><span class="kbd">Opt+drag</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-icons">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-globe"/></svg></div>
+          <h3>Themeable file icons</h3>
+          <p>Themeable icon sets with optional native macOS file-icon overlay, shipped as distributable plugins.</p>
+          <div class="keys"><span class="kbd">Catppuccin</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= View & edit ======= -->
+  <section class="section" id="view" data-od-id="view">
+    <div class="wrap view-grid">
+      <div>
+        <div class="sec-head" style="margin-bottom:28px">
+          <span class="eyebrow">03 · View &amp; edit</span>
+          <h2>Read it, edit it, preview it — in place.</h2>
+        </div>
+        <div class="view-body">
+          <p>The <b style="color:var(--fg)">F3 viewer</b> opens huge files instantly with lazy search. The <b style="color:var(--fg)">F4 editor</b> edits in-app with a <b style="color:var(--fg)">Markdown preview</b> pane — no app hopping.</p>
+          <p>Grid/icon view adds three icon sizes, photo-day grouping and type filtering, with <span class="strong">image, video, PDF and CBZ/CBR thumbnails</span> served by the backend.</p>
+          <p>The <b style="color:var(--fg)">Properties dialog</b> shows byte-precise sizes, timestamps and permissions — and aggregates totals across a multi-selection. On macOS, Finder tags and Spotlight comments round-trip with Finder itself.</p>
+        </div>
+        <div class="list-hints">
+          <div class="hint"><span class="k"><kbd>F3</kbd></span><span class="d">Instant large-file viewer with lazy search</span></div>
+          <div class="hint"><span class="k"><kbd>F4</kbd></span><span class="d">In-app editor with live Markdown preview</span></div>
+          <div class="hint"><span class="k"><kbd>⌘I</kbd></span><span class="d">Properties dialog with multi-selection totals</span></div>
+        </div>
+      </div>
+
+      <div class="view-shots">
+        <figure class="shot" data-od-id="view-shot-markdown">
+          <img src="image-3.png" alt="Procyon showing a Markdown file in the F4 in-app editor with a rendered preview pane">
+          <figcaption><span class="kbd">F4</span> in-app editor with Markdown preview</figcaption>
+        </figure>
+        <figure class="shot" data-od-id="view-shot-editor">
+          <img src="image-4.png" alt="Procyon in-app text editor open on a source file">
+          <figcaption><span class="kbd">F4</span> integrated editor — no external app needed</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Operations ======= -->
+  <section class="section alt" id="operations" data-od-id="operations">
+    <div class="wrap ops-grid">
+      <div>
+        <div class="sec-head" style="margin-bottom:28px">
+          <span class="eyebrow">04 · Operation engine</span>
+          <h2>Jobs you can steer.</h2>
+        </div>
+        <div class="ops-body">
+          <p>Long-running work is a bounded Rust scheduler, not a spinner. Each copy, move, rename or delete is a typed job with lifecycle, progress and a smoothed transfer rate — cancellable, pausable and resumable at safe boundaries.</p>
+          <p>Conflicts resolve up front with <b style="color:var(--fg)">ask, overwrite, rename-new or skip</b>. Queued jobs wait in FIFO order, and the last 100 outcomes stay in a terminal history so you always know what ran.</p>
+        </div>
+        <div class="ops-pills">
+          <span class="pill"><svg aria-hidden="true"><use href="#i-check"/></svg>Pause / resume</span>
+          <span class="pill"><svg aria-hidden="true"><use href="#i-hour"/></svg>Cancellation</span>
+          <span class="pill"><svg aria-hidden="true"><use href="#i-shield"/></svg>Preflight checks</span>
+          <span class="pill"><svg aria-hidden="true"><use href="#i-dup"/></svg>Idempotent retries</span>
+        </div>
+        <div class="list-hints">
+          <div class="hint"><span class="k"><kbd>⌘P</kbd></span><span class="d">Inspect every running, queued and failed job</span></div>
+          <div class="hint"><span class="k"><kbd>Pause</kbd></span><span class="d">Pause or cancel from the Operation Centre — partial progress is always summarised</span></div>
+          <div class="hint"><span class="k"><kbd>F5</kbd></span><span class="d">Copy one file or a whole tree to the other pane</span></div>
+        </div>
+      </div>
+
+      <div class="ops-panel" data-od-id="ops-mock" role="img" aria-label="Operation centre showing two copy jobs in progress with progress bars">
+        <div class="ops-label"><span>Operation Centre</span><span class="status que">FIFO</span></div>
+        <div class="op">
+          <div class="op-top">
+            <span class="op-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-copy"/></svg>Copy — small.zip</span>
+            <span class="op-meta"><span class="status run">RUNNING</span><span>1 of 3</span></span>
+          </div>
+          <div class="track"><i style="width:72%"></i></div>
+          <div class="op-sub"><span>→ frontend/ · 38 of 54 files</span><span class="rate">6.2 MB/s</span></div>
+        </div>
+        <div class="op">
+          <div class="op-top">
+            <span class="op-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-folder"/></svg>Copy — crates/</span>
+            <span class="op-meta"><span class="status que">QUEUED</span><span>2 of 3</span></span>
+          </div>
+          <div class="track"><i class="warn" style="width:12%"></i></div>
+          <div class="op-sub"><span>waiting for scheduler lock</span></div>
+        </div>
+        <div class="op">
+          <div class="op-top">
+            <span class="op-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-rename"/></svg>Rename — release-notes.md</span>
+            <span class="op-meta"><span class="status done">DONE</span><span>0.4s</span></span>
+          </div>
+          <div class="track"><i style="width:100%"></i></div>
+          <div class="op-sub"><span>completed, 12:03:41</span><span class="rate">ok</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Remote ======= -->
+  <section class="section" id="remote" data-od-id="remote">
+    <div class="wrap remote-grid">
+      <div>
+        <div class="sec-head" style="margin-bottom:28px">
+          <span class="eyebrow">05 · Remote</span>
+          <h2>Your servers, one pane away.</h2>
+        </div>
+        <div class="remote-body">
+          <p><span class="strong">SFTP and FTP/FTPS</span> roots live beside local folders in the same two-pane engine — copy local ↔ remote and remote ↔ remote streams through the exact same operation jobs, with server-native rename when both sides share a connection. Session pooling keeps transfers moving, and remote change tracking keeps the view honest.</p>
+          <p>Host keys are <span class="strong">never auto-accepted</span>: a changed key becomes a visible status you must explicitly confirm. Credentials stay as opaque references in your macOS Keychain or Windows Credential Manager, never in the profile itself.</p>
+          <p>The embedded terminal drawer opens a real <b style="color:var(--fg)">remote shell over SSH</b> for any location backed by a connection — no window hopping.</p>
+        </div>
+        <div class="remote-hints">
+          <div class="rhint"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-shield"/></svg><span><b>Host-key verification.</b> First use and every change surface a fingerprint probe before connect.</span></div>
+          <div class="rhint"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-term"/></svg><span><b>SSH terminal.</b> <kbd>Ctrl+`</kbd> / <kbd>F12</kbd> spawns a shell in the remote's directory.</span></div>
+          <div class="rhint"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-copy"/></svg><span><b>FTP / FTPS.</b> Passive FTP and explicit FTPS providers flow through the same engine.</span></div>
+          <div class="rhint"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-star"/></svg><span><b>Server favourites.</b> Cloud, network and SSH locations surface under grouped favourites — no credentials for OS-exposed folders.</span></div>
+        </div>
+        <figure class="shot" data-od-id="remote-shot">
+          <img src="image-2.png" alt="Procyon with the embedded SSH terminal open in the drawer, running commands inside the remote directory">
+          <figcaption><span class="kbd">Ctrl+`</span> embedded SSH terminal in the remote's directory</figcaption>
+        </figure>
+      </div>
+
+      <div class="conn" data-od-id="remote-connections">
+        <div class="conn-bar">
+          <span class="cname"><span class="kdot on"></span>dev-prod</span>
+          <span class="caddr">sftp://procyon@dev</span>
+        </div>
+        <div class="conn-list">
+          <div class="crow"><span class="fld">~/srv/www</span><span class="note">index.html · assets/</span><span class="hbuf"><span class="tag checked">key verified</span></span></div>
+          <div class="crow"><span class="fld">~/releases</span><span class="note">v0.2.0.tar.gz</span><span class="hbuf"><span class="tag checked">key verified</span></span></div>
+        </div>
+        <div class="conn-bar" style="border-top:1px solid var(--border)">
+          <span class="cname"><span class="kdot warn"></span>staging</span>
+          <span class="caddr">sftp://deploy@staging.int</span>
+        </div>
+        <div class="conn-list">
+          <div class="crow"><span class="fld">/var/www</span><span class="note">root</span><span class="hbuf"><span class="tag">host key unverified</span></span></div>
+          <div class="crow"><span class="fld">/opt/app</span><span class="note">logs/</span><span class="hbuf"><span class="tag">host key unverified</span></span></div>
+        </div>
+        <div class="conn-list" style="padding-bottom:8px">
+          <div class="crow"><span class="fld">CLOUD&nbsp;—&nbsp;iCloud Drive</span><span class="note">macOS · no credentials needed</span><span class="hbuf"><span class="tag">local</span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Plugins ======= -->
+  <section class="section alt" id="plugins" data-od-id="plugins">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">06 · Plugins</span>
+        <h2>Extend from inside a sandbox.</h2>
+        <p class="sub">Plugins declare a manifest and a permission set, then contribute actions, columns and icon themes from a restricted Lua sandbox — resource-limited, diagnostics-bounded, auto-disabled after repeated failures.</p>
+      </div>
+      <div class="plug-grid">
+        <article class="plug" data-od-id="plugin-card-markdown-path">
+          <div class="pl-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-pen"/></svg>Copy Markdown Path</div>
+          <p>Turns the current path into a clickable <code style="font-size:12.5px;color:var(--accent-deep)">[text](path)</code> link on your clipboard.</p>
+          <span class="perm">contrib · action</span>
+        </article>
+        <article class="plug" data-od-id="plugin-card-file-age">
+          <div class="pl-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-hour"/></svg>File Age Column</div>
+          <p>Adds a host-rendered column that shows how old each entry is, sorted by raw modification time.</p>
+          <span class="perm">contrib · column</span>
+        </article>
+        <article class="plug" data-od-id="plugin-card-catppuccin">
+          <div class="pl-name"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-palette"/></svg>Catppuccin Icons</div>
+          <p>A distributable icon theme layered over the default set, switchable from the plugin manager.</p>
+          <span class="perm">theme · icons</span>
+        </article>
+      </div>
+      <div class="arch-note" data-od-id="plugin-architecture-note">
+        <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-shield"/></svg>
+        <div>
+          <b>Designed by contract.</b>
+          <p>Plugin actions register in the same action registry as built-ins, so they arrive in the command palette and context menus automatically — with permission checks and isolation handled by <code style="font-size:12.5px;color:var(--accent-deep)">fm-plugin-runtime</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Platforms ======= -->
+  <section class="section" id="platforms" data-od-id="platforms">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">07 · Platforms</span>
+        <h2>Designed on macOS, honest about the rest.</h2>
+        <p class="sub">Full file-icon, trash, reveal and terminal integration on macOS today; drag-out already works on Windows; every host gets the same browser-mode core.</p>
+      </div>
+      <div class="plat-grid">
+        <article class="plat" data-od-id="platform-macos">
+          <h3>macOS <span class="tag full">Full</span></h3>
+          <div class="cap"><span>Native file icons</span><span class="st">on</span></div>
+          <div class="cap"><span>Trash / Recycle Bin</span><span class="st">on</span></div>
+          <div class="cap"><span>Reveal + Open terminal</span><span class="st">on</span></div>
+          <div class="cap"><span>Finder tags &amp; Spotlight comments</span><span class="st">on</span></div>
+          <div class="cap"><span>Native menu bar</span><span class="st">on</span></div>
+          <div class="install">
+            <div class="code"><span class="pm">$</span><code>brew install --cask procyon</code></div>
+            <span class="alt">tap erikvullings/tap first — or drag the .dmg from every release into Applications</span>
+          </div>
+        </article>
+        <article class="plat" data-od-id="platform-windows">
+          <h3>Windows <span class="tag part">Beta</span></h3>
+          <div class="cap"><span>Native file icons</span><span class="st">on</span></div>
+          <div class="cap"><span>Trash / Recycle Bin</span><span class="st">on</span></div>
+          <div class="cap"><span>Reveal + terminal</span><span class="st">on</span></div>
+          <div class="cap"><span>Native menu bar</span><span class="st no">todo</span></div>
+          <div class="install">
+            <div class="code"><span class="pm">PS&gt;</span><code>choco install procyon</code></div>
+            <span class="alt">.msi and -setup.exe installers in releases</span>
+          </div>
+        </article>
+        <article class="plat" data-od-id="platform-linux">
+          <h3>Linux <span class="tag part">In progress</span></h3>
+          <div class="cap"><span>Browser-mode core</span><span class="st">on</span></div>
+          <div class="cap"><span>Archive + SFTP providers</span><span class="st">on</span></div>
+          <div class="cap"><span>Native desktop integration</span><span class="st no">todo</span></div>
+          <div class="cap"><span>In-memory credential fallback</span><span class="st">partial</span></div>
+          <div class="install">
+            <div class="code"><span class="pm">$</span><code>sudo apt install ./procyon.deb</code></div>
+            <span class="alt">or run the .AppImage from releases</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Open source ======= -->
+  <section class="section alt" id="opensource" data-od-id="opensource">
+    <div class="wrap os-grid">
+      <div>
+        <div class="sec-head" style="margin-bottom:28px">
+          <span class="eyebrow">08 · Open source</span>
+          <h2>A gatherer you can trust enough to read.</h2>
+        </div>
+        <div class="os-body">
+          <p>Procyon is built from a Rust workspace — <b>Axum</b> server, <b>Tauri 2</b> desktop shell, VFS providers for local, SFTP and archive storage — with a <b>Mithril + TypeScript</b> frontend. One OpenAPI contract drives the HTTP client, the desktop IPC and the mock runtime from a single definition.</p>
+          <p>Work is tracked task-by-task in the repo, milestone against milestone. The dual MIT / Apache-2.0 license keeps it usable anywhere you please.</p>
+        </div>
+        <div class="list-hints">
+          <div class="hint"><span class="k"><kbd>fmt</kbd></span><span class="d">cargo fmt + clippy -D warnings gate every change</span></div>
+          <div class="hint"><span class="k"><kbd>test</kbd></span><span class="d">Rust, frontend and script suites run on macOS, Windows and Linux CI</span></div>
+          <div class="hint"><span class="k"><kbd>api</kbd></span><span class="d">Checked-in OpenAPI document — reject if the generated client would drift</span></div>
+        </div>
+      </div>
+      <div class="os-panel" data-od-id="opensource-panel">
+        <div class="os-row"><span class="l">Repository</span><span class="v">github.com/erikvullings/procyon</span></div>
+        <div class="os-row"><span class="l">Language</span><span class="v">Rust · TypeScript · Mithril</span></div>
+        <div class="os-row"><span class="l">Shell</span><span class="v">Tauri 2 + Axum</span></div>
+        <div class="os-row"><span class="l">Crates</span><span class="v">fm-operations · fm-vfs · fm-search</span></div>
+        <div class="os-row"><span class="l">Status</span><span class="v">v0.1.0 — active</span></div>
+        <div class="license-line">
+          <span class="tag full" style="font-size:11px">MIT</span>
+          <span class="tag full" style="font-size:11px">Apache-2.0</span>
+          <span>&nbsp;dual-license</span>
+        </div>
+        <div class="hero-actions" style="margin-top:4px">
+          <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">
+            <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-git"/></svg>Browse the source
+          </a>
+          <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon/releases">
+            Release notes
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= Final CTA ======= -->
+  <section class="final-cta" id="install" data-od-id="install">
+    <div class="wrap">
+      <div class="copy">
+        <span class="eyebrow">Ready to gather?</span>
+        <h2>Two panes. Every file.</h2>
+        <p class="lede">Free, open source, and local-first. Install it, connect a server, and let Procyon do the gathering.</p>
+      </div>
+      <div class="cta-right">
+        <img class="cta-mascot" data-od-id="install-mascot" src="raccoon---body.png" alt="Procyon, the raccoon mascot — a gatherer of files" width="512" height="512">
+        <div class="hero-actions" data-od-id="install-commands">
+          <a class="btn" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon/releases">Download for macOS</a>
+          <a class="btn secondary" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">GitHub repository</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ======= Footer ======= -->
+<footer class="footer" data-od-id="footer">
+  <div class="footer-inner">
+    <a class="brand" href="#top">
+      <img class="brand-mark" src="raccoon---face---bg.png" alt="" width="30" height="30">
+      <span>Procyon</span>
+    </a>
+    <div class="footer-links" data-od-id="footer-links">
+      <a href="#features">Features</a>
+      <a href="#operations">Operations</a>
+      <a href="#remote">Remote</a>
+      <a href="#plugins">Plugins</a>
+      <a href="#platforms">Install</a>
+      <a target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">Source</a>
+    </div>
+    <span class="copy">Procyon · pro-kee-on — a gatherer of files</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var STORAGE_KEY = 'procyon-theme';
+  var root = document.documentElement;
+  var toggle = document.getElementById('theme-toggle');
+  var mql = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function isDark(){ return root.getAttribute('data-theme') === 'dark'; }
+  function reflect(){
+    var dark = isDark();
+    toggle.setAttribute('aria-pressed', String(dark));
+    toggle.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  }
+  toggle.addEventListener('click', function(){
+    var dark = !isDark();
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light');
+    reflect();
+  });
+  mql.addEventListener('change', function(e){
+    if (!localStorage.getItem(STORAGE_KEY)){
+      root.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      reflect();
+    }
+  });
+  reflect();
+})();
+</script>
+</body>
+</html>

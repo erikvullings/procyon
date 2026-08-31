@@ -1,0 +1,15 @@
+[package]
+name = "fm-platform"
+description = "Platform adapter traits and capability reporting."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bitflags.workspace = true
+fm-domain.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

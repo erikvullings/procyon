@@ -1,0 +1,32 @@
+[package]
+name = "fm-vfs-local"
+description = "Local filesystem implementation of the virtual filesystem provider."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+fm-domain.workspace = true
+fm-vfs = { path = "../fm-vfs" }
+futures.workspace = true
+notify.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "sync", "time"] }
+tokio-util.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "directory_listing"
+harness = false
+
+[lints]
+workspace = true

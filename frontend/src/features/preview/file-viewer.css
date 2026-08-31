@@ -1,0 +1,698 @@
+.fm-file-viewer {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--fm-surface);
+}
+
+.fm-file-viewer-info-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  max-height: 45%;
+  overflow: auto;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+  font-size: 0.92em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fm-file-viewer-metadata + .fm-file-viewer-git-history {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-file-viewer-metadata dl {
+  margin: 0;
+}
+
+.fm-file-viewer-metadata-field {
+  margin: 0 0 0.75rem;
+}
+
+/** Groups the plain-text fields (Size/Lines/Characters/Language) into a single compact row
+ * instead of one block per field - they're all short label/value pairs. */
+.fm-file-viewer-metadata-row {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.9rem;
+  row-gap: 0.35rem;
+  margin: 0 0 0.75rem;
+}
+
+.fm-file-viewer-metadata-row .fm-file-viewer-metadata-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.fm-file-viewer-metadata-row .fm-file-viewer-metadata-field dt {
+  margin: 0;
+}
+
+.fm-file-viewer-metadata-row .fm-file-viewer-metadata-field dt::after {
+  content: ":";
+}
+
+.fm-file-viewer-metadata-row .fm-file-viewer-metadata-field dd {
+  margin: 0;
+}
+
+.fm-file-viewer-metadata-field dt {
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+  margin-bottom: 0.15rem;
+}
+
+.fm-file-viewer-metadata-field dd {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  word-break: break-word;
+}
+
+.fm-file-viewer-metadata-field dd a {
+  color: var(--fm-accent);
+}
+
+.fm-file-viewer-metadata-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-file-viewer-git-history-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--fm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.fm-file-viewer-git-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.fm-file-viewer-git-history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.fm-file-viewer-git-history-summary {
+  word-break: break-word;
+}
+
+.fm-file-viewer-git-history-meta {
+  font-size: 0.85em;
+  color: var(--fm-text-muted);
+}
+
+.fm-file-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--fm-header-height);
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.92em;
+}
+
+.fm-file-viewer-title {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+  flex: 1;
+  color: var(--fm-text-muted);
+  font-family: var(--fm-font-family);
+  font-weight: normal;
+  line-height: var(--fm-header-height);
+  margin: 0;
+  border-bottom: 0;
+  box-shadow: none;
+  height: var(--fm-header-height);
+}
+
+.fm-file-viewer-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  width: var(--fm-header-height);
+  height: var(--fm-header-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.fm-file-viewer-zoom-controls button {
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.fm-file-viewer-page-controls button {
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-page-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.fm-file-viewer-page-count {
+  min-width: 4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-body-pdf {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.fm-file-viewer-pdf-canvas {
+  max-width: 100%;
+  box-shadow: 0 0 0 1px var(--fm-border);
+}
+
+.fm-file-viewer-pdf-page-error {
+  padding: 1rem;
+  color: var(--fm-error, var(--fm-text-muted));
+}
+
+.fm-file-viewer-body-epub {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.fm-file-viewer-epub-chapter {
+  max-width: 42rem;
+  width: 100%;
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+  font-size: var(--fm-font-size);
+  line-height: 1.6;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fm-file-viewer-epub-chapter img {
+  max-width: 100%;
+}
+
+.fm-file-viewer-copy,
+.fm-file-viewer-metadata-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  width: var(--fm-header-height);
+  height: var(--fm-header-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-metadata-toggle[aria-pressed="true"] {
+  color: var(--fm-accent);
+}
+
+.fm-file-viewer-zoom-level {
+  min-width: 3rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-search {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.92em;
+}
+
+.fm-file-viewer-search > input[type="text"]:not(.browser-default).fm-file-viewer-search-input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  border-bottom: 0;
+  color: inherit;
+  font-family: var(--fm-font-family);
+  font-size: inherit;
+  font-weight: normal;
+  line-height: inherit;
+  height: var(--fm-row-height);
+  box-shadow: none;
+}
+
+.fm-file-viewer-search-nav,
+.fm-file-viewer-search-toggle {
+  box-sizing: border-box;
+  height: var(--fm-row-height);
+  padding: 0 0.35rem;
+  border: none;
+  background: transparent;
+  /* border: 1px solid var(--fm-border);
+  background: var(--fm-surface); */
+  color: var(--fm-text-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-file-viewer-search-toggle[aria-pressed="true"] {
+  border-color: var(--fm-accent);
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+}
+
+.fm-file-viewer-search-count {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fm-file-viewer-search-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.fm-file-viewer-body {
+  /* Always the last grid row (search bar is row 2 and only present for text previews). */
+  grid-row: 3;
+  overflow: auto;
+  min-height: 0;
+  /* padding: 0.5rem; */
+}
+
+.fm-file-viewer-markdown {
+  padding: 1rem;
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+  font-size: var(--fm-font-size);
+  line-height: 1.45;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Lister-style viewer is the deliberate exception to the app-wide `user-select: none` (see
+ * `frontend/src/themes/theme.css`) - unlike directory listings and chrome, viewed file content is
+ * meant to be selected and copied (mouse-drag or the copy button in the header). */
+.fm-file-viewer-body-text .cm-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* The viewer is read-only (edits are blocked at the CodeMirror state level, not via DOM
+ * contenteditable, so the content stays mouse-selectable - see code-mirror-editor.ts) - hide the
+ * blinking text-insertion caret that contenteditable would otherwise show. */
+.fm-file-viewer-body-text .cm-cursor {
+  display: none;
+}
+
+.fm-file-viewer-markdown h1,
+.fm-file-viewer-markdown h2,
+.fm-file-viewer-markdown h3,
+.fm-file-viewer-markdown h4,
+.fm-file-viewer-markdown h5,
+.fm-file-viewer-markdown h6 {
+  margin: 0.8em 0 0.35em;
+  line-height: 1.2;
+}
+
+.fm-file-viewer-markdown h1 {
+  font-size: 1.5em;
+}
+
+.fm-file-viewer-markdown h2 {
+  font-size: 1.35em;
+}
+
+.fm-file-viewer-markdown h3 {
+  font-size: 1.2em;
+}
+
+.fm-file-viewer-markdown h4 {
+  font-size: 1.1em;
+}
+
+.fm-file-viewer-markdown h5 {
+  font-size: 1em;
+}
+
+.fm-file-viewer-markdown h6 {
+  font-size: 0.92em;
+}
+
+.fm-file-viewer-markdown code {
+  font-size: 0.92em;
+}
+
+.fm-file-viewer-markdown sub,
+.fm-file-viewer-markdown sup {
+  position: static;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+.fm-file-viewer-markdown ul,
+.fm-file-viewer-markdown ul.browser-default {
+  padding-inline-start: 2em;
+  list-style-type: disc !important;
+}
+
+.fm-file-viewer-markdown ol,
+.fm-file-viewer-markdown ol.browser-default {
+  padding-inline-start: 2em;
+  list-style-type: decimal !important;
+}
+
+.fm-file-viewer-markdown ul > li {
+  list-style-type: disc !important;
+}
+
+.fm-file-viewer-markdown ol > li {
+  list-style-type: decimal !important;
+}
+
+.fm-file-viewer-loading-more {
+  padding: 0.5rem 0;
+  color: var(--fm-text-muted);
+  text-align: center;
+}
+
+.fm-file-viewer-body-image {
+  display: flex;
+}
+
+/* `margin: auto` (rather than `align-items`/`justify-content: center` on the flex container)
+ * centers the image when it's smaller than the container while keeping it fully reachable via
+ * scroll once zoomed past the container's size - `justify-content`/`align-items: center` on an
+ * `overflow: auto` flex container clips the overflow on the leading edge instead of scrolling to
+ * it (flexbug #12), which would make Arrow-key panning unable to reach the top/left of a zoomed
+ * image. */
+.fm-file-viewer-body-image img {
+  margin: auto;
+}
+
+.fm-file-viewer-body-image img.fm-file-viewer-image-fit {
+  /* `max-width/max-height` only shrinks images bigger than the container - a small SVG (e.g. a
+   * 24px icon) needs `width/height: 100%` to actually grow up to fill it too. */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Search-match highlight for rendered markdown (`<mark>`, injected by
+ * `renderMarkdownWithHighlight` in `markdown-search-highlight.ts`). Matches the CodeMirror text
+ * viewer's own selection color for consistency (`code-mirror-editor.ts`'s
+ * `.cm-selectionBackground` theme rule). */
+.fm-file-viewer-highlight {
+  background-color: var(--fm-selection);
+  color: inherit;
+}
+
+.fm-file-viewer-body-audio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fm-file-viewer-body-audio audio {
+  width: 100%;
+  max-width: 32rem;
+  accent-color: var(--fm-accent);
+}
+
+.fm-file-viewer-body-video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fm-surface);
+}
+
+.fm-file-viewer-body-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.fm-file-viewer-external-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--fm-text-muted);
+  text-align: center;
+}
+
+.fm-file-viewer-fallback-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fm-file-viewer-open-externally,
+.fm-file-viewer-quick-look {
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+  cursor: pointer;
+}
+
+/* Non-standard pseudo-elements (Chromium/WebKit) styling the native control panel so it
+ * follows the active theme's blue-tinted surface instead of the browser's default chrome. */
+.fm-file-viewer-body-audio audio::-webkit-media-controls-panel {
+  background-color: var(--fm-surface-elevated);
+  border-radius: var(--fm-radius);
+}
+
+.fm-file-viewer-body-audio audio::-webkit-media-controls-play-button,
+.fm-file-viewer-body-audio audio::-webkit-media-controls-mute-button,
+.fm-file-viewer-body-audio audio::-webkit-media-controls-overflow-button,
+.fm-file-viewer-body-audio audio::-webkit-media-controls-current-time-display,
+.fm-file-viewer-body-audio audio::-webkit-media-controls-time-remaining-display {
+  color: var(--fm-text);
+}
+
+.fm-file-viewer-window-controls,
+.fm-structured-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+}
+
+.fm-file-viewer-body-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-file-viewer-body-text > .fm-code-mirror-editor,
+.fm-file-viewer-body-text > .fm-file-viewer-markdown {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.fm-structured-view,
+.fm-structured-json {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fm-structured-toolbar input[type="search"] {
+  min-width: 12rem;
+  flex: 1 1 auto;
+}
+
+.fm-structured-toolbar .fm-structured-option {
+  width: 10rem;
+  flex: 0 0 10rem;
+  margin: 0;
+}
+
+.fm-structured-progress,
+.fm-structured-warning {
+  color: var(--fm-text-muted);
+}
+
+.fm-structured-warning,
+.fm-structured-search-results {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+}
+
+.fm-structured-search-results {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+}
+
+.fm-structured-header-viewport {
+  position: relative;
+  z-index: 2;
+  height: 2rem;
+  flex: 0 0 2rem;
+  overflow: hidden;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+}
+
+.fm-structured-header-row,
+.fm-structured-row,
+.fm-structured-canvas {
+  position: relative;
+}
+
+.fm-structured-header-row {
+  height: 2rem;
+}
+
+.fm-structured-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.fm-structured-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-bottom: 1px solid var(--fm-border-subtle, var(--fm-border));
+}
+
+.fm-structured-cell {
+  position: absolute;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0.4rem 0.5rem;
+  overflow: hidden;
+  border-right: 1px solid var(--fm-border-subtle, var(--fm-border));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-structured-header-cell {
+  font-weight: 600;
+}
+
+.fm-structured-sort {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.fm-structured-sort:not(:disabled) {
+  cursor: pointer;
+}
+
+.fm-structured-json-source {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 0.75rem;
+  margin: 0;
+  overflow: auto;
+  font-family: var(--fm-font-monospace, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.fm-json-token-property {
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+.fm-json-token-string {
+  color: var(--fm-success);
+}
+.fm-json-token-number {
+  color: var(--fm-warning);
+}
+.fm-json-token-boolean,
+.fm-json-token-null {
+  color: var(--fm-accent);
+}
+.fm-json-token-punctuation {
+  color: var(--fm-text-muted);
+}
+.fm-json-token-invalid {
+  color: var(--fm-error);
+  text-decoration: underline wavy;
+}

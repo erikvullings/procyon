@@ -1,0 +1,48 @@
+[
+  { "id": "core.refresh", "title": "Refresh", "category": "navigation", "defaultShortcuts": [{ "key": "r", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.rename", "title": "Rename", "category": "fileOperations", "defaultShortcuts": [{ "key": "F2" }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.copy", "title": "Copy", "category": "fileOperations", "defaultShortcuts": [{ "key": "F5" }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.pack", "title": "Pack to Archive", "category": "fileOperations", "defaultShortcuts": [{ "key": "F5", "alt": true }], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } },
+  { "id": "core.moveToArchive", "title": "Move to Archive", "category": "fileOperations", "defaultShortcuts": [{ "key": "F5", "alt": true, "shift": true }], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } },
+  { "id": "core.extract", "title": "Extract Archive", "category": "fileOperations", "defaultShortcuts": [{ "key": "F6", "alt": true }], "contextRequirements": { "requiresSingleSelection": true }, "source": { "kind": "core" } },
+  { "id": "core.move", "title": "Move", "category": "fileOperations", "defaultShortcuts": [{ "key": "F6" }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.createDirectory", "title": "New folder", "category": "fileOperations", "defaultShortcuts": [{ "key": "F7" }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.paste", "title": "Paste", "category": "fileOperations", "defaultShortcuts": [], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.trash", "title": "Trash", "category": "fileOperations", "defaultShortcuts": [], "contextRequirements": { "featureAvailable": false }, "source": { "kind": "core" } },
+  { "id": "core.delete", "title": "Delete", "category": "fileOperations", "defaultShortcuts": [{ "key": "F8" }, { "key": "Delete" }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.palette", "title": "Command palette", "category": "navigation", "defaultShortcuts": [{ "key": "p", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.focusLocation", "title": "Focus location", "category": "navigation", "defaultShortcuts": [{ "key": "l", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.quickFilter", "title": "Quick filter", "category": "navigation", "defaultShortcuts": [{ "key": "f", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.findFiles", "title": "Find files", "category": "navigation", "defaultShortcuts": [{ "key": "F7", "alt": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.newTab", "title": "New tab", "category": "navigation", "defaultShortcuts": [{ "key": "t", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.closeTab", "title": "Close tab", "category": "navigation", "defaultShortcuts": [{ "key": "w", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.nextTab", "title": "Next tab", "category": "navigation", "defaultShortcuts": [{ "key": "Tab", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.previousTab", "title": "Previous tab", "category": "navigation", "defaultShortcuts": [{ "key": "Tab", "ctrl": true, "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.reopenClosedTab", "title": "Reopen closed tab", "category": "navigation", "defaultShortcuts": [{ "key": "T", "ctrl": true, "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.open", "title": "Open", "category": "navigation", "defaultShortcuts": [{ "key": "Enter" }, { "key": "F3", "alt": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.view", "title": "View", "category": "fileOperations", "defaultShortcuts": [{ "key": "F3" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.calculateFolderSize", "title": "Calculate Folder Size", "category": "fileOperations", "defaultShortcuts": [{ "key": ".", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.edit", "title": "Edit", "category": "fileOperations", "defaultShortcuts": [{ "key": "F4" }, { "key": "F4", "alt": true, "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.openWith", "title": "Open With…", "category": "fileOperations", "defaultShortcuts": [{ "key": "Enter", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.quickLook", "title": "Quick Look", "category": "fileOperations", "defaultShortcuts": [{ "key": "y", "ctrl": true }, { "key": "F3", "shift": true }], "contextRequirements": { "featureAvailable": false, "requiresSingleSelection": true }, "source": { "kind": "core" } }
+  ,{ "id": "core.revealInSystemFileManager", "title": "Reveal in File Manager", "category": "fileOperations", "defaultShortcuts": [], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.uninstallApplication", "title": "Uninstall Application…", "category": "fileOperations", "defaultShortcuts": [], "contextRequirements": { "featureAvailable": false }, "source": { "kind": "core" } }
+  ,{ "id": "core.openTerminal", "title": "Open Terminal Here", "category": "tools", "defaultShortcuts": [], "contextRequirements": { "featureAvailable": false }, "source": { "kind": "core" } }
+  ,{ "id": "core.copyName", "title": "Copy Filename", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
+  ,{ "id": "core.copyPath", "title": "Copy Full Path", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
+  ,{ "id": "core.copyRelativePath", "title": "Copy Relative Path", "category": "clipboard", "defaultShortcuts": [], "contextRequirements": { "requiresSelection": true }, "source": { "kind": "core" } }
+  ,{ "id": "core.parent", "title": "Parent", "category": "navigation", "defaultShortcuts": [{ "key": "Backspace" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.switchPane", "title": "Switch pane", "category": "navigation", "defaultShortcuts": [{ "key": "Tab" }, { "key": "Tab", "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorUp", "title": "Up", "category": "selection", "defaultShortcuts": [{ "key": "ArrowUp" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorDown", "title": "Down", "category": "selection", "defaultShortcuts": [{ "key": "ArrowDown" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorPageUp", "title": "Page up", "category": "selection", "defaultShortcuts": [{ "key": "PageUp" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorPageDown", "title": "Page down", "category": "selection", "defaultShortcuts": [{ "key": "PageDown" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorFirst", "title": "First", "category": "selection", "defaultShortcuts": [{ "key": "Home" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.moveCursorLast", "title": "Last", "category": "selection", "defaultShortcuts": [{ "key": "End" }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.extendSelectionUp", "title": "Extend up", "category": "selection", "defaultShortcuts": [{ "key": "ArrowUp", "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.extendSelectionDown", "title": "Extend down", "category": "selection", "defaultShortcuts": [{ "key": "ArrowDown", "shift": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.toggleSelection", "title": "Toggle", "category": "selection", "defaultShortcuts": [], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.toggleSelectionAndAdvance", "title": "Toggle and advance", "category": "selection", "defaultShortcuts": [{ "key": "Insert" }, { "key": " " }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.selectAll", "title": "Select all", "category": "selection", "defaultShortcuts": [{ "key": "a", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }
+  ,{ "id": "core.clearSelection", "title": "Clear selection", "category": "selection", "defaultShortcuts": [{ "key": "Escape" }], "contextRequirements": {}, "source": { "kind": "core" } }
+]

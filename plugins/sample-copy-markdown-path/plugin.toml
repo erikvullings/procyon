@@ -1,0 +1,13 @@
+id = "sample.copy-markdown-path"
+name = "Copy Markdown Path"
+version = "0.1.0"
+api_version = "1"
+description = "Copies the selected file or directory as a Markdown link."
+entrypoint = "plugin.lua"
+
+[permissions]
+selected_entry_metadata = true
+clipboard_write = true
+
+[contributions]
+actions = true

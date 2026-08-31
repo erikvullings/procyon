@@ -1,0 +1,723 @@
+.fm-pane {
+  display: grid;
+  position: relative;
+  outline: none;
+  /*
+   * Every conceptual row gets its own always-present, explicitly numbered track (auto-sized
+   * tracks with no content collapse to 0 height) so optional siblings (entry content) can never
+   * be auto-placed into the flexible directory-table row - see the per-class `grid-row` pins
+   * below. The quick filter replaces the breadcrumb/path-editor in-place (row 2) rather than
+   * adding its own row, so the tab strip and directory table stay aligned between panes whether
+   * or not filtering is active.
+   */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  /* border: 1px solid var(--fm-border); */
+  background: var(--fm-surface);
+}
+
+.fm-pane-tabs {
+  grid-row: 1;
+}
+
+.fm-breadcrumb-row {
+  grid-row: 2;
+}
+
+.fm-pane > .fm-directory-table,
+.fm-pane > .fm-directory-state {
+  grid-row: 3;
+}
+
+.fm-pane-status {
+  grid-row: 4;
+}
+
+.fm-pane-viewer {
+  display: flex;
+  flex-direction: column;
+  grid-template-rows: none;
+}
+
+/* .fm-pane[data-active="true"] {
+  border-color: var(--fm-accent);
+  box-shadow: inset 0 2px var(--fm-accent);
+} */
+
+.fm-pane-tabs {
+  display: flex;
+  align-items: stretch;
+  height: var(--fm-header-height);
+  overflow-x: hidden;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.92em;
+  scrollbar-width: none;
+}
+
+.fm-pane-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fm-breadcrumb-segment {
+  min-height: var(--fm-row-height);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.fm-pane-tab {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  border: 0;
+  border-right: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+  color: var(--fm-text-muted);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+}
+
+/* The last tab is immediately followed by the New tab / Favourites buttons, not another tab -
+   drop its separator so it doesn't read as a border between the tabs and those icons. */
+.fm-pane-tab:last-of-type {
+  border-right: 0;
+}
+
+.fm-pane-tab.fm-drop-target {
+  outline: 2px solid var(--fm-selection);
+  outline-offset: -2px;
+}
+
+.fm-pane-tab.fm-tab-drop-before {
+  background: color-mix(in srgb, var(--fm-accent) 8%, var(--fm-surface));
+  box-shadow: inset 1px 0 var(--fm-accent);
+  outline: 0;
+}
+
+.fm-pane-tab.fm-tab-drop-after {
+  background: color-mix(in srgb, var(--fm-accent) 8%, var(--fm-surface));
+  box-shadow: inset -1px 0 var(--fm-accent);
+  outline: 0;
+}
+
+.fm-pane-tabs.fm-tab-append-target {
+  box-shadow: inset -1px 0 var(--fm-accent);
+}
+
+/* A lone tab has nothing to separate it from -- the divider would just float next to the
+ * new-tab/favourites buttons. */
+.fm-pane-tab.fm-pane-tab-only {
+  border-right: 0;
+}
+
+.fm-pane-tab[aria-selected="true"] {
+  background: var(--fm-surface-elevated);
+  color: inherit;
+}
+
+.fm-pane-tab-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-pane-tab-title > * {
+  display: inline !important;
+}
+
+.fm-pane-tab-connection-icon {
+  vertical-align: -1px;
+}
+
+.fm-pane-tab-filename-search-icon,
+.fm-pane-tab-content-search-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 0.3rem;
+  vertical-align: -1px;
+  color: var(--fm-text-muted);
+}
+
+.fm-pane-tab-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: var(--fm-row-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--fm-radius);
+  /* Overlays the tab title, so it must mask it with the tab's own background rather than a
+   * fixed colour that only matches inactive tabs. */
+  background-color: inherit;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fm-pane-tab:hover .fm-pane-tab-close,
+.fm-pane-tab:focus-within .fm-pane-tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fm-pane-tab-close:hover {
+  background-color: var(--fm-hover);
+}
+
+.fm-pane-tab-new,
+.fm-pane-tab-favourites {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  /* mithril-materialized's `.btn-flat` sets its own fixed `height: 36px` and
+   * `padding: 0 16px` at equal selector specificity - override with `!important` so this
+   * button always matches the row height instead of stretching it (previously only masked by
+   * the old tab strip's `overflow: hidden`). */
+  width: var(--fm-row-height) !important;
+  height: var(--fm-row-height) !important;
+  min-width: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  padding: 0 !important;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-pane-tab-new .fm-icon,
+.fm-pane-view-mode .fm-icon,
+.fm-pane-grid-sort .fm-icon,
+.fm-pane-photo-mode .fm-icon {
+  display: block;
+  transform: translateY(-1px);
+}
+
+/* The list/grid-dots glyphs read visually lower than the other toolbar icons even with the
+ * shared -1px nudge above - needs a touch more to sit level with its siblings. */
+.fm-pane-view-mode .fm-icon {
+  transform: translateY(-2px);
+}
+
+.fm-breadcrumb-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: var(--fm-row-height);
+  /* Not `overflow: hidden` - the view/sort/favourites dropdown menus are positioned absolute
+   * inside this row and extend below it; the breadcrumb text itself is already clipped by
+   * `.fm-breadcrumb-segments`'s own `overflow: hidden`, so this row doesn't need to clip too. */
+  border-bottom: 1px solid var(--fm-border);
+  /* Painted here (not per-child) so the new-tab/favourites buttons share the same background as
+   * the breadcrumb/path-editor/quick-filter segment beside them, instead of falling through to
+   * the plain (non-elevated) `.fm-pane` background and reading as a mismatched box. */
+  background: var(--fm-pane-breadcrumb-background, var(--fm-surface-elevated));
+}
+
+.fm-breadcrumb,
+.fm-path-editor {
+  position: relative;
+  display: flex;
+  min-height: var(--fm-row-height);
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-pane-breadcrumb-background, var(--fm-surface-elevated));
+  font-size: 0.92em;
+}
+
+.fm-breadcrumb-row > .fm-breadcrumb,
+.fm-breadcrumb-row > .fm-path-editor,
+.fm-breadcrumb-row > .fm-quick-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.fm-breadcrumb-segments {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.fm-breadcrumb-scheme {
+  align-self: center;
+  padding: 0 0 0 0.65rem;
+  color: var(--fm-text-muted);
+  white-space: nowrap;
+}
+
+button.fm-breadcrumb-scheme {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.fm-breadcrumb-scheme:hover {
+  color: var(--fm-text);
+}
+
+.fm-breadcrumb-segment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  padding: 0 0.65rem;
+  color: var(--fm-text-muted);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fm-breadcrumb-segment:not(:last-child)::after {
+  position: absolute;
+  right: -0.15rem;
+  content: "›";
+  color: var(--fm-text-muted);
+}
+
+.fm-breadcrumb-segment:last-child {
+  color: var(--fm-text-muted);
+  font-weight: 600;
+}
+
+.fm-search-execution-mode {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 0.35rem;
+  color: var(--fm-text-muted);
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+.fm-search-refresh {
+  align-self: stretch;
+  width: 22px !important;
+  height: 100% !important;
+  min-width: 22px;
+  padding: 0 !important;
+}
+
+.fm-breadcrumb-segment:hover,
+.fm-pane-tab-favourites:hover {
+  background: var(--fm-hover);
+}
+
+.fm-pane-tab-favourites {
+  margin-right: 0.5rem;
+}
+
+.fm-pane-tab-favourites .fm-icon {
+  display: block;
+}
+
+.fm-view-mode-menu-wrapper,
+.fm-grid-sort-menu-wrapper {
+  position: relative;
+}
+
+.fm-pane-view-mode,
+.fm-pane-grid-sort,
+.fm-pane-photo-mode,
+.fm-pane-tab-favourites {
+  /* Both the trigger button and the full-viewport backdrop (z-index 4) are siblings inside this
+   * wrapper - without this the backdrop paints over the button once the menu is open, so a
+   * repeat click on the button is swallowed by the backdrop instead of toggling the menu closed. */
+  position: relative;
+  z-index: 5;
+}
+
+.fm-pane-grid-sort,
+.fm-pane-photo-mode {
+  margin-right: 0.25rem;
+}
+
+.fm-pane-photo-mode[aria-pressed="true"] {
+  color: var(--fm-accent);
+}
+
+.fm-view-mode-menu-backdrop {
+  position: fixed;
+  z-index: 4;
+  inset: 0;
+}
+
+.fm-view-mode-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--fm-row-height) + 0.25rem);
+  right: 0.25rem;
+  display: grid;
+  min-width: 10rem;
+  padding: 0.25rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 0.25rem;
+  background: var(--fm-surface-elevated);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
+  /* Otherwise falls back to mithril-materialized's default font stack/size instead of the app's. */
+  font-family: var(--fm-font-family);
+  font-size: 0.92em;
+}
+
+.fm-view-mode-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text);
+  text-align: left;
+  /* Otherwise mithril-materialized's `button { font-family: ... }` wins over the inherited
+   * app font, since it targets this `<button>` element directly. */
+  font: inherit;
+}
+
+.fm-view-mode-menu-item:hover {
+  background: var(--fm-hover);
+}
+
+.fm-view-mode-menu-item[aria-checked="true"] {
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+
+.fm-favourites-menu-backdrop {
+  position: fixed;
+  z-index: 4;
+  inset: 0;
+}
+
+.fm-favourites-menu {
+  position: absolute;
+  z-index: 5;
+  /* Positioned relative to `.fm-pane`, not the breadcrumb row, so it must clear both the tab
+     strip row above it and the breadcrumb row the trigger button lives in - one row-height left
+     it overlapping the trigger button itself, swallowing clicks meant to close the menu. */
+  top: calc(var(--fm-row-height) * 2 + 0.25rem);
+  right: 0.25rem;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(18rem, calc(100vw - 0.5rem));
+  max-height: min(32rem, calc(100vh - var(--fm-row-height) * 2 - 0.75rem));
+  overflow: hidden;
+  border: 1px solid var(--fm-border);
+  border-radius: 0.25rem;
+  background: var(--fm-surface-elevated);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
+  /* Otherwise falls back to mithril-materialized's default font stack/size instead of the app's. */
+  font-family: var(--fm-font-family);
+  font-size: 0.92em;
+}
+
+.fm-favourites-menu:focus {
+  outline: none;
+}
+
+.fm-favourites-menu-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.fm-favourites-add,
+.fm-favourites-item,
+.fm-favourites-recents {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.fm-favourites-add > input[type="text"]:not(.browser-default) {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  box-shadow: none;
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-favourites-add > input[type="text"]:not(.browser-default):focus {
+  border: 1px solid var(--fm-accent);
+  box-shadow: 0 0 0 1px var(--fm-accent);
+}
+
+.fm-favourites-add-button {
+  color: var(--fm-text-muted);
+}
+
+.fm-favourites-add-button:hover:not(:disabled) {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-favourites-menu button:not(.btn-icon) {
+  appearance: none;
+  min-height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--fm-text);
+  font: inherit;
+  line-height: 1;
+}
+
+.fm-favourites-menu button.fm-manage-connections {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  border-top: 1px solid var(--fm-border);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0;
+  text-align: left;
+}
+
+/* Beats `.fm-favourites-recents > button`'s `display: block` (same specificity
+   family, defined later) by matching on both the parent class and the
+   element's own class. */
+.fm-favourites-recents > button.fm-server-item,
+.fm-favourites-recents > button.fm-cloud-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.fm-server-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-server-status {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-favourites-item > button:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-weight: normal;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-favourites-menu-scroll > strong,
+.fm-favourites-recents > strong {
+  color: var(--fm-text);
+  font-size: 0.9em;
+}
+
+.fm-hostkey-prompt {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.25rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  font-size: 0.9em;
+}
+
+.fm-hostkey-prompt code {
+  word-break: break-all;
+}
+
+.fm-hostkey-warning {
+  color: var(--fm-warning);
+  font-weight: 600;
+}
+
+.fm-hostkey-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.fm-favourites-item > button:first-child {
+  cursor: pointer !important;
+}
+
+.fm-favourites-recents > button {
+  cursor: pointer;
+}
+
+.fm-favourites-recents.fm-smart-folders > button {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fm-favourites-recents.fm-smart-folders > button > .fm-saved-search-icon {
+  display: block;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-1px);
+}
+
+.fm-favourites-item > button:first-child:hover:not(:disabled),
+.fm-favourites-item > button:first-child:focus-visible,
+.fm-favourites-recents > button:hover:not(:disabled),
+.fm-favourites-recents > button:focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-favourites-item > button:not(:first-child) {
+  opacity: 0;
+  pointer-events: none;
+  color: var(--fm-text-muted);
+}
+
+.fm-favourites-item:hover > button:not(:first-child),
+.fm-favourites-item:focus-within > button:not(:first-child) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fm-favourites-item > button:not(:first-child):hover:not(:disabled),
+.fm-favourites-item > button:not(:first-child):focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-favourites-item > button:not(:first-child):disabled {
+  color: var(--fm-text-muted);
+}
+
+.fm-favourites-item:hover > button:not(:first-child):disabled,
+.fm-favourites-item:focus-within > button:not(:first-child):disabled {
+  opacity: 0.35;
+}
+
+.fm-favourites-recents {
+  display: grid;
+  gap: 0;
+  margin-top: 0.25rem;
+}
+
+/* Recent locations are selectable menu items, not section headings. */
+.fm-favourites-recents > button {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fm-text-muted) !important;
+  font-size: 0.9em !important;
+  font-weight: normal !important;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer !important;
+}
+
+.fm-path-editor > input[type="text"]:not(.browser-default).fm-path-input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.5rem;
+  color: var(--fm-text-muted);
+  font-family: var(--fm-font-family);
+  font-size: inherit;
+  font-weight: normal;
+  line-height: inherit;
+  margin: 0;
+  border-bottom: 0;
+  box-shadow: none;
+  height: var(--fm-row-height);
+}
+
+.fm-path-error {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  right: 0;
+  left: 0;
+  border: 1px solid var(--fm-error);
+  padding: 0.25rem 0.5rem;
+  background: var(--fm-surface-elevated);
+  color: var(--fm-error);
+}
+
+.fm-pane > .fm-directory-table {
+  border: 0;
+}
+
+.fm-pane-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  min-height: var(--fm-row-height);
+  align-items: center;
+  border-top: 1px solid var(--fm-border);
+  padding: 0 0.5rem;
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-typeahead-status {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: auto;
+  padding-inline-start: 0.65rem;
+  border-inline-start: 1px solid var(--fm-border);
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-typeahead-status-error {
+  color: var(--fm-error);
+}
+
+.fm-pane nav,
+.fm-pane nav .nav-wrapper i,
+.fm-pane nav a.sidenav-trigger,
+.fm-pane nav a.sidenav-trigger i {
+  height: 1rem;
+  line-height: 1rem;
+}

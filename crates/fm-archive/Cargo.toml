@@ -1,0 +1,30 @@
+[package]
+name = "fm-archive"
+description = "Archive provider: browsing, extraction and creation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bzip2.workspace = true
+chrono.workspace = true
+flate2.workspace = true
+fm-domain.workspace = true
+fm-vfs.workspace = true
+fs2.workspace = true
+rars.workspace = true
+sevenz-rust2.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "sync"] }
+tokio-util.workspace = true
+uuid.workspace = true
+zip.workspace = true
+zeroize.workspace = true
+xz2.workspace = true
+
+[lints]
+workspace = true

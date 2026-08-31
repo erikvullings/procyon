@@ -1,0 +1,628 @@
+{
+  "iconDefinitions": {
+    "api-blueprint": {
+      "iconPath": "icons/api-blueprint.svg"
+    },
+    "astro": {
+      "iconPath": "icons/astro.svg"
+    },
+    "audio": {
+      "iconPath": "icons/audio.svg"
+    },
+    "azure-pipelines": {
+      "iconPath": "icons/azure-pipelines.svg"
+    },
+    "bash": {
+      "iconPath": "icons/bash.svg"
+    },
+    "biome": {
+      "iconPath": "icons/biome.svg"
+    },
+    "book": {
+      "iconPath": "icons/mdbook.svg"
+    },
+    "bun": {
+      "iconPath": "icons/bun.svg"
+    },
+    "bun-lock": {
+      "iconPath": "icons/bun-lock.svg"
+    },
+    "binary": {
+      "iconPath": "icons/binary.svg"
+    },
+    "c": {
+      "iconPath": "icons/c.svg"
+    },
+    "c-header": {
+      "iconPath": "icons/c-header.svg"
+    },
+    "cargo": {
+      "iconPath": "icons/cargo.svg"
+    },
+    "exe": {
+      "iconPath": "icons/exe.svg"
+    },
+    "cargo-lock": {
+      "iconPath": "icons/cargo-lock.svg"
+    },
+    "favicon": {
+      "iconPath": "icons/favicon.svg"
+    },
+    "figma": {
+      "iconPath": "icons/figma.svg"
+    },
+    "changelog": {
+      "iconPath": "icons/changelog.svg"
+    },
+    "folder-cargo": {
+      "iconPath": "icons/folder_cargo.svg"
+    },
+    "folder-cargo-open": {
+      "iconPath": "icons/folder_cargo_open.svg"
+    },
+    "folder-dist": {
+      "iconPath": "icons/folder_dist.svg"
+    },
+    "folder-dist-open": {
+      "iconPath": "icons/folder_dist_open.svg"
+    },
+    "folder-download": {
+      "iconPath": "icons/folder_download.svg"
+    },
+    "folder-download-open": {
+      "iconPath": "icons/folder_download_open.svg"
+    },
+    "folder-git": {
+      "iconPath": "icons/folder_git.svg"
+    },
+    "folder-git-open": {
+      "iconPath": "icons/folder_git_open.svg"
+    },
+    "folder-node": {
+      "iconPath": "icons/folder_node.svg"
+    },
+    "folder-node-open": {
+      "iconPath": "icons/folder_node_open.svg"
+    },
+    "circle-ci": {
+      "iconPath": "icons/circle-ci.svg"
+    },
+    "comic": {
+      "iconPath": "icons/comic.svg"
+    },
+    "code-of-conduct": {
+      "iconPath": "icons/code-of-conduct.svg"
+    },
+    "codeowners": {
+      "iconPath": "icons/codeowners.svg"
+    },
+    "config": {
+      "iconPath": "icons/config.svg"
+    },
+    "contributing": {
+      "iconPath": "icons/contributing.svg"
+    },
+    "cpp": {
+      "iconPath": "icons/cpp.svg"
+    },
+    "cpp-header": {
+      "iconPath": "icons/cpp-header.svg"
+    },
+    "csharp": {
+      "iconPath": "icons/csharp.svg"
+    },
+    "css": {
+      "iconPath": "icons/css.svg"
+    },
+    "csv": {
+      "iconPath": "icons/csv.svg"
+    },
+    "dart": {
+      "iconPath": "icons/dart.svg"
+    },
+    "database": {
+      "iconPath": "icons/database.svg"
+    },
+    "docker": {
+      "iconPath": "icons/docker.svg"
+    },
+    "docker-compose": {
+      "iconPath": "icons/docker-compose.svg"
+    },
+    "deno": {
+      "iconPath": "icons/deno.svg"
+    },
+    "deno-lock": {
+      "iconPath": "icons/deno_lock.svg"
+    },
+    "dependabot": {
+      "iconPath": "icons/dependabot.svg"
+    },
+    "editorconfig": {
+      "iconPath": "icons/editorconfig.svg"
+    },
+    "env": {
+      "iconPath": "icons/env.svg"
+    },
+    "eslint": {
+      "iconPath": "icons/eslint.svg"
+    },
+    "file": {
+      "iconPath": "icons/file.svg"
+    },
+    "folder": {
+      "iconPath": "icons/folder.svg"
+    },
+    "font": {
+      "iconPath": "icons/font.svg"
+    },
+    "git": {
+      "iconPath": "icons/git.svg"
+    },
+    "go": {
+      "iconPath": "icons/go.svg"
+    },
+    "gradle": {
+      "iconPath": "icons/gradle.svg"
+    },
+    "groovy": {
+      "iconPath": "icons/groovy.svg"
+    },
+    "gitlab": {
+      "iconPath": "icons/gitlab.svg"
+    },
+    "html": {
+      "iconPath": "icons/html.svg"
+    },
+    "image": {
+      "iconPath": "icons/image.svg"
+    },
+    "java": {
+      "iconPath": "icons/java.svg"
+    },
+    "java-jar": {
+      "iconPath": "icons/java-jar.svg"
+    },
+    "javascript-config": {
+      "iconPath": "icons/javascript-config.svg"
+    },
+    "javascript-react": {
+      "iconPath": "icons/javascript-react.svg"
+    },
+    "javascript": {
+      "iconPath": "icons/javascript.svg"
+    },
+    "json": {
+      "iconPath": "icons/json.svg"
+    },
+    "kotlin": {
+      "iconPath": "icons/kotlin.svg"
+    },
+    "lock": {
+      "iconPath": "icons/lock.svg"
+    },
+    "log": {
+      "iconPath": "icons/log.svg"
+    },
+    "lua": {
+      "iconPath": "icons/lua.svg"
+    },
+    "license": {
+      "iconPath": "icons/license.svg"
+    },
+    "makefile": {
+      "iconPath": "icons/makefile.svg"
+    },
+    "markdown": {
+      "iconPath": "icons/markdown.svg"
+    },
+    "ms-excel": {
+      "iconPath": "icons/ms-excel.svg"
+    },
+    "ms-word": {
+      "iconPath": "icons/ms-word.svg"
+    },
+    "ms-powerpoint": {
+      "iconPath": "icons/ms-powerpoint.svg"
+    },
+    "npm": {
+      "iconPath": "icons/npm.svg"
+    },
+    "npm-lock": {
+      "iconPath": "icons/npm-lock.svg"
+    },
+    "package-json": {
+      "iconPath": "icons/package-json.svg"
+    },
+    "pdf": {
+      "iconPath": "icons/pdf.svg"
+    },
+    "php": {
+      "iconPath": "icons/php.svg"
+    },
+    "playwright": {
+      "iconPath": "icons/playwright.svg"
+    },
+    "powershell": {
+      "iconPath": "icons/powershell.svg"
+    },
+    "pnpm": {
+      "iconPath": "icons/pnpm.svg"
+    },
+    "pnpm-lock": {
+      "iconPath": "icons/pnpm-lock.svg"
+    },
+    "postcss": {
+      "iconPath": "icons/postcss.svg"
+    },
+    "prettier": {
+      "iconPath": "icons/prettier.svg"
+    },
+    "python": {
+      "iconPath": "icons/python.svg"
+    },
+    "readme": {
+      "iconPath": "icons/readme.svg"
+    },
+    "renovate": {
+      "iconPath": "icons/renovate.svg"
+    },
+    "robots": {
+      "iconPath": "icons/robots.svg"
+    },
+    "ruby": {
+      "iconPath": "icons/ruby.svg"
+    },
+    "rust": {
+      "iconPath": "icons/rust.svg"
+    },
+    "sass": {
+      "iconPath": "icons/sass.svg"
+    },
+    "stylelint": {
+      "iconPath": "icons/stylelint.svg"
+    },
+    "svg": {
+      "iconPath": "icons/svg.svg"
+    },
+    "svelte": {
+      "iconPath": "icons/svelte.svg"
+    },
+    "swift": {
+      "iconPath": "icons/swift.svg"
+    },
+    "symlink": {
+      "iconPath": "icons/symlink.svg"
+    },
+    "tailwind": {
+      "iconPath": "icons/tailwind.svg"
+    },
+    "tauri": {
+      "iconPath": "icons/tauri.svg"
+    },
+    "tauri-ignore": {
+      "iconPath": "icons/tauri-ignore.svg"
+    },
+    "text": {
+      "iconPath": "icons/text.svg"
+    },
+    "semantic-release": {
+      "iconPath": "icons/semantic-release.svg"
+    },
+    "toml": {
+      "iconPath": "icons/toml.svg"
+    },
+    "typescript-config": {
+      "iconPath": "icons/typescript-config.svg"
+    },
+    "typescript-react": {
+      "iconPath": "icons/typescript-react.svg"
+    },
+    "typescript": {
+      "iconPath": "icons/typescript.svg"
+    },
+    "vite": {
+      "iconPath": "icons/vite.svg"
+    },
+    "vitest": {
+      "iconPath": "icons/vitest.svg"
+    },
+    "video": {
+      "iconPath": "icons/video.svg"
+    },
+    "vue": {
+      "iconPath": "icons/vue.svg"
+    },
+    "web-assembly": {
+      "iconPath": "icons/web-assembly.svg"
+    },
+    "workflow": {
+      "iconPath": "icons/workflow.svg"
+    },
+    "xml": {
+      "iconPath": "icons/xml.svg"
+    },
+    "yaml": {
+      "iconPath": "icons/yaml.svg"
+    },
+    "yarn": {
+      "iconPath": "icons/yarn.svg"
+    },
+    "yarn-lock": {
+      "iconPath": "icons/yarn-lock.svg"
+    },
+    "zip": {
+      "iconPath": "icons/zip.svg"
+    }
+  },
+  "file": "file",
+  "folder": "folder",
+  "symlink": "symlink",
+  "fileExtensions": {
+    "7z": "zip",
+    "aac": "audio",
+    "astro": "astro",
+    "avi": "video",
+    "bash": "bash",
+    "cbr": "comic",
+    "cbz": "comic",
+    "cc": "cpp",
+    "cjs": "javascript",
+    "conf": "config",
+    "config": "config",
+    "cpp": "cpp",
+    "cs": "csharp",
+    "css": "css",
+    "csv": "csv",
+    "cxx": "cpp",
+    "cts": "typescript",
+    "dart": "dart",
+    "doc": "ms-word",
+    "docx": "ms-word",
+    "dot": "ms-word",
+    "env": "env",
+    "epub": "book",
+    "exe": "exe",
+    "flac": "audio",
+    "fig": "figma",
+    "figma": "figma",
+    "flv": "video",
+    "go": "go",
+    "gradle": "gradle",
+    "groovy": "groovy",
+    "gif": "image",
+    "gitattributes": "git",
+    "gitconfig": "git",
+    "gitignore": "git",
+    "gitmodules": "git",
+    "gz": "zip",
+    "h": "c-header",
+    "hpp": "cpp-header",
+    "hxx": "cpp-header",
+    "htm": "html",
+    "html": "html",
+    "ini": "config",
+    "jar": "java-jar",
+    "java": "java",
+    "jpeg": "image",
+    "jpg": "image",
+    "js": "javascript",
+    "json": "json",
+    "jsonc": "json",
+    "jsx": "javascript-react",
+    "kt": "kotlin",
+    "kts": "kotlin",
+    "lock": "lock",
+    "log": "log",
+    "lua": "lua",
+    "m3u": "video",
+    "m3u8": "video",
+    "m4v": "video",
+    "markdown": "markdown",
+    "md": "markdown",
+    "mjs": "javascript",
+    "mkv": "video",
+    "mov": "video",
+    "mp3": "audio",
+    "mp4": "video",
+    "mts": "typescript",
+    "nzb": "binary",
+    "otf": "font",
+    "pdf": "pdf",
+    "php": "php",
+    "phtml": "php",
+    "png": "image",
+    "ps1": "powershell",
+    "psd1": "powershell",
+    "psm1": "powershell",
+    "ppt": "ms-powerpoint",
+    "pptx": "ms-powerpoint",
+    "py": "python",
+    "pyw": "python",
+    "rar": "zip",
+    "rb": "ruby",
+    "rs": "rust",
+    "sass": "sass",
+    "scss": "sass",
+    "sh": "bash",
+    "sql": "database",
+    "svg": "svg",
+    "svelte": "svelte",
+    "swift": "swift",
+    "toml": "toml",
+    "ts": "typescript",
+    "tsx": "typescript-react",
+    "ttf": "font",
+    "txt": "text",
+    "vue": "vue",
+    "wav": "audio",
+    "wasm": "web-assembly",
+    "webm": "video",
+    "webp": "image",
+    "woff": "font",
+    "woff2": "font",
+    "xls": "ms-excel",
+    "xlsb": "ms-excel",
+    "xlsm": "ms-excel",
+    "xlsx": "ms-excel",
+    "xml": "xml",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "zsh": "bash",
+    "zip": "zip"
+  },
+  "fileNames": {
+    ".codeowners": "codeowners",
+    ".gitlab-ci.yml": "gitlab",
+    ".gitlab-ci.yaml": "gitlab",
+    ".releaserc": "semantic-release",
+    ".releaserc.json": "semantic-release",
+    ".releaserc.yaml": "semantic-release",
+    ".releaserc.yml": "semantic-release",
+    ".bashrc": "bash",
+    ".env": "env",
+    ".editorconfig": "editorconfig",
+    ".eslintrc": "eslint",
+    ".eslintrc.cjs": "eslint",
+    ".eslintrc.js": "eslint",
+    ".eslintrc.json": "eslint",
+    ".eslintrc.yaml": "eslint",
+    ".eslintrc.yml": "eslint",
+    ".prettierignore": "prettier",
+    ".prettierrc": "prettier",
+    ".prettierrc.cjs": "prettier",
+    ".prettierrc.js": "prettier",
+    ".prettierrc.json": "prettier",
+    ".prettierrc.yaml": "prettier",
+    ".prettierrc.yml": "prettier",
+    ".taurignore": "tauri-ignore",
+    ".zshrc": "bash",
+    "biome.json": "biome",
+    "biome.jsonc": "biome",
+    "build.yml": "workflow",
+    "build.yaml": "workflow",
+    "bun.lock": "bun-lock",
+    "bun.lockb": "bun-lock",
+    "cargo.lock": "cargo-lock",
+    "cargo.toml": "cargo",
+    "Cargo.lock": "cargo-lock",
+    "Cargo.toml": "cargo",
+    "cmakelists.txt": "cpp",
+    "changelog.md": "changelog",
+    "changelog.txt": "changelog",
+    "ci.yml": "workflow",
+    "ci.yaml": "workflow",
+    "circle.yml": "circle-ci",
+    "code_of_conduct.md": "code-of-conduct",
+    "code_of_conduct.txt": "code-of-conduct",
+    "codecov.yml": "workflow",
+    "codecov.yaml": "workflow",
+    "contributing.md": "contributing",
+    "contributing.txt": "contributing",
+    "deno.json": "deno",
+    "deno.jsonc": "deno",
+    "deno.lock": "deno-lock",
+    "dependabot.yml": "dependabot",
+    "dependabot.yaml": "dependabot",
+    "docker-compose.yaml": "docker-compose",
+    "docker-compose.yml": "docker-compose",
+    "dockerfile": "docker",
+    "favicon.ico": "favicon",
+    "favicon.png": "favicon",
+    "favicon.svg": "favicon",
+    "favicon.webp": "favicon",
+    "eslint.config.cjs": "eslint",
+    "eslint.config.js": "eslint",
+    "eslint.config.mjs": "eslint",
+    "eslint.config.ts": "eslint",
+    "import_map.json": "deno",
+    "jsconfig.json": "javascript-config",
+    "makefile": "makefile",
+    "license": "license",
+    "license.md": "license",
+    "license.txt": "license",
+    "openapi.json": "api-blueprint",
+    "openapi.yaml": "api-blueprint",
+    "openapi.yml": "api-blueprint",
+    "package-lock.json": "npm-lock",
+    "package.json": "package-json",
+    "playwright.config.cjs": "playwright",
+    "playwright.config.cts": "playwright",
+    "playwright.config.js": "playwright",
+    "playwright.config.mjs": "playwright",
+    "playwright.config.mts": "playwright",
+    "playwright.config.ts": "playwright",
+    "pnpm-lock.yaml": "pnpm-lock",
+    "pnpm-workspace.yaml": "pnpm",
+    "postcss.config.cjs": "postcss",
+    "postcss.config.js": "postcss",
+    "postcss.config.mjs": "postcss",
+    "postcss.config.ts": "postcss",
+    "prettier.config.cjs": "prettier",
+    "prettier.config.js": "prettier",
+    "prettier.config.mjs": "prettier",
+    "prettier.config.ts": "prettier",
+    "readme": "readme",
+    "readme.md": "readme",
+    "release.config.cjs": "semantic-release",
+    "release.config.js": "semantic-release",
+    "release.config.mjs": "semantic-release",
+    "release.yml": "workflow",
+    "release.yaml": "workflow",
+    "renovate.json": "renovate",
+    "renovate.json5": "renovate",
+    "renovate.yaml": "renovate",
+    "renovate.yml": "renovate",
+    "robots.txt": "robots",
+    "rust-toolchain.toml": "cargo",
+    "swagger.json": "api-blueprint",
+    "swagger.yaml": "api-blueprint",
+    "swagger.yml": "api-blueprint",
+    "stylelint.config.cjs": "stylelint",
+    "stylelint.config.js": "stylelint",
+    "stylelint.config.mjs": "stylelint",
+    "tailwind.config.cjs": "tailwind",
+    "tailwind.config.js": "tailwind",
+    "tailwind.config.mjs": "tailwind",
+    "tailwind.config.ts": "tailwind",
+    "tauri.conf.json": "tauri",
+    "tsconfig.app.json": "typescript-config",
+    "tsconfig.base.json": "typescript-config",
+    "tsconfig.json": "typescript-config",
+    "tsconfig.node.json": "typescript-config",
+    "vite.config.cjs": "vite",
+    "vite.config.js": "vite",
+    "vite.config.mjs": "vite",
+    "vite.config.ts": "vite",
+    "vitest.config.cjs": "vitest",
+    "vitest.config.js": "vitest",
+    "vitest.config.mjs": "vitest",
+    "vitest.config.ts": "vitest",
+    "yarn.lock": "yarn-lock"
+  },
+  "folderNames": {
+    ".cargo": "folder-cargo",
+    ".git": "folder-git",
+    "Downloads": "folder-download",
+    "cargo": "folder-cargo",
+    "dist": "folder-dist",
+    "downloads": "folder-download",
+    "node_modules": "folder-node"
+  },
+  "folderNamesExpanded": {
+    ".cargo": "folder-cargo-open",
+    ".git": "folder-git-open",
+    "Downloads": "folder-download-open",
+    "cargo": "folder-cargo-open",
+    "dist": "folder-dist-open",
+    "downloads": "folder-download-open",
+    "node_modules": "folder-node-open"
+  },
+  "mimePrefixes": {
+    "image/": "image",
+    "audio/": "audio",
+    "video/": "video",
+    "application/pdf": "pdf",
+    "application/zip": "zip"
+  }
+}

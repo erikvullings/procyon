@@ -1,0 +1,15 @@
+# Speeds up the final link step of debug builds (fm-server statically links
+# mlua's vendored Lua interpreter, several archive codecs, and other heavy
+# crates, so linking is otherwise a slow single-threaded bottleneck).
+# Requires `brew install lld`.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld"]
+
+# Silences lld's "has version 26.5.0, which is newer than target minimum of
+# 11.0.0" warnings — the Homebrew rust stdlib/mlua's vendored Lua are built
+# against the macOS 26 SDK, but lld otherwise assumes an 11.0 floor.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "26.0"

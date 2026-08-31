@@ -1,0 +1,27 @@
+[package]
+name = "fm-search"
+description = "Recursive, cancellable filesystem search."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+fm-domain.workspace = true
+fm-events.workspace = true
+fm-search-acceleration.workspace = true
+fm-vfs = { path = "../fm-vfs" }
+ignore.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "rt", "time"] }
+tokio-util.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

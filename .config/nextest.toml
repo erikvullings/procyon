@@ -1,0 +1,14 @@
+[profile.default]
+
+# `cancelling_an_sftp_to_ftp_copy_leaves_no_partial_destination` races real
+# wall-clock scheduling against a fast (loopback, no real disk I/O) transfer:
+# it polls for the operation to reach `Running` and only then requests
+# cancellation, which is inherently non-deterministic under the CPU
+# contention of the full workspace suite running concurrently in CI - a slow
+# scheduler turn for this test's own task can let the transfer finish before
+# cancellation is even requested. No file size reliably closes that window
+# (see crates/fm-application/tests/cross_provider_transfer.rs), so this
+# accepts a bounded retry instead of chasing an unreachable guarantee.
+[[profile.default.overrides]]
+filter = 'test(cancelling_an_sftp_to_ftp_copy_leaves_no_partial_destination)'
+retries = 2

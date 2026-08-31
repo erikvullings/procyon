@@ -1,0 +1,80 @@
+[package]
+name = "fm-desktop"
+description = "Tauri 2 desktop host embedding the same frontend and FileManagerService as fm-server."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# `scripts/build-tauri.mjs` reads this through `cargo metadata` and supplies it
+# to Tauri as a generated config overlay. Keep desktop identity in this one
+# Cargo-owned source so the resolved workspace crate version cannot drift from
+# installer metadata.
+[package.metadata.desktop]
+product-name = "Procyon"
+identifier = "nl.erikvullings.procyon"
+icons = [
+  "icons/32x32.png",
+  "icons/128x128.png",
+  "icons/128x128@2x.png",
+  "icons/icon.icns",
+  "icons/icon.ico",
+]
+
+[lib]
+# A library target lets the mock-runtime smoke test build the same `run`
+# entry point `main.rs` calls, matching `fm-server`'s `lib.rs`/`main.rs` split.
+name = "fm_desktop"
+# The configured desktop targets consume this library through the executable.
+# `staticlib` and `cdylib` are only needed by Tauri mobile builds and would add
+# two redundant links to every local and CI desktop build.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true, features = [] }
+
+[dependencies]
+fm-application.workspace = true
+fm-credentials.workspace = true
+fm-domain.workspace = true
+fm-events.workspace = true
+fm-platform.workspace = true
+fm-search-acceleration.workspace = true
+fm-transport-dto.workspace = true
+dirs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# `devtools` keeps right-click "Inspect Element" available in release builds too (Tauri
+# disables it there by default, only auto-enabling it for debug builds) - needed while this
+# is an unsigned alpha so testers can diagnose frontend issues themselves.
+tauri = { workspace = true, features = ["devtools"] }
+tauri-plugin-single-instance.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-window-state.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+portable-pty = "0.9.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+drag.workspace = true
+fm-credentials-macos.workspace = true
+fm-platform-macos.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+drag.workspace = true
+fm-credentials-windows.workspace = true
+fm-platform-windows.workspace = true
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = ["Win32_Foundation"] }
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["test"] }
+chrono.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

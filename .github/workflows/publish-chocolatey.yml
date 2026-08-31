@@ -1,0 +1,79 @@
+name: Publish Chocolatey
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to package
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to package
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  chocolatey:
+    name: Publish Chocolatey package
+    runs-on: windows-latest
+    environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download the unsigned NSIS installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$env:RELEASE_TAG" --pattern "*-setup.exe" --dir package-input
+      - name: Generate and pack the Chocolatey package
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem package-input -Filter *-setup.exe | Select-Object -First 1
+          if (-not $installer) { throw "The GitHub release has no NSIS setup executable" }
+          $version = $env:RELEASE_TAG.Substring(1)
+          $checksum = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          node scripts/generate-package-manager-files.mjs chocolatey `
+            --version $version `
+            --sha256 $checksum `
+            --repository $env:GITHUB_REPOSITORY `
+            --asset $installer.Name `
+            --output chocolatey-package
+          choco pack chocolatey-package/procyon.nuspec --output-directory chocolatey-output
+      - name: Attach the .nupkg to the GitHub release
+        # Upload first so a package remains available for manual publishing after an upstream error.
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $package = Get-ChildItem chocolatey-output -Filter *.nupkg | Select-Object -First 1
+          if (-not $package) { throw "Chocolatey package was not created" }
+          gh release upload "$env:RELEASE_TAG" $package.FullName --clobber
+      - name: Push to the Chocolatey Community Repository
+        shell: pwsh
+        continue-on-error: true
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          $package = Get-ChildItem chocolatey-output -Filter *.nupkg | Select-Object -First 1
+          if (-not $package) { throw "Chocolatey package was not created" }
+          $maxAttempts = 4
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              choco push $package.FullName --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY --execution-timeout=500
+              if ($LASTEXITCODE -eq 0) { exit 0 }
+              throw "choco push exited with code $LASTEXITCODE"
+            } catch {
+              Write-Warning "Attempt $attempt of $maxAttempts failed: $_"
+              if ($attempt -eq $maxAttempts) {
+                Write-Warning "Giving up after $maxAttempts attempts - the .nupkg is still attached to the GitHub release for a manual push."
+                exit 1
+              }
+              Start-Sleep -Seconds (30 * $attempt)
+            }
+          }

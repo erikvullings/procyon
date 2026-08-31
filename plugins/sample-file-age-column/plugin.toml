@@ -1,0 +1,12 @@
+id = "sample.file-age"
+name = "File Age"
+version = "0.1.0"
+api_version = "1"
+description = "Displays a compact age from the entry modification timestamp."
+entrypoint = "plugin.lua"
+
+[permissions]
+selected_entry_metadata = true
+
+[contributions]
+columns = true

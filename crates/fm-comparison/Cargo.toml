@@ -1,0 +1,27 @@
+[package]
+name = "fm-comparison"
+description = "Cancellable, provider-neutral directory comparison and synchronization planning."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+fm-checksum.workspace = true
+fm-domain.workspace = true
+fm-events.workspace = true
+fm-vfs = { path = "../fm-vfs" }
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt"] }
+tokio-util.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+fm-vfs-local.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,139 @@
+/* SERVERS connections manager (task 0103/0104): matches the visual language
+   already established by `.fm-workspace-switcher-*` (theme.css) - a
+   bordered, gapped row list inside the shared `.modal`/`.modal-content`
+   chrome, rather than bare unstyled text. */
+
+.fm-app-shell .modal.fm-connections-modal {
+  width: min(30rem, calc(100vw - 2rem));
+}
+
+.fm-connections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.fm-connections-empty {
+  margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-connections-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 18rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fm-connections-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.4rem 0.6rem;
+}
+
+.fm-connections-status {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-connections-name {
+  flex: 1 1 auto;
+  min-width: 5rem;
+  overflow: hidden;
+  color: var(--fm-text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-connections-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  background: var(--fm-hover);
+  color: var(--fm-text-muted);
+  font-size: 0.75em;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.fm-connections-status-label {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
+.fm-onedrive-identity,
+.fm-onedrive-authorization-status {
+  flex: 1 0 100%;
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
+.fm-onedrive-help {
+  margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-connections-actions {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.fm-connections-row .fm-connections-actions:empty {
+  display: none;
+}
+
+.fm-connections-modal button:not(.btn-icon) {
+  appearance: none;
+  min-height: 1.8rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--fm-text);
+  font: inherit;
+  line-height: 1;
+}
+
+.fm-connections-modal button:not(.btn-icon):hover:not(:disabled) {
+  background: var(--fm-hover);
+}
+
+.fm-connections-modal button:not(.btn-icon):disabled {
+  color: var(--fm-text-muted);
+  cursor: default;
+}
+
+.fm-connections-add {
+  align-self: flex-start;
+}
+
+.fm-connections-row-error {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+.fm-connections-success {
+  margin: 0;
+}
+
+/* Materialize's own `.row { margin-bottom: 20px }` default is meant for
+   full-width page forms; stacked in a narrow modal it produces far more gap
+   than the layout needs. The parent's flex `gap` above is the single source
+   of vertical spacing instead. */
+.fm-connection-form .row {
+  margin-bottom: 0;
+}

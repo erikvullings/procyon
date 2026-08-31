@@ -1,0 +1,41 @@
+.fm-session-token-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--fm-background);
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+}
+
+.fm-session-token-gate__card {
+  width: min(420px, calc(100vw - 2rem));
+  padding: 2rem;
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+  border: 1px solid var(--fm-border);
+}
+
+.fm-session-token-gate__card h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.fm-session-token-gate__card p {
+  margin: 0 0 1rem;
+  color: var(--fm-text-muted);
+  font-size: 0.9rem;
+}
+
+.fm-session-token-gate__error {
+  margin: -0.5rem 0 1rem;
+  color: var(--fm-error);
+  font-size: 0.85rem;
+}
+
+.fm-session-token-gate__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}

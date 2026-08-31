@@ -1,0 +1,21 @@
+[package]
+name = "fm-vfs"
+description = "Virtual filesystem provider trait, capabilities and errors."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bitflags.workspace = true
+fm-domain.workspace = true
+futures.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+tokio-util.workspace = true
+
+[lints]
+workspace = true

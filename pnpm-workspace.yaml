@@ -1,0 +1,32 @@
+packages:
+  - frontend
+allowBuilds:
+  esbuild: true
+overrides:
+  '@codemirror/view': 6.43.9
+minimumReleaseAgeExclude:
+  - jsdom@30.0.1
+  - mithril-materialized@3.17.7 || 3.17.9
+  - '@biomejs/biome@2.5.10'
+  - '@biomejs/cli-darwin-arm64@2.5.10'
+  - '@biomejs/cli-darwin-x64@2.5.10'
+  - '@biomejs/cli-linux-arm64-musl@2.5.10'
+  - '@biomejs/cli-linux-arm64@2.5.10'
+  - '@biomejs/cli-linux-x64-musl@2.5.10'
+  - '@biomejs/cli-linux-x64@2.5.10'
+  - '@biomejs/cli-win32-arm64@2.5.10'
+  - '@biomejs/cli-win32-x64@2.5.10'
+  - '@orval/angular@8.25.0'
+  - '@orval/axios@8.25.0'
+  - '@orval/core@8.25.0'
+  - '@orval/effect@8.25.0'
+  - '@orval/fetch@8.25.0'
+  - '@orval/hono@8.25.0'
+  - '@orval/mcp@8.25.0'
+  - '@orval/mock@8.25.0'
+  - '@orval/query@8.25.0'
+  - '@orval/solid-start@8.25.0'
+  - '@orval/swr@8.25.0'
+  - '@orval/zod@8.25.0'
+  - orval@8.25.0
+  - '@types/node@26.4.0'

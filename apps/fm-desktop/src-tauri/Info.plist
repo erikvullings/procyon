@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- macOS deduplicates launches of the same bundle by default: clicking the Dock icon (or
+	     double-clicking in Finder) while an instance is already running just activates that
+	     instance instead of starting a new process. Setting this to false opts back into the
+	     ability to open a second window/instance from the Dock, matching typical Mac app
+	     behaviour. Tauri merges this file into the generated Info.plist (see
+	     ../../../Cargo.toml's `info_plist` doc comment / tauri-utils' BundleConfig). -->
+	<key>LSMultipleInstancesProhibited</key>
+	<false/>
+</dict>
+</plist>

@@ -1,0 +1,115 @@
+.fm-file-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+}
+
+.fm-file-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  padding: 0 0.25rem 0 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  box-sizing: border-box;
+  overflow: hidden;
+  font-size: 0.92em;
+}
+
+.fm-file-editor-header .btn-flat,
+.fm-file-editor-header .fm-file-editor-close {
+  height: calc(var(--fm-row-height) - 2px);
+  min-height: 0;
+  line-height: calc(var(--fm-row-height) - 2px);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.fm-file-editor-header strong {
+  font: inherit;
+  font-weight: 500;
+}
+
+.fm-file-editor-header .fm-file-editor-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--fm-row-height) - 2px);
+  min-width: calc(var(--fm-row-height) - 2px);
+  padding-left: 0;
+  padding-right: 0;
+  line-height: 1;
+}
+
+.fm-file-editor-spacer {
+  flex: 1;
+}
+
+.fm-file-editor-dirty,
+.fm-file-editor-error {
+  color: var(--fm-warning);
+}
+
+.fm-file-editor-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--fm-surface);
+}
+
+.fm-code-mirror,
+.fm-code-mirror .cm-editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.fm-code-mirror .cm-scroller {
+  overflow: auto;
+}
+
+/* The editor is the deliberate exception to the app-wide `user-select: none` (see
+ * `frontend/src/themes/theme.css`): without this, WebKit (Tauri's WKWebView) fails to place the
+ * text-insertion caret on click inside a `user-select: none` contenteditable region, even though
+ * keyboard navigation still works - so clicking another line silently left the caret unmoved. */
+.fm-code-mirror .cm-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fm-file-editor-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 1rem;
+  background: var(--fm-surface);
+}
+
+.fm-file-editor-conflict,
+.fm-file-editor-close-dialog,
+.fm-file-editor-message,
+.fm-file-editor-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.fm-file-editor-close-dialog {
+  position: absolute;
+  z-index: 5;
+  align-self: center;
+  top: 40%;
+  background: var(--fm-surface);
+  box-shadow: var(--fm-shadow);
+}

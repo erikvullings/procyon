@@ -1,0 +1,2199 @@
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --fm-background: #f4f6f8;
+  --fm-surface: #ffffff;
+  --fm-surface-elevated: #ffffff;
+  --fm-text: #344054;
+  --fm-text-muted: #667085;
+  --fm-border: #c8ced8;
+  --fm-accent: #075ea8;
+  --fm-selection: #c9e2ff;
+  --fm-selection-inactive: #e2e8f0;
+  --fm-hover: #e9eef4;
+  --fm-error: #b42318;
+  --fm-warning: #8a4b08;
+  --fm-success: #18723c;
+  --fm-selected-row-text: #b45309;
+  --fm-cursor-row-text: #475467;
+  --fm-disk-usage-directory: #476b78;
+  --fm-disk-usage-media: #4f8468;
+  --fm-disk-usage-code: #416f9d;
+  --fm-disk-usage-archive: #a66b2c;
+  --fm-disk-usage-executable: #985a5a;
+  --fm-disk-usage-other: #70838c;
+  --fm-disk-usage-block-border: rgb(255 255 255 / 45%);
+  --fm-disk-usage-block-focus: #ffffff;
+  --fm-disk-usage-label: #ffffff;
+  --fm-disk-usage-label-outline: rgb(0 0 0 / 55%);
+  --fm-row-height: 20px;
+  --fm-header-height: 20px;
+  --fm-font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fm-font-size: 13px;
+  /* xterm.js otherwise defaults to "courier-new, courier, monospace" (task: keep the terminal's
+   * font matching the rest of the app rather than falling back to a distinctly larger-looking
+   * Courier New). */
+  --fm-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --fm-radius: 4px;
+  --fm-shadow: 0 8px 24px rgb(23 32 51 / 16%);
+
+  /* Finder tag label colors (task 0136) - deliberately identical across light/dark/system: these
+   * are recognizable brand-ish swatches matching Finder's own seven colors, not adaptive UI chrome,
+   * so they don't need a themed variant. */
+  --fm-finder-tag-red: #fc3b32;
+  --fm-finder-tag-orange: #ff9d0a;
+  --fm-finder-tag-yellow: #ffcc00;
+  --fm-finder-tag-green: #67cc57;
+  --fm-finder-tag-blue: #5596f6;
+  --fm-finder-tag-purple: #b767cc;
+  --fm-finder-tag-gray: #a1a1a1;
+
+  --mm-primary-color: var(--fm-accent);
+  --mm-primary-color-light: var(--fm-selection);
+  --mm-primary-color-dark: var(--fm-accent);
+  --mm-background-color: var(--fm-background);
+  --mm-surface-color: var(--fm-surface);
+  --mm-card-background: var(--fm-surface-elevated);
+  --mm-modal-background: var(--fm-surface-elevated);
+  --mm-input-background: var(--fm-surface);
+  --mm-text-primary: var(--fm-text);
+  --mm-text-secondary: var(--fm-text-muted);
+  --mm-border-color: var(--fm-border);
+  --mm-divider-color: var(--fm-border);
+  --mm-input-border: var(--fm-border);
+  --mm-input-border-focus: var(--fm-accent);
+  --mm-input-text: var(--fm-text);
+  --mm-button-background: var(--fm-accent);
+  --mm-button-text: var(--fm-surface);
+  --mm-button-flat-text: var(--fm-accent);
+  --mm-dropdown-hover: var(--fm-hover);
+  --mm-dropdown-focus: var(--fm-selection-inactive);
+  --mm-dropdown-selected: var(--fm-selection);
+  --mm-row-hover: var(--fm-hover);
+  --mm-error-color: var(--fm-error);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --fm-background: #11151a;
+  --fm-surface: #1b2129;
+  --fm-surface-elevated: #252d38;
+  --fm-text: #d3dae3;
+  --fm-text-muted: #98a3b0;
+  --fm-border: #485463;
+  --fm-accent: #79b8ff;
+  --fm-selection: #244f78;
+  --fm-selection-inactive: #343e4b;
+  --fm-hover: #29333f;
+  --fm-error: #ff8a80;
+  --fm-warning: #ffc46b;
+  --fm-success: #72d69a;
+  --fm-selected-row-text: #fbbf24;
+  --fm-cursor-row-text: #f2f4f7;
+  --fm-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  --fm-directory-row-base: #21252d;
+  --fm-directory-row-highlight: #232730;
+  --fm-disk-usage-directory: #345866;
+  --fm-disk-usage-media: #376a50;
+  --fm-disk-usage-code: #355f88;
+  --fm-disk-usage-archive: #845523;
+  --fm-disk-usage-executable: #754747;
+  --fm-disk-usage-other: #4f626c;
+
+  /*
+   * mm's own components.css redeclares every --mm-* var on this exact
+   * `[data-theme=dark]` selector (equal specificity); repeating our mapping
+   * here (not just the `:root` block above) guarantees ours wins on source
+   * order instead of depending on import order alone.
+   */
+  --mm-primary-color: var(--fm-accent);
+  --mm-primary-color-light: var(--fm-selection);
+  --mm-primary-color-dark: var(--fm-accent);
+  --mm-background-color: var(--fm-background);
+  --mm-surface-color: var(--fm-surface);
+  --mm-card-background: var(--fm-surface-elevated);
+  --mm-modal-background: var(--fm-surface-elevated);
+  --mm-input-background: var(--fm-surface);
+  --mm-text-primary: var(--fm-text);
+  --mm-text-secondary: var(--fm-text-muted);
+  --mm-border-color: var(--fm-border);
+  --mm-divider-color: var(--fm-border);
+  --mm-input-border: var(--fm-border);
+  --mm-input-border-focus: var(--fm-accent);
+  --mm-input-text: var(--fm-text);
+  --mm-button-background: var(--fm-accent);
+  --mm-button-text: var(--fm-background);
+  --mm-button-flat-text: var(--fm-accent);
+  --mm-dropdown-hover: var(--fm-hover);
+  --mm-dropdown-focus: var(--fm-selection-inactive);
+  --mm-dropdown-selected: var(--fm-selection);
+  --mm-row-hover: var(--fm-hover);
+  --mm-error-color: var(--fm-error);
+}
+
+@media (prefers-color-scheme: dark) {
+  /*
+   * mm's components.css also defines `:root:not([data-theme])` inside this
+   * same media query -- that selector has HIGHER specificity than a plain
+   * `:root` (an extra `:not()` pseudo-class), so it beats our light block's
+   * `--mm-*` mappings outright whenever the OS is dark and no explicit
+   * `data-theme` is set (the "system" theme setting), regardless of import
+   * order. Matching the same selector here restores the specificity tie,
+   * which our later source order then wins.
+   */
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --fm-background: #11151a;
+    --fm-surface: #1b2129;
+    --fm-surface-elevated: #252d38;
+    --fm-text: #d3dae3;
+    --fm-text-muted: #98a3b0;
+    --fm-border: #485463;
+    --fm-accent: #79b8ff;
+    --fm-selection: #244f78;
+    --fm-selection-inactive: #343e4b;
+    --fm-hover: #29333f;
+    --fm-error: #ff8a80;
+    --fm-warning: #ffc46b;
+    --fm-success: #72d69a;
+    --fm-selected-row-text: #fbbf24;
+    --fm-cursor-row-text: #f2f4f7;
+    --fm-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    --fm-directory-row-base: #21252d;
+    --fm-directory-row-highlight: #232730;
+    --fm-disk-usage-directory: #345866;
+    --fm-disk-usage-media: #376a50;
+    --fm-disk-usage-code: #355f88;
+    --fm-disk-usage-archive: #845523;
+    --fm-disk-usage-executable: #754747;
+    --fm-disk-usage-other: #4f626c;
+
+    --mm-primary-color: var(--fm-accent);
+    --mm-primary-color-light: var(--fm-selection);
+    --mm-primary-color-dark: var(--fm-accent);
+    --mm-background-color: var(--fm-background);
+    --mm-surface-color: var(--fm-surface);
+    --mm-card-background: var(--fm-surface-elevated);
+    --mm-modal-background: var(--fm-surface-elevated);
+    --mm-input-background: var(--fm-surface);
+    --mm-text-primary: var(--fm-text);
+    --mm-text-secondary: var(--fm-text-muted);
+    --mm-border-color: var(--fm-border);
+    --mm-divider-color: var(--fm-border);
+    --mm-input-border: var(--fm-border);
+    --mm-input-border-focus: var(--fm-accent);
+    --mm-input-text: var(--fm-text);
+    --mm-button-background: var(--fm-accent);
+    --mm-button-text: var(--fm-background);
+    --mm-button-flat-text: var(--fm-accent);
+    --mm-dropdown-hover: var(--fm-hover);
+    --mm-dropdown-focus: var(--fm-selection-inactive);
+    --mm-dropdown-selected: var(--fm-selection);
+    --mm-row-hover: var(--fm-hover);
+    --mm-error-color: var(--fm-error);
+  }
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--fm-background);
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+  font-size: var(--fm-font-size);
+}
+
+/* Keep native scrollbars visually aligned with the active theme in Tauri/WKWebView. */
+.fm-app-shell * {
+  scrollbar-color: var(--fm-border) var(--fm-surface);
+}
+
+.fm-app-shell *::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: var(--fm-surface);
+}
+
+.fm-app-shell *::-webkit-scrollbar-track {
+  background: var(--fm-surface);
+}
+
+.fm-app-shell *::-webkit-scrollbar-thumb {
+  background: var(--fm-border);
+  border: 2px solid var(--fm-surface);
+  border-radius: 999px;
+}
+
+.fm-app-shell *::-webkit-scrollbar-thumb:hover {
+  background: var(--fm-text-muted);
+}
+
+/*
+ * The file manager UI is not a document -- only text the user actively types
+ * (inputs/textareas) should be selectable. Everything else (chrome, labels,
+ * directory rows) must reject click-and-drag text selection. -webkit- prefix
+ * is required for Tauri's WKWebView, which ignores the unprefixed property.
+ */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.fm-app-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  height: 100vh;
+  min-width: 520px;
+  overflow: hidden;
+}
+
+/*
+ * Pinned by row number rather than left to auto-placement: the mac-only
+ * titlebar spacer only exists in the DOM in Tauri overlay mode, and
+ * mithril-materialized's ModalPanel-based dialogs (command palette, context
+ * menu, create-directory, find-files, permanent-delete) always render an
+ * always-present `.modal-container` wrapper regardless of open/closed state.
+ * Without explicit rows, that variable element count shifts these four
+ * structural rows by one track depending on which dialogs/spacer happen to be
+ * present, which previously let the operation centre grab the workspace's
+ * intended `minmax(0, 1fr)` track and balloon to fill the screen.
+ */
+.fm-titlebar-spacer {
+  grid-row: 1;
+}
+
+.fm-workspace-toolbar {
+  grid-row: 2;
+}
+
+main.fm-workspace {
+  grid-row: 3;
+  display: flex;
+  min-height: 0;
+}
+
+.fm-permanent-delete-modal {
+  --mm-modal-width: min(560px, calc(100vw - 32px));
+  --mm-modal-max-width: min(560px, calc(100vw - 32px));
+  --mm-modal-content-padding-top-with-close: 24px;
+}
+
+.fm-permanent-delete-modal .mm-modal-title {
+  padding-inline-end: 32px;
+}
+
+.fm-permanent-delete-modal .fm-permanent-delete-confirm:focus {
+  color: var(--fm-error);
+}
+
+/* Directory-tree sidebar (task 0139): a fixed-width column beside the pane split, sized so
+ * `.fm-workspace-layout` (flex: 1 1 auto) fills the remaining width the same way it filled the
+ * whole row before the sidebar existed. */
+.fm-directory-tree-sidebar {
+  flex: 0 0 auto;
+  width: 220px;
+  min-width: 0;
+  height: 100%;
+}
+
+.fm-operation-centre {
+  grid-row: 5;
+}
+
+.fm-function-key-bar {
+  grid-row: 6;
+}
+
+.fm-terminal-drawer {
+  grid-row: 4;
+  height: 280px;
+  min-height: 120px;
+  max-height: 80vh;
+  background: var(--fm-surface);
+  overflow: hidden;
+}
+
+.fm-terminal-drawer[hidden] {
+  display: none;
+}
+
+.fm-terminal-resize-handle {
+  position: relative;
+  height: 1px;
+  cursor: ns-resize;
+  background: var(--fm-border);
+}
+
+/* Invisible hit area wider than the sliver itself, matching .fm-workspace-splitter::after, so
+ * dragging stays easy without the handle itself looking thicker than the status bar's border. */
+.fm-terminal-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+  cursor: ns-resize;
+}
+
+.fm-terminal-host {
+  height: calc(100% - 1px);
+  padding: 4px 8px;
+  font-size: 0.92em;
+}
+
+.fm-terminal-surface {
+  width: 100%;
+  height: 100%;
+}
+
+.fm-terminal-unavailable {
+  color: var(--fm-text-muted);
+  padding: 1rem;
+}
+
+/*
+ * ModalPanel's outer wrapper carries no styling of its own -- only its
+ * `.modal-overlay`/`.modal` children are `position: fixed` -- so left
+ * unstyled it's a normal block-level grid item, perturbing sibling row
+ * assignment above. `display: contents` removes it from grid-item
+ * generation while leaving its fixed-position children rendering exactly
+ * where they already positioned themselves.
+ */
+.modal-container {
+  display: contents;
+}
+
+.fm-workspace-toolbar,
+.fm-function-key-bar,
+.fm-operation-centre {
+  display: flex;
+  gap: 1rem;
+  min-height: var(--fm-row-height);
+  align-items: center;
+  border-bottom: 1px solid var(--fm-border);
+  padding: 0 0.75rem;
+  background: var(--fm-surface-elevated);
+}
+
+.fm-workspace-toolbar strong {
+  white-space: nowrap;
+}
+
+.fm-workspace-toolbar {
+  position: relative;
+  gap: 0rem;
+  font-size: 0.92em;
+  border-bottom: 0;
+}
+
+/*
+ * macOS overlay title bar (tauri.conf.json titleBarStyle: Overlay + hiddenTitle):
+ * reserves a row, coloured the same as the toolbar, for the native traffic lights,
+ * with our own centred title label -- the OS title is hidden since it doesn't
+ * centre reliably without an NSToolbar attached.
+ */
+.fm-titlebar-spacer {
+  display: none;
+}
+
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-titlebar-spacer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  background: var(--fm-surface-elevated);
+}
+
+.fm-titlebar-label {
+  color: var(--fm-text-muted);
+  font-size: 1em;
+  font-weight: 700;
+}
+
+.fm-windows-titlebar {
+  display: flex;
+  position: relative;
+  grid-row: 1;
+  z-index: 20;
+  height: 32px;
+  align-items: center;
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+  user-select: none;
+}
+
+.fm-windows-titlebar-label {
+  display: inline-flex;
+  height: 100%;
+  align-items: center;
+  gap: 6px;
+  width: 116px;
+  padding-left: 12px;
+  color: var(--fm-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.fm-windows-titlebar-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.fm-windows-native-menu {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.fm-windows-native-menu-group {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.fm-windows-native-menu-trigger,
+.fm-windows-titlebar-controls button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.fm-windows-native-menu-trigger {
+  padding: 0 9px;
+  font-size: 0.82rem;
+}
+
+.fm-windows-native-menu-trigger:hover,
+.fm-windows-native-menu-trigger:focus-visible,
+.fm-windows-native-menu-item:hover:not(.is-disabled) {
+  outline: 0;
+  background: var(--mm-dropdown-hover);
+}
+
+.fm-windows-native-menu-popup {
+  position: absolute;
+  z-index: 100;
+  top: 100%;
+  left: 0;
+  display: grid;
+  min-width: 220px;
+  margin: 0;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 4px;
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+  list-style: none;
+}
+
+.fm-windows-native-menu-item,
+.fm-windows-native-menu-submenu {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: default;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.fm-windows-native-menu-item.is-disabled {
+  color: var(--fm-text-muted);
+}
+
+.fm-windows-native-menu-item kbd {
+  color: var(--fm-text-muted);
+  font: inherit;
+}
+
+.fm-windows-native-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--fm-border);
+}
+
+.fm-windows-titlebar-spacer {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.fm-windows-titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.fm-windows-titlebar-controls button {
+  width: 46px;
+  font-size: 1rem;
+}
+
+.fm-windows-titlebar-controls button:hover,
+.fm-windows-titlebar-controls button:focus-visible {
+  outline: 0;
+  background: var(--mm-dropdown-hover);
+}
+
+.fm-windows-titlebar-controls .fm-windows-titlebar-close:hover {
+  background: #c42b1c;
+  color: white;
+}
+
+/* Excludes `.fm-tooltip`: every toolbar icon button is now wrapped in a `span.fm-tooltip`
+   (components/tooltip.ts), so an unscoped `> span` selector here would match each one and push
+   every button to the far right instead of just the intended trailing status span. */
+.fm-workspace-toolbar > span:not(.fm-tooltip) {
+  margin-left: auto;
+  color: var(--fm-text-muted);
+}
+
+/*
+ * Custom tooltip: native `title` tooltips are unreliable across browsers/webviews (delay and
+ * support vary a lot), so icon-only controls are wrapped in `.fm-tooltip` (see
+ * `components/tooltip.ts`), which shows the label on hover/focus. The visible tooltip itself is
+ * a single `body`-level portal element (`.fm-tooltip-portal`), positioned in JS rather than
+ * painted in place as a `::after` on the wrapper - several ancestors a tooltip-bearing control
+ * can live inside (an icon button's own ripple-clipping class, the pane tab strip's
+ * horizontally-scrolling container) clip an in-place tooltip via `overflow: hidden`, and a portal
+ * outside that DOM subtree sidesteps it entirely.
+ */
+.fm-tooltip {
+  display: inline-flex;
+}
+
+.fm-tooltip-portal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  border-radius: var(--fm-radius);
+  padding: 0.2rem 0.5rem;
+  background: var(--fm-text);
+  color: var(--fm-surface);
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.fm-navigation-controls {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.fm-navigation-controls button,
+.fm-workspace-toolbar button,
+.fm-settings-button,
+.fm-settings-editor button,
+.fm-diagnostics-button,
+.fm-diagnostics-editor button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 1.75rem;
+  border: 0;
+  border-radius: 2px;
+  padding: 0 0.4rem;
+  background: transparent;
+  color: var(--fm-text-muted);
+  font: inherit;
+}
+
+.fm-navigation-controls button:disabled,
+.fm-workspace-toolbar button:disabled {
+  opacity: 0.35;
+}
+
+.fm-navigation-controls button:hover:not(:disabled),
+.fm-workspace-toolbar button:hover:not(:disabled),
+.fm-settings-button:hover,
+.fm-settings-editor button:hover:not(:disabled),
+.fm-diagnostics-button:hover,
+.fm-diagnostics-editor button:hover:not(:disabled) {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-settings-editor {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 35%);
+}
+
+.fm-settings-editor-panel {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.75rem;
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+/* Keeps the save/cancel actions visible without scrolling: the panel itself no
+ * longer scrolls, only the `.fm-settings-editor-body` between the fixed
+ * heading and the fixed footer does. */
+.fm-settings-editor-panel--fixed-footer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fm-settings-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.fm-settings-section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem 0;
+}
+
+.fm-settings-disclosure {
+  display: contents;
+}
+
+.fm-settings-button {
+  display: flex;
+  min-height: var(--fm-row-height);
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fm-settings-button::-webkit-details-marker {
+  display: none;
+}
+
+.fm-diagnostics-editor {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 35%);
+}
+
+.fm-diagnostics-disclosure {
+  display: contents;
+}
+
+.fm-diagnostics-button {
+  display: flex;
+  min-height: var(--fm-row-height);
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fm-diagnostics-button::-webkit-details-marker {
+  display: none;
+}
+
+.fm-settings-editor-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.fm-settings-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--fm-border);
+}
+
+/* `.row .col.s12` (mm's grid CSS) sets `width: 100%`, sizing this to the full row like the other
+ * settings rows' `.input-field` wrappers - but those wrappers are invisible, so their own
+ * `.col` gutter padding reads as inset from the row edge around the *visible* input border.
+ * This fieldset draws its own visible border directly on that same full-width box, so without
+ * matching the inset via margin, it appears wider than its siblings. The extra class selectors
+ * raise specificity above `.row .col.s12` so the override takes effect. */
+.fm-settings-column-select.col.s12 {
+  box-sizing: border-box;
+  width: calc(100% - 1.5rem);
+  min-width: 0;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.5rem 0.75rem;
+  margin: 0 0.75rem;
+}
+
+.fm-settings-column-select legend {
+  padding: 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-settings-column-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-settings-column-list li {
+  display: flex;
+}
+
+.fm-settings-column-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.fm-workspace-disclosure {
+  display: contents;
+}
+
+.fm-workspace-switcher-button {
+  display: flex;
+  min-height: var(--fm-row-height);
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  list-style: none;
+  max-width: 12rem;
+}
+
+.fm-workspace-switcher-button::-webkit-details-marker {
+  display: none;
+}
+
+.fm-disclosure-summary-hidden {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+  list-style: none;
+  color: transparent;
+}
+
+.fm-disclosure-summary-hidden::-webkit-details-marker {
+  display: none;
+}
+
+.fm-workspace-switcher-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 1px);
+  left: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.75rem;
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-workspace-switcher-backdrop {
+  position: fixed;
+  z-index: 19;
+  inset: 0;
+}
+
+.fm-workspace-switcher-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.fm-workspace-switcher-panel button {
+  min-width: 1.75rem;
+  border: 0;
+  border-radius: 2px;
+  padding: 0 0.4rem;
+  background: transparent;
+  color: var(--fm-text-muted);
+  font: inherit;
+}
+
+.fm-workspace-switcher-panel button:hover:not(:disabled) {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-workspace-switcher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-workspace-switcher-row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.2rem 0.35rem;
+}
+
+.fm-workspace-switcher-row[data-active="true"] {
+  border-color: var(--fm-accent);
+}
+
+/* Icon-only actions (rename/delete/open-in-new-window) never shrink, so the name - the one thing
+ * whose length actually varies - is what gives way to `text-overflow: ellipsis` first. */
+.fm-workspace-switcher-row .btn-flat {
+  flex: 0 0 auto;
+}
+
+.fm-workspace-switcher-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-workspace-switcher-empty {
+  color: var(--fm-text-muted);
+}
+
+.fm-workspace-switcher-error {
+  color: var(--fm-error);
+}
+
+.fm-workspace-rename-form {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.25rem;
+}
+
+.fm-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fm-workspace-loading {
+  padding: 1rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-command-palette-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: min(18vh, 10rem);
+  background: rgb(0 0 0 / 35%);
+}
+
+.fm-command-palette {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: min(65vh, 38rem);
+  overflow: hidden auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+input[type="text"].fm-command-palette-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--fm-border);
+  outline: 0;
+  padding: 0.8rem 1rem;
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.fm-command-palette-status,
+.fm-command-palette-results small,
+.fm-command-palette-unavailable,
+.fm-command-palette-error {
+  color: var(--fm-text-muted);
+}
+
+.fm-command-palette-status {
+  display: block;
+  padding: 0.35rem 1rem;
+  font-size: 0.85rem;
+}
+
+.fm-command-palette-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-command-palette-results li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 1rem;
+}
+
+.fm-command-palette-results li > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.fm-command-palette-results li[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.fm-command-palette-active {
+  background: var(--fm-selection);
+}
+
+.fm-command-palette-results kbd {
+  align-self: center;
+  color: var(--fm-text-muted);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.fm-command-palette-parameters {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.fm-command-palette-parameters h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.fm-command-palette-parameters label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fm-command-palette-parameters input {
+  border: 1px solid var(--fm-border);
+  padding: 0.35rem;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+input[type="text"].fm-shortcuts-help-search {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  outline: 0;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-shortcuts-help-capture {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.fm-shortcuts-help-capture label {
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+input[type="text"].fm-shortcuts-help-capture-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  outline: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+  cursor: default;
+}
+
+.fm-shortcuts-help-capture-result {
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-shortcuts-help-table td:last-child {
+  white-space: nowrap;
+}
+
+.fm-shortcuts-help-table small {
+  display: block;
+  color: var(--fm-text-muted);
+}
+
+.fm-context-menu-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+}
+
+.fm-context-menu {
+  position: fixed;
+  display: grid;
+  min-width: 12rem;
+  max-width: min(20rem, calc(100vw - 1rem));
+  overflow: hidden;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.25rem;
+  background: var(--mm-card-background);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-context-menu-item {
+  border: 0;
+  border-radius: 2px;
+  padding: 0.45rem 0.75rem;
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  text-align: left;
+}
+
+.fm-context-menu-submenu::after {
+  float: right;
+  content: ">";
+}
+
+.fm-context-menu-item:hover:not(:disabled),
+.fm-context-menu-item:focus-visible {
+  outline: 0;
+  background: var(--mm-dropdown-hover);
+}
+
+.fm-context-menu-item:disabled {
+  color: var(--fm-text-muted);
+}
+
+.fm-operation-centre {
+  border-top: 1px solid var(--fm-border);
+  color: var(--fm-text-muted);
+  overflow-x: auto;
+}
+
+.fm-operation {
+  display: grid;
+  min-width: 22rem;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-right: 1px solid var(--fm-border);
+}
+
+.fm-operation-summary,
+.fm-operation-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.fm-operation-summary strong {
+  color: var(--fm-text);
+}
+
+.fm-operation progress {
+  width: 100%;
+  accent-color: var(--fm-accent);
+}
+
+.fm-operation-controls button {
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+}
+
+.fm-operation-result {
+  color: var(--fm-success);
+}
+
+.fm-operation-warning {
+  color: var(--fm-warning);
+}
+
+.fm-operation-warning ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.fm-operation-failure {
+  color: var(--fm-error);
+}
+
+.fm-operation-failure pre {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+}
+
+.fm-function-key-bar {
+  justify-content: space-around;
+  border-bottom: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-function-key[aria-disabled="true"] {
+  color: var(--fm-text-muted);
+  opacity: 0.5;
+}
+
+/* The filled/tinted treatment requires the pane to both be `activePaneId` (`data-active`) AND
+ * currently hold real DOM focus (`:focus-within`) - the two are usually in sync, except when
+ * focus moves to the directory-tree sidebar (task 0139) without changing which pane is "active"
+ * for command routing. In that case the pane below falls through to the outline-only rule
+ * further down, which is unconditional on focus - the same "not focused, but still showing
+ * where the cursor is" treatment used for the grid view's cursor tile. */
+.fm-pane[data-active="true"]:focus-within .fm-selected-row {
+  background: color-mix(in srgb, var(--fm-selection) 18%, transparent);
+  color: var(--fm-selected-row-text);
+}
+
+.fm-pane[data-active="true"]:focus-within .fm-cursor-row:not(.fm-selected-row) {
+  background-color: color-mix(in srgb, var(--fm-accent) 48%, transparent);
+  color: var(--fm-cursor-row-text);
+}
+
+/* The cursor row always gets a distinctive outline (Marta convention), regardless of whether
+   it's also marked - so the cursor position stays visible without the tinted cursor background
+   above washing out the amber "selected" text color a marked row needs to keep. Unlike the fill
+   rules above, this one is deliberately not gated on `:focus-within`: it is also what keeps the
+   cursor position visible in a pane that lost DOM focus to the directory-tree sidebar. */
+.fm-pane[data-active="true"] .fm-cursor-row {
+  box-shadow: inset 0 0 0 1px var(--fm-accent);
+}
+
+[data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row {
+  background: color-mix(in srgb, var(--fm-background) 55%, var(--fm-surface));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .fm-pane[data-active="true"]:focus-within .fm-selected-row {
+    background: color-mix(in srgb, var(--fm-background) 55%, var(--fm-surface));
+  }
+}
+
+.fm-plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.fm-plugin-empty {
+  color: var(--fm-text-muted);
+}
+
+.fm-plugin-row {
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.35rem 0.5rem;
+}
+
+.fm-plugin-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.fm-plugin-version,
+.fm-plugin-description {
+  color: var(--fm-text-muted);
+}
+
+.fm-plugin-toggle {
+  margin: 0;
+}
+
+.fm-plugin-view-log {
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  padding: 0.15rem 0.5rem;
+}
+
+.fm-plugin-diagnostic,
+.fm-plugin-toggle-error {
+  margin-top: 0.25rem;
+  color: var(--fm-error);
+}
+
+.fm-plugin-permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin: 0.35rem 0 0;
+  margin-left: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-plugin-permission {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-plugin-permission[data-granted="true"] {
+  color: var(--fm-text);
+}
+
+.fm-plugin-permission[data-granted="false"] .fm-plugin-permission-state {
+  text-decoration: line-through;
+}
+
+.fm-plugin-log-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-plugin-log-entries li {
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    scroll-behavior: auto;
+  }
+
+  :root *,
+  :root *::before,
+  :root *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    transition-delay: 0ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+
+/*
+ * ModalPanel's title renders as a plain `h4`, inheriting the page's 2.28rem
+ * type-scale font-size and hardcoding `margin: 0 0 20px 0` inline (needs
+ * !important to override). Shrink it for every dialog by default -- lower
+ * specificity than the per-modal overrides below, so those still win.
+ */
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
+.fm-app-shell .modal-content h4 {
+  margin: 0 0 0.6rem 0 !important;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
+
+/*
+ * ModalPanel (mithril-materialized) sets width/padding/title size via inline
+ * styles, so overriding them for a denser look requires !important here.
+ */
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+.modal.fm-dense-modal {
+  max-width: min(24rem, calc(100vw - 2rem)) !important;
+}
+
+.modal.fm-dense-modal .modal-content {
+  padding: 0.75rem 1rem !important;
+}
+
+.modal.fm-dense-modal .modal-content h4 {
+  margin: 0 0 0.6rem 0 !important;
+  font-size: 1.05rem !important;
+}
+
+.modal.fm-dense-modal .modal-footer {
+  padding: 0.4rem 0.6rem !important;
+}
+
+.modal.fm-delete-workspace-modal > button.mm-modal-close-button {
+  top: 0.25rem !important;
+  right: 0.25rem !important;
+}
+
+.modal.fm-delete-workspace-modal .modal-footer {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.modal.fm-delete-workspace-modal .modal-footer button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+
+.fm-create-directory-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+/*
+ * These dialogs use plain HTML inputs (not mm's TextInput), so mm's own
+ * `input[type=text]:not(.browser-default)` base rule (2 classes + 1 type)
+ * otherwise wins over a bare `.fm-create-directory-field input` (1 class + 1
+ * type) and leaves the underline-only Material look with no box border.
+ * `.fm-app-shell` brings this rule to the same specificity, and it wins the
+ * tie because this file loads after mm's stylesheets.
+ */
+.fm-app-shell .fm-create-directory-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-app-shell .fm-create-directory-field input:focus {
+  outline: none;
+  border-color: var(--fm-accent);
+}
+
+.fm-field-error {
+  color: var(--fm-error);
+  font-size: 0.8rem;
+}
+
+/* Spotlight comment editor (task 0136) - same input-styling approach as
+ * `.fm-create-directory-field` above, applied to a textarea instead. */
+.fm-spotlight-comment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.fm-app-shell .fm-spotlight-comment-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.fm-app-shell .fm-spotlight-comment-field textarea:focus {
+  outline: none;
+  border-color: var(--fm-accent);
+}
+
+/* Finder tags editor (task 0136). */
+.fm-finder-tags-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.fm-finder-tags-empty {
+  margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-finder-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-finder-tags-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 999px;
+  background: var(--fm-surface);
+}
+
+.fm-finder-tag-color-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.fm-finder-tags-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.fm-finder-tags-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fm-app-shell .fm-finder-tags-add-row input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 8rem;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-app-shell .fm-finder-tags-add-row input:focus {
+  outline: none;
+  border-color: var(--fm-accent);
+}
+
+.fm-finder-tag-color-picker {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.fm-finder-tag-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--fm-border);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fm-finder-tag-color-swatch--selected {
+  box-shadow: 0 0 0 2px var(--fm-accent);
+}
+
+.fm-finder-tags-add-button {
+  height: var(--fm-row-height);
+  padding: 0 0.6rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  cursor: pointer;
+}
+
+.fm-finder-tags-add-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+.modal.fm-find-files-modal {
+  max-width: min(42rem, calc(100vw - 2rem)) !important;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+
+.fm-find-files-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fm-saved-searches {
+  display: grid;
+  gap: 0.3rem;
+  min-height: 0;
+}
+
+.fm-saved-searches-title {
+  color: var(--fm-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fm-saved-search-list {
+  display: grid;
+  max-height: min(28vh, 11rem);
+  overflow-y: auto;
+}
+
+.fm-saved-search {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--fm-row-height);
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-saved-search-name {
+  flex: 1 1 auto;
+  min-width: 5rem;
+  overflow: hidden;
+  color: var(--fm-text);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-saved-search-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.fm-app-shell .fm-saved-search-action.btn-icon,
+.fm-app-shell .fm-saved-search-pin.toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--fm-row-height);
+  min-width: var(--fm-row-height);
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-app-shell .fm-saved-search-action.btn-icon:hover,
+.fm-app-shell .fm-saved-search-action.btn-icon:focus-visible,
+.fm-app-shell .fm-saved-search-pin.toggle-button:hover,
+.fm-app-shell .fm-saved-search-pin.toggle-button:focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-app-shell .fm-saved-search-pin.toggle-button.checked {
+  color: var(--fm-accent);
+}
+
+.fm-saved-search-pin-icon {
+  display: inline-flex;
+}
+
+.fm-saved-search-save {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fm-saved-search-save > input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.45rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.fm-app-shell .fm-save-search-button.btn-flat {
+  flex: 0 0 auto;
+  min-height: var(--fm-row-height);
+  height: auto;
+  margin: 0;
+  padding: 0.15rem 0.3rem;
+  font-size: inherit;
+}
+
+.fm-find-files-status {
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-find-files-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  max-height: min(45vh, 22rem);
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fm-find-files-results li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.fm-find-files-results li:hover {
+  background: var(--fm-selection);
+}
+
+.fm-find-files-results li > span {
+  display: grid;
+  gap: 0.1rem;
+  overflow: hidden;
+}
+
+.fm-find-files-results li small {
+  overflow: hidden;
+  color: var(--fm-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles.
+ * `.modal-content` uses `max-height` (not a fixed `height`) so a short plan still shrinks to fit;
+ * once content exceeds it, the flex column below caps the dialog and only the preview listbox
+ * scrolls, keeping the Cancel/Rename footer always visible.
+ */
+.modal.fm-multi-rename-modal {
+  max-width: min(48rem, calc(100vw - 2rem)) !important;
+  max-height: min(85vh, 44rem) !important;
+  /* Without a floor, the fixed-size rules form above the preview list (which can't shrink
+     below its own content) squeezes the list to nothing on short viewports -- the table
+     scrolls into invisibility instead of just showing fewer rows. Reserve enough height for
+     the title, rules form, footer, and the preview list's own `min-height` floor combined
+     (measured ~34rem at the default font size, plus a buffer); still capped by max-height
+     above and 90vh below so the dialog never grows past the viewport. */
+  min-height: min(38rem, 90vh) !important;
+}
+
+.modal.fm-multi-rename-modal .modal-content {
+  position: static !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0 !important;
+  min-height: 0;
+}
+
+/* mm's own `.modal-fixed-footer .modal-footer` CSS sets `position: absolute; bottom: 0`, taking
+   the footer out of the flex flow entirely -- `.modal-content` then claims the dialog's FULL
+   height (nothing left to leave room for) and the footer just overlays whatever content ends up
+   underneath it, instead of the preview list stopping above it. Restore normal flex flow so the
+   two properly share the dialog's height. */
+.modal.fm-multi-rename-modal .modal-footer {
+  position: static !important;
+  flex: 0 0 auto;
+}
+
+/* ModalPanel wraps its `description` prop in an unclassed div; without shrink styling of its
+   own, that wrapper blocks the flex-shrink chain and the whole preview list overflows uncapped
+   instead of scrolling. `overflow-y: auto` (not `hidden`) is a deliberate fallback: on an
+   extremely short viewport where even the rules form's own unshrinkable min-content height plus
+   the preview list's `min-height` floor can't both fit within the dialog's 90vh-capped height,
+   this lets the whole rules+preview area scroll together as one unit instead of letting the
+   preview list's floor render past this wrapper's edge and overlap the (always flex-fixed)
+   footer below.  */
+.modal.fm-multi-rename-modal .modal-content > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+
+.fm-multi-rename-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.75rem;
+}
+
+.fm-multi-rename-presets {
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.fm-multi-rename-presets select {
+  margin: 0;
+}
+
+/* Its own scrollable listbox: grows to fill the space left by the rules above, and scrolls
+   independently so a long rename plan never makes the whole modal (and its footer) scroll. */
+.fm-multi-rename-preview-container {
+  flex: 1 1 auto;
+  min-height: 5rem;
+  overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+}
+
+.fm-multi-rename-preview {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+}
+
+.fm-multi-rename-preview th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--fm-surface);
+}
+
+.fm-multi-rename-preview th,
+.fm-multi-rename-preview td {
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-multi-rename-row--problem td {
+  background: var(--fm-error-surface, rgb(255 0 0 / 8%));
+}
+
+/* Sync-plan review table (task 0075), mirroring `.fm-multi-rename-preview` above. */
+.fm-sync-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 60vh;
+}
+
+.fm-sync-plan-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  overflow-y: auto;
+}
+
+.fm-sync-plan-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--fm-surface);
+}
+
+.fm-sync-plan-table th,
+.fm-sync-plan-table td {
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-sync-plan-path {
+  font-family: var(--fm-font-mono, monospace);
+  word-break: break-all;
+}
+
+/* Properties dialog (task 0140): a label/value table per section (general, permissions,
+ * provider-specific), mirroring `.fm-sync-plan-table` above. */
+.fm-properties-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.fm-properties-body h5 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fm-properties-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+}
+
+.fm-properties-table th {
+  width: 40%;
+  text-align: left;
+  font-weight: 600;
+  color: var(--fm-text-secondary, inherit);
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  vertical-align: top;
+}
+
+.fm-properties-table td {
+  text-align: left;
+  padding: 0.25rem 0;
+  word-break: break-all;
+}
+
+/* Uses the same input-styling approach as `.fm-create-directory-field` above. */
+.fm-archive-password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.fm-app-shell .fm-archive-password-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-app-shell .fm-archive-password-field input:focus {
+  outline: none;
+  border-color: var(--fm-accent);
+}
+
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+.modal.fm-conflict-dialog {
+  max-width: min(30rem, calc(100vw - 2rem)) !important;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+
+.fm-conflict-dialog-entries {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.fm-conflict-dialog-entries dt {
+  margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-conflict-dialog-entries dd {
+  margin: 0;
+}
+
+.fm-conflict-dialog-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* Match the row-height inputs; box uses border-box so its 18px footprint fits inside. */
+.fm-app-shell .fm-conflict-dialog-checkbox input[type="checkbox"] + span:not(.lever) {
+  height: 20px;
+  line-height: 20px;
+  padding-left: 24px;
+}
+
+/* Recolors mm's checkbox to theme tokens; see the multi-rename checkbox rules above. */
+.fm-app-shell .fm-conflict-dialog-checkbox input[type="checkbox"] + span:not(.lever)::before {
+  box-sizing: border-box;
+  margin-top: 1px;
+  border-color: var(--fm-border);
+}
+
+.fm-app-shell
+  .fm-conflict-dialog-checkbox
+  input[type="checkbox"]:checked
+  + span:not(.lever)::before {
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  box-sizing: border-box;
+  border: 2px solid var(--fm-accent);
+  background-color: var(--fm-accent);
+  transform: none;
+}
+
+.fm-app-shell
+  .fm-conflict-dialog-checkbox
+  input[type="checkbox"]:checked
+  + span:not(.lever)::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--fm-surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Checksum results and duplicate review panels (task 0077). Both dock below
+   the panes and share the surface/border treatment used by the sync-plan
+   review table above. */
+.checksum-results,
+.duplicate-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  background: var(--fm-surface);
+  border-top: 1px solid var(--fm-border);
+}
+
+.checksum-results__header,
+.duplicate-review__header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 0.25rem;
+  background: var(--fm-surface);
+}
+
+.checksum-results__header h2,
+.duplicate-review__header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.checksum-results__progress,
+.duplicate-review__summary {
+  color: var(--fm-text-muted);
+}
+
+/* Pushes the trailing controls to the right edge of the header. */
+.checksum-results__close,
+.duplicate-review__close {
+  margin-left: auto;
+}
+
+.checksum-results__error,
+.duplicate-review__error {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--fm-error);
+  background: var(--fm-error-surface, rgb(255 0 0 / 8%));
+  border-radius: var(--fm-radius);
+}
+
+.duplicate-review__warnings {
+  margin: 0;
+  color: var(--fm-warning);
+}
+
+.checksum-results__saved {
+  margin: 0;
+  color: var(--fm-success);
+}
+
+.checksum-results__actions,
+.checksum-results__save {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.checksum-results__save-name {
+  min-width: 16rem;
+}
+
+.checksum-results__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.checksum-results__table th,
+.checksum-results__table td {
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.checksum-results__digest code {
+  font-family: var(--fm-font-mono, monospace);
+  word-break: break-all;
+}
+
+.checksum-results__entry-error {
+  color: var(--fm-error);
+}
+
+.checksum-results__verify-input {
+  width: 100%;
+  font-family: var(--fm-font-mono, monospace);
+}
+
+.checksum-results__verification--match {
+  color: var(--fm-success);
+}
+
+.checksum-results__verification--mismatch {
+  color: var(--fm-error);
+}
+
+.checksum-results__verification--missing {
+  color: var(--fm-warning);
+}
+
+.duplicate-review__groups,
+.duplicate-review__copies {
+  margin: 0;
+  padding-left: 1rem;
+  list-style: none;
+}
+
+.duplicate-review__group {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.duplicate-review__group-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.duplicate-review__reclaimable {
+  font-weight: 400;
+  color: var(--fm-text-muted);
+}
+
+.duplicate-review__path {
+  font-family: var(--fm-font-mono, monospace);
+  word-break: break-all;
+}
+
+.duplicate-review__keep-hint {
+  color: var(--fm-text-muted);
+}
+
+/* Hardlinked paths are one file, so they are visually set apart from the
+   true duplicates above them rather than blending into the same list. */
+.duplicate-review__hardlinks {
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-left: 3px solid var(--fm-warning);
+  background: var(--fm-hover);
+  border-radius: var(--fm-radius);
+}
+
+.duplicate-review__hardlink-note {
+  margin: 0 0 0.25rem;
+  color: var(--fm-text-muted);
+}
+
+.duplicate-review__footer {
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.25rem;
+  background: var(--fm-surface);
+}
+
+/* Application uninstall review checklist (task 0148). */
+.fm-application-uninstall-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.fm-application-uninstall-row + .fm-application-uninstall-row {
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-application-uninstall-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+
+.fm-application-uninstall-item--locked {
+  color: var(--fm-text-muted);
+}
+
+.fm-application-uninstall-path {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-application-uninstall-size {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-application-uninstall-locked-note {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  font-style: italic;
+}

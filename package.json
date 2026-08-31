@@ -1,0 +1,37 @@
+{
+  "name": "fm",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "dev": "pnpm --dir frontend dev",
+    "dev:mock": "cross-env VITE_RUNTIME=mock pnpm --dir frontend dev",
+    "dev:http": "cross-env VITE_RUNTIME=http pnpm --dir frontend dev",
+    "dev:server": "cross-env FM_SERVER_PORT=8787 cargo watch -w apps/fm-server -w crates -w Cargo.toml -w Cargo.lock -x 'run -p fm-server -- --dev-mode-auth-disabled'",
+    "dev:server:no-watch": "cross-env FM_SERVER_PORT=8787 cargo run -p fm-server -- --dev-mode-auth-disabled",
+    "dev:tauri": "cd apps/fm-desktop/src-tauri && pnpm exec tauri dev",
+    "test": "pnpm run test:rust && pnpm run test:frontend && pnpm run test:scripts",
+    "test:rust": "cargo nextest run --workspace && cargo test --doc --workspace",
+    "test:frontend": "pnpm --dir frontend test",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "lint": "pnpm run lint:rust && pnpm run lint:frontend",
+    "lint:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
+    "lint:frontend": "biome check .",
+    "api:export": "node scripts/export-openapi.mjs",
+    "api:generate": "node scripts/generate-api.mjs",
+    "api:check": "pnpm run api:export && pnpm run api:generate && git diff --exit-code",
+    "build": "pnpm run build:rust && pnpm run build:frontend",
+    "build:rust": "cargo build --workspace --release",
+    "build:frontend": "pnpm --dir frontend build",
+    "build:tauri": "node scripts/build-tauri.mjs",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@tauri-apps/cli": "^2.11.4",
+    "cross-env": "^10.1.0",
+    "husky": "^9.1.7",
+    "js-yaml": "^5.4.1"
+  }
+}

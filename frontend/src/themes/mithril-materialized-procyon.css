@@ -1,0 +1,388 @@
+/*
+ * Dense Procyon presentation for the mithril-materialized components used by fm.
+ * Keep this after the package stylesheet: mm still supplies component structure,
+ * accessibility states, the grid, and animations; this file owns application look.
+ */
+.fm-app-shell .btn,
+.fm-app-shell .btn-flat,
+.fm-app-shell button.btn,
+.fm-app-shell button.btn-flat {
+  min-height: var(--fm-row-height);
+  height: auto;
+  padding: 2px 4px;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  box-shadow: none;
+  font: inherit;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.fm-app-shell .btn:hover,
+.fm-app-shell .btn:focus,
+.fm-app-shell .btn-flat:hover,
+.fm-app-shell .btn-flat:focus {
+  box-shadow: none;
+}
+
+.fm-app-shell .btn-flat,
+.fm-app-shell button.btn-flat {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fm-text);
+}
+
+.fm-app-shell .btn-flat:hover,
+.fm-app-shell .btn-flat:focus-visible {
+  border-color: transparent;
+  background: var(--fm-hover);
+}
+
+.fm-app-shell .input-field {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0.2rem 0 0.3rem;
+}
+
+/*
+ * mm renders `<input>` before `<label>` (its floating-label trick relies on
+ * `input:focus + label` sibling selectors), so a plain static label falls
+ * below the input. `order` visually promotes it above the input without
+ * touching DOM order, keeping any mm sibling-selector behavior intact.
+ */
+.fm-app-shell .input-field > label {
+  order: -1;
+  position: static;
+  display: block;
+  margin: 0 0 0.2rem;
+  padding-left: 0.1rem;
+  color: var(--fm-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.15;
+  transform: none;
+  transition: none;
+}
+
+/*
+ * mm's own `.input-field > label:not(.label-icon).active` rule matches this
+ * selector's specificity (3 classes, 1 type) and would otherwise win on
+ * source order for any populated/focused field, re-floating the label with
+ * `translateY(-14px) scale(0.8)` on top of the static layout above and
+ * making it overlap the input's own text.
+ */
+.fm-app-shell .input-field > label.active {
+  transform: none;
+}
+
+.fm-app-shell .input-field input:not([type="checkbox"]),
+.fm-app-shell .select-wrapper input.select-dropdown,
+.fm-app-shell select.browser-default {
+  box-sizing: border-box;
+  min-height: var(--fm-row-height);
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-app-shell .input-field input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+  padding-right: 1.3rem;
+}
+
+.fm-app-shell .input-field input[type="number"]::-webkit-outer-spin-button,
+.fm-app-shell .input-field input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.fm-app-shell .input-field input:not([type="checkbox"]):focus,
+.fm-app-shell .select-wrapper input.select-dropdown:focus,
+.fm-app-shell select.browser-default:focus {
+  outline: none;
+}
+
+.fm-app-shell .input-field input:not([type="checkbox"]),
+.fm-app-shell .select-wrapper input.select-dropdown,
+.fm-app-shell select.browser-default {
+  width: 100%;
+  line-height: calc(var(--fm-row-height) - 2px);
+}
+
+.fm-app-shell .select-wrapper input.select-dropdown {
+  padding-right: 1.35rem;
+}
+
+.fm-app-shell .select-wrapper svg.caret {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin: 0;
+  transform: translateY(-50%);
+  fill: var(--fm-text-muted);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fm-app-shell .select-wrapper input.select-dropdown:focus + svg.caret {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/*
+ * mm's `disabled` prop on Select blocks opening/keyboard interaction and
+ * sets `tabindex="-1"` on `.select-wrapper`, but never sets the underlying
+ * trigger `<input>`'s `disabled` attribute - so there is no `:disabled` to
+ * hook a look into. Style the `tabindex` signal it does set instead.
+ */
+.fm-app-shell .select-wrapper[tabindex="-1"] {
+  cursor: not-allowed;
+}
+
+.fm-app-shell .select-wrapper[tabindex="-1"] input.select-dropdown {
+  background: var(--fm-hover);
+  color: var(--fm-text-muted);
+  cursor: not-allowed;
+}
+
+.fm-app-shell .select-wrapper[tabindex="-1"] svg.caret {
+  opacity: 0.4;
+}
+
+/* mm's own `.switch, .switch * { margin: 12px 0 17px 0; }` inflates every switch descendant. */
+.fm-app-shell .switch,
+.fm-app-shell .switch * {
+  margin: 0;
+}
+
+.fm-app-shell .switch,
+.fm-app-shell .switch label,
+.fm-app-shell .switch label .switch-value {
+  font-size: inherit;
+  line-height: var(--fm-row-height);
+}
+
+.fm-app-shell .switch label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.fm-app-shell .switch label .switch-value:last-child {
+  margin-left: 0.75rem;
+}
+
+.fm-app-shell .switch label .switch-value:first-child {
+  margin-right: 0.45rem;
+}
+
+.fm-app-shell .switch label span:not(.lever) {
+  font-size: 0.92rem;
+  line-height: 1.15;
+}
+
+.fm-app-shell .switch label .switch-value {
+  top: -1px;
+}
+
+.fm-app-shell .input-field > label:not(.label-icon).switch-label.active {
+  transform: none;
+}
+
+.fm-app-shell .switch label .lever {
+  width: 1.8rem;
+  height: 0.75rem;
+  margin: 0;
+}
+
+.fm-app-shell .switch label .lever::after,
+.fm-app-shell .switch label .lever::before {
+  width: 0.9rem;
+  height: 0.9rem;
+  top: -0.08rem;
+}
+
+.fm-app-shell .modal {
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+  box-shadow: var(--fm-shadow);
+  /* mm's base `.modal` sets only `overflow-y: auto`, leaving `overflow-x` at its default
+   * `visible` - per the CSS overflow spec, pairing `visible` with a non-`visible` value on the
+   * other axis silently computes the `visible` one to `auto` too, so any modal (this one
+   * included) grows an unwanted horizontal scrollbar the instant its content overflows by even
+   * a pixel (e.g. the footer's own buttons). Pin it to `hidden` explicitly - every modal here
+   * only ever needs to scroll vertically. */
+  overflow-x: hidden;
+}
+
+.fm-app-shell .modal .modal-content {
+  padding: 0.75rem 1rem;
+}
+
+.fm-app-shell .modal .modal-footer {
+  min-height: 0;
+  height: auto;
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--fm-border);
+  /* background: var(--fm-surface-elevated); */
+}
+
+/* ModalPanel supplies these values inline; keep the search dialog compact and chrome-like. */
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel inline layout */
+.fm-app-shell .modal.fm-find-files-modal {
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: min(32rem, calc(100vw - 2rem)) !important;
+  border-radius: 2px !important;
+  background: var(--fm-surface-elevated) !important;
+}
+
+.fm-app-shell .modal.fm-find-files-modal > button.modal-close {
+  top: 0.25rem !important;
+  right: 0.25rem !important;
+  min-width: var(--fm-row-height) !important;
+  min-height: var(--fm-row-height);
+  padding: 0 !important;
+  border: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.fm-app-shell .modal.fm-find-files-modal .modal-content {
+  padding: 0.65rem 0.75rem !important;
+  padding-top: 0.65rem !important;
+  background: var(--fm-surface-elevated);
+}
+
+.fm-app-shell .modal.fm-find-files-modal .modal-content h4 {
+  margin: 0 2rem 0.5rem 0 !important;
+  font-size: 1rem !important;
+  font-weight: 600;
+  line-height: var(--fm-row-height);
+}
+
+.fm-app-shell .modal.fm-find-files-modal .modal-footer {
+  padding: 0.2rem 0.35rem !important;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel inline layout */
+
+.fm-app-shell .dropdown-content {
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-app-shell .dropdown-content li {
+  min-height: var(--fm-row-height);
+}
+
+.fm-app-shell .dropdown-content li > span {
+  padding: 0.25rem 0.5rem;
+  color: var(--fm-text);
+  font-size: inherit;
+  line-height: 1.2;
+}
+
+.fm-app-shell .select-wrapper .dropdown-content li:hover:not(.disabled),
+.fm-app-shell .select-wrapper .dropdown-content li.active {
+  background-color: var(--fm-selection-inactive) !important;
+  background-image: none !important;
+}
+
+[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li:hover:not(.disabled),
+[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.active {
+  background-color: var(--fm-selection-inactive) !important;
+  background-image: none !important;
+}
+
+.fm-app-shell .select-wrapper .dropdown-content li.selected,
+[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.selected {
+  background-color: var(--fm-selection) !important;
+  background-image: none !important;
+}
+
+.fm-app-shell .select-wrapper .dropdown-content li:hover:not(.disabled) > span,
+.fm-app-shell .select-wrapper .dropdown-content li.selected > span,
+.fm-app-shell .select-wrapper .dropdown-content li.active > span {
+  background-color: transparent !important;
+}
+
+.fm-app-shell .input-field .number-input-controls {
+  top: calc(0.82rem * 1.15 + 0.2rem);
+  right: 0.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: calc(var(--fm-row-height) - 2px);
+  pointer-events: none;
+}
+
+.fm-app-shell .input-field .number-input-control {
+  width: 0.9rem;
+  height: 0.55rem;
+  min-width: 0.9rem;
+  min-height: 0.55rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text-muted);
+  pointer-events: auto;
+}
+
+.fm-app-shell .input-field .number-input-control svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.fm-app-shell .input-field .number-input-control:hover {
+  color: var(--fm-text);
+}
+
+/* Materialize's 20px grid gutters and floating labels are too loose for settings. */
+.fm-app-shell .fm-settings-editor-body > .row {
+  margin-bottom: 0.4rem;
+}
+
+.fm-app-shell .fm-settings-section-heading {
+  margin: 0.55rem 0 0.15rem;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.fm-app-shell .fm-settings-editor-body > .row:first-child .fm-settings-section-heading {
+  margin-top: 0.1rem;
+}
+
+.fm-app-shell .fm-settings-editor-heading strong {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.fm-app-shell .fm-settings-editor-heading > button[aria-label="Close settings"] {
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  padding: 0.15rem;
+}
+
+.fm-app-shell .fm-settings-editor-heading > button[aria-label="Close settings"] svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.fm-app-shell .input-field .helper-text {
+  min-height: 0;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}

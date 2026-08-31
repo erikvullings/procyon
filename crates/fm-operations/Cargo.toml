@@ -1,0 +1,30 @@
+[package]
+name = "fm-operations"
+description = "Operation engine: jobs, scheduling, progress and conflict handling."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+fm-domain.workspace = true
+fm-events.workspace = true
+fm-vfs.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "copy_planning"
+harness = false
+
+[lints]
+workspace = true

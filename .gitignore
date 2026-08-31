@@ -1,0 +1,34 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# Benchmarks and test fixtures (generated, reproducible via seed)
+fixtures/benchmark/
+/tmp/
+.criterion/
+
+# Tooling caches / logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.eslintcache
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Local env overrides (never commit secrets)
+.env
+.env.local
+
+# Local MinIO instance used to smoke-test fm-vfs-s3 against a real endpoint
+# (see crates/fm-vfs-s3/tests/provider_contract.rs's real_endpoint_smoke_test)
+.minio-data/

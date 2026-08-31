@@ -1,0 +1,386 @@
+.fm-directory-table {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+  color: var(--fm-text-muted);
+  font-size: 0.92em;
+}
+
+/* Header lives outside the scrollable viewport so the scrollbar starts below it. We reserve
+ * scrollbar gutter space with `scrollbar-gutter: stable` while keeping `overflow-y: auto`.
+ * In Tauri's WKWebView, forcing an always-visible disabled scrollbar (`overflow-y: scroll`) can
+ * intermittently repaint with system white when content is short; the stable gutter avoids that
+ * while preserving column alignment. The header mirrors the measured gutter via
+ * `--fm-scrollbar-width` (set from JS - see directory-table.ts). */
+.fm-directory-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  outline: none;
+  /* Set explicitly (not just inherited from .fm-directory-table) so the reserved gutter always
+   * composites against the pane's own surface colour in Tauri's WKWebView - without this, one
+   * pane's gutter can render against a different, darker default depending on its position in
+   * the window. */
+  background: var(--fm-surface);
+  /* Forces its own compositing layer. WKWebView has known repaint bugs with
+   * `scrollbar-gutter: stable` inside a CSS Grid ancestor (the two-pane split is a grid) where
+   * the first grid track's reserved gutter can composite against stale/default chrome instead of
+   * `background` above, while later tracks repaint correctly - this nudges the engine to redo the
+   * paint on its own layer instead of reusing that stale composite. */
+  transform: translateZ(0);
+  scrollbar-color: var(--fm-border) var(--fm-surface);
+}
+
+.fm-directory-viewport::-webkit-scrollbar {
+  width: 12px;
+}
+
+.fm-directory-viewport::-webkit-scrollbar-track {
+  background: var(--fm-surface);
+}
+
+.fm-directory-viewport::-webkit-scrollbar-thumb {
+  background: var(--fm-border);
+  border: 2px solid var(--fm-surface);
+  border-radius: 999px;
+}
+
+.fm-directory-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--fm-text-muted);
+}
+
+.fm-directory-header,
+.fm-directory-row {
+  display: grid;
+  grid-template-columns:
+    minmax(12rem, 1fr) minmax(6rem, 0.25fr) minmax(6rem, 0.2fr) minmax(2.5rem, 0.08fr)
+    minmax(10rem, 0.35fr);
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.fm-directory-row.fm-drop-target {
+  outline: 2px solid var(--fm-selection);
+  outline-offset: -2px;
+}
+
+.fm-directory-header {
+  flex: 0 0 auto;
+  height: var(--fm-row-height);
+  padding-inline-end: var(--fm-scrollbar-width, 0px);
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  font-weight: 600;
+  font-size: 0.92em;
+}
+
+.fm-directory-header > button {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  border-inline-end: 1px solid var(--fm-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.fm-directory-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.fm-directory-resize-handle:hover,
+.fm-directory-resize-handle:active {
+  background: var(--fm-selection);
+}
+
+.fm-directory-header > button:last-child {
+  border-inline-end: 0;
+}
+
+.fm-directory-header > button:hover,
+.fm-directory-header > button:focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-sort-indicator {
+  display: block;
+  flex: 0 0 0.75rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-inline-start: auto;
+}
+
+.fm-directory-body {
+  position: relative;
+  background: var(--fm-directory-row-base, transparent);
+}
+
+.fm-directory-row,
+.fm-directory-row-filler {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--fm-row-height);
+  cursor: default;
+  background: var(--fm-directory-row-base, transparent);
+}
+
+.fm-cursor-row,
+.fm-selected-row {
+  color: var(--fm-text);
+}
+
+.fm-cut-entry {
+  opacity: 0.5;
+}
+
+.fm-directory-row[data-row-stripe="alternate"],
+.fm-directory-row-filler[data-row-stripe="alternate"] {
+  background: var(
+    --fm-directory-row-highlight,
+    color-mix(in srgb, var(--fm-text) 2.5%, transparent)
+  );
+}
+
+.fm-directory-cell {
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-directory-name {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.fm-entry-icon {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-entry-name {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-search-result {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-search-result-name,
+.fm-search-result-parent {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.fm-search-result-name,
+.fm-search-result-path-part {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-search-result-parent {
+  display: flex;
+  align-items: center;
+  color: var(--fm-text-muted);
+}
+
+.fm-search-result-path-prefix,
+.fm-search-result-path-collapse,
+.fm-search-result-path-separator {
+  flex: 0 0 auto;
+}
+
+.fm-search-result-path-part {
+  flex: 0 1 auto;
+  min-width: 2ch;
+}
+
+img.fm-native-entry-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.fm-directory-cell > input[type="text"]:not(.browser-default).fm-inline-rename-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+  font-size: inherit;
+  font-weight: normal;
+  line-height: inherit;
+  margin: 0;
+  border-bottom: 0;
+  box-shadow: none;
+  height: var(--fm-row-height);
+}
+
+.fm-directory-size {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-directory-git-status {
+  text-align: center;
+}
+
+.fm-directory-git-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  font-weight: 700;
+  font-size: 0.9em;
+}
+
+.fm-directory-git-status-badge--modified {
+  color: var(--fm-warning);
+}
+
+.fm-directory-git-status-badge--staged {
+  color: var(--fm-success);
+}
+
+.fm-directory-git-status-badge--untracked {
+  color: var(--fm-accent);
+}
+
+.fm-directory-git-status-badge--ignored {
+  color: var(--fm-text-muted);
+}
+
+/* Keeps the app's own font rather than switching to monospace: `tabular-nums` fixes each digit
+ * to the same width within that font, so day/hour/minute line up across rows even though the
+ * formatted string's digit count varies (e.g. "Aug 6" vs "Aug 16"). */
+.fm-directory-modified {
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-hidden-entry {
+  font-style: italic;
+  opacity: 0.72;
+}
+
+.fm-entry-symlink-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-inline-start: auto;
+  padding-inline-start: 0.5rem;
+  color: var(--fm-text-muted);
+  opacity: 0.72;
+}
+
+.fm-entry-hidden-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-inline-start: auto;
+  padding-inline-start: 0.5rem;
+  color: var(--fm-text-muted);
+  opacity: 0.72;
+}
+
+/* Finder tag color dots (task 0136) - a decorative overlay, not the sole way to know an entry
+   is tagged (spec §29): the "Edit Tags…" dialog always lists tag names as text. */
+.fm-entry-finder-tags {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.2rem;
+  margin-inline-start: auto;
+  padding-inline-start: 0.5rem;
+}
+
+.fm-entry-finder-tag-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Directory-comparison status (task 0075). Text-labelled, not colour-only (spec §29): the label
+   itself ("newer", "size ≠", ...) carries the meaning, with a border/background as a secondary,
+   non-essential cue. */
+.fm-comparison-badge {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.fm-typeahead-match {
+  color: var(--fm-error);
+  font-weight: 700;
+}
+
+.fm-directory-state {
+  display: grid;
+  place-content: center;
+  min-height: calc(var(--fm-row-height) * 3);
+  gap: 0.25rem;
+  color: var(--fm-text-muted);
+  text-align: center;
+}
+
+.fm-directory-error {
+  min-height: 100%;
+  color: var(--fm-error);
+}
+
+.fm-directory-retry {
+  justify-self: center;
+}
+
+.fm-directory-placeholder {
+  width: min(36rem, 70vw);
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-hover);
+}
+
+.fm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

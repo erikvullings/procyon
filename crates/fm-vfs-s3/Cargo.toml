@@ -1,0 +1,25 @@
+[package]
+name = "fm-vfs-s3"
+description = "S3-compatible object storage virtual filesystem provider."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+fm-domain.workspace = true
+fm-vfs.workspace = true
+futures.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+rusty-s3.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "rt", "sync"] }
+tokio-util = { workspace = true, features = ["io"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,40 @@
+.fm-quick-filter {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.92em;
+}
+
+.fm-quick-filter-icon {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-quick-filter > input[type="text"]:not(.browser-default).fm-quick-filter-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  height: var(--fm-row-height);
+  padding: 0;
+  border: 0;
+  border-bottom: 0;
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--fm-font-family);
+  font-size: inherit;
+  font-weight: normal;
+  line-height: inherit;
+  margin: 0;
+}
+
+.fm-quick-filter > input[type="text"]:not(.browser-default).fm-quick-filter-input:focus {
+  outline: none;
+  border-bottom: 0;
+  box-shadow: none;
+}

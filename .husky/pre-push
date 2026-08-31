@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# All checks live in Node so macOS, Linux and Windows share one code path, and
+# so the hook needs no POSIX tools (xargs/dirname/grep) or nested subshells.
+exec node scripts/pre-push.mjs

@@ -1,0 +1,29 @@
+[package]
+name = "fm-ssh"
+description = "Reusable SSH session, authentication and host-key verification logic (session/auth today; SFTP/terminal/command consumers build on top)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+rand.workspace = true
+russh.workspace = true
+russh-sftp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "sync", "time"] }
+uuid = { workspace = true }
+zeroize.workspace = true
+
+[dev-dependencies]
+futures.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

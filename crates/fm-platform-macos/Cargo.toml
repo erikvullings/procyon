@@ -1,0 +1,30 @@
+[package]
+name = "fm-platform-macos"
+description = "macOS implementations of the platform adapter traits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+fm-domain.workspace = true
+fm-platform.workspace = true
+fm-search-acceleration.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+dirs.workspace = true
+objc2.workspace = true
+objc2-app-kit.workspace = true
+objc2-foundation.workspace = true
+plist.workspace = true
+quicklook.workspace = true
+walkdir.workspace = true
+xattr.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

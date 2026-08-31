@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for the main window and per-workspace windows (task 0143's open_workspace_window, labeled workspace-<uuid>). Allow-lists only the commands this host actually implements (spec §22): no default full-filesystem plugin access.",
+  "windows": [
+    "main",
+    "workspace-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-theme",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://login.microsoftonline.com/*"
+        }
+      ]
+    }
+  ]
+}
