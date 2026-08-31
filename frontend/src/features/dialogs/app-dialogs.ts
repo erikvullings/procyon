@@ -163,6 +163,35 @@ export function renderAppDialogs(
         ctx.setOperations(transitionOperationState(ctx.getOperations(), operationId, 'running'));
         void client.resumeOperation(operationId).catch(() => undefined);
       },
+      onUndo: (operationId) => {
+        void client
+          .undoOperation(operationId)
+          .then((undo) => {
+            const operations = ctx.getOperations();
+            const original = operations.byId[operationId];
+            ctx.setOperations({
+              ...operations,
+              byId: {
+                ...operations.byId,
+                ...(original === undefined
+                  ? {}
+                  : {
+                      [operationId]: {
+                        ...original,
+                        undo: {
+                          available: false,
+                          reason: t('operation', 'undoInProgress'),
+                          operationId: undo.id,
+                        },
+                      },
+                    }),
+                [undo.id]: undo,
+              },
+            });
+            ctx.redraw();
+          })
+          .catch(() => undefined);
+      },
       onDismiss: (operationId) => {
         ctx.cancelAutoDismiss(operationId);
         ctx.rememberDismissedOperation(operationId);

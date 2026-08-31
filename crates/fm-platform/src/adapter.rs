@@ -62,6 +62,29 @@ pub trait PlatformAdapter: Send + Sync + std::any::Any {
         })
     }
 
+    /// Moves an entry to trash and returns its restorable native location when the platform API
+    /// exposes one.
+    fn trash_with_restore_location(&self, path: &Path) -> Result<Option<PathBuf>, PlatformError> {
+        self.trash(path)?;
+        Ok(None)
+    }
+
+    /// Restores a previously trashed entry without replacing anything at its original path.
+    fn restore_from_trash(
+        &self,
+        trashed_path: &Path,
+        original_path: &Path,
+    ) -> Result<(), PlatformError> {
+        if original_path.exists() {
+            return Err(PlatformError::Io {
+                message: "the original path is occupied".into(),
+            });
+        }
+        std::fs::rename(trashed_path, original_path).map_err(|_| PlatformError::Io {
+            message: "the trash item could not be restored".into(),
+        })
+    }
+
     /// Opens an entry with the OS default application.
     fn open_with_default_application(&self, path: &Path) -> Result<(), PlatformError> {
         let _ = path;

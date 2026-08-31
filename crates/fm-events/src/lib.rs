@@ -552,6 +552,8 @@ pub enum OperationKindPayload {
     Trash,
     /// Permanently delete entries.
     Delete,
+    /// Safely reverse a completed operation.
+    Undo,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).
@@ -638,6 +640,20 @@ pub struct OperationProgressPayload {
     pub progress: OperationProgressDetails,
 }
 
+/// Undo availability attached to an operation lifecycle snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationUndoPayload {
+    /// Whether a guarded inverse operation can currently be submitted.
+    pub available: bool,
+    /// Explanation when undo is unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Active or completed undo operation associated with this row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<OperationId>,
+}
+
 /// A file operation carried by operation lifecycle events.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -665,6 +681,12 @@ pub struct OperationPayload {
     /// Completion timestamp, when finished.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<DateTime<Utc>>,
+    /// Current guarded undo availability.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub undo: Option<OperationUndoPayload>,
+    /// Original operation reversed by this undo job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub undo_of: Option<OperationId>,
 }
 
 /// Incremental directory changes in the frontend wire format.
@@ -1594,6 +1616,8 @@ mod tests {
                     .expect("Unix epoch is valid"),
                 started_at: None,
                 completed_at: None,
+                undo: None,
+                undo_of: None,
             };
             let pane_id = PaneId::from_str(PANE_ID).expect("fixture pane id must be valid");
             let tab_id = TabId::from_str(TAB_ID).expect("fixture tab id must be valid");

@@ -123,6 +123,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::operation::start_operation))
         .routes(utoipa_axum::routes!(routes::operation::get_operation))
         .routes(utoipa_axum::routes!(routes::operation::cancel_operation))
+        .routes(utoipa_axum::routes!(routes::operation::undo_operation))
         .routes(utoipa_axum::routes!(routes::operation::pause_operation))
         .routes(utoipa_axum::routes!(routes::operation::resume_operation))
         .routes(utoipa_axum::routes!(

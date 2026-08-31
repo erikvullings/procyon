@@ -14,8 +14,8 @@ use async_trait::async_trait;
 use fm_archive::{create_7z_archive, create_zip_archive};
 use fm_domain::{EntryId, EntryKind, Location, ProviderId};
 use fm_operations::{
-    ConflictResolution, ExecutionError, ExecutionOutcome, Operation, OperationExecutor,
-    OperationPlan, PauseToken, PlanItem,
+    ConflictResolution, EntryFingerprint, ExecutionError, ExecutionOutcome, Operation,
+    OperationExecutor, OperationPlan, OperationUndo, PauseToken, PlanItem, UndoAction, UndoPlan,
 };
 use fm_platform::{PlatformAdapter, PlatformCapabilities};
 use fm_settings::Settings;
@@ -198,6 +198,8 @@ impl OperationPlanner {
                     provider,
                     source,
                     destination,
+                    source_fingerprint: Mutex::new(None),
+                    destination_fingerprint: Mutex::new(None),
                 })
             }
             OperationKindDto::Rename => {
@@ -235,6 +237,8 @@ impl OperationPlanner {
                         provider,
                         source,
                         destination,
+                        source_fingerprint: Mutex::new(None),
+                        destination_fingerprint: Mutex::new(None),
                     });
                 }
                 Arc::new(RenameGroupExecutor { renames })
@@ -287,6 +291,8 @@ impl OperationPlanner {
                         source_override: Some(source),
                         continue_on_error: true,
                         completed_root_destination: Mutex::new(None),
+                        created_destinations: Mutex::new(Vec::new()),
+                        replaced_existing: AtomicBool::new(false),
                         transfer,
                     });
                 }
@@ -333,6 +339,8 @@ impl OperationPlanner {
                         source_override: Some(source.clone()),
                         continue_on_error: false,
                         completed_root_destination: Mutex::new(None),
+                        created_destinations: Mutex::new(Vec::new()),
+                        replaced_existing: AtomicBool::new(false),
                         transfer,
                     };
                     moves.push(MoveExecutor {
@@ -344,6 +352,8 @@ impl OperationPlanner {
                         fallback: Mutex::new(false),
                         force_fallback: self.force_cross_volume_moves.load(Ordering::Relaxed),
                         transfer,
+                        source_fingerprint: Mutex::new(None),
+                        destination_fingerprint: Mutex::new(None),
                     });
                 }
                 Arc::new(MoveGroupExecutor {
@@ -385,6 +395,8 @@ impl OperationPlanner {
                         source_override: Some(source),
                         continue_on_error: true,
                         completed_root_destination: Mutex::new(None),
+                        created_destinations: Mutex::new(Vec::new()),
+                        replaced_existing: AtomicBool::new(false),
                         transfer,
                     });
                 }
@@ -445,7 +457,14 @@ impl OperationPlanner {
                 }
                 Arc::new(TrashExecutor {
                     platform: Arc::clone(&self.platform),
+                    providers: self.providers.clone(),
+                    restored_entries: Mutex::new(Vec::new()),
                 })
+            }
+            OperationKindDto::Undo => {
+                return Err(ApplicationError::InvalidRequest(
+                    "undo must target a completed operation through the undo endpoint".into(),
+                ));
             }
             OperationKindDto::Search => {
                 return Err(ApplicationError::InvalidRequest(
@@ -458,6 +477,62 @@ impl OperationPlanner {
                 ));
             }
         })
+    }
+
+    pub(crate) fn plan_undo(
+        &self,
+        plan: UndoPlan,
+    ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
+        if plan.actions.is_empty() {
+            return Err(ApplicationError::InvalidRequest(
+                "This operation has no effects to undo.".into(),
+            ));
+        }
+        let guard = UndoExecutor {
+            providers: self.providers.clone(),
+            platform: Arc::clone(&self.platform),
+            plan: plan.clone(),
+        };
+        let cross_provider = plan.actions.iter().find_map(|action| match action {
+            UndoAction::CrossProviderMoveBack {
+                original,
+                current_root,
+                ..
+            } => Some((original, current_root)),
+            _ => None,
+        });
+        if let Some((original, current_root)) = cross_provider {
+            if plan.actions.len() != 1 {
+                return Err(ApplicationError::InvalidRequest(
+                    "Cross-provider undo cannot be combined with other inverse actions.".into(),
+                ));
+            }
+            let destination = original
+                .parent()
+                .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
+                .ok_or_else(|| {
+                    ApplicationError::InvalidRequest(
+                        "A provider root cannot be restored by move undo.".into(),
+                    )
+                })?;
+            let request = StartOperationRequestDto {
+                operation_type: OperationKindDto::Move,
+                sources: vec![current_root.entry.location.clone().into()],
+                destination: Some(destination.into()),
+                destinations: Vec::new(),
+                conflict_policy: fm_transport_dto::OperationConflictPolicyDto::Ask,
+                name: None,
+                archive_format: None,
+                archive_compression_level: None,
+                create_intermediate_directories: false,
+                symlink_policy: SymlinkPolicyDto::default(),
+                permanent_delete_confirmed: false,
+                override_read_only: false,
+            };
+            let inner = self.plan(OperationKindDto::Move, &request)?;
+            return Ok(Arc::new(GuardedUndoExecutor { guard, inner }));
+        }
+        Ok(Arc::new(guard))
     }
 }
 
@@ -582,6 +657,8 @@ struct RenameExecutor {
     provider: Arc<dyn FileSystemProvider>,
     source: Location,
     destination: Location,
+    source_fingerprint: Mutex<Option<EntryFingerprint>>,
+    destination_fingerprint: Mutex<Option<EntryFingerprint>>,
 }
 
 /// Batch rename (task 0072 multi-rename): one [`RenameExecutor`] per source/destination pair,
@@ -610,6 +687,8 @@ struct CopyExecutor {
     source_override: Option<Location>,
     continue_on_error: bool,
     completed_root_destination: Mutex<Option<Location>>,
+    created_destinations: Mutex<Vec<Location>>,
+    replaced_existing: AtomicBool,
     /// Strategy chosen by the planner for this source/destination pair
     /// (task 0108). Decided once, up front, from both sides' capabilities —
     /// execution only obeys it.
@@ -647,6 +726,8 @@ struct DeleteExecutor {
 
 struct TrashExecutor {
     platform: Arc<dyn PlatformAdapter>,
+    providers: ProviderRegistry,
+    restored_entries: Mutex<Vec<(Location, Location)>>,
 }
 
 struct MoveExecutor {
@@ -658,11 +739,24 @@ struct MoveExecutor {
     fallback: Mutex<bool>,
     force_fallback: bool,
     transfer: TransferPlan,
+    source_fingerprint: Mutex<Option<EntryFingerprint>>,
+    destination_fingerprint: Mutex<Option<EntryFingerprint>>,
 }
 
 struct MoveGroupExecutor {
     moves: Vec<MoveExecutor>,
     stale_sources: Mutex<HashMap<String, EntryRef>>,
+}
+
+struct UndoExecutor {
+    providers: ProviderRegistry,
+    platform: Arc<dyn PlatformAdapter>,
+    plan: UndoPlan,
+}
+
+struct GuardedUndoExecutor {
+    guard: UndoExecutor,
+    inner: Arc<dyn OperationExecutor>,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -704,6 +798,393 @@ impl ArchiveCreationFormat {
 /* -------------------------------------------------------------------------- */
 /*  OperationExecutor implementations                                         */
 /* -------------------------------------------------------------------------- */
+
+async fn fingerprint(
+    provider: &Arc<dyn FileSystemProvider>,
+    location: &Location,
+    cancellation: &CancellationToken,
+) -> Result<EntryFingerprint, ExecutionError> {
+    let summary = provider
+        .inspect(
+            &EntryRef {
+                id: EntryId::new(),
+                location: location.clone(),
+            },
+            cancellation.clone(),
+        )
+        .await?;
+    let content_hash = if summary.kind == EntryKind::File {
+        let reader = provider
+            .open_read(
+                &EntryRef {
+                    id: summary.id,
+                    location: summary.location.clone(),
+                },
+                cancellation.clone(),
+            )
+            .await?;
+        let hashes = fm_checksum::hash_stream(
+            reader,
+            &[fm_checksum::ChecksumAlgorithm::Blake3],
+            cancellation,
+        )
+        .await
+        .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        hashes
+            .get(fm_checksum::ChecksumAlgorithm::Blake3)
+            .map(str::to_owned)
+    } else {
+        None
+    };
+    Ok(EntryFingerprint {
+        entry: EntryRef {
+            id: summary.id,
+            location: summary.location,
+        },
+        stable_id: false,
+        kind: summary.kind,
+        size: summary.size,
+        modified_at: summary.modified_at,
+        content_hash,
+    })
+}
+
+fn fingerprint_matches(expected: &EntryFingerprint, actual: &fm_domain::EntrySummary) -> bool {
+    (!expected.stable_id || expected.entry.id == actual.id)
+        && expected.kind == actual.kind
+        && expected.size == actual.size
+        && expected.modified_at == actual.modified_at
+}
+
+#[async_trait]
+impl OperationExecutor for UndoExecutor {
+    async fn plan(
+        &self,
+        _operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationPlan, ExecutionError> {
+        let mut items = Vec::with_capacity(self.plan.actions.len());
+        for action in &self.plan.actions {
+            match action {
+                UndoAction::MoveBack {
+                    original, current, ..
+                } => {
+                    self.verify_fingerprint(current, cancellation).await?;
+                    let original_provider = self.providers.resolve(original)?;
+                    let original_entry = EntryRef {
+                        id: EntryId::new(),
+                        location: original.clone(),
+                    };
+                    match original_provider
+                        .inspect(&original_entry, cancellation.clone())
+                        .await
+                    {
+                        Err(fm_vfs::VfsError::NotFound { .. }) => {}
+                        Ok(_) => {
+                            return Err(ExecutionError::Failed(
+                                "The original path is occupied, so undo would overwrite a later change."
+                                    .into(),
+                            ));
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                    items.push(PlanItem::new(current.entry.clone(), 0));
+                }
+                UndoAction::RemoveCreated { entries } => {
+                    for entry in entries {
+                        self.verify_fingerprint(entry, cancellation).await?;
+                    }
+                    items.extend(
+                        entries
+                            .iter()
+                            .rev()
+                            .map(|entry| PlanItem::new(entry.entry.clone(), 0)),
+                    );
+                }
+                UndoAction::CrossProviderMoveBack {
+                    original,
+                    current_entries,
+                    ..
+                } => {
+                    for entry in current_entries {
+                        self.verify_fingerprint(entry, cancellation).await?;
+                    }
+                    self.verify_original_absent(original, cancellation).await?;
+                    items.extend(
+                        current_entries
+                            .iter()
+                            .map(|entry| PlanItem::new(entry.entry.clone(), 0)),
+                    );
+                }
+                UndoAction::RestoreTrash { original, trashed } => {
+                    self.verify_fingerprint(trashed, cancellation).await?;
+                    self.verify_original_absent(original, cancellation).await?;
+                    items.push(PlanItem::new(trashed.entry.clone(), 0));
+                }
+            }
+        }
+        Ok(OperationPlan::new(items))
+    }
+
+    async fn execute(
+        &self,
+        _operation: &Operation,
+        item: &PlanItem,
+        _resolution: Option<ConflictResolution>,
+        _pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        let action = self
+            .plan
+            .actions
+            .iter()
+            .find(|action| match action {
+                UndoAction::MoveBack { current, .. } => {
+                    current.entry.location == item.entry.location
+                }
+                UndoAction::RemoveCreated { entries } => entries
+                    .iter()
+                    .any(|entry| entry.entry.location == item.entry.location),
+                UndoAction::CrossProviderMoveBack {
+                    current_entries, ..
+                } => current_entries
+                    .iter()
+                    .any(|entry| entry.entry.location == item.entry.location),
+                UndoAction::RestoreTrash { trashed, .. } => {
+                    trashed.entry.location == item.entry.location
+                }
+            })
+            .ok_or_else(|| ExecutionError::Failed("Undo plan entry is missing.".into()))?;
+        match action {
+            UndoAction::MoveBack {
+                original, current, ..
+            } => {
+                self.verify_fingerprint(current, cancellation).await?;
+                self.verify_original_absent(original, cancellation).await?;
+                let provider = self.providers.resolve(&current.entry.location)?;
+                provider
+                    .rename(&current.entry, original, cancellation.clone())
+                    .await?;
+            }
+            UndoAction::RemoveCreated { entries } => {
+                let fingerprint = entries
+                    .iter()
+                    .find(|entry| entry.entry.location == item.entry.location)
+                    .ok_or_else(|| ExecutionError::Failed("Undo fingerprint is missing.".into()))?;
+                self.verify_fingerprint(fingerprint, cancellation).await?;
+                let provider = self.providers.resolve(&fingerprint.entry.location)?;
+                provider
+                    .remove(
+                        &fingerprint.entry,
+                        RemoveOptions {
+                            recursive: false,
+                            use_trash: false,
+                        },
+                        cancellation.clone(),
+                    )
+                    .await?;
+            }
+            UndoAction::CrossProviderMoveBack { .. } => {
+                unreachable!("cross-provider undo uses the guarded move executor")
+            }
+            UndoAction::RestoreTrash { original, trashed } => {
+                self.verify_fingerprint(trashed, cancellation).await?;
+                self.verify_original_absent(original, cancellation).await?;
+                let trashed_path = trashed
+                    .entry
+                    .location
+                    .to_native_path()
+                    .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+                let original_path = original
+                    .to_native_path()
+                    .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+                self.platform
+                    .restore_from_trash(&trashed_path, &original_path)
+                    .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            }
+        }
+        Ok(ExecutionOutcome::Completed)
+    }
+
+    async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
+        Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        Ok(OperationUndo::unavailable(
+            "Undo operations cannot themselves be undone.",
+        ))
+    }
+}
+
+impl UndoExecutor {
+    async fn verify_fingerprint(
+        &self,
+        expected: &EntryFingerprint,
+        cancellation: &CancellationToken,
+    ) -> Result<(), ExecutionError> {
+        let provider = self.providers.resolve(&expected.entry.location)?;
+        let actual = provider
+            .inspect(&expected.entry, cancellation.clone())
+            .await
+            .map_err(|error| match error {
+                fm_vfs::VfsError::NotFound { .. } => ExecutionError::Failed(
+                    "The operation output is missing, so it cannot be undone safely.".into(),
+                ),
+                error => error.into(),
+            })?;
+        if !fingerprint_matches(expected, &actual) {
+            return Err(ExecutionError::Failed(
+                "The operation output changed after completion, so it cannot be undone safely."
+                    .into(),
+            ));
+        }
+        if let Some(expected_hash) = &expected.content_hash {
+            let reader = provider
+                .open_read(
+                    &EntryRef {
+                        id: actual.id,
+                        location: actual.location.clone(),
+                    },
+                    cancellation.clone(),
+                )
+                .await?;
+            let hashes = fm_checksum::hash_stream(
+                reader,
+                &[fm_checksum::ChecksumAlgorithm::Blake3],
+                cancellation,
+            )
+            .await
+            .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            if hashes.get(fm_checksum::ChecksumAlgorithm::Blake3) != Some(expected_hash.as_str()) {
+                return Err(ExecutionError::Failed(
+                    "The operation output content changed after completion, so it cannot be undone safely."
+                        .into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    async fn verify_original_absent(
+        &self,
+        original: &Location,
+        cancellation: &CancellationToken,
+    ) -> Result<(), ExecutionError> {
+        let provider = self.providers.resolve(original)?;
+        let entry = EntryRef {
+            id: EntryId::new(),
+            location: original.clone(),
+        };
+        match provider.inspect(&entry, cancellation.clone()).await {
+            Err(fm_vfs::VfsError::NotFound { .. }) => Ok(()),
+            Ok(_) => Err(ExecutionError::Failed(
+                "The original path is occupied, so undo would overwrite a later change.".into(),
+            )),
+            Err(error) => Err(error.into()),
+        }
+    }
+}
+
+#[async_trait]
+impl OperationExecutor for GuardedUndoExecutor {
+    async fn plan(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationPlan, ExecutionError> {
+        self.guard.plan(operation, cancellation).await?;
+        self.inner.plan(operation, cancellation).await
+    }
+
+    async fn execute(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        resolution: Option<ConflictResolution>,
+        pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        if let Some(expected) = self
+            .guard
+            .plan
+            .actions
+            .iter()
+            .find_map(|action| match action {
+                UndoAction::CrossProviderMoveBack {
+                    current_entries, ..
+                } => current_entries
+                    .iter()
+                    .find(|entry| entry.entry.location == item.entry.location),
+                _ => None,
+            })
+        {
+            self.guard
+                .verify_fingerprint(expected, cancellation)
+                .await?;
+        }
+        if resolution.is_some() {
+            return Err(ExecutionError::Failed(
+                "Undo cannot overwrite or rename around an occupied original path.".into(),
+            ));
+        }
+        if let Some(original) = self
+            .guard
+            .plan
+            .actions
+            .iter()
+            .find_map(|action| match action {
+                UndoAction::CrossProviderMoveBack {
+                    original,
+                    current_root,
+                    ..
+                } if current_root.entry.location == item.entry.location => Some(original),
+                _ => None,
+            })
+        {
+            self.guard
+                .verify_original_absent(original, cancellation)
+                .await?;
+        }
+        match self
+            .inner
+            .execute(operation, item, resolution, pause, cancellation)
+            .await
+        {
+            Err(ExecutionError::Conflict(_)) => Err(ExecutionError::Failed(
+                "The original path became occupied, so undo was stopped without overwriting it."
+                    .into(),
+            )),
+            result => result,
+        }
+    }
+
+    async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError> {
+        self.inner.cleanup_partial(operation).await
+    }
+
+    async fn finish(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<(), ExecutionError> {
+        self.inner.finish(operation, cancellation).await
+    }
+
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        Ok(OperationUndo::unavailable(
+            "Undo operations cannot themselves be undone.",
+        ))
+    }
+}
 
 #[async_trait]
 impl OperationExecutor for CreateArchiveExecutor {
@@ -951,17 +1432,52 @@ impl OperationExecutor for TrashExecutor {
             .location
             .to_native_path()
             .map_err(|error| ExecutionError::Failed(error.to_string()))?;
-        self.platform
-            .trash(&path)
-            .map_err(|error| ExecutionError::Warning {
-                entry: item.entry.clone(),
-                message: error.to_string(),
-            })?;
+        let restore_location =
+            self.platform
+                .trash_with_restore_location(&path)
+                .map_err(|error| ExecutionError::Warning {
+                    entry: item.entry.clone(),
+                    message: error.to_string(),
+                })?;
+        if let Some(restore_path) = restore_location {
+            let restore_location = Location::from_native_path(&restore_path)
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            self.restored_entries
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .push((item.entry.location.clone(), restore_location));
+        }
         Ok(ExecutionOutcome::Completed)
     }
 
     async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
         Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        let restored_entries = self
+            .restored_entries
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        if restored_entries.is_empty() {
+            return Ok(OperationUndo::unavailable(
+                "The platform did not provide a restorable trash location.",
+            ));
+        }
+        let mut actions = Vec::with_capacity(restored_entries.len());
+        for (original, trashed_location) in restored_entries {
+            let provider = self.providers.resolve(&trashed_location)?;
+            actions.push(UndoAction::RestoreTrash {
+                original,
+                trashed: fingerprint(&provider, &trashed_location, cancellation).await?,
+            });
+        }
+        Ok(OperationUndo::available(UndoPlan { actions }))
     }
 }
 
@@ -1047,6 +1563,14 @@ impl OperationExecutor for CopyGroupExecutor {
         }
         Ok(())
     }
+
+    async fn undo_evidence(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        copy_group_undo_evidence(&self.copies, operation, cancellation).await
+    }
 }
 
 #[async_trait]
@@ -1129,6 +1653,22 @@ impl OperationExecutor for MoveGroupExecutor {
             executor.finish(operation, cancellation).await?;
         }
         Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        let mut actions = Vec::new();
+        for executor in &self.moves {
+            let evidence = executor.undo_evidence(operation, cancellation).await?;
+            let Some(plan) = evidence.plan else {
+                return Ok(evidence);
+            };
+            actions.extend(plan.actions);
+        }
+        Ok(OperationUndo::available(UndoPlan { actions }))
     }
 }
 
@@ -1219,6 +1759,14 @@ impl OperationExecutor for DuplicateExecutor {
         }
         Ok(())
     }
+
+    async fn undo_evidence(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        copy_group_undo_evidence(&self.copies, operation, cancellation).await
+    }
 }
 
 #[async_trait]
@@ -1232,6 +1780,11 @@ impl OperationExecutor for MoveExecutor {
             id: EntryId::new(),
             location: self.source.clone(),
         };
+        *self
+            .source_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            Some(fingerprint(&self.source_provider, &self.source, cancellation).await?);
         let name = source
             .location
             .name()
@@ -1308,6 +1861,7 @@ impl OperationExecutor for MoveExecutor {
                 None => return Err(conflict_error(&source, &existing)),
                 Some(ConflictResolution::Skip) => return Ok(ExecutionOutcome::Skipped),
                 Some(ConflictResolution::Overwrite) => {
+                    self.copy.replaced_existing.store(true, Ordering::Release);
                     self.destination_provider
                         .remove(
                             &destination_entry,
@@ -1327,9 +1881,15 @@ impl OperationExecutor for MoveExecutor {
                 }
             }
         }
-        self.source_provider
+        let moved = self
+            .source_provider
             .rename(&item.entry, &destination, cancellation.clone())
             .await?;
+        *self
+            .destination_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            Some(fingerprint(&self.destination_provider, &moved.location, cancellation).await?);
         Ok(ExecutionOutcome::Completed)
     }
 
@@ -1382,6 +1942,83 @@ impl OperationExecutor for MoveExecutor {
             )
             .await?;
         Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        let original_fingerprint = self
+            .source_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let Some(original_fingerprint) = original_fingerprint else {
+            return Ok(OperationUndo::unavailable(
+                "The move did not retain its original source fingerprint.",
+            ));
+        };
+        if !*self
+            .fallback
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+        {
+            let current = self
+                .destination_fingerprint
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone();
+            return Ok(match current {
+                Some(current) => OperationUndo::available(UndoPlan {
+                    actions: vec![UndoAction::MoveBack {
+                        original: self.source.clone(),
+                        original_fingerprint,
+                        current,
+                    }],
+                }),
+                None => OperationUndo::unavailable(
+                    "The move destination was not completed, so there is nothing safe to undo.",
+                ),
+            });
+        }
+        let copy_evidence = self.copy.undo_evidence(operation, cancellation).await?;
+        let Some(copy_plan) = copy_evidence.plan else {
+            return Ok(copy_evidence);
+        };
+        let current_entries = copy_plan
+            .actions
+            .into_iter()
+            .flat_map(|action| match action {
+                UndoAction::RemoveCreated { entries } => entries,
+                _ => Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let current_root_location = self
+            .copy
+            .completed_root_destination
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+            .ok_or_else(|| ExecutionError::Failed("move destination evidence is missing".into()))?;
+        if self.source.name().ok() != current_root_location.name().ok() {
+            return Ok(OperationUndo::unavailable(
+                "A collision changed the moved entry name, so cross-provider undo is unavailable.",
+            ));
+        }
+        let current_root = current_entries
+            .iter()
+            .find(|entry| entry.entry.location == current_root_location)
+            .cloned()
+            .ok_or_else(|| ExecutionError::Failed("move root fingerprint is missing".into()))?;
+        Ok(OperationUndo::available(UndoPlan {
+            actions: vec![UndoAction::CrossProviderMoveBack {
+                original: self.source.clone(),
+                original_fingerprint,
+                current_root,
+                current_entries,
+            }],
+        }))
     }
 }
 
@@ -1550,6 +2187,7 @@ impl OperationExecutor for CopyExecutor {
                 None => return Err(conflict_error(&source, &destination)),
                 Some(ConflictResolution::Skip) => return Ok(ExecutionOutcome::Skipped),
                 Some(ConflictResolution::Overwrite) => {
+                    self.replaced_existing.store(true, Ordering::Release);
                     if planned.kind == EntryKind::Directory {
                         reuse_destination_directory = true;
                     }
@@ -1621,6 +2259,13 @@ impl OperationExecutor for CopyExecutor {
             }
             other => other,
         };
+        if matches!(&outcome, Ok(ExecutionOutcome::Completed)) && !reuse_destination_directory {
+            self.created_destinations
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .push(planned.destination.clone());
+        }
+
         if outcome.is_ok() && planned.is_root {
             *self
                 .completed_root_destination
@@ -1669,6 +2314,56 @@ impl OperationExecutor for CopyExecutor {
         }
         Ok(())
     }
+
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        if self.replaced_existing.load(Ordering::Acquire) {
+            return Ok(OperationUndo::unavailable(
+                "Undo is unavailable because the copy replaced or merged existing entries.",
+            ));
+        }
+        let locations = self
+            .created_destinations
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let mut entries = Vec::with_capacity(locations.len());
+        for location in locations {
+            entries.push(fingerprint(&self.destination_provider, &location, cancellation).await?);
+        }
+        Ok(if entries.is_empty() {
+            OperationUndo::unavailable("The copy created no entries to undo.")
+        } else {
+            OperationUndo::available(UndoPlan {
+                actions: vec![UndoAction::RemoveCreated { entries }],
+            })
+        })
+    }
+}
+
+async fn copy_group_undo_evidence(
+    copies: &[CopyExecutor],
+    operation: &Operation,
+    cancellation: &CancellationToken,
+) -> Result<OperationUndo, ExecutionError> {
+    let mut actions = Vec::new();
+    for copy in copies {
+        let evidence = copy.undo_evidence(operation, cancellation).await?;
+        match evidence.plan {
+            Some(plan) => actions.extend(plan.actions),
+            None if evidence.unavailable_reason.as_deref()
+                == Some("The copy created no entries to undo.") => {}
+            None => return Ok(evidence),
+        }
+    }
+    Ok(if actions.is_empty() {
+        OperationUndo::unavailable("The operation created no entries to undo.")
+    } else {
+        OperationUndo::available(UndoPlan { actions })
+    })
 }
 
 impl CopyExecutor {
@@ -1945,13 +2640,18 @@ impl OperationExecutor for RenameExecutor {
     async fn plan(
         &self,
         operation: &Operation,
-        _cancellation: &CancellationToken,
+        cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
         let entry = operation
             .sources
             .first()
             .cloned()
             .ok_or_else(|| ExecutionError::Failed("rename source is missing".into()))?;
+        *self
+            .source_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            Some(fingerprint(&self.provider, &self.source, cancellation).await?);
         Ok(OperationPlan::new(vec![PlanItem::new(entry, 0)]))
     }
 
@@ -1967,14 +2667,49 @@ impl OperationExecutor for RenameExecutor {
             id: item.entry.id,
             location: self.source.clone(),
         };
-        self.provider
+        let destination = self
+            .provider
             .rename(&source, &self.destination, cancellation.clone())
             .await?;
+        *self
+            .destination_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            Some(fingerprint(&self.provider, &destination.location, cancellation).await?);
         Ok(ExecutionOutcome::Completed)
     }
 
     async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
         Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        let destination = self
+            .destination_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let original_fingerprint = self
+            .source_fingerprint
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        Ok(match (original_fingerprint, destination) {
+            (Some(original_fingerprint), Some(current)) => OperationUndo::available(UndoPlan {
+                actions: vec![UndoAction::MoveBack {
+                    original: self.source.clone(),
+                    original_fingerprint,
+                    current,
+                }],
+            }),
+            _ => OperationUndo::unavailable(
+                "The renamed entry was not completed, so there is nothing safe to undo.",
+            ),
+        })
     }
 }
 
@@ -2023,6 +2758,22 @@ impl OperationExecutor for RenameGroupExecutor {
 
     async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
         Ok(())
+    }
+
+    async fn undo_evidence(
+        &self,
+        operation: &Operation,
+        cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        let mut actions = Vec::new();
+        for executor in &self.renames {
+            let evidence = executor.undo_evidence(operation, cancellation).await?;
+            let Some(plan) = evidence.plan else {
+                return Ok(evidence);
+            };
+            actions.extend(plan.actions);
+        }
+        Ok(OperationUndo::available(UndoPlan { actions }))
     }
 }
 
@@ -2638,6 +3389,8 @@ mod tests {
             source_override: Some(source_location),
             continue_on_error: false,
             completed_root_destination: Mutex::new(None),
+            created_destinations: Mutex::new(Vec::new()),
+            replaced_existing: AtomicBool::new(false),
             transfer: TransferPlan {
                 strategy: TransferStrategy::DirectStream,
                 move_strategy: MoveStrategy::CopyThenDelete,
@@ -2872,6 +3625,8 @@ mod tests {
             source_override: Some(source_location),
             continue_on_error: false,
             completed_root_destination: Mutex::new(None),
+            created_destinations: Mutex::new(Vec::new()),
+            replaced_existing: AtomicBool::new(false),
             transfer: TransferPlan {
                 strategy: TransferStrategy::DirectStream,
                 move_strategy: MoveStrategy::CopyThenDelete,
@@ -2958,6 +3713,8 @@ mod tests {
             source_override: Some(source_location),
             continue_on_error: false,
             completed_root_destination: Mutex::new(None),
+            created_destinations: Mutex::new(Vec::new()),
+            replaced_existing: AtomicBool::new(false),
             transfer: TransferPlan {
                 strategy: TransferStrategy::DirectStream,
                 move_strategy: MoveStrategy::CopyThenDelete,
@@ -3415,6 +4172,8 @@ mod tests {
             source_override: Some(source_location),
             continue_on_error: false,
             completed_root_destination: Mutex::new(None),
+            created_destinations: Mutex::new(Vec::new()),
+            replaced_existing: AtomicBool::new(false),
             transfer: TransferPlan {
                 strategy: TransferStrategy::DirectStream,
                 move_strategy: MoveStrategy::CopyThenDelete,

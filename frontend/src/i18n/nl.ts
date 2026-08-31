@@ -14,6 +14,7 @@ export const nl = {
     dismiss: 'Afwerpen',
     pause: 'Pauzeren',
     resume: 'Hervatten',
+    undo: 'Ongedaan maken',
     skip: 'Overslaan',
     overwrite: 'Overschrijven',
     renameNew: 'Nieuwe naam',
@@ -344,6 +345,7 @@ export const nl = {
     kindDuplicate: 'Dupliceren',
     kindTrash: 'Naar prullenbak',
     kindDelete: 'Verwijderen',
+    kindUndo: 'Ongedaan maken',
     kindSearch: 'Zoeken',
     kindCompare: 'Vergelijken',
     stateQueued: 'In wachtrij',
@@ -362,6 +364,7 @@ export const nl = {
     filesFound: { 1: '1 bestand gevonden.', n: '{n} bestanden gevonden.' },
     entriesCompared: { 1: '1 item vergeleken.', n: '{n} items vergeleken.' },
     itemsCompleted: '{count} items voltooid ({bytes}).',
+    undoInProgress: 'Ongedaan maken is bezig.',
   },
   viewer: {
     closeViewer: 'Viewer sluiten',

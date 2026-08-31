@@ -18,6 +18,7 @@ const applyWorkspaceCommand = vi.fn();
 const requestStartOperation = vi.fn();
 const requestListOperations = vi.fn();
 const requestCancelOperation = vi.fn();
+const requestUndoOperation = vi.fn();
 const requestPauseOperation = vi.fn();
 const requestResumeOperation = vi.fn();
 const requestResolveOperationConflict = vi.fn();
@@ -65,6 +66,7 @@ vi.mock('../generated/file-manager-api', () => ({
   startOperation: (...args: unknown[]) => requestStartOperation(...args),
   listOperations: (...args: unknown[]) => requestListOperations(...args),
   cancelOperation: (...args: unknown[]) => requestCancelOperation(...args),
+  undoOperation: (...args: unknown[]) => requestUndoOperation(...args),
   pauseOperation: (...args: unknown[]) => requestPauseOperation(...args),
   resumeOperation: (...args: unknown[]) => requestResumeOperation(...args),
   resolveOperationConflict: (...args: unknown[]) => requestResolveOperationConflict(...args),
@@ -144,6 +146,7 @@ afterEach(() => {
   requestStartOperation.mockReset();
   requestListOperations.mockReset();
   requestCancelOperation.mockReset();
+  requestUndoOperation.mockReset();
   requestPauseOperation.mockReset();
   requestResumeOperation.mockReset();
   requestResolveOperationConflict.mockReset();
@@ -509,6 +512,7 @@ describe('HttpFileManagerClient', () => {
           conflictPolicy: 'ask',
           createdAt: '2026-07-31T12:00:00Z',
           errors: [],
+          undo: { available: false, reason: 'Operation is still running.' },
         },
       });
       const client = new HttpFileManagerClient();
@@ -532,6 +536,7 @@ describe('HttpFileManagerClient', () => {
         data: { operations: [] },
         headers: new Headers(),
       });
+
       requestCancelOperation.mockResolvedValue({ status: 204, headers: new Headers() });
       requestPauseOperation.mockResolvedValue({ status: 204, headers: new Headers() });
       requestResumeOperation.mockResolvedValue({ status: 204, headers: new Headers() });
@@ -548,6 +553,34 @@ describe('HttpFileManagerClient', () => {
       expect(requestCancelOperation).toHaveBeenCalledWith('operation-1', options);
       expect(requestPauseOperation).toHaveBeenCalledWith('operation-1', options);
       expect(requestResumeOperation).toHaveBeenCalledWith('operation-1', options);
+    });
+
+    it('starts undo through the generated operation endpoint', async () => {
+      requestUndoOperation.mockResolvedValue({
+        status: 201,
+        headers: new Headers(),
+        data: {
+          id: 'undo-1',
+          type: 'undo',
+          state: 'queued',
+          sources: [],
+          destination: null,
+          progress: { completedItems: 0, completedBytes: 0 },
+          conflictPolicy: 'ask',
+          createdAt: '2026-08-31T12:00:00Z',
+          errors: [],
+          undo: { available: false, reason: 'Undo operations cannot themselves be undone.' },
+          undoOf: 'operation-1',
+        },
+      });
+      const client = new HttpFileManagerClient();
+
+      await expect(client.undoOperation('operation-1')).resolves.toMatchObject({
+        id: 'undo-1',
+        kind: 'undo',
+        undoOf: 'operation-1',
+      });
+      expect(requestUndoOperation).toHaveBeenCalledWith('operation-1', undefined);
     });
 
     it('reserves the exact conflict request shape without duplicating the operation id in JSON', async () => {

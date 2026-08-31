@@ -9,6 +9,7 @@ export interface OperationCentreAttrs {
   onCancel: (operationId: OperationId) => void;
   onPause: (operationId: OperationId) => void;
   onResume: (operationId: OperationId) => void;
+  onUndo?: (operationId: OperationId) => void;
   onDismiss: (operationId: OperationId) => void;
 }
 
@@ -103,6 +104,8 @@ function operationKindLabel(kind: OperationKind | null | undefined): string {
       return t('operation', 'kindTrash');
     case 'delete':
       return t('operation', 'kindDelete');
+    case 'undo':
+      return t('operation', 'kindUndo');
     case 'search':
       return t('operation', 'kindSearch');
     case 'compare':
@@ -266,6 +269,9 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                 ]),
               ]),
           m('.fm-operation-controls', [
+            operation.undo?.available === true
+              ? button(t('button', 'undo'), 'undo', () => attrs.onUndo?.(operation.id))
+              : undefined,
             operation.state === 'queued' ||
             operation.state === 'planning' ||
             operation.state === 'running'
@@ -281,6 +287,9 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
               ? button(t('button', 'dismiss'), 'dismiss', () => attrs.onDismiss(operation.id))
               : undefined,
           ]),
+          terminal && operation.undo?.available === false && operation.undo.reason !== undefined
+            ? m('.fm-operation-undo-reason', operation.undo.reason)
+            : undefined,
         ]);
       }),
     );

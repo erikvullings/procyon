@@ -178,6 +178,7 @@ export type MockClientMethod =
   | 'startOperation'
   | 'listOperations'
   | 'cancelOperation'
+  | 'undoOperation'
   | 'pauseOperation'
   | 'resumeOperation'
   | 'resolveConflict'
@@ -1688,6 +1689,38 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('cancelOperation', signal, () => {
       const operation = this.requireOperation(operationId);
       this.operations.set(operationId, { ...operation, state: 'cancelled' });
+    });
+  }
+
+  undoOperation(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
+    return this.perform('undoOperation', signal, () => {
+      const original = this.requireOperation(operationId);
+      if (original.undo?.available !== true) {
+        throw new Error(original.undo?.reason ?? 'This operation cannot be undone.');
+      }
+      this.operationSequence += 1;
+      const undo: Operation = {
+        id: `mock-operation-${this.seed}-${this.operationSequence}`,
+        kind: 'undo',
+        state: 'running',
+        sources: original.sources,
+        progress: { completedItems: 0, completedBytes: 0 },
+        conflictPolicy: 'ask',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        undo: { available: false, reason: 'Undo operations cannot themselves be undone.' },
+        undoOf: operationId,
+      };
+      this.operations.set(operationId, {
+        ...original,
+        undo: {
+          available: false,
+          reason: 'Undo is already in progress for this operation.',
+          operationId: undo.id,
+        },
+      });
+      this.operations.set(undo.id, undo);
+      return undo;
     });
   }
 

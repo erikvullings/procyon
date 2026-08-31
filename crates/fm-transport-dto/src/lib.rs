@@ -95,8 +95,8 @@ pub use location::LocationDto;
 pub use operation::{
     ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, OperationConflictPolicyDto, OperationDto,
     OperationEntryErrorDto, OperationKindDto, OperationPageDto, OperationProgressDto,
-    OperationStateDto, ResolveOperationConflictRequestDto, StartOperationRequestDto,
-    SymlinkPolicyDto,
+    OperationStateDto, OperationUndoDto, ResolveOperationConflictRequestDto,
+    StartOperationRequestDto, SymlinkPolicyDto,
 };
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,

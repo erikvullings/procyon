@@ -190,6 +190,7 @@ pub(crate) async fn cancel_operation(
             );
             Ok(StatusCode::NO_CONTENT)
         }
+
         Err(error) => {
             warn!(
                 request_id = %correlation_id,
@@ -201,6 +202,30 @@ pub(crate) async fn cancel_operation(
             Err(ApiError::new(error, correlation_id))
         }
     }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/operations/{operationId}/undo",
+    operation_id = "undoOperation",
+    params(("operationId" = Uuid, Path)),
+    responses(
+        (status = 201, body = OperationDto),
+        (status = 404, body = ApplicationErrorDto),
+        (status = 400, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn undo_operation(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<OperationDto>), ApiError> {
+    let correlation_id = extract_request_id(&request_id);
+    state
+        .service
+        .undo_operation(OperationId::from(id))
+        .map(|operation| (StatusCode::CREATED, Json(operation)))
+        .map_err(|error| ApiError::new(error, correlation_id))
 }
 
 #[utoipa::path(

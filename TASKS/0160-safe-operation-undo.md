@@ -1,6 +1,6 @@
 # 0160 Safe operation undo
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, frontend, operations
 Depends on: 0035, 0043, 0047
@@ -41,3 +41,11 @@ operation did not retain enough evidence.
 
 - 2026-08-28: Created from the product feature review. Recommended as the highest-value next feature
   because it deepens Procyon's existing safety model rather than adding another isolated tool.
+- 2026-08-31: Implemented persisted, fingerprint-guarded undo plans for rename, move, copy,
+  duplicate, and recoverable platform trash operations. Undo runs through the normal scheduler and
+  is exposed through both HTTP and Tauri clients; permanent deletes and operations without safe
+  evidence include an explicit unavailable reason.
+- 2026-08-31: Added coverage for modified, missing, reused, and occupied paths; cross-provider
+  moves; partial copies; cancellation; restart persistence; repeated undo; and platform trash
+  restoration. The operation centre now displays undo availability and starts undo jobs through the
+  shared client abstraction.

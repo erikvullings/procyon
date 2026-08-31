@@ -3486,6 +3486,18 @@
           "type": {
             "$ref": "#/components/schemas/OperationKindDto",
             "description": "Semantic operation discriminator."
+          },
+          "undo": {
+            "$ref": "#/components/schemas/OperationUndoDto",
+            "description": "Whether this completed operation can currently be undone and, if not, why."
+          },
+          "undoOf": {
+            "description": "Original operation reversed by this undo job.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3496,7 +3508,8 @@
           "progress",
           "conflictPolicy",
           "createdAt",
-          "errors"
+          "errors",
+          "undo"
         ],
         "type": "object"
       },
@@ -3531,6 +3544,7 @@
           "duplicate",
           "trash",
           "delete",
+          "undo",
           "search",
           "compare"
         ],
@@ -3692,6 +3706,34 @@
           "interrupted"
         ],
         "type": "string"
+      },
+      "OperationUndoDto": {
+        "description": "User-facing undo availability for an operation history row.",
+        "properties": {
+          "available": {
+            "description": "A safe undo job may currently be submitted.",
+            "type": "boolean"
+          },
+          "operationId": {
+            "description": "Undo job already running or completed for this operation.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "Explanation when undo is unavailable.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "type": "object"
       },
       "OwnershipInfoDto": {
         "description": "Ownership information for an entry.",
@@ -10037,6 +10079,54 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/operations/{operationId}/undo": {
+      "post": {
+        "operationId": "undoOperation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationDto"
+                }
+              }
+            },
             "description": ""
           },
           "400": {

@@ -149,6 +149,7 @@ import {
   resumeOperation as requestOperationResume,
   startOperation as requestOperationStart,
   listOperations as requestOperations,
+  undoOperation as requestOperationUndo,
   setPaneActivity as requestPaneActivity,
   disablePlugin as requestPluginDisable,
   enablePlugin as requestPluginEnable,
@@ -816,6 +817,16 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected cancelOperation response status: ${response.status}`);
   }
 
+  async undoOperation(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
+    const response = await requestOperationUndo(
+      operationId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected undoOperation response status: ${response.status}`);
+    return operationFromDto(response.data);
+  }
+
   async pauseOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
     const response = await requestOperationPause(
       operationId,
@@ -1450,6 +1461,12 @@ function operationFromDto(dto: OperationDto): Operation {
             message: error.message,
           })),
         }),
+    undo: {
+      available: dto.undo.available,
+      ...(dto.undo.reason == null ? {} : { reason: dto.undo.reason }),
+      ...(dto.undo.operationId == null ? {} : { operationId: dto.undo.operationId }),
+    },
+    ...(dto.undoOf == null ? {} : { undoOf: dto.undoOf }),
   };
 }
 

@@ -354,6 +354,8 @@ describe('TauriFileManagerClient', () => {
       expect(invoke).toHaveBeenCalledWith('resume_operation', { operationId: operation.id });
       await client.cancelOperation(operation.id);
       expect(invoke).toHaveBeenCalledWith('cancel_operation', { operationId: operation.id });
+      await expect(client.undoOperation(operation.id)).resolves.toEqual(operation);
+      expect(invoke).toHaveBeenCalledWith('undo_operation', { operationId: operation.id });
     });
   });
 

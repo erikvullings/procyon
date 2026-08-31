@@ -13,6 +13,7 @@ export const en = {
     dismiss: 'Dismiss',
     pause: 'Pause',
     resume: 'Resume',
+    undo: 'Undo',
     skip: 'Skip',
     overwrite: 'Overwrite',
     renameNew: 'Rename new',
@@ -340,6 +341,7 @@ export const en = {
     kindDuplicate: 'Duplicate',
     kindTrash: 'Trash',
     kindDelete: 'Delete',
+    kindUndo: 'Undo',
     kindSearch: 'Search',
     kindCompare: 'Compare',
     stateQueued: 'Queued',
@@ -358,6 +360,7 @@ export const en = {
     filesFound: { 1: 'Found 1 file.', n: 'Found {n} files.' },
     entriesCompared: { 1: 'Compared 1 entry.', n: 'Compared {n} entries.' },
     itemsCompleted: 'Completed {count} items ({bytes}).',
+    undoInProgress: 'Undo is in progress.',
   },
   viewer: {
     closeViewer: 'Close viewer',

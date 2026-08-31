@@ -51,11 +51,21 @@ describe('operation progress reducer', () => {
         operationId: 'a',
         progress: { completedItems: 1, completedBytes: 256 },
       }),
-      event(4, { type: 'operation.completed', operation: operation('completed', 'b') }),
+      event(4, {
+        type: 'operation.completed',
+        operation: {
+          ...operation('completed', 'b'),
+          undo: { available: true },
+        },
+      }),
     ]);
 
     expect(next.byId.a).toMatchObject({ state: 'running', progress: { completedItems: 1 } });
-    expect(next.byId.b).toMatchObject({ state: 'completed', progress: { completedItems: 2 } });
+    expect(next.byId.b).toMatchObject({
+      state: 'completed',
+      progress: { completedItems: 2 },
+      undo: { available: true },
+    });
   });
 
   it('retains failure details and ignores progress for unknown operations', () => {
@@ -301,5 +311,41 @@ describe('OperationCentre states', () => {
     expect(warningText?.textContent).toContain(
       'existing-folder: Skipped because destination already exists.',
     );
+  });
+
+  it('offers undo only when history marks it safe and explains unavailable entries', () => {
+    const onUndo = vi.fn();
+    const undoable: Operation = {
+      ...operation('completed', 'undoable'),
+      undo: { available: true },
+    };
+    const irreversible: Operation = {
+      ...operation('completed', 'irreversible'),
+      undo: { available: false, reason: 'Permanent delete cannot be undone.' },
+    };
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([undoable, irreversible]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onUndo,
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    root
+      .querySelector<HTMLButtonElement>('[data-operation-id="undoable"] [data-action="undo"]')
+      ?.click();
+    expect(onUndo).toHaveBeenCalledWith('undoable');
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] [data-action="undo"]'),
+    ).toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] .fm-operation-undo-reason')
+        ?.textContent,
+    ).toBe('Permanent delete cannot be undone.');
   });
 });

@@ -621,13 +621,21 @@ impl PlatformAdapter for MacosPlatformAdapter {
     }
 
     fn trash(&self, path: &Path) -> Result<(), PlatformError> {
+        self.trash_with_restore_location(path).map(|_| ())
+    }
+
+    fn trash_with_restore_location(&self, path: &Path) -> Result<Option<PathBuf>, PlatformError> {
         let ns_path = NSString::from_str(path_to_str(path)?);
         let url = NSURL::fileURLWithPath(&ns_path);
+        let mut resulting_url = None;
         NSFileManager::defaultManager()
-            .trashItemAtURL_resultingItemURL_error(&url, None)
+            .trashItemAtURL_resultingItemURL_error(&url, Some(&mut resulting_url))
             .map_err(|error| PlatformError::Io {
                 message: error.localizedDescription().to_string(),
-            })
+            })?;
+        Ok(resulting_url
+            .and_then(|url| url.path())
+            .map(|path| PathBuf::from(path.to_string())))
     }
 
     fn open_with_default_application(&self, path: &Path) -> Result<(), PlatformError> {
@@ -1855,16 +1863,22 @@ mod tests {
     }
 
     #[test]
-    fn trash_moves_a_real_temporary_file_out_of_its_directory() {
+    fn trash_returns_a_location_that_can_be_safely_restored() {
         let dir = tempdir().expect("temp dir");
         let file = dir.path().join("trash-me.txt");
         std::fs::write(&file, b"content").expect("create fixture");
 
-        MacosPlatformAdapter::new()
-            .trash(&file)
-            .expect("trash the fixture file");
+        let adapter = MacosPlatformAdapter::new();
+        let trashed = adapter
+            .trash_with_restore_location(&file)
+            .expect("trash the fixture file")
+            .expect("macOS returns the trash location");
 
         assert!(!file.exists(), "the file must be gone from its directory");
+        adapter
+            .restore_from_trash(&trashed, &file)
+            .expect("restore the fixture file");
+        assert_eq!(std::fs::read(&file).expect("restored file"), b"content");
     }
 
     #[test]

@@ -13,10 +13,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use fm_domain::OperationId;
-use fm_operations::{Operation, OperationSnapshotObserver};
+use fm_operations::{Operation, OperationSnapshotObserver, OperationState, UndoPlan};
 use fm_transport_dto::{
     EntryRefDto, OperationConflictPolicyDto, OperationDto, OperationEntryErrorDto,
-    OperationKindDto, OperationProgressDto, OperationStateDto,
+    OperationKindDto, OperationProgressDto, OperationStateDto, OperationUndoDto,
 };
 
 use crate::DirectoryService;
@@ -61,6 +61,32 @@ impl OperationHistory {
                 operation.completed_at = Some(now);
             }
         }
+        let interrupted_undo_ids = operations
+            .iter()
+            .filter(|operation| {
+                operation.undo_of.is_some() && operation.state == OperationState::Interrupted
+            })
+            .map(|operation| operation.id)
+            .collect::<HashSet<_>>();
+        let known_ids = operations
+            .iter()
+            .map(|operation| operation.id)
+            .collect::<HashSet<_>>();
+        for operation in &mut operations {
+            let Some(pending_id) = operation.undo.pending_operation else {
+                continue;
+            };
+            if interrupted_undo_ids.contains(&pending_id) {
+                operation.undo.pending_operation = None;
+                operation.undo.plan = None;
+                operation.undo.unavailable_reason = Some(
+                    "The previous undo was interrupted, so its remaining effects cannot be reversed safely."
+                        .into(),
+                );
+            } else if !known_ids.contains(&pending_id) {
+                operation.undo.pending_operation = None;
+            }
+        }
         let history = Self {
             path,
             operations: Mutex::new(operations),
@@ -88,6 +114,66 @@ impl OperationHistory {
             .find(|operation| operation.id == id && operation.state.is_terminal())
             .cloned()
             .map(|operation| operation_dto(operation, None))
+    }
+
+    pub(crate) fn record(&self, id: OperationId) -> Option<Operation> {
+        self.operations
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+            .find(|operation| operation.id == id && operation.state.is_terminal())
+            .cloned()
+    }
+
+    pub(crate) fn reserve_undo(
+        &self,
+        id: OperationId,
+        undo_id: OperationId,
+    ) -> Result<(Operation, UndoPlan), String> {
+        let result = {
+            let mut operations = self
+                .operations
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let operation = operations
+                .iter_mut()
+                .find(|operation| operation.id == id && operation.state.is_terminal())
+                .ok_or_else(|| "Operation history entry was not found.".to_owned())?;
+            if operation.undo.undone_by.is_some() {
+                return Err("This operation has already been undone.".into());
+            }
+            if operation.undo.pending_operation.is_some() {
+                return Err("Undo is already in progress for this operation.".into());
+            }
+            let plan = operation.undo.plan.clone().ok_or_else(|| {
+                operation
+                    .undo
+                    .unavailable_reason
+                    .clone()
+                    .unwrap_or_else(|| "This operation cannot be undone safely.".into())
+            })?;
+            operation.undo.pending_operation = Some(undo_id);
+            Ok((operation.clone(), plan))
+        };
+        if result.is_ok() {
+            self.prune_and_save();
+        }
+        result
+    }
+
+    pub(crate) fn release_undo(&self, id: OperationId, undo_id: OperationId) {
+        {
+            let mut operations = self
+                .operations
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if let Some(operation) = operations.iter_mut().find(|operation| operation.id == id)
+                && operation.undo.pending_operation == Some(undo_id)
+            {
+                operation.undo.pending_operation = None;
+            }
+        }
+        self.prune_and_save();
     }
 
     fn prune_and_save(&self) {
@@ -163,6 +249,26 @@ impl OperationSnapshotObserver for OperationHistory {
             } else {
                 operations.push(operation.clone());
             }
+            if let Some(original_id) = operation.undo_of
+                && operation.state.is_terminal()
+                && let Some(original) = operations
+                    .iter_mut()
+                    .find(|candidate| candidate.id == original_id)
+            {
+                original.undo.pending_operation = None;
+                if matches!(
+                    operation.state,
+                    OperationState::Completed | OperationState::CompletedWithWarnings
+                ) {
+                    original.undo.undone_by = Some(operation.id);
+                } else if operation.progress.completed_items > 0 {
+                    original.undo.plan = None;
+                    original.undo.unavailable_reason = Some(
+                        "The previous undo completed only partially, so it cannot be retried safely."
+                            .into(),
+                    );
+                }
+            }
         }
         self.prune_and_save();
     }
@@ -201,6 +307,7 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
 
 pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -> OperationDto {
     let result_summary = operation_result_summary(&operation);
+    let undo = operation_undo_dto(&operation);
     OperationDto {
         id: operation.id.into(),
         operation_type: match operation.kind {
@@ -214,6 +321,7 @@ pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -
             fm_operations::OperationKind::Duplicate => OperationKindDto::Duplicate,
             fm_operations::OperationKind::Trash => OperationKindDto::Trash,
             fm_operations::OperationKind::Delete => OperationKindDto::Delete,
+            fm_operations::OperationKind::Undo => OperationKindDto::Undo,
         },
         state: match operation.state {
             fm_operations::OperationState::Queued => OperationStateDto::Queued,
@@ -275,6 +383,43 @@ pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -
             .collect(),
         queue_position,
         result_summary,
+        undo,
+        undo_of: operation.undo_of.map(Into::into),
+    }
+}
+
+fn operation_undo_dto(operation: &Operation) -> OperationUndoDto {
+    if let Some(id) = operation.undo.undone_by {
+        return OperationUndoDto {
+            available: false,
+            reason: Some("This operation has already been undone.".into()),
+            operation_id: Some(id.into()),
+        };
+    }
+    if let Some(id) = operation.undo.pending_operation {
+        return OperationUndoDto {
+            available: false,
+            reason: Some("Undo is already in progress for this operation.".into()),
+            operation_id: Some(id.into()),
+        };
+    }
+    let available = operation.undo.plan.is_some()
+        && matches!(
+            operation.state,
+            OperationState::Completed | OperationState::CompletedWithWarnings
+        );
+    OperationUndoDto {
+        available,
+        reason: if available {
+            None
+        } else {
+            operation
+                .undo
+                .unavailable_reason
+                .clone()
+                .or_else(|| Some("This operation cannot currently be undone safely.".into()))
+        },
+        operation_id: None,
     }
 }
 

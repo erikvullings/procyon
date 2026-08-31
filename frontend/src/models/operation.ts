@@ -13,6 +13,7 @@ export type OperationKind =
   | 'duplicate'
   | 'trash'
   | 'delete'
+  | 'undo'
   | 'search'
   | 'compare';
 
@@ -65,6 +66,16 @@ export interface Operation {
   result?: OperationResult;
   /** Entry-level warnings collected for completed-with-warnings operations. */
   errors?: readonly OperationEntryError[];
+  /** Backend-evaluated undo availability for retained history. */
+  undo?: OperationUndo;
+  /** Original operation reversed by an undo job. */
+  undoOf?: OperationId;
+}
+
+export interface OperationUndo {
+  available: boolean;
+  reason?: string;
+  operationId?: OperationId;
 }
 
 export interface OperationResult {

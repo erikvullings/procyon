@@ -475,6 +475,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke('cancel_operation', { operationId });
   }
 
+  undoOperation(operationId: OperationId, _signal?: AbortSignal): Promise<Operation> {
+    return invoke<Operation>('undo_operation', { operationId });
+  }
+
   async pauseOperation(operationId: OperationId, _signal?: AbortSignal): Promise<void> {
     await invoke('pause_operation', { operationId });
   }

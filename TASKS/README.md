@@ -104,7 +104,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0048 In-application clipboard copy / cut / paste
 - [x] 0075 Directory comparison and synchronization
 - [x] 0077 Checksums and duplicate-file detection
-- [ ] 0160 Safe operation undo *(needs 0035, 0043, 0047)*
+- [x] 0160 Safe operation undo
 - [ ] 0161 Saved synchronization profiles *(needs 0030, 0075)*
 - [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
 - [ ] 0165 File collection basket *(needs 0035, 0048, 0108)*
