@@ -46,6 +46,9 @@ const BACKGROUND_POLL_MULTIPLIER: u32 = 4;
 /// often rather than backing off forever.
 const MAX_POLL_BACKOFF_MULTIPLIER: u32 = 8;
 
+/// Poll cadence used only when a provider advertises push tracking but its watch cannot start.
+const FAILED_WATCH_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Maximum entries returned per `list()` response. The full directory is always enumerated and
 /// sorted first (see `list()` docs); this only bounds response/DOM size for very large
 /// directories, it never affects sort correctness across pages.
@@ -495,7 +498,23 @@ impl WatchHub {
         let active = Arc::new(AtomicBool::new(true));
         let mut stream: ProviderChangeStream = match provider.change_tracking() {
             ChangeTracking::NativeWatch | ChangeTracking::DeltaApi => {
-                provider.watch(&location, cancellation.clone()).await?
+                match provider.watch(&location, cancellation.clone()).await {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        tracing::warn!(
+                            provider_id = %provider.id(),
+                            %error,
+                            "provider watch failed; falling back to directory polling"
+                        );
+                        poll_change_stream(
+                            Arc::clone(&provider),
+                            location.clone(),
+                            FAILED_WATCH_POLL_INTERVAL,
+                            Arc::clone(&active),
+                            cancellation.clone(),
+                        )
+                    }
+                }
             }
             ChangeTracking::Poll { interval } => poll_change_stream(
                 Arc::clone(&provider),
@@ -1145,7 +1164,7 @@ mod tests {
     /// downstream consumer (e.g. `spawn_pane_watch`'s own re-list) makes.
     struct PollingProvider {
         id: ProviderId,
-        tracking_interval: Duration,
+        tracking: ChangeTracking,
         responses: Vec<PollOutcome>,
         cursor: AtomicUsize,
         call_times: Mutex<Vec<std::time::Instant>>,
@@ -1161,7 +1180,19 @@ mod tests {
         fn new(id: ProviderId, tracking_interval: Duration, responses: Vec<PollOutcome>) -> Self {
             Self {
                 id,
-                tracking_interval,
+                tracking: ChangeTracking::Poll {
+                    interval: tracking_interval,
+                },
+                responses,
+                cursor: AtomicUsize::new(0),
+                call_times: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn with_failed_native_watch(id: ProviderId, responses: Vec<PollOutcome>) -> Self {
+            Self {
+                id,
+                tracking: ChangeTracking::NativeWatch,
                 responses,
                 cursor: AtomicUsize::new(0),
                 call_times: Mutex::new(Vec::new()),
@@ -1188,9 +1219,7 @@ mod tests {
         }
 
         fn change_tracking(&self) -> ChangeTracking {
-            ChangeTracking::Poll {
-                interval: self.tracking_interval,
-            }
+            self.tracking
         }
 
         async fn list(
@@ -1458,6 +1487,58 @@ mod tests {
         })
         .await
         .expect("a delta must be published once the poller observes the provider's change");
+
+        match delta {
+            DirectoryDeltaPayload::EntriesAdded { entries, .. } => {
+                assert_eq!(entries.len(), 1);
+                assert_eq!(entries[0].name, "b.txt");
+            }
+            other => panic!("expected an EntriesAdded delta, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_native_watch_falls_back_to_polling() {
+        let entry_a = poll_entry("a.txt");
+        let entry_b = poll_entry("b.txt");
+        let provider = Arc::new(PollingProvider::with_failed_native_watch(
+            ProviderId::new("failing-watch"),
+            vec![
+                PollOutcome::Ok(vec![entry_a.clone()]),
+                PollOutcome::Ok(vec![entry_a.clone()]),
+                PollOutcome::Ok(vec![entry_a, entry_b]),
+            ],
+        ));
+        let mut providers = ProviderRegistry::new();
+        providers.register(provider);
+        let events = EventBus::default();
+        let service = DirectoryService::with_event_bus(providers, events.clone());
+        let mut subscription = events.subscribe_all_workspaces(SessionId::new("test"), None);
+        let mut list_request = request(PaneId::new(), Uuid::new_v4());
+        list_request.location = LocationDto {
+            provider_id: "failing-watch".to_owned(),
+            uri: "failing-watch:///dir".to_owned(),
+        };
+
+        service
+            .list(list_request)
+            .await
+            .expect("initial listing must succeed");
+
+        let delta = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if let SubscriptionEvent::Event(envelope) = subscription
+                    .recv()
+                    .await
+                    .expect("subscription must stay open")
+                    && let BackendEventPayload::DirectoryDelta { delta, .. } = envelope.payload
+                {
+                    return delta;
+                }
+            }
+        })
+        .await
+        .expect("failed native watch must continue tracking through polling");
 
         match delta {
             DirectoryDeltaPayload::EntriesAdded { entries, .. } => {
