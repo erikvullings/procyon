@@ -65,6 +65,7 @@ import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
   getOperationCentreVisible(): boolean;
+  toggleOperationCentre(): void;
   getOperations(): OperationCentreState;
   setOperations(next: OperationCentreState): void;
   getPendingConflict(): OperationConflict | undefined;
@@ -153,6 +154,8 @@ export function renderAppDialogs(
     ctx.getOperationCentreVisible()
       ? m(OperationCentre, {
           state: ctx.getOperations(),
+          formatSettings: ctx.getFormatSettings(),
+          onClose: () => ctx.toggleOperationCentre(),
           onCancel: (operationId) => {
             ctx.setOperations(
               transitionOperationState(ctx.getOperations(), operationId, 'cancelling'),

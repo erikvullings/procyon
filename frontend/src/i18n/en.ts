@@ -39,6 +39,8 @@ export const en = {
     comparePanes: 'Compare panes',
     comparePanesTooltip: 'Select the entries that differ between the two panes (Shift+F2)',
     operationCentre: 'Operations (Alt+Z)',
+    showOperationCentre: 'Show Operations Centre',
+    hideOperationCentre: 'Hide Operations Centre',
     operationCentreUpdateFailed: 'Could not update operation-centre visibility.',
     commandPalette: 'Command palette',
     workspaceSwitcher: 'Workspace switcher',

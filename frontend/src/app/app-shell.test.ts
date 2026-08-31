@@ -634,6 +634,13 @@ describe('AppShell', () => {
       expect((await client.getWorkspace(workspaceId)).operationCentre.visible).toBe(true),
     );
 
+    root.querySelector<HTMLButtonElement>('.fm-operation-centre-close')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).toBeNull());
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace(workspaceId)).operationCentre.visible).toBe(false),
+    );
+
+    await openOperationCentre();
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'z', altKey: true, bubbles: true, cancelable: true }),
     );
@@ -775,6 +782,34 @@ describe('AppShell', () => {
     expect(invokeAction).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(root.querySelector('.fm-directory-tree')).not.toBeNull());
     expect(root.querySelector('.fm-command-palette')).toBeNull();
+  });
+
+  it('shows and hides the Operations Centre from the command palette', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    const invokeOperationCentreToggle = async (expectedTitle: string) => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }),
+      );
+      m.redraw.sync();
+      const input = root.querySelector<HTMLInputElement>('.fm-command-palette-input');
+      if (input === null) throw new Error('command palette did not open');
+      input.value = 'operations centre';
+      input.dispatchEvent(new Event('input'));
+      m.redraw.sync();
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain(expectedTitle);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    };
+
+    await invokeOperationCentreToggle('Show Operations Centre');
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).not.toBeNull());
+    await invokeOperationCentreToggle('Hide Operations Centre');
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).toBeNull());
+    expect(invokeAction).not.toHaveBeenCalled();
   });
 
   it('opens F7 validation and selects the directory after a reset refresh', async () => {
@@ -1878,7 +1913,9 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openOperationCentre();
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy - Running'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
     client.emit({
       eventId: 11,
       timestamp: '2026-07-31T12:00:00Z',
@@ -1908,7 +1945,9 @@ describe('AppShell', () => {
 
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openOperationCentre();
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy - Failed'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="failed"]')).not.toBeNull(),
+    );
 
     root
       .querySelector<HTMLButtonElement>(
@@ -1916,12 +1955,12 @@ describe('AppShell', () => {
       )
       ?.click();
     m.redraw.sync();
-    expect(root.textContent).not.toContain('Copy - Failed');
+    expect(root.querySelector('.fm-operation[data-state="failed"]')).toBeNull();
 
     m.mount(root, null);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
-    expect(root.textContent).not.toContain('Copy - Failed');
+    expect(root.querySelector('.fm-operation[data-state="failed"]')).toBeNull();
   });
 
   it('restores completed undoable operations into the centre after restart', async () => {
@@ -1941,7 +1980,9 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openOperationCentre();
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Trash - Completed'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')).not.toBeNull(),
+    );
     expect(
       root.querySelector('[data-operation-id="undoable-trash-1"] [data-action="undo"]'),
     ).not.toBeNull();
@@ -1981,7 +2022,9 @@ describe('AppShell', () => {
     vi.spyOn(client, 'undoOperation').mockResolvedValue(undo);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openOperationCentre();
-    await vi.waitFor(() => expect(root.textContent).toContain('Trash - Completed'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')).not.toBeNull(),
+    );
 
     root
       .querySelector<HTMLButtonElement>(
@@ -1989,8 +2032,12 @@ describe('AppShell', () => {
       )
       ?.click();
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Undo - Running'));
-    expect(root.textContent).not.toContain('Trash - Completed');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')?.textContent).toContain(
+        'Undo',
+      ),
+    );
+    expect(root.querySelector('.fm-operation[data-state="completed"]')).toBeNull();
     expect(root.textContent).not.toContain('Undo is in progress');
     expect(
       root.querySelector('[data-operation-id="undo-trash-1"] .fm-operation-undo-reason'),
@@ -2010,7 +2057,11 @@ describe('AppShell', () => {
       },
     });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Undo - Completed'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')?.textContent).toContain(
+        'Undo',
+      ),
+    );
     expect(root.textContent).not.toContain('Undo is in progress');
     expect(
       root.querySelector('[data-operation-id="undo-trash-1"] .fm-operation-undo-reason'),
@@ -2032,7 +2083,9 @@ describe('AppShell', () => {
     const cancelOperation = vi.spyOn(client, 'cancelOperation').mockReturnValue(pendingCancel);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openOperationCentre();
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy - Running'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
 
     root
       .querySelector<HTMLButtonElement>(
@@ -2042,7 +2095,7 @@ describe('AppShell', () => {
     m.redraw.sync();
 
     expect(cancelOperation).toHaveBeenCalledWith(operation.id);
-    expect(root.textContent).toContain('Copy - Cancelling');
+    expect(root.querySelector('.fm-operation[data-state="cancelling"]')).not.toBeNull();
     expect(
       root.querySelector(`[data-operation-id="${operation.id}"] [data-action="cancel"]`),
     ).toBeNull();
@@ -4284,7 +4337,9 @@ describe('workspace management (task 0084)', () => {
     const cancelOperation = vi.spyOn(client, 'cancelOperation');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openOperationCentre();
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy - Running'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
     await openWorkspaceSwitcher();
 
     row(root, second.id)?.querySelector<HTMLElement>('.fm-workspace-switcher-name')?.click();
@@ -4298,7 +4353,7 @@ describe('workspace management (task 0084)', () => {
       ).toBe('Workspace switcher, current workspace: Bravo'),
     );
     await openOperationCentre();
-    expect(root.textContent).toContain('Copy - Running');
+    expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull();
     expect(cancelOperation).not.toHaveBeenCalled();
   });
 

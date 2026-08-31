@@ -40,6 +40,8 @@ export const nl = {
     comparePanes: 'Vensters vergelijken',
     comparePanesTooltip: 'Selecteer de verskillende bestanden tussen de twee vensters (Shift+F2)',
     operationCentre: 'Bewerkingen (Alt+Z)',
+    showOperationCentre: 'Bewerkingencentrum tonen',
+    hideOperationCentre: 'Bewerkingencentrum verbergen',
     operationCentreUpdateFailed: 'Kon de zichtbaarheid van het bewerkingencentrum niet bijwerken.',
     commandPalette: 'Commandopallet',
     workspaceSwitcher: 'Werkruimte wisselen',

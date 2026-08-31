@@ -425,9 +425,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }));
   }
 
-  /** Purely frontend UI toggles with no backend action-registry counterpart (task 0139),
+  /** Purely frontend UI actions with no backend action-registry counterpart,
    * synthesized client-side the same way `favouriteActions` is - see `invokePaletteAction`'s
-   * `client.toggleDirectoryTree` branch for the dispatch side. */
+   * `client.*` branches for the dispatch side. */
   function clientOnlyActions(): readonly ActionDescriptor[] {
     return [
       {
@@ -436,6 +436,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         description: t('tree', 'directoryTree'),
         category: 'navigation',
         defaultShortcuts: [{ key: 'F10', alt: true }],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      {
+        id: 'client.toggleOperationCentre',
+        title:
+          workspace?.operationCentre.visible === true
+            ? t('shell', 'hideOperationCentre')
+            : t('shell', 'showOperationCentre'),
+        category: 'navigation',
+        defaultShortcuts: [{ key: 'z', alt: true }],
         contextRequirements: {},
         source: { kind: 'core' },
       },
@@ -2676,6 +2687,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     toggleDirectoryTree,
+    toggleOperationCentre,
     redraw: () => m.redraw(),
   };
 
@@ -2962,6 +2974,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   const appDialogsContext: AppDialogsContext = {
     getOperationCentreVisible: () => workspace?.operationCentre.visible === true,
+    toggleOperationCentre,
     getOperations: () => operations,
     setOperations: (next) => {
       operations = next;

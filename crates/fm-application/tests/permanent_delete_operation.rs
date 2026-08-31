@@ -6,8 +6,8 @@ use std::{fs, time::Duration};
 use fm_application::FileManagerService;
 use fm_domain::Location;
 use fm_transport_dto::{
-    OperationConflictPolicyDto, OperationKindDto, OperationStateDto, RuntimeKindDto,
-    StartOperationRequestDto,
+    ConflictResolutionDto, OperationConflictPolicyDto, OperationKindDto, OperationStateDto,
+    ResolveOperationConflictRequestDto, RuntimeKindDto, StartOperationRequestDto,
 };
 
 fn request(
@@ -121,6 +121,58 @@ async fn read_only_entries_require_an_explicit_override() {
         if operation.state == OperationStateDto::Completed {
             break;
         }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(!source.exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn read_only_descendants_do_not_prevent_the_confirmation_prompt() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("delete-me");
+    let read_only = source.join(".git/objects/pack/index.idx");
+    fs::create_dir_all(read_only.parent().unwrap()).unwrap();
+    fs::write(&read_only, b"safe").unwrap();
+    fs::set_permissions(&read_only, fs::Permissions::from_mode(0o444)).unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        root.path().join("workspaces"),
+        root.path().join("settings"),
+    );
+
+    let started = service
+        .start_operation(request(&source, false, false), None)
+        .unwrap();
+    loop {
+        let operation = service.get_operation(started.id.into()).unwrap();
+        if operation.state == OperationStateDto::WaitingForConflictResolution {
+            assert_eq!(operation.progress.total_items, Some(5));
+            break;
+        }
+        assert_ne!(operation.state, OperationStateDto::Failed);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    assert!(source.exists());
+    assert!(read_only.exists());
+    service
+        .resolve_operation_conflict(
+            started.id.into(),
+            ResolveOperationConflictRequestDto {
+                resolution: ConflictResolutionDto::Confirm,
+                apply_to_all_similar: false,
+            },
+        )
+        .unwrap();
+    loop {
+        let operation = service.get_operation(started.id.into()).unwrap();
+        if operation.state == OperationStateDto::Completed {
+            break;
+        }
+        assert_ne!(operation.state, OperationStateDto::Failed);
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert!(!source.exists());

@@ -3628,10 +3628,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn trash_undo_restores_the_recorded_original_location() {
+    async fn trash_undo_restores_a_directory_with_read_only_descendants() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let file = dir.path().join("trash-me.txt");
+        let source = dir.path().join("trash-me");
+        let file = source.join(".git/objects/pack/index.idx");
+        std::fs::create_dir_all(file.parent().expect("fixture file must have a parent"))
+            .expect("create fixture tree");
         std::fs::write(&file, b"content").expect("write fixture");
+        let mut permissions = std::fs::metadata(&file)
+            .expect("read fixture metadata")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&file, permissions).expect("make fixture read-only");
         let service = FileManagerService::with_platform_adapter(
             RuntimeKindDto::Tauri,
             dir.path().join("workspaces"),
@@ -3643,18 +3651,26 @@ mod tests {
         );
 
         let started = service
-            .start_operation(trash_request(&[&file]), None)
+            .start_operation(trash_request(&[&source]), None)
             .expect("trash must be accepted");
         let completed = wait_for_terminal_operation(&service, started.id.into()).await;
         assert!(completed.undo.available);
-        assert!(!file.exists());
+        assert!(!source.exists());
 
         let undo = service
             .undo_operation(started.id.into())
             .expect("trash undo must be accepted");
         let undone = wait_for_terminal_operation(&service, undo.id.into()).await;
         assert_eq!(undone.state, OperationStateDto::Completed);
-        assert_eq!(std::fs::read(file).expect("restored fixture"), b"content");
+        assert_eq!(std::fs::read(&file).expect("restored fixture"), b"content");
+        #[cfg(windows)]
+        {
+            let mut permissions = std::fs::metadata(&file)
+                .expect("read restored fixture metadata")
+                .permissions();
+            permissions.set_readonly(false);
+            std::fs::set_permissions(file, permissions).expect("make restored fixture writable");
+        }
     }
 
     #[test]

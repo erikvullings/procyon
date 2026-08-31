@@ -90,6 +90,8 @@ export interface ActionCommandControllerContext {
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
   /** Toggles the directory-tree sidebar (task 0139). */
   toggleDirectoryTree(): void;
+  /** Toggles the Operations Centre panel. */
+  toggleOperationCentre(): void;
   redraw(): void;
 }
 
@@ -308,6 +310,10 @@ export function createActionCommandController(
     }
     if (action.id === 'client.toggleDirectoryTree') {
       context.toggleDirectoryTree();
+      return;
+    }
+    if (action.id === 'client.toggleOperationCentre') {
+      context.toggleOperationCentre();
       return;
     }
     if (action.id === 'client.diskUsage') {

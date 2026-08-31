@@ -143,6 +143,27 @@ describe('OperationCentre states', () => {
     root.remove();
   });
 
+  it('offers an accessible close control without affecting operation actions', () => {
+    const onClose = vi.fn();
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+          onClose,
+        }),
+    });
+
+    const close = root.querySelector<HTMLButtonElement>('.fm-operation-centre-close');
+    expect(close?.getAttribute('aria-label')).toBe('Hide Operations Centre');
+    close?.click();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('shows queued, running, paused, completed, and failed states with appropriate controls', () => {
     const operations = [
       operation('queued'),
@@ -212,7 +233,41 @@ describe('OperationCentre states', () => {
     });
 
     const result = root.querySelector('[data-operation-id="cancelled"] .fm-operation-result');
-    expect(result?.textContent).toBe('Cancelled after 2 / 4 items (1 KiB / 2 KiB).');
+    expect(result?.textContent).toBe('Cancelled after 2 / 4 items (1 K / 2 K).');
+  });
+
+  it('uses a status icon and compact totals for completed operations', () => {
+    const completed: Operation = {
+      ...operation('completed'),
+      progress: {
+        ...operation('completed').progress,
+        completedItems: 21,
+        totalItems: 21,
+        completedBytes: 36_400_000,
+        totalBytes: 36_400_000,
+      },
+    };
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([completed]),
+          formatSettings: { sizeFormat: 'decimal', dateFormat: 'medium', locale: 'en-US' },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const summary = root.querySelector('.fm-operation-summary');
+    expect(summary?.textContent).toContain('Copy✓');
+    expect(summary?.textContent).toContain('21 items');
+    expect(summary?.textContent).toContain('36.4 M');
+    expect(summary?.textContent).not.toContain('Completed');
+    expect(summary?.textContent).not.toContain('21 / 21');
+    expect(summary?.querySelector('.fm-operation-state')?.getAttribute('aria-label')).toBe(
+      'Completed',
+    );
   });
 
   it('renders an empty state when there are no operations', () => {

@@ -1309,7 +1309,7 @@ impl OperationExecutor for DeleteExecutor {
                 if cancellation.is_cancelled() {
                     return Err(fm_vfs::VfsError::Cancelled.into());
                 }
-                if summary.read_only && !self.override_read_only {
+                if summary.read_only && !self.override_read_only && !self.requires_confirmation {
                     return Err(ExecutionError::Failed(format!(
                         "read-only entry requires explicit override: {}",
                         summary.location.uri
