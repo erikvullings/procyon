@@ -199,6 +199,7 @@ export * from './operationProgressDto';
 export * from './operationQueueStatusDto.ts';
 export * from './operationStateDto.ts';
 export * from './operationStateDto';
+export * from './operationUndoDto.ts';
 export * from './ownershipInfoDto.ts';
 export * from './ownershipInfoDto';
 export * from './paneStateDto.ts';

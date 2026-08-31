@@ -75,6 +75,7 @@ pub enum OperationKindDto {
     Duplicate,
     Trash,
     Delete,
+    Undo,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).
@@ -172,6 +173,25 @@ pub struct OperationDto {
     /// Concise terminal outcome retained with the operation history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result_summary: Option<String>,
+    /// Whether this completed operation can currently be undone and, if not, why.
+    pub undo: OperationUndoDto,
+    /// Original operation reversed by this undo job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_of: Option<Uuid>,
+}
+
+/// User-facing undo availability for an operation history row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationUndoDto {
+    /// A safe undo job may currently be submitted.
+    pub available: bool,
+    /// Explanation when undo is unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Undo job already running or completed for this operation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<Uuid>,
 }
 
 /// A bounded page of active and historical operation snapshots.

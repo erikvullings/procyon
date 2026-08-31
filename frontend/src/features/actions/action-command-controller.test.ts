@@ -71,6 +71,7 @@ function fakeContext(
     openPropertiesForActivePane: () => {},
     uninstallApplication: () => {},
     toggleDirectoryTree: () => {},
+    toggleOperationCentre: () => {},
     redraw: () => {},
     ...overrides,
   };

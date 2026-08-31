@@ -15,6 +15,7 @@ const EVENT_TYPES = [
   'workspace.closed',
   'workspace.deleted',
   'workspace.layoutChanged',
+  'workspace.operationCentreChanged',
   'workspace.activePaneChanged',
   'workspace.tabAdded',
   'workspace.tabClosed',

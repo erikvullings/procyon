@@ -3380,6 +3380,51 @@ export const resumeOperation = async (operationId: string, options?: Parameters<
 
 
 
+export type undoOperationResponse201 = {
+  data: OperationDto
+  status: 201
+}
+
+export type undoOperationResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type undoOperationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type undoOperationResponseSuccess = (undoOperationResponse201) & {
+  headers: Headers;
+};
+export type undoOperationResponseError = (undoOperationResponse400 | undoOperationResponse404) & {
+  headers: Headers;
+};
+
+export type undoOperationResponse = (undoOperationResponseSuccess | undoOperationResponseError)
+
+export const getUndoOperationUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/v1/operations/${operationId}/undo`
+}
+
+export const undoOperation = async (operationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<undoOperationResponse> => {
+
+  return fetchMutator<undoOperationResponse>(getUndoOperationUrl(operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type listPluginsResponse200 = {
   data: PluginDescriptorDto[]
   status: 200

@@ -17,6 +17,7 @@ function isSafelyIdempotent(command: WorkspaceCommand): boolean {
     case 'activateTab':
     case 'updateView':
     case 'updateLayout':
+    case 'updateOperationCentre':
       return true;
     case 'navigateTab':
       return command.navigationMode === 'refresh';

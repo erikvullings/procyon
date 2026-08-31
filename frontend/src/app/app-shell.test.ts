@@ -148,6 +148,23 @@ async function openWorkspaceSwitcher(container: HTMLElement = root): Promise<voi
   await vi.waitFor(() => expect(container.querySelector('.fm-workspace-switcher')).not.toBeNull());
 }
 
+async function openOperationCentre(container: HTMLElement = root): Promise<void> {
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLButtonElement>('.fm-operation-centre-button')?.disabled,
+    ).toBe(false),
+  );
+  container.querySelector<HTMLButtonElement>('.fm-operation-centre-button')?.click();
+  m.redraw.sync();
+  await vi.waitFor(() =>
+    expect(
+      container
+        .querySelector<HTMLButtonElement>('.fm-operation-centre-button')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true'),
+  );
+}
+
 beforeEach(() => {
   vi.stubGlobal('EventSource', TestEventSource);
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
@@ -596,6 +613,49 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F6 Move');
   });
 
+  it('toggles and persists the hidden operation centre from the toolbar and Alt+Z', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const workspaceId = (await client.listWorkspaces())[0]?.id;
+    if (workspaceId === undefined) throw new Error('no active workspace');
+
+    expect(
+      root
+        .querySelector<HTMLButtonElement>('.fm-operation-centre-button')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('false');
+
+    await openOperationCentre();
+    expect(root.querySelector('.fm-operation-centre')?.textContent).toContain(
+      'No operations to show.',
+    );
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace(workspaceId)).operationCentre.visible).toBe(true),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-operation-centre-close')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).toBeNull());
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace(workspaceId)).operationCentre.visible).toBe(false),
+    );
+
+    await openOperationCentre();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', altKey: true, bubbles: true, cancelable: true }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector<HTMLButtonElement>('.fm-operation-centre-button')
+          ?.getAttribute('aria-pressed'),
+      ).toBe('false'),
+    );
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace(workspaceId)).operationCentre.visible).toBe(false),
+    );
+  });
+
   it('previews modified function-key commands while a modifier is held', async () => {
     const client = new MockFileManagerClient();
     const invokeAction = vi.spyOn(client, 'invokeAction');
@@ -722,6 +782,34 @@ describe('AppShell', () => {
     expect(invokeAction).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(root.querySelector('.fm-directory-tree')).not.toBeNull());
     expect(root.querySelector('.fm-command-palette')).toBeNull();
+  });
+
+  it('shows and hides the Operations Centre from the command palette', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    const invokeOperationCentreToggle = async (expectedTitle: string) => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }),
+      );
+      m.redraw.sync();
+      const input = root.querySelector<HTMLInputElement>('.fm-command-palette-input');
+      if (input === null) throw new Error('command palette did not open');
+      input.value = 'operations centre';
+      input.dispatchEvent(new Event('input'));
+      m.redraw.sync();
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain(expectedTitle);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    };
+
+    await invokeOperationCentreToggle('Show Operations Centre');
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).not.toBeNull());
+    await invokeOperationCentreToggle('Hide Operations Centre');
+    await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).toBeNull());
+    expect(invokeAction).not.toHaveBeenCalled();
   });
 
   it('opens F7 validation and selects the directory after a reset refresh', async () => {
@@ -1824,7 +1912,10 @@ describe('AppShell', () => {
     const listOperations = vi.spyOn(client, 'listOperations');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy · Running'));
+    await openOperationCentre();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
     client.emit({
       eventId: 11,
       timestamp: '2026-07-31T12:00:00Z',
@@ -1853,7 +1944,10 @@ describe('AppShell', () => {
     vi.spyOn(client, 'listOperations').mockResolvedValue([failed]);
 
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy · Failed'));
+    await openOperationCentre();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="failed"]')).not.toBeNull(),
+    );
 
     root
       .querySelector<HTMLButtonElement>(
@@ -1861,12 +1955,117 @@ describe('AppShell', () => {
       )
       ?.click();
     m.redraw.sync();
-    expect(root.textContent).not.toContain('Copy · Failed');
+    expect(root.querySelector('.fm-operation[data-state="failed"]')).toBeNull();
 
     m.mount(root, null);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
-    expect(root.textContent).not.toContain('Copy · Failed');
+    expect(root.querySelector('.fm-operation[data-state="failed"]')).toBeNull();
+  });
+
+  it('restores completed undoable operations into the centre after restart', async () => {
+    const client = new MockFileManagerClient();
+    const undoableTrash: Operation = {
+      id: 'undoable-trash-1',
+      kind: 'trash',
+      state: 'completed',
+      sources: [],
+      progress: { completedItems: 1, completedBytes: 0 },
+      conflictPolicy: 'ask',
+      createdAt: '2026-08-30T12:00:00.000Z',
+      undo: { available: true },
+    };
+    vi.spyOn(client, 'listOperations').mockResolvedValue([undoableTrash]);
+
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await openOperationCentre();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')).not.toBeNull(),
+    );
+    expect(
+      root.querySelector('[data-operation-id="undoable-trash-1"] [data-action="undo"]'),
+    ).not.toBeNull();
+  });
+
+  it('replaces an undone operation with the undo job and updates its inline state', async () => {
+    const client = new MockFileManagerClient();
+    const undoableTrash: Operation = {
+      id: 'undoable-trash-1',
+      kind: 'trash',
+      state: 'completed',
+      sources: [
+        {
+          id: 'report',
+          location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+        },
+      ],
+      progress: { completedItems: 1, completedBytes: 0 },
+      conflictPolicy: 'ask',
+      createdAt: '2026-08-30T12:00:00.000Z',
+      completedAt: '2026-08-30T12:00:01.000Z',
+      undo: { available: true },
+    };
+    const undo: Operation = {
+      id: 'undo-trash-1',
+      kind: 'undo',
+      state: 'running',
+      sources: undoableTrash.sources,
+      progress: { completedItems: 0, totalItems: 1, completedBytes: 0 },
+      conflictPolicy: 'ask',
+      createdAt: '2026-08-30T12:01:00.000Z',
+      startedAt: '2026-08-30T12:01:00.000Z',
+      undo: { available: false, reason: 'Undo operations cannot themselves be undone.' },
+      undoOf: undoableTrash.id,
+    };
+    vi.spyOn(client, 'listOperations').mockResolvedValue([undoableTrash]);
+    vi.spyOn(client, 'undoOperation').mockResolvedValue(undo);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await openOperationCentre();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')).not.toBeNull(),
+    );
+
+    root
+      .querySelector<HTMLButtonElement>(
+        `[data-operation-id="${undoableTrash.id}"] [data-action="undo"]`,
+      )
+      ?.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')?.textContent).toContain(
+        'Undo',
+      ),
+    );
+    expect(root.querySelector('.fm-operation[data-state="completed"]')).toBeNull();
+    expect(root.textContent).not.toContain('Undo is in progress');
+    expect(
+      root.querySelector('[data-operation-id="undo-trash-1"] .fm-operation-undo-reason'),
+    ).toBeNull();
+
+    client.emit({
+      eventId: 12,
+      timestamp: '2026-08-30T12:01:01.000Z',
+      payload: {
+        type: 'operation.completed',
+        operation: {
+          ...undo,
+          state: 'completed',
+          progress: { completedItems: 1, totalItems: 1, completedBytes: 0 },
+          completedAt: '2026-08-30T12:01:01.000Z',
+        },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="completed"]')?.textContent).toContain(
+        'Undo',
+      ),
+    );
+    expect(root.textContent).not.toContain('Undo is in progress');
+    expect(
+      root.querySelector('[data-operation-id="undo-trash-1"] .fm-operation-undo-reason'),
+    ).toBeNull();
   });
 
   it('acknowledges cancel immediately while the backend request is still pending', async () => {
@@ -1883,7 +2082,10 @@ describe('AppShell', () => {
     });
     const cancelOperation = vi.spyOn(client, 'cancelOperation').mockReturnValue(pendingCancel);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy · Running'));
+    await openOperationCentre();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
 
     root
       .querySelector<HTMLButtonElement>(
@@ -1893,7 +2095,7 @@ describe('AppShell', () => {
     m.redraw.sync();
 
     expect(cancelOperation).toHaveBeenCalledWith(operation.id);
-    expect(root.textContent).toContain('Copy · Cancelling');
+    expect(root.querySelector('.fm-operation[data-state="cancelling"]')).not.toBeNull();
     expect(
       root.querySelector(`[data-operation-id="${operation.id}"] [data-action="cancel"]`),
     ).toBeNull();
@@ -1933,7 +2135,7 @@ describe('AppShell', () => {
 
     expect(cancelOperation).toHaveBeenCalledWith(operation.id);
     expect(root.querySelector(`[data-operation-id="${operation.id}"]`)).toBeNull();
-    expect(root.textContent).not.toContain('Delete · Cancelled');
+    expect(root.textContent).not.toContain('Delete - Cancelled');
   });
 
   it('presents operation conflicts and submits the selected apply-to-all decision', async () => {
@@ -4134,7 +4336,10 @@ describe('workspace management (task 0084)', () => {
     });
     const cancelOperation = vi.spyOn(client, 'cancelOperation');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('Copy · Running'));
+    await openOperationCentre();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull(),
+    );
     await openWorkspaceSwitcher();
 
     row(root, second.id)?.querySelector<HTMLElement>('.fm-workspace-switcher-name')?.click();
@@ -4147,7 +4352,8 @@ describe('workspace management (task 0084)', () => {
           ?.getAttribute('data-tooltip'),
       ).toBe('Workspace switcher, current workspace: Bravo'),
     );
-    expect(root.textContent).toContain('Copy · Running');
+    await openOperationCentre();
+    expect(root.querySelector('.fm-operation[data-state="running"]')).not.toBeNull();
     expect(cancelOperation).not.toHaveBeenCalled();
   });
 

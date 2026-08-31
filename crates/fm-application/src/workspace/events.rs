@@ -124,6 +124,13 @@ pub(crate) fn command_event(
             revision,
             layout: layout_payload(&persisted.layout),
         },
+        WorkspaceCommand::UpdateOperationCentre { .. } => {
+            BackendEventPayload::WorkspaceOperationCentreChanged {
+                revision,
+                visible: persisted.operation_centre.visible,
+                height: persisted.operation_centre.height,
+            }
+        }
     };
 
     Ok(event)

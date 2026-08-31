@@ -51,6 +51,12 @@ export type BackendEventPayload =
   | { type: 'workspace.closed'; revision: number }
   | { type: 'workspace.deleted'; revision: number }
   | { type: 'workspace.layoutChanged'; revision: number; layout: WorkspaceLayout }
+  | {
+      type: 'workspace.operationCentreChanged';
+      revision: number;
+      visible: boolean;
+      height: number;
+    }
   | { type: 'workspace.activePaneChanged'; revision: number; paneId: PaneId }
   | {
       type: 'workspace.tabAdded';

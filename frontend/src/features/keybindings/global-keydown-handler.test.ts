@@ -222,6 +222,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     redraw: vi.fn(),
     toggleTerminal: vi.fn(),
     toggleDirectoryTree: vi.fn(),
+    toggleOperationCentre: vi.fn(),
     setSort: vi.fn(),
     swapPaneTabSets: vi.fn(),
     openMultiRenameForActivePane: vi.fn(),
@@ -272,6 +273,30 @@ function viewerKeydown(
 }
 
 describe('dispatchGlobalKeydown precedence', () => {
+  it('routes Alt+Z to the operation centre toggle', () => {
+    const toggleOperationCentre = vi.fn();
+    const context = makeContext({ toggleOperationCentre });
+
+    const event = keydown('z', { altKey: true });
+    const route = dispatchGlobalKeydown(context, event);
+
+    expect(route).toBe('operation-centre-toggle');
+    expect(event.defaultPrevented).toBe(true);
+    expect(toggleOperationCentre).toHaveBeenCalledOnce();
+  });
+
+  it('routes Alt+Z by physical key when Option modifies the character on macOS', () => {
+    const toggleOperationCentre = vi.fn();
+    const context = makeContext({ toggleOperationCentre });
+
+    const event = keydown('Ω', { code: 'KeyZ', altKey: true });
+    const route = dispatchGlobalKeydown(context, event);
+
+    expect(route).toBe('operation-centre-toggle');
+    expect(event.defaultPrevented).toBe(true);
+    expect(toggleOperationCentre).toHaveBeenCalledOnce();
+  });
+
   it('routes Alt+F10 to the directory tree before registered actions', () => {
     const toggleDirectoryTree = vi.fn();
     const setActiveTabQuickFilter = vi.fn();

@@ -137,12 +137,92 @@ fn openapi_reserves_all_stable_operation_ids() {
         "startOperation",
         "getOperation",
         "cancelOperation",
+        "undoOperation",
         "pauseOperation",
         "resumeOperation",
         "resolveOperationConflict",
     ] {
         assert!(text.contains(operation_id), "missing {operation_id}");
     }
+}
+
+#[tokio::test]
+async fn undo_route_starts_a_guarded_inverse_operation() {
+    let server = common::TestServer::spawn().await;
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source.txt");
+    let destination = root.path().join("destination");
+    tokio::fs::write(&source, b"copy through undo route")
+        .await
+        .unwrap();
+    tokio::fs::create_dir(&destination).await.unwrap();
+    let client = reqwest::Client::new();
+    let operation: serde_json::Value = client
+        .post(format!("{}/api/v1/operations", server.base_url))
+        .json(&json!({
+            "type": "copy",
+            "sources": [{"providerId":"local","uri": common::file_uri(&source)}],
+            "destination": {"providerId":"local","uri": common::file_uri(&destination)},
+            "conflictPolicy": "ask"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let id = operation["id"].as_str().unwrap();
+    for _ in 0..200 {
+        let current: serde_json::Value = client
+            .get(format!("{}/api/v1/operations/{id}", server.base_url))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if current["state"] == "completed" {
+            assert_eq!(current["undo"]["available"], true);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let undo: serde_json::Value = client
+        .post(format!("{}/api/v1/operations/{id}/undo", server.base_url))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(undo["type"], "undo");
+    assert_eq!(undo["undoOf"], id);
+    let undo_id = undo["id"].as_str().unwrap();
+    for _ in 0..200 {
+        let current: serde_json::Value = client
+            .get(format!("{}/api/v1/operations/{undo_id}", server.base_url))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if current["state"] == "completed" {
+            assert!(!destination.join("source.txt").exists());
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("undo route operation did not complete")
 }
 
 #[tokio::test]

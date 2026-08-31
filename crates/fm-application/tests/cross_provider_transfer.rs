@@ -336,6 +336,44 @@ async fn two_different_ftp_connections_stream_rather_than_taking_a_same_server_p
 }
 
 #[tokio::test]
+async fn cross_provider_move_undo_copies_back_then_removes_the_unchanged_output() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let service = service(&root);
+    let source_fixture = FtpFixture::start().await;
+    let destination_fixture = FtpFixture::start().await;
+    let source_id = register_ftp(&service, "Source FTP", &source_fixture).await;
+    let destination_id = register_ftp(&service, "Destination FTP", &destination_fixture).await;
+    source_fixture
+        .put("/undo-move.txt", b"cross-provider undo")
+        .await;
+    let mut request = copy_request(
+        ftp_location(source_id, "undo-move.txt"),
+        ftp_location(destination_id, ""),
+    );
+    request.operation_type = OperationKindDto::Move;
+
+    let operation = service
+        .start_operation(request, None)
+        .expect("move must be accepted");
+    let completed = await_terminal(&service, operation.id).await;
+    assert_eq!(completed.state, OperationStateDto::Completed);
+    assert!(completed.undo.available);
+    assert!(source_fixture.get("/undo-move.txt").await.is_none());
+
+    let undo = service
+        .undo_operation(operation.id.into())
+        .expect("undo must be accepted");
+    let undone = await_terminal(&service, undo.id).await;
+
+    assert_eq!(undone.state, OperationStateDto::Completed);
+    assert_eq!(
+        source_fixture.get("/undo-move.txt").await.as_deref(),
+        Some(b"cross-provider undo".as_slice())
+    );
+    assert!(destination_fixture.get("/undo-move.txt").await.is_none());
+}
+
+#[tokio::test]
 async fn two_different_sftp_connections_stream_rather_than_taking_a_same_server_path() {
     let root = tempfile::tempdir().expect("temporary root");
     let service = service(&root);

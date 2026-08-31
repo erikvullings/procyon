@@ -74,6 +74,33 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('theme stylesheet', () => {
+  it('contains long operation source previews within their card', () => {
+    expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('flex-direction: column');
+    expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('overflow: hidden');
+    expect(themeBlock(/\.fm-operation-summary\s*\{([^}]*)\}/)).toContain('flex-wrap: wrap');
+    expect(themeBlock(/\.fm-operation-source-preview\s*\{([^}]*)\}/)).toContain('min-width: 0');
+    expect(themeBlock(/\.fm-operation-source-preview\s*\{([^}]*)\}/)).toContain(
+      'overflow-wrap: anywhere',
+    );
+  });
+
+  it('aligns operation card headers and controls across uneven content', () => {
+    expect(themeBlock(/\.fm-operation-list\s*\{([^}]*)\}/)).toContain('align-items: stretch');
+    expect(themeBlock(/\.fm-operation-controls\s*\{([^}]*margin-top[^}]*)\}/)).toContain(
+      'margin-top: auto',
+    );
+  });
+
+  it('keeps the Operations Centre close control fixed at its top-right edge', () => {
+    expect(themeBlock(/\.fm-operation-centre\s*\{([^}]*border-top[^}]*)\}/)).toContain(
+      'position: relative',
+    );
+    const close = themeBlock(/\.fm-operation-centre-close\s*\{([^}]*)\}/);
+    expect(close).toContain('position: absolute');
+    expect(close).toContain('top: 0.25rem');
+    expect(close).toContain('right: 0.25rem');
+  });
+
   it('defines every file-manager design token', () => {
     for (const token of REQUIRED_TOKENS) {
       expect(themeCss).toContain(`${token}:`);

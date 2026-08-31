@@ -76,6 +76,7 @@ export interface DirectoryTableAttrs {
   readonly state: LoadingState;
   readonly source?: DirectoryEntrySource;
   readonly cursorIndex?: number;
+  readonly centerCursor?: boolean;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
   readonly active?: boolean;
@@ -625,6 +626,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
   let rowHeight = DEFAULT_ROW_HEIGHT;
   let scrollTop = 0;
   let previousCursorIndex: number | undefined;
+  let previousCursorEntryId: EntryId | undefined;
   // The correct scroll target for a given cursorIndex depends on the entry
   // count too: while `loadAllPages` progressively appends pages, the cursor can
   // jump to (and stay pinned at) the last index before every page has arrived,
@@ -643,6 +645,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
   // the scroll once Mithril patches the content to its real (larger) height.
   // `pendingCursorIndex` tracks that a post-patch recheck is still owed.
   let pendingCursorIndex: number | undefined;
+  let pendingCursorAlignment: 'nearest' | 'center' = 'nearest';
   let resizeObserver: ResizeObserver | undefined;
   let dragTargetIndex: number | undefined;
   /** Live column widths shown while a resize drag is in flight, overriding `attrs.columnWidths`
@@ -712,7 +715,11 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     window.addEventListener('pointerup', end);
   }
 
-  function applyScrollForCursor(attrs: DirectoryTableAttrs, cursorIndex: number): void {
+  function applyScrollForCursor(
+    attrs: DirectoryTableAttrs,
+    cursorIndex: number,
+    alignment: 'nearest' | 'center',
+  ): void {
     if (element === undefined || attrs.source === undefined) return;
     const nextScrollTop = scrollOffsetForIndex({
       index: cursorIndex,
@@ -720,6 +727,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       rowHeight,
       scrollTop: element.scrollTop,
       viewportHeight: attrs.viewportHeight ?? (element.clientHeight || DEFAULT_VIEWPORT_HEIGHT),
+      alignment,
     });
     if (nextScrollTop !== element.scrollTop) {
       element.scrollTop = nextScrollTop;
@@ -729,6 +737,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     // it and `scrollTop` must reflect that reality, not the intended target.
     scrollTop = element.scrollTop;
     pendingCursorIndex = scrollTop === nextScrollTop ? undefined : cursorIndex;
+    pendingCursorAlignment = alignment;
   }
 
   function syncCursor(attrs: DirectoryTableAttrs): void {
@@ -736,12 +745,22 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       return;
     }
     const entryCount = attrs.source.length;
-    if (attrs.cursorIndex === previousCursorIndex && entryCount === previousEntryCount) {
+    const cursorEntryId = attrs.source.entryAt(attrs.cursorIndex)?.id;
+    if (
+      attrs.cursorIndex === previousCursorIndex &&
+      cursorEntryId === previousCursorEntryId &&
+      entryCount === previousEntryCount
+    ) {
       return;
     }
     previousCursorIndex = attrs.cursorIndex;
+    previousCursorEntryId = cursorEntryId;
     previousEntryCount = entryCount;
-    applyScrollForCursor(attrs, attrs.cursorIndex);
+    applyScrollForCursor(
+      attrs,
+      attrs.cursorIndex,
+      attrs.centerCursor === true ? 'center' : 'nearest',
+    );
   }
 
   /** Re-verifies the scroll position once Mithril has patched the DOM with this
@@ -752,7 +771,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     if (pendingCursorIndex === undefined || element === undefined) return false;
     const cursorIndex = pendingCursorIndex;
     const before = scrollTop;
-    applyScrollForCursor(attrs, cursorIndex);
+    applyScrollForCursor(attrs, cursorIndex, pendingCursorAlignment);
     return scrollTop !== before;
   }
 
@@ -991,11 +1010,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 rowHeight = nextRowHeight;
                 const heightChangedAfterLayout =
                   attrs.viewportHeight === undefined && element.clientHeight !== viewportHeight;
-                if (
-                  rowHeightChanged ||
-                  heightChangedAfterLayout ||
-                  recheckScroll(vnode.attrs as DirectoryTableAttrs)
-                ) {
+                if (rowHeightChanged || heightChangedAfterLayout || recheckScroll(attrs)) {
                   m.redraw();
                 }
               },

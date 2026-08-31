@@ -113,6 +113,9 @@ pub(crate) fn apply(
         WorkspaceCommand::UpdateLayout { layout, .. } => {
             workspace.layout = layout;
         }
+        WorkspaceCommand::UpdateOperationCentre { preferences, .. } => {
+            workspace.operation_centre = preferences;
+        }
     }
 
     workspace.validate().map_err(WorkspaceError::Invalid)
@@ -1032,6 +1035,30 @@ mod tests {
         .expect("update layout must succeed");
 
         assert_eq!(ws.layout, new_layout);
+    }
+
+    #[test]
+    fn update_operation_centre_replaces_the_preferences() {
+        let mut ws = workspace();
+        let workspace_id = ws.id;
+        let expected_revision = ws.revision;
+        let preferences = fm_domain::OperationCentrePreferences {
+            visible: true,
+            height: 320,
+        };
+
+        apply(
+            &mut ws,
+            WorkspaceCommand::UpdateOperationCentre {
+                workspace_id,
+                preferences,
+                expected_revision,
+            },
+            home(),
+        )
+        .expect("update operation centre must succeed");
+
+        assert_eq!(ws.operation_centre, preferences);
     }
 
     #[test]

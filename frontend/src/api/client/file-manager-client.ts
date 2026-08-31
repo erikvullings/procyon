@@ -328,6 +328,8 @@ export interface FileManagerClient {
 
   cancelOperation(operationId: OperationId, signal?: AbortSignal): Promise<void>;
 
+  undoOperation(operationId: OperationId, signal?: AbortSignal): Promise<Operation>;
+
   pauseOperation(operationId: OperationId, signal?: AbortSignal): Promise<void>;
 
   resumeOperation(operationId: OperationId, signal?: AbortSignal): Promise<void>;

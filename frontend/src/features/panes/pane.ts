@@ -1,5 +1,5 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
-import { IconButton } from 'mithril-materialized';
+import { IconButton, ModalPanel } from 'mithril-materialized';
 import {
   arrowsSortIcon,
   gridDotsIcon,
@@ -410,6 +410,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let favouritesPreviousFocus: HTMLElement | undefined;
   let viewMenuOpen = false;
   let sortMenuOpen = false;
+  let selectionMaskCommand: 'selectByMask' | 'deselectByMask' | undefined;
+  let selectionMask = '*.*';
+  let selectionMaskNeedsFocus = false;
   let photoModeByTab = new Map<TabId, boolean>();
   let typeaheadPath: string | undefined;
   /** The pane's own `section.fm-pane` DOM node - the actual keyboard target (`onkeydown` is bound
@@ -423,6 +426,24 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   const renameCtrl = createRenameEditingController();
   /** Selection just before the current keystroke, for the Numpad `/` "restore" shortcut. */
   let previousSelectionSnapshot: readonly EntryId[] = [];
+
+  function closeSelectionMask(): void {
+    selectionMaskCommand = undefined;
+    sectionElement?.focus();
+  }
+
+  function applySelectionMask(attrs: PaneAttrs): void {
+    if (selectionMaskCommand === undefined) return;
+    attrs.onSelectionAction({
+      type: selectionMaskCommand,
+      matchingEntryIds: attrs.entries
+        .filter(
+          (entry) => !isParentEntry(entry.id) && matchesGlobMask(entry.name, selectionMask.trim()),
+        )
+        .map((entry) => entry.id),
+    });
+    closeSelectionMask();
+  }
 
   function openFavourites(attrs: PaneAttrs): void {
     favouritesPreviousFocus = document.activeElement as HTMLElement;
@@ -578,7 +599,8 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
         editing = false;
         pathError = undefined;
       }
-      if (typeaheadPath !== attrs.path) {
+      const pathChanged = typeaheadPath !== attrs.path;
+      if (pathChanged) {
         typeaheadPath = attrs.path;
         typeaheadCtrl.reset();
       }
@@ -837,23 +859,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               attrs.onSelectionAction({ type: 'invert' });
             } else if (command?.type === 'selectByMask' || command?.type === 'deselectByMask') {
               event.preventDefault();
-              const selecting = command.type === 'selectByMask';
-              const pattern = window.prompt(
-                selecting
-                  ? t('pane', 'selectFilesMatchingMask')
-                  : t('pane', 'deselectFilesMatchingMask'),
-                '*.*',
-              );
-              if (pattern !== null) {
-                attrs.onSelectionAction({
-                  type: command.type,
-                  matchingEntryIds: attrs.entries
-                    .filter(
-                      (entry) => !isParentEntry(entry.id) && matchesGlobMask(entry.name, pattern),
-                    )
-                    .map((entry) => entry.id),
-                });
-              }
+              selectionMaskCommand = command.type;
+              selectionMask = '*.*';
+              selectionMaskNeedsFocus = true;
             } else if (event.altKey && event.key === 'ArrowLeft') {
               event.preventDefault();
               void attrs.navigation.onBack();
@@ -1645,6 +1653,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               : m(DirectoryTable, {
                   ...sharedListAttrs,
                   active: attrs.active,
+                  centerCursor: pathChanged,
                   sort: attrs.tableConfig.sort,
                   ...(attrs.tableConfig.pluginColumns === undefined
                     ? {}
@@ -1731,6 +1740,52 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   typeaheadCtrl.prefix,
                 ),
           ]),
+          m(ModalPanel, {
+            className: 'fm-dense-modal fm-selection-mask-modal',
+            title:
+              selectionMaskCommand === 'deselectByMask'
+                ? t('pane', 'deselectFilesMatchingMask')
+                : t('pane', 'selectFilesMatchingMask'),
+            description: m('label.fm-selection-mask-field', [
+              m('span', t('pane', 'fileMask')),
+              m('input[type=text]', {
+                value: selectionMask,
+                oninput: (event: InputEvent) => {
+                  selectionMask = (event.currentTarget as HTMLInputElement).value;
+                },
+                onupdate: ({ dom }: VnodeDOM) => {
+                  if (!selectionMaskNeedsFocus) return;
+                  selectionMaskNeedsFocus = false;
+                  (dom as HTMLInputElement).focus();
+                  (dom as HTMLInputElement).select();
+                },
+                onkeydown: (event: KeyboardEvent) => {
+                  event.stopPropagation();
+                  if (event.key === 'Escape') {
+                    closeSelectionMask();
+                  } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applySelectionMask(attrs);
+                  }
+                },
+              }),
+            ]),
+            isOpen: selectionMaskCommand !== undefined,
+            closeOnEsc: true,
+            onToggle: (open: boolean) => {
+              if (!open) closeSelectionMask();
+            },
+            buttons: [
+              { label: t('button', 'cancel'), onclick: closeSelectionMask },
+              {
+                label:
+                  selectionMaskCommand === 'deselectByMask'
+                    ? t('pane', 'deselectMatching')
+                    : t('pane', 'selectMatching'),
+                onclick: () => applySelectionMask(attrs),
+              },
+            ],
+          }),
         ],
       );
     },

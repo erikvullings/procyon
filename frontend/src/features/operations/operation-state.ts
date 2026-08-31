@@ -94,3 +94,14 @@ export function dismissOperation(
   delete failuresById[operationId];
   return { byId, failuresById };
 }
+
+/** Undoable completions remain visible until the user invokes or explicitly dismisses them. */
+export function shouldAutoDismissOperation(operation: Operation): boolean {
+  return (
+    operation.undo?.available !== true &&
+    (operation.state === 'completed' ||
+      operation.state === 'completedWithWarnings' ||
+      operation.state === 'cancelled' ||
+      operation.state === 'interrupted')
+  );
+}

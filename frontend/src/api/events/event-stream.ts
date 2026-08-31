@@ -90,6 +90,7 @@ const KNOWN_EVENT_TYPES = new Set([
   'workspace.closed',
   'workspace.deleted',
   'workspace.layoutChanged',
+  'workspace.operationCentreChanged',
   'workspace.activePaneChanged',
   'workspace.tabAdded',
   'workspace.tabClosed',

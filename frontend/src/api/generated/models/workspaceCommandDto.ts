@@ -5,6 +5,7 @@
 import type { DirectoryViewPatchDto } from './directoryViewPatchDto.ts';
 import type { LocationDto } from './locationDto.ts';
 import type { NavigationModeDto } from './navigationModeDto.ts';
+import type { OperationCentrePreferencesDto } from './operationCentrePreferencesDto.ts';
 import type { WorkspaceLayoutDto } from './workspaceLayoutDto.ts';
 
 /**
@@ -147,6 +148,17 @@ export type WorkspaceCommandDto = {
   /** The new layout; must reference every existing pane exactly once. */
   layout: WorkspaceLayoutDto;
   type: 'updateLayout';
+  /** The target workspace. */
+  workspaceId: string;
+} | {
+  /**
+     * The revision this command was issued against.
+     * @minimum 0
+     */
+  expectedRevision: number;
+  /** The new operation-centre preferences. */
+  preferences: OperationCentrePreferencesDto;
+  type: 'updateOperationCentre';
   /** The target workspace. */
   workspaceId: string;
 };

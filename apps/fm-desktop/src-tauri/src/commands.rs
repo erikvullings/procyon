@@ -1198,6 +1198,17 @@ macro_rules! operation_command {
 operation_command!(cancel_operation);
 operation_command!(pause_operation);
 operation_command!(resume_operation);
+/// Starts an undo job through the same service method as REST.
+#[tauri::command]
+pub(crate) async fn undo_operation(
+    state: State<'_, AppState>,
+    operation_id: Uuid,
+) -> Result<OperationDto, ApplicationErrorDto> {
+    state
+        .service
+        .undo_operation(OperationId::from(operation_id))
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
 /// Resolves a pending operation conflict through the shared service.
 #[tauri::command]
 pub(crate) fn resolve_operation_conflict(

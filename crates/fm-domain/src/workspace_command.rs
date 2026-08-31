@@ -9,8 +9,8 @@
 use crate::ids::{PaneId, TabId, WorkspaceId};
 use crate::location::Location;
 use crate::workspace::{
-    ColumnConfiguration, DirectoryViewMode, IconSize, PersistedFilter, SortDescriptor,
-    WorkspaceLayout,
+    ColumnConfiguration, DirectoryViewMode, IconSize, OperationCentrePreferences, PersistedFilter,
+    SortDescriptor, WorkspaceLayout,
 };
 
 /// A focused workspace mutation, exactly per spec §5.3.9.
@@ -131,6 +131,15 @@ pub enum WorkspaceCommand {
         /// The revision the caller last observed.
         expected_revision: u64,
     },
+    /// Updates the workspace's operation-centre presentation preferences.
+    UpdateOperationCentre {
+        /// The workspace to mutate.
+        workspace_id: WorkspaceId,
+        /// The new operation-centre preferences.
+        preferences: OperationCentrePreferences,
+        /// The revision the caller last observed.
+        expected_revision: u64,
+    },
 }
 
 impl WorkspaceCommand {
@@ -147,7 +156,8 @@ impl WorkspaceCommand {
             | Self::ActivateTab { workspace_id, .. }
             | Self::NavigateTab { workspace_id, .. }
             | Self::UpdateView { workspace_id, .. }
-            | Self::UpdateLayout { workspace_id, .. } => *workspace_id,
+            | Self::UpdateLayout { workspace_id, .. }
+            | Self::UpdateOperationCentre { workspace_id, .. } => *workspace_id,
         }
     }
 
@@ -184,6 +194,9 @@ impl WorkspaceCommand {
                 expected_revision, ..
             }
             | Self::UpdateLayout {
+                expected_revision, ..
+            }
+            | Self::UpdateOperationCentre {
                 expected_revision, ..
             } => *expected_revision,
         }
@@ -316,6 +329,14 @@ mod tests {
                 workspace_id,
                 layout: WorkspaceLayout::Pane { pane_id },
                 expected_revision: 10,
+            },
+            WorkspaceCommand::UpdateOperationCentre {
+                workspace_id,
+                preferences: OperationCentrePreferences {
+                    visible: true,
+                    height: 240,
+                },
+                expected_revision: 11,
             },
         ];
 

@@ -552,6 +552,8 @@ pub enum OperationKindPayload {
     Trash,
     /// Permanently delete entries.
     Delete,
+    /// Safely reverse a completed operation.
+    Undo,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).
@@ -638,6 +640,20 @@ pub struct OperationProgressPayload {
     pub progress: OperationProgressDetails,
 }
 
+/// Undo availability attached to an operation lifecycle snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationUndoPayload {
+    /// Whether a guarded inverse operation can currently be submitted.
+    pub available: bool,
+    /// Explanation when undo is unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Active or completed undo operation associated with this row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<OperationId>,
+}
+
 /// A file operation carried by operation lifecycle events.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -665,6 +681,12 @@ pub struct OperationPayload {
     /// Completion timestamp, when finished.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<DateTime<Utc>>,
+    /// Current guarded undo availability.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub undo: Option<OperationUndoPayload>,
+    /// Original operation reversed by this undo job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub undo_of: Option<OperationId>,
 }
 
 /// Incremental directory changes in the frontend wire format.
@@ -860,6 +882,16 @@ pub enum BackendEventPayload {
         revision: u64,
         /// The new layout.
         layout: WorkspaceLayoutPayload,
+    },
+    /// The workspace's operation-centre presentation preferences changed.
+    #[serde(rename = "workspace.operationCentreChanged")]
+    WorkspaceOperationCentreChanged {
+        /// The workspace's new revision.
+        revision: u64,
+        /// Whether the operation centre is visible.
+        visible: bool,
+        /// The operation centre's height in pixels.
+        height: u32,
     },
     /// The focused pane changed.
     #[serde(rename = "workspace.activePaneChanged")]
@@ -1142,6 +1174,7 @@ impl BackendEventPayload {
             Self::WorkspaceClosed { .. } => "workspace.closed",
             Self::WorkspaceDeleted { .. } => "workspace.deleted",
             Self::WorkspaceLayoutChanged { .. } => "workspace.layoutChanged",
+            Self::WorkspaceOperationCentreChanged { .. } => "workspace.operationCentreChanged",
             Self::WorkspaceActivePaneChanged { .. } => "workspace.activePaneChanged",
             Self::WorkspaceTabAdded { .. } => "workspace.tabAdded",
             Self::WorkspaceTabClosed { .. } => "workspace.tabClosed",
@@ -1426,6 +1459,7 @@ mod tests {
                 "workspace.closed",
                 "workspace.deleted",
                 "workspace.layoutChanged",
+                "workspace.operationCentreChanged",
                 "workspace.activePaneChanged",
                 "workspace.tabAdded",
                 "workspace.tabClosed",
@@ -1594,6 +1628,8 @@ mod tests {
                     .expect("Unix epoch is valid"),
                 started_at: None,
                 completed_at: None,
+                undo: None,
+                undo_of: None,
             };
             let pane_id = PaneId::from_str(PANE_ID).expect("fixture pane id must be valid");
             let tab_id = TabId::from_str(TAB_ID).expect("fixture tab id must be valid");
@@ -1614,6 +1650,11 @@ mod tests {
                 Self::WorkspaceLayoutChanged {
                     revision: 2,
                     layout: WorkspaceLayoutPayload::Pane { pane_id },
+                },
+                Self::WorkspaceOperationCentreChanged {
+                    revision: 2,
+                    visible: true,
+                    height: 240,
                 },
                 Self::WorkspaceActivePaneChanged {
                     revision: 2,

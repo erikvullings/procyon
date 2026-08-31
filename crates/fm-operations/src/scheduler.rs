@@ -8,7 +8,7 @@ use fm_events::{
     BackendEventPayload, ConflictPolicyPayload, EntryKindPayload, EntryRefPayload, EventAudience,
     EventBus, LocationPayload, OperationConflictEntryPayload, OperationConflictPayload,
     OperationKindPayload, OperationPayload, OperationProgressDetails, OperationProgressPayload,
-    OperationStatePayload,
+    OperationStatePayload, OperationUndoPayload,
 };
 use fm_vfs::EntryRef;
 use thiserror::Error;
@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ConflictResolution, Operation, OperationConflict, OperationProgress, OperationState,
-    PauseToken, ProgressPublisher, TransitionError,
+    OperationUndo, PauseToken, ProgressPublisher, TransitionError,
 };
 
 /// Receives durable snapshots whenever an operation changes.
@@ -134,6 +134,17 @@ pub trait OperationExecutor: Send + Sync + 'static {
         _cancellation: &CancellationToken,
     ) -> Result<(), ExecutionError> {
         Ok(())
+    }
+
+    /// Produces the explicit inverse plan after all original mutations have completed.
+    async fn undo_evidence(
+        &self,
+        _operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationUndo, ExecutionError> {
+        Ok(OperationUndo::unavailable(
+            "This operation does not retain enough evidence to be undone safely.",
+        ))
     }
 
     /// Whether execution must wait for explicit user confirmation after planning.
@@ -604,7 +615,10 @@ impl Scheduler {
         }
         let snapshot = job.snapshot();
         executor.finish(&snapshot, &job.cancellation).await?;
+        let snapshot = job.snapshot();
+        let undo = executor.undo_evidence(&snapshot, &job.cancellation).await?;
         let mut state = job.lock();
+        state.operation.undo = undo;
         let terminal = if state.operation.errors.is_empty() {
             OperationState::Completed
         } else {
@@ -725,6 +739,7 @@ impl Scheduler {
                 state: state_payload(state),
             },
         );
+        self.observe(operation);
         Ok(())
     }
 
@@ -781,6 +796,7 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
             crate::OperationKind::Duplicate => OperationKindPayload::Duplicate,
             crate::OperationKind::Trash => OperationKindPayload::Trash,
             crate::OperationKind::Delete => OperationKindPayload::Delete,
+            crate::OperationKind::Undo => OperationKindPayload::Undo,
         },
         state: state_payload(operation.state),
         sources: operation.sources.iter().map(entry_payload).collect(),
@@ -796,6 +812,43 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
         created_at: operation.created_at,
         started_at: operation.started_at,
         completed_at: operation.completed_at,
+        undo: Some(operation_undo_payload(operation)),
+        undo_of: operation.undo_of,
+    }
+}
+
+fn operation_undo_payload(operation: &Operation) -> OperationUndoPayload {
+    if let Some(id) = operation.undo.undone_by {
+        return OperationUndoPayload {
+            available: false,
+            reason: Some("This operation has already been undone.".into()),
+            operation_id: Some(id),
+        };
+    }
+    if let Some(id) = operation.undo.pending_operation {
+        return OperationUndoPayload {
+            available: false,
+            reason: Some("Undo is already in progress for this operation.".into()),
+            operation_id: Some(id),
+        };
+    }
+    let available = operation.undo.plan.is_some()
+        && matches!(
+            operation.state,
+            OperationState::Completed | OperationState::CompletedWithWarnings
+        );
+    OperationUndoPayload {
+        available,
+        reason: if available {
+            None
+        } else {
+            operation
+                .undo
+                .unavailable_reason
+                .clone()
+                .or_else(|| Some("This operation cannot currently be undone safely.".into()))
+        },
+        operation_id: None,
     }
 }
 

@@ -100,10 +100,12 @@ import { TauriEventStream } from '../events/tauri-event-stream';
 import type { DirectorySnapshotDto } from '../generated/models/directorySnapshotDto';
 import type { EntryMetadataDto } from '../generated/models/entryMetadataDto';
 import type { EntrySummaryDto } from '../generated/models/entrySummaryDto';
+import type { OperationDto } from '../generated/models/operationDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 import type { WorkspaceDto } from '../generated/models/workspaceDto';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
+import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
 
 /**
@@ -463,16 +465,20 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<GitFileHistoryResult>('get_file_git_history', { request });
   }
 
-  startOperation(request: StartOperationRequest, _signal?: AbortSignal): Promise<Operation> {
-    return invoke<Operation>('start_operation', { request });
+  async startOperation(request: StartOperationRequest, _signal?: AbortSignal): Promise<Operation> {
+    return operationFromDto(await invoke<OperationDto>('start_operation', { request }));
   }
 
-  listOperations(_signal?: AbortSignal): Promise<Operation[]> {
-    return invoke<Operation[]>('list_operations');
+  async listOperations(_signal?: AbortSignal): Promise<Operation[]> {
+    return (await invoke<OperationDto[]>('list_operations')).map(operationFromDto);
   }
 
   async cancelOperation(operationId: OperationId, _signal?: AbortSignal): Promise<void> {
     await invoke('cancel_operation', { operationId });
+  }
+
+  async undoOperation(operationId: OperationId, _signal?: AbortSignal): Promise<Operation> {
+    return operationFromDto(await invoke<OperationDto>('undo_operation', { operationId }));
   }
 
   async pauseOperation(operationId: OperationId, _signal?: AbortSignal): Promise<void> {

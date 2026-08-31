@@ -127,6 +127,8 @@ impl ChecksumCoordinator {
                     created_at: chrono::Utc::now(),
                     started_at: None,
                     completed_at: None,
+                    undo: None,
+                    undo_of: None,
                 },
             },
         );
@@ -383,6 +385,8 @@ impl ChecksumCoordinator {
                     created_at: chrono::Utc::now(),
                     started_at: None,
                     completed_at: None,
+                    undo: None,
+                    undo_of: None,
                 },
             },
         );

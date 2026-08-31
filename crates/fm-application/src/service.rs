@@ -517,6 +517,11 @@ impl FileManagerService {
         self.operations.get(id)
     }
 
+    /// Starts a guarded operation-engine job that reverses a completed operation.
+    pub fn undo_operation(&self, id: OperationId) -> Result<OperationDto, ApplicationError> {
+        self.operations.undo(id)
+    }
+
     /// Requests cancellation of an operation.
     ///
     /// Searches, comparisons, checksum jobs and duplicate scans are not
@@ -3548,6 +3553,36 @@ mod tests {
         }
     }
 
+    struct RestorableTrashAdapter {
+        directory: PathBuf,
+    }
+
+    impl fm_platform::PlatformAdapter for RestorableTrashAdapter {
+        fn capabilities(&self) -> PlatformCapabilities {
+            PlatformCapabilities::TRASH
+        }
+
+        fn trash_with_restore_location(
+            &self,
+            path: &Path,
+        ) -> Result<Option<PathBuf>, fm_platform::PlatformError> {
+            std::fs::create_dir_all(&self.directory).map_err(|_| {
+                fm_platform::PlatformError::Io {
+                    message: "could not create test trash directory".into(),
+                }
+            })?;
+            let destination = self.directory.join(path.file_name().ok_or_else(|| {
+                fm_platform::PlatformError::Io {
+                    message: "trash path has no file name".into(),
+                }
+            })?);
+            std::fs::rename(path, &destination).map_err(|_| fm_platform::PlatformError::Io {
+                message: "could not move test item to trash".into(),
+            })?;
+            Ok(Some(destination))
+        }
+    }
+
     async fn wait_for_terminal_operation(
         service: &FileManagerService,
         id: fm_domain::OperationId,
@@ -3573,7 +3608,8 @@ mod tests {
         let first = dir.path().join("trash-me.txt");
         let second = dir.path().join("trash-me-too.txt");
         std::fs::write(&first, b"1").expect("write first fixture");
-        std::fs::write(&second, b"2").expect("write second fixture");
+        std::fs::create_dir(&second).expect("create second fixture");
+        std::fs::write(second.join("nested.txt"), b"2345").expect("write nested fixture");
 
         let started = service
             .start_operation(trash_request(&[&first, &second]), None)
@@ -3581,10 +3617,62 @@ mod tests {
         let result = wait_for_terminal_operation(&service, started.id.into()).await;
 
         assert_eq!(result.state, OperationStateDto::Completed);
+        assert_eq!(result.progress.total_items, Some(2));
+        assert_eq!(result.progress.completed_items, 2);
+        assert_eq!(result.progress.total_bytes, Some(5));
+        assert_eq!(result.progress.completed_bytes, 5);
         assert_eq!(adapter.trashed.lock().unwrap().as_slice(), [first, second]);
         // Trashing never routes through a `FileSystemProvider::remove` call,
         // so the fixtures are untouched by this test double; only the real
         // macOS adapter test (`fm-platform-macos`) exercises an actual move.
+    }
+
+    #[tokio::test]
+    async fn trash_undo_restores_a_directory_with_read_only_descendants() {
+        let dir = tempfile::tempdir().expect("must create a temp dir");
+        let source = dir.path().join("trash-me");
+        let file = source.join(".git/objects/pack/index.idx");
+        std::fs::create_dir_all(file.parent().expect("fixture file must have a parent"))
+            .expect("create fixture tree");
+        std::fs::write(&file, b"content").expect("write fixture");
+        let mut permissions = std::fs::metadata(&file)
+            .expect("read fixture metadata")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&file, permissions).expect("make fixture read-only");
+        let service = FileManagerService::with_platform_adapter(
+            RuntimeKindDto::Tauri,
+            dir.path().join("workspaces"),
+            dir.path().join("settings"),
+            EventBus::default(),
+            Arc::new(RestorableTrashAdapter {
+                directory: dir.path().join("trash"),
+            }),
+        );
+
+        let started = service
+            .start_operation(trash_request(&[&source]), None)
+            .expect("trash must be accepted");
+        let completed = wait_for_terminal_operation(&service, started.id.into()).await;
+        assert!(completed.undo.available);
+        assert!(!source.exists());
+
+        let undo = service
+            .undo_operation(started.id.into())
+            .expect("trash undo must be accepted");
+        let undone = wait_for_terminal_operation(&service, undo.id.into()).await;
+        assert_eq!(undone.state, OperationStateDto::Completed);
+        assert_eq!(std::fs::read(&file).expect("restored fixture"), b"content");
+        #[cfg(windows)]
+        {
+            let mut permissions = std::fs::metadata(&file)
+                .expect("read restored fixture metadata")
+                .permissions();
+            // On Windows this clears the read-only file attribute; the Unix warning is inapplicable.
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            std::fs::set_permissions(file, permissions).expect("make restored fixture writable");
+        }
     }
 
     #[test]

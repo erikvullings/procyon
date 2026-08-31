@@ -8,7 +8,6 @@ import type {
   Operation,
   OperationConflict,
   OperationId,
-  OperationState,
   PaneId,
   PluginDescriptor,
   ScanDiskUsageResult,
@@ -29,19 +28,11 @@ import {
   dismissOperation,
   type OperationCentreState,
   reduceOperationEvents,
+  shouldAutoDismissOperation,
 } from '../operations/operation-state';
 
 const FAST_OPERATION_DISMISS_THRESHOLD_MS = 500;
 const AUTO_DISMISS_DELAY_MS = 5_000;
-
-function isAutoDismissibleState(state: OperationState): boolean {
-  return (
-    state === 'completed' ||
-    state === 'completedWithWarnings' ||
-    state === 'cancelled' ||
-    state === 'interrupted'
-  );
-}
 
 function shouldRefreshOnTerminalOperation(operation: Operation): boolean {
   if (operation.kind === 'search' || operation.kind === 'compare') return false;
@@ -264,7 +255,7 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
                 ctx.removeOperationSourcesFromSearchResults(current);
                 ctx.removeOperationSourcesFromDiskUsage(current);
               }
-              if (!isAutoDismissibleState(current.state)) continue;
+              if (!shouldAutoDismissOperation(current)) continue;
               if (
                 Date.now() - Date.parse(current.createdAt) <
                 FAST_OPERATION_DISMISS_THRESHOLD_MS

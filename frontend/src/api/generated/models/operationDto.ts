@@ -9,6 +9,7 @@ import type { OperationEntryErrorDto } from './operationEntryErrorDto.ts';
 import type { OperationKindDto } from './operationKindDto.ts';
 import type { OperationProgressDto } from './operationProgressDto.ts';
 import type { OperationStateDto } from './operationStateDto.ts';
+import type { OperationUndoDto } from './operationUndoDto.ts';
 
 /**
  * Complete transport snapshot of an operation.
@@ -52,4 +53,11 @@ export interface OperationDto {
   state: OperationStateDto;
   /** Semantic operation discriminator. */
   type: OperationKindDto;
+  /** Whether this completed operation can currently be undone and, if not, why. */
+  undo: OperationUndoDto;
+  /**
+     * Original operation reversed by this undo job.
+     * @nullable
+     */
+  undoOf?: string | null;
 }

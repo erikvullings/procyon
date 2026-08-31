@@ -265,7 +265,8 @@ fn command_workspace_id(command: &WorkspaceCommandDto) -> Uuid {
         | WorkspaceCommandDto::ActivateTab { workspace_id, .. }
         | WorkspaceCommandDto::NavigateTab { workspace_id, .. }
         | WorkspaceCommandDto::UpdateView { workspace_id, .. }
-        | WorkspaceCommandDto::UpdateLayout { workspace_id, .. } => *workspace_id,
+        | WorkspaceCommandDto::UpdateLayout { workspace_id, .. }
+        | WorkspaceCommandDto::UpdateOperationCentre { workspace_id, .. } => *workspace_id,
     }
 }
 
@@ -281,5 +282,6 @@ fn workspace_command_kind(command: &WorkspaceCommandDto) -> &'static str {
         WorkspaceCommandDto::NavigateTab { .. } => "navigateTab",
         WorkspaceCommandDto::UpdateView { .. } => "updateView",
         WorkspaceCommandDto::UpdateLayout { .. } => "updateLayout",
+        WorkspaceCommandDto::UpdateOperationCentre { .. } => "updateOperationCentre",
     }
 }

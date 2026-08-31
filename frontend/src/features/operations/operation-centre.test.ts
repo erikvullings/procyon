@@ -51,11 +51,21 @@ describe('operation progress reducer', () => {
         operationId: 'a',
         progress: { completedItems: 1, completedBytes: 256 },
       }),
-      event(4, { type: 'operation.completed', operation: operation('completed', 'b') }),
+      event(4, {
+        type: 'operation.completed',
+        operation: {
+          ...operation('completed', 'b'),
+          undo: { available: true },
+        },
+      }),
     ]);
 
     expect(next.byId.a).toMatchObject({ state: 'running', progress: { completedItems: 1 } });
-    expect(next.byId.b).toMatchObject({ state: 'completed', progress: { completedItems: 2 } });
+    expect(next.byId.b).toMatchObject({
+      state: 'completed',
+      progress: { completedItems: 2 },
+      undo: { available: true },
+    });
   });
 
   it('retains failure details and ignores progress for unknown operations', () => {
@@ -133,6 +143,27 @@ describe('OperationCentre states', () => {
     root.remove();
   });
 
+  it('offers an accessible close control without affecting operation actions', () => {
+    const onClose = vi.fn();
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+          onClose,
+        }),
+    });
+
+    const close = root.querySelector<HTMLButtonElement>('.fm-operation-centre-close');
+    expect(close?.getAttribute('aria-label')).toBe('Hide Operations Centre');
+    close?.click();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('shows queued, running, paused, completed, and failed states with appropriate controls', () => {
     const operations = [
       operation('queued'),
@@ -169,7 +200,7 @@ describe('OperationCentre states', () => {
     expect(root.querySelectorAll('.fm-operation')).toHaveLength(5);
     expect(root.textContent).toContain('report.pdf');
     expect(root.textContent).toContain('512 B/s');
-    expect(root.textContent).toContain('Copied 4 items.');
+    expect(root.querySelector('[data-operation-id="completed"] .fm-operation-result')).toBeNull();
     expect(root.textContent).toContain('Could not copy report.pdf.');
     expect(root.querySelector('details')?.textContent).toContain('Permission denied');
     expect(
@@ -202,10 +233,44 @@ describe('OperationCentre states', () => {
     });
 
     const result = root.querySelector('[data-operation-id="cancelled"] .fm-operation-result');
-    expect(result?.textContent).toBe('Cancelled after 2 / 4 items (1 KiB / 2 KiB).');
+    expect(result?.textContent).toBe('Cancelled after 2 / 4 items (1 K / 2 K).');
   });
 
-  it('renders nothing when there are no operations', () => {
+  it('uses a status icon and compact totals for completed operations', () => {
+    const completed: Operation = {
+      ...operation('completed'),
+      progress: {
+        ...operation('completed').progress,
+        completedItems: 21,
+        totalItems: 21,
+        completedBytes: 36_400_000,
+        totalBytes: 36_400_000,
+      },
+    };
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([completed]),
+          formatSettings: { sizeFormat: 'decimal', dateFormat: 'medium', locale: 'en-US' },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const summary = root.querySelector('.fm-operation-summary');
+    expect(summary?.textContent).toContain('Copy✓');
+    expect(summary?.textContent).toContain('21 items');
+    expect(summary?.textContent).toContain('36.4 M');
+    expect(summary?.textContent).not.toContain('Completed');
+    expect(summary?.textContent).not.toContain('21 / 21');
+    expect(summary?.querySelector('.fm-operation-state')?.getAttribute('aria-label')).toBe(
+      'Completed',
+    );
+  });
+
+  it('renders an empty state when there are no operations', () => {
     m.mount(root, {
       view: () =>
         m(OperationCentre, {
@@ -217,8 +282,8 @@ describe('OperationCentre states', () => {
         }),
     });
 
-    expect(root.querySelector('.fm-operation-centre')).toBeNull();
-    expect(root.textContent).toBe('');
+    expect(root.querySelector('.fm-operation-centre')).not.toBeNull();
+    expect(root.textContent).toBe('No operations to show.');
   });
 
   it('shows a match count instead of the current-entry filename for a running search', () => {
@@ -293,13 +358,81 @@ describe('OperationCentre states', () => {
         }),
     });
 
-    const result = root.querySelector('[data-operation-id="warned-copy"] .fm-operation-result');
-    expect(result?.textContent).toContain('Completed with 1 warning.');
+    expect(root.querySelector('[data-operation-id="warned-copy"] .fm-operation-result')).toBeNull();
     const warningText = root.querySelector(
       '[data-operation-id="warned-copy"] .fm-operation-warning',
     );
     expect(warningText?.textContent).toContain(
       'existing-folder: Skipped because destination already exists.',
     );
+  });
+
+  it('offers undo only when history marks it safe and explains unavailable entries', () => {
+    const onUndo = vi.fn();
+    const undoable: Operation = {
+      ...operation('completed', 'undoable'),
+      sources: [
+        {
+          id: 'report',
+          location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+        },
+        {
+          id: 'notes',
+          location: { providerId: 'local', uri: 'file:///Documents/notes.txt' },
+        },
+      ],
+      completedAt: '2026-08-31T15:00:02Z',
+      undo: { available: true },
+    };
+    const irreversible: Operation = {
+      ...operation('completed', 'irreversible'),
+      undo: { available: false, reason: 'Permanent delete cannot be undone.' },
+    };
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([undoable, irreversible]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onUndo,
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    root
+      .querySelector<HTMLButtonElement>('[data-operation-id="undoable"] [data-action="undo"]')
+      ?.click();
+    expect(onUndo).toHaveBeenCalledWith('undoable');
+    expect(root.querySelector('[data-operation-id="undoable"] [data-action="dismiss"]')).toBeNull();
+    expect(
+      root.querySelector<HTMLTimeElement>('[data-operation-id="undoable"] time')?.dateTime,
+    ).toBe('2026-08-31T15:00:02Z');
+    const sources = root.querySelector('[data-operation-id="undoable"] .fm-operation-sources');
+    expect(sources?.tagName).toBe('DETAILS');
+    expect(sources?.hasAttribute('open')).toBe(false);
+    expect(sources?.querySelector('.fm-operation-source-preview')?.textContent).toBe(
+      'report.pdf, notes.txt',
+    );
+    expect(sources?.querySelector('summary')?.getAttribute('aria-label')).toBe(
+      'Show or hide file list',
+    );
+    expect([...(sources?.querySelectorAll('li') ?? [])].map((item) => item.textContent)).toEqual([
+      'report.pdf',
+      'notes.txt',
+    ]);
+    expect(root.querySelector('[data-operation-id="undoable"] progress')).toBeNull();
+    expect(root.querySelector('[data-operation-id="undoable"] .fm-operation-result')).toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] [data-action="undo"]'),
+    ).toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] [data-action="dismiss"]'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="irreversible"] .fm-operation-undo-reason')
+        ?.textContent,
+    ).toBe('Permanent delete cannot be undone.');
   });
 });

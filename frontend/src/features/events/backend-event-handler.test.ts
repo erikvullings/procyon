@@ -961,5 +961,47 @@ describe('createBackendEventHandler', () => {
         completedOperation,
       );
     });
+
+    it('does not auto-dismiss a completed operation while undo remains available', () => {
+      const runningOperation: Operation = {
+        id: 'undoable-trash' as never,
+        kind: 'trash',
+        state: 'running',
+        sources: [],
+        progress: { completedItems: 0, completedBytes: 0 },
+        conflictPolicy: 'ask',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+      const completedOperation: Operation = {
+        ...runningOperation,
+        state: 'completed',
+        undo: { available: true },
+      };
+      const pending: BackendEvent[] = [];
+      const ctx = makeContext({
+        getOperations: vi.fn(() => createOperationsState([runningOperation])),
+        pushPendingOperationEvent: vi.fn((event: BackendEvent) => pending.push(event)),
+        clearPendingOperationEvents: vi.fn(() => pending.splice(0)),
+      });
+      const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+
+      try {
+        createBackendEventHandler(ctx)(
+          makeEvent({ type: 'operation.completed', operation: completedOperation }, WS_ID),
+        );
+      } finally {
+        raf.mockRestore();
+      }
+
+      expect(ctx.scheduleAutoDismiss).not.toHaveBeenCalled();
+      expect(ctx.setOperations).toHaveBeenCalledWith(
+        expect.objectContaining({
+          byId: expect.objectContaining({ 'undoable-trash': completedOperation }),
+        }),
+      );
+    });
   });
 });

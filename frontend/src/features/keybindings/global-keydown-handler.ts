@@ -147,6 +147,8 @@ export interface GlobalKeydownContext {
   toggleTerminal(): void;
   /** Toggles the directory-tree sidebar (Alt+F10, Total Commander parity, task 0139). */
   toggleDirectoryTree(): void;
+  /** Toggles the operation centre (Alt+Z). */
+  toggleOperationCentre(): void;
   /** Applies a fixed sort to `paneId`'s active tab (Ctrl+F3..Ctrl+F7). */
   setSort(paneId: PaneId, sort: readonly SortDescriptor[]): void;
   /** Swaps `paneAId` and `paneBId`'s entire tab sets (Ctrl+Shift+U), not just their active locations. */
@@ -311,6 +313,18 @@ export function isDirectoryTreeToggleShortcut(
   return bareModifiers && event.altKey && (event.key === 'F10' || event.code === 'F10');
 }
 
+export function isOperationCentreToggleShortcut(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
+): boolean {
+  return (
+    event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    (event.key.toLowerCase() === 'z' || event.code === 'KeyZ')
+  );
+}
+
 type KeydownRouteState = {
   dispatchedAction: string | undefined;
   forceSystemView: boolean;
@@ -340,6 +354,16 @@ const EARLY_KEYDOWN_ROUTES = [
       if (!isTerminalToggleShortcut(event, context.getKeybindingRuntime())) return false;
       event.preventDefault();
       context.toggleTerminal();
+      context.redraw();
+      return true;
+    },
+  },
+  {
+    id: 'operation-centre-toggle',
+    tryHandle: (context, event) => {
+      if (!isOperationCentreToggleShortcut(event)) return false;
+      event.preventDefault();
+      context.toggleOperationCentre();
       context.redraw();
       return true;
     },

@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fm_domain::{EntryId, OperationId};
-use fm_operations::{ConflictResolution, Operation, Scheduler, SchedulerError};
+use fm_operations::{
+    ConflictPolicy, ConflictResolution, Operation, OperationKind, Scheduler, SchedulerError,
+};
 use fm_transport_dto::{
     ConflictResolutionDto, OperationConflictPolicyDto, OperationDto, OperationPageDto,
     ResolveOperationConflictRequestDto, StartOperationRequestDto,
@@ -132,15 +134,50 @@ impl OperationsCoordinator {
     }
 
     pub(crate) fn get(&self, id: OperationId) -> Result<OperationDto, ApplicationError> {
-        self.scheduler
-            .get(id)
-            .map(|operation| operation_dto(operation, None))
-            .map_err(map_scheduler_error)
-            .or_else(|error| self.history.get(id).ok_or(error))
+        match self.scheduler.get(id) {
+            Ok(operation) if operation.state.is_terminal() => self
+                .history
+                .get(id)
+                .or_else(|| Some(operation_dto(operation, None)))
+                .ok_or(ApplicationError::NotFound),
+            Ok(operation) => Ok(operation_dto(operation, None)),
+            Err(error) => self
+                .history
+                .get(id)
+                .ok_or_else(|| map_scheduler_error(error)),
+        }
     }
 
     pub(crate) fn cancel(&self, id: OperationId) -> Result<(), SchedulerError> {
         self.scheduler.cancel(id)
+    }
+
+    pub(crate) fn undo(&self, id: OperationId) -> Result<OperationDto, ApplicationError> {
+        let original = self.history.record(id).ok_or(ApplicationError::NotFound)?;
+        let mut operation = Operation::new(
+            OperationKind::Undo,
+            original.sources.clone(),
+            original.destination.clone(),
+            ConflictPolicy::Ask,
+        );
+        operation.undo_of = Some(id);
+        let undo_id = operation.id;
+        let (_, plan) = self
+            .history
+            .reserve_undo(id, undo_id)
+            .map_err(ApplicationError::InvalidRequest)?;
+        let executor = match self.planner.plan_undo(plan) {
+            Ok(executor) => executor,
+            Err(error) => {
+                self.history.release_undo(id, undo_id);
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.scheduler.submit(operation, executor) {
+            self.history.release_undo(id, undo_id);
+            return Err(map_scheduler_error(error));
+        }
+        self.get(undo_id)
     }
 
     pub(crate) fn force_cross_volume_moves_for_tests(&self, force: bool) {

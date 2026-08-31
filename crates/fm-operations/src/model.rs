@@ -29,6 +29,12 @@ pub struct Operation {
     pub completed_at: Option<DateTime<Utc>>,
     /// Entry-scoped failures that did not abort the whole operation.
     pub errors: Vec<OperationEntryError>,
+    /// Persisted evidence and lifecycle for safely reversing this operation.
+    #[serde(default)]
+    pub undo: OperationUndo,
+    /// Original operation reversed by this job, for audit/history linkage.
+    #[serde(default)]
+    pub undo_of: Option<OperationId>,
 }
 
 impl Operation {
@@ -52,6 +58,8 @@ impl Operation {
             started_at: None,
             completed_at: None,
             errors: Vec::new(),
+            undo: OperationUndo::default(),
+            undo_of: None,
         }
     }
 
@@ -63,15 +71,131 @@ impl Operation {
                 to: next,
             });
         }
+
         self.state = next;
         let now = Utc::now();
         if next == OperationState::Planning && self.started_at.is_none() {
             self.started_at = Some(now);
         }
+
         if next.is_terminal() {
             self.completed_at = Some(now);
         }
         Ok(())
+    }
+}
+
+/// A conservative identity/revision snapshot used before applying an inverse mutation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntryFingerprint {
+    /// Stable provider identity observed after the original operation.
+    pub entry: EntryRef,
+    /// Whether repeated provider inspection proved the entry id stable.
+    #[serde(default)]
+    pub stable_id: bool,
+    /// Entry kind, which must remain unchanged.
+    pub kind: EntryKind,
+    /// Logical size reported by the provider.
+    pub size: Option<u64>,
+    /// Last modification timestamp reported by the provider.
+    pub modified_at: Option<DateTime<Utc>>,
+    /// BLAKE3 content hash used when the provider has no stable identity.
+    #[serde(default)]
+    pub content_hash: Option<String>,
+}
+
+/// One inverse mutation retained with a completed operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum UndoAction {
+    /// Move an unchanged entry back to its original location.
+    MoveBack {
+        /// Location occupied before the original operation.
+        original: Location,
+        /// Fingerprint observed at the original location before mutation.
+        original_fingerprint: EntryFingerprint,
+        /// Fingerprint at the location produced by the original operation.
+        current: EntryFingerprint,
+    },
+    /// Copy an unchanged entry tree back across providers, then remove the moved output.
+    CrossProviderMoveBack {
+        /// Location occupied before the original operation.
+        original: Location,
+        /// Root fingerprint observed before the original operation.
+        original_fingerprint: EntryFingerprint,
+        /// Root at the destination produced by the original operation.
+        current_root: EntryFingerprint,
+        /// Every output entry, used to reject modifications anywhere in the tree.
+        current_entries: Vec<EntryFingerprint>,
+    },
+    /// Remove entries created by copy/duplicate, after verifying every fingerprint.
+    RemoveCreated {
+        /// Created entries, including descendants, in parent-before-child order.
+        entries: Vec<EntryFingerprint>,
+    },
+    /// Restore a platform-trash entry to its recorded original location.
+    RestoreTrash {
+        /// Location occupied before trashing.
+        original: Location,
+        /// Fingerprint at the native trash location returned by the platform.
+        trashed: EntryFingerprint,
+    },
+}
+
+/// Explicit inverse plan persisted with operation history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UndoPlan {
+    /// Ordered inverse mutations.
+    pub actions: Vec<UndoAction>,
+}
+
+/// Persisted undo evidence and whether it has already been consumed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationUndo {
+    /// Safe inverse plan, absent when the operation cannot be reversed.
+    pub plan: Option<UndoPlan>,
+    /// Stable user-facing explanation when no plan can be offered.
+    pub unavailable_reason: Option<String>,
+    /// Undo job currently reserved for this operation.
+    pub pending_operation: Option<OperationId>,
+    /// Successfully completed undo job.
+    pub undone_by: Option<OperationId>,
+}
+
+impl Default for OperationUndo {
+    fn default() -> Self {
+        Self {
+            plan: None,
+            unavailable_reason: Some(
+                "Undo is available only after the operation completes.".into(),
+            ),
+            pending_operation: None,
+            undone_by: None,
+        }
+    }
+}
+
+impl OperationUndo {
+    /// Records a safe persisted inverse plan.
+    #[must_use]
+    pub fn available(plan: UndoPlan) -> Self {
+        Self {
+            plan: Some(plan),
+            unavailable_reason: None,
+            pending_operation: None,
+            undone_by: None,
+        }
+    }
+
+    /// Records why no safe inverse can be offered.
+    #[must_use]
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            plan: None,
+            unavailable_reason: Some(reason.into()),
+            pending_operation: None,
+            undone_by: None,
+        }
     }
 }
 
@@ -180,6 +304,8 @@ pub enum OperationKind {
     Trash,
     /// Permanently delete entries.
     Delete,
+    /// Safely reverse a completed operation.
+    Undo,
 }
 
 /// Observable progress for one operation.
