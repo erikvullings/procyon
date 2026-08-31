@@ -1660,24 +1660,35 @@ describe('Pane navigation input', () => {
     });
   });
 
-  it('prompts for a mask and dispatches visible matching entry ids', () => {
-    const prompt = vi
-      .spyOn(window, 'prompt')
-      .mockReturnValueOnce('*.txt')
-      .mockReturnValueOnce('two.*');
+  it('prompts for a mask from Shift+= and dispatches visible matching entry ids', () => {
     const onSelectionAction = vi.fn();
     mount(attrs({ onSelectionAction }));
     const pane = root.querySelector<HTMLElement>('.fm-pane');
 
     pane?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: '+', code: 'NumpadAdd', bubbles: true }),
+      new KeyboardEvent('keydown', {
+        key: '+',
+        code: 'Equal',
+        shiftKey: true,
+        bubbles: true,
+      }),
     );
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.fm-selection-mask-modal input');
+    expect(input?.value).toBe('*.*');
+    if (input === null) throw new Error('selection mask input missing');
+    input.value = '*.txt';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
     pane?.dispatchEvent(
       new KeyboardEvent('keydown', { key: '-', code: 'NumpadSubtract', bubbles: true }),
     );
+    m.redraw.sync();
+    input.value = 'two.*';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
-    expect(prompt).toHaveBeenNthCalledWith(1, 'Select files matching mask', '*.*');
-    expect(prompt).toHaveBeenNthCalledWith(2, 'Deselect files matching mask', '*.*');
     expect(onSelectionAction.mock.calls.map(([action]) => action)).toEqual([
       { type: 'selectByMask', matchingEntryIds: ['one', 'two'] },
       { type: 'deselectByMask', matchingEntryIds: ['two'] },

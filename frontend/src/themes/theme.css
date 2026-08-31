@@ -1434,7 +1434,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 /* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
 
-.fm-create-directory-field {
+.fm-create-directory-field,
+.fm-selection-mask-field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -1449,7 +1450,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * `.fm-app-shell` brings this rule to the same specificity, and it wins the
  * tie because this file loads after mm's stylesheets.
  */
-.fm-app-shell .fm-create-directory-field input {
+.fm-app-shell .fm-create-directory-field input,
+.fm-app-shell .fm-selection-mask-field input {
   box-sizing: border-box;
   width: 100%;
   height: var(--fm-row-height);
@@ -1462,7 +1464,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font: inherit;
 }
 
-.fm-app-shell .fm-create-directory-field input:focus {
+.fm-app-shell .fm-create-directory-field input:focus,
+.fm-app-shell .fm-selection-mask-field input:focus {
   outline: none;
   border-color: var(--fm-accent);
 }
