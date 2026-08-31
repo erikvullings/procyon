@@ -142,16 +142,24 @@ function syncScrollbarWidth(viewport: HTMLElement): void {
   if (current !== next) table.style.setProperty('--fm-scrollbar-width', next);
 }
 
+function fileExtension(entry: EntrySummary): string | undefined {
+  if (entry.kind !== 'file') return undefined;
+  if (entry.extension !== undefined && entry.extension.length > 0) return entry.extension;
+
+  const separatorIndex = entry.name.lastIndexOf('.');
+  return separatorIndex > 0 && separatorIndex < entry.name.length - 1
+    ? entry.name.slice(separatorIndex + 1)
+    : undefined;
+}
+
 function typeLabel(entry: EntrySummary): string {
-  if (entry.kind === 'directory' || entry.kind === 'symlink') {
-    return '';
-  }
-  return entry.extension ?? entry.mimeType ?? t('table', 'file');
+  if (entry.kind === 'directory' || entry.kind === 'symlink') return '';
+  return fileExtension(entry) ?? entry.mimeType ?? t('table', 'file');
 }
 
 function displayName(entry: EntrySummary, separateExtension: boolean): string {
   if (!separateExtension || entry.kind !== 'file') return entry.name;
-  const extension = entry.extension;
+  const extension = fileExtension(entry);
   if (extension === undefined || extension.length === 0) return entry.name;
   const suffix = `.${extension}`;
   if (

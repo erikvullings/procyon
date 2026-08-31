@@ -631,11 +631,16 @@ describe('DirectoryTable rows', () => {
       name: 'folder.txt',
       kind: 'directory',
     });
+    const { extension: _inferredExtension, ...inferred } = entry({
+      id: 'inferred',
+      name: 'inferred.md',
+    });
     mount({
       state: { type: 'loaded' },
       source: entryArraySource([
         entry({ id: 'report', name: 'report.txt', extension: 'txt' }),
         entry({ id: 'archive', name: 'archive.tar.gz', extension: 'gz' }),
+        inferred,
         directory,
         entry({ id: 'dotfile', name: '.env', extension: 'env' }),
       ]),
@@ -647,12 +652,14 @@ describe('DirectoryTable rows', () => {
     expect(rows.map((row) => row.querySelector('.fm-entry-name')?.textContent)).toEqual([
       'report',
       'archive.tar',
+      'inferred',
       'folder.txt',
       '.env',
     ]);
     expect(rows.map((row) => row.querySelector('.fm-directory-type')?.textContent)).toEqual([
       'txt',
       'gz',
+      'md',
       '',
       'env',
     ]);
