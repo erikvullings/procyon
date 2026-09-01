@@ -922,6 +922,51 @@ describe('file viewer controller', () => {
     });
   });
 
+  it('sorts populated spreadsheet cells before blank cells in ascending order', async () => {
+    const context = setup();
+    vi.mocked(context.client.openStructuredView).mockResolvedValue({
+      sessionId: 'excel-session',
+      kind: 'table',
+      sourceRevision: 'r1',
+      sourceBytes: 800_000,
+      randomAccess: true,
+      headerMode: 'none',
+      headers: ['A'],
+      rows: [
+        { index: 0, cells: [] },
+        { index: 1, cells: ['Zulu'] },
+        { index: 2, cells: ['Alpha'] },
+        { index: 3, cells: [] },
+      ],
+      sheets: [{ name: 'Sheet1', rowCount: 4, columnCount: 1 }],
+      selectedSheet: 'Sheet1',
+      indexedBytes: 800_000,
+      indexedRows: 4,
+      totalRows: 4,
+      indexingComplete: true,
+    });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'people.xlsx', extension: 'xlsx' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    await controller.sortStructuredRows(0);
+
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        rows: [
+          { index: 0, cells: ['Alpha'] },
+          { index: 1, cells: ['Zulu'] },
+          { index: 2, cells: [] },
+          { index: 3, cells: [] },
+        ],
+        sortDirection: 'ascending',
+      },
+    });
+  });
+
   it('runs a search and jumps to the first match', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValueOnce({

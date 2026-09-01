@@ -131,6 +131,7 @@ export interface FileViewerStructuredTableContent {
   readonly searchMatches: readonly StructuredRow[];
   readonly searchNextCursor: number | undefined;
   readonly searching: boolean;
+  readonly showRowNumbers?: boolean;
   readonly sortColumn?: number;
   readonly sortDirection?: 'ascending' | 'descending';
 }
@@ -339,6 +340,7 @@ export interface FileViewerController {
   loadStructuredRows(startRow: number): Promise<void>;
   setStructuredOptions(delimiter: string, headerMode: 'auto' | 'firstRow' | 'none'): Promise<void>;
   selectStructuredSheet(sheetName: string): Promise<void>;
+  toggleStructuredRowNumbers(): void;
   loadJsonWindow(offset: number): Promise<void>;
   searchStructuredRows(query: string, cursor?: number): Promise<void>;
   sortStructuredRows(column: number): Promise<void>;
@@ -604,6 +606,7 @@ export function createFileViewerController(
         searchMatches: [],
         searchNextCursor: undefined,
         searching: false,
+        showRowNumbers: false,
       },
     });
     if (!opened.indexingComplete) scheduleStructuredStatusPoll();
@@ -1279,6 +1282,17 @@ export function createFileViewerController(
     }
   }
 
+  function toggleStructuredRowNumbers(): void {
+    if (current.status !== 'ready' || current.content.kind !== 'structuredTable') return;
+    publish({
+      ...current,
+      content: {
+        ...current.content,
+        showRowNumbers: current.content.showRowNumbers !== true,
+      },
+    });
+  }
+
   async function loadJsonWindow(offset: number): Promise<void> {
     if (
       current.status !== 'ready' ||
@@ -1406,14 +1420,14 @@ export function createFileViewerController(
       }
     }
     rows.sort((left, right) => {
-      const comparison = (left.cells[column] ?? '').localeCompare(
-        right.cells[column] ?? '',
-        undefined,
-        {
-          numeric: true,
-          sensitivity: 'base',
-        },
-      );
+      const leftValue = left.cells[column] ?? '';
+      const rightValue = right.cells[column] ?? '';
+      if (leftValue === '') return rightValue === '' ? 0 : 1;
+      if (rightValue === '') return -1;
+      const comparison = leftValue.localeCompare(rightValue, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
       return direction === 'ascending' ? comparison : -comparison;
     });
     if (current.status !== 'ready' || current.content.kind !== 'structuredTable') return;
@@ -1943,6 +1957,7 @@ export function createFileViewerController(
     loadStructuredRows,
     setStructuredOptions,
     selectStructuredSheet,
+    toggleStructuredRowNumbers,
     loadJsonWindow,
     searchStructuredRows,
     sortStructuredRows,

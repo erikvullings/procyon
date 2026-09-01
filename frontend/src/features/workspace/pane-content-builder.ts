@@ -858,6 +858,8 @@ export function createPaneContentBuilder(
                       void viewer.controller.setStructuredOptions(delimiter, headerMode),
                     onSelectStructuredSheet: (sheetName) =>
                       void viewer.controller.selectStructuredSheet(sheetName),
+                    onToggleStructuredRowNumbers: () =>
+                      viewer.controller.toggleStructuredRowNumbers(),
                     onLoadJsonWindow: (offset) => void viewer.controller.loadJsonWindow(offset),
                     onSearchStructuredRows: (query, cursor) =>
                       void viewer.controller.searchStructuredRows(query, cursor),

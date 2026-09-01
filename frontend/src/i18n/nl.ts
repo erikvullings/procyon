@@ -461,6 +461,8 @@ export const nl = {
     structuredNoHeader: 'Geen kopregel',
     structuredSearchRows: 'Geïndexeerde rijen zoeken/filteren',
     structuredRows: '{count} rijen',
+    structuredRowsToggle: 'Rijen',
+    structuredShowRowNumbers: 'Rijnummers tonen',
     structuredIndexedRows: '{count} rijen geïndexeerd…',
     structuredSortColumn: 'Op deze kolom sorteren',
     structuredColumn: 'Kolom {number}',
