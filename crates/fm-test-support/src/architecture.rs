@@ -55,6 +55,7 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-platform-macos", 2),
     ("fm-platform-windows", 2),
     ("fm-plugin-runtime", 2),
+    ("fm-pptx-renderer", 2),
     ("fm-search", 2),
     ("fm-settings", 2),
     ("fm-vcs-status", 2),
