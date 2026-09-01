@@ -11,11 +11,16 @@ import type { JsonTokenSpanDto } from '../api/generated/models/jsonTokenSpanDto'
 import type { LoadEditableFileResponseDto } from '../api/generated/models/loadEditableFileResponseDto';
 import type { OpenDocxPreviewRequestDto } from '../api/generated/models/openDocxPreviewRequestDto';
 import type { OpenDocxPreviewResponseDto } from '../api/generated/models/openDocxPreviewResponseDto';
+import type { OpenPptxPreviewRequestDto } from '../api/generated/models/openPptxPreviewRequestDto';
+import type { OpenPptxPreviewResponseDto } from '../api/generated/models/openPptxPreviewResponseDto';
 import type { OpenStructuredViewRequestDto } from '../api/generated/models/openStructuredViewRequestDto';
 import type { OpenStructuredViewResponseDto } from '../api/generated/models/openStructuredViewResponseDto';
+import type { PptxPreviewSessionRequestDto } from '../api/generated/models/pptxPreviewSessionRequestDto';
 import type { ReadDocxPreviewResourceRequestDto } from '../api/generated/models/readDocxPreviewResourceRequestDto';
 import type { ReadDocxPreviewResourceResponseDto } from '../api/generated/models/readDocxPreviewResourceResponseDto';
 import type { ReadFileRangeResponseDto } from '../api/generated/models/readFileRangeResponseDto';
+import type { ReadPptxPreviewResourceRequestDto } from '../api/generated/models/readPptxPreviewResourceRequestDto';
+import type { ReadPptxPreviewResourceResponseDto } from '../api/generated/models/readPptxPreviewResourceResponseDto';
 import type { ReadStructuredJsonWindowRequestDto } from '../api/generated/models/readStructuredJsonWindowRequestDto';
 import type { ReadStructuredJsonWindowResponseDto } from '../api/generated/models/readStructuredJsonWindowResponseDto';
 import type { ReadStructuredRowsRequestDto } from '../api/generated/models/readStructuredRowsRequestDto';
@@ -201,6 +206,15 @@ export type DocxPreviewResourceDescriptor = OpenDocxPreviewResponseDto['resource
 export type DocxPreviewSessionRequest = DocxPreviewSessionRequestDto;
 export type ReadDocxPreviewResourceRequest = ReadDocxPreviewResourceRequestDto;
 export type DocxPreviewResource = ReadDocxPreviewResourceResponseDto;
+
+/** Provider-neutral bounded semantic PPTX preview session contracts (task 0173). */
+export type OpenPptxPreviewRequest = OpenPptxPreviewRequestDto;
+export type PptxPreview = OpenPptxPreviewResponseDto;
+export type PptxPreviewResourceDescriptor = OpenPptxPreviewResponseDto['resources'][number];
+export type PptxPreviewSlide = OpenPptxPreviewResponseDto['slides'][number];
+export type PptxPreviewSessionRequest = PptxPreviewSessionRequestDto;
+export type ReadPptxPreviewResourceRequest = ReadPptxPreviewResourceRequestDto;
+export type PptxPreviewResource = ReadPptxPreviewResourceResponseDto;
 
 export interface LoadEditableFileRequest {
   location: Location;

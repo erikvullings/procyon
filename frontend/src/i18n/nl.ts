@@ -413,6 +413,7 @@ export const nl = {
     nextPage: 'Volgende pagina',
     loadingPage: 'Pagina laden…',
     loadingChapter: 'Hoofdstuk laden…',
+    loadingSlide: 'Dia laden…',
     archiveFormat: 'Formaat',
     archiveFiles: 'Bestanden',
     archiveDirectories: 'Mappen',
@@ -447,6 +448,9 @@ export const nl = {
     epubPackageMissing: 'Kan het pakketdocument van deze EPUB niet vinden.',
     docxContentOnly:
       'Alleen inhoudsweergave. Word-opmaakfuncties zijn weggelaten: {features}. Open extern voor volledige weergave.',
+    pptxContentPreview: 'PowerPoint-inhoudsvoorbeeld',
+    pptxContentOnly:
+      'Alleen inhoudsvoorbeeld. PowerPoint-weergavefuncties zijn weggelaten: {features}. Open extern voor volledige weergave.',
     structuredSortLimit: 'Sorteren is beschikbaar voor bestanden tot {size}.',
     structuredSortAfterIndex:
       'Sorteren wordt beschikbaar zodra dit begrensde bestand volledig is geïndexeerd.',

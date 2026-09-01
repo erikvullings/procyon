@@ -1,6 +1,6 @@
 # 0173 PPTX content preview
 
-Status: open
+Status: done
 Priority: low
 Subsystem: backend, frontend
 Depends on: 0088
@@ -54,3 +54,10 @@ leaking a crate-specific model into transport.
 - 2026-08-29: Created from the Office-preview design discussion. This deliberately scopes a useful
   semantic slide reader rather than a PowerPoint-compatible renderer; visual fidelity remains an
   external-application concern.
+- 2026-09-01: Implemented a provider-neutral `PptxPreviewService` using `pptx-to-md`, with
+  application-owned presentation ordering, bounded package/media parsing, retained opaque
+  resources, source-revision checks, cancellation, and equivalent HTTP/Tauri/mock adapters.
+- 2026-09-01: Added the paged F3 content viewer with sanitized per-slide rendering, titles, text,
+  lists, tables, links, notes, images, search, copy, keyboard navigation, explicit fidelity limits,
+  cleanup, and external fallback. Covered parser safety/lifecycle, host routes/adapters, and viewer
+  behavior with focused Rust and frontend tests.

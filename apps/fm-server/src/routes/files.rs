@@ -8,9 +8,11 @@ use fm_transport_dto::{
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
     DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenDocxPreviewRequestDto,
-    OpenDocxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
+    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
     ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewResourceRequestDto,
+    ReadPptxPreviewResourceResponseDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
@@ -124,6 +126,59 @@ pub(crate) async fn close_docx_preview(
     state
         .service
         .close_docx_preview(request)
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+/// Opens a bounded semantic PPTX content-preview session.
+#[utoipa::path(post, path = "/api/v1/files/pptx/open", operation_id = "openPptxPreview",
+    request_body = OpenPptxPreviewRequestDto,
+    responses((status = 200, body = OpenPptxPreviewResponseDto), (status = 400, body = ApplicationErrorDto), (status = 403, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn open_pptx_preview(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<OpenPptxPreviewRequestDto>,
+) -> Result<Json<OpenPptxPreviewResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .open_pptx_preview(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads one bounded embedded image from a PPTX preview session.
+#[utoipa::path(post, path = "/api/v1/files/pptx/resource", operation_id = "readPptxPreviewResource",
+    request_body = ReadPptxPreviewResourceRequestDto,
+    responses((status = 200, body = ReadPptxPreviewResourceResponseDto), (status = 404, body = ApplicationErrorDto), (status = 409, body = ApplicationErrorDto)))]
+pub(crate) async fn read_pptx_preview_resource(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadPptxPreviewResourceRequestDto>,
+) -> Result<Json<ReadPptxPreviewResourceResponseDto>, ApiError> {
+    state
+        .service
+        .read_pptx_preview_resource(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+/// Cancels and releases a PPTX preview session.
+#[utoipa::path(post, path = "/api/v1/files/pptx/close", operation_id = "closePptxPreview",
+    request_body = PptxPreviewSessionRequestDto,
+    responses((status = 204), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn close_pptx_preview(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<PptxPreviewSessionRequestDto>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .service
+        .close_pptx_preview(request)
         .await
         .map(|()| StatusCode::NO_CONTENT)
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))

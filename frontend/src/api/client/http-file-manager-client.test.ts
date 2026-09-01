@@ -37,6 +37,9 @@ const requestReadFileRange = vi.fn();
 const requestOpenDocxPreview = vi.fn();
 const requestReadDocxPreviewResource = vi.fn();
 const requestCloseDocxPreview = vi.fn();
+const requestOpenPptxPreview = vi.fn();
+const requestReadPptxPreviewResource = vi.fn();
+const requestClosePptxPreview = vi.fn();
 const requestSearchInFile = vi.fn();
 const requestOpenStructuredView = vi.fn();
 const requestStructuredViewStatus = vi.fn();
@@ -88,6 +91,9 @@ vi.mock('../generated/file-manager-api', () => ({
   openDocxPreview: (...args: unknown[]) => requestOpenDocxPreview(...args),
   readDocxPreviewResource: (...args: unknown[]) => requestReadDocxPreviewResource(...args),
   closeDocxPreview: (...args: unknown[]) => requestCloseDocxPreview(...args),
+  openPptxPreview: (...args: unknown[]) => requestOpenPptxPreview(...args),
+  readPptxPreviewResource: (...args: unknown[]) => requestReadPptxPreviewResource(...args),
+  closePptxPreview: (...args: unknown[]) => requestClosePptxPreview(...args),
   searchInFile: (...args: unknown[]) => requestSearchInFile(...args),
   openStructuredView: (...args: unknown[]) => requestOpenStructuredView(...args),
   getStructuredViewStatus: (...args: unknown[]) => requestStructuredViewStatus(...args),
@@ -1066,11 +1072,13 @@ describe('HttpFileManagerClient', () => {
         headers: new Headers(),
         data: preview,
       });
+
       requestReadDocxPreviewResource.mockResolvedValue({
         status: 200,
         headers: new Headers(),
         data: { data: [137, 80], mediaType: 'image/png' },
       });
+
       requestCloseDocxPreview.mockResolvedValue({
         status: 204,
         headers: new Headers(),
@@ -1090,6 +1098,52 @@ describe('HttpFileManagerClient', () => {
         client.closeDocxPreview({ sessionId: 'docx-session' }, controller.signal),
       ).resolves.toBeUndefined();
       expect(requestOpenDocxPreview).toHaveBeenCalledWith(
+        { location },
+        expect.objectContaining({ signal: controller.signal }),
+      );
+    });
+
+    it('uses the generated PPTX session endpoints with the caller signal', async () => {
+      const client = new HttpFileManagerClient();
+      const controller = new AbortController();
+      const location = { providerId: 'local', uri: 'file:///briefing.pptx' };
+      const preview = {
+        sessionId: 'pptx-session',
+        sourceRevision: 'r1',
+        sourceBytes: 2048,
+        slides: [{ index: 0, title: 'Overview', markdown: '# Overview' }],
+        resources: [],
+        omittedFeatures: ['charts'],
+      };
+      requestOpenPptxPreview.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: preview,
+      });
+      requestReadPptxPreviewResource.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: { data: [137, 80], mediaType: 'image/png' },
+      });
+      requestClosePptxPreview.mockResolvedValue({
+        status: 204,
+        headers: new Headers(),
+        data: undefined,
+      });
+
+      await expect(client.openPptxPreview({ location }, controller.signal)).resolves.toEqual(
+        preview,
+      );
+      await expect(
+        client.readPptxPreviewResource(
+          { sessionId: 'pptx-session', resourceId: 'image-1' },
+          controller.signal,
+        ),
+      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      await expect(
+        client.closePptxPreview({ sessionId: 'pptx-session' }, controller.signal),
+      ).resolves.toBeUndefined();
+      expect(requestOpenPptxPreview).toHaveBeenCalledWith(
         { location },
         expect.objectContaining({ signal: controller.signal }),
       );

@@ -40,6 +40,7 @@ fm-vfs-sftp.workspace = true
 fm-vfs-webdav.workspace = true
 futures.workspace = true
 parallel-disk-usage.workspace = true
+pptx-to-md.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 quick-xml.workspace = true

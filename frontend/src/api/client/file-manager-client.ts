@@ -44,14 +44,19 @@ import type {
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
+  OpenPptxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PptxPreview,
+  PptxPreviewResource,
+  PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
+  ReadPptxPreviewResourceRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -260,6 +265,12 @@ export interface FileManagerClient {
     signal?: AbortSignal,
   ): Promise<DocxPreviewResource>;
   closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void>;
+  openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview>;
+  readPptxPreviewResource(
+    request: ReadPptxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<PptxPreviewResource>;
+  closePptxPreview(request: PptxPreviewSessionRequest, signal?: AbortSignal): Promise<void>;
   openStructuredView(
     request: OpenStructuredViewRequest,
     signal?: AbortSignal,

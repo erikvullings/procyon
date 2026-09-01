@@ -417,7 +417,7 @@ const EARLY_KEYDOWN_ROUTES = [
 ] as const satisfies readonly KeydownRoute[];
 
 const ACTION_KEYDOWN_ROUTES = [
-  // ArrowLeft/ArrowRight page through an open PDF/comic/EPUB viewer - Total Commander's Lister
+  // ArrowLeft/ArrowRight page through an open PDF/comic/EPUB/PPTX viewer - Total Commander's Lister
   // convention for paged content. Works regardless of which pane is active (see
   // `findOpenViewer`): F3 opens the viewer in the *opposite* pane without moving keyboard focus
   // there, so requiring the viewer's own pane to be active would force a pane switch first just
@@ -441,7 +441,10 @@ const ACTION_KEYDOWN_ROUTES = [
             : undefined;
         if (
           content !== undefined &&
-          (content.kind === 'pdf' || content.kind === 'comic' || content.kind === 'epub')
+          (content.kind === 'pdf' ||
+            content.kind === 'comic' ||
+            content.kind === 'epub' ||
+            content.kind === 'pptx')
         ) {
           event.preventDefault();
           if (event.key === 'ArrowLeft') activeViewer?.controller.previousPage();
