@@ -5,7 +5,7 @@ use std::io::Read;
 use std::sync::Arc;
 
 use fm_domain::{EntryId, EntryKind, Location};
-use fm_pptx_renderer::render_pptx_to_pdf;
+use fm_pptx_renderer::{render_pptx_first_page_to_pdf, render_pptx_to_pdf};
 use fm_transport_dto::{
     OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, PptxPreviewSessionRequestDto,
     ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto,
@@ -13,7 +13,7 @@ use fm_transport_dto::{
 use fm_vfs::{EntryRef, FileSystemProvider, ProviderCapabilities, ProviderRegistry};
 use quick_xml::events::Event;
 use tokio::io::AsyncReadExt;
-use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
+use tokio::sync::{Notify, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -39,24 +39,38 @@ struct Session {
     entry: EntryRef,
     revision: String,
     cancellation: CancellationToken,
-    pdf: Vec<u8>,
-    _slot: OwnedSemaphorePermit,
+    pdf: RwLock<PdfState>,
+    pdf_ready: Notify,
+    slot: RwLock<Option<OwnedSemaphorePermit>>,
+}
+
+enum PdfState {
+    Rendering,
+    Ready(Vec<u8>),
+    Failed(String),
 }
 
 trait PptxConverter: Send + Sync {
-    fn render(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError>;
+    fn render_first_page(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError>;
+    fn render_all(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError>;
 }
 
 struct NativePptxConverter;
 
 impl PptxConverter for NativePptxConverter {
-    fn render(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
-        render_pptx_to_pdf(bytes).map_err(|error| {
-            ApplicationError::InvalidRequest(format!(
-                "PowerPoint preview rendering failed: {error}; open it in an external application"
-            ))
-        })
+    fn render_first_page(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
+        render_pptx_first_page_to_pdf(bytes).map_err(render_error)
     }
+
+    fn render_all(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
+        render_pptx_to_pdf(bytes).map_err(render_error)
+    }
+}
+
+fn render_error(error: fm_pptx_renderer::PptxRenderError) -> ApplicationError {
+    ApplicationError::InvalidRequest(format!(
+        "PowerPoint preview rendering failed: {error}; open it in an external application"
+    ))
 }
 
 /// Shared rendered-PDF session owner used by both HTTP and Tauri adapters.
@@ -141,31 +155,47 @@ impl PptxPreviewService {
             return Err(ApplicationError::OperationCancelled);
         }
         let converter = Arc::clone(&self.converter);
-        let pdf = tokio::task::spawn_blocking(move || converter.render(&bytes))
-            .await
-            .map_err(|_| ApplicationError::Internal)??;
+        let render_bytes = bytes.clone();
+        let first_page_pdf =
+            tokio::task::spawn_blocking(move || converter.render_first_page(&render_bytes))
+                .await
+                .map_err(|_| ApplicationError::Internal)??;
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
         }
 
         let session_id = Uuid::new_v4();
-        let pdf_bytes = pdf.len() as u64;
-        self.sessions.write().await.insert(
-            session_id,
-            Arc::new(Session {
-                provider,
-                entry,
-                revision: revision.clone(),
-                cancellation,
-                pdf,
-                _slot: slot,
-            }),
-        );
+        let session = Arc::new(Session {
+            provider,
+            entry,
+            revision: revision.clone(),
+            cancellation,
+            pdf: RwLock::new(PdfState::Rendering),
+            pdf_ready: Notify::new(),
+            slot: RwLock::new(Some(slot)),
+        });
+        self.sessions
+            .write()
+            .await
+            .insert(session_id, Arc::clone(&session));
+        let converter = Arc::clone(&self.converter);
+        tokio::spawn(async move {
+            let rendered = tokio::task::spawn_blocking(move || converter.render_all(&bytes)).await;
+            let next = match rendered {
+                Ok(Ok(pdf)) => PdfState::Ready(pdf),
+                Ok(Err(error)) => PdfState::Failed(error.to_string()),
+                Err(_) => PdfState::Failed("PowerPoint renderer stopped unexpectedly".to_owned()),
+            };
+            if !session.cancellation.is_cancelled() {
+                *session.pdf.write().await = next;
+                session.pdf_ready.notify_waiters();
+            }
+        });
         Ok(OpenPptxPreviewResponseDto {
             session_id,
             source_revision: revision,
             source_bytes,
-            pdf_bytes,
+            first_page_pdf,
         })
     }
 
@@ -180,21 +210,36 @@ impl PptxPreviewService {
         }
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
-        let start = usize::try_from(request.offset)
-            .unwrap_or(usize::MAX)
-            .min(session.pdf.len());
-        let requested_end = request.offset.saturating_add(request.length);
-        let end = usize::try_from(requested_end)
-            .unwrap_or(usize::MAX)
-            .min(session.pdf.len());
-        let data = session.pdf[start..end].to_vec();
-        Ok(ReadFileRangeResponseDto {
-            offset: request.offset,
-            length: data.len() as u64,
-            eof: end == session.pdf.len(),
-            data,
-            probably_binary: (request.offset == 0).then_some(true),
-        })
+        loop {
+            let notified = session.pdf_ready.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let state = session.pdf.read().await;
+            match &*state {
+                PdfState::Rendering => drop(state),
+                PdfState::Failed(message) => {
+                    return Err(ApplicationError::InvalidRequest(message.clone()));
+                }
+                PdfState::Ready(pdf) => {
+                    let start = usize::try_from(request.offset)
+                        .unwrap_or(usize::MAX)
+                        .min(pdf.len());
+                    let requested_end = request.offset.saturating_add(request.length);
+                    let end = usize::try_from(requested_end)
+                        .unwrap_or(usize::MAX)
+                        .min(pdf.len());
+                    let data = pdf[start..end].to_vec();
+                    return Ok(ReadFileRangeResponseDto {
+                        offset: request.offset,
+                        length: data.len() as u64,
+                        eof: end == pdf.len(),
+                        data,
+                        probably_binary: (request.offset == 0).then_some(true),
+                    });
+                }
+            }
+            notified.await;
+        }
     }
 
     pub(crate) async fn close(
@@ -208,6 +253,9 @@ impl PptxPreviewService {
             .remove(&request.session_id)
             .ok_or(ApplicationError::NotFound)?;
         session.cancellation.cancel();
+        *session.pdf.write().await = PdfState::Failed("PowerPoint preview was closed".to_owned());
+        session.slot.write().await.take();
+        session.pdf_ready.notify_waiters();
         Ok(())
     }
 
@@ -427,7 +475,7 @@ fn invalid_pptx(error: impl std::fmt::Display) -> ApplicationError {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
-    use std::sync::Arc;
+    use std::sync::{Arc, Condvar, Mutex};
 
     use fm_vfs::ProviderRegistry;
     use fm_vfs_local::LocalFileSystemProvider;
@@ -485,6 +533,36 @@ mod tests {
         PptxPreviewService::new(providers)
     }
 
+    struct BlockingConverter {
+        release: Arc<(Mutex<bool>, Condvar)>,
+    }
+
+    impl PptxConverter for BlockingConverter {
+        fn render_first_page(&self, _bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
+            Ok(b"%PDF-first-page".to_vec())
+        }
+
+        fn render_all(&self, _bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
+            let (lock, wake) = &*self.release;
+            let mut released = lock.lock().expect("lock full-render gate");
+            while !*released {
+                released = wake.wait(released).expect("wait for full-render release");
+            }
+            Ok(b"%PDF-complete".to_vec())
+        }
+    }
+
+    fn service_with_converter(converter: Arc<dyn PptxConverter>) -> PptxPreviewService {
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(LocalFileSystemProvider::new()));
+        PptxPreviewService {
+            providers,
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            session_slots: Arc::new(Semaphore::new(MAX_PPTX_SESSIONS)),
+            converter,
+        }
+    }
+
     fn open_request(path: &std::path::Path) -> OpenPptxPreviewRequestDto {
         OpenPptxPreviewRequestDto {
             location: Location::from_native_path(path)
@@ -513,9 +591,67 @@ mod tests {
             .await
             .expect("read rendered PDF");
 
-        assert!(opened.pdf_bytes > 16);
+        assert!(opened.first_page_pdf.starts_with(b"%PDF-"));
         assert!(range.data.starts_with(b"%PDF-"));
         assert!(!range.eof);
+    }
+
+    #[tokio::test]
+    async fn returns_the_first_page_while_the_complete_pdf_is_still_rendering() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+        let path = directory.path().join("briefing.pptx");
+        std::fs::write(&path, presentation_package()).expect("write PPTX fixture");
+        let release = Arc::new((Mutex::new(false), Condvar::new()));
+        let service = service_with_converter(Arc::new(BlockingConverter {
+            release: Arc::clone(&release),
+        }));
+
+        let opened = service
+            .open(open_request(&path))
+            .await
+            .expect("open first-page preview");
+
+        assert_eq!(opened.first_page_pdf, b"%PDF-first-page");
+        let (lock, wake) = &*release;
+        *lock.lock().expect("lock full-render gate") = true;
+        wake.notify_all();
+        let range = service
+            .read_pdf(ReadPptxPreviewPdfRequestDto {
+                session_id: opened.session_id,
+                offset: 0,
+                length: 32,
+            })
+            .await
+            .expect("read completed PDF");
+        assert_eq!(range.data, b"%PDF-complete");
+        assert!(range.eof);
+    }
+
+    #[tokio::test]
+    async fn closing_releases_the_session_slot_before_background_rendering_finishes() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+        let path = directory.path().join("briefing.pptx");
+        std::fs::write(&path, presentation_package()).expect("write PPTX fixture");
+        let release = Arc::new((Mutex::new(false), Condvar::new()));
+        let service = service_with_converter(Arc::new(BlockingConverter {
+            release: Arc::clone(&release),
+        }));
+        let opened = service
+            .open(open_request(&path))
+            .await
+            .expect("open first-page preview");
+
+        service
+            .close(PptxPreviewSessionRequestDto {
+                session_id: opened.session_id,
+            })
+            .await
+            .expect("close preview");
+
+        assert_eq!(service.session_slots.available_permits(), MAX_PPTX_SESSIONS);
+        let (lock, wake) = &*release;
+        *lock.lock().expect("lock full-render gate") = true;
+        wake.notify_all();
     }
 
     #[test]

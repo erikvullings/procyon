@@ -102,7 +102,23 @@ pub fn layout_document(
   package: &PresentationDocument,
   options: &LayoutOptions,
 ) -> Result<crate::common::LayoutDocument<'static>> {
+  let import = PowerPointImport::import_document(package)?;
+  lower_import(import, options)
+}
+
+pub fn layout_first_page(
+  package: &PresentationDocument,
+  options: &LayoutOptions,
+) -> Result<crate::common::LayoutDocument<'static>> {
   let mut import = PowerPointImport::import_document(package)?;
+  import.draw_pages.truncate(1);
+  lower_import(import, options)
+}
+
+fn lower_import(
+  mut import: PowerPointImport,
+  options: &LayoutOptions,
+) -> Result<crate::common::LayoutDocument<'static>> {
   import.field_update_datetime = options.field_update_datetime;
   import.field_format_locale = options
     .format_locale

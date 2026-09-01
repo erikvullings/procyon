@@ -546,7 +546,7 @@ pub struct OpenPptxPreviewRequestDto {
     pub location: LocationDto,
 }
 
-/// Rendered PDF session metadata. PDF bytes are fetched in bounded ranges.
+/// Rendered PDF session metadata with an immediately displayable first slide.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenPptxPreviewResponseDto {
@@ -556,8 +556,8 @@ pub struct OpenPptxPreviewResponseDto {
     pub source_revision: String,
     /// Source package bytes at session creation.
     pub source_bytes: u64,
-    /// Exact byte length of the retained rendered PDF.
-    pub pdf_bytes: u64,
+    /// Bounded single-page PDF shown while the complete presentation renders.
+    pub first_page_pdf: Vec<u8>,
 }
 
 /// Identifies a PPTX preview session.

@@ -936,26 +936,44 @@ export function createFileViewerController(
         return;
       }
       pptxSessionId = opened.sessionId;
-      const bytes = new Uint8Array(opened.pdfBytes);
+      const firstPageDocument = await loadPdfDocument(new Uint8Array(opened.firstPagePdf));
+      if (!isCurrent(controller)) return;
+      publish({
+        status: 'ready',
+        entry,
+        metadataPanelOpen: initialMetadataOpen,
+        content: {
+          kind: 'pdf',
+          document: firstPageDocument,
+          pageCount: firstPageDocument.numPages,
+          currentPage: 1,
+        },
+      });
+
+      const chunks: number[][] = [];
       let offset = 0;
-      while (offset < bytes.length) {
+      for (;;) {
         const chunk = await client.readPptxPreviewPdf(
           {
             sessionId: opened.sessionId,
             offset,
-            length: Math.min(PPTX_PDF_RANGE_BYTES, bytes.length - offset),
+            length: PPTX_PDF_RANGE_BYTES,
           },
           controller.signal,
         );
         if (!isCurrent(controller)) return;
         if (chunk.offset !== offset || chunk.length !== chunk.data.length || chunk.length === 0) {
-          throw new Error(t('viewer', 'unableToLoad'));
+          throw new Error(`Invalid PowerPoint PDF range response at byte ${offset}`);
         }
-        bytes.set(chunk.data, offset);
+        chunks.push(chunk.data);
         offset += chunk.length;
-        if (chunk.eof && offset !== bytes.length) {
-          throw new Error(t('viewer', 'unableToLoad'));
-        }
+        if (chunk.eof) break;
+      }
+      const bytes = new Uint8Array(offset);
+      let writeOffset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, writeOffset);
+        writeOffset += chunk.length;
       }
       const document = await loadPdfDocument(bytes);
       if (!isCurrent(controller)) return;
@@ -965,6 +983,7 @@ export function createFileViewerController(
         metadataPanelOpen: initialMetadataOpen,
         content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1 },
       });
+      void firstPageDocument.cleanup();
     } catch (error: unknown) {
       failPptxPreview(controller, error);
     }

@@ -11,7 +11,7 @@ import {
 import { loadPdfDocument } from './pdf-preview';
 
 vi.mock('./pdf-preview', () => ({
-  loadPdfDocument: vi.fn().mockResolvedValue({ numPages: 3 }),
+  loadPdfDocument: vi.fn().mockResolvedValue({ numPages: 3, cleanup: vi.fn() }),
 }));
 
 /** Builds a fake pdf.js document whose pages' text content is `pageText[pageNumber - 1]`. */
@@ -79,14 +79,62 @@ function textOf(state: FileViewerState | undefined): string | undefined {
 }
 
 describe('file viewer controller', () => {
-  it('loads rendered PPTX PDF bytes through bounded ranges and reuses the PDF viewer', async () => {
+  it('shows the first PPTX slide before the complete presentation is ready', async () => {
     const context = setup();
-    const pdfBytes = 1024 * 1024 + 2;
+    let resolveFullPdf:
+      | ((chunk: Awaited<ReturnType<FileViewerClient['readPptxPreviewPdf']>>) => void)
+      | undefined;
+    const fullPdf = new Promise<Awaited<ReturnType<FileViewerClient['readPptxPreviewPdf']>>>(
+      (resolve) => {
+        resolveFullPdf = resolve;
+      },
+    );
     vi.mocked(context.client.openPptxPreview).mockResolvedValue({
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
-      pdfBytes,
+      firstPagePdf: [37, 80, 68, 70],
+    });
+    vi.mocked(context.client.readPptxPreviewPdf).mockReturnValue(fullPdf);
+    const cleanupFirstPage = vi.fn();
+    vi.mocked(loadPdfDocument)
+      .mockResolvedValueOnce({ numPages: 1, cleanup: cleanupFirstPage } as never)
+      .mockResolvedValueOnce({ numPages: 5, cleanup: vi.fn() } as never);
+
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { kind: 'pdf', pageCount: 1, currentPage: 1 },
+      }),
+    );
+    resolveFullPdf?.({
+      data: [37, 80, 68, 70, 45],
+      offset: 0,
+      length: 5,
+      eof: true,
+      probablyBinary: true,
+    });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { kind: 'pdf', pageCount: 5, currentPage: 1 },
+      }),
+    );
+    expect(cleanupFirstPage).toHaveBeenCalledOnce();
+  });
+
+  it('loads rendered PPTX PDF bytes through bounded ranges and reuses the PDF viewer', async () => {
+    const context = setup();
+    vi.mocked(loadPdfDocument).mockClear();
+    vi.mocked(context.client.openPptxPreview).mockResolvedValue({
+      sessionId: 'pptx-session',
+      sourceRevision: 'r1',
+      sourceBytes: 4096,
+      firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf)
       .mockResolvedValueOnce({
@@ -120,10 +168,10 @@ describe('file viewer controller', () => {
     );
     expect(context.client.readPptxPreviewPdf).toHaveBeenNthCalledWith(
       2,
-      { sessionId: 'pptx-session', offset: 1024 * 1024, length: 2 },
+      { sessionId: 'pptx-session', offset: 1024 * 1024, length: 1024 * 1024 },
       expect.any(AbortSignal),
     );
-    expect(loadPdfDocument).toHaveBeenCalledWith(expect.any(Uint8Array));
+    expect(loadPdfDocument).toHaveBeenCalledTimes(2);
     controller.dispose();
     expect(context.client.closePptxPreview).toHaveBeenCalledWith({ sessionId: 'pptx-session' });
   });
@@ -156,7 +204,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 1024,
-      pdfBytes: 128,
+      firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf).mockRejectedValue(
       new Error('The presentation changed'),

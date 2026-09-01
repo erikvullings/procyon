@@ -453,8 +453,7 @@ const ACTION_KEYDOWN_ROUTES = [
       return false;
     },
   },
-  // Arrow/Page keys inside an open F3 viewer: scroll (Arrow Up/Down) and page (Page Up/Down)
-  // text content, or pan (Arrow keys, any direction) and zoom (Page Up/Down) image content.
+  // Arrow/Page keys inside an open F3 viewer: scroll text, page-scroll DOCX, page PDFs, or pan/zoom images.
   // Gated on `isViewerNavigationTarget` - see its doc comment for why this must not fire from
   // just anywhere the way ArrowLeft/Right paging above does.
   {
@@ -480,8 +479,8 @@ const ACTION_KEYDOWN_ROUTES = [
           activeViewer !== undefined && activeViewer.state.status === 'ready'
             ? activeViewer.state.content
             : undefined;
-        if (viewerPaneId !== undefined && content?.kind === 'text') {
-          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        if (viewerPaneId !== undefined && (content?.kind === 'text' || content?.kind === 'docx')) {
+          if (content.kind === 'text' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
             event.preventDefault();
             context.scrollViewer(viewerPaneId, 0, event.key === 'ArrowUp' ? -1 : 1, 'line');
             return;
@@ -491,6 +490,17 @@ const ACTION_KEYDOWN_ROUTES = [
             context.scrollViewer(viewerPaneId, 0, event.key === 'PageUp' ? -1 : 1, 'page');
             return;
           }
+        }
+        if (
+          viewerPaneId !== undefined &&
+          content?.kind === 'pdf' &&
+          (event.key === 'PageUp' || event.key === 'PageDown')
+        ) {
+          event.preventDefault();
+          if (event.key === 'PageUp') activeViewer?.controller.previousPage();
+          else activeViewer?.controller.nextPage();
+          context.redraw();
+          return;
         }
         if (viewerPaneId !== undefined && content?.kind === 'image') {
           if (event.key === 'PageUp' || event.key === 'PageDown') {
