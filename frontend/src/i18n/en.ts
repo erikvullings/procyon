@@ -461,6 +461,7 @@ export const en = {
     structuredShowRowNumbers: 'Show row numbers',
     structuredIndexedRows: 'Indexed {count} rows…',
     structuredSortColumn: 'Sort by this column',
+    structuredClearSort: 'Restore original row order',
     structuredColumn: 'Column {number}',
     structuredFormulaValue: 'Formula: ={formula}\nCached value: {value}',
     previousWindow: 'Previous window',

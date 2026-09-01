@@ -743,7 +743,7 @@
   height: var(--fm-row-height);
   padding: 0 0.5rem;
   color: var(--fm-text-muted);
-  background: var(--fm-surface);
+  background: var(--fm-surface-elevated);
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
@@ -824,6 +824,9 @@
   flex: 1 1 auto;
   overflow: auto;
   background: var(--fm-surface);
+  /* Match the directory viewport's isolated compositing layer so WKWebView paints the scrollbar
+   * track against the pane surface instead of its darker default chrome. */
+  transform: translateZ(0);
   scrollbar-color: var(--fm-border) var(--fm-surface);
 }
 
@@ -841,6 +844,10 @@
   background: var(--fm-border);
   border: 2px solid var(--fm-surface);
   border-radius: 999px;
+}
+
+.fm-structured-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--fm-text-muted);
 }
 
 .fm-structured-scroll::-webkit-scrollbar-corner {

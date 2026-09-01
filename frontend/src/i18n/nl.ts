@@ -465,6 +465,7 @@ export const nl = {
     structuredShowRowNumbers: 'Rijnummers tonen',
     structuredIndexedRows: '{count} rijen geïndexeerd…',
     structuredSortColumn: 'Op deze kolom sorteren',
+    structuredClearSort: 'Oorspronkelijke rijvolgorde herstellen',
     structuredColumn: 'Kolom {number}',
     structuredFormulaValue: 'Formule: ={formula}\nOpgeslagen waarde: {value}',
     previousWindow: 'Vorig venster',

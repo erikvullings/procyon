@@ -1396,28 +1396,58 @@ export function createFileViewerController(
       return;
 
     const direction =
-      table.sortColumn === column && table.sortDirection === 'ascending'
-        ? 'descending'
-        : 'ascending';
-    let rows = [...table.rows];
-    if (table.searchQuery === '') {
+      table.sortColumn !== column
+        ? 'ascending'
+        : table.sortDirection === 'ascending'
+          ? 'descending'
+          : table.sortDirection === 'descending'
+            ? undefined
+            : 'ascending';
+    let rows =
+      direction === undefined && table.searchQuery !== ''
+        ? [...table.searchMatches]
+        : [...table.rows];
+    if (
+      table.searchQuery === '' &&
+      (direction === undefined ||
+        rows.length !== (table.sourceTotalRows ?? table.sourceIndexedRows) ||
+        table.rowStart !== 0)
+    ) {
       const count = table.sourceTotalRows ?? table.sourceIndexedRows;
-      if (rows.length !== count || table.rowStart !== 0) {
-        rows = [];
-        const controller = beginRequest();
-        for (let startRow = 0; startRow < count; startRow += 500) {
-          const page = await client.readStructuredRows(
-            {
-              sessionId: table.sessionId,
-              startRow,
-              count: Math.min(500, count - startRow),
-            },
-            controller.signal,
-          );
-          if (!isCurrent(controller)) return;
-          rows.push(...page.rows);
-        }
+      rows = [];
+      const controller = beginRequest();
+      for (let startRow = 0; startRow < count; startRow += 500) {
+        const page = await client.readStructuredRows(
+          {
+            sessionId: table.sessionId,
+            startRow,
+            count: Math.min(500, count - startRow),
+          },
+          controller.signal,
+        );
+        if (!isCurrent(controller)) return;
+        rows.push(...page.rows);
       }
+    }
+    if (direction === undefined) {
+      if (current.status !== 'ready' || current.content.kind !== 'structuredTable') return;
+      const {
+        sortColumn: _sortColumn,
+        sortDirection: _sortDirection,
+        ...unsortedContent
+      } = current.content;
+      publish({
+        ...current,
+        content: {
+          ...unsortedContent,
+          rows: rows.map((row, index) => ({ ...row, index })),
+          rowStart: 0,
+          indexedRows:
+            table.searchQuery === '' ? table.sourceIndexedRows : table.searchMatches.length,
+          totalRows: table.searchQuery === '' ? table.sourceTotalRows : undefined,
+        },
+      });
+      return;
     }
     rows.sort((left, right) => {
       const leftValue = left.cells[column] ?? '';

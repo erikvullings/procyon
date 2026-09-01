@@ -920,6 +920,40 @@ describe('file viewer controller', () => {
         sortDirection: 'ascending',
       },
     });
+
+    await controller.sortStructuredRows(0);
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        rows: [
+          { index: 0, cells: ['Grace'] },
+          { index: 1, cells: ['Ada'] },
+        ],
+        sortColumn: 0,
+        sortDirection: 'descending',
+      },
+    });
+
+    vi.mocked(context.client.readStructuredRows).mockResolvedValue({
+      rows: [
+        { index: 0, cells: ['Grace'] },
+        { index: 1, cells: ['Ada'] },
+      ],
+      indexedRows: 2,
+      totalRows: 2,
+      indexingComplete: true,
+    });
+    await controller.sortStructuredRows(0);
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        rows: [
+          { index: 0, cells: ['Grace'] },
+          { index: 1, cells: ['Ada'] },
+        ],
+      },
+    });
+    expect(context.states.at(-1)).not.toMatchObject({
+      content: { sortColumn: expect.anything(), sortDirection: expect.anything() },
+    });
   });
 
   it('sorts populated spreadsheet cells before blank cells in ascending order', async () => {

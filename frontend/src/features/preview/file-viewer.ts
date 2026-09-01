@@ -591,7 +591,11 @@ const StructuredTable: FactoryComponent<{
                       disabled: !sortEnabled,
                       'aria-sort':
                         content.sortColumn === column ? content.sortDirection : undefined,
-                      title: sortEnabled ? t('viewer', 'structuredSortColumn') : sortDisabledReason,
+                      title: sortEnabled
+                        ? content.sortColumn === column && content.sortDirection === 'descending'
+                          ? t('viewer', 'structuredClearSort')
+                          : t('viewer', 'structuredSortColumn')
+                        : sortDisabledReason,
                       onclick: () => attrs.onSortStructuredRows(column),
                     },
                     [
@@ -708,7 +712,10 @@ const StructuredTable: FactoryComponent<{
                     onchange: attrs.onToggleStructuredRowNumbers,
                   }),
                 ]),
-                { className: 'fm-structured-row-number-control' },
+                {
+                  className: 'fm-structured-row-number-control',
+                  'data-tooltip-placement': 'above',
+                },
               ),
             ])
           : undefined,
