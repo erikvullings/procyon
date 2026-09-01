@@ -58,8 +58,16 @@ fn write_pptx_fixture(path: &std::path::Path) {
     let options = SimpleFileOptions::default();
     for (name, contents) in [
         (
+            "[Content_Types].xml",
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>"#,
+        ),
+        (
+            "_rels/.rels",
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>"#,
+        ),
+        (
             "ppt/presentation.xml",
-            r#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#,
+            r#"<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#,
         ),
         (
             "ppt/_rels/presentation.xml.rels",
@@ -67,11 +75,7 @@ fn write_pptx_fixture(path: &std::path::Path) {
         ),
         (
             "ppt/slides/slide1.xml",
-            r#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="1" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Hello PPTX</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rImage"/></p:blipFill><p:spPr/></p:pic></p:spTree></p:cSld></p:sld>"#,
-        ),
-        (
-            "ppt/slides/_rels/slide1.xml.rels",
-            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+            r#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="10000000" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3200"/><a:t>Hello PPTX</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#,
         ),
     ] {
         archive
@@ -81,12 +85,6 @@ fn write_pptx_fixture(path: &std::path::Path) {
             .write_all(contents.as_bytes())
             .expect("write PPTX fixture entry");
     }
-    archive
-        .start_file("ppt/media/image1.png", options)
-        .expect("start PPTX image");
-    archive
-        .write_all(b"\x89PNG\r\n\x1a\nfixture")
-        .expect("write PPTX image");
     archive.finish().expect("finish PPTX fixture");
 }
 
@@ -311,7 +309,7 @@ async fn docx_preview_routes_open_read_a_bounded_resource_and_close_one_session(
 }
 
 #[tokio::test]
-async fn pptx_preview_routes_open_read_a_bounded_resource_and_close_one_session() {
+async fn pptx_preview_routes_open_read_rendered_pdf_and_close_one_session() {
     let root = tempfile::tempdir().expect("must create a temp directory");
     let target = root.path().join("briefing.pptx");
     write_pptx_fixture(&target);
@@ -327,27 +325,19 @@ async fn pptx_preview_routes_open_read_a_bounded_resource_and_close_one_session(
         .error_for_status()
         .expect("open response");
     let opened: Value = opened.json().await.expect("open JSON");
-    assert!(
-        opened["slides"][0]["markdown"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("Hello PPTX")
-    );
-    assert_eq!(opened["resources"].as_array().map(Vec::len), Some(1));
+    assert!(opened["pdfBytes"].as_u64().is_some_and(|bytes| bytes > 0));
     let session_id = opened["sessionId"].clone();
-    let resource_id = opened["resources"][0]["resourceId"].clone();
 
-    let resource = client
-        .post(format!("{}/api/v1/files/pptx/resource", server.base_url))
-        .json(&json!({ "sessionId": session_id, "resourceId": resource_id }))
+    let range = client
+        .post(format!("{}/api/v1/files/pptx/pdf", server.base_url))
+        .json(&json!({ "sessionId": session_id, "offset": 0, "length": 5 }))
         .send()
         .await
-        .expect("resource request")
+        .expect("PDF range request")
         .error_for_status()
-        .expect("resource response");
-    let resource: Value = resource.json().await.expect("resource JSON");
-    assert_eq!(resource["mediaType"], "image/png");
-    assert_eq!(resource["data"][0], 137);
+        .expect("PDF range response");
+    let range: Value = range.json().await.expect("PDF range JSON");
+    assert_eq!(range["data"], json!([37, 80, 68, 70, 45]));
 
     let closed = client
         .post(format!("{}/api/v1/files/pptx/close", server.base_url))

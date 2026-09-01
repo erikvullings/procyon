@@ -1,0 +1,887 @@
+use ooxmlsdk::schemas::schemas_microsoft_com_office_powerpoint_2010_main as p14;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_main as a;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_presentationml_2006_main as p;
+use ooxmlsdk::units::DrawingmlPercentageValue;
+
+use crate::docx::ImageCrop;
+
+use super::drawingml::color::Color;
+use super::drawingml::fill::{FillKind, FillProperties};
+use super::drawingml::graphical_object_frame_context::GraphicalObjectFrameContext;
+use super::drawingml::line::LineProperties;
+use super::drawingml::shape::{
+  CustomShapeGeometry, FrameType, MediaKind, Point, Shape, ShapeService, Size,
+};
+use super::drawingml::shape_properties::EffectProperties;
+use super::drawingml::text_body::{TextBody, TextRun, TextRunKind};
+use super::shape::PptShape;
+use super::shape_context::PPTShapeContext;
+use super::slide::{
+  ActiveXControlRecord, ShapeLocation, SlidePersist, active_x_wmf_external_header,
+  normalize_vml_shape_id,
+};
+
+#[derive(Debug)]
+pub(crate) struct PPTShapeGroupContext {
+  shape_location: ShapeLocation,
+  graphic_shape: Option<PptShape>,
+}
+
+impl PPTShapeGroupContext {
+  pub(crate) fn new(shape_location: ShapeLocation) -> Self {
+    Self {
+      shape_location,
+      graphic_shape: None,
+    }
+  }
+
+  pub(crate) fn on_create_context(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    shape_tree: &p::ShapeTree,
+  ) {
+    // onCreateContext dispatches sp/cxnSp/grpSp/pic/graphicFrame and keeps
+    // PPT shape-location state available to child shape contexts.
+    self.import_shape_tree_choices(slide_persist, &shape_tree.shape_tree_choice);
+  }
+
+  pub(crate) fn import_control_list(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    controls: &p::ControlList,
+  ) {
+    for choice in &controls.xml_children {
+      match choice {
+        p::ControlListChoice::Control(control) => {
+          self.import_control(slide_persist, control);
+        }
+        // The package MCE processor selects AlternateContent before schema
+        // deserialization when the `mce` feature is enabled. Import code must
+        // not reinterpret or select MCE branches a second time.
+        p::ControlListChoice::AlternateContent(_) => {}
+      }
+    }
+  }
+
+  fn import_control(&mut self, slide_persist: &mut SlidePersist, control: &p::Control) {
+    let active_x_state = control
+      .id
+      .as_ref()
+      .and_then(|id| slide_persist.active_x_controls.get(id))
+      .cloned();
+    let record = ActiveXControlRecord {
+      control: control.clone(),
+      state: active_x_state.clone(),
+    };
+    if let Some(name) = &control.name {
+      slide_persist
+        .active_x_controls_by_shape
+        .insert(name.clone(), record.clone());
+    }
+    if let Some(shape_id) = &control.shape_id {
+      slide_persist
+        .active_x_controls_by_shape
+        .insert(normalize_vml_shape_id(shape_id), record);
+    }
+    if let Some(picture) = control.picture.as_deref() {
+      let mut shape = self.import_picture(slide_persist, picture);
+      if let Some(resource) = shape
+        .picture
+        .as_mut()
+        .and_then(|picture| picture.image_resource.as_mut())
+      {
+        if let Some(palette) = active_x_state
+          .as_ref()
+          .and_then(|state| state.preview_palette_override())
+        {
+          resource.monochrome_dib_palette_override = Some(palette);
+        }
+        resource.metafile_external_header = active_x_wmf_external_header(control);
+        resource.metafile_semantic_text_includes_raster_backdrop = true;
+      }
+      let shape_index = slide_persist.shapes.len();
+      slide_persist.shapes.push(shape);
+      if let Some(relationship_id) = &control.id {
+        slide_persist
+          .active_x_preview_shapes_by_relationship
+          .insert(relationship_id.clone(), shape_index);
+      }
+    }
+  }
+
+  fn import_shape_tree_choices(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    choices: &[p::ShapeTreeChoice],
+  ) {
+    for choice in choices {
+      if let Some(shape) = self.import_shape_tree_choice(slide_persist, choice) {
+        slide_persist.shapes.push(shape);
+      }
+    }
+  }
+
+  fn import_shape_tree_choice(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    choice: &p::ShapeTreeChoice,
+  ) -> Option<Shape> {
+    match choice {
+      p::ShapeTreeChoice::Shape(shape) => {
+        Some(self.import_shape(slide_persist, shape, ShapeService::Custom))
+      }
+      p::ShapeTreeChoice::GroupShape(group) => Some(self.import_group_shape(slide_persist, group)),
+      p::ShapeTreeChoice::GraphicFrame(frame) => {
+        Some(self.import_graphic_frame(slide_persist, frame))
+      }
+      p::ShapeTreeChoice::ConnectionShape(shape) => {
+        Some(self.import_connection_shape(slide_persist, shape))
+      }
+      p::ShapeTreeChoice::Picture(picture) => Some(self.import_picture(slide_persist, picture)),
+      p::ShapeTreeChoice::ContentPart(content_part) => {
+        Some(self.import_content_part(slide_persist, content_part))
+      }
+      p::ShapeTreeChoice::AlternateContent(_) => None,
+    }
+  }
+
+  fn import_group_shape_choice(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    choice: &p::GroupShapeChoice,
+  ) -> Option<Shape> {
+    match choice {
+      p::GroupShapeChoice::Shape(shape) => {
+        Some(self.import_shape(slide_persist, shape, ShapeService::Custom))
+      }
+      p::GroupShapeChoice::GroupShape(group) => Some(self.import_group_shape(slide_persist, group)),
+      p::GroupShapeChoice::GraphicFrame(frame) => {
+        Some(self.import_graphic_frame(slide_persist, frame))
+      }
+      p::GroupShapeChoice::ConnectionShape(shape) => {
+        Some(self.import_connection_shape(slide_persist, shape))
+      }
+      p::GroupShapeChoice::Picture(picture) => Some(self.import_picture(slide_persist, picture)),
+      p::GroupShapeChoice::ContentPart(content_part) => {
+        Some(self.import_content_part(slide_persist, content_part))
+      }
+      p::GroupShapeChoice::AlternateContent(_) => None,
+    }
+  }
+
+  fn import_shape(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    source: &p::Shape,
+    service_name: ShapeService,
+  ) -> Shape {
+    let mut shape = PptShape::new(service_name, self.shape_location);
+    apply_non_visual_drawing_properties(
+      &mut shape.shape,
+      slide_persist,
+      &source
+        .non_visual_shape_properties
+        .non_visual_drawing_properties,
+    );
+    let application_properties = &source
+      .non_visual_shape_properties
+      .application_non_visual_drawing_properties;
+    // ECMA-376 Part 1 §19.3.1.33 defines userDrawn as an explicit marker
+    // for objects drawn by the user. Preserve it so an ordinary master text
+    // box is not conflated with master/layout placeholders.
+    shape.shape.user_drawn = application_properties
+      .user_drawn
+      .as_ref()
+      .is_some_and(|value| value.as_bool());
+    if let Some(placeholder) = &application_properties.placeholder_shape {
+      PPTShapeContext::new(&mut shape).on_create_context(slide_persist, placeholder);
+    }
+    apply_application_media(&mut shape.shape, slide_persist, application_properties);
+    apply_transform_2d(
+      &mut shape.shape,
+      source.shape_properties.transform2_d.as_deref(),
+    );
+    if source
+      .use_background_fill
+      .is_some_and(|value| value.as_bool())
+    {
+      // ECMA-376 Part 1 §19.3.1.43: this is the portion of the slide
+      // background behind the shape, not a transparent/no-fill shape.
+      shape.shape.fill_properties = Some(FillProperties {
+        kind: FillKind::SlideBackground,
+        placeholder_color: None,
+      });
+    }
+    apply_shape_properties(&mut shape.shape, &source.shape_properties);
+    if let Some(style) = &source.shape_style {
+      shape.shape.set_shape_style_refs(style);
+    }
+    if let Some(text_body) = &source.text_body {
+      let mut text_body = TextBody::from_pml(text_body);
+      // PPTShapeContext clones the matched layout/master placeholder before
+      // parsing the local p:txBody. Preserve that presentation-specific
+      // ancestor before consulting generic DrawingML object defaults;
+      // otherwise a theme spDef such as anchor="t" masks a title
+      // placeholder's anchor="ctr" and moves every inherited title.
+      if let Some(inherited) = shape.shape.text_body.as_ref() {
+        text_body.inherit_placeholder_body_properties(inherited);
+      }
+      if let Some(theme_defaults) = slide_persist.theme_text_body_defaults.as_ref() {
+        text_body.inherit_theme_body_properties(theme_defaults);
+      }
+      resolve_text_body_hyperlinks(slide_persist, &mut text_body);
+      shape.shape.set_text_body(text_body);
+    }
+    shape.into_shape(slide_persist)
+  }
+
+  fn import_group_shape(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    group: &p::GroupShape,
+  ) -> Shape {
+    struct PendingGroup<'a> {
+      source: &'a p::GroupShape,
+      shape: PptShape,
+      next_child: usize,
+    }
+
+    let mut pending = vec![PendingGroup {
+      source: group,
+      shape: self.import_group_shape_shell(slide_persist, group),
+      next_child: 0,
+    }];
+    loop {
+      let frame = pending.last_mut().expect("root group remains pending");
+      if let Some(choice) = frame.source.group_shape_choice.get(frame.next_child) {
+        frame.next_child += 1;
+        if let p::GroupShapeChoice::GroupShape(child) = choice {
+          pending.push(PendingGroup {
+            source: child,
+            shape: self.import_group_shape_shell(slide_persist, child),
+            next_child: 0,
+          });
+        } else if let Some(child) = self.import_group_shape_choice(slide_persist, choice) {
+          pending
+            .last_mut()
+            .expect("current group remains pending")
+            .shape
+            .shape
+            .children
+            .push(child);
+        }
+        continue;
+      }
+
+      let completed = pending
+        .pop()
+        .expect("completed group remains pending")
+        .shape
+        .into_shape(slide_persist);
+      if let Some(parent) = pending.last_mut() {
+        parent.shape.shape.children.push(completed);
+      } else {
+        return completed;
+      }
+    }
+  }
+
+  fn import_group_shape_shell(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    group: &p::GroupShape,
+  ) -> PptShape {
+    let mut shape = PptShape::new(ShapeService::Group, self.shape_location);
+    apply_non_visual_drawing_properties(
+      &mut shape.shape,
+      slide_persist,
+      &group
+        .non_visual_group_shape_properties
+        .non_visual_drawing_properties,
+    );
+    apply_group_transform(
+      &mut shape.shape,
+      group.group_shape_properties.transform_group.as_deref(),
+    );
+    if let Some(fill) = import_group_fill_properties(
+      group
+        .group_shape_properties
+        .group_shape_properties_choice1
+        .as_ref(),
+    ) {
+      shape.shape.fill_properties = Some(fill);
+    }
+    shape.shape.effect_properties = group
+      .group_shape_properties
+      .group_shape_properties_choice2
+      .as_ref()
+      .map(EffectProperties::from_pml_group_shape_properties_choice);
+    shape.shape.scene3d = group
+      .group_shape_properties
+      .scene3_d_type
+      .as_deref()
+      .cloned();
+    shape
+  }
+
+  fn import_graphic_frame(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    frame: &p::GraphicFrame,
+  ) -> Shape {
+    let mut shape = PptShape::new(ShapeService::GraphicObject, self.shape_location);
+    apply_non_visual_drawing_properties(
+      &mut shape.shape,
+      slide_persist,
+      &frame
+        .non_visual_graphic_frame_properties
+        .non_visual_drawing_properties,
+    );
+    if let Some(placeholder) = &frame
+      .non_visual_graphic_frame_properties
+      .application_non_visual_drawing_properties
+      .placeholder_shape
+    {
+      apply_graphic_placeholder(&mut shape, slide_persist, placeholder);
+    }
+    apply_presentation_transform(&mut shape.shape, &frame.transform);
+    GraphicalObjectFrameContext.dispatch_graphic_data(
+      &frame.graphic.graphic_data,
+      slide_persist,
+      &mut shape.shape,
+    );
+    self.graphic_shape = Some(shape);
+    self.import_ext_drawings();
+    let shape = self
+      .graphic_shape
+      .take()
+      .unwrap_or_else(|| PptShape::new(ShapeService::GraphicObject, self.shape_location));
+    shape.into_shape(slide_persist)
+  }
+
+  fn import_connection_shape(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    source: &p::ConnectionShape,
+  ) -> Shape {
+    let mut shape = PptShape::new(ShapeService::Connector, self.shape_location);
+    apply_non_visual_drawing_properties(
+      &mut shape.shape,
+      slide_persist,
+      &source
+        .non_visual_connection_shape_properties
+        .non_visual_drawing_properties,
+    );
+    apply_connection_shape_properties(
+      &mut shape.shape,
+      &source
+        .non_visual_connection_shape_properties
+        .non_visual_connector_shape_drawing_properties,
+    );
+    apply_transform_2d(
+      &mut shape.shape,
+      source.shape_properties.transform2_d.as_deref(),
+    );
+    apply_shape_properties(&mut shape.shape, &source.shape_properties);
+    if let Some(style) = &source.shape_style {
+      shape.shape.set_shape_style_refs(style);
+    }
+    shape.into_shape(slide_persist)
+  }
+
+  fn import_picture(&mut self, slide_persist: &mut SlidePersist, picture: &p::Picture) -> Shape {
+    let mut shape = PptShape::new(ShapeService::GraphicObject, self.shape_location);
+    apply_non_visual_drawing_properties(
+      &mut shape.shape,
+      slide_persist,
+      &picture
+        .non_visual_picture_properties
+        .non_visual_drawing_properties,
+    );
+    if let Some(placeholder) = &picture
+      .non_visual_picture_properties
+      .application_non_visual_drawing_properties
+      .placeholder_shape
+    {
+      apply_graphic_placeholder(&mut shape, slide_persist, placeholder);
+    }
+    apply_application_media(
+      &mut shape.shape,
+      slide_persist,
+      &picture
+        .non_visual_picture_properties
+        .application_non_visual_drawing_properties,
+    );
+    apply_transform_2d(
+      &mut shape.shape,
+      picture.shape_properties.transform2_d.as_deref(),
+    );
+    apply_shape_properties(&mut shape.shape, &picture.shape_properties);
+    if let Some(style) = &picture.shape_style {
+      shape.shape.set_shape_style_refs(style);
+    }
+    if let Some(blip_fill) = picture.blip_fill.as_deref() {
+      if let Some(blip) = blip_fill.blip.as_ref() {
+        let image_resource = blip
+          .embed
+          .as_deref()
+          .and_then(|relationship_id| slide_persist.image_resources.get(relationship_id))
+          .cloned();
+        shape.shape.set_picture(
+          blip.embed.clone(),
+          blip.link.clone(),
+          image_crop_from_source_rectangle(blip_fill.source_rectangle.as_ref()),
+          blip.blip_choice.clone(),
+          image_resource,
+        );
+      } else {
+        // Apache POI bug 62929 retains an empty p:blipFill as an
+        // XSLFPictureShape with no data, link, or crop. Keep that picture
+        // identity so fixed-output lowering can use Office's missing-picture
+        // visual instead of silently treating the p:pic as an ordinary shape.
+        shape.shape.set_empty_picture_fill();
+      }
+    }
+    shape.into_shape(slide_persist)
+  }
+
+  fn import_content_part(
+    &mut self,
+    slide_persist: &mut SlidePersist,
+    content_part: &p::ContentPart,
+  ) -> Shape {
+    let mut shape = PptShape::new(ShapeService::Media, self.shape_location);
+    if let Some(properties) = &content_part.non_visual_content_part_properties {
+      apply_p14_non_visual_drawing_properties(
+        &mut shape.shape,
+        &properties.non_visual_drawing_properties,
+      );
+    }
+    apply_p14_transform_2d(&mut shape.shape, content_part.transform2_d.as_deref());
+    shape.shape.set_content_part(content_part.r_id.clone());
+    shape.shape.set_content_part_resource(
+      slide_persist
+        .media_resources
+        .get(content_part.r_id.as_str())
+        .cloned(),
+    );
+    shape.into_shape(slide_persist)
+  }
+
+  pub(crate) fn import_ext_drawings(&mut self) {
+    if let Some(shape) = &mut self.graphic_shape
+      && shape.shape.frame_type == FrameType::Diagram
+    {
+      shape.shape.keep_diagram_drawing();
+    }
+  }
+}
+
+fn apply_graphic_placeholder(
+  shape: &mut PptShape,
+  slide_persist: &mut SlidePersist,
+  placeholder: &p::PlaceholderShape,
+) {
+  // bUseText=false for graphic placeholders so prompt text is not inherited by
+  // real charts/tables/pictures/media.
+  shape.shape.sub_type = Some(placeholder.r#type.unwrap_or(p::PlaceholderValues::Object));
+  if placeholder.index != Some(u32::MAX) {
+    shape.shape.sub_type_index = placeholder.index;
+    shape.inherit_placeholder_type_by_index(slide_persist);
+  }
+  shape.apply_graphic_placeholder_reference(slide_persist);
+}
+
+fn apply_non_visual_drawing_properties(
+  shape: &mut Shape,
+  slide_persist: &SlidePersist,
+  properties: &p::NonVisualDrawingProperties,
+) {
+  shape.id = Some(properties.id);
+  shape.name = Some(properties.name.clone());
+  shape.description = properties.description.clone();
+  shape.title = properties.title.clone();
+  shape.hidden = properties
+    .hidden
+    .as_ref()
+    .is_some_and(|hidden| hidden.as_bool());
+  shape.hyperlink_url = properties
+    .hyperlink_on_click
+    .as_deref()
+    .and_then(|hyperlink| hyperlink_url(slide_persist, hyperlink));
+}
+
+fn apply_connection_shape_properties(
+  shape: &mut Shape,
+  properties: &p::NonVisualConnectorShapeDrawingProperties,
+) {
+  if let Some(connection) = &properties.start_connection {
+    shape.add_connector_shape_properties(true, connection.id, connection.index);
+  }
+  if let Some(connection) = &properties.end_connection {
+    shape.add_connector_shape_properties(false, connection.id, connection.index);
+  }
+}
+
+fn apply_p14_non_visual_drawing_properties(
+  shape: &mut Shape,
+  properties: &p14::NonVisualDrawingProperties,
+) {
+  shape.id = Some(properties.id);
+  shape.name = Some(properties.name.clone());
+  shape.description = properties.description.clone();
+  shape.title = properties.title.clone();
+  shape.hidden = properties
+    .hidden
+    .as_ref()
+    .is_some_and(|hidden| hidden.as_bool());
+}
+
+fn hyperlink_url(slide_persist: &SlidePersist, hyperlink: &a::HyperlinkOnClick) -> Option<String> {
+  hyperlink
+    .id
+    .as_deref()
+    .and_then(|relationship_id| slide_persist.hyperlink_targets.get(relationship_id))
+    .cloned()
+    .or_else(|| hyperlink.invalid_url.clone())
+    .or_else(|| hyperlink.action.clone().and_then(hyperlink_action_url))
+}
+
+fn hyperlink_action_url(action: String) -> Option<String> {
+  action
+    .strip_prefix("ppaction://hlinkshowjump?jump=")
+    .map(|jump| format!("ooxmlsdk-pdf-action://hlinkshowjump/{jump}"))
+}
+
+fn resolve_text_body_hyperlinks(slide_persist: &SlidePersist, text_body: &mut TextBody) {
+  // a:rPr/a:hlinkClick exactly like shape-level cNvPr/a:hlinkClick.
+  for paragraph in &mut text_body.paragraphs {
+    for run in &mut paragraph.runs {
+      resolve_text_run_hyperlink(slide_persist, run);
+    }
+  }
+}
+
+fn resolve_text_run_hyperlink(slide_persist: &SlidePersist, run: &mut TextRun) {
+  run.hyperlink_url = run
+    .run_properties
+    .as_deref()
+    .and_then(|properties| properties.hyperlink_on_click.as_deref())
+    .and_then(|hyperlink| hyperlink_url(slide_persist, hyperlink));
+  if run.hyperlink_url.is_some() && run.kind == TextRunKind::Run {
+    run.kind = TextRunKind::Field;
+  }
+}
+
+fn apply_application_media(
+  shape: &mut Shape,
+  slide_persist: &SlidePersist,
+  properties: &p::ApplicationNonVisualDrawingProperties,
+) {
+  // stores media stream/package URL/mime from a:wavAudioFile, a:audioFile,
+  // a:videoFile, and p14:media before Shape::finalizeServiceName chooses a
+  // presentation MediaShape.
+  if let Some(choice) = &properties.application_non_visual_drawing_properties_choice {
+    match choice {
+      p::ApplicationNonVisualDrawingPropertiesChoice::WaveAudioFile(audio) => {
+        let relationship_id = audio.embed.clone();
+        shape.set_media(
+          MediaKind::Audio,
+          Some(relationship_id.clone()),
+          None,
+          slide_persist
+            .media_resources
+            .get(relationship_id.as_str())
+            .cloned(),
+        );
+      }
+      p::ApplicationNonVisualDrawingPropertiesChoice::AudioFromFile(audio) => {
+        let relationship_id = audio.link.clone();
+        shape.set_media(
+          MediaKind::Audio,
+          None,
+          Some(relationship_id.clone()),
+          slide_persist
+            .media_resources
+            .get(relationship_id.as_str())
+            .cloned(),
+        );
+      }
+      p::ApplicationNonVisualDrawingPropertiesChoice::VideoFromFile(video) => {
+        let relationship_id = video.link.clone();
+        shape.set_media(
+          MediaKind::Video,
+          None,
+          Some(relationship_id.clone()),
+          slide_persist
+            .media_resources
+            .get(relationship_id.as_str())
+            .cloned(),
+        );
+      }
+      p::ApplicationNonVisualDrawingPropertiesChoice::QuickTimeFromFile(quick_time) => {
+        let relationship_id = quick_time.link.clone();
+        shape.set_media(
+          MediaKind::Video,
+          None,
+          Some(relationship_id.clone()),
+          slide_persist
+            .media_resources
+            .get(relationship_id.as_str())
+            .cloned(),
+        );
+      }
+      p::ApplicationNonVisualDrawingPropertiesChoice::AudioFromCd(_) => {}
+    }
+  }
+
+  if let Some(extension_list) = &properties.application_non_visual_drawing_properties_extension_list
+  {
+    for extension in &extension_list.application_non_visual_drawing_properties_extension {
+      if let Some(p::ApplicationNonVisualDrawingPropertiesExtensionChoice::Media(media)) =
+        &extension.application_non_visual_drawing_properties_extension_choice
+      {
+        let relationship_id = media.embed.as_ref().or(media.link.as_ref()).cloned();
+        shape.set_media(
+          MediaKind::Unknown,
+          media.embed.clone(),
+          media.link.clone(),
+          relationship_id
+            .as_deref()
+            .and_then(|id| slide_persist.media_resources.get(id))
+            .cloned(),
+        );
+      }
+    }
+  }
+}
+
+pub(crate) fn apply_shape_properties(shape: &mut Shape, properties: &p::ShapeProperties) {
+  // ShapePropertiesContext owns fill/line/effect state before the PPT shape is
+  // converted to drawing objects.
+  if let Some(geometry) = properties
+    .shape_properties_choice1
+    .as_ref()
+    .map(import_custom_shape_geometry)
+  {
+    shape.set_custom_shape_geometry(geometry);
+  }
+  if let Some(fill) = properties
+    .shape_properties_choice2
+    .as_ref()
+    .and_then(import_fill_properties)
+  {
+    shape.fill_properties = Some(fill);
+  }
+  if let Some(line) = properties
+    .outline
+    .as_deref()
+    .and_then(import_line_properties)
+  {
+    shape.line_properties = Some(line);
+  }
+  if let Some(effect) = properties.shape_properties_choice3.as_ref() {
+    shape.effect_properties = Some(EffectProperties::from_pml_shape_properties_choice(effect));
+  }
+  shape.scene3d = properties.scene3_d_type.as_deref().cloned();
+  shape.shape3d = properties.shape3_d_type.as_deref().cloned();
+}
+
+fn image_crop_from_source_rectangle(rect: Option<&a::SourceRectangle>) -> ImageCrop {
+  let Some(rect) = rect else {
+    return ImageCrop::default();
+  };
+  // CropQuotientsFromSrcRect clamps negative srcRect edges to zero before
+  // deriving crop quotients.
+  let left = drawingml_percent_ratio(rect.left.as_ref()).max(0.0);
+  let top = drawingml_percent_ratio(rect.top.as_ref()).max(0.0);
+  let right = drawingml_percent_ratio(rect.right.as_ref()).max(0.0);
+  let bottom = drawingml_percent_ratio(rect.bottom.as_ref()).max(0.0);
+  if left + right >= 1.0 || top + bottom >= 1.0 {
+    return ImageCrop::default();
+  }
+  ImageCrop {
+    left,
+    top,
+    right,
+    bottom,
+  }
+}
+
+fn drawingml_percent_ratio(value: Option<&DrawingmlPercentageValue>) -> f32 {
+  value.map(|value| value.as_ratio() as f32).unwrap_or(0.0)
+}
+
+fn import_custom_shape_geometry(choice: &p::ShapePropertiesChoice) -> CustomShapeGeometry {
+  // custGeom/prstGeom populate CustomShapeProperties before createAndInsert;
+  // do not lower preset geometry to PDF path data during import.
+  match choice {
+    p::ShapePropertiesChoice::CustomGeometry(geometry) => {
+      CustomShapeGeometry::Custom(geometry.clone())
+    }
+    p::ShapePropertiesChoice::PresetGeometry(geometry) => {
+      CustomShapeGeometry::Preset(geometry.clone())
+    }
+  }
+}
+
+fn import_fill_properties(choice: &p::ShapePropertiesChoice2) -> Option<FillProperties> {
+  match choice {
+    p::ShapePropertiesChoice2::NoFill(_) => Some(FillProperties {
+      kind: FillKind::None,
+      placeholder_color: None,
+    }),
+    p::ShapePropertiesChoice2::SolidFill(fill) => Some(FillProperties {
+      kind: FillKind::Solid(import_solid_fill_color(fill)),
+      placeholder_color: None,
+    }),
+    p::ShapePropertiesChoice2::GroupFill => Some(FillProperties {
+      kind: FillKind::Group,
+      placeholder_color: None,
+    }),
+    p::ShapePropertiesChoice2::GradientFill(fill) => Some(FillProperties {
+      kind: FillKind::Gradient(fill.clone()),
+      placeholder_color: None,
+    }),
+    p::ShapePropertiesChoice2::BlipFill(fill) => Some(FillProperties {
+      kind: FillKind::Blip(fill.clone()),
+      placeholder_color: None,
+    }),
+    p::ShapePropertiesChoice2::PatternFill(fill) => Some(FillProperties {
+      kind: FillKind::Pattern(fill.clone()),
+      placeholder_color: None,
+    }),
+  }
+}
+
+fn import_group_fill_properties(
+  choice: Option<&p::GroupShapePropertiesChoice>,
+) -> Option<FillProperties> {
+  match choice? {
+    p::GroupShapePropertiesChoice::NoFill(_) => Some(FillProperties {
+      kind: FillKind::None,
+      placeholder_color: None,
+    }),
+    p::GroupShapePropertiesChoice::SolidFill(fill) => Some(FillProperties {
+      kind: FillKind::Solid(import_solid_fill_color(fill)),
+      placeholder_color: None,
+    }),
+    p::GroupShapePropertiesChoice::GroupFill => Some(FillProperties {
+      kind: FillKind::Group,
+      placeholder_color: None,
+    }),
+    p::GroupShapePropertiesChoice::GradientFill(fill) => Some(FillProperties {
+      kind: FillKind::Gradient(fill.clone()),
+      placeholder_color: None,
+    }),
+    p::GroupShapePropertiesChoice::BlipFill(fill) => Some(FillProperties {
+      kind: FillKind::Blip(fill.clone()),
+      placeholder_color: None,
+    }),
+    p::GroupShapePropertiesChoice::PatternFill(fill) => Some(FillProperties {
+      kind: FillKind::Pattern(fill.clone()),
+      placeholder_color: None,
+    }),
+  }
+}
+
+fn import_line_properties(outline: &a::Outline) -> Option<LineProperties> {
+  LineProperties::from_dml_outline(outline)
+}
+
+fn import_solid_fill_color(fill: &a::SolidFill) -> Option<Color> {
+  Color::from_solid_fill_choice(fill.solid_fill_choice.as_ref()?)
+}
+
+fn apply_transform_2d(shape: &mut Shape, transform: Option<&a::Transform2D>) {
+  let Some(transform) = transform else {
+    return;
+  };
+  apply_transform_fields(
+    shape,
+    transform.rotation,
+    transform.horizontal_flip.as_ref(),
+    transform.vertical_flip.as_ref(),
+    transform.offset.as_ref(),
+    transform.extents.as_ref(),
+  );
+}
+
+fn apply_p14_transform_2d(shape: &mut Shape, transform: Option<&p14::Transform2D>) {
+  let Some(transform) = transform else {
+    return;
+  };
+  apply_transform_fields(
+    shape,
+    transform.rotation,
+    transform.horizontal_flip.as_ref(),
+    transform.vertical_flip.as_ref(),
+    transform.offset.as_ref(),
+    transform.extents.as_ref(),
+  );
+}
+
+fn apply_presentation_transform(shape: &mut Shape, transform: &p::Transform) {
+  apply_transform_fields(
+    shape,
+    transform.rotation,
+    transform.horizontal_flip.as_ref(),
+    transform.vertical_flip.as_ref(),
+    transform.offset.as_ref(),
+    transform.extents.as_ref(),
+  );
+}
+
+fn apply_group_transform(shape: &mut Shape, transform: Option<&a::TransformGroup>) {
+  let Some(transform) = transform else {
+    return;
+  };
+  apply_transform_fields(
+    shape,
+    transform.rotation,
+    transform.horizontal_flip.as_ref(),
+    transform.vertical_flip.as_ref(),
+    transform.offset.as_ref(),
+    transform.extents.as_ref(),
+  );
+  if let Some(offset) = &transform.child_offset {
+    shape.child_position = Point {
+      x: offset.x.to_emu(),
+      y: offset.y.to_emu(),
+    };
+  }
+  if let Some(extents) = &transform.child_extents {
+    shape.child_size = Size {
+      cx: extents.cx.to_emu(),
+      cy: extents.cy.to_emu(),
+    };
+  }
+}
+
+fn apply_transform_fields(
+  shape: &mut Shape,
+  rotation: Option<i32>,
+  horizontal_flip: Option<&ooxmlsdk::simple_type::BooleanValue>,
+  vertical_flip: Option<&ooxmlsdk::simple_type::BooleanValue>,
+  offset: Option<&a::Offset>,
+  extents: Option<&a::Extents>,
+) {
+  if let Some(rotation) = rotation {
+    // keeps DrawingML rotation as shape transform state before rendering.
+    shape.rotation = rotation as f32 / 60_000.0;
+  }
+  shape.flip_h = horizontal_flip.is_some_and(|value| value.as_bool());
+  shape.flip_v = vertical_flip.is_some_and(|value| value.as_bool());
+  if let Some(offset) = offset {
+    shape.position = Point {
+      x: offset.x.to_emu(),
+      y: offset.y.to_emu(),
+    };
+  }
+  if let Some(extents) = extents {
+    shape.size = Size {
+      cx: extents.cx.to_emu(),
+      cy: extents.cy.to_emu(),
+    };
+  }
+}

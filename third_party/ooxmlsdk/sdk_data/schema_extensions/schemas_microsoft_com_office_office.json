@@ -1,0 +1,27 @@
+{
+  "Types": [
+    {
+      "ClassName": "ShapeDefaults",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ShapeLayout",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ShapeIdMap",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SignatureLine",
+      "Attributes": [
+        {
+          "PropertyName": "SigningInstructions",
+          "ReadAliases": [
+            "o:signinginstructions"
+          ]
+        }
+      ]
+    }
+  ]
+}

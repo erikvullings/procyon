@@ -1,0 +1,17 @@
+[package]
+name = "fm-pptx-renderer"
+description = "Stable Procyon adapter around the vendored OOXML PPTX-to-PDF renderer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+ooxmlsdk-pdf = { path = "../../third_party/ooxmlsdk/crates/ooxmlsdk-pdf" }
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+zip.workspace = true

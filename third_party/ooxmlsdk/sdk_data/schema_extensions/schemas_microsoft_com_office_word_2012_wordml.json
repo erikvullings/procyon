@@ -1,0 +1,36 @@
+{
+  "Types": [
+    {
+      "ClassName": "CommentsEx",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "People",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Appearance"
+    },
+    {
+      "ClassName": "CommentEx"
+    },
+    {
+      "ClassName": "PersistentDocumentId"
+    },
+    {
+      "ClassName": "Person",
+      "Attributes": [
+        {
+          "QName": "w15:contact",
+          "PropertyName": "Contact",
+          "PropertyComments": "Legacy contact identity",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "PresenceInfo"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/olecfsdk",
+  "crates/olecfsdk-derive",
+  "crates/olecfsdk-ooxml",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+authors = ["KaiserY"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/KaiserY/olecfsdk"
+documentation = "https://docs.rs/olecfsdk"
+description = "Typed Rust SDK for Microsoft Office compound binary file formats"
+keywords = ["office", "ppt", "cfb", "doc", "xls"]
+categories = ["parser-implementations"]
+readme = "README.md"
+
+[workspace.dependencies]
+bitflags = "2.13.0"
+flate2 = "1.1.9"
+olecfsdk = { version = "0.1.0", path = "crates/olecfsdk" }
+olecfsdk-derive = { version = "0.1.0", path = "crates/olecfsdk-derive" }
+ooxmlsdk = "0.13.0"
+codepage = "0.1.2"
+encoding_rs = "0.8.35"
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = { version = "2.0.104", features = ["full"] }
+thiserror = "2.0.12"

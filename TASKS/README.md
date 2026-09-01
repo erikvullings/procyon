@@ -150,7 +150,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0159 Structured viewer Tauri UX regressions *(needs 0100)*
 - [x] 0171 DOCX preview in the F3 viewer *(needs 0088)*
 - [ ] 0172 Bounded spreadsheet preview *(needs 0100)*
-- [ ] 0173 PPTX content preview *(needs 0088)*
+- [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
 
 ## Metadata, icons & views

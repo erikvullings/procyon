@@ -744,24 +744,6 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(previousPage).toHaveBeenCalledTimes(1);
   });
 
-  it('ArrowLeft/ArrowRight page a PPTX content preview', () => {
-    const nextPage = vi.fn();
-    const previousPage = vi.fn();
-    const context = makeContext({
-      getViewer: (paneId) =>
-        paneId === PANE_B
-          ? ({
-              controller: { nextPage, previousPage } as never,
-              state: { status: 'ready', content: { kind: 'pptx' } } as never,
-            } as never)
-          : undefined,
-    });
-    createGlobalKeydownHandler(context)(keydown('ArrowRight'));
-    createGlobalKeydownHandler(context)(keydown('ArrowLeft'));
-    expect(nextPage).toHaveBeenCalledTimes(1);
-    expect(previousPage).toHaveBeenCalledTimes(1);
-  });
-
   it('does not intercept ArrowLeft/ArrowRight when no viewer is open (or it is showing non-paged content)', () => {
     const nextPage = vi.fn();
     const context = makeContext({

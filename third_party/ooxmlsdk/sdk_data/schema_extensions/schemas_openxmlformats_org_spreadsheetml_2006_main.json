@@ -1,0 +1,609 @@
+{
+  "Enums": [
+    {
+      "Name": "ConditionalFormattingOperatorValues",
+      "AddFacets": [
+        {
+          "Name": "Expression",
+          "Value": "expression"
+        }
+      ]
+    },
+    {
+      "Name": "SheetStateValues",
+      "AddFacets": [
+        {
+          "Name": "Show",
+          "Value": "show"
+        }
+      ]
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "CacheFieldExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CacheFieldExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CacheHierarchyExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CacheHierarchyExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CacheSourceExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CacheSourceExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CalculatedMemberExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CalculatedMemberExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Chartsheet",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Controls",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "Comment",
+      "AlternateContent": [
+        {
+          "AfterField": "comment_text",
+          "Children": [
+            "comment_properties"
+          ]
+        }
+      ],
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "ConditionalFormattingRuleExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ConditionalFormattingRuleExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ConnectionExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ConnectionExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DataFieldExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DataFieldExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DialogSheet",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr6:uid",
+          "PropertyName": "Xr6Uid",
+          "PropertyComments": "Revision 6 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Extension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ExternalBook",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SharedStringTable",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "ExternalCell",
+      "Children": [
+        {
+          "Name": "x:ST_Xstring/x:v",
+          "OverrideName": "x:CT_Xstring/x:v"
+        }
+      ]
+    },
+    {
+      "ClassName": "NumberingFormat",
+      "Attributes": [
+        {
+          "QName": "x16r2:formatCode16",
+          "PropertyName": "X16r2FormatCode16",
+          "PropertyComments": "Revision 2 Number Format Code",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "OleObjects",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "PageSetup",
+      "Attributes": [
+        {
+          "PropertyName": "FirstPageNumber",
+          "OverrideType": "Int64Value"
+        }
+      ]
+    },
+    {
+      "ClassName": "PivotCacheDefinitionExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotCacheDefinitionExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotFieldExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotFieldExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotFilterExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotFilterExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotHierarchyExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotHierarchyExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotTableDefinitionExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PivotTableDefinitionExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "QueryTable",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr16:uid",
+          "PropertyName": "Xr16Uid",
+          "PropertyComments": "Revision 16 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "QueryTableExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "QueryTableExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SharedStringItem",
+      "HaveMcIgnorable": false,
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Sheet",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SlicerCacheDefinitionExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StylesheetExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StylesheetExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Stylesheet",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ],
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "TableExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TableExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TableStyle",
+      "Attributes": [
+        {
+          "QName": "xr9:uid",
+          "PropertyName": "Xr9Uid",
+          "PropertyComments": "Revision 9 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Comments",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Connections",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Connection",
+      "Attributes": [
+        {
+          "QName": "xr16:uid",
+          "PropertyName": "Xr16Uid",
+          "PropertyComments": "Revision 16 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "ExternalLink",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Headers",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "PivotCacheDefinition",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "PivotCacheRecords",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "PivotTableDefinition",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Table",
+      "HaveMcIgnorable": true,
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Revisions",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Users",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Topic",
+      "Children": [
+        {
+          "Name": "x:ST_Xstring/x:v",
+          "OverrideName": "x:CT_Xstring/x:v"
+        }
+      ]
+    },
+    {
+      "ClassName": "Workbook",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ],
+      "HaveMcIgnorable": true,
+      "AlternateContent": [
+        {
+          "AfterField": "workbook_properties",
+          "Children": [
+            "absolute_path"
+          ]
+        }
+      ],
+      "AddChildren": [
+        {
+          "Name": "xr:CT_RevisionPtr/xr:revisionPtr",
+          "PropertyName": "RevisionPtr",
+          "PropertyComments": "Defines the RevisionPtr Class.",
+          "Optional": true,
+          "InitialVersion": "Office2016",
+          "AfterPropertyName": "AbsolutePath"
+        }
+      ]
+    },
+    {
+      "ClassName": "WorkbookExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "WorkbookExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Worksheet",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true,
+      "AlternateContent": [
+        {
+          "AfterField": "drawing",
+          "Children": [
+            "legacy_drawing"
+          ]
+        },
+        {
+          "AfterField": "legacy_drawing",
+          "Children": [
+            "controls"
+          ]
+        }
+      ],
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "WorksheetExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "WorksheetExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AutoFilter",
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "CellFormat"
+    },
+    {
+      "ClassName": "CellStyle",
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "CalculationProperties",
+      "HaveMcIgnorable": true,
+      "HaveXmlnsFields": true,
+      "Attributes": [
+        {
+          "QName": "hs:hclCalcId",
+          "PropertyName": "HsHclCalcId",
+          "PropertyComments": "Haansoft Calculation Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "CellFormats",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "DataValidation",
+      "AlternateContent": [
+        {
+          "BeforeField": "list",
+          "Children": [
+            "list",
+            "formula1"
+          ]
+        }
+      ],
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Drawing",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DefinedName",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "DifferentialFormats",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "Fills",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "Filters",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Fonts",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "Hyperlink",
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Row"
+    },
+    {
+      "ClassName": "SheetFormatProperties"
+    },
+    {
+      "ClassName": "TableColumn",
+      "Attributes": [
+        {
+          "QName": "xr3:uid",
+          "PropertyName": "Xr3Uid",
+          "PropertyComments": "Revision 3 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Text"
+    },
+    {
+      "ClassName": "WorkbookView",
+      "Attributes": [
+        {
+          "QName": "xr2:uid",
+          "PropertyName": "Xr2Uid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    }
+  ]
+}

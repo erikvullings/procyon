@@ -19,8 +19,7 @@ import type { PptxPreviewSessionRequestDto } from '../api/generated/models/pptxP
 import type { ReadDocxPreviewResourceRequestDto } from '../api/generated/models/readDocxPreviewResourceRequestDto';
 import type { ReadDocxPreviewResourceResponseDto } from '../api/generated/models/readDocxPreviewResourceResponseDto';
 import type { ReadFileRangeResponseDto } from '../api/generated/models/readFileRangeResponseDto';
-import type { ReadPptxPreviewResourceRequestDto } from '../api/generated/models/readPptxPreviewResourceRequestDto';
-import type { ReadPptxPreviewResourceResponseDto } from '../api/generated/models/readPptxPreviewResourceResponseDto';
+import type { ReadPptxPreviewPdfRequestDto } from '../api/generated/models/readPptxPreviewPdfRequestDto';
 import type { ReadStructuredJsonWindowRequestDto } from '../api/generated/models/readStructuredJsonWindowRequestDto';
 import type { ReadStructuredJsonWindowResponseDto } from '../api/generated/models/readStructuredJsonWindowResponseDto';
 import type { ReadStructuredRowsRequestDto } from '../api/generated/models/readStructuredRowsRequestDto';
@@ -207,14 +206,11 @@ export type DocxPreviewSessionRequest = DocxPreviewSessionRequestDto;
 export type ReadDocxPreviewResourceRequest = ReadDocxPreviewResourceRequestDto;
 export type DocxPreviewResource = ReadDocxPreviewResourceResponseDto;
 
-/** Provider-neutral bounded semantic PPTX preview session contracts (task 0173). */
+/** Provider-neutral bounded rendered PowerPoint preview session contracts (task 0173). */
 export type OpenPptxPreviewRequest = OpenPptxPreviewRequestDto;
 export type PptxPreview = OpenPptxPreviewResponseDto;
-export type PptxPreviewResourceDescriptor = OpenPptxPreviewResponseDto['resources'][number];
-export type PptxPreviewSlide = OpenPptxPreviewResponseDto['slides'][number];
 export type PptxPreviewSessionRequest = PptxPreviewSessionRequestDto;
-export type ReadPptxPreviewResourceRequest = ReadPptxPreviewResourceRequestDto;
-export type PptxPreviewResource = ReadPptxPreviewResourceResponseDto;
+export type ReadPptxPreviewPdfRequest = ReadPptxPreviewPdfRequestDto;
 
 export interface LoadEditableFileRequest {
   location: Location;

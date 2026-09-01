@@ -1,0 +1,629 @@
+use ooxmlsdk::schemas::{
+  schemas_microsoft_com_office_drawing_2008_diagram as dsp,
+  schemas_openxmlformats_org_drawingml_2006_main as a,
+  schemas_openxmlformats_org_presentationml_2006_main as p,
+};
+
+use crate::render::math::text_math_text;
+
+use super::text_list_style::{TextListParagraphStyle, TextListParagraphStyleRef, TextListStyle};
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TextBody {
+  pub(crate) has_body_properties: bool,
+  pub(crate) has_noninherited_body_properties: bool,
+  pub(crate) body_properties: Option<Box<a::BodyProperties>>,
+  pub(crate) display_properties: TextBodyDisplayProperties,
+  pub(crate) has_list_style: bool,
+  pub(crate) list_style: Option<TextListStyle>,
+  pub(crate) paragraphs: Vec<TextParagraph>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextBodyDisplayProperties {
+  pub(crate) word_wrap: bool,
+  pub(crate) use_first_last_paragraph_spacing: bool,
+  pub(crate) horizontal_overflow: Option<a::TextHorizontalOverflowValues>,
+  pub(crate) vertical_overflow: Option<a::TextVerticalOverflowValues>,
+  pub(crate) clip_vertical_overflow: bool,
+  pub(crate) column_count: usize,
+  pub(crate) column_spacing_emu: i64,
+  pub(crate) right_to_left_columns: bool,
+  pub(crate) text_area_rotation: Option<i32>,
+  pub(crate) text_camera_z_rotation: Option<i32>,
+  pub(crate) vertical: Option<a::TextVerticalValues>,
+  pub(crate) anchor: a::TextAnchoringTypeValues,
+  pub(crate) anchor_center: bool,
+  pub(crate) from_word_art: bool,
+  pub(crate) preset_text_warp: Option<a::TextShapeValues>,
+  pub(crate) preset_text_warp_geometry: Option<Box<a::PresetTextWarp>>,
+  pub(crate) upright: bool,
+  pub(crate) auto_fit: TextAutoFit,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum TextAutoFit {
+  #[default]
+  None,
+  Normal {
+    font_scale: i32,
+    line_space_reduction: i32,
+  },
+  Shape,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TextParagraph {
+  pub(crate) diagram_source_order: Option<usize>,
+  pub(crate) diagram_synthesized_bullet_left_margin: bool,
+  pub(crate) diagram_synthesized_bullet_indent: bool,
+  pub(crate) level: Option<u8>,
+  pub(crate) paragraph_properties: Option<Box<a::ParagraphProperties>>,
+  pub(crate) end_paragraph_run_properties: Option<Box<a::EndParagraphRunProperties>>,
+  pub(crate) master_paragraph_style: Option<TextListParagraphStyle>,
+  pub(crate) text_paragraph_style: Option<TextListParagraphStyle>,
+  pub(crate) runs: Vec<TextRun>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextRun {
+  pub(crate) text: String,
+  pub(crate) kind: TextRunKind,
+  pub(crate) hyperlink_url: Option<String>,
+  pub(crate) field_type: Option<String>,
+  pub(crate) run_properties: Option<Box<a::RunProperties>>,
+  pub(crate) field_paragraph_properties: Option<Box<a::ParagraphProperties>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum TextRunKind {
+  #[default]
+  Run,
+  Break,
+  Field,
+  Math,
+  /// Editor-only prompt carried by an empty presentation placeholder.
+  Placeholder,
+}
+
+impl TextBody {
+  pub(crate) fn from_dml(source: &a::TextBody) -> Self {
+    // TextBodyContext owns bodyPr, lstStyle, and paragraph import for both
+    // shape text and DrawingML table cell text.
+    Self::from_parts(
+      &source.body_properties,
+      source.list_style.as_deref(),
+      &source.paragraph,
+    )
+  }
+
+  pub(crate) fn from_pml(source: &p::TextBody) -> Self {
+    // PresentationML p:txBody carries DrawingML bodyPr/lstStyle/a:p
+    // children; import it through the same typed DrawingML paragraph path.
+    Self::from_parts(
+      &source.body_properties,
+      source.list_style.as_deref(),
+      &source.paragraph,
+    )
+  }
+
+  pub(crate) fn from_diagram_drawing(source: &dsp::TextBody) -> Self {
+    // Diagram drawing text bodies are regular DrawingML text bodies inside
+    // dsp:sp. Import them through the same text body model as p:txBody.
+    Self::from_parts(
+      &source.body_properties,
+      source.list_style.as_deref(),
+      &source.paragraph,
+    )
+  }
+
+  pub(crate) fn from_theme_object_defaults(source: Option<&a::ObjectDefaults>) -> Option<Self> {
+    let source = source?;
+    // MS-OE376 2.1.1300 resolves missing bodyPr attributes through txDef,
+    // then lnDef, then spDef. Build that same precedence from low to high;
+    // lstStyle uses the parallel DrawingML paragraph-property cascade.
+    let definitions = [
+      source.shape_default.as_deref().map(|definition| {
+        (
+          definition.body_properties.as_ref(),
+          definition.list_style.as_ref(),
+        )
+      }),
+      source.line_default.as_deref().map(|definition| {
+        (
+          definition.body_properties.as_ref(),
+          definition.list_style.as_ref(),
+        )
+      }),
+      source.text_default.as_deref().map(|definition| {
+        (
+          definition.body_properties.as_ref(),
+          definition.list_style.as_ref(),
+        )
+      }),
+    ];
+    let mut merged: Option<Self> = None;
+    for (body_properties, list_style) in definitions.into_iter().flatten() {
+      let mut overlay = Self::from_parts(body_properties, Some(list_style), &[]);
+      if let Some(inherited) = merged.as_ref() {
+        overlay.inherit_body_properties(inherited);
+        if let Some(source_style) = overlay.list_style.take() {
+          let mut merged_style = inherited.list_style.clone().unwrap_or_default();
+          merged_style.merge_from(&source_style);
+          overlay.list_style = Some(merged_style);
+        }
+      }
+      merged = Some(overlay);
+    }
+    merged
+  }
+
+  fn from_parts(
+    body_properties: &a::BodyProperties,
+    list_style: Option<&a::ListStyle>,
+    paragraphs: &[a::Paragraph],
+  ) -> Self {
+    Self {
+      has_body_properties: true,
+      has_noninherited_body_properties: has_noninherited_body_properties(body_properties),
+      body_properties: Some(Box::new(body_properties.clone())),
+      display_properties: TextBodyDisplayProperties::from_body_properties(body_properties),
+      has_list_style: list_style.is_some(),
+      list_style: list_style.map(TextListStyle::from_dml_list_style),
+      paragraphs: paragraphs.iter().map(TextParagraph::from_dml).collect(),
+    }
+  }
+
+  pub(crate) fn apply_text_styles(&mut self, master_text_list_style: Option<&TextListStyle>) {
+    for paragraph in &mut self.paragraphs {
+      paragraph.apply_text_styles(master_text_list_style, self.list_style.as_ref());
+    }
+  }
+
+  pub(crate) fn inherit_placeholder_body_properties(&mut self, inherited: &Self) {
+    // Presentation slides inherit layout information and only local values
+    // override it (ECMA-376 Part 1, Annex L.3.2.3). LibreOffice implements
+    // this by cloning the placeholder TextBody before parsing the local
+    // p:txBody; its TextBodyPropertiesContext replaces insets only when the
+    // corresponding a:bodyPr attribute is present.
+    self.inherit_body_properties(inherited);
+    if !self.has_list_style {
+      self.list_style.clone_from(&inherited.list_style);
+    }
+  }
+
+  pub(crate) fn inherit_theme_body_properties(&mut self, inherited: &Self) {
+    // Theme lstStyle is merged below the presentation/master/placeholder
+    // styles by PptShape. Only missing bodyPr attributes participate in this
+    // second fallback (MS-OE376, 2.1.1300).
+    self.inherit_body_properties(inherited);
+  }
+
+  fn inherit_body_properties(&mut self, inherited: &Self) {
+    let has_direct_anchor = self
+      .body_properties
+      .as_deref()
+      .is_some_and(|properties| properties.anchor.is_some());
+    if let (Some(properties), Some(inherited_properties)) = (
+      self.body_properties.as_deref_mut(),
+      inherited.body_properties.as_deref(),
+    ) {
+      properties.rotation = properties.rotation.or(inherited_properties.rotation);
+      properties.use_paragraph_spacing = properties
+        .use_paragraph_spacing
+        .or(inherited_properties.use_paragraph_spacing);
+      properties.vertical_overflow = properties
+        .vertical_overflow
+        .or(inherited_properties.vertical_overflow);
+      properties.horizontal_overflow = properties
+        .horizontal_overflow
+        .or(inherited_properties.horizontal_overflow);
+      properties.vertical = properties.vertical.or(inherited_properties.vertical);
+      properties.wrap = properties.wrap.or(inherited_properties.wrap);
+      properties.left_inset = properties.left_inset.or(inherited_properties.left_inset);
+      properties.top_inset = properties.top_inset.or(inherited_properties.top_inset);
+      properties.right_inset = properties.right_inset.or(inherited_properties.right_inset);
+      properties.bottom_inset = properties
+        .bottom_inset
+        .or(inherited_properties.bottom_inset);
+      properties.column_count = properties
+        .column_count
+        .or(inherited_properties.column_count);
+      properties.column_spacing = properties
+        .column_spacing
+        .or(inherited_properties.column_spacing);
+      properties.right_to_left_columns = properties
+        .right_to_left_columns
+        .or(inherited_properties.right_to_left_columns);
+      properties.from_word_art = properties
+        .from_word_art
+        .or(inherited_properties.from_word_art);
+      properties.anchor = properties.anchor.or(inherited_properties.anchor);
+      properties.anchor_center = properties
+        .anchor_center
+        .or(inherited_properties.anchor_center);
+      properties.force_anti_alias = properties
+        .force_anti_alias
+        .or(inherited_properties.force_anti_alias);
+      properties.up_right = properties.up_right.or(inherited_properties.up_right);
+      properties.compatible_line_spacing = properties
+        .compatible_line_spacing
+        .or(inherited_properties.compatible_line_spacing);
+    }
+    if let Some(properties) = self.body_properties.as_deref() {
+      self.display_properties = TextBodyDisplayProperties::from_body_properties(properties);
+    }
+    // A synthesized placeholder/theme body can carry its already-resolved
+    // display anchor without retaining the source bodyPr. Preserve that
+    // cascade value whenever the local bodyPr did not author an anchor.
+    if !has_direct_anchor {
+      self.display_properties.anchor = inherited.display_properties.anchor;
+    }
+  }
+}
+
+impl Default for TextBodyDisplayProperties {
+  fn default() -> Self {
+    Self {
+      word_wrap: true,
+      use_first_last_paragraph_spacing: false,
+      horizontal_overflow: None,
+      vertical_overflow: None,
+      clip_vertical_overflow: false,
+      column_count: 1,
+      column_spacing_emu: 0,
+      right_to_left_columns: false,
+      text_area_rotation: None,
+      text_camera_z_rotation: None,
+      vertical: None,
+      anchor: a::TextAnchoringTypeValues::Top,
+      anchor_center: false,
+      from_word_art: false,
+      preset_text_warp: None,
+      preset_text_warp_geometry: None,
+      upright: false,
+      auto_fit: TextAutoFit::None,
+    }
+  }
+}
+
+impl TextBodyDisplayProperties {
+  pub(crate) fn from_body_properties(properties: &a::BodyProperties) -> Self {
+    // TextBodyPropertiesContext maps CT_TextBodyProperties into a stable text
+    // property bag before any shape is created. Keep these as typed PPTX text
+    // semantics; display lowering may consume only a subset.
+    let mut result = Self {
+      word_wrap: properties
+        .wrap
+        .is_none_or(|wrap| wrap == a::TextWrappingValues::Square),
+      use_first_last_paragraph_spacing: properties
+        .use_paragraph_spacing
+        .is_some_and(|value| value.as_bool()),
+      horizontal_overflow: properties.horizontal_overflow,
+      vertical_overflow: properties.vertical_overflow,
+      clip_vertical_overflow: matches!(
+        properties.vertical_overflow,
+        Some(a::TextVerticalOverflowValues::Ellipsis | a::TextVerticalOverflowValues::Clip)
+      ),
+      column_count: properties
+        .column_count
+        .and_then(|count| usize::try_from(count).ok())
+        .filter(|count| *count > 0)
+        .unwrap_or(1),
+      column_spacing_emu: properties
+        .column_spacing
+        .map(|spacing| spacing.to_emu())
+        .unwrap_or_default(),
+      right_to_left_columns: properties
+        .right_to_left_columns
+        .is_some_and(|value| value.as_bool()),
+      text_area_rotation: properties.rotation,
+      text_camera_z_rotation: properties
+        .scene3_d_type
+        .as_deref()
+        .and_then(|scene| scene.camera.rotation.as_ref())
+        .map(|rotation| rotation.revolution),
+      vertical: properties.vertical,
+      anchor: properties.anchor.unwrap_or(a::TextAnchoringTypeValues::Top),
+      anchor_center: properties
+        .anchor_center
+        .is_some_and(|value| value.as_bool()),
+      from_word_art: properties
+        .from_word_art
+        .is_some_and(|value| value.as_bool())
+        || properties.preset_text_warp.is_some(),
+      preset_text_warp: properties
+        .preset_text_warp
+        .as_deref()
+        .map(|warp| warp.preset),
+      preset_text_warp_geometry: properties.preset_text_warp.clone(),
+      upright: properties.up_right.is_some_and(|value| value.as_bool()),
+      auto_fit: TextAutoFit::None,
+    };
+
+    match properties.body_properties_choice1.as_ref() {
+      Some(a::BodyPropertiesChoice::NoAutoFit) | None => {
+        result.auto_fit = TextAutoFit::None;
+      }
+      Some(a::BodyPropertiesChoice::NormalAutoFit(auto_fit)) => {
+        result.auto_fit = TextAutoFit::Normal {
+          font_scale: auto_fit
+            .font_scale
+            .map(|scale| scale.as_drawingml_percent())
+            .unwrap_or(100_000),
+          line_space_reduction: auto_fit
+            .line_space_reduction
+            .map(|scale| scale.as_drawingml_percent())
+            // ECMA-376 dml-main.xsd declares lnSpcReduction with a 0%
+            // default. An empty a:normAutofit therefore keeps normal line
+            // spacing; only an explicit positive value reduces it.
+            .unwrap_or(0),
+        };
+      }
+      Some(a::BodyPropertiesChoice::ShapeAutoFit) => {
+        if !matches!(
+          result.vertical,
+          Some(
+            a::TextVerticalValues::Vertical
+              | a::TextVerticalValues::EastAsianVetical
+              | a::TextVerticalValues::Vertical270
+              | a::TextVerticalValues::MongolianVertical
+          )
+        ) {
+          result.auto_fit = TextAutoFit::Shape;
+        }
+      }
+    }
+    result
+  }
+
+  pub(crate) fn font_scale(&self) -> f32 {
+    match self.auto_fit {
+      TextAutoFit::Normal { font_scale, .. } => font_scale as f32 / 100_000.0,
+      TextAutoFit::None | TextAutoFit::Shape => 1.0,
+    }
+  }
+
+  pub(crate) fn line_height_scale(&self) -> f32 {
+    match self.auto_fit {
+      TextAutoFit::Normal {
+        line_space_reduction,
+        ..
+      } => 1.0 - line_space_reduction as f32 / 100_000.0,
+      TextAutoFit::None | TextAutoFit::Shape => 1.0,
+    }
+  }
+
+  pub(crate) fn rotation_degrees(&self) -> f32 {
+    let body_rotation = self
+      .text_area_rotation
+      .map(|rotation| rotation as f32 / 60_000.0)
+      .unwrap_or_default();
+    let vertical_rotation = match self.vertical {
+      Some(a::TextVerticalValues::Vertical | a::TextVerticalValues::EastAsianVetical) => 90.0,
+      Some(a::TextVerticalValues::Vertical270) => 270.0,
+      _ => 0.0,
+    };
+    // ECMA-376 Part 1 §20.1.10.83 defines vert/vert270 as the text flow
+    // direction. bodyPr@upright keeps text upright against transforms applied
+    // to the text body and its shape; it does not turn vertical text back into
+    // horizontal text.
+    if self.upright {
+      vertical_rotation
+    } else {
+      body_rotation + vertical_rotation
+    }
+  }
+
+  pub(crate) fn camera_z_rotation_degrees(&self) -> f32 {
+    // bodyPr/scene3d camera rot@rev as TextCameraZRotateAngle, and
+    // svx/source/svdraw/svdotextdecomposition.cxx applies it as
+    // 360 - GetCameraZRotation() during text decomposition.
+    self
+      .text_camera_z_rotation
+      .map(|rotation| 360.0 - rotation as f32 / 60_000.0)
+      .unwrap_or_default()
+  }
+}
+
+impl TextParagraph {
+  pub(crate) fn from_dml(source: &a::Paragraph) -> Self {
+    let level = source
+      .paragraph_properties
+      .as_ref()
+      .and_then(|properties| properties.level)
+      .map(|level| level as u8);
+    let runs = source
+      .paragraph_choice
+      .iter()
+      .filter_map(TextRun::from_dml)
+      .collect();
+    Self {
+      diagram_source_order: None,
+      diagram_synthesized_bullet_left_margin: false,
+      diagram_synthesized_bullet_indent: false,
+      level,
+      paragraph_properties: source.paragraph_properties.clone(),
+      end_paragraph_run_properties: source.end_paragraph_run_properties.clone(),
+      master_paragraph_style: None,
+      text_paragraph_style: None,
+      runs,
+    }
+  }
+
+  pub(crate) fn apply_text_styles(
+    &mut self,
+    master_text_list_style: Option<&TextListStyle>,
+    text_list_style: Option<&TextListStyle>,
+  ) {
+    self.master_paragraph_style = master_text_list_style
+      .and_then(|style| self.get_paragraph_style(style))
+      .map(TextListParagraphStyleRef::to_owned_style);
+    self.text_paragraph_style = text_list_style
+      .and_then(|style| self.get_paragraph_style(style))
+      .map(TextListParagraphStyleRef::to_owned_style);
+  }
+
+  pub(crate) fn get_paragraph_style<'a>(
+    &self,
+    text_list_style: &'a TextListStyle,
+  ) -> Option<TextListParagraphStyleRef<'a>> {
+    text_list_style.paragraph_style_for_level(self.level)
+  }
+}
+
+impl TextRun {
+  fn from_dml(choice: &a::ParagraphChoice) -> Option<Self> {
+    match choice {
+      a::ParagraphChoice::Run(run) => Some(Self {
+        text: run.text.clone(),
+        kind: TextRunKind::Run,
+        hyperlink_url: None,
+        field_type: None,
+        run_properties: run.run_properties.clone(),
+        field_paragraph_properties: None,
+      }),
+      a::ParagraphChoice::Break(line_break) => Some(Self {
+        text: "\n".to_string(),
+        kind: TextRunKind::Break,
+        hyperlink_url: None,
+        field_type: None,
+        run_properties: line_break.run_properties.clone(),
+        field_paragraph_properties: None,
+      }),
+      a::ParagraphChoice::Field(field) => field.text.as_ref().map(|text| Self {
+        text: text.clone(),
+        kind: TextRunKind::Field,
+        hyperlink_url: None,
+        field_type: field.r#type.clone(),
+        run_properties: field.run_properties.clone(),
+        field_paragraph_properties: field.paragraph_properties.clone(),
+      }),
+      a::ParagraphChoice::TextMath(math) => Some(Self {
+        text: text_math_text(math),
+        kind: TextRunKind::Math,
+        hyperlink_url: None,
+        field_type: None,
+        run_properties: None,
+        field_paragraph_properties: None,
+      }),
+      a::ParagraphChoice::AlternateContent(_) => None,
+    }
+  }
+}
+
+pub(crate) fn has_noninherited_body_properties(properties: &a::BodyProperties) -> bool {
+  properties.rotation.is_some()
+    || properties.use_paragraph_spacing.is_some()
+    || properties.vertical_overflow.is_some()
+    || properties.horizontal_overflow.is_some()
+    || properties.vertical.is_some()
+    || properties.wrap.is_some()
+    || properties.left_inset.is_some()
+    || properties.top_inset.is_some()
+    || properties.right_inset.is_some()
+    || properties.bottom_inset.is_some()
+    || properties.column_count.is_some()
+    || properties.column_spacing.is_some()
+    || properties.right_to_left_columns.is_some()
+    || properties.from_word_art.is_some()
+    || properties.anchor.is_some()
+    || properties.anchor_center.is_some()
+    || properties.force_anti_alias.is_some()
+    || properties.up_right.is_some()
+    || properties.compatible_line_spacing.is_some()
+    || properties.preset_text_warp.is_some()
+    || properties.body_properties_choice1.is_some()
+    || properties.scene3_d_type.is_some()
+    || properties.body_properties_choice2.is_some()
+    || properties.extension_list.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn empty_normal_autofit_keeps_full_line_height() {
+    let properties = a::BodyProperties {
+      body_properties_choice1: Some(a::BodyPropertiesChoice::NormalAutoFit(
+        a::NormalAutoFit::default(),
+      )),
+      ..a::BodyProperties::default()
+    };
+
+    let display = TextBodyDisplayProperties::from_body_properties(&properties);
+
+    assert_eq!(display.font_scale(), 1.0);
+    assert_eq!(display.line_height_scale(), 1.0);
+  }
+
+  #[test]
+  fn preset_text_warp_marks_word_art_and_preserves_its_kind() {
+    let properties = a::BodyProperties {
+      preset_text_warp: Some(Box::new(a::PresetTextWarp {
+        preset: a::TextShapeValues::TextPlain,
+        ..a::PresetTextWarp::default()
+      })),
+      ..a::BodyProperties::default()
+    };
+
+    let display = TextBodyDisplayProperties::from_body_properties(&properties);
+
+    assert!(display.from_word_art);
+    assert_eq!(
+      display.preset_text_warp,
+      Some(a::TextShapeValues::TextPlain)
+    );
+  }
+
+  #[test]
+  fn empty_placeholder_body_properties_inherit_vertical_anchor() {
+    let mut inherited = TextBody::default();
+    inherited.display_properties.anchor = a::TextAnchoringTypeValues::Center;
+    let mut direct = TextBody::from_parts(&a::BodyProperties::default(), None, &[]);
+
+    direct.inherit_placeholder_body_properties(&inherited);
+
+    assert_eq!(
+      direct.display_properties.anchor,
+      a::TextAnchoringTypeValues::Center
+    );
+  }
+
+  #[test]
+  fn empty_placeholder_body_properties_inherit_layout_insets() {
+    let inherited_properties = a::BodyProperties {
+      left_inset: Some(ooxmlsdk::simple_type::Coordinate32Value::Emu(0)),
+      top_inset: Some(ooxmlsdk::simple_type::Coordinate32Value::Emu(1)),
+      right_inset: Some(ooxmlsdk::simple_type::Coordinate32Value::Emu(2)),
+      bottom_inset: Some(ooxmlsdk::simple_type::Coordinate32Value::Emu(3)),
+      ..a::BodyProperties::default()
+    };
+    let inherited = TextBody::from_parts(&inherited_properties, None, &[]);
+    let mut direct = TextBody::from_parts(&a::BodyProperties::default(), None, &[]);
+
+    direct.inherit_placeholder_body_properties(&inherited);
+
+    let properties = direct
+      .body_properties
+      .as_deref()
+      .expect("direct text body should retain body properties");
+    assert_eq!(properties.left_inset, inherited_properties.left_inset);
+    assert_eq!(properties.top_inset, inherited_properties.top_inset);
+    assert_eq!(properties.right_inset, inherited_properties.right_inset);
+    assert_eq!(properties.bottom_inset, inherited_properties.bottom_inset);
+  }
+
+  #[test]
+  fn upright_vertical_text_retains_its_vertical_flow_rotation() {
+    let display = TextBodyDisplayProperties {
+      upright: true,
+      vertical: Some(a::TextVerticalValues::Vertical270),
+      text_area_rotation: Some(600_000),
+      ..TextBodyDisplayProperties::default()
+    };
+
+    assert_eq!(display.rotation_degrees(), 270.0);
+  }
+}

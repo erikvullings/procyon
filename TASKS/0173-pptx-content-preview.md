@@ -7,47 +7,47 @@ Depends on: 0088
 
 ## Context
 
-The F3 viewer has no PowerPoint preview. A faithful slide renderer would require substantial
-PresentationML, DrawingML, theme, font, chart, and layout support, but a native Rust parser can
-still provide a useful content-oriented preview of slide text and basic media.
+The F3 viewer needs a visually faithful PowerPoint preview without requiring LibreOffice or another
+external office suite. The first semantic Markdown implementation proved too limited for real
+presentations. Convert PPTX packages to PDF in native Rust and display the result through the
+existing PDF.js viewer.
 
-Prototype `pptx-to-md` as the first native Rust option. Treat its Markdown as an intermediate
-representation only: retain explicit slide boundaries and sanitize the rendered result through the
-existing Markdown preview path. If the prototype cannot preserve stable slide ordering, notes, or
-image relationships, evaluate `ppt-rs` behind the same application-owned interface rather than
-leaking a crate-specific model into transport.
+Vendor the unpublished, version-aligned `ooxmlsdk` renderer packages behind a small
+`fm-pptx-renderer` adapter crate. This keeps upstream source isolated and replaceable while exposing
+no third-party types to the application or transport layers.
 
 ## Acceptance Criteria
 
-- F3 recognizes `.pptx` and opens a read-only in-app preview organized by slide in presentation
-  order.
-- The preview renders slide titles, text, lists, tables, links, speaker notes, and embedded images
-  when the selected parser exposes them, with clear placeholders for omitted content.
-- Previous/next controls, keyboard navigation, slide count, and current-slide state reuse the
-  existing paged PDF/comic/EPUB viewer conventions.
+- F3 recognizes `.pptx`, converts it to PDF, and opens the result in the existing read-only PDF
+  viewer in presentation order.
+- The preview preserves the renderer's slide geometry, text, fonts, shapes, and images rather than
+  flattening the deck to semantic Markdown.
+- Previous/next controls, keyboard navigation, page count, search, and current-page state are the
+  existing PDF viewer behavior.
 - Parsing is provider-neutral and implemented behind `fm-application`; HTTP and Tauri adapters are
   thin and behaviorally equivalent.
-- Markdown/HTML output is sanitized before rendering. Package relationships cannot trigger scripts,
-  arbitrary file reads, or uncontrolled network requests.
-- Explicit source-byte, expanded-ZIP, entry-count, XML-depth, slide-count, text, and media budgets
-  prevent unbounded work. Over-budget or unsupported presentations retain an external-open fallback.
-- The UI labels this as a content preview and does not imply fidelity for themes, precise geometry,
-  fonts, transitions, animations, SmartArt, charts, embedded objects, audio, or video.
-- Search, selection/copy, cancellation, source-revision invalidation, cleanup, and external-open
-  actions behave consistently with other paged F3 renderers.
-- Tests cover ordering, titles/lists/tables, notes, images, unsafe links, malformed relationships,
-  ZIP limits, unsupported drawing content, cancellation, source changes, and host parity.
+- Package relationships cannot trigger scripts, arbitrary file reads, or uncontrolled network
+  requests.
+- Explicit source-byte, expanded-ZIP, entry-count, XML-depth, slide-count, text, media, decoded-image
+  pixel, and rendered-PDF budgets prevent unbounded work. Over-budget or unsupported presentations
+  retain an external-open fallback.
+- Rendered-PDF output and retained sessions are explicitly bounded. Unsupported or over-budget
+  presentations retain the external-open fallback.
+- Search, cancellation, source-revision invalidation, cleanup, and external-open actions behave
+  consistently with other paged F3 renderers.
+- Tests cover real PPTX-to-PDF conversion, package limits, cancellation, source changes, bounded PDF
+  range reads, cleanup, and HTTP/Tauri/mock parity.
 
 ## Implementation Notes
 
-- Keep slide structure in the DTO/state model instead of flattening the whole deck into one Markdown
-  string; this preserves navigation and bounds frontend memory.
-- Reuse `safeMarkdownHtml`, the sanitized preview styling, and paged-content controls in
-  `frontend/src/features/preview/file-viewer.ts`.
+- Keep the vendored renderer behind `fm-pptx-renderer`; application and transport code depend only on
+  its byte-oriented adapter.
+- Retain converted PDF bytes in the application session and expose bounded range reads to both
+  runtime adapters.
+- Reuse the existing PDF.js state, rendering, search, and paged controls instead of maintaining a
+  PPTX-specific frontend renderer.
 - Do not introduce LibreOffice or another external office suite as a required runtime dependency.
-  Optional future conversion-to-PDF can be considered separately if users require visual fidelity.
-- `pptx-to-md` and `ppt-rs` are newer and less established than Calamine. The first implementation
-  step is a fixture-based parser evaluation covering real-world decks before transport/UI work.
+- Renderer source provenance and aligned revisions are recorded in `third_party/README.md`.
 
 ## Agent Notes
 
@@ -61,3 +61,7 @@ leaking a crate-specific model into transport.
   lists, tables, links, notes, images, search, copy, keyboard navigation, explicit fidelity limits,
   cleanup, and external fallback. Covered parser safety/lifecycle, host routes/adapters, and viewer
   behavior with focused Rust and frontend tests.
+- 2026-09-01: Replaced the semantic Markdown implementation with native PPTX-to-PDF rendering using
+  vendored `ooxmlsdk` source behind `fm-pptx-renderer`. The application now retains a bounded PDF
+  session, HTTP/Tauri/mock adapters expose bounded range reads, and the frontend reuses its PDF.js
+  viewer for visual slide fidelity, navigation, and search.

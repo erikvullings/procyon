@@ -11,8 +11,7 @@ use fm_transport_dto::{
     OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
     OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
     ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadPptxPreviewResourceRequestDto,
-    ReadPptxPreviewResourceResponseDto, ReadStructuredJsonWindowRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
@@ -131,7 +130,7 @@ pub(crate) async fn close_docx_preview(
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
 }
 
-/// Opens a bounded semantic PPTX content-preview session.
+/// Opens a bounded rendered PowerPoint preview session.
 #[utoipa::path(post, path = "/api/v1/files/pptx/open", operation_id = "openPptxPreview",
     request_body = OpenPptxPreviewRequestDto,
     responses((status = 200, body = OpenPptxPreviewResponseDto), (status = 400, body = ApplicationErrorDto), (status = 403, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto)))]
@@ -150,18 +149,18 @@ pub(crate) async fn open_pptx_preview(
         .map_err(|error| ApiError::new(error, request_id))
 }
 
-/// Reads one bounded embedded image from a PPTX preview session.
-#[utoipa::path(post, path = "/api/v1/files/pptx/resource", operation_id = "readPptxPreviewResource",
-    request_body = ReadPptxPreviewResourceRequestDto,
-    responses((status = 200, body = ReadPptxPreviewResourceResponseDto), (status = 404, body = ApplicationErrorDto), (status = 409, body = ApplicationErrorDto)))]
-pub(crate) async fn read_pptx_preview_resource(
+/// Reads one bounded byte range from a rendered PowerPoint PDF.
+#[utoipa::path(post, path = "/api/v1/files/pptx/pdf", operation_id = "readPptxPreviewPdf",
+    request_body = ReadPptxPreviewPdfRequestDto,
+    responses((status = 200, body = ReadFileRangeResponseDto), (status = 400, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto), (status = 409, body = ApplicationErrorDto)))]
+pub(crate) async fn read_pptx_preview_pdf(
     State(state): State<AppState>,
     Extension(request_id): Extension<RequestId>,
-    Json(request): Json<ReadPptxPreviewResourceRequestDto>,
-) -> Result<Json<ReadPptxPreviewResourceResponseDto>, ApiError> {
+    Json(request): Json<ReadPptxPreviewPdfRequestDto>,
+) -> Result<Json<ReadFileRangeResponseDto>, ApiError> {
     state
         .service
-        .read_pptx_preview_resource(request)
+        .read_pptx_preview_pdf(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))

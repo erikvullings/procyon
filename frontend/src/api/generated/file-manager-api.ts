@@ -68,8 +68,7 @@ import type {
   ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
   ReadFileRangeResponseDto,
-  ReadPptxPreviewResourceRequestDto,
-  ReadPptxPreviewResourceResponseDto,
+  ReadPptxPreviewPdfRequestDto,
   ReadStructuredJsonWindowRequestDto,
   ReadStructuredJsonWindowResponseDto,
   ReadStructuredRowsRequestDto,
@@ -2545,7 +2544,7 @@ export const getOpenPptxPreviewUrl = () => {
 }
 
 /**
- * @summary Opens a bounded semantic PPTX content-preview session.
+ * @summary Opens a bounded rendered PowerPoint preview session.
  */
 export const openPptxPreview = async (openPptxPreviewRequestDto: OpenPptxPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openPptxPreviewResponse> => {
 
@@ -2566,42 +2565,47 @@ return fetchMutator<openPptxPreviewResponse>(getOpenPptxPreviewUrl(),
 
 
 
-export type readPptxPreviewResourceResponse200 = {
-  data: ReadPptxPreviewResourceResponseDto
+export type readPptxPreviewPdfResponse200 = {
+  data: ReadFileRangeResponseDto
   status: 200
 }
 
-export type readPptxPreviewResourceResponse404 = {
+export type readPptxPreviewPdfResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type readPptxPreviewPdfResponse404 = {
   data: ApplicationErrorDto
   status: 404
 }
 
-export type readPptxPreviewResourceResponse409 = {
+export type readPptxPreviewPdfResponse409 = {
   data: ApplicationErrorDto
   status: 409
 }
 
-export type readPptxPreviewResourceResponseSuccess = (readPptxPreviewResourceResponse200) & {
+export type readPptxPreviewPdfResponseSuccess = (readPptxPreviewPdfResponse200) & {
   headers: Headers;
 };
-export type readPptxPreviewResourceResponseError = (readPptxPreviewResourceResponse404 | readPptxPreviewResourceResponse409) & {
+export type readPptxPreviewPdfResponseError = (readPptxPreviewPdfResponse400 | readPptxPreviewPdfResponse404 | readPptxPreviewPdfResponse409) & {
   headers: Headers;
 };
 
-export type readPptxPreviewResourceResponse = (readPptxPreviewResourceResponseSuccess | readPptxPreviewResourceResponseError)
+export type readPptxPreviewPdfResponse = (readPptxPreviewPdfResponseSuccess | readPptxPreviewPdfResponseError)
 
-export const getReadPptxPreviewResourceUrl = () => {
-
-
+export const getReadPptxPreviewPdfUrl = () => {
 
 
-  return `/api/v1/files/pptx/resource`
+
+
+  return `/api/v1/files/pptx/pdf`
 }
 
 /**
- * @summary Reads one bounded embedded image from a PPTX preview session.
+ * @summary Reads one bounded byte range from a rendered PowerPoint PDF.
  */
-export const readPptxPreviewResource = async (readPptxPreviewResourceRequestDto: ReadPptxPreviewResourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readPptxPreviewResourceResponse> => {
+export const readPptxPreviewPdf = async (readPptxPreviewPdfRequestDto: ReadPptxPreviewPdfRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readPptxPreviewPdfResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2609,12 +2613,12 @@ export const readPptxPreviewResource = async (readPptxPreviewResourceRequestDto:
     if (Array.isArray(h)) return Object.fromEntries(h);
     return h;
   };
-return fetchMutator<readPptxPreviewResourceResponse>(getReadPptxPreviewResourceUrl(),
+return fetchMutator<readPptxPreviewPdfResponse>(getReadPptxPreviewPdfUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(readPptxPreviewResourceRequestDto)
+    body: JSON.stringify(readPptxPreviewPdfRequestDto)
   }
 );}
 

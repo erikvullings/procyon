@@ -1,0 +1,163 @@
+use super::*;
+use crate::render::chart as shared_chart;
+
+pub(super) fn supplemental_graphic_blocks(
+  package: &WordprocessingDocument,
+  main: &MainDocumentPart,
+  styles: &StylesCatalog,
+) -> Vec<Block> {
+  chart_text_blocks(package, main, styles)
+}
+
+fn chart_text_blocks(
+  package: &WordprocessingDocument,
+  main: &MainDocumentPart,
+  styles: &StylesCatalog,
+) -> Vec<Block> {
+  let mut blocks = Vec::new();
+  let chart_parts = main.chart_parts(package).collect::<Vec<_>>();
+  for chart_part in chart_parts {
+    let Ok(chart_space) = chart_part.root_element(package) else {
+      continue;
+    };
+    // Typed radial and cartesian charts are laid out at their drawing anchor.
+    // Cached series data is not separate document body text.
+    let typed_chart = shared_chart::pie_chart_model(chart_space).is_some()
+      || shared_chart::cartesian_chart_for_host_locales(
+        chart_space,
+        shared_chart::ChartHostApplication::Wordprocessing,
+        styles.locales.ui_language(),
+        styles.locales.format_locale(),
+      )
+      .is_some();
+    let vertical_axis_labels = chart_vertical_multilevel_axis_labels(chart_space);
+    if typed_chart && vertical_axis_labels.is_empty() {
+      continue;
+    }
+    let color = chart_label_color(chart_space, &styles.theme_colors).unwrap_or_default();
+    let texts = if typed_chart {
+      vertical_axis_labels.clone()
+    } else {
+      shared_chart::fixed_output_texts_for_host_ui_language(
+        chart_space,
+        shared_chart::ChartHostApplication::Wordprocessing,
+        styles.locales.ui_language(),
+      )
+    };
+    for text in texts {
+      let mut style = text_style_with_color(styles, color);
+      if vertical_axis_labels.iter().any(|label| label == &text) {
+        style.rotation_deg = -90.0;
+      }
+      blocks.push(simple_text_block(text, style));
+    }
+  }
+  blocks
+}
+
+fn chart_vertical_multilevel_axis_labels(chart_space: &c::ChartSpace) -> Vec<String> {
+  if !shared_chart::has_vertical_multilevel_category_axis(chart_space) {
+    return Vec::new();
+  }
+
+  let mut labels = Vec::new();
+  for series in shared_chart::series(chart_space) {
+    let Some(category_axis_data) = series.category_axis_data else {
+      continue;
+    };
+    let Some(c::CategoryAxisDataChoice::MultiLevelStringReference(reference)) =
+      category_axis_data.category_axis_data_choice.as_ref()
+    else {
+      continue;
+    };
+    let Some(cache) = reference.multi_level_string_cache.as_deref() else {
+      continue;
+    };
+    for level in cache.level.iter().skip(1) {
+      for point in &level.string_point {
+        push_unique_chart_text(&mut labels, &point.numeric_value);
+      }
+    }
+  }
+  labels
+}
+
+fn push_unique_chart_text(texts: &mut Vec<String>, value: &str) {
+  let trimmed = value.trim();
+  if trimmed.is_empty() || texts.iter().any(|text| text == trimmed) {
+    return;
+  }
+  texts.push(trimmed.to_string());
+}
+
+fn chart_label_color(chart_space: &c::ChartSpace, theme_colors: &ThemeColors) -> Option<RgbColor> {
+  shared_chart::series(chart_space)
+    .into_iter()
+    .filter_map(|series| series.data_labels)
+    .chain(shared_chart::data_labels(chart_space))
+    .find_map(|labels| {
+      labels
+        .data_label
+        .iter()
+        .find_map(|label| {
+          label
+            .data_label_choice
+            .iter()
+            .find_map(|choice| match choice {
+              c::DataLabelChoice::Sequence(sequence) => sequence
+                .text_properties
+                .as_deref()
+                .and_then(|properties| chart_text_properties_color(properties, theme_colors)),
+              c::DataLabelChoice::Delete(_) => None,
+            })
+        })
+        .or_else(|| match labels.data_labels_choice.as_ref()? {
+          c::DataLabelsChoice::Sequence(sequence) => sequence
+            .text_properties
+            .as_deref()
+            .and_then(|properties| chart_text_properties_color(properties, theme_colors)),
+          c::DataLabelsChoice::Delete(_) => None,
+        })
+    })
+}
+
+fn chart_text_properties_color(
+  properties: &c::TextProperties,
+  theme_colors: &ThemeColors,
+) -> Option<RgbColor> {
+  properties
+    .list_style
+    .as_deref()
+    .and_then(|style| style.default_paragraph_properties.as_deref())
+    .and_then(|paragraph| paragraph.default_run_properties.as_deref())
+    .and_then(|run_properties| chart_default_run_properties_color(run_properties, theme_colors))
+    .or_else(|| {
+      properties
+        .paragraph
+        .iter()
+        .filter_map(|paragraph| paragraph.paragraph_properties.as_deref())
+        .filter_map(|properties| properties.default_run_properties.as_deref())
+        .find_map(|run_properties| chart_default_run_properties_color(run_properties, theme_colors))
+    })
+}
+
+fn chart_default_run_properties_color(
+  run_properties: &a::DefaultRunProperties,
+  theme_colors: &ThemeColors,
+) -> Option<RgbColor> {
+  match run_properties.default_run_properties_choice1.as_ref()? {
+    a::DefaultRunPropertiesChoice::SolidFill(fill) => {
+      drawingml_solid_fill_color(fill, theme_colors)
+    }
+    _ => None,
+  }
+}
+
+fn drawingml_solid_fill_color(fill: &a::SolidFill, theme_colors: &ThemeColors) -> Option<RgbColor> {
+  match fill.solid_fill_choice.as_ref()? {
+    a::SolidFillChoice::RgbColorModelHex(color) => parse_hex_color(color.val.as_str()),
+    a::SolidFillChoice::SchemeColor(color) => resolve_drawingml_scheme_color(color, theme_colors),
+    a::SolidFillChoice::PresetColor(color) => drawingml_preset_color_value(color.val),
+    _ => None,
+  }
+}

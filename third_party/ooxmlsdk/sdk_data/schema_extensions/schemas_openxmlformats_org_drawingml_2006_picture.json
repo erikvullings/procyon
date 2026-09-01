@@ -1,0 +1,30 @@
+{
+  "Types": [
+    {
+      "ClassName": "Picture",
+      "HaveXmlnsFields": true,
+      "AlternateContent": [
+        {
+          "AfterField": "non_visual_picture_properties",
+          "Children": [
+            "blip_fill"
+          ]
+        }
+      ],
+      "Children": [
+        {
+          "PropertyName": "NonVisualPictureProperties",
+          "Optional": true
+        },
+        {
+          "PropertyName": "BlipFill",
+          "Optional": true
+        },
+        {
+          "PropertyName": "ShapeProperties",
+          "Optional": true
+        }
+      ]
+    }
+  ]
+}

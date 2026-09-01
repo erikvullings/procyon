@@ -1,0 +1,31 @@
+{
+  "Enums": [
+    {
+      "Name": "VerticalAnchorValues",
+      "AddFacets": [
+        {
+          "Name": "Line",
+          "Value": "line"
+        }
+      ]
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "TopBorder",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LeftBorder",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RightBorder",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BottomBorder",
+      "HaveXmlnsFields": true
+    }
+  ]
+}

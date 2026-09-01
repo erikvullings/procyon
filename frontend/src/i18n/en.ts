@@ -409,7 +409,6 @@ export const en = {
     nextPage: 'Next page',
     loadingPage: 'Loading page…',
     loadingChapter: 'Loading chapter…',
-    loadingSlide: 'Loading slide…',
     archiveFormat: 'Format',
     archiveFiles: 'Files',
     archiveDirectories: 'Directories',
@@ -444,9 +443,6 @@ export const en = {
     epubPackageMissing: "Couldn't find this EPUB's package document.",
     docxContentOnly:
       'Content view only. Word layout features are omitted: {features}. Open externally for full fidelity.',
-    pptxContentPreview: 'PowerPoint content preview',
-    pptxContentOnly:
-      'Content preview only. PowerPoint fidelity features are omitted: {features}. Open externally for full fidelity.',
     structuredSortLimit: 'Sorting is available for files up to {size}.',
     structuredSortAfterIndex:
       'Sorting becomes available when this bounded file has finished indexing.',

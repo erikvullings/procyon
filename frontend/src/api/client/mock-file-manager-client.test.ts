@@ -702,25 +702,24 @@ describe('MockFileManagerClient file range and content search methods', () => {
     ).rejects.toMatchObject({ code: 'notFound' });
   });
 
-  it('provides and cleans up the same paged PPTX session contract as other hosts', async () => {
+  it('provides and cleans up the same rendered PPTX PDF session contract as other hosts', async () => {
     const client = new MockFileManagerClient();
     const opened = await client.openPptxPreview({
       location: { ...LOCATION, uri: 'mock:///briefing.pptx' },
     });
-    const resource = opened.resources[0];
-
-    expect(opened.slides).toHaveLength(2);
-    await expect(
-      client.readPptxPreviewResource({
-        sessionId: opened.sessionId,
-        resourceId: resource?.resourceId ?? '',
-      }),
-    ).resolves.toMatchObject({ mediaType: 'image/png' });
+    expect(opened.pdfBytes).toBeGreaterThan(0);
+    const range = await client.readPptxPreviewPdf({
+      sessionId: opened.sessionId,
+      offset: 0,
+      length: opened.pdfBytes,
+    });
+    expect(new TextDecoder().decode(new Uint8Array(range.data))).toMatch(/^%PDF-/);
     await client.closePptxPreview({ sessionId: opened.sessionId });
     await expect(
-      client.readPptxPreviewResource({
+      client.readPptxPreviewPdf({
         sessionId: opened.sessionId,
-        resourceId: resource?.resourceId ?? '',
+        offset: 0,
+        length: 4,
       }),
     ).rejects.toMatchObject({ code: 'notFound' });
   });

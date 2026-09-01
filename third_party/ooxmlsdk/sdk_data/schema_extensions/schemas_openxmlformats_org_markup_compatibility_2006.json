@@ -1,0 +1,29 @@
+{
+  "Types": [
+    {
+      "ClassName": "AlternateContent",
+      "HaveMcIgnorable": true,
+      "HaveMcProcessContent": true,
+      "HaveMcMustUnderstand": true,
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Choice",
+      "HaveMcPreserveAttributes": true,
+      "HaveMcPreserveElements": true,
+      "HaveMcProcessContent": true,
+      "HaveMcMustUnderstand": true,
+      "HaveXmlnsFields": true,
+      "Attributes": [
+        {
+          "PropertyName": "Requires",
+          "OverrideType": "ListValue<crate::common::XmlNamespace>"
+        }
+      ]
+    },
+    {
+      "ClassName": "Fallback",
+      "HaveXmlnsFields": true
+    }
+  ]
+}

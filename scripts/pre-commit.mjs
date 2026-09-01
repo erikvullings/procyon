@@ -52,7 +52,9 @@ function owningManifest(file) {
   return directory === '.' ? 'Cargo.toml' : `${directory}/Cargo.toml`;
 }
 
-const stagedRustSources = stagedFiles(['*.rs']);
+const isVendored = (file) => file.startsWith('third_party/');
+
+const stagedRustSources = stagedFiles(['*.rs']).filter((file) => !isVendored(file));
 if (stagedRustSources.length > 0) {
   run('rustfmt', ['--edition', '2024', ...stagedRustSources]);
   run('git', ['add', ...stagedRustSources]);
@@ -63,7 +65,9 @@ if (stagedRustSources.length > 0) {
 // (including slow integration tests - large-tree copies, real SFTP sessions,
 // etc.) only runs in CI now (see scripts/pre-push.mjs), not in a local hook -
 // run `pnpm test` yourself before pushing if you want it to run locally too.
-const stagedRust = stagedFiles(['*.rs', '**/Cargo.toml', 'Cargo.toml', 'Cargo.lock']);
+const stagedRust = stagedFiles(['*.rs', '**/Cargo.toml', 'Cargo.toml', 'Cargo.lock']).filter(
+  (file) => !isVendored(file),
+);
 if (stagedRust.length > 0) {
   const manifests = [...new Set(stagedRust.map(owningManifest))];
   for (const manifest of manifests) {

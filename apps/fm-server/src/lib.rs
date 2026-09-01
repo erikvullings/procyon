@@ -68,9 +68,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(routes::files::close_docx_preview))
         .routes(utoipa_axum::routes!(routes::files::open_pptx_preview))
-        .routes(utoipa_axum::routes!(
-            routes::files::read_pptx_preview_resource
-        ))
+        .routes(utoipa_axum::routes!(routes::files::read_pptx_preview_pdf))
         .routes(utoipa_axum::routes!(routes::files::close_pptx_preview))
         .routes(utoipa_axum::routes!(routes::files::open_structured_view))
         .routes(utoipa_axum::routes!(routes::files::structured_view_status))

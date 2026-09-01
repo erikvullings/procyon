@@ -61,11 +61,10 @@ import type {
   PluginId,
   PluginLogEntry,
   PptxPreview,
-  PptxPreviewResource,
   PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
-  ReadPptxPreviewResourceRequest,
+  ReadPptxPreviewPdfRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -184,7 +183,7 @@ export type MockClientMethod =
   | 'readDocxPreviewResource'
   | 'closeDocxPreview'
   | 'openPptxPreview'
-  | 'readPptxPreviewResource'
+  | 'readPptxPreviewPdf'
   | 'closePptxPreview'
   | 'searchInFile'
   | 'calculateFolderSize'
@@ -777,7 +776,7 @@ export class MockFileManagerClient implements FileManagerClient {
   >();
   private readonly fileContents = new Map<string, Uint8Array>();
   private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
-  private readonly pptxSessions = new Map<string, Map<string, PptxPreviewResource>>();
+  private readonly pptxSessions = new Map<string, Uint8Array>();
   private readonly structuredSessions = new Map<
     string,
     {
@@ -1417,54 +1416,43 @@ export class MockFileManagerClient implements FileManagerClient {
   openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview> {
     return this.perform('openPptxPreview', signal, () => {
       const sessionId = crypto.randomUUID();
-      const resourceId = crypto.randomUUID();
-      this.pptxSessions.set(
-        sessionId,
-        new Map([
-          [
-            resourceId,
-            {
-              data: [137, 80, 78, 71, 13, 10, 26, 10],
-              mediaType: 'image/png',
-            },
-          ],
-        ]),
+      const pdf = new TextEncoder().encode(
+        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
+          '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+          '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n' +
+          '4 0 obj<</Length 0>>stream\nendstream\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
       );
+      this.pptxSessions.set(sessionId, pdf);
       return {
         sessionId,
         sourceRevision: `mock:${request.location.uri}`,
         sourceBytes: 2048,
-        slides: [
-          { index: 0, title: 'Overview', markdown: '# Overview\n\nFirst mock slide.' },
-          {
-            index: 1,
-            title: 'Details',
-            markdown: '# Details\n\n![Embedded image](pptx-resource:../media/image1.png)',
-          },
-        ],
-        resources: [
-          {
-            resourceId,
-            source: '../media/image1.png',
-            mediaType: 'image/png',
-            byteLength: 8,
-          },
-        ],
-        omittedFeatures: ['themes and precise geometry', 'transitions and animations', 'charts'],
+        pdfBytes: pdf.length,
       };
     });
   }
 
-  readPptxPreviewResource(
-    request: ReadPptxPreviewResourceRequest,
+  readPptxPreviewPdf(
+    request: ReadPptxPreviewPdfRequest,
     signal?: AbortSignal,
-  ): Promise<PptxPreviewResource> {
-    return this.perform('readPptxPreviewResource', signal, () => {
-      const resource = this.pptxSessions.get(request.sessionId)?.get(request.resourceId);
-      if (resource === undefined) {
-        throw new MockClientError('notFound', 'PPTX preview resource not found');
+  ): Promise<FileRangeChunk> {
+    return this.perform('readPptxPreviewPdf', signal, () => {
+      if (request.length <= 0) {
+        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes');
       }
-      return structuredClone(resource);
+      const pdf = this.pptxSessions.get(request.sessionId);
+      if (pdf === undefined) {
+        throw new MockClientError('notFound', 'PPTX preview session not found');
+      }
+      const end = Math.min(pdf.length, request.offset + request.length);
+      const slice = pdf.slice(request.offset, Math.max(request.offset, end));
+      return {
+        data: Array.from(slice),
+        offset: request.offset,
+        length: slice.length,
+        eof: end >= pdf.length,
+        ...(request.offset === 0 ? { probablyBinary: true } : {}),
+      };
     });
   }
 

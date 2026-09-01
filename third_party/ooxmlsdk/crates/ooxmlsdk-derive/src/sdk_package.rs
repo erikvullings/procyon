@@ -1,0 +1,1282 @@
+use super::*;
+
+struct PackageChildInfo {
+  attrs: Vec<Attribute>,
+  field_ident: Ident,
+  part_ty: Type,
+  kind: PartChildKind,
+  relationship_type: PartRelationshipTypeSource,
+  main_accessor_ident: Option<Ident>,
+}
+
+struct PartChildMarkerInfo {
+  part_ty: Type,
+  kind: PartChildKind,
+}
+
+pub(crate) fn expand_sdk_package(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = &input.ident;
+  let Data::Struct(data_struct) = &input.data else {
+    return Err(syn::Error::new_spanned(
+      input,
+      "SdkPackage can only be derived for structs",
+    ));
+  };
+
+  let Fields::Named(fields) = &data_struct.fields else {
+    return Err(syn::Error::new_spanned(
+      input,
+      "SdkPackage can only be derived for named-field structs",
+    ));
+  };
+
+  let storage_field = fields
+    .named
+    .iter()
+    .find(|field| field.ident.as_ref().is_some_and(|ident| ident == "storage"))
+    .ok_or_else(|| syn::Error::new_spanned(input, "SdkPackage requires a `storage` field"))?;
+  let storage_ident = storage_field.ident.as_ref().unwrap();
+  let open_settings_ident = fields.named.iter().find_map(|field| {
+    let ident = field.ident.as_ref()?;
+    (ident == "open_settings").then_some(ident)
+  });
+  let open_settings_method = open_settings_ident.map(|ident| {
+    quote! {
+      #[inline]
+      fn open_settings(&self) -> &crate::sdk::OpenSettings {
+        &self.#ident
+      }
+    }
+  });
+  let open_settings_init = open_settings_ident.map(|ident| {
+    quote! {
+      #ident: open_settings,
+    }
+  });
+
+  let root_elements_ident = fields.named.iter().find_map(|field| {
+    let ident = field.ident.as_ref()?;
+    (ident == "root_elements").then_some(ident)
+  });
+  let root_elements_local = root_elements_ident.map(|_| {
+    quote! {
+      let root_elements = crate::parts::initialize_root_elements(&mut storage, &open_settings)?;
+    }
+  });
+  let root_elements_init = root_elements_ident.map(|ident| {
+    quote! {
+      #ident: root_elements,
+    }
+  });
+  let mut child_infos = Vec::new();
+  for field in &fields.named {
+    let Some(field_ident) = field.ident.as_ref() else {
+      continue;
+    };
+    if field_ident == "storage" || field_ident == "open_settings" || field_ident == "root_elements"
+    {
+      continue;
+    }
+
+    let Some(marker) = part_child_field_info(&field.ty) else {
+      return Err(syn::Error::new_spanned(
+        field,
+        "SdkPackage fields require storage, open_settings, root_elements, or PartChild markers",
+      ));
+    };
+    let relationship_type = parse_part_child_relationship_type_attr(&field.attrs)?
+      .unwrap_or(PartRelationshipTypeSource::TypeConst);
+    child_infos.push(PackageChildInfo {
+      attrs: passthrough_attrs(&field.attrs),
+      field_ident: field_ident.clone(),
+      part_ty: marker.part_ty,
+      kind: parse_part_child_kind_attr(&field.attrs)?.unwrap_or(marker.kind),
+      relationship_type,
+      main_accessor_ident: parse_package_main_accessor(&field.attrs)?,
+    });
+  }
+  let main_child = child_infos
+    .iter()
+    .find(|child| child.main_accessor_ident.is_some());
+  let main_part_relationship_type = main_child.map(|child| {
+    let part_ty = &child.part_ty;
+    quote! {
+      pub const MAIN_PART_RELATIONSHIP_TYPE: &'static str =
+        <#part_ty as crate::sdk::SdkPartDescriptor>::RELATIONSHIP_TYPE;
+    }
+  });
+  let main_part_method = main_child.map(|child| {
+    let attrs = &child.attrs;
+    let field_ident = &child.field_ident;
+    let part_ty = &child.part_ty;
+    let accessor_ident = child.main_accessor_ident.as_ref().unwrap();
+    let relationship_matches = relationship_match_condition_tokens(
+      &child.relationship_type,
+      quote! { relationship },
+      quote! { <#part_ty as crate::sdk::SdkPartDescriptor>::RELATIONSHIP_TYPE },
+    );
+    let add_accessor_ident: Ident =
+      parse_str(&format!("add_{accessor_ident}")).expect("main part add accessor identifier");
+    quote! {
+      #( #attrs )*
+      pub fn #accessor_ident(&self) -> Result<#part_ty, crate::common::SdkError> {
+        let _ = self.#field_ident;
+        let storage = crate::sdk::SdkPackage::storage(self);
+        crate::sdk::SdkPackage::relationships(self)
+          .part_relationships()
+          .find_map(|relationship| {
+            (#relationship_matches)
+              .then(|| crate::sdk::relationship_target_as_part::<#part_ty>(storage, relationship))
+              .flatten()
+          })
+          .ok_or_else(|| {
+            crate::common::SdkError::CommonError(
+              concat!("missing main part for ", stringify!(#ident)).to_string(),
+            )
+          })
+      }
+
+      #( #attrs )*
+      pub fn #add_accessor_ident(&mut self) -> Result<#part_ty, crate::common::SdkError> {
+        let _ = self.#field_ident;
+        if self.#accessor_ident().is_ok() {
+          return Err(crate::common::SdkError::CommonError(
+            concat!("main part already exists for ", stringify!(#ident)).to_string(),
+          ));
+        }
+
+        let relationship_id =
+          crate::sdk::SdkPackage::relationships(self).next_relationship_id();
+        let content_type =
+          crate::sdk::typed_main_part_content_type::<#part_ty>(
+            crate::sdk::SdkPackage::storage(self),
+          );
+        let part =
+          crate::sdk::SdkPackage::add_new_part_with_content_type_and_extension::<#part_ty>(
+            self,
+            relationship_id.clone(),
+            content_type,
+            <#part_ty as crate::sdk::SdkPartDescriptor>::EXTENSION,
+            crate::common::NewPartTargetMode::Fixed,
+          )?;
+        Ok(part)
+      }
+    }
+  });
+  let main_relationship_expr = if main_child.is_some() {
+    quote! {
+      crate::sdk::SdkPackage::relationships(self)
+        .first_target_part_by_relationship_type(Self::MAIN_PART_RELATIONSHIP_TYPE)
+    }
+  } else {
+    quote! { None }
+  };
+  let document_type_ty: Type = match ident.to_string().as_str() {
+    "WordprocessingDocument" => parse_str("crate::sdk::WordprocessingDocumentType")?,
+    "SpreadsheetDocument" => parse_str("crate::sdk::SpreadsheetDocumentType")?,
+    "PresentationDocument" => parse_str("crate::sdk::PresentationDocumentType")?,
+    _ => {
+      return Err(syn::Error::new_spanned(
+        input,
+        "SdkPackage only supports generated office document packages",
+      ));
+    }
+  };
+  let package_relationship_methods = package_relationship_method_tokens(&child_infos);
+  let constraint_impl = package_constraint_impl_tokens(&child_infos);
+  let root_cache_methods = root_elements_ident.map(|root_elements_ident| {
+    quote! {
+      #[inline]
+      fn root_element(
+        &self,
+        part_slot: crate::common::PartSlot,
+      ) -> Option<&crate::parts::PartRootElement> {
+        self.#root_elements_ident.get(part_slot)
+      }
+
+      #[inline]
+      fn cache_root_element(
+        &self,
+        part_slot: crate::common::PartSlot,
+        root_element: crate::parts::PartRootElement,
+      ) -> Option<&crate::parts::PartRootElement> {
+        self.#root_elements_ident.cache_loaded(part_slot, root_element)
+      }
+
+      #[inline]
+      fn root_element_requires_serialization(
+        &self,
+        part_slot: crate::common::PartSlot,
+      ) -> bool {
+        self.#root_elements_ident.requires_serialization(part_slot)
+      }
+
+      #[inline]
+      fn root_element_mut(
+        &mut self,
+        part_slot: crate::common::PartSlot,
+      ) -> Option<&mut crate::parts::PartRootElement> {
+        self.#root_elements_ident.get_mut(part_slot)
+      }
+
+      #[inline]
+      fn replace_root_element(
+        &mut self,
+        part_slot: crate::common::PartSlot,
+        root_element: crate::parts::PartRootElement,
+      ) -> bool {
+        self.#root_elements_ident.replace(part_slot, root_element)
+      }
+
+      #[inline]
+      fn take_root_element(
+        &mut self,
+        part_slot: crate::common::PartSlot,
+      ) -> Option<crate::parts::PartRootElement> {
+        self.#root_elements_ident.take(part_slot)
+      }
+
+      #[inline]
+      fn push_root_element_slot(&mut self) {
+        self.#root_elements_ident.push_empty();
+      }
+    }
+  });
+  let child_field_inits = child_infos.iter().map(|child| {
+    let field_ident = &child.field_ident;
+    quote! {
+      #field_ident: Default::default(),
+    }
+  });
+  let validate_method_tokens = if cfg!(feature = "validators") {
+    quote! {
+      #[cfg(feature = "validators")]
+      pub fn validate(
+        &mut self,
+      ) -> Result<Vec<crate::validator::ValidationErrorInfo>, crate::common::SdkError> {
+        self.load_all_parts()?;
+        let mut context = crate::validator::ValidationContext::default();
+        let parts: Vec<_> = crate::sdk::SdkPackage::storage(self)
+          .parts()
+          .iter()
+          .enumerate()
+          .filter(|(_, part)| !part.is_deleted())
+          .map(|(index, part)| {
+            (
+              crate::common::PartSlot::from_index(index),
+              part.path().to_string(),
+            )
+          })
+          .collect();
+
+        for (part_id, part_uri) in parts {
+          let Some(root_element) = crate::sdk::SdkPackage::root_element(self, part_id) else {
+            continue;
+          };
+          context.with_part_uri(part_uri, |context| {
+            root_element.validate_into(context);
+          });
+          if context.should_stop() {
+            break;
+          }
+        }
+
+        Ok(context.into_errors())
+      }
+    }
+  } else {
+    quote! {}
+  };
+  Ok(quote! {
+    impl crate::sdk::SdkPackage for #ident {
+      #constraint_impl
+
+      #[inline]
+      fn storage(&self) -> &crate::common::SdkPackageStorage {
+        &self.#storage_ident
+      }
+
+      #[inline]
+      fn storage_mut(&mut self) -> &mut crate::common::SdkPackageStorage {
+        &mut self.#storage_ident
+      }
+
+      #open_settings_method
+
+      #root_cache_methods
+    }
+
+    impl #ident {
+      #main_part_relationship_type
+
+      pub fn new<R: std::io::Read + std::io::Seek>(
+        reader: R,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::new_with_settings(reader, crate::sdk::OpenSettings::default())
+      }
+
+      pub fn create(document_type: #document_type_ty) -> Self {
+        let open_settings = crate::sdk::OpenSettings::default();
+        let storage = crate::common::SdkPackageStorage::create(Some(document_type.content_type()));
+        Self::from_storage(storage, open_settings)
+          .expect("empty package storage should initialize")
+      }
+
+      pub fn create_from_template<P: AsRef<std::path::Path>>(
+        path: P,
+      ) -> Result<Self, crate::common::SdkError> {
+        let mut package = Self::new_from_file(path)?;
+        package.change_document_type(#document_type_ty::default())?;
+        Ok(package)
+      }
+
+      pub fn document_type(&self) -> #document_type_ty {
+        let content_type = #main_relationship_expr
+          .and_then(|part_id| crate::sdk::SdkPackage::storage(self).part(part_id))
+          .map(|part| part.content_type())
+          .or_else(|| {
+            crate::sdk::SdkPackage::storage(self).preferred_main_part_content_type()
+          });
+        content_type
+          .and_then(#document_type_ty::from_content_type)
+          .unwrap_or_default()
+      }
+
+      pub fn change_document_type(
+        &mut self,
+        document_type: #document_type_ty,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::sdk::SdkPackage::storage_mut(self)
+          .set_preferred_main_part_content_type(document_type.content_type());
+        if let Some(part_id) = #main_relationship_expr {
+          crate::sdk::SdkPackage::storage_mut(self)
+            .set_part_content_type(part_id, document_type.content_type())?;
+        }
+        Ok(())
+      }
+
+      pub fn new_with_settings<R: std::io::Read + std::io::Seek>(
+        reader: R,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::new_inner(reader, open_settings)
+      }
+
+      pub fn new_from_file<P: AsRef<std::path::Path>>(
+        path: P,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::new_from_file_with_settings(path, crate::sdk::OpenSettings::default())
+      }
+
+      pub fn new_from_file_with_settings<P: AsRef<std::path::Path>>(
+        path: P,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        let storage = crate::common::SdkPackageStorage::open_file(path.as_ref())?;
+        Self::from_storage(storage, open_settings)
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn from_flat_opc_str(text: &str) -> Result<Self, crate::common::SdkError> {
+        Self::from_flat_opc_str_with_settings(text, crate::sdk::OpenSettings::default())
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn from_flat_opc_str_with_settings(
+        text: &str,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::from_flat_opc_reader_with_settings(
+          std::io::Cursor::new(text.as_bytes()),
+          open_settings,
+        )
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn from_flat_opc_reader<R: std::io::BufRead>(
+        reader: R,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::from_flat_opc_reader_with_settings(reader, crate::sdk::OpenSettings::default())
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn from_flat_opc_reader_with_settings<R: std::io::BufRead>(
+        reader: R,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        Self::from_flat_opc_reader_inner(reader, open_settings)
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn to_flat_opc_string(&self) -> Result<String, crate::common::SdkError> {
+        let mut bytes = Vec::new();
+        self.write_flat_opc_to(&mut bytes)?;
+        String::from_utf8(bytes)
+          .map_err(|err| crate::common::SdkError::CommonError(format!("invalid Flat OPC UTF-8: {err}")))
+      }
+
+      #[cfg(feature = "flat-opc")]
+      pub fn write_flat_opc_to<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::sdk::SdkPackage::write_flat_opc_to(self, writer)
+      }
+
+      #[inline]
+      pub fn open_settings(&self) -> &crate::sdk::OpenSettings {
+        crate::sdk::SdkPackage::open_settings(self)
+      }
+
+      #[inline]
+      pub fn load_all_parts(&mut self) -> Result<(), crate::common::SdkError> {
+        crate::sdk::SdkPackage::load_all_parts(self)
+      }
+
+      #validate_method_tokens
+
+      #[inline]
+      pub fn add_external_relationship(
+        &mut self,
+        relationship_id: impl Into<String>,
+        relationship_type: impl Into<String>,
+        target: impl Into<String>,
+      ) -> Result<crate::common::RelationshipRef<'_>, crate::common::SdkError> {
+        crate::sdk::SdkPackage::add_external_relationship(
+          self,
+          relationship_id,
+          relationship_type,
+          target,
+        )
+      }
+
+      #[inline]
+      pub fn add_external_relationship_auto_id(
+        &mut self,
+        relationship_type: impl Into<String>,
+        target: impl Into<String>,
+      ) -> Result<crate::common::RelationshipRef<'_>, crate::common::SdkError> {
+        crate::sdk::SdkPackage::add_external_relationship_auto_id(
+          self,
+          relationship_type,
+          target,
+        )
+      }
+
+      #[inline]
+      pub fn add_hyperlink_relationship(
+        &mut self,
+        relationship_id: impl Into<String>,
+        target: impl Into<String>,
+      ) -> Result<crate::common::RelationshipRef<'_>, crate::common::SdkError> {
+        crate::sdk::SdkPackage::add_hyperlink_relationship(self, relationship_id, target)
+      }
+
+      #[inline]
+      pub fn add_hyperlink_relationship_with_mode(
+        &mut self,
+        relationship_id: impl Into<String>,
+        target: impl Into<String>,
+        target_mode: crate::schemas::opc_relationships::TargetMode,
+      ) -> Result<crate::common::RelationshipRef<'_>, crate::common::SdkError> {
+        crate::sdk::SdkPackage::add_hyperlink_relationship_with_mode(
+          self,
+          relationship_id,
+          target,
+          target_mode,
+        )
+      }
+
+      #[inline]
+      pub fn add_hyperlink_relationship_auto_id(
+        &mut self,
+        target: impl Into<String>,
+        target_mode: crate::schemas::opc_relationships::TargetMode,
+      ) -> Result<crate::common::RelationshipRef<'_>, crate::common::SdkError> {
+        crate::sdk::SdkPackage::add_hyperlink_relationship_auto_id(
+          self,
+          target,
+          target_mode,
+        )
+      }
+
+      #[inline]
+      pub fn get_reference_relationship(
+        &self,
+        relationship_id: &str,
+      ) -> Option<crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::get_reference_relationship(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn get_external_relationship(
+        &self,
+        relationship_id: &str,
+      ) -> Option<crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::get_external_relationship(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn get_hyperlink_relationship(
+        &self,
+        relationship_id: &str,
+      ) -> Option<crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::get_hyperlink_relationship(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn delete_reference_relationship(
+        &mut self,
+        relationship_id: &str,
+      ) -> Result<crate::common::Relationship, crate::common::SdkError> {
+        crate::sdk::SdkPackage::delete_reference_relationship(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn delete_external_relationship(
+        &mut self,
+        relationship_id: &str,
+      ) -> Result<crate::common::Relationship, crate::common::SdkError> {
+        crate::sdk::SdkPackage::delete_external_relationship(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn change_relationship_id(
+        &mut self,
+        relationship_id: &str,
+        new_relationship_id: impl Into<String>,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::sdk::SdkPackage::change_relationship_id(
+          self,
+          relationship_id,
+          new_relationship_id,
+        )
+      }
+
+      #[inline]
+      pub fn external_relationships(&self) -> impl Iterator<Item = crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::external_relationships(self)
+      }
+
+      #[inline]
+      pub fn hyperlink_relationships(&self) -> impl Iterator<Item = crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::hyperlink_relationships(self)
+      }
+
+      #[inline]
+      pub fn data_part_reference_relationships(
+        &self,
+      ) -> impl Iterator<Item = crate::common::RelationshipRef<'_>> {
+        crate::sdk::SdkPackage::data_part_reference_relationships(self)
+      }
+
+      #[inline]
+      pub fn media_data_parts(&self) -> impl Iterator<Item = crate::common::MediaDataPart> + '_ {
+        crate::sdk::SdkPackage::media_data_parts(self)
+      }
+
+      #[inline]
+      pub fn delete_unused_media_data_parts(&mut self) -> usize {
+        crate::sdk::SdkPackage::delete_unused_media_data_parts(self)
+      }
+
+      #[inline]
+      pub fn add_new_part<T: crate::sdk::SdkPart>(
+        &mut self,
+        relationship_id: impl Into<String>,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_new_part(self, relationship_id)
+      }
+
+      #[inline]
+      pub fn add_new_part_auto_id<T: crate::sdk::SdkPart>(
+        &mut self,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_new_part_auto_id(self)
+      }
+
+      #[inline]
+      pub fn add_new_part_with_content_type<T: crate::sdk::SdkPart>(
+        &mut self,
+        relationship_id: impl Into<String>,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_new_part_with_content_type(
+          self,
+          relationship_id,
+          content_type,
+        )
+      }
+
+      #[inline]
+      pub fn add_new_part_with_content_type_auto_id<T: crate::sdk::SdkPart>(
+        &mut self,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_new_part_with_content_type_auto_id(self, content_type)
+      }
+
+      #[inline]
+      pub fn add_new_part_with_content_type_and_extension<T: crate::sdk::SdkPart>(
+        &mut self,
+        relationship_id: impl Into<String>,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+        extension: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_new_part_with_content_type_and_extension(
+          self,
+          relationship_id,
+          content_type,
+          extension,
+          crate::common::NewPartTargetMode::Indexed,
+        )
+      }
+
+      #[inline]
+      pub fn add_new_part_with_content_type_and_extension_auto_id<T: crate::sdk::SdkPart>(
+        &mut self,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+        extension: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<T, crate::common::SdkError>
+  {
+        let relationship_id = crate::sdk::SdkPackage::relationships(self).next_relationship_id();
+        crate::sdk::SdkPackage::add_new_part_with_content_type_and_extension(
+          self,
+          relationship_id,
+          content_type,
+          extension,
+          crate::common::NewPartTargetMode::Indexed,
+        )
+      }
+
+      #[inline]
+      pub fn add_core_file_properties_part(
+        &mut self,
+      ) -> Result<crate::parts::core_file_properties_part::CoreFilePropertiesPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_core_file_properties_part(self)
+      }
+
+      #[inline]
+      pub fn add_extended_file_properties_part(
+        &mut self,
+      ) -> Result<
+        crate::parts::extended_file_properties_part::ExtendedFilePropertiesPart,
+        crate::common::SdkError,
+      >
+  {
+        crate::sdk::SdkPackage::add_extended_file_properties_part(self)
+      }
+
+      #[inline]
+      pub fn add_custom_file_properties_part(
+        &mut self,
+      ) -> Result<
+        crate::parts::custom_file_properties_part::CustomFilePropertiesPart,
+        crate::common::SdkError,
+      >
+  {
+        crate::sdk::SdkPackage::add_custom_file_properties_part(self)
+      }
+
+      #[inline]
+      pub fn add_digital_signature_origin_part(
+        &mut self,
+      ) -> Result<
+        crate::parts::digital_signature_origin_part::DigitalSignatureOriginPart,
+        crate::common::SdkError,
+      >
+  {
+        crate::sdk::SdkPackage::add_digital_signature_origin_part(self)
+      }
+
+      #[inline]
+      pub fn add_thumbnail_part(
+        &mut self,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<crate::parts::thumbnail_part::ThumbnailPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_thumbnail_part(self, content_type)
+      }
+
+      #[inline]
+      pub fn add_thumbnail_part_with_id(
+        &mut self,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+        relationship_id: impl Into<String>,
+      ) -> Result<crate::parts::thumbnail_part::ThumbnailPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_thumbnail_part_with_id(
+          self,
+          content_type,
+          relationship_id,
+        )
+      }
+
+      #[inline]
+      pub fn add_thumbnail_part_by_type(
+        &mut self,
+        part_type: crate::sdk::ThumbnailPartType,
+      ) -> Result<crate::parts::thumbnail_part::ThumbnailPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_thumbnail_part_by_type(self, part_type)
+      }
+
+      #[inline]
+      pub fn add_thumbnail_part_by_type_with_id(
+        &mut self,
+        part_type: crate::sdk::ThumbnailPartType,
+        relationship_id: impl Into<String>,
+      ) -> Result<crate::parts::thumbnail_part::ThumbnailPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_thumbnail_part_by_type_with_id(
+          self,
+          part_type,
+          relationship_id,
+        )
+      }
+
+      #[inline]
+      pub fn add_extended_part(
+        &mut self,
+        relationship_type: impl Into<String>,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+        target_extension: impl Into<std::borrow::Cow<'static, str>>,
+      ) -> Result<crate::parts::extended_part::ExtendedPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_extended_part(
+          self,
+          relationship_type,
+          content_type,
+          target_extension,
+        )
+      }
+
+      #[inline]
+      pub fn add_extended_part_with_id(
+        &mut self,
+        relationship_type: impl Into<String>,
+        content_type: impl Into<std::borrow::Cow<'static, str>>,
+        target_extension: impl Into<std::borrow::Cow<'static, str>>,
+        relationship_id: impl Into<String>,
+      ) -> Result<crate::parts::extended_part::ExtendedPart, crate::common::SdkError>
+  {
+        crate::sdk::SdkPackage::add_extended_part_with_id(
+          self,
+          relationship_type,
+          content_type,
+          target_extension,
+          relationship_id,
+        )
+      }
+
+      pub fn save<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: W,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::parts::save_package(self, writer)
+      }
+
+      pub fn copy_to<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: W,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::parts::save_package(self, writer)
+      }
+
+      pub fn to_package_bytes(&self) -> Result<Vec<u8>, crate::common::SdkError> {
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        self.copy_to(&mut buffer)?;
+        Ok(buffer.into_inner())
+      }
+
+      pub fn to_owned_package(&self) -> Result<Self, crate::common::SdkError> {
+        Self::new_with_settings(
+          std::io::Cursor::new(self.to_package_bytes()?),
+          *self.open_settings(),
+        )
+      }
+
+      pub fn save_as_file<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+      ) -> Result<(), crate::common::SdkError> {
+        crate::parts::save_package_to_file(self, path.as_ref())
+      }
+
+      #main_part_method
+
+      #package_relationship_methods
+
+      fn new_inner<R: std::io::Read + std::io::Seek>(
+        reader: R,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        let storage = crate::common::SdkPackageStorage::open(reader)?;
+        Self::from_storage(storage, open_settings)
+      }
+
+      #[cfg(feature = "flat-opc")]
+      fn from_flat_opc_reader_inner<R: std::io::BufRead>(
+        reader: R,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        let storage = crate::common::SdkPackageStorage::open_flat_opc(reader)?;
+        Self::from_storage(storage, open_settings)
+      }
+
+      fn from_storage(
+        mut storage: crate::common::SdkPackageStorage,
+        open_settings: crate::sdk::OpenSettings,
+      ) -> Result<Self, crate::common::SdkError> {
+        #root_elements_local
+
+        Ok(Self {
+          #root_elements_init
+          #( #child_field_inits )*
+          #storage_ident: storage,
+          #open_settings_init
+        })
+      }
+    }
+
+  })
+}
+
+fn package_constraint_impl_tokens(child_infos: &[PackageChildInfo]) -> proc_macro2::TokenStream {
+  let entries = child_infos.iter().map(|child| {
+    let attrs = &child.attrs;
+    let entry = package_constraint_entry_tokens(child);
+    quote! {
+      #( #attrs )*
+      #entry
+    }
+  });
+  let lookup = if child_infos.iter().all(|child| child.attrs.is_empty()) {
+    let arms = child_infos.iter().enumerate().map(|(index, child)| {
+      let variant_ident = package_part_kind_variant_ident(&child.part_ty);
+      quote! {
+        crate::parts::PartKind::#variant_ident => Some(Self::CHILD_PART_CONSTRAINTS[#index]),
+      }
+    });
+    quote! {
+      match kind {
+        #( #arms )*
+        _ => None,
+      }
+    }
+  } else {
+    quote! {
+      Self::CHILD_PART_CONSTRAINTS
+        .iter()
+        .copied()
+        .find(|constraint| constraint.child_kind == kind)
+    }
+  };
+
+  quote! {
+    const CHILD_PART_CONSTRAINTS: &'static [crate::sdk::PartConstraint] = &[
+      #( #entries, )*
+    ];
+
+    #[inline]
+    fn child_part_constraint(
+      kind: crate::parts::PartKind,
+    ) -> Option<crate::sdk::PartConstraint> {
+      #lookup
+    }
+  }
+}
+
+fn package_constraint_entry_tokens(child: &PackageChildInfo) -> proc_macro2::TokenStream {
+  let part_ty = &child.part_ty;
+  let relationship_type = match &child.relationship_type {
+    PartRelationshipTypeSource::Explicit(value) => quote! { #value },
+    PartRelationshipTypeSource::TypeConst => {
+      quote! { <#part_ty as crate::sdk::SdkPartDescriptor>::RELATIONSHIP_TYPE }
+    }
+  };
+  let (min_occurs_is_non_zero, max_occurs_great_than_one) = match child.kind {
+    PartChildKind::Optional => (false, false),
+    PartChildKind::Required => (true, false),
+    PartChildKind::Repeated => (false, true),
+    PartChildKind::RequiredRepeated => (true, true),
+  };
+  quote! {
+    crate::sdk::PartConstraint::new(
+      <#part_ty as crate::sdk::SdkPartDescriptor>::KIND,
+      #relationship_type,
+      <#part_ty as crate::sdk::SdkPartDescriptor>::CONTENT_TYPE,
+      #min_occurs_is_non_zero,
+      #max_occurs_great_than_one,
+    )
+  }
+}
+
+fn package_part_kind_variant_ident(part_ty: &Type) -> &Ident {
+  let Type::Path(type_path) = part_ty else {
+    panic!("generated package child part type must be a path")
+  };
+  &type_path
+    .path
+    .segments
+    .last()
+    .expect("generated package child part path must not be empty")
+    .ident
+}
+
+fn package_relationship_method_tokens(
+  child_infos: &[PackageChildInfo],
+) -> proc_macro2::TokenStream {
+  let accessors = child_infos
+    .iter()
+    .filter(|child| child.main_accessor_ident.is_none())
+    .map(|child| {
+      let attrs = &child.attrs;
+      let field_ident = &child.field_ident;
+      let method_ident = &child.field_ident;
+      let part_ty = &child.part_ty;
+      let relationship_matches = relationship_match_condition_tokens(
+        &child.relationship_type,
+        quote! { relationship },
+        quote! { <#part_ty as crate::sdk::SdkPartDescriptor>::RELATIONSHIP_TYPE },
+      );
+      match child.kind {
+        PartChildKind::Repeated | PartChildKind::RequiredRepeated => quote! {
+          #( #attrs )*
+          pub fn #method_ident(&self) -> impl Iterator<Item = #part_ty> + '_ {
+            let _ = self.#field_ident;
+            let storage = crate::sdk::SdkPackage::storage(self);
+            crate::sdk::SdkPackage::relationships(self)
+              .part_relationships()
+              .filter_map(move |relationship| {
+                (#relationship_matches)
+                  .then(|| crate::sdk::relationship_target_as_part::<#part_ty>(storage, relationship))
+                  .flatten()
+              })
+          }
+        },
+        PartChildKind::Required | PartChildKind::Optional => quote! {
+          #( #attrs )*
+          pub fn #method_ident(&self) -> Option<#part_ty> {
+            let _ = self.#field_ident;
+            let storage = crate::sdk::SdkPackage::storage(self);
+            crate::sdk::SdkPackage::relationships(self)
+              .part_relationships()
+              .find_map(|relationship| {
+                (#relationship_matches)
+                  .then(|| crate::sdk::relationship_target_as_part::<#part_ty>(storage, relationship))
+                  .flatten()
+              })
+          }
+        },
+      }
+    });
+
+  quote! {
+    #[inline]
+    pub fn parts(&self) -> impl Iterator<Item = crate::parts::IdPartPair<'_>> + '_ {
+      crate::sdk::SdkPackage::parts(self)
+    }
+
+    #[inline]
+    pub fn get_all_parts(&self) -> impl Iterator<Item = crate::parts::PartRef> + '_ {
+      crate::sdk::SdkPackage::get_all_parts(self)
+    }
+
+    #[inline]
+    pub fn get_part_by_id(
+      &self,
+      relationship_id: &str,
+    ) -> Option<crate::parts::PartRef> {
+      crate::sdk::SdkPackage::get_part_by_id(self, relationship_id)
+    }
+
+    #[inline]
+    pub fn try_get_part_by_id(
+      &self,
+      relationship_id: &str,
+    ) -> Result<crate::parts::PartRef, crate::common::SdkError> {
+      crate::sdk::SdkPackage::try_get_part_by_id(self, relationship_id)
+    }
+
+    #[inline]
+    pub fn get_parts_of_type<T: crate::sdk::SdkPart>(&self) -> impl Iterator<Item = T> + '_ {
+      crate::sdk::SdkPackage::get_parts_of_type(self)
+    }
+
+    #[inline]
+    pub fn related_parts_of_type<T: crate::sdk::SdkPart>(
+      &self,
+    ) -> impl Iterator<Item = crate::sdk::RelatedPart<'_, T>> + '_ {
+      crate::sdk::SdkPackage::related_parts_of_type(self)
+    }
+
+    /// Returns the first matching relationship ID in package relationship order.
+    #[inline]
+    pub fn get_id_of_part<T: crate::sdk::SdkPart>(
+      &self,
+      part: &T,
+    ) -> Result<&str, crate::common::SdkError> {
+      crate::sdk::SdkPackage::get_id_of_part(self, part)
+    }
+
+    #[inline]
+    pub fn change_id_of_part<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: &T,
+      new_relationship_id: impl Into<String>,
+    ) -> Result<String, crate::common::SdkError> {
+      crate::sdk::SdkPackage::change_id_of_part(self, part, new_relationship_id)
+    }
+
+    #[inline]
+    pub fn delete_part_by_id(
+      &mut self,
+      relationship_id: &str,
+    ) -> Result<bool, crate::common::SdkError> {
+      crate::sdk::SdkPackage::delete_part_by_id(self, relationship_id)
+    }
+
+    #[inline]
+    pub fn delete_part<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: T,
+    ) -> Result<bool, crate::common::SdkError> {
+      crate::sdk::SdkPackage::delete_part(self, part)
+    }
+
+    #[inline]
+    pub fn delete_parts<T, I>(&mut self, parts: I) -> Result<(), crate::common::SdkError>
+    where
+      T: crate::sdk::SdkPart,
+      I: IntoIterator<Item = T>,
+    {
+      crate::sdk::SdkPackage::delete_parts(self, parts)
+    }
+
+    #[inline]
+    pub fn add_part<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: T,
+    ) -> Result<T, crate::common::SdkError> {
+      crate::sdk::SdkPackage::add_part(self, part)
+    }
+
+    #[inline]
+    pub fn add_part_with_id<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: T,
+      relationship_id: impl Into<String>,
+    ) -> Result<T, crate::common::SdkError> {
+      crate::sdk::SdkPackage::add_part_with_id(self, part, relationship_id)
+    }
+
+    #[inline]
+    pub fn add_part_from_package<
+      P: crate::sdk::SdkPackage,
+      T: crate::sdk::SdkPart,
+    >(
+      &mut self,
+      source_package: &P,
+      part: &T,
+    ) -> Result<T, crate::common::SdkError>
+  {
+      crate::sdk::SdkPackage::add_part_from_package(self, source_package, part)
+    }
+
+    #[inline]
+    pub fn add_part_from_package_with_id<
+      P: crate::sdk::SdkPackage,
+      T: crate::sdk::SdkPart,
+    >(
+      &mut self,
+      source_package: &P,
+      part: &T,
+      relationship_id: impl Into<String>,
+    ) -> Result<T, crate::common::SdkError>
+  {
+      crate::sdk::SdkPackage::add_part_from_package_with_id(
+        self,
+        source_package,
+        part,
+        relationship_id,
+      )
+    }
+
+    #[inline]
+    pub fn create_relationship_to_part<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: T,
+    ) -> Result<String, crate::common::SdkError> {
+      crate::sdk::SdkPackage::create_relationship_to_part(self, part)
+    }
+
+    #[inline]
+    pub fn create_relationship_to_part_with_id<T: crate::sdk::SdkPart>(
+      &mut self,
+      part: T,
+      relationship_id: impl Into<String>,
+    ) -> Result<String, crate::common::SdkError> {
+      crate::sdk::SdkPackage::create_relationship_to_part_with_id(
+        self,
+        part,
+        relationship_id,
+      )
+    }
+
+    #[inline]
+    pub fn create_media_data_part(
+      &mut self,
+      content_type: impl Into<std::borrow::Cow<'static, str>>,
+      extension: impl AsRef<str>,
+    ) -> Result<crate::common::MediaDataPart, crate::common::SdkError> {
+      crate::sdk::SdkPackage::create_media_data_part(self, content_type, extension)
+    }
+
+    #[inline]
+    pub fn create_media_data_part_with_content_type(
+      &mut self,
+      content_type: impl Into<std::borrow::Cow<'static, str>>,
+    ) -> Result<crate::common::MediaDataPart, crate::common::SdkError> {
+      crate::sdk::SdkPackage::create_media_data_part_with_content_type(self, content_type)
+    }
+
+    #[inline]
+    pub fn create_media_data_part_by_type(
+      &mut self,
+      part_type: crate::sdk::MediaDataPartType,
+    ) -> Result<crate::common::MediaDataPart, crate::common::SdkError> {
+      crate::sdk::SdkPackage::create_media_data_part_by_type(self, part_type)
+    }
+
+    #( #accessors )*
+  }
+}
+
+fn part_child_marker_info(ty: &Type) -> Option<PartChildMarkerInfo> {
+  let Type::Path(type_path) = ty else {
+    return None;
+  };
+  let segment = type_path.path.segments.last()?;
+  let marker_name = segment.ident.to_string();
+  let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+    return None;
+  };
+  let syn::GenericArgument::Type(part_ty) = args.args.first()? else {
+    return None;
+  };
+
+  let kind = match marker_name.as_str() {
+    "OptionalPart" => PartChildKind::Optional,
+    "RequiredPart" => PartChildKind::Required,
+    "RepeatedPart" => PartChildKind::Repeated,
+    "PartChild" => {
+      let syn::GenericArgument::Type(kind_ty) = args.args.iter().nth(1)? else {
+        return None;
+      };
+      part_child_kind_from_type(kind_ty)?
+    }
+    _ => return None,
+  };
+
+  Some(PartChildMarkerInfo {
+    part_ty: part_ty.clone(),
+    kind,
+  })
+}
+
+fn part_child_field_info(ty: &Type) -> Option<PartChildMarkerInfo> {
+  if let Some(part_ty) = marker_inner_type(ty, "Vec") {
+    return Some(PartChildMarkerInfo {
+      part_ty,
+      kind: PartChildKind::Repeated,
+    });
+  }
+  if let Some(part_ty) = marker_inner_type(ty, "Option") {
+    let part_ty = marker_inner_type(&part_ty, "Box").unwrap_or(part_ty);
+    return Some(PartChildMarkerInfo {
+      part_ty,
+      kind: PartChildKind::Optional,
+    });
+  }
+  part_child_marker_info(ty)
+}
+
+fn marker_inner_type(ty: &Type, marker: &str) -> Option<Type> {
+  let Type::Path(type_path) = ty else {
+    return None;
+  };
+  let segment = type_path.path.segments.last()?;
+  if segment.ident != marker {
+    return None;
+  }
+  let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+    return None;
+  };
+  let syn::GenericArgument::Type(inner) = args.args.first()? else {
+    return None;
+  };
+  Some(inner.clone())
+}
+
+fn part_child_kind_from_type(ty: &Type) -> Option<PartChildKind> {
+  let Type::Path(type_path) = ty else {
+    return None;
+  };
+  let segment = type_path.path.segments.last()?;
+  match segment.ident.to_string().as_str() {
+    "OptionalPartKind" => Some(PartChildKind::Optional),
+    "RequiredPartKind" => Some(PartChildKind::Required),
+    "RepeatedPartKind" => Some(PartChildKind::Repeated),
+    _ => None,
+  }
+}
+
+fn parse_package_main_accessor(attrs: &[Attribute]) -> syn::Result<Option<Ident>> {
+  for attr in attrs {
+    if !attr.path().is_ident("sdk") {
+      continue;
+    }
+    let metas =
+      attr.parse_args_with(syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated)?;
+    for meta in metas {
+      if let Meta::List(meta) = meta
+        && meta.path.is_ident("package_main")
+      {
+        let mut accessor = None;
+        meta.parse_nested_meta(|nested| {
+          if nested.path.is_ident("accessor") {
+            let value: LitStr = nested.value()?.parse()?;
+            accessor = Some(value.value());
+            Ok(())
+          } else {
+            Err(nested.error("unsupported sdk package_main attribute"))
+          }
+        })?;
+        let Some(accessor) = accessor else {
+          return Err(syn::Error::new_spanned(
+            meta,
+            "sdk package_main requires accessor",
+          ));
+        };
+        return parse_str(&accessor).map(Some);
+      }
+    }
+  }
+
+  Ok(None)
+}
+
+fn passthrough_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
+  attrs
+    .iter()
+    .filter(|attr| !attr.path().is_ident("sdk"))
+    .cloned()
+    .collect()
+}

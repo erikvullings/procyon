@@ -1,0 +1,61 @@
+{
+  "Types": [
+    {
+      "ClassName": "Inline",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Anchor",
+      "AlternateContent": [
+        {
+          "AfterField": "horizontal_position",
+          "Children": [
+            "horizontal_position",
+            "vertical_position"
+          ]
+        }
+      ],
+      "Attributes": [
+        {
+          "QName": ":relativeHeight",
+          "Optional": true
+        }
+      ],
+      "Children": [
+        {
+          "PropertyName": "SimplePosition",
+          "Optional": true
+        },
+        {
+          "PropertyName": "HorizontalPosition",
+          "Optional": true
+        },
+        {
+          "PropertyName": "VerticalPosition",
+          "Optional": true
+        },
+        {
+          "Name": "a:CT_NonVisualDrawingProps/wp:docPr",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "SimplePosition",
+      "Attributes": [
+        {
+          "QName": ":x",
+          "PropertyName": "X",
+          "PropertyComments": "X-Axis Coordinate",
+          "OverrideType": "CoordinateValue"
+        },
+        {
+          "QName": ":y",
+          "PropertyName": "Y",
+          "PropertyComments": "Y-Axis Coordinate",
+          "OverrideType": "CoordinateValue"
+        }
+      ]
+    }
+  ]
+}

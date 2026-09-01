@@ -1,0 +1,15 @@
+{
+  "Types": [
+    {
+      "ClassName": "VbaSuppData",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "MailMergeRecipients",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "KeyMapEntry"
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+{
+  "Enums": [
+    {
+      "Name": "TextAnchoringTypeValues",
+      "AddFacets": [
+        {
+          "Name": "Justified",
+          "Value": "just"
+        },
+        {
+          "Name": "Distributed",
+          "Value": "dist"
+        }
+      ]
+    }
+  ],
+  "ChoiceEnums": [
+    {
+      "RustName": "GraphicDataChoice",
+      "AddXmlAny": [
+        "wp:wsp"
+      ],
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        },
+        {
+          "RustName": "ExtendedChartReference",
+          "QName": "cx:chart",
+          "PayloadRustType": "RelId",
+          "PayloadModulePath": "crate::schemas::schemas_microsoft_com_office_drawing_2014_chartex"
+        },
+        {
+          "RustName": "Model3D",
+          "QName": "am3d:model3d",
+          "PayloadRustType": "Model3D",
+          "PayloadModulePath": "crate::schemas::schemas_microsoft_com_office_drawing_2017_model3d"
+        }
+      ]
+    },
+    {
+      "RustName": "ParagraphChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "Blip",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BlipExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BodyProperties",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ConnectorLockingExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Duotone",
+      "Attributes": [
+        {
+          "QName": "xfr1",
+          "PropertyName": "Xfr1",
+          "PropertyComments": "xfr1",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        },
+        {
+          "QName": "xfr2",
+          "PropertyName": "Xfr2",
+          "PropertyComments": "xfr2",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "EffectList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "EffectReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "FillReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "FillRectangle",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "FontReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Graphic",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "GraphicFrameLocks",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "GvmlGroupShapeExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "HyperlinkExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "HyperlinkOnClick",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LinePropertiesExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LineReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ListStyle",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NoFill",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NonVisualDrawingPropertiesExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NonVisualGroupDrawingShapePropsExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NonVisualPicturePropertiesExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "OfficeStyleSheetExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Outline",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Paragraph",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PictureLocks",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PresetGeometry",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RgbColorModelHex",
+      "HaveMcIgnorable": true,
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Scene3DType",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Shape3DType",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ShapeLocks",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ShapePropertiesExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SolidFill",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SourceRectangle",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Stretch",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TableStyleList",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "Theme",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Transform2D",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TransformEffect",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TransformGroup",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TableStyleType",
+      "Attributes": [
+        {
+          "PropertyName": "StyleId",
+          "Optional": true
+        },
+        {
+          "PropertyName": "StyleName",
+          "Optional": true
+        }
+      ]
+    }
+  ]
+}

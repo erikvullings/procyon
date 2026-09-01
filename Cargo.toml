@@ -4,7 +4,12 @@ resolver = "3"
 # nests the Rust crate under `<app>/src-tauri`, one level deeper than the
 # `apps/*` glob reaches. `apps/fm-desktop` itself holds no Cargo.toml (only
 # `src-tauri` does), so it is excluded from the glob match.
-exclude = ["apps/fm-desktop"]
+exclude = [
+  "apps/fm-desktop",
+  "third_party/emfsdk",
+  "third_party/ooxmlsdk",
+  "third_party/olecfsdk",
+]
 members = ["crates/*", "apps/*", "apps/fm-desktop/src-tauri"]
 
 [workspace.package]
@@ -40,6 +45,7 @@ fm-platform-macos = {path = "crates/fm-platform-macos"}
 fm-platform-windows = {path = "crates/fm-platform-windows"}
 fm-plugin-api = {path = "crates/fm-plugin-api"}
 fm-plugin-runtime = {path = "crates/fm-plugin-runtime"}
+fm-pptx-renderer = {path = "crates/fm-pptx-renderer"}
 fm-search = {path = "crates/fm-search"}
 fm-search-acceleration = {path = "crates/fm-search-acceleration"}
 fm-settings = {path = "crates/fm-settings"}
@@ -104,7 +110,6 @@ openh264 = "0.9.8"
 percent-encoding = "2.3.2"
 parallel-disk-usage = { version = "0.24.0", default-features = false }
 plist = "1.10.0"
-pptx-to-md = "1.0.0"
 quick-xml = "0.41.0"
 rand = "0.10"
 rars = "0.4.8"

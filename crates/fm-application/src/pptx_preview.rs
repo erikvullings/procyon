@@ -1,27 +1,24 @@
-//! Bounded, provider-neutral PPTX conversion for the F3 content viewer.
+//! Bounded, provider-neutral PPTX-to-PDF conversion for the F3 viewer.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::sync::Arc;
 
 use fm_domain::{EntryId, EntryKind, Location};
+use fm_pptx_renderer::render_pptx_to_pdf;
 use fm_transport_dto::{
-    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, PptxPreviewResourceDto,
-    PptxPreviewSessionRequestDto, PptxPreviewSlideDto, ReadPptxPreviewResourceRequestDto,
-    ReadPptxPreviewResourceResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, PptxPreviewSessionRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto,
 };
 use fm_vfs::{EntryRef, FileSystemProvider, ProviderCapabilities, ProviderRegistry};
-use pptx_to_md::{
-    ImageHandlingMode, MarkdownOptions, ParserConfig, PptxContainer, ReadingOrder,
-    SlideBlockContent, TextRole,
-};
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::Event;
 use tokio::io::AsyncReadExt;
 use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::ApplicationError;
+use crate::content_streaming::MAX_RANGE_LENGTH;
 use crate::file_editor::read_stream_error;
 
 pub(crate) const MAX_PPTX_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
@@ -33,43 +30,36 @@ pub(crate) const MAX_PPTX_TEXT_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAX_PPTX_MEDIA_ITEMS: usize = 128;
 pub(crate) const MAX_PPTX_MEDIA_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_MEDIA_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_PPTX_SINGLE_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 32 * 1024 * 1024;
 const MAX_PPTX_SESSIONS: usize = 8;
-
-struct RetainedResource {
-    media_type: String,
-    data: Vec<u8>,
-}
 
 struct Session {
     provider: Arc<dyn FileSystemProvider>,
     entry: EntryRef,
     revision: String,
     cancellation: CancellationToken,
-    resources: HashMap<Uuid, RetainedResource>,
+    pdf: Vec<u8>,
     _slot: OwnedSemaphorePermit,
 }
 
 trait PptxConverter: Send + Sync {
-    fn parse(
-        &self,
-        bytes: &[u8],
-        cancellation: &CancellationToken,
-    ) -> Result<ParsedPptx, ApplicationError>;
+    fn render(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError>;
 }
 
 struct NativePptxConverter;
 
 impl PptxConverter for NativePptxConverter {
-    fn parse(
-        &self,
-        bytes: &[u8],
-        cancellation: &CancellationToken,
-    ) -> Result<ParsedPptx, ApplicationError> {
-        parse_pptx(bytes, cancellation)
+    fn render(&self, bytes: &[u8]) -> Result<Vec<u8>, ApplicationError> {
+        render_pptx_to_pdf(bytes).map_err(|error| {
+            ApplicationError::InvalidRequest(format!(
+                "PowerPoint preview rendering failed: {error}; open it in an external application"
+            ))
+        })
     }
 }
 
-/// Shared PPTX preview session owner used by both HTTP and Tauri adapters.
+/// Shared rendered-PDF session owner used by both HTTP and Tauri adapters.
 #[derive(Clone)]
 pub(crate) struct PptxPreviewService {
     providers: ProviderRegistry,
@@ -98,7 +88,7 @@ impl PptxPreviewService {
             .try_acquire_owned()
             .map_err(|_| {
                 ApplicationError::InvalidRequest(format!(
-                    "at most {MAX_PPTX_SESSIONS} PPTX previews may be open; close another preview first"
+                    "at most {MAX_PPTX_SESSIONS} PowerPoint previews may be open; close another preview first"
                 ))
             })?;
         let location: Location = request.location.into();
@@ -122,7 +112,7 @@ impl PptxPreviewService {
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
             return Err(ApplicationError::InvalidRequest(
-                "PPTX preview requires a regular file".to_owned(),
+                "PowerPoint preview requires a regular file".to_owned(),
             ));
         }
         let source_bytes = provider
@@ -146,45 +136,20 @@ impl PptxPreviewService {
         if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
             return Err(budget_error("source bytes", MAX_PPTX_SOURCE_BYTES));
         }
-        let parse_cancellation = cancellation.clone();
+        preflight_package(&bytes, &cancellation)?;
+        if cancellation.is_cancelled() {
+            return Err(ApplicationError::OperationCancelled);
+        }
         let converter = Arc::clone(&self.converter);
-        let parsed =
-            tokio::task::spawn_blocking(move || converter.parse(&bytes, &parse_cancellation))
-                .await
-                .map_err(|_| ApplicationError::Internal)??;
+        let pdf = tokio::task::spawn_blocking(move || converter.render(&bytes))
+            .await
+            .map_err(|_| ApplicationError::Internal)??;
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
         }
 
         let session_id = Uuid::new_v4();
-        let slides = parsed
-            .slides
-            .into_iter()
-            .enumerate()
-            .map(|(index, slide)| PptxPreviewSlideDto {
-                index: index as u32,
-                title: slide.title,
-                markdown: slide.markdown,
-            })
-            .collect();
-        let mut resources = HashMap::new();
-        let mut resource_dtos = Vec::with_capacity(parsed.resources.len());
-        for resource in parsed.resources {
-            let resource_id = Uuid::new_v5(&session_id, resource.source.as_bytes());
-            resource_dtos.push(PptxPreviewResourceDto {
-                resource_id,
-                source: resource.source,
-                media_type: resource.media_type.clone(),
-                byte_length: resource.data.len() as u64,
-            });
-            resources.insert(
-                resource_id,
-                RetainedResource {
-                    media_type: resource.media_type,
-                    data: resource.data,
-                },
-            );
-        }
+        let pdf_bytes = pdf.len() as u64;
         self.sessions.write().await.insert(
             session_id,
             Arc::new(Session {
@@ -192,7 +157,7 @@ impl PptxPreviewService {
                 entry,
                 revision: revision.clone(),
                 cancellation,
-                resources,
+                pdf,
                 _slot: slot,
             }),
         );
@@ -200,25 +165,35 @@ impl PptxPreviewService {
             session_id,
             source_revision: revision,
             source_bytes,
-            slides,
-            resources: resource_dtos,
-            omitted_features: omitted_features(),
+            pdf_bytes,
         })
     }
 
-    pub(crate) async fn read_resource(
+    pub(crate) async fn read_pdf(
         &self,
-        request: ReadPptxPreviewResourceRequestDto,
-    ) -> Result<ReadPptxPreviewResourceResponseDto, ApplicationError> {
+        request: ReadPptxPreviewPdfRequestDto,
+    ) -> Result<ReadFileRangeResponseDto, ApplicationError> {
+        if request.length == 0 || request.length > MAX_RANGE_LENGTH {
+            return Err(ApplicationError::InvalidRequest(format!(
+                "length must be between 1 and {MAX_RANGE_LENGTH} bytes"
+            )));
+        }
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
-        let resource = session
-            .resources
-            .get(&request.resource_id)
-            .ok_or(ApplicationError::NotFound)?;
-        Ok(ReadPptxPreviewResourceResponseDto {
-            data: resource.data.clone(),
-            media_type: resource.media_type.clone(),
+        let start = usize::try_from(request.offset)
+            .unwrap_or(usize::MAX)
+            .min(session.pdf.len());
+        let requested_end = request.offset.saturating_add(request.length);
+        let end = usize::try_from(requested_end)
+            .unwrap_or(usize::MAX)
+            .min(session.pdf.len());
+        let data = session.pdf[start..end].to_vec();
+        Ok(ReadFileRangeResponseDto {
+            offset: request.offset,
+            length: data.len() as u64,
+            eof: end == session.pdf.len(),
+            data,
+            probably_binary: (request.offset == 0).then_some(true),
         })
     }
 
@@ -279,124 +254,6 @@ async fn validate_revision(session: &Session) -> Result<(), ApplicationError> {
     Ok(())
 }
 
-fn omitted_features() -> Vec<String> {
-    [
-        "themes and precise geometry",
-        "fonts",
-        "transitions and animations",
-        "SmartArt and charts",
-        "embedded objects",
-        "audio and video",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ParsedPptxSlide {
-    pub(crate) title: Option<String>,
-    pub(crate) markdown: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ParsedPptxResource {
-    pub(crate) source: String,
-    pub(crate) media_type: String,
-    pub(crate) data: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ParsedPptx {
-    pub(crate) slides: Vec<ParsedPptxSlide>,
-    pub(crate) resources: Vec<ParsedPptxResource>,
-}
-
-fn parse_pptx(
-    bytes: &[u8],
-    cancellation: &CancellationToken,
-) -> Result<ParsedPptx, ApplicationError> {
-    if cancellation.is_cancelled() {
-        return Err(ApplicationError::OperationCancelled);
-    }
-    preflight_package(bytes, cancellation)?;
-    let order = presentation_order(bytes)?;
-    let mut source = tempfile::NamedTempFile::new().map_err(|_| ApplicationError::Internal)?;
-    source
-        .write_all(bytes)
-        .map_err(|_| ApplicationError::Internal)?;
-    let config = ParserConfig::builder()
-        .extract_images(true)
-        .image_handling_mode(ImageHandlingMode::Manually)
-        .include_slide_number_as_comment(false)
-        .include_speaker_notes(true)
-        .include_presentation_metadata(false)
-        .build();
-    let mut container = PptxContainer::open(source.path(), config).map_err(invalid_pptx)?;
-    let mut slides = container.parse_all().map_err(invalid_pptx)?;
-    slides.sort_by_key(|slide| {
-        order
-            .iter()
-            .position(|path| path == &slide.rel_path)
-            .unwrap_or(usize::MAX)
-    });
-    let options = MarkdownOptions {
-        reading_order: ReadingOrder::Source,
-        include_slide_number_as_comment: false,
-        include_speaker_notes: true,
-        include_comments: false,
-        render_unsupported_comments: true,
-    };
-    let mut resources_by_source = HashMap::<String, ParsedPptxResource>::new();
-    let mut text_bytes = 0_usize;
-    let slides = slides
-        .into_iter()
-        .map(|slide| {
-            let title = slide.blocks.iter().find_map(|block| match &block.content {
-                SlideBlockContent::Text(text) if text.role == TextRole::Title => text
-                    .paragraphs
-                    .iter()
-                    .map(|paragraph| paragraph.text())
-                    .map(|value| value.trim().to_owned())
-                    .find(|value| !value.is_empty()),
-                _ => None,
-            });
-            let mut markdown = slide.to_markdown(&options).map_err(invalid_pptx)?;
-            for image in &slide.images {
-                let Some(data) = slide.image_data.get(&image.id) else {
-                    markdown.push_str("\n\n_[Embedded image omitted: resource unavailable]_\n");
-                    continue;
-                };
-                let Some(media_type) = image_media_type(&image.target) else {
-                    markdown.push_str("\n\n_[Embedded image omitted: unsupported format]_\n");
-                    continue;
-                };
-                markdown.push_str(&format!(
-                    "\n\n![Embedded image](pptx-resource:{})\n",
-                    image.target
-                ));
-                resources_by_source
-                    .entry(image.target.clone())
-                    .or_insert_with(|| ParsedPptxResource {
-                        source: image.target.clone(),
-                        media_type: media_type.to_owned(),
-                        data: data.clone(),
-                    });
-            }
-            text_bytes = text_bytes
-                .checked_add(markdown.len())
-                .ok_or_else(|| budget_error("text", MAX_PPTX_TEXT_BYTES as u64))?;
-            if text_bytes > MAX_PPTX_TEXT_BYTES {
-                return Err(budget_error("text", MAX_PPTX_TEXT_BYTES as u64));
-            }
-            Ok(ParsedPptxSlide { title, markdown })
-        })
-        .collect::<Result<Vec<_>, ApplicationError>>()?;
-    let mut resources = resources_by_source.into_values().collect::<Vec<_>>();
-    resources.sort_by(|left, right| left.source.cmp(&right.source));
-    Ok(ParsedPptx { slides, resources })
-}
-
 fn preflight_package(
     bytes: &[u8],
     cancellation: &CancellationToken,
@@ -407,13 +264,15 @@ fn preflight_package(
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(invalid_pptx)?;
     if archive.len() > MAX_PPTX_ZIP_ENTRIES {
         return Err(ApplicationError::InvalidRequest(format!(
-            "PPTX content preview exceeds the ZIP entry-count budget ({MAX_PPTX_ZIP_ENTRIES}); open it in an external application"
+            "PowerPoint preview exceeds the ZIP entry-count budget ({MAX_PPTX_ZIP_ENTRIES}); open it in an external application"
         )));
     }
     let mut expanded_bytes = 0_u64;
     let mut slide_count = 0_usize;
+    let mut text_bytes = 0_usize;
     let mut media_count = 0_usize;
     let mut media_bytes = 0_u64;
+    let mut image_pixels = 0_u64;
     for index in 0..archive.len() {
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
@@ -430,15 +289,15 @@ fn preflight_package(
             slide_count += 1;
             if slide_count > MAX_PPTX_SLIDES {
                 return Err(ApplicationError::InvalidRequest(format!(
-                    "PPTX content preview exceeds the slide-count budget ({MAX_PPTX_SLIDES}); open it in an external application"
+                    "PowerPoint preview exceeds the slide-count budget ({MAX_PPTX_SLIDES}); open it in an external application"
                 )));
             }
         }
-        if image_media_type(&name).is_some() && !entry.is_dir() {
+        if name.starts_with("ppt/media/") && !entry.is_dir() {
             media_count += 1;
             if media_count > MAX_PPTX_MEDIA_ITEMS {
                 return Err(ApplicationError::InvalidRequest(format!(
-                    "PPTX content preview exceeds the media-count budget ({MAX_PPTX_MEDIA_ITEMS}); open it in an external application"
+                    "PowerPoint preview exceeds the media-count budget ({MAX_PPTX_MEDIA_ITEMS}); open it in an external application"
                 )));
             }
             if entry.size() > MAX_PPTX_SINGLE_MEDIA_BYTES as u64 {
@@ -456,22 +315,66 @@ fn preflight_package(
                     MAX_PPTX_MEDIA_BYTES as u64,
                 ));
             }
+            if let Some(format) = raster_image_format(&name) {
+                let mut data = Vec::with_capacity(entry.size() as usize);
+                entry.read_to_end(&mut data).map_err(invalid_pptx)?;
+                let (width, height) =
+                    image::ImageReader::with_format(std::io::Cursor::new(data), format)
+                        .into_dimensions()
+                        .map_err(invalid_pptx)?;
+                let pixels = u64::from(width) * u64::from(height);
+                if pixels > MAX_PPTX_SINGLE_IMAGE_PIXELS {
+                    return Err(pixel_budget_error(
+                        "per-image decoded pixels",
+                        MAX_PPTX_SINGLE_IMAGE_PIXELS,
+                    ));
+                }
+                image_pixels = image_pixels.checked_add(pixels).ok_or_else(|| {
+                    pixel_budget_error("total decoded image pixels", MAX_PPTX_TOTAL_IMAGE_PIXELS)
+                })?;
+                if image_pixels > MAX_PPTX_TOTAL_IMAGE_PIXELS {
+                    return Err(pixel_budget_error(
+                        "total decoded image pixels",
+                        MAX_PPTX_TOTAL_IMAGE_PIXELS,
+                    ));
+                }
+            }
         }
         let lowercase = name.to_ascii_lowercase();
         if lowercase.ends_with(".xml") || lowercase.ends_with(".rels") {
-            validate_xml_depth(&mut entry, cancellation)?;
+            text_bytes = text_bytes
+                .checked_add(validate_xml(&mut entry, cancellation)?)
+                .ok_or_else(|| budget_error("text", MAX_PPTX_TEXT_BYTES as u64))?;
+            if text_bytes > MAX_PPTX_TEXT_BYTES {
+                return Err(budget_error("text", MAX_PPTX_TEXT_BYTES as u64));
+            }
         }
     }
     Ok(())
 }
 
-fn validate_xml_depth(
+fn raster_image_format(name: &str) -> Option<image::ImageFormat> {
+    let extension = std::path::Path::new(name)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "png" => Some(image::ImageFormat::Png),
+        "jpg" | "jpeg" => Some(image::ImageFormat::Jpeg),
+        "gif" => Some(image::ImageFormat::Gif),
+        "webp" => Some(image::ImageFormat::WebP),
+        _ => None,
+    }
+}
+
+fn validate_xml(
     source: &mut impl Read,
     cancellation: &CancellationToken,
-) -> Result<(), ApplicationError> {
+) -> Result<usize, ApplicationError> {
     let mut reader = quick_xml::Reader::from_reader(std::io::BufReader::new(source));
     let mut buffer = Vec::new();
     let mut depth = 0_usize;
+    let mut text_bytes = 0_usize;
     loop {
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
@@ -481,11 +384,16 @@ fn validate_xml_depth(
                 depth += 1;
                 if depth > MAX_PPTX_XML_DEPTH {
                     return Err(ApplicationError::InvalidRequest(format!(
-                        "PPTX content preview exceeds the XML depth budget ({MAX_PPTX_XML_DEPTH}); open it in an external application"
+                        "PowerPoint preview exceeds the XML depth budget ({MAX_PPTX_XML_DEPTH}); open it in an external application"
                     )));
                 }
             }
             Ok(Event::End(_)) => depth = depth.saturating_sub(1),
+            Ok(Event::Text(text)) => {
+                text_bytes = text_bytes
+                    .checked_add(text.len())
+                    .ok_or_else(|| budget_error("text", MAX_PPTX_TEXT_BYTES as u64))?;
+            }
             Ok(Event::DocType(_)) => {
                 return Err(invalid_pptx("DOCTYPE declarations are not allowed"));
             }
@@ -495,150 +403,25 @@ fn validate_xml_depth(
         }
         buffer.clear();
     }
-    Ok(())
+    Ok(text_bytes)
 }
 
 fn budget_error(resource: &str, limit: u64) -> ApplicationError {
     ApplicationError::InvalidRequest(format!(
-        "PPTX content preview exceeds the {resource} budget ({limit} bytes); open it in an external application"
+        "PowerPoint preview exceeds the {resource} budget ({limit} bytes); open it in an external application"
     ))
 }
 
-fn image_media_type(source: &str) -> Option<&'static str> {
-    match source.rsplit('.').next()?.to_ascii_lowercase().as_str() {
-        "png" => Some("image/png"),
-        "jpg" | "jpeg" => Some("image/jpeg"),
-        "gif" => Some("image/gif"),
-        "webp" => Some("image/webp"),
-        "bmp" => Some("image/bmp"),
-        "svg" => Some("image/svg+xml"),
-        _ => None,
-    }
+fn pixel_budget_error(resource: &str, limit: u64) -> ApplicationError {
+    ApplicationError::InvalidRequest(format!(
+        "PowerPoint preview exceeds the {resource} budget ({limit} pixels); open it in an external application"
+    ))
 }
 
 fn invalid_pptx(error: impl std::fmt::Display) -> ApplicationError {
     ApplicationError::InvalidRequest(format!(
-        "PPTX content preview is unavailable because the package is malformed: {error}"
+        "PowerPoint preview is unavailable because the package is malformed: {error}"
     ))
-}
-
-fn presentation_order(bytes: &[u8]) -> Result<Vec<String>, ApplicationError> {
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(invalid_pptx)?;
-    let presentation = read_archive_entry(&mut archive, "ppt/presentation.xml")?;
-    let relationships = read_archive_entry(&mut archive, "ppt/_rels/presentation.xml.rels")?;
-    let ids = attribute_values(&presentation, b"sldId", b"r:id")?;
-    let targets = relationship_targets(&relationships)?;
-    Ok(ids
-        .into_iter()
-        .filter_map(|id| targets.get(&id))
-        .filter_map(|target| resolve_presentation_target(target))
-        .collect())
-}
-
-fn resolve_presentation_target(target: &str) -> Option<String> {
-    let package_path = target
-        .strip_prefix('/')
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("ppt/{target}"));
-    let mut normalized = Vec::new();
-    for component in package_path.split('/') {
-        match component {
-            "" | "." => {}
-            ".." => {
-                normalized.pop()?;
-            }
-            value => normalized.push(value),
-        }
-    }
-    Some(normalized.join("/"))
-}
-
-fn read_archive_entry<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    path: &str,
-) -> Result<Vec<u8>, ApplicationError> {
-    let mut entry = archive.by_name(path).map_err(invalid_pptx)?;
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes).map_err(invalid_pptx)?;
-    Ok(bytes)
-}
-
-fn attribute_values(
-    xml: &[u8],
-    element_name: &[u8],
-    attribute_name: &[u8],
-) -> Result<Vec<String>, ApplicationError> {
-    let mut reader = quick_xml::Reader::from_reader(xml);
-    let mut buffer = Vec::new();
-    let mut values = Vec::new();
-    loop {
-        match reader.read_event_into(&mut buffer) {
-            Ok(Event::Start(element) | Event::Empty(element))
-                if element.local_name().as_ref() == element_name =>
-            {
-                for attribute in element.attributes() {
-                    let attribute = attribute.map_err(invalid_pptx)?;
-                    if attribute.key.as_ref() == attribute_name {
-                        values.push(
-                            String::from_utf8(attribute.value.into_owned())
-                                .map_err(invalid_pptx)?,
-                        );
-                    }
-                }
-            }
-            Ok(Event::DocType(_)) => {
-                return Err(invalid_pptx("DOCTYPE declarations are not allowed"));
-            }
-            Ok(Event::Eof) => break,
-            Ok(_) => {}
-            Err(error) => return Err(invalid_pptx(error)),
-        }
-        buffer.clear();
-    }
-    Ok(values)
-}
-
-fn relationship_targets(xml: &[u8]) -> Result<HashMap<String, String>, ApplicationError> {
-    let mut reader = quick_xml::Reader::from_reader(xml);
-    let mut buffer = Vec::new();
-    let mut targets = HashMap::new();
-    loop {
-        match reader.read_event_into(&mut buffer) {
-            Ok(Event::Start(element) | Event::Empty(element))
-                if element.local_name().as_ref() == b"Relationship" =>
-            {
-                if let (Some(id), Some(target)) = (
-                    attribute_value(&element, b"Id")?,
-                    attribute_value(&element, b"Target")?,
-                ) {
-                    targets.insert(id, target);
-                }
-            }
-            Ok(Event::DocType(_)) => {
-                return Err(invalid_pptx("DOCTYPE declarations are not allowed"));
-            }
-            Ok(Event::Eof) => break,
-            Ok(_) => {}
-            Err(error) => return Err(invalid_pptx(error)),
-        }
-        buffer.clear();
-    }
-    Ok(targets)
-}
-
-fn attribute_value(
-    element: &BytesStart<'_>,
-    name: &[u8],
-) -> Result<Option<String>, ApplicationError> {
-    for attribute in element.attributes() {
-        let attribute = attribute.map_err(invalid_pptx)?;
-        if attribute.key.local_name().as_ref() == name {
-            return String::from_utf8(attribute.value.into_owned())
-                .map(Some)
-                .map_err(invalid_pptx);
-        }
-    }
-    Ok(None)
 }
 
 #[cfg(test)]
@@ -651,20 +434,6 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::*;
-
-    fn slide_xml(title: &str) -> String {
-        format!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
- xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
- <p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="1" name="Title"/>
- <p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
- <p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>{title}</a:t></a:r></a:p>
- </p:txBody></p:sp></p:spTree></p:cSld>
-</p:sld>"#
-        )
-    }
 
     fn package(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let mut bytes = std::io::Cursor::new(Vec::new());
@@ -680,32 +449,34 @@ mod tests {
                     .expect("start fixture entry");
                 archive.write_all(data).expect("write fixture entry");
             }
-
             archive.finish().expect("finish fixture package");
         }
         bytes.into_inner()
     }
 
-    fn image_package(image_target: &str, include_image: bool) -> Vec<u8> {
-        let slide = br#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:pic><p:nvPicPr><p:cNvPr id="1" name="Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rImage"/></p:blipFill><p:spPr/></p:pic></p:spTree></p:cSld></p:sld>"#;
-        let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
-        let presentation_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#;
-        let slide_rels = format!(
-            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{image_target}"/></Relationships>"#
-        );
-        let mut entries = vec![
-            ("ppt/presentation.xml", presentation.as_slice()),
+    fn presentation_package() -> Vec<u8> {
+        package(&[
+            (
+                "[Content_Types].xml",
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>"#,
+            ),
+            (
+                "_rels/.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>"#,
+            ),
+            (
+                "ppt/presentation.xml",
+                br#"<p:presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#,
+            ),
             (
                 "ppt/_rels/presentation.xml.rels",
-                presentation_rels.as_slice(),
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#,
             ),
-            ("ppt/slides/slide1.xml", slide.as_slice()),
-            ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
-        ];
-        if include_image {
-            entries.push(("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nfixture"));
-        }
-        package(&entries)
+            (
+                "ppt/slides/slide1.xml",
+                br#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="10000000" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3200"/><a:t>Hello PPTX</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#,
+            ),
+        ])
     }
 
     fn service() -> PptxPreviewService {
@@ -722,111 +493,36 @@ mod tests {
         }
     }
 
-    #[test]
-    fn preserves_package_declared_slide_order_instead_of_filename_order() {
-        let first = slide_xml("Presented first");
-        let second = slide_xml("Presented second");
-        let presentation = br#"<?xml version="1.0" encoding="UTF-8"?>
-<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
- <p:sldIdLst><p:sldId id="257" r:id="rId2"/><p:sldId id="256" r:id="rId1"/></p:sldIdLst>
-</p:presentation>"#;
-        let relationships = br#"<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
- <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
- <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="/ppt/slides/slide2.xml"/>
-</Relationships>"#;
-        let bytes = package(&[
-            ("ppt/slides/slide1.xml", second.as_bytes()),
-            ("ppt/slides/slide2.xml", first.as_bytes()),
-            ("ppt/presentation.xml", presentation),
-            ("ppt/_rels/presentation.xml.rels", relationships),
-        ]);
+    #[tokio::test]
+    async fn opens_a_rendered_pdf_and_reads_it_in_bounded_ranges() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+        let path = directory.path().join("briefing.pptx");
+        std::fs::write(&path, presentation_package()).expect("write PPTX fixture");
+        let service = service();
 
-        let parsed =
-            parse_pptx(&bytes, &CancellationToken::new()).expect("representative PPTX must parse");
+        let opened = service
+            .open(open_request(&path))
+            .await
+            .expect("open rendered preview");
+        let range = service
+            .read_pdf(ReadPptxPreviewPdfRequestDto {
+                session_id: opened.session_id,
+                offset: 0,
+                length: 16,
+            })
+            .await
+            .expect("read rendered PDF");
 
-        assert_eq!(
-            parsed
-                .slides
-                .iter()
-                .map(|slide| slide.title.as_deref())
-                .collect::<Vec<_>>(),
-            vec![Some("Presented first"), Some("Presented second")]
-        );
-    }
-
-    #[test]
-    fn preserves_titles_lists_tables_links_notes_images_and_unsupported_placeholders() {
-        let slide = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
- xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
- <p:cSld><p:spTree>
-  <p:sp><p:nvSpPr><p:cNvPr id="1" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/>
-   <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Quarterly report</a:t></a:r></a:p></p:txBody></p:sp>
-  <p:sp><p:nvSpPr><p:cNvPr id="2" name="Body"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/>
-   <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="0"><a:buChar char="&#8226;"/></a:pPr><a:r><a:t>First item</a:t></a:r></a:p>
-   <a:p><a:r><a:rPr><a:hlinkClick r:id="rLink"/></a:rPr><a:t>Example</a:t></a:r></a:p></p:txBody></p:sp>
-  <p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="Table"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm/>
-   <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid><a:gridCol w="1"/><a:gridCol w="1"/></a:tblGrid>
-   <a:tr h="1"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Name</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
-   <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Value</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>
-  <p:pic><p:nvPicPr><p:cNvPr id="4" name="Picture" descr="Quarter chart"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
-   <p:blipFill><a:blip r:embed="rImage"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr/></p:pic>
-  <p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Chart"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm/>
-   <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"/></a:graphic></p:graphicFrame>
- </p:spTree></p:cSld>
-</p:sld>"#;
-        let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
-        let presentation_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#;
-        let slide_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
- <Relationship Id="rLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
- <Relationship Id="rImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
- <Relationship Id="rNotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/>
-</Relationships>"#;
-        let notes = br#"<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="1" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Discuss retention</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>"#;
-        let bytes = package(&[
-            ("ppt/presentation.xml", presentation),
-            ("ppt/_rels/presentation.xml.rels", presentation_rels),
-            ("ppt/slides/slide1.xml", slide),
-            ("ppt/slides/_rels/slide1.xml.rels", slide_rels),
-            ("ppt/notesSlides/notesSlide1.xml", notes),
-            ("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nfixture"),
-        ]);
-
-        let parsed =
-            parse_pptx(&bytes, &CancellationToken::new()).expect("representative PPTX must parse");
-        let slide = &parsed.slides[0];
-
-        assert_eq!(slide.title.as_deref(), Some("Quarterly report"));
-        assert!(slide.markdown.contains("First item"), "{}", slide.markdown);
-        assert!(slide.markdown.contains("| Name"), "{}", slide.markdown);
-        assert!(
-            slide.markdown.contains("[Example](https://example.com)"),
-            "{}",
-            slide.markdown
-        );
-        assert!(
-            slide.markdown.contains("Discuss retention"),
-            "{}",
-            slide.markdown
-        );
-        assert!(
-            slide.markdown.contains("Unsupported slide element"),
-            "{}",
-            slide.markdown
-        );
-        assert!(slide.markdown.contains("pptx-resource:../media/image1.png"));
-        assert_eq!(parsed.resources.len(), 1);
-        assert_eq!(parsed.resources[0].media_type, "image/png");
+        assert!(opened.pdf_bytes > 16);
+        assert!(range.data.starts_with(b"%PDF-"));
+        assert!(!range.eof);
     }
 
     #[test]
     fn rejects_expanded_zip_and_entry_count_budget_overruns() {
         let oversized = vec![b'x'; (MAX_PPTX_EXPANDED_BYTES + 1) as usize];
         let bytes = package(&[("ppt/presentation.xml", oversized.as_slice())]);
-        let expanded_error = parse_pptx(&bytes, &CancellationToken::new())
+        let expanded_error = preflight_package(&bytes, &CancellationToken::new())
             .expect_err("expanded package budget must be enforced");
         assert!(expanded_error.to_string().contains("expanded ZIP"));
 
@@ -838,50 +534,52 @@ mod tests {
             .map(|name| (name.as_str(), b"x".as_slice()))
             .collect::<Vec<_>>();
         let bytes = package(&entries);
-        let count_error = parse_pptx(&bytes, &CancellationToken::new())
+        let count_error = preflight_package(&bytes, &CancellationToken::new())
             .expect_err("entry-count budget must be enforced");
         assert!(count_error.to_string().contains("entry-count"));
     }
 
     #[test]
-    fn malformed_image_relationships_render_an_explicit_placeholder() {
-        let parsed = parse_pptx(
-            &image_package("../media/missing.png", false),
-            &CancellationToken::new(),
-        )
-        .expect("missing image relationships should not discard slide text");
+    fn rejects_raster_images_with_an_excessive_decoded_size() {
+        let mut gif = b"GIF89a\x01\0\x01\0\x80\0\0\0\0\0\xff\xff\xff\
+            \x21\xf9\x04\x01\0\0\0\0\x2c\0\0\0\0\x01\0\x01\0\0\
+            \x02\x02\x44\x01\0\x3b"
+            .to_vec();
+        gif[6..10].copy_from_slice(&[0xff, 0xff, 0xff, 0xff]);
+        let bytes = package(&[("ppt/media/image1.gif", &gif)]);
 
-        assert!(parsed.resources.is_empty());
-        assert!(parsed.slides[0].markdown.contains("resource unavailable"));
+        let error = preflight_package(&bytes, &CancellationToken::new())
+            .expect_err("decoded image pixel budget must be enforced");
+
+        assert!(error.to_string().contains("decoded pixels"), "{error}");
     }
 
     #[test]
-    fn honours_cancellation_before_parsing() {
+    fn honours_cancellation_before_rendering() {
         let cancellation = CancellationToken::new();
         cancellation.cancel();
-        let error = parse_pptx(&image_package("../media/image1.png", true), &cancellation)
-            .expect_err("cancelled parsing must stop");
+        let error = preflight_package(&presentation_package(), &cancellation)
+            .expect_err("cancelled conversion must stop");
         assert_eq!(error, ApplicationError::OperationCancelled);
     }
 
     #[tokio::test]
-    async fn invalidates_resources_when_the_source_revision_changes() {
+    async fn invalidates_pdf_ranges_when_the_source_revision_changes() {
         let directory = tempfile::tempdir().expect("create temp directory");
         let path = directory.path().join("briefing.pptx");
-        std::fs::write(&path, image_package("../media/image1.png", true))
-            .expect("write PPTX fixture");
+        std::fs::write(&path, presentation_package()).expect("write PPTX fixture");
         let service = service();
         let opened = service
             .open(open_request(&path))
             .await
             .expect("open PPTX preview");
-        let resource_id = opened.resources[0].resource_id;
 
         std::fs::write(&path, b"changed source").expect("replace PPTX fixture");
         let error = service
-            .read_resource(ReadPptxPreviewResourceRequestDto {
+            .read_pdf(ReadPptxPreviewPdfRequestDto {
                 session_id: opened.session_id,
-                resource_id,
+                offset: 0,
+                length: 16,
             })
             .await
             .expect_err("changed source must invalidate the session");
@@ -896,8 +594,7 @@ mod tests {
     async fn close_cancels_and_releases_the_session() {
         let directory = tempfile::tempdir().expect("create temp directory");
         let path = directory.path().join("briefing.pptx");
-        std::fs::write(&path, image_package("../media/image1.png", true))
-            .expect("write PPTX fixture");
+        std::fs::write(&path, presentation_package()).expect("write PPTX fixture");
         let service = service();
         let opened = service
             .open(open_request(&path))

@@ -441,10 +441,7 @@ const ACTION_KEYDOWN_ROUTES = [
             : undefined;
         if (
           content !== undefined &&
-          (content.kind === 'pdf' ||
-            content.kind === 'comic' ||
-            content.kind === 'epub' ||
-            content.kind === 'pptx')
+          (content.kind === 'pdf' || content.kind === 'comic' || content.kind === 'epub')
         ) {
           event.preventDefault();
           if (event.key === 'ArrowLeft') activeViewer?.controller.previousPage();
