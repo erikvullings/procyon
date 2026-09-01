@@ -66,3 +66,5 @@ which would discard useful structure before the existing sanitized-HTML viewer s
   full frontend suite passed all DOCX coverage but retained one timing-sensitive typeahead failure
   from the newly merged `main` change; that test passes in isolation. One unrelated timing-sensitive
   safe-undo test likewise failed under nextest but passed when rerun with `cargo test`.
+- 2026-09-01: Raised the DOCX source, single-image, and total-image limits to 32 MiB and the expanded
+  package limit to 128 MiB. The rendered HTML limit remains 4 MiB to keep browser DOM memory bounded.

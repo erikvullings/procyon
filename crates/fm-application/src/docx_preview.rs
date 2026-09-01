@@ -20,13 +20,13 @@ use uuid::Uuid;
 use crate::ApplicationError;
 use crate::file_editor::read_stream_error;
 
-pub(crate) const MAX_DOCX_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
-pub(crate) const MAX_DOCX_EXPANDED_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_DOCX_SOURCE_BYTES: u64 = 32 * 1024 * 1024;
+pub(crate) const MAX_DOCX_EXPANDED_BYTES: u64 = 128 * 1024 * 1024;
 pub(crate) const MAX_DOCX_ZIP_ENTRIES: usize = 4_096;
 pub(crate) const MAX_DOCX_XML_DEPTH: usize = 128;
 pub(crate) const MAX_DOCX_IMAGES: usize = 128;
-pub(crate) const MAX_DOCX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
-pub(crate) const MAX_DOCX_TOTAL_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_DOCX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+pub(crate) const MAX_DOCX_TOTAL_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 pub(crate) const MAX_DOCX_RENDERED_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DOCX_SESSIONS: usize = 8;
 
@@ -381,6 +381,14 @@ fn preflight_package(
     bytes: &[u8],
     cancellation: &CancellationToken,
 ) -> Result<(), ApplicationError> {
+    preflight_package_with_expanded_limit(bytes, cancellation, MAX_DOCX_EXPANDED_BYTES)
+}
+
+fn preflight_package_with_expanded_limit(
+    bytes: &[u8],
+    cancellation: &CancellationToken,
+    max_expanded_bytes: u64,
+) -> Result<(), ApplicationError> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|error| invalid_docx(error.to_string()))?;
     if archive.len() > MAX_DOCX_ZIP_ENTRIES {
@@ -400,9 +408,9 @@ fn preflight_package(
             .map_err(|error| invalid_docx(error.to_string()))?;
         expanded_bytes = expanded_bytes
             .checked_add(file.size())
-            .ok_or_else(|| budget_error("expanded ZIP", MAX_DOCX_EXPANDED_BYTES))?;
-        if expanded_bytes > MAX_DOCX_EXPANDED_BYTES {
-            return Err(budget_error("expanded ZIP", MAX_DOCX_EXPANDED_BYTES));
+            .ok_or_else(|| budget_error("expanded ZIP", max_expanded_bytes))?;
+        if expanded_bytes > max_expanded_bytes {
+            return Err(budget_error("expanded ZIP", max_expanded_bytes));
         }
         let name = file.name().to_owned();
         if image_media_type(&name).is_some() && !file.is_dir() {
@@ -615,11 +623,25 @@ mod tests {
 
     #[test]
     fn rejects_an_expanded_zip_bomb_before_parsing() {
-        let oversized = vec![b'x'; (MAX_DOCX_EXPANDED_BYTES + 1) as usize];
+        let expanded_limit = 1_024;
+        let oversized = vec![b'x'; expanded_limit as usize + 1];
         let bytes = package(&[("word/document.xml", &oversized)]);
-        let error = parse_docx(&bytes, &CancellationToken::new())
-            .expect_err("expanded package budget must be enforced");
+        let error = preflight_package_with_expanded_limit(
+            &bytes,
+            &CancellationToken::new(),
+            expanded_limit,
+        )
+        .expect_err("expanded package budget must be enforced");
         assert!(error.to_string().contains("expanded ZIP"));
+    }
+
+    #[test]
+    fn uses_practical_docx_preview_budgets() {
+        assert_eq!(MAX_DOCX_SOURCE_BYTES, 32 * 1024 * 1024);
+        assert_eq!(MAX_DOCX_EXPANDED_BYTES, 128 * 1024 * 1024);
+        assert_eq!(MAX_DOCX_IMAGE_BYTES, 32 * 1024 * 1024);
+        assert_eq!(MAX_DOCX_TOTAL_IMAGE_BYTES, 32 * 1024 * 1024);
+        assert_eq!(MAX_DOCX_RENDERED_BYTES, 4 * 1024 * 1024);
     }
 
     #[test]
