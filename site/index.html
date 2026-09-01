@@ -477,6 +477,8 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .cap .st{font-family:var(--font-mono);font-size:11.5px;color:var(--accent-deep)}
 .cap .st.no{color:var(--muted)}
 .plat .install{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.install-actions{display:flex;flex-wrap:wrap;gap:8px}
+.install-actions .btn{min-height:36px;padding:8px 13px;font-size:12px}
 .code{
   display:flex;align-items:center;gap:10px;
   background:oklch(24% 0.02 250);color:oklch(85% 0.01 250);
@@ -642,19 +644,19 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <span class="eyebrow">Open source · MIT / Apache-2.0</span>
         <h1 data-od-id="hero-title">Gather <span class="hl">every file</span> in two panes.</h1>
         <p class="lede">
-          Procyon — Latin for <em>raccoon</em> — is a keyboard-first dual-pane file manager.
+          Procyon (<b>PROH-see-on</b>) — Latin for <em>raccoon</em> — is a keyboard-first dual-pane file manager.
           Local folders, archives, and SSH hosts share one pane-wise workflow, powered by a
           Rust operation engine and a virtualized table that holds its own at a million entries.
         </p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="#install" data-od-id="hero-cta-primary">Install Procyon</a>
+          <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi" data-od-id="hero-cta-primary">Download for Windows</a>
           <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon" data-od-id="hero-cta-github">
             View source
             <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-arrow-up-right"/></svg>
           </a>
         </div>
         <p class="hero-note" data-od-id="hero-credit">
-          <span class="dot">●</span> Ships as a Tauri desktop app &amp; runs in the browser
+          <span class="dot">●</span> Alpha desktop builds for Windows, macOS &amp; Linux
         </p>
       </div>
 
@@ -721,7 +723,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <article class="feat" data-od-id="feature-card-trash">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-trash"/></svg></div>
           <h3>Trash, not regret</h3>
-          <p>Move to the OS Trash or Recycle Bin by default; permanent delete stays one deliberate, confirmed step away.</p>
+          <p>Move to the OS Trash or Recycle Bin by default, then safely undo it. Permanent delete stays one deliberate, confirmed step away.</p>
           <div class="keys"><span class="kbd">⌘⌫</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-rename">
@@ -763,14 +765,14 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         </article>
         <article class="feat" data-od-id="feature-card-viewer">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-eye"/></svg></div>
-          <h3>Instant large-file viewer</h3>
-          <p>A Lister-style viewer that opens huge files with lazy search, plus an in-app text editor with Markdown preview.</p>
+          <h3>Office &amp; large-file viewer</h3>
+          <p>Open huge text files with lazy search, preview DOCX and PPTX documents, or explore bounded spreadsheet sheets with filtering, formulas and three-state sorting.</p>
           <div class="keys"><span class="kbd">F3 view</span><span class="kbd">F4 edit</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-archive">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-archive"/></svg></div>
           <h3>Browse &amp; mutate archives</h3>
-          <p>zip, tar and friends open like folders — browse, extract and add files, password-protected archives included.</p>
+          <p>Preview an archive's contents, then open zip, tar and friends like folders — browse, extract and add files, including password-protected archives.</p>
           <div class="keys"><span class="kbd">Enter</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-drag">
@@ -798,12 +800,14 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <h2>Read it, edit it, preview it — in place.</h2>
         </div>
         <div class="view-body">
-          <p>The <b style="color:var(--fg)">F3 viewer</b> opens huge files instantly with lazy search. The <b style="color:var(--fg)">F4 editor</b> edits in-app with a <b style="color:var(--fg)">Markdown preview</b> pane — no app hopping.</p>
+          <p>The <b style="color:var(--fg)">F3 viewer</b> opens huge files instantly with lazy search. It also renders bounded <b style="color:var(--fg)">DOCX, PPTX and spreadsheet previews</b> without loading an entire document into memory.</p>
+          <p>Spreadsheet sheets open as compact tables with worksheet tabs, filtering, formulas, optional row numbers and sortable columns. The <b style="color:var(--fg)">F4 editor</b> edits text in-app with a <b style="color:var(--fg)">Markdown preview</b> pane.</p>
           <p>Grid/icon view adds three icon sizes, photo-day grouping and type filtering, with <span class="strong">image, video, PDF and CBZ/CBR thumbnails</span> served by the backend.</p>
           <p>The <b style="color:var(--fg)">Properties dialog</b> shows byte-precise sizes, timestamps and permissions — and aggregates totals across a multi-selection. On macOS, Finder tags and Spotlight comments round-trip with Finder itself.</p>
         </div>
         <div class="list-hints">
           <div class="hint"><span class="k"><kbd>F3</kbd></span><span class="d">Instant large-file viewer with lazy search</span></div>
+          <div class="hint"><span class="k"><kbd>.xlsx</kbd></span><span class="d">Bounded worksheet preview with filtering and reversible sorting</span></div>
           <div class="hint"><span class="k"><kbd>F4</kbd></span><span class="d">In-app editor with live Markdown preview</span></div>
           <div class="hint"><span class="k"><kbd>⌘I</kbd></span><span class="d">Properties dialog with multi-selection totals</span></div>
         </div>
@@ -832,13 +836,14 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         </div>
         <div class="ops-body">
           <p>Long-running work is a bounded Rust scheduler, not a spinner. Each copy, move, rename or delete is a typed job with lifecycle, progress and a smoothed transfer rate — cancellable, pausable and resumable at safe boundaries.</p>
-          <p>Conflicts resolve up front with <b style="color:var(--fg)">ask, overwrite, rename-new or skip</b>. Queued jobs wait in FIFO order, and the last 100 outcomes stay in a terminal history so you always know what ran.</p>
+          <p>Conflicts resolve up front with <b style="color:var(--fg)">ask, overwrite, rename-new or skip</b>. Completed renames, moves, copies, duplicates and recoverable trash operations carry fingerprint-guarded undo plans, so later edits are never overwritten or deleted.</p>
         </div>
         <div class="ops-pills">
           <span class="pill"><svg aria-hidden="true"><use href="#i-check"/></svg>Pause / resume</span>
           <span class="pill"><svg aria-hidden="true"><use href="#i-hour"/></svg>Cancellation</span>
           <span class="pill"><svg aria-hidden="true"><use href="#i-shield"/></svg>Preflight checks</span>
           <span class="pill"><svg aria-hidden="true"><use href="#i-dup"/></svg>Idempotent retries</span>
+          <span class="pill"><svg aria-hidden="true"><use href="#i-shield"/></svg>Safe undo</span>
         </div>
         <div class="list-hints">
           <div class="hint"><span class="k"><kbd>⌘P</kbd></span><span class="d">Inspect every running, queued and failed job</span></div>
@@ -966,8 +971,8 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
     <div class="wrap">
       <div class="sec-head">
         <span class="eyebrow">07 · Platforms</span>
-        <h2>Designed on macOS, honest about the rest.</h2>
-        <p class="sub">Full file-icon, trash, reveal and terminal integration on macOS today; drag-out already works on Windows; every host gets the same browser-mode core.</p>
+        <h2>Desktop builds for Windows, macOS and Linux.</h2>
+        <p class="sub">Windows and macOS have native desktop integration. Linux ships as both a Debian package and portable AppImage, with the same file-management core and fewer platform-specific integrations.</p>
       </div>
       <div class="plat-grid">
         <article class="plat" data-od-id="platform-macos">
@@ -979,29 +984,39 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <div class="cap"><span>Native menu bar</span><span class="st">on</span></div>
           <div class="install">
             <div class="code"><span class="pm">$</span><code>brew install --cask procyon</code></div>
-            <span class="alt">tap erikvullings/tap first — or drag the .dmg from every release into Applications</span>
+            <div class="install-actions">
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_universal.dmg">Download DMG</a>
+            </div>
+            <span class="alt">Tap erikvullings/tap first — or install the unsigned alpha DMG directly.</span>
           </div>
         </article>
         <article class="plat" data-od-id="platform-windows">
-          <h3>Windows <span class="tag part">Beta</span></h3>
+          <h3>Windows <span class="tag full">Available</span></h3>
           <div class="cap"><span>Native file icons</span><span class="st">on</span></div>
           <div class="cap"><span>Trash / Recycle Bin</span><span class="st">on</span></div>
           <div class="cap"><span>Reveal + terminal</span><span class="st">on</span></div>
           <div class="cap"><span>Native menu bar</span><span class="st no">todo</span></div>
           <div class="install">
-            <div class="code"><span class="pm">PS&gt;</span><code>choco install procyon</code></div>
-            <span class="alt">.msi and -setup.exe installers in releases</span>
+            <div class="install-actions">
+              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi">Download MSI</a>
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64-setup.exe">Download setup EXE</a>
+            </div>
+            <span class="alt">Unsigned alpha installers. Chocolatey availability currently trails the latest release.</span>
           </div>
         </article>
         <article class="plat" data-od-id="platform-linux">
-          <h3>Linux <span class="tag part">In progress</span></h3>
-          <div class="cap"><span>Browser-mode core</span><span class="st">on</span></div>
+          <h3>Linux <span class="tag full">Available</span></h3>
+          <div class="cap"><span>Tauri desktop + browser core</span><span class="st">on</span></div>
           <div class="cap"><span>Archive + SFTP providers</span><span class="st">on</span></div>
-          <div class="cap"><span>Native desktop integration</span><span class="st no">todo</span></div>
+          <div class="cap"><span>Native desktop integration</span><span class="st">partial</span></div>
           <div class="cap"><span>In-memory credential fallback</span><span class="st">partial</span></div>
           <div class="install">
-            <div class="code"><span class="pm">$</span><code>sudo apt install ./procyon.deb</code></div>
-            <span class="alt">or run the .AppImage from releases</span>
+            <div class="code"><span class="pm">$</span><code>sudo apt install ./Procyon_0.1.0-13_amd64.deb</code></div>
+            <div class="install-actions">
+              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_amd64.deb">Download .deb</a>
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_amd64.AppImage">Download AppImage</a>
+            </div>
+            <span class="alt">Unsigned x86-64 alpha builds.</span>
           </div>
         </article>
       </div>
@@ -1031,7 +1046,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <div class="os-row"><span class="l">Language</span><span class="v">Rust · TypeScript · Mithril</span></div>
         <div class="os-row"><span class="l">Shell</span><span class="v">Tauri 2 + Axum</span></div>
         <div class="os-row"><span class="l">Crates</span><span class="v">fm-operations · fm-vfs · fm-search</span></div>
-        <div class="os-row"><span class="l">Status</span><span class="v">v0.1.0 — active</span></div>
+        <div class="os-row"><span class="l">Status</span><span class="v">v0.1.0-13 · alpha</span></div>
         <div class="license-line">
           <span class="tag full" style="font-size:11px">MIT</span>
           <span class="tag full" style="font-size:11px">Apache-2.0</span>
@@ -1060,8 +1075,8 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
       <div class="cta-right">
         <img class="cta-mascot" data-od-id="install-mascot" src="raccoon---body.png" alt="Procyon, the raccoon mascot — a gatherer of files" width="512" height="512">
         <div class="hero-actions" data-od-id="install-commands">
-          <a class="btn" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon/releases">Download for macOS</a>
-          <a class="btn secondary" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">GitHub repository</a>
+          <a class="btn" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi">Download for Windows</a>
+          <a class="btn secondary" href="#platforms">macOS &amp; Linux downloads</a>
         </div>
       </div>
     </div>
@@ -1084,7 +1099,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
       <a href="#platforms">Install</a>
       <a target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon">Source</a>
     </div>
-    <span class="copy">Procyon · pro-kee-on — a gatherer of files</span>
+    <span class="copy">Procyon · PROH-see-on — a gatherer of files</span>
   </div>
 </footer>
 
