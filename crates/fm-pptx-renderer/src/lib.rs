@@ -20,14 +20,10 @@ pub enum PptxRenderError {
     #[error("could not render the PowerPoint presentation: {0}")]
     Conversion(String),
     /// The rendered PDF exceeds the preview-session memory budget.
-    #[error(
-        "rendered PowerPoint preview exceeds the {MAX_RENDERED_PDF_BYTES}-byte PDF output budget"
-    )]
+    #[error("rendered PowerPoint preview exceeds the PDF output limit of 64 MiB")]
     OutputTooLarge,
     /// The immediate first-page response exceeds its transport budget.
-    #[error(
-        "first-page PowerPoint preview exceeds the {MAX_FIRST_PAGE_PDF_BYTES}-byte inline response budget"
-    )]
+    #[error("first-page PowerPoint preview exceeds the inline response limit of 8 MiB")]
     FirstPageTooLarge,
 }
 

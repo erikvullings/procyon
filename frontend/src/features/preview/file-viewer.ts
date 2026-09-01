@@ -1095,7 +1095,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
             : state.status === 'unsupported'
               ? renderExternalFallback(attrs, t('viewer', 'previewUnavailableGeneric'))
               : state.status === 'error'
-                ? m('.fm-file-viewer-body', m('span', state.message))
+                ? renderExternalFallback(attrs, state.message)
                 : state.content.kind === 'text'
                   ? renderTextBody(attrs, state, () => searchInput?.focus())
                   : state.content.kind === 'structuredTable'

@@ -21,15 +21,15 @@ use crate::ApplicationError;
 use crate::content_streaming::MAX_RANGE_LENGTH;
 use crate::file_editor::read_stream_error;
 
-pub(crate) const MAX_PPTX_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
-pub(crate) const MAX_PPTX_EXPANDED_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_PPTX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_PPTX_EXPANDED_BYTES: u64 = 256 * 1024 * 1024;
 pub(crate) const MAX_PPTX_ZIP_ENTRIES: usize = 4_096;
 pub(crate) const MAX_PPTX_XML_DEPTH: usize = 128;
 pub(crate) const MAX_PPTX_SLIDES: usize = 1_000;
 pub(crate) const MAX_PPTX_TEXT_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAX_PPTX_MEDIA_ITEMS: usize = 128;
-pub(crate) const MAX_PPTX_MEDIA_BYTES: usize = 16 * 1024 * 1024;
-pub(crate) const MAX_PPTX_SINGLE_MEDIA_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_PPTX_MEDIA_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_PPTX_SINGLE_MEDIA_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
 pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 32 * 1024 * 1024;
 const MAX_PPTX_SESSIONS: usize = 8;
@@ -134,7 +134,7 @@ impl PptxPreviewService {
             .await
             .map_err(ApplicationError::from)?;
         if source_bytes > MAX_PPTX_SOURCE_BYTES {
-            return Err(budget_error("source bytes", MAX_PPTX_SOURCE_BYTES));
+            return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
         }
         let revision = source_revision(&summary, source_bytes);
         let reader = provider
@@ -148,7 +148,7 @@ impl PptxPreviewService {
             .await
             .map_err(read_stream_error)?;
         if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
-            return Err(budget_error("source bytes", MAX_PPTX_SOURCE_BYTES));
+            return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
         }
         preflight_package(&bytes, &cancellation)?;
         if cancellation.is_cancelled() {
@@ -306,8 +306,16 @@ fn preflight_package(
     bytes: &[u8],
     cancellation: &CancellationToken,
 ) -> Result<(), ApplicationError> {
+    preflight_package_with_expanded_limit(bytes, cancellation, MAX_PPTX_EXPANDED_BYTES)
+}
+
+fn preflight_package_with_expanded_limit(
+    bytes: &[u8],
+    cancellation: &CancellationToken,
+    max_expanded_bytes: u64,
+) -> Result<(), ApplicationError> {
     if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
-        return Err(budget_error("source bytes", MAX_PPTX_SOURCE_BYTES));
+        return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
     }
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(invalid_pptx)?;
     if archive.len() > MAX_PPTX_ZIP_ENTRIES {
@@ -328,9 +336,9 @@ fn preflight_package(
         let mut entry = archive.by_index(index).map_err(invalid_pptx)?;
         expanded_bytes = expanded_bytes
             .checked_add(entry.size())
-            .ok_or_else(|| budget_error("expanded ZIP", MAX_PPTX_EXPANDED_BYTES))?;
-        if expanded_bytes > MAX_PPTX_EXPANDED_BYTES {
-            return Err(budget_error("expanded ZIP", MAX_PPTX_EXPANDED_BYTES));
+            .ok_or_else(|| budget_error("expanded ZIP", max_expanded_bytes))?;
+        if expanded_bytes > max_expanded_bytes {
+            return Err(budget_error("expanded ZIP", max_expanded_bytes));
         }
         let name = entry.name().to_owned();
         if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
@@ -455,8 +463,13 @@ fn validate_xml(
 }
 
 fn budget_error(resource: &str, limit: u64) -> ApplicationError {
+    let limit = if limit.is_multiple_of(1024 * 1024) {
+        format!("{} MiB", limit / (1024 * 1024))
+    } else {
+        format!("{limit} bytes")
+    };
     ApplicationError::InvalidRequest(format!(
-        "PowerPoint preview exceeds the {resource} budget ({limit} bytes); open it in an external application"
+        "PowerPoint preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally."
     ))
 }
 
@@ -656,10 +669,15 @@ mod tests {
 
     #[test]
     fn rejects_expanded_zip_and_entry_count_budget_overruns() {
-        let oversized = vec![b'x'; (MAX_PPTX_EXPANDED_BYTES + 1) as usize];
+        let expanded_limit = 1_024;
+        let oversized = vec![b'x'; expanded_limit as usize + 1];
         let bytes = package(&[("ppt/presentation.xml", oversized.as_slice())]);
-        let expanded_error = preflight_package(&bytes, &CancellationToken::new())
-            .expect_err("expanded package budget must be enforced");
+        let expanded_error = preflight_package_with_expanded_limit(
+            &bytes,
+            &CancellationToken::new(),
+            expanded_limit,
+        )
+        .expect_err("expanded package budget must be enforced");
         assert!(expanded_error.to_string().contains("expanded ZIP"));
 
         let names = (0..=MAX_PPTX_ZIP_ENTRIES)
@@ -673,6 +691,23 @@ mod tests {
         let count_error = preflight_package(&bytes, &CancellationToken::new())
             .expect_err("entry-count budget must be enforced");
         assert!(count_error.to_string().contains("entry-count"));
+    }
+
+    #[test]
+    fn uses_practical_budgets_and_reports_size_limits_in_mib() {
+        assert_eq!(MAX_PPTX_SOURCE_BYTES, 64 * 1024 * 1024);
+        assert_eq!(MAX_PPTX_EXPANDED_BYTES, 256 * 1024 * 1024);
+        assert_eq!(MAX_PPTX_MEDIA_BYTES, 64 * 1024 * 1024);
+        assert_eq!(MAX_PPTX_SINGLE_MEDIA_BYTES, 64 * 1024 * 1024);
+        let ApplicationError::InvalidRequest(message) =
+            budget_error("source file size", MAX_PPTX_SOURCE_BYTES)
+        else {
+            panic!("budget error must be an invalid request");
+        };
+        assert_eq!(
+            message,
+            "PowerPoint preview cannot open this file because it exceeds the source file size limit of 64 MiB. Open it externally."
+        );
     }
 
     #[test]
