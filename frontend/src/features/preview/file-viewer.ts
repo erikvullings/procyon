@@ -124,6 +124,8 @@ function pagedContentInfo(
     return { current: content.currentPage + 1, total: content.pageCount };
   if (content.kind === 'epub')
     return { current: content.currentChapter + 1, total: content.chapterCount };
+  if (content.kind === 'pptx')
+    return { current: content.currentSlide + 1, total: content.slideCount };
   return undefined;
 }
 
@@ -855,6 +857,27 @@ function renderDocxBody(state: Extract<FileViewerState, { status: 'ready' }>): m
   ]);
 }
 
+function renderPptxBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
+  const content = state.content;
+  if (content.kind !== 'pptx') return undefined;
+  const slide = content.slides[content.currentSlide];
+  return m('.fm-file-viewer-body.fm-file-viewer-body-pptx', [
+    m('.fm-file-viewer-pptx-heading', [
+      m('span.fm-file-viewer-pptx-label', t('viewer', 'pptxContentPreview')),
+      slide?.title === undefined ? undefined : m('strong', slide.title),
+    ]),
+    content.currentSlideHtml === undefined
+      ? m('span', t('viewer', 'loadingSlide'))
+      : m('.fm-file-viewer-pptx-slide.browser-default', {
+          innerHTML: content.currentSlideHtml,
+        }),
+    m(
+      'p.fm-file-viewer-pptx-limitations',
+      t('viewer', 'pptxContentOnly', { features: content.omittedFeatures.join(', ') }),
+    ),
+  ]);
+}
+
 function renderAudioBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
   const content = state.content;
   if (content.kind !== 'audio') return undefined;
@@ -960,7 +983,12 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
     view: ({ attrs }) => {
       const state = attrs.state;
       const search =
-        state.status === 'ready' && state.content.kind === 'text' ? state.search : undefined;
+        state.status === 'ready' &&
+        (state.content.kind === 'text' ||
+          state.content.kind === 'docx' ||
+          state.content.kind === 'pptx')
+          ? state.search
+          : undefined;
       return m(
         'section.fm-file-viewer',
         { 'aria-label': t('viewer', 'viewing', { name: state.entry.name }) },
@@ -1025,7 +1053,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                 })()
               : undefined,
             state.status === 'ready' &&
-            (state.content.kind === 'text' || state.content.kind === 'image')
+            (state.content.kind === 'text' ||
+              state.content.kind === 'image' ||
+              state.content.kind === 'pptx')
               ? tooltip(
                   state.content.kind === 'image'
                     ? t('viewer', 'copyImage')
@@ -1080,7 +1110,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
             ),
           ]),
           state.status === 'ready' &&
-          (state.content.kind === 'text' || state.content.kind === 'docx')
+          (state.content.kind === 'text' ||
+            state.content.kind === 'docx' ||
+            state.content.kind === 'pptx')
             ? renderSearchBar(attrs, search, (el) => {
                 searchInput = el;
               })
@@ -1102,7 +1134,8 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                       ? renderStructuredJson(attrs, state)
                       : state.content.kind === 'structuredFallback'
                         ? renderExternalFallback(attrs, state.content.message)
-                        : state.content.kind === 'docxExternal'
+                        : state.content.kind === 'docxExternal' ||
+                            state.content.kind === 'pptxExternal'
                           ? renderExternalFallback(attrs, state.content.message)
                           : state.content.kind === 'audio'
                             ? renderAudioBody(state)
@@ -1117,9 +1150,11 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                     ? renderEpubBody(state)
                                     : state.content.kind === 'docx'
                                       ? renderDocxBody(state)
-                                      : state.content.kind === 'archiveSummary'
-                                        ? renderArchiveSummary(state)
-                                        : renderImageBody(attrs, state),
+                                      : state.content.kind === 'pptx'
+                                        ? renderPptxBody(state)
+                                        : state.content.kind === 'archiveSummary'
+                                          ? renderArchiveSummary(state)
+                                          : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

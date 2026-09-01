@@ -3403,6 +3403,69 @@
         ],
         "type": "object"
       },
+      "OpenPptxPreviewRequestDto": {
+        "description": "Opens a bounded, provider-neutral PPTX content-preview session.",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral PPTX source location."
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "OpenPptxPreviewResponseDto": {
+        "description": "Initial semantic PPTX slides and bounded resource descriptors.",
+        "properties": {
+          "omittedFeatures": {
+            "description": "PowerPoint fidelity features deliberately omitted from this content view.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "description": "Embedded images referenced by slide Markdown, fetched separately by id.",
+            "items": {
+              "$ref": "#/components/schemas/PptxPreviewResourceDto"
+            },
+            "type": "array"
+          },
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "slides": {
+            "description": "Slides in package-declared presentation order.",
+            "items": {
+              "$ref": "#/components/schemas/PptxPreviewSlideDto"
+            },
+            "type": "array"
+          },
+          "sourceBytes": {
+            "description": "Source package bytes at session creation.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRevision": {
+            "description": "Revision recorded before parsing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "sourceRevision",
+          "sourceBytes",
+          "slides",
+          "resources",
+          "omittedFeatures"
+        ],
+        "type": "object"
+      },
       "OpenStructuredViewRequestDto": {
         "description": "Opens a provider-neutral, read-only structured-data viewer session.",
         "properties": {
@@ -4316,6 +4379,78 @@
         ],
         "type": "object"
       },
+      "PptxPreviewResourceDto": {
+        "description": "One embedded image retained by a bounded PPTX preview session.",
+        "properties": {
+          "byteLength": {
+            "description": "Exact retained byte count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mediaType": {
+            "description": "Browser media type for the bounded image bytes.",
+            "type": "string"
+          },
+          "resourceId": {
+            "description": "Opaque resource identifier scoped to the preview session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "description": "Parser-local source referenced by slide Markdown.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resourceId",
+          "source",
+          "mediaType",
+          "byteLength"
+        ],
+        "type": "object"
+      },
+      "PptxPreviewSessionRequestDto": {
+        "description": "Identifies a PPTX preview session.",
+        "properties": {
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "PptxPreviewSlideDto": {
+        "description": "One slide retained independently to preserve bounded paged viewer state.",
+        "properties": {
+          "index": {
+            "description": "Zero-based position in presentation order.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "markdown": {
+            "description": "Semantic Markdown for this slide only. Hosts must sanitize before DOM insertion.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Parser-identified title, when present.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "markdown"
+        ],
+        "type": "object"
+      },
       "QuickFilterPatchDto": {
         "description": "Sets or clears a tab's persisted quick-filter as part of a\n[`DirectoryViewPatchDto`].",
         "oneOf": [
@@ -4488,6 +4623,49 @@
           "offset",
           "length",
           "eof"
+        ],
+        "type": "object"
+      },
+      "ReadPptxPreviewResourceRequestDto": {
+        "description": "Requests one bounded embedded PPTX resource.",
+        "properties": {
+          "resourceId": {
+            "description": "Opaque resource identifier from the open response.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Opaque backend session identifier.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "ReadPptxPreviewResourceResponseDto": {
+        "description": "Embedded PPTX image bytes and their browser media type.",
+        "properties": {
+          "data": {
+            "description": "Bounded raw image bytes.",
+            "items": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "mediaType": {
+            "description": "Browser media type for the bytes.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "mediaType"
         ],
         "type": "object"
       },
@@ -9483,6 +9661,143 @@
           }
         },
         "summary": "Fetches a file's git commit history, for the Alt+Space metadata panel's history section\n(task 0135). Local provider only; returns an empty commit list (never an error) when the\nfile is outside a git working tree, on a non-local provider, or not yet committed."
+      }
+    },
+    "/api/v1/files/pptx/close": {
+      "post": {
+        "operationId": "closePptxPreview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PptxPreviewSessionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Cancels and releases a PPTX preview session."
+      }
+    },
+    "/api/v1/files/pptx/open": {
+      "post": {
+        "operationId": "openPptxPreview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPptxPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenPptxPreviewResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Opens a bounded semantic PPTX content-preview session."
+      }
+    },
+    "/api/v1/files/pptx/resource": {
+      "post": {
+        "operationId": "readPptxPreviewResource",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadPptxPreviewResourceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadPptxPreviewResourceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Reads one bounded embedded image from a PPTX preview session."
       }
     },
     "/api/v1/files/range": {

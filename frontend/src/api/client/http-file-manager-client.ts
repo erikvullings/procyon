@@ -44,6 +44,7 @@ import type {
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
+  OpenPptxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -51,8 +52,12 @@ import type {
   PluginIconTheme,
   PluginId,
   PluginLogEntry,
+  PptxPreview,
+  PptxPreviewResource,
+  PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
+  ReadPptxPreviewResourceRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -167,6 +172,9 @@ import {
   getPluginIconThemeAsset as requestPluginIconThemeAsset,
   getPluginLogs as requestPluginLogs,
   listPlugins as requestPlugins,
+  closePptxPreview as requestPptxPreviewClose,
+  openPptxPreview as requestPptxPreviewOpen,
+  readPptxPreviewResource as requestPptxPreviewResource,
   readFileRange as requestReadFileRange,
   getRuntimeCapabilities as requestRuntimeCapabilities,
   saveEditableFile as requestSaveEditableFile,
@@ -639,6 +647,41 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204)
       throw new Error(`Unexpected closeDocxPreview response status: ${response.status}`);
+  }
+
+  async openPptxPreview(
+    request: OpenPptxPreviewRequest,
+    signal?: AbortSignal,
+  ): Promise<PptxPreview> {
+    const response = await requestPptxPreviewOpen(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected openPptxPreview response status: ${response.status}`);
+    return response.data;
+  }
+
+  async readPptxPreviewResource(
+    request: ReadPptxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<PptxPreviewResource> {
+    const response = await requestPptxPreviewResource(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected readPptxPreviewResource response status: ${response.status}`);
+    return response.data;
+  }
+
+  async closePptxPreview(request: PptxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
+    const response = await requestPptxPreviewClose(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected closePptxPreview response status: ${response.status}`);
   }
 
   async openStructuredView(

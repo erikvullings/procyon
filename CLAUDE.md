@@ -113,7 +113,8 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 `OperationsCoordinator` (scheduler, history, idempotency and conflict control),
 `SearchComparisonCoordinator` (search/comparison lifecycle and sync plans), `ActionInvoker`
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
-`DocxPreviewService` (bounded semantic conversion and retained package resources),
+`DocxPreviewService` and `PptxPreviewService` (bounded semantic conversion and retained package
+resources),
 `ConnectionFacade`, and `PluginManager`. Extend the owning service when a feature fits one of these
 capabilities; add a new service only for a genuinely distinct responsibility. Do not move logic back
 into the facade or let capability services depend on `FileManagerService`.

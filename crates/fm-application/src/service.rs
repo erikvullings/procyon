@@ -63,6 +63,7 @@ use crate::platform_mapping::{
     map_platform_error, runtime_capabilities_dto, volume_capacity,
 };
 use crate::plugin_manager::PluginManager;
+use crate::pptx_preview::PptxPreviewService;
 use crate::remote_terminal::RemoteTerminalService;
 use crate::search_comparison_coordinator::SearchComparisonCoordinator;
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
@@ -91,6 +92,7 @@ pub struct FileManagerService {
     directories: DirectoryService,
     editor: FileEditorService,
     docx_preview: DocxPreviewService,
+    pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
@@ -449,6 +451,7 @@ impl FileManagerService {
             directories,
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
             docx_preview: DocxPreviewService::new(providers.clone()),
+            pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
             archive_provider,
@@ -808,6 +811,30 @@ impl FileManagerService {
         request: fm_transport_dto::DocxPreviewSessionRequestDto,
     ) -> Result<(), ApplicationError> {
         self.docx_preview.close(request).await
+    }
+
+    /// Opens a bounded, provider-neutral semantic PPTX preview session.
+    pub async fn open_pptx_preview(
+        &self,
+        request: fm_transport_dto::OpenPptxPreviewRequestDto,
+    ) -> Result<fm_transport_dto::OpenPptxPreviewResponseDto, ApplicationError> {
+        self.pptx_preview.open(request).await
+    }
+
+    /// Reads one bounded embedded image from a PPTX preview session.
+    pub async fn read_pptx_preview_resource(
+        &self,
+        request: fm_transport_dto::ReadPptxPreviewResourceRequestDto,
+    ) -> Result<fm_transport_dto::ReadPptxPreviewResourceResponseDto, ApplicationError> {
+        self.pptx_preview.read_resource(request).await
+    }
+
+    /// Cancels and releases a PPTX preview session.
+    pub async fn close_pptx_preview(
+        &self,
+        request: fm_transport_dto::PptxPreviewSessionRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.pptx_preview.close(request).await
     }
 
     /// Opens a bounded, provider-neutral read-only structured-data session.

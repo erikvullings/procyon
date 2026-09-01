@@ -55,16 +55,21 @@ import type {
   OneDriveAuthorizationAttemptDto,
   OpenDocxPreviewRequestDto,
   OpenDocxPreviewResponseDto,
+  OpenPptxPreviewRequestDto,
+  OpenPptxPreviewResponseDto,
   OpenStructuredViewRequestDto,
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
   PluginDescriptorDto,
   PluginLogEntryDto,
+  PptxPreviewSessionRequestDto,
   ReadDocxPreviewResourceRequestDto,
   ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
   ReadFileRangeResponseDto,
+  ReadPptxPreviewResourceRequestDto,
+  ReadPptxPreviewResourceResponseDto,
   ReadStructuredJsonWindowRequestDto,
   ReadStructuredJsonWindowResponseDto,
   ReadStructuredRowsRequestDto,
@@ -2448,6 +2453,168 @@ return fetchMutator<getFileGitHistoryResponse>(getGetFileGitHistoryUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(getFileGitHistoryRequestDto)
+  }
+);}
+
+
+
+export type closePptxPreviewResponse204 = {
+  data: void
+  status: 204
+}
+
+export type closePptxPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type closePptxPreviewResponseSuccess = (closePptxPreviewResponse204) & {
+  headers: Headers;
+};
+export type closePptxPreviewResponseError = (closePptxPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type closePptxPreviewResponse = (closePptxPreviewResponseSuccess | closePptxPreviewResponseError)
+
+export const getClosePptxPreviewUrl = () => {
+
+
+
+
+  return `/api/v1/files/pptx/close`
+}
+
+/**
+ * @summary Cancels and releases a PPTX preview session.
+ */
+export const closePptxPreview = async (pptxPreviewSessionRequestDto: PptxPreviewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closePptxPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<closePptxPreviewResponse>(getClosePptxPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(pptxPreviewSessionRequestDto)
+  }
+);}
+
+
+
+export type openPptxPreviewResponse200 = {
+  data: OpenPptxPreviewResponseDto
+  status: 200
+}
+
+export type openPptxPreviewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type openPptxPreviewResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type openPptxPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type openPptxPreviewResponseSuccess = (openPptxPreviewResponse200) & {
+  headers: Headers;
+};
+export type openPptxPreviewResponseError = (openPptxPreviewResponse400 | openPptxPreviewResponse403 | openPptxPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type openPptxPreviewResponse = (openPptxPreviewResponseSuccess | openPptxPreviewResponseError)
+
+export const getOpenPptxPreviewUrl = () => {
+
+
+
+
+  return `/api/v1/files/pptx/open`
+}
+
+/**
+ * @summary Opens a bounded semantic PPTX content-preview session.
+ */
+export const openPptxPreview = async (openPptxPreviewRequestDto: OpenPptxPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openPptxPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<openPptxPreviewResponse>(getOpenPptxPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(openPptxPreviewRequestDto)
+  }
+);}
+
+
+
+export type readPptxPreviewResourceResponse200 = {
+  data: ReadPptxPreviewResourceResponseDto
+  status: 200
+}
+
+export type readPptxPreviewResourceResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type readPptxPreviewResourceResponse409 = {
+  data: ApplicationErrorDto
+  status: 409
+}
+
+export type readPptxPreviewResourceResponseSuccess = (readPptxPreviewResourceResponse200) & {
+  headers: Headers;
+};
+export type readPptxPreviewResourceResponseError = (readPptxPreviewResourceResponse404 | readPptxPreviewResourceResponse409) & {
+  headers: Headers;
+};
+
+export type readPptxPreviewResourceResponse = (readPptxPreviewResourceResponseSuccess | readPptxPreviewResourceResponseError)
+
+export const getReadPptxPreviewResourceUrl = () => {
+
+
+
+
+  return `/api/v1/files/pptx/resource`
+}
+
+/**
+ * @summary Reads one bounded embedded image from a PPTX preview session.
+ */
+export const readPptxPreviewResource = async (readPptxPreviewResourceRequestDto: ReadPptxPreviewResourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readPptxPreviewResourceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<readPptxPreviewResourceResponse>(getReadPptxPreviewResourceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readPptxPreviewResourceRequestDto)
   }
 );}
 

@@ -53,14 +53,19 @@ import type {
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
+  OpenPptxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PptxPreview,
+  PptxPreviewResource,
+  PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
+  ReadPptxPreviewResourceRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -178,6 +183,9 @@ export type MockClientMethod =
   | 'openDocxPreview'
   | 'readDocxPreviewResource'
   | 'closeDocxPreview'
+  | 'openPptxPreview'
+  | 'readPptxPreviewResource'
+  | 'closePptxPreview'
   | 'searchInFile'
   | 'calculateFolderSize'
   | 'archiveSummary'
@@ -769,6 +777,7 @@ export class MockFileManagerClient implements FileManagerClient {
   >();
   private readonly fileContents = new Map<string, Uint8Array>();
   private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
+  private readonly pptxSessions = new Map<string, Map<string, PptxPreviewResource>>();
   private readonly structuredSessions = new Map<
     string,
     {
@@ -1401,6 +1410,68 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('closeDocxPreview', signal, () => {
       if (!this.docxSessions.delete(request.sessionId)) {
         throw new MockClientError('notFound', 'DOCX preview session not found');
+      }
+    });
+  }
+
+  openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview> {
+    return this.perform('openPptxPreview', signal, () => {
+      const sessionId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
+      this.pptxSessions.set(
+        sessionId,
+        new Map([
+          [
+            resourceId,
+            {
+              data: [137, 80, 78, 71, 13, 10, 26, 10],
+              mediaType: 'image/png',
+            },
+          ],
+        ]),
+      );
+      return {
+        sessionId,
+        sourceRevision: `mock:${request.location.uri}`,
+        sourceBytes: 2048,
+        slides: [
+          { index: 0, title: 'Overview', markdown: '# Overview\n\nFirst mock slide.' },
+          {
+            index: 1,
+            title: 'Details',
+            markdown: '# Details\n\n![Embedded image](pptx-resource:../media/image1.png)',
+          },
+        ],
+        resources: [
+          {
+            resourceId,
+            source: '../media/image1.png',
+            mediaType: 'image/png',
+            byteLength: 8,
+          },
+        ],
+        omittedFeatures: ['themes and precise geometry', 'transitions and animations', 'charts'],
+      };
+    });
+  }
+
+  readPptxPreviewResource(
+    request: ReadPptxPreviewResourceRequest,
+    signal?: AbortSignal,
+  ): Promise<PptxPreviewResource> {
+    return this.perform('readPptxPreviewResource', signal, () => {
+      const resource = this.pptxSessions.get(request.sessionId)?.get(request.resourceId);
+      if (resource === undefined) {
+        throw new MockClientError('notFound', 'PPTX preview resource not found');
+      }
+      return structuredClone(resource);
+    });
+  }
+
+  closePptxPreview(request: PptxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
+    return this.perform('closePptxPreview', signal, () => {
+      if (!this.pptxSessions.delete(request.sessionId)) {
+        throw new MockClientError('notFound', 'PPTX preview session not found');
       }
     });
   }

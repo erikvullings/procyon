@@ -48,14 +48,19 @@ import type {
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
+  OpenPptxPreviewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PptxPreview,
+  PptxPreviewResource,
+  PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
+  ReadPptxPreviewResourceRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -382,6 +387,21 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   closeDocxPreview(request: DocxPreviewSessionRequest, _signal?: AbortSignal): Promise<void> {
     return invoke<void>('close_docx_preview', { request });
+  }
+
+  openPptxPreview(request: OpenPptxPreviewRequest, _signal?: AbortSignal): Promise<PptxPreview> {
+    return invoke<PptxPreview>('open_pptx_preview', { request });
+  }
+
+  readPptxPreviewResource(
+    request: ReadPptxPreviewResourceRequest,
+    _signal?: AbortSignal,
+  ): Promise<PptxPreviewResource> {
+    return invoke<PptxPreviewResource>('read_pptx_preview_resource', { request });
+  }
+
+  closePptxPreview(request: PptxPreviewSessionRequest, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('close_pptx_preview', { request });
   }
 
   openStructuredView(

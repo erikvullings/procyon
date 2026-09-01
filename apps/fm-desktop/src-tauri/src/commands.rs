@@ -23,23 +23,25 @@ use fm_transport_dto::{
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     HostKeyProbeDto, InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest,
     LocationDto, NavigateRequest, OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto,
-    OpenDocxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    OperationDto, OperationQueueStatusDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
-    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadStructuredJsonWindowRequestDto,
-    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
-    ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
-    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
-    SaveChecksumFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
-    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
-    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
-    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
-    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
-    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
-    StructuredViewStatusDto, SyncPlanDto, UpdateConnectionRequestDto,
-    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
-    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
+    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, OperationDto,
+    OperationQueueStatusDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
+    PptxPreviewSessionRequestDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadPptxPreviewResourceRequestDto, ReadPptxPreviewResourceResponseDto,
+    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
+    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto,
+    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
+    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto,
+    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, ScanDiskUsageRequestDto,
+    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
+    SearchStructuredRowsResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
+    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
+    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
+    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto,
+    StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
+    UpdateConnectionRequestDto, UpdateStructuredViewRequestDto, VerificationReportDto,
+    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -712,6 +714,42 @@ pub(crate) async fn close_docx_preview(
     state
         .service
         .close_docx_preview(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn open_pptx_preview(
+    state: State<'_, AppState>,
+    request: OpenPptxPreviewRequestDto,
+) -> Result<OpenPptxPreviewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .open_pptx_preview(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn read_pptx_preview_resource(
+    state: State<'_, AppState>,
+    request: ReadPptxPreviewResourceRequestDto,
+) -> Result<ReadPptxPreviewResourceResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_pptx_preview_resource(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn close_pptx_preview(
+    state: State<'_, AppState>,
+    request: PptxPreviewSessionRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .close_pptx_preview(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

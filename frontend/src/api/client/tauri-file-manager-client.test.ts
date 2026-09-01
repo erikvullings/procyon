@@ -568,11 +568,48 @@ describe('TauriFileManagerClient', () => {
       expect(invoke).toHaveBeenNthCalledWith(1, 'open_docx_preview', {
         request: { location },
       });
+
       expect(invoke).toHaveBeenNthCalledWith(2, 'read_docx_preview_resource', {
         request: { sessionId: 'docx-session', resourceId: 'image-1' },
       });
+
       expect(invoke).toHaveBeenNthCalledWith(3, 'close_docx_preview', {
         request: { sessionId: 'docx-session' },
+      });
+    });
+
+    it('uses the shared PPTX session DTOs for open, resource read, and close', async () => {
+      const client = new TauriFileManagerClient();
+      const location = { providerId: 'local', uri: 'file:///briefing.pptx' };
+      const preview = {
+        sessionId: 'pptx-session',
+        sourceRevision: 'r1',
+        sourceBytes: 2048,
+        slides: [{ index: 0, title: 'Overview', markdown: '# Overview' }],
+        resources: [],
+        omittedFeatures: ['charts'],
+      };
+      invoke
+        .mockResolvedValueOnce(preview)
+        .mockResolvedValueOnce({ data: [137, 80], mediaType: 'image/png' })
+        .mockResolvedValueOnce(undefined);
+
+      await expect(client.openPptxPreview({ location })).resolves.toEqual(preview);
+      await expect(
+        client.readPptxPreviewResource({
+          sessionId: 'pptx-session',
+          resourceId: 'image-1',
+        }),
+      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      await expect(client.closePptxPreview({ sessionId: 'pptx-session' })).resolves.toBeUndefined();
+      expect(invoke).toHaveBeenNthCalledWith(1, 'open_pptx_preview', {
+        request: { location },
+      });
+      expect(invoke).toHaveBeenNthCalledWith(2, 'read_pptx_preview_resource', {
+        request: { sessionId: 'pptx-session', resourceId: 'image-1' },
+      });
+      expect(invoke).toHaveBeenNthCalledWith(3, 'close_pptx_preview', {
+        request: { sessionId: 'pptx-session' },
       });
     });
 

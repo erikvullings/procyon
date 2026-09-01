@@ -267,12 +267,14 @@
   padding: 1rem;
 }
 
-.fm-file-viewer-body-docx {
+.fm-file-viewer-body-docx,
+.fm-file-viewer-body-pptx {
   padding: 1rem;
 }
 
 .fm-file-viewer-epub-chapter,
-.fm-file-viewer-docx-content {
+.fm-file-viewer-docx-content,
+.fm-file-viewer-pptx-slide {
   max-width: 42rem;
   width: 100%;
   color: var(--fm-text);
@@ -284,27 +286,46 @@
 }
 
 .fm-file-viewer-epub-chapter img,
-.fm-file-viewer-docx-content img {
+.fm-file-viewer-docx-content img,
+.fm-file-viewer-pptx-slide img {
   max-width: 100%;
 }
 
-.fm-file-viewer-docx-content table {
+.fm-file-viewer-docx-content table,
+.fm-file-viewer-pptx-slide table {
   width: 100%;
   border-collapse: collapse;
 }
 
 .fm-file-viewer-docx-content th,
-.fm-file-viewer-docx-content td {
+.fm-file-viewer-docx-content td,
+.fm-file-viewer-pptx-slide th,
+.fm-file-viewer-pptx-slide td {
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--fm-border);
   text-align: start;
 }
 
-.fm-file-viewer-docx-limitations {
+.fm-file-viewer-docx-limitations,
+.fm-file-viewer-pptx-limitations {
   max-width: 42rem;
   margin: 1.5rem auto 0;
   color: var(--fm-text-muted);
   font-size: 0.85em;
+}
+
+.fm-file-viewer-pptx-heading {
+  display: flex;
+  max-width: 42rem;
+  margin: 0 auto 1rem;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.fm-file-viewer-pptx-label {
+  color: var(--fm-text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
 }
 
 .fm-file-viewer-docx-content .fm-docx-search-match {

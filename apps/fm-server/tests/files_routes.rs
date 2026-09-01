@@ -52,6 +52,44 @@ fn write_docx_fixture(path: &std::path::Path) {
     archive.finish().expect("finish DOCX fixture");
 }
 
+fn write_pptx_fixture(path: &std::path::Path) {
+    let file = std::fs::File::create(path).expect("create PPTX fixture");
+    let mut archive = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    for (name, contents) in [
+        (
+            "ppt/presentation.xml",
+            r#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#,
+        ),
+        (
+            "ppt/_rels/presentation.xml.rels",
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#,
+        ),
+        (
+            "ppt/slides/slide1.xml",
+            r#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="1" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Hello PPTX</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rImage"/></p:blipFill><p:spPr/></p:pic></p:spTree></p:cSld></p:sld>"#,
+        ),
+        (
+            "ppt/slides/_rels/slide1.xml.rels",
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+        ),
+    ] {
+        archive
+            .start_file(name, options)
+            .expect("start PPTX fixture entry");
+        archive
+            .write_all(contents.as_bytes())
+            .expect("write PPTX fixture entry");
+    }
+    archive
+        .start_file("ppt/media/image1.png", options)
+        .expect("start PPTX image");
+    archive
+        .write_all(b"\x89PNG\r\n\x1a\nfixture")
+        .expect("write PPTX image");
+    archive.finish().expect("finish PPTX fixture");
+}
+
 #[tokio::test]
 async fn scans_disk_usage_with_progress_correlation_fields() {
     let root = tempfile::tempdir().expect("must create a temp directory");
@@ -265,6 +303,54 @@ async fn docx_preview_routes_open_read_a_bounded_resource_and_close_one_session(
 
     let closed = client
         .post(format!("{}/api/v1/files/docx/close", server.base_url))
+        .json(&json!({ "sessionId": opened["sessionId"] }))
+        .send()
+        .await
+        .expect("close request");
+    assert_eq!(closed.status(), reqwest::StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn pptx_preview_routes_open_read_a_bounded_resource_and_close_one_session() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let target = root.path().join("briefing.pptx");
+    write_pptx_fixture(&target);
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let opened = client
+        .post(format!("{}/api/v1/files/pptx/open", server.base_url))
+        .json(&json!({ "location": location_json(&target) }))
+        .send()
+        .await
+        .expect("open request")
+        .error_for_status()
+        .expect("open response");
+    let opened: Value = opened.json().await.expect("open JSON");
+    assert!(
+        opened["slides"][0]["markdown"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Hello PPTX")
+    );
+    assert_eq!(opened["resources"].as_array().map(Vec::len), Some(1));
+    let session_id = opened["sessionId"].clone();
+    let resource_id = opened["resources"][0]["resourceId"].clone();
+
+    let resource = client
+        .post(format!("{}/api/v1/files/pptx/resource", server.base_url))
+        .json(&json!({ "sessionId": session_id, "resourceId": resource_id }))
+        .send()
+        .await
+        .expect("resource request")
+        .error_for_status()
+        .expect("resource response");
+    let resource: Value = resource.json().await.expect("resource JSON");
+    assert_eq!(resource["mediaType"], "image/png");
+    assert_eq!(resource["data"][0], 137);
+
+    let closed = client
+        .post(format!("{}/api/v1/files/pptx/close", server.base_url))
         .json(&json!({ "sessionId": opened["sessionId"] }))
         .send()
         .await

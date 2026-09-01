@@ -104,6 +104,7 @@ openh264 = "0.9.8"
 percent-encoding = "2.3.2"
 parallel-disk-usage = { version = "0.24.0", default-features = false }
 plist = "1.10.0"
+pptx-to-md = "1.0.0"
 quick-xml = "0.41.0"
 rand = "0.10"
 rars = "0.4.8"
