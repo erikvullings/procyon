@@ -167,9 +167,24 @@ describe('FileViewer', () => {
     expect(onQuickLook).toHaveBeenCalledTimes(2);
   });
 
-  it('shows the error message on failure', () => {
-    mount(baseAttrs({ status: 'error', entry: entry(), message: 'boom' }));
-    expect(root.querySelector('.fm-file-viewer-body')?.textContent).toBe('boom');
+  it('shows the exact error and external-open action for any preview failure', () => {
+    const onOpenExternally = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'error',
+          entry: entry(),
+          message: 'File exceeds the preview size limit of 64 MiB.',
+        },
+        { onOpenExternally },
+      ),
+    );
+
+    expect(root.querySelector('.fm-file-viewer-body')?.textContent).toContain(
+      'File exceeds the preview size limit of 64 MiB.',
+    );
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-open-externally')?.click();
+    expect(onOpenExternally).toHaveBeenCalledOnce();
   });
 
   it('renders text content and a search bar', () => {

@@ -139,7 +139,7 @@ impl DocxPreviewService {
             .await
             .map_err(ApplicationError::from)?;
         if source_bytes > MAX_DOCX_SOURCE_BYTES {
-            return Err(budget_error("source bytes", MAX_DOCX_SOURCE_BYTES));
+            return Err(budget_error("source file size", MAX_DOCX_SOURCE_BYTES));
         }
         let revision = source_revision(&summary, source_bytes);
         let reader = provider
@@ -153,7 +153,7 @@ impl DocxPreviewService {
             .await
             .map_err(read_stream_error)?;
         if bytes.len() as u64 > MAX_DOCX_SOURCE_BYTES {
-            return Err(budget_error("source bytes", MAX_DOCX_SOURCE_BYTES));
+            return Err(budget_error("source file size", MAX_DOCX_SOURCE_BYTES));
         }
         let parse_cancellation = cancellation.clone();
         let converter = Arc::clone(&self.converter);
@@ -327,7 +327,7 @@ fn parse_docx(
         return Err(ApplicationError::OperationCancelled);
     }
     if bytes.len() as u64 > MAX_DOCX_SOURCE_BYTES {
-        return Err(budget_error("source bytes", MAX_DOCX_SOURCE_BYTES));
+        return Err(budget_error("source file size", MAX_DOCX_SOURCE_BYTES));
     }
     preflight_package(bytes, cancellation)?;
     let (document, media) = ferrodoc::parse_with_media(bytes, ferrodoc::Format::Docx)
@@ -367,8 +367,13 @@ fn invalid_docx(detail: impl AsRef<str>) -> ApplicationError {
 }
 
 fn budget_error(resource: &str, limit: u64) -> ApplicationError {
+    let limit = if limit.is_multiple_of(1024 * 1024) {
+        format!("{} MiB", limit / (1024 * 1024))
+    } else {
+        format!("{limit} bytes")
+    };
     ApplicationError::InvalidRequest(format!(
-        "DOCX preview exceeds the {resource} budget ({limit} bytes); open it in an external application"
+        "DOCX preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally."
     ))
 }
 

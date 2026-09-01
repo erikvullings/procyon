@@ -46,6 +46,8 @@ no third-party types to the application or transport layers.
   runtime adapters.
 - Return an 8 MiB-bounded first-slide PDF from session creation, render the complete deck in the
   background, and replace the initial document when the complete bounded range stream is ready.
+- Accept PPTX source packages up to 64 MiB, with a 256 MiB expanded-package budget and 64 MiB
+  embedded-media budgets. Size failures state the applicable limit and retain external-open actions.
 - Reuse the existing PDF.js state, rendering, search, and paged controls instead of maintaining a
   PPTX-specific frontend renderer.
 - Do not introduce LibreOffice or another external office suite as a required runtime dependency.
@@ -70,3 +72,6 @@ no third-party types to the application or transport layers.
 - 2026-09-01: Added deterministic missing-family fallback for Aptos/Aptos Display presentations,
   first-slide-first background conversion, explicit renderer/budget failure messages, and common F3
   Tab/PageUp/PageDown behavior for PDF/PPTX and DOCX previews.
+- 2026-09-01: Raised practical PPTX source/media limits to 64 MiB and expanded-package limits to
+  256 MiB. All F3 load errors now preserve their concrete reason and offer explicit external open;
+  oversized files are never launched automatically.
