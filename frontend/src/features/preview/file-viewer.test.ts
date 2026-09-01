@@ -846,6 +846,11 @@ describe('FileViewer', () => {
     expect(
       root.querySelector('.fm-structured-row-number-control')?.getAttribute('data-tooltip'),
     ).toBe('Show row numbers');
+    expect(
+      root
+        .querySelector('.fm-structured-row-number-control')
+        ?.getAttribute('data-tooltip-placement'),
+    ).toBe('above');
     expect(root.querySelector('.fm-structured-row-number-toggle')?.lastElementChild?.tagName).toBe(
       'INPUT',
     );

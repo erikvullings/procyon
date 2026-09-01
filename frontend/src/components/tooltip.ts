@@ -59,7 +59,10 @@ function showTooltipPortal(target: EventTarget | null, label: string): void {
     ),
   );
   element.style.left = `${left}px`;
-  element.style.top = `${anchorRect.bottom + 6}px`;
+  element.style.top =
+    target.dataset.tooltipPlacement === 'above'
+      ? `${Math.max(4, anchorRect.top - portalRect.height - 6)}px`
+      : `${anchorRect.bottom + 6}px`;
 }
 
 function hideTooltipPortal(): void {
