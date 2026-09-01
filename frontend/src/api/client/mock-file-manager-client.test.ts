@@ -707,11 +707,11 @@ describe('MockFileManagerClient file range and content search methods', () => {
     const opened = await client.openPptxPreview({
       location: { ...LOCATION, uri: 'mock:///briefing.pptx' },
     });
-    expect(opened.pdfBytes).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(new Uint8Array(opened.firstPagePdf))).toMatch(/^%PDF-/);
     const range = await client.readPptxPreviewPdf({
       sessionId: opened.sessionId,
       offset: 0,
-      length: opened.pdfBytes,
+      length: opened.firstPagePdf.length,
     });
     expect(new TextDecoder().decode(new Uint8Array(range.data))).toMatch(/^%PDF-/);
     await client.closePptxPreview({ sessionId: opened.sessionId });

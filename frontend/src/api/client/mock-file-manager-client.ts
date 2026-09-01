@@ -1427,7 +1427,7 @@ export class MockFileManagerClient implements FileManagerClient {
         sessionId,
         sourceRevision: `mock:${request.location.uri}`,
         sourceBytes: 2048,
-        pdfBytes: pdf.length,
+        firstPagePdf: Array.from(pdf),
       };
     });
   }

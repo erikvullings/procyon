@@ -4,14 +4,14 @@
  */
 
 /**
- * Rendered PDF session metadata. PDF bytes are fetched in bounded ranges.
+ * Rendered PDF session metadata with an immediately displayable first slide.
  */
 export interface OpenPptxPreviewResponseDto {
   /**
-     * Exact byte length of the retained rendered PDF.
-     * @minimum 0
+     * Bounded single-page PDF shown while the complete presentation renders.
+     * @items.minimum 0
      */
-  pdfBytes: number;
+  firstPagePdf: number[];
   /** Opaque backend session identifier. */
   sessionId: string;
   /**

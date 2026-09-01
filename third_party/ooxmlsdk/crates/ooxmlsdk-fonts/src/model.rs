@@ -3025,6 +3025,8 @@ fn default_family_substitution_chains<'a>() -> Vec<FontFallbackChain<'a>> {
     script: None,
     language: None,
     families: vec![
+      Cow::Borrowed("Arial"),
+      Cow::Borrowed("Helvetica"),
       Cow::Borrowed("DejaVu Sans"),
       Cow::Borrowed("Liberation Sans"),
       Cow::Borrowed("Noto Sans"),

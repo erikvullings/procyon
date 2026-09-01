@@ -427,11 +427,20 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           focusAndActivate(attrs, paneId);
         },
         onkeydown: (event: KeyboardEvent) => {
-          if (
+          const isUnmodifiedTab =
+            event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey;
+          const isEditableTarget =
             event.target instanceof HTMLInputElement ||
             event.target instanceof HTMLTextAreaElement ||
             event.target instanceof HTMLSelectElement ||
-            (event.target instanceof HTMLElement && event.target.isContentEditable)
+            (event.target instanceof HTMLElement && event.target.isContentEditable);
+          if (
+            isEditableTarget &&
+            !(
+              isUnmodifiedTab &&
+              event.target instanceof Element &&
+              event.target.closest('.fm-pane-viewer') !== null
+            )
           ) {
             return;
           }
@@ -464,7 +473,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           // This layout handler also moves DOM focus. Letting the same Tab reach the document
           // handler would switch workspace.activePaneId a second time, back to the old pane.
           event.stopPropagation();
-          if (attrs.onFocusViewer?.() === true) {
+          const eventStartedInsideViewer =
+            event.target instanceof Element && event.target.closest('.fm-pane-viewer') !== null;
+          if (!eventStartedInsideViewer && attrs.onFocusViewer?.() === true) {
             return;
           }
           const paneOrder = paneIdsInLayout(attrs.workspace.layout);

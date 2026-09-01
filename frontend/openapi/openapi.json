@@ -3417,13 +3417,16 @@
         "type": "object"
       },
       "OpenPptxPreviewResponseDto": {
-        "description": "Rendered PDF session metadata. PDF bytes are fetched in bounded ranges.",
+        "description": "Rendered PDF session metadata with an immediately displayable first slide.",
         "properties": {
-          "pdfBytes": {
-            "description": "Exact byte length of the retained rendered PDF.",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
+          "firstPagePdf": {
+            "description": "Bounded single-page PDF shown while the complete presentation renders.",
+            "items": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
           },
           "sessionId": {
             "description": "Opaque backend session identifier.",
@@ -3445,7 +3448,7 @@
           "sessionId",
           "sourceRevision",
           "sourceBytes",
-          "pdfBytes"
+          "firstPagePdf"
         ],
         "type": "object"
       },

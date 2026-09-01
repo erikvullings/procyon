@@ -784,6 +784,49 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(scrollViewer).toHaveBeenNthCalledWith(4, PANE_B, 0, -1, 'page');
   });
 
+  it('PageUp/PageDown scroll a DOCX viewer once focus is inside it', () => {
+    const scrollViewer = vi.fn();
+    const context = makeContext({
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: {} as never,
+              state: { status: 'ready', content: { kind: 'docx' } } as never,
+            } as never)
+          : undefined,
+      scrollViewer,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('PageDown'));
+    createGlobalKeydownHandler(context)(viewerKeydown('PageUp'));
+
+    expect(scrollViewer).toHaveBeenNthCalledWith(1, PANE_B, 0, 1, 'page');
+    expect(scrollViewer).toHaveBeenNthCalledWith(2, PANE_B, 0, -1, 'page');
+  });
+
+  it('PageUp/PageDown navigate a PDF viewer once focus is inside it', () => {
+    const previousPage = vi.fn();
+    const nextPage = vi.fn();
+    const redraw = vi.fn();
+    const context = makeContext({
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: { previousPage, nextPage } as never,
+              state: { status: 'ready', content: { kind: 'pdf' } } as never,
+            } as never)
+          : undefined,
+      redraw,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('PageDown'));
+    createGlobalKeydownHandler(context)(viewerKeydown('PageUp'));
+
+    expect(nextPage).toHaveBeenCalledOnce();
+    expect(previousPage).toHaveBeenCalledOnce();
+    expect(redraw).toHaveBeenCalledTimes(2);
+  });
+
   it('does not scroll a text viewer from Arrow/Page keys outside the viewer (would otherwise fight the directory table cursor)', () => {
     const scrollViewer = vi.fn();
     const context = makeContext({

@@ -11,8 +11,14 @@ The unpublished `ooxmlsdk-fonts`, `ooxmlsdk-formula`, `ooxmlsdk-layout`, and `oo
 packages are retained together so they remain version-aligned. Procyon accesses them only through
 `crates/fm-pptx-renderer`.
 
-Local modification: the workspace dependencies for `emfsdk` and `olecfsdk` use the sibling vendored
-source trees below instead of upstream Git revisions.
+Local modifications:
+
+- workspace dependencies for `emfsdk` and `olecfsdk` use the sibling vendored source trees below
+  instead of upstream Git revisions;
+- missing Office font families fall back through common system sans-serif families, preventing
+  Aptos-authored presentations from silently losing text on hosts without Aptos;
+- the PPTX layout/PDF crates expose a first-slide conversion entry point so Procyon can display the
+  first page while the complete presentation renders (the adapter caps that inline PDF at 8 MiB).
 
 ## emfsdk
 

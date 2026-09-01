@@ -44,6 +44,8 @@ no third-party types to the application or transport layers.
   its byte-oriented adapter.
 - Retain converted PDF bytes in the application session and expose bounded range reads to both
   runtime adapters.
+- Return an 8 MiB-bounded first-slide PDF from session creation, render the complete deck in the
+  background, and replace the initial document when the complete bounded range stream is ready.
 - Reuse the existing PDF.js state, rendering, search, and paged controls instead of maintaining a
   PPTX-specific frontend renderer.
 - Do not introduce LibreOffice or another external office suite as a required runtime dependency.
@@ -65,3 +67,6 @@ no third-party types to the application or transport layers.
   vendored `ooxmlsdk` source behind `fm-pptx-renderer`. The application now retains a bounded PDF
   session, HTTP/Tauri/mock adapters expose bounded range reads, and the frontend reuses its PDF.js
   viewer for visual slide fidelity, navigation, and search.
+- 2026-09-01: Added deterministic missing-family fallback for Aptos/Aptos Display presentations,
+  first-slide-first background conversion, explicit renderer/budget failure messages, and common F3
+  Tab/PageUp/PageDown behavior for PDF/PPTX and DOCX previews.

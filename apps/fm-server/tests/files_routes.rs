@@ -325,7 +325,14 @@ async fn pptx_preview_routes_open_read_rendered_pdf_and_close_one_session() {
         .error_for_status()
         .expect("open response");
     let opened: Value = opened.json().await.expect("open JSON");
-    assert!(opened["pdfBytes"].as_u64().is_some_and(|bytes| bytes > 0));
+    assert_eq!(
+        &opened["firstPagePdf"]
+            .as_array()
+            .expect("first-page PDF byte array")[..5],
+        &json!([37, 80, 68, 70, 45])
+            .as_array()
+            .expect("PDF signature array")[..]
+    );
     let session_id = opened["sessionId"].clone();
 
     let range = client

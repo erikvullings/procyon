@@ -238,6 +238,24 @@ where
   convert_presentation_document(&document, options)
 }
 
+/// Convert only the first PPTX slide into PDF bytes.
+pub fn convert_pptx_first_page<R>(reader: R, mut options: PdfOptions) -> Result<Vec<u8>>
+where
+  R: Read + Seek,
+{
+  let settings = OpenSettings {
+    markup_compatibility_process_settings: MarkupCompatibilityProcessSettings {
+      process_mode: MarkupCompatibilityProcessMode::ProcessLoadedPartsOnly,
+      target_file_format_version: FileFormatVersion::Microsoft365,
+    },
+    ..Default::default()
+  };
+  let document = PresentationDocument::new_with_settings(reader, settings)?;
+  let layout_options = options.take_layout_options();
+  let pages = ooxmlsdk_layout::pptx::layout_first_page(&document, &layout_options)?;
+  render::krilla::render(&pages, &options)
+}
+
 /// Convert a PPTX stream and return the exact font/glyph data passed to PDF serialization.
 pub fn convert_pptx_with_diagnostics<R>(
   reader: R,

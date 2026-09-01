@@ -442,6 +442,25 @@ describe('WorkspaceLayoutView keyboard navigation', () => {
     expect(onActivatePane).not.toHaveBeenCalled();
   });
 
+  it('cycles to the other pane when Tab is pressed from inside the F3 viewer', () => {
+    const onFocusViewer = vi.fn(() => true);
+    const onActivatePane = vi.fn<(paneId: PaneId) => void>();
+    mount(attrs({ onFocusViewer, onActivatePane }));
+    const leftPane = root.querySelector<HTMLElement>('[data-pane-id="left"] > .fm-pane');
+    const viewer = document.createElement('section');
+    viewer.className = 'fm-pane-viewer';
+    const search = document.createElement('input');
+    search.className = 'fm-file-viewer-search-input';
+    viewer.append(search);
+    leftPane?.append(viewer);
+    onActivatePane.mockClear();
+
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+
+    expect(onFocusViewer).not.toHaveBeenCalled();
+    expect(onActivatePane).toHaveBeenCalledExactlyOnceWith('right');
+  });
+
   it('falls back to the normal pane cycle when onFocusViewer declines (or is unset)', () => {
     const onFocusViewer = vi.fn(() => false);
     const onActivatePane = vi.fn<(paneId: PaneId) => void>();
