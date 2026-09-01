@@ -694,6 +694,7 @@ button.fm-breadcrumb-scheme:hover {
   align-items: center;
   border-top: 1px solid var(--fm-border);
   padding: 0 0.5rem;
+  background: var(--fm-surface-elevated);
   color: var(--fm-text-muted);
   font-size: 0.9em;
   font-variant-numeric: tabular-nums;
