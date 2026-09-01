@@ -71,6 +71,7 @@ block2 = "0.6.2"
 blake3 = "1.8.6"
 bytes = "1.12.1"
 bzip2 = "0.6"
+calamine = {version = "0.32.0", features = ["chrono", "picture"]}
 chrono = {version = "0.4.45", features = ["serde"]}
 clap = {version = "4.6.4", features = ["derive", "env"]}
 crc32fast = "1.5.0"

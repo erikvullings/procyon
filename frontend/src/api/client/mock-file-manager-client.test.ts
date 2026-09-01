@@ -11,6 +11,33 @@ const ROOT_REQUEST = {
 } as const;
 
 describe('MockFileManagerClient directories', () => {
+  it('mirrors bounded workbook sheets and in-session sheet selection', async () => {
+    const client = new MockFileManagerClient();
+    const opened = await client.openStructuredView({
+      location: { providerId: 'file', uri: 'mock:///budget.xlsx' },
+      format: 'excel',
+      headerMode: 'none',
+    });
+
+    expect(opened).toMatchObject({
+      kind: 'table',
+      selectedSheet: 'Summary',
+      sheets: [{ name: 'Summary' }, { name: 'Details' }],
+    });
+    const selected = await client.updateStructuredView({
+      sessionId: opened.sessionId,
+      selectedSheet: 'Details',
+    });
+    expect(selected).toMatchObject({
+      selectedSheet: 'Details',
+      rows: [
+        { index: 0, cells: ['Details'] },
+        { index: 1, cells: [] },
+        { index: 2, cells: ['Sparse row'] },
+      ],
+    });
+  });
+
   it('shows the extension column by default', async () => {
     const settings = await new MockFileManagerClient().getSettings();
 

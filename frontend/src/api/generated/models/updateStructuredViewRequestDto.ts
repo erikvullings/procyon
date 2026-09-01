@@ -14,6 +14,11 @@ export interface UpdateStructuredViewRequestDto {
      */
   delimiter?: string | null;
   headerMode?: null | StructuredHeaderModeDto;
+  /**
+     * Worksheet to select without reopening the workbook.
+     * @nullable
+     */
+  selectedSheet?: string | null;
   /** Opaque backend session identifier. */
   sessionId: string;
 }

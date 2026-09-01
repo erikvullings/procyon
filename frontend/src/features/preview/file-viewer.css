@@ -635,6 +635,33 @@
   overflow: hidden;
 }
 
+.fm-structured-sheet-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.125rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.5rem 0;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+}
+
+.fm-structured-sheet-tab {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0.25rem 0.25rem 0 0;
+  color: var(--fm-text-muted);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fm-structured-sheet-tab.active {
+  border-color: var(--fm-border);
+  color: var(--fm-text);
+  background: var(--fm-surface-elevated);
+}
+
 .fm-structured-toolbar input[type="search"] {
   min-width: 12rem;
   flex: 1 1 auto;

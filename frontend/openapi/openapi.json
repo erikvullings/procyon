@@ -3533,10 +3533,24 @@
             },
             "type": "array"
           },
+          "selectedSheet": {
+            "description": "Selected worksheet name for workbook sessions.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "sessionId": {
             "description": "Opaque backend session identifier.",
             "format": "uuid",
             "type": "string"
+          },
+          "sheets": {
+            "description": "Workbook sheets in source order. Empty for non-workbook formats.",
+            "items": {
+              "$ref": "#/components/schemas/StructuredSheetDto"
+            },
+            "type": "array"
           },
           "sourceBytes": {
             "description": "Source size at session creation.",
@@ -6213,6 +6227,50 @@
         ],
         "type": "object"
       },
+      "StructuredCellDto": {
+        "description": "Useful spreadsheet cell semantics without claiming formula recalculation.",
+        "properties": {
+          "column": {
+            "description": "Zero-based column index within the worksheet.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "display": {
+            "description": "Displayed or cached value returned by the workbook.",
+            "type": "string"
+          },
+          "formula": {
+            "description": "Formula source, when the workbook reader exposes it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/StructuredCellValueTypeDto",
+            "description": "Stable value category for host renderers."
+          }
+        },
+        "required": [
+          "column",
+          "display",
+          "valueType"
+        ],
+        "type": "object"
+      },
+      "StructuredCellValueTypeDto": {
+        "description": "Spreadsheet value categories preserved by the structured viewer.",
+        "enum": [
+          "text",
+          "number",
+          "boolean",
+          "error",
+          "dateTime",
+          "duration"
+        ],
+        "type": "string"
+      },
       "StructuredHeaderModeDto": {
         "description": "Whether the first logical delimited record is presented as column labels.",
         "enum": [
@@ -6225,6 +6283,13 @@
       "StructuredRowDto": {
         "description": "One bounded table row. No session response carries unbounded offset arrays.",
         "properties": {
+          "cellDetails": {
+            "description": "Typed workbook metadata for non-empty cells. Empty for text formats.",
+            "items": {
+              "$ref": "#/components/schemas/StructuredCellDto"
+            },
+            "type": "array"
+          },
           "cells": {
             "description": "Decoded values for this one record only.",
             "items": {
@@ -6242,6 +6307,33 @@
         "required": [
           "index",
           "cells"
+        ],
+        "type": "object"
+      },
+      "StructuredSheetDto": {
+        "description": "One worksheet tab and its bounded used dimensions.",
+        "properties": {
+          "columnCount": {
+            "description": "Used column extent, including sparse gaps.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "Worksheet tab label.",
+            "type": "string"
+          },
+          "rowCount": {
+            "description": "Used row extent, including sparse gaps.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "rowCount",
+          "columnCount"
         ],
         "type": "object"
       },
@@ -6590,6 +6682,13 @@
                 "$ref": "#/components/schemas/StructuredHeaderModeDto",
                 "description": "Optional header interpretation override."
               }
+            ]
+          },
+          "selectedSheet": {
+            "description": "Worksheet to select without reopening the workbook.",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "sessionId": {

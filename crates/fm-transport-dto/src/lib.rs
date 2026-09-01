@@ -89,9 +89,10 @@ pub use files::{
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     SearchInFileMatchDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, StructuredHeaderModeDto,
-    StructuredRowDto, StructuredViewFormatDto, StructuredViewKindDto,
-    StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
+    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, StructuredCellDto,
+    StructuredCellValueTypeDto, StructuredHeaderModeDto, StructuredRowDto, StructuredSheetDto,
+    StructuredViewFormatDto, StructuredViewKindDto, StructuredViewSessionRequestDto,
+    StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};

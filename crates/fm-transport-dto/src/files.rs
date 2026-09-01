@@ -230,6 +230,54 @@ pub struct StructuredRowDto {
     pub index: u64,
     /// Decoded values for this one record only.
     pub cells: Vec<String>,
+    /// Typed workbook metadata for non-empty cells. Empty for text formats.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_details: Vec<StructuredCellDto>,
+}
+
+/// Useful spreadsheet cell semantics without claiming formula recalculation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredCellDto {
+    /// Zero-based column index within the worksheet.
+    pub column: u32,
+    /// Displayed or cached value returned by the workbook.
+    pub display: String,
+    /// Stable value category for host renderers.
+    pub value_type: StructuredCellValueTypeDto,
+    /// Formula source, when the workbook reader exposes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
+}
+
+/// Spreadsheet value categories preserved by the structured viewer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum StructuredCellValueTypeDto {
+    /// UTF-8 text.
+    Text,
+    /// Integer or floating-point number.
+    Number,
+    /// Boolean value.
+    Boolean,
+    /// Workbook cell error such as `#DIV/0!`.
+    Error,
+    /// Excel or ISO date/time value.
+    DateTime,
+    /// ISO duration value.
+    Duration,
+}
+
+/// One worksheet tab and its bounded used dimensions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredSheetDto {
+    /// Worksheet tab label.
+    pub name: String,
+    /// Used row extent, including sparse gaps.
+    pub row_count: u64,
+    /// Used column extent, including sparse gaps.
+    pub column_count: u32,
 }
 
 /// Initial session metadata and a bounded first page.
@@ -255,6 +303,12 @@ pub struct OpenStructuredViewResponseDto {
     pub headers: Vec<String>,
     /// Bounded initial logical-record page.
     pub rows: Vec<StructuredRowDto>,
+    /// Workbook sheets in source order. Empty for non-workbook formats.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sheets: Vec<StructuredSheetDto>,
+    /// Selected worksheet name for workbook sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_sheet: Option<String>,
     /// Bytes scanned by the incremental indexer.
     pub indexed_bytes: u64,
     /// Logical data records indexed so far.
@@ -334,6 +388,9 @@ pub struct UpdateStructuredViewRequestDto {
     /// Optional header interpretation override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header_mode: Option<StructuredHeaderModeDto>,
+    /// Worksheet to select without reopening the workbook.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_sheet: Option<String>,
 }
 
 /// Reads a bounded raw JSON byte window and chunk-safe lexical token spans.

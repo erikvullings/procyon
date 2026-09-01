@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+calamine.workspace = true
 chrono.workspace = true
 csv-async = { version = "1.3.1", features = ["tokio"] }
 dirs.workspace = true

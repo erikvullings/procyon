@@ -4,20 +4,22 @@
 //! small hot-row cache. They never retain the source text or one offset per
 //! logical record.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::Cursor;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use csv_async::AsyncReaderBuilder;
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_transport_dto::{
     OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
     ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
     ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, SearchStructuredRowsRequestDto,
-    SearchStructuredRowsResponseDto, StructuredHeaderModeDto, StructuredRowDto,
-    StructuredViewFormatDto, StructuredViewKindDto, StructuredViewSessionRequestDto,
-    StructuredViewStatusDto, UpdateStructuredViewRequestDto,
+    SearchStructuredRowsResponseDto, StructuredCellDto, StructuredCellValueTypeDto,
+    StructuredHeaderModeDto, StructuredRowDto, StructuredSheetDto, StructuredViewFormatDto,
+    StructuredViewKindDto, StructuredViewSessionRequestDto, StructuredViewStatusDto,
+    UpdateStructuredViewRequestDto,
 };
 use fm_vfs::{
     EntryRef, FileSystemProvider, ProviderCapabilities, ProviderReadStream, ProviderRegistry,
@@ -37,6 +39,18 @@ const MAX_ROWS_PER_REQUEST: u16 = 500;
 const SPARSE_ROW_STRIDE: u64 = 1_024;
 const JSON_CHECKPOINT_STRIDE: u64 = 1024 * 1024;
 const HOT_PAGE_LIMIT: usize = 4;
+/// Spreadsheet budgets bound both parser input and retained application state.
+pub(crate) const WORKBOOK_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
+const WORKBOOK_EXPANDED_BYTES: u64 = 64 * 1024 * 1024;
+const WORKBOOK_ENTRY_LIMIT: usize = 4_096;
+const WORKBOOK_SHEET_LIMIT: usize = 64;
+const WORKBOOK_ROWS_PER_SHEET: u64 = 100_000;
+const WORKBOOK_COLUMNS_PER_SHEET: u32 = 2_048;
+const WORKBOOK_DENSE_CELL_LIMIT: u64 = 500_000;
+const WORKBOOK_NON_EMPTY_CELL_LIMIT: usize = 400_000;
+const WORKBOOK_STRING_BYTES: usize = 64 * 1024;
+const WORKBOOK_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+const WORKBOOK_TOTAL_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 struct CsvCheckpoint {
@@ -97,6 +111,18 @@ struct HotPage {
     rows: Vec<StructuredRowDto>,
 }
 
+#[derive(Debug)]
+struct SpreadsheetSheet {
+    metadata: StructuredSheetDto,
+    rows: BTreeMap<u64, StructuredRowDto>,
+}
+
+#[derive(Debug)]
+struct SpreadsheetWorkbook {
+    sheets: Vec<SpreadsheetSheet>,
+    selected: usize,
+}
+
 struct Session {
     provider: Arc<dyn FileSystemProvider>,
     entry: EntryRef,
@@ -110,6 +136,7 @@ struct Session {
     has_header: RwLock<bool>,
     headers: RwLock<Vec<String>>,
     sample_rows: RwLock<Vec<StructuredRowDto>>,
+    workbook: Option<RwLock<SpreadsheetWorkbook>>,
     progress: RwLock<Progress>,
     hot_pages: Mutex<VecDeque<HotPage>>,
     cancellation: CancellationToken,
@@ -166,45 +193,85 @@ impl StructuredViewService {
             .map_err(ApplicationError::from)?;
         let revision = source_revision(&summary, source_bytes);
         let random_access = capabilities.contains(ProviderCapabilities::RANDOM_ACCESS);
-        let (kind, format_warning) = match request.format {
+        let (kind, format_warning, workbook) = match request.format {
             StructuredViewFormatDto::Csv
             | StructuredViewFormatDto::Tsv
-            | StructuredViewFormatDto::Ndjson => (StructuredViewKindDto::Table, None),
-            StructuredViewFormatDto::Json => (StructuredViewKindDto::JsonText, None),
-            StructuredViewFormatDto::Excel => (
-                StructuredViewKindDto::ExternalFallback,
-                Some("This workbook cannot be opened within the viewer's bounded-memory budget. Open it in an external spreadsheet application.".to_owned()),
-            ),
+            | StructuredViewFormatDto::Ndjson => (StructuredViewKindDto::Table, None, None),
+            StructuredViewFormatDto::Json => (StructuredViewKindDto::JsonText, None, None),
+            StructuredViewFormatDto::Excel => {
+                match load_spreadsheet(
+                    &provider,
+                    &entry,
+                    random_access,
+                    source_bytes,
+                    cancellation.child_token(),
+                )
+                .await
+                {
+                    Ok(workbook) => (StructuredViewKindDto::Table, None, Some(workbook)),
+                    Err(limit) => (
+                        StructuredViewKindDto::ExternalFallback,
+                        Some(format!(
+                            "{limit} Open it in an external spreadsheet application."
+                        )),
+                        None,
+                    ),
+                }
+            }
         };
-        let sample = read_source_range(
-            &provider,
-            &entry,
-            random_access,
-            0,
-            source_bytes.min(SAMPLE_BYTES),
-            cancellation.clone(),
-        )
-        .await?;
+        let sample = if request.format == StructuredViewFormatDto::Excel {
+            Vec::new()
+        } else {
+            read_source_range(
+                &provider,
+                &entry,
+                random_access,
+                0,
+                source_bytes.min(SAMPLE_BYTES),
+                cancellation.clone(),
+            )
+            .await?
+        };
         let delimiter = delimiter_for(&request, &sample)?;
-        let (headers, rows, has_header) = match request.format {
+        let (headers, rows, has_header, sheets, selected_sheet) = match request.format {
             StructuredViewFormatDto::Csv | StructuredViewFormatDto::Tsv => {
-                parse_initial_delimited_rows(
+                let (headers, rows, has_header) = parse_initial_delimited_rows(
                     &sample,
                     delimiter.expect("CSV delimiter"),
                     request.header_mode,
                 )
-                .await?
+                .await?;
+                (headers, rows, has_header, Vec::new(), None)
             }
             StructuredViewFormatDto::Ndjson => {
                 let (headers, rows) = parse_initial_ndjson_rows(&sample);
-                (headers, rows, true)
+                (headers, rows, true, Vec::new(), None)
             }
-            StructuredViewFormatDto::Json | StructuredViewFormatDto::Excel => {
-                (Vec::new(), Vec::new(), false)
+            StructuredViewFormatDto::Json => (Vec::new(), Vec::new(), false, Vec::new(), None),
+            StructuredViewFormatDto::Excel => {
+                if let Some(workbook) = workbook.as_ref() {
+                    let selected = &workbook.sheets[workbook.selected];
+                    (
+                        spreadsheet_headers(selected.metadata.column_count),
+                        spreadsheet_page(selected, 0, INITIAL_ROWS as u16),
+                        false,
+                        workbook
+                            .sheets
+                            .iter()
+                            .map(|sheet| sheet.metadata.clone())
+                            .collect(),
+                        Some(selected.metadata.name.clone()),
+                    )
+                } else {
+                    (Vec::new(), Vec::new(), false, Vec::new(), None)
+                }
             }
         };
         let session_id = Uuid::new_v4();
-        let indexed_rows = u64::try_from(rows.len()).unwrap_or(u64::MAX);
+        let indexed_rows = workbook.as_ref().map_or_else(
+            || u64::try_from(rows.len()).unwrap_or(u64::MAX),
+            |workbook| workbook.sheets[workbook.selected].metadata.row_count,
+        );
         let session = Arc::new(Session {
             provider,
             entry,
@@ -218,11 +285,21 @@ impl StructuredViewService {
             has_header: RwLock::new(has_header),
             headers: RwLock::new(headers.clone()),
             sample_rows: RwLock::new(rows.clone()),
+            workbook: workbook.map(RwLock::new),
             progress: RwLock::new(Progress {
-                indexed_bytes: u64::try_from(sample.len()).unwrap_or(u64::MAX),
+                indexed_bytes: if kind == StructuredViewKindDto::Table
+                    && request.format == StructuredViewFormatDto::Excel
+                {
+                    source_bytes
+                } else {
+                    u64::try_from(sample.len()).unwrap_or(u64::MAX)
+                },
                 indexed_rows,
-                complete: kind == StructuredViewKindDto::ExternalFallback,
-                total_rows: None,
+                complete: kind == StructuredViewKindDto::ExternalFallback
+                    || request.format == StructuredViewFormatDto::Excel,
+                total_rows: (request.format == StructuredViewFormatDto::Excel
+                    && kind == StructuredViewKindDto::Table)
+                    .then_some(indexed_rows),
                 warning: format_warning.clone(),
                 checkpoints: vec![CsvCheckpoint { row: 0, byte: 0 }],
                 json_checkpoints: vec![JsonCheckpoint {
@@ -252,6 +329,8 @@ impl StructuredViewService {
             header_mode: request.header_mode,
             headers,
             rows,
+            sheets,
+            selected_sheet,
             indexed_bytes: progress.indexed_bytes,
             indexed_rows: progress.indexed_rows,
             total_rows: progress.total_rows,
@@ -300,6 +379,70 @@ impl StructuredViewService {
     ) -> Result<OpenStructuredViewResponseDto, ApplicationError> {
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
+        if session.format == StructuredViewFormatDto::Excel {
+            let selected_sheet = request.selected_sheet.ok_or_else(|| {
+                ApplicationError::InvalidRequest(
+                    "a worksheet name is required for workbook sessions".to_owned(),
+                )
+            })?;
+            let (headers, rows, sheets, row_count) = {
+                let workbook_lock = session.workbook.as_ref().ok_or_else(|| {
+                    ApplicationError::InvalidRequest(
+                        "this workbook was opened as an external fallback".to_owned(),
+                    )
+                })?;
+                let mut workbook = workbook_lock.write().await;
+                let selected = workbook
+                    .sheets
+                    .iter()
+                    .position(|sheet| sheet.metadata.name == selected_sheet)
+                    .ok_or_else(|| {
+                        ApplicationError::InvalidRequest(format!(
+                            "worksheet '{selected_sheet}' does not exist"
+                        ))
+                    })?;
+                workbook.selected = selected;
+                let sheet = &workbook.sheets[selected];
+                (
+                    spreadsheet_headers(sheet.metadata.column_count),
+                    spreadsheet_page(sheet, 0, INITIAL_ROWS as u16),
+                    workbook
+                        .sheets
+                        .iter()
+                        .map(|item| item.metadata.clone())
+                        .collect::<Vec<_>>(),
+                    sheet.metadata.row_count,
+                )
+            };
+            *session.headers.write().await = headers.clone();
+            *session.sample_rows.write().await = rows.clone();
+            session.hot_pages.lock().await.clear();
+            {
+                let mut progress = session.progress.write().await;
+                progress.indexed_bytes = session.source_bytes;
+                progress.indexed_rows = row_count;
+                progress.total_rows = Some(row_count);
+                progress.complete = true;
+            }
+            return Ok(OpenStructuredViewResponseDto {
+                session_id: request.session_id,
+                kind: StructuredViewKindDto::Table,
+                source_revision: session.revision.clone(),
+                source_bytes: session.source_bytes,
+                random_access: session.random_access,
+                delimiter: None,
+                header_mode: StructuredHeaderModeDto::None,
+                headers,
+                rows,
+                sheets,
+                selected_sheet: Some(selected_sheet),
+                indexed_bytes: session.source_bytes,
+                indexed_rows: row_count,
+                total_rows: Some(row_count),
+                indexing_complete: true,
+                warning: None,
+            });
+        }
         if !matches!(
             session.format,
             StructuredViewFormatDto::Csv | StructuredViewFormatDto::Tsv
@@ -361,6 +504,8 @@ impl StructuredViewService {
             header_mode,
             headers,
             rows,
+            sheets: Vec::new(),
+            selected_sheet: None,
             indexed_bytes: progress.indexed_bytes,
             indexed_rows: progress.indexed_rows,
             total_rows: progress.total_rows,
@@ -388,6 +533,13 @@ impl StructuredViewService {
         let rows = if let Some(rows) = cached_rows(&session, request.start_row, request.count).await
         {
             rows
+        } else if let Some(workbook) = &session.workbook {
+            let workbook = workbook.read().await;
+            spreadsheet_page(
+                &workbook.sheets[workbook.selected],
+                request.start_row,
+                request.count,
+            )
         } else {
             read_rows_from_source(&session, request.start_row, request.count).await?
         };
@@ -553,6 +705,331 @@ impl StructuredViewService {
     }
 }
 
+async fn load_spreadsheet(
+    provider: &Arc<dyn FileSystemProvider>,
+    entry: &EntryRef,
+    random_access: bool,
+    source_bytes: u64,
+    cancellation: CancellationToken,
+) -> Result<SpreadsheetWorkbook, String> {
+    ensure_at_most(source_bytes, WORKBOOK_SOURCE_BYTES, "Workbook source bytes")?;
+    if cancellation.is_cancelled() {
+        return Err("Workbook parsing was cancelled.".to_owned());
+    }
+    let bytes = read_source_range(
+        provider,
+        entry,
+        random_access,
+        0,
+        source_bytes,
+        cancellation.clone(),
+    )
+    .await
+    .map_err(|error| format!("The workbook source could not be read: {error}."))?;
+    let parsed = tokio::task::spawn_blocking(move || parse_spreadsheet(bytes))
+        .await
+        .map_err(|error| format!("The workbook parser could not complete: {error}."))??;
+    if cancellation.is_cancelled() {
+        return Err("Workbook parsing was cancelled.".to_owned());
+    }
+    Ok(parsed)
+}
+
+fn parse_spreadsheet(bytes: Vec<u8>) -> Result<SpreadsheetWorkbook, String> {
+    if bytes.starts_with(b"PK\x03\x04") {
+        preflight_zip_workbook(&bytes)?;
+    }
+    let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes))
+        .map_err(|error| format!("The workbook is corrupt or unsupported: {error}."))?;
+    let sheet_names = workbook.sheet_names();
+    if sheet_names.is_empty() {
+        return Err("The workbook contains no worksheets.".to_owned());
+    }
+    ensure_at_most(
+        sheet_names.len() as u64,
+        WORKBOOK_SHEET_LIMIT as u64,
+        "Workbook sheet count",
+    )?;
+    if let Some(pictures) = workbook.pictures() {
+        let mut total = 0_u64;
+        for (_, image) in pictures {
+            let size = image.len() as u64;
+            ensure_at_most(size, WORKBOOK_IMAGE_BYTES, "Workbook image bytes")?;
+            total = total.saturating_add(size);
+        }
+        ensure_at_most(
+            total,
+            WORKBOOK_TOTAL_IMAGE_BYTES,
+            "Workbook total image bytes",
+        )?;
+    }
+
+    let mut sheets = Vec::with_capacity(sheet_names.len());
+    let mut non_empty_cells = 0_usize;
+    let mut retained_bytes = 0_u64;
+    for name in sheet_names {
+        let values = workbook
+            .worksheet_range(&name)
+            .map_err(|error| format!("Worksheet '{name}' could not be parsed: {error}."))?;
+        let formulas = workbook.worksheet_formula(&name).map_err(|error| {
+            format!("Worksheet '{name}' formulas could not be parsed: {error}.")
+        })?;
+        let value_start = values.start();
+        let value_end = values.end();
+        let formula_start = formulas.start();
+        let formula_end = formulas.end();
+        let end_row = value_end
+            .map(|position| position.0)
+            .into_iter()
+            .chain(formula_end.map(|position| position.0))
+            .max();
+        let end_column = value_end
+            .map(|position| position.1)
+            .into_iter()
+            .chain(formula_end.map(|position| position.1))
+            .max();
+        let row_count = end_row.map_or(0, |row| u64::from(row) + 1);
+        let column_count = end_column.map_or(0, |column| column.saturating_add(1));
+        enforce_sheet_dimensions(&name, row_count, column_count)?;
+
+        let mut rows = BTreeMap::<u64, StructuredRowDto>::new();
+        let starts = [value_start, formula_start]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        let start_row = starts.iter().map(|position| position.0).min().unwrap_or(0);
+        let start_column = starts.iter().map(|position| position.1).min().unwrap_or(0);
+        for row in start_row..u32::try_from(row_count).unwrap_or(u32::MAX) {
+            let mut cells = Vec::new();
+            let mut cell_details = Vec::new();
+            for column in start_column..column_count {
+                let value = values.get_value((row, column)).unwrap_or(&Data::Empty);
+                let formula = formulas
+                    .get_value((row, column))
+                    .filter(|formula| !formula.is_empty());
+                if value == &Data::Empty && formula.is_none() {
+                    continue;
+                }
+                non_empty_cells = non_empty_cells.saturating_add(1);
+                ensure_at_most(
+                    non_empty_cells as u64,
+                    WORKBOOK_NON_EMPTY_CELL_LIMIT as u64,
+                    "Workbook non-empty cell count",
+                )?;
+                let display = value.to_string();
+                ensure_at_most(
+                    display.len() as u64,
+                    WORKBOOK_STRING_BYTES as u64,
+                    &format!("Cell string bytes in worksheet '{name}'"),
+                )?;
+                if let Some(formula) = formula {
+                    ensure_at_most(
+                        formula.len() as u64,
+                        WORKBOOK_STRING_BYTES as u64,
+                        &format!("Formula string bytes in worksheet '{name}'"),
+                    )?;
+                }
+                retained_bytes = retained_bytes
+                    .saturating_add(display.len() as u64)
+                    .saturating_add(formula.map_or(0, |formula| formula.len() as u64));
+                ensure_at_most(
+                    retained_bytes,
+                    WORKBOOK_EXPANDED_BYTES,
+                    "Parsed workbook string bytes",
+                )?;
+                let needed = column as usize + 1;
+                if cells.len() < needed {
+                    cells.resize(needed, String::new());
+                }
+                cells[column as usize] = display.clone();
+                cell_details.push(StructuredCellDto {
+                    column,
+                    display,
+                    value_type: spreadsheet_value_type(value),
+                    formula: formula.cloned(),
+                });
+            }
+            if !cell_details.is_empty() {
+                rows.insert(
+                    u64::from(row),
+                    StructuredRowDto {
+                        index: u64::from(row),
+                        cells,
+                        cell_details,
+                    },
+                );
+            }
+        }
+        sheets.push(SpreadsheetSheet {
+            metadata: StructuredSheetDto {
+                name,
+                row_count,
+                column_count,
+            },
+            rows,
+        });
+    }
+    Ok(SpreadsheetWorkbook {
+        sheets,
+        selected: 0,
+    })
+}
+
+fn spreadsheet_value_type(value: &Data) -> StructuredCellValueTypeDto {
+    match value {
+        Data::Int(_) | Data::Float(_) => StructuredCellValueTypeDto::Number,
+        Data::String(_) | Data::Empty => StructuredCellValueTypeDto::Text,
+        Data::Bool(_) => StructuredCellValueTypeDto::Boolean,
+        Data::DateTime(_) | Data::DateTimeIso(_) => StructuredCellValueTypeDto::DateTime,
+        Data::DurationIso(_) => StructuredCellValueTypeDto::Duration,
+        Data::Error(_) => StructuredCellValueTypeDto::Error,
+    }
+}
+
+fn spreadsheet_headers(column_count: u32) -> Vec<String> {
+    (0..column_count).map(excel_column_name).collect()
+}
+
+fn excel_column_name(mut column: u32) -> String {
+    let mut name = String::new();
+    loop {
+        name.insert(0, char::from(b'A' + (column % 26) as u8));
+        if column < 26 {
+            return name;
+        }
+        column = column / 26 - 1;
+    }
+}
+
+fn spreadsheet_page(sheet: &SpreadsheetSheet, start: u64, count: u16) -> Vec<StructuredRowDto> {
+    let end = start
+        .saturating_add(u64::from(count))
+        .min(sheet.metadata.row_count);
+    (start..end)
+        .map(|index| {
+            sheet.rows.get(&index).cloned().unwrap_or(StructuredRowDto {
+                index,
+                cells: Vec::new(),
+                cell_details: Vec::new(),
+            })
+        })
+        .collect()
+}
+
+fn enforce_sheet_dimensions(name: &str, rows: u64, columns: u32) -> Result<(), String> {
+    if rows > WORKBOOK_ROWS_PER_SHEET {
+        return Err(format!(
+            "Worksheet '{name}' has {rows} rows, exceeding the {WORKBOOK_ROWS_PER_SHEET}-row limit."
+        ));
+    }
+    if columns > WORKBOOK_COLUMNS_PER_SHEET {
+        return Err(format!(
+            "Worksheet '{name}' has {columns} columns, exceeding the {WORKBOOK_COLUMNS_PER_SHEET}-column limit."
+        ));
+    }
+    let dense_cells = rows.saturating_mul(u64::from(columns));
+    if dense_cells > WORKBOOK_DENSE_CELL_LIMIT {
+        return Err(format!(
+            "Worksheet '{name}' spans {dense_cells} cells, exceeding the {WORKBOOK_DENSE_CELL_LIMIT}-cell materialization limit."
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_at_most(actual: u64, limit: u64, subject: &str) -> Result<(), String> {
+    if actual <= limit {
+        Ok(())
+    } else {
+        Err(format!("{subject} {actual} exceeds the {limit} limit."))
+    }
+}
+
+fn preflight_zip_workbook(bytes: &[u8]) -> Result<(), String> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| format!("The workbook ZIP package is corrupt: {error}."))?;
+    ensure_at_most(
+        archive.len() as u64,
+        WORKBOOK_ENTRY_LIMIT as u64,
+        "Workbook archive entry count",
+    )?;
+    let mut expanded = 0_u64;
+    let mut image_total = 0_u64;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| format!("Workbook archive entry {index} is corrupt: {error}."))?;
+        let size = entry.size();
+        expanded = expanded.saturating_add(size);
+        ensure_at_most(expanded, WORKBOOK_EXPANDED_BYTES, "Workbook expanded bytes")?;
+        let name = entry.name().to_owned();
+        if name.starts_with("xl/media/") {
+            ensure_at_most(
+                size,
+                WORKBOOK_IMAGE_BYTES,
+                &format!("Workbook image '{name}' bytes"),
+            )?;
+            image_total = image_total.saturating_add(size);
+            ensure_at_most(
+                image_total,
+                WORKBOOK_TOTAL_IMAGE_BYTES,
+                "Workbook total image bytes",
+            )?;
+        }
+        if name.starts_with("xl/worksheets/") && name.ends_with(".xml") {
+            let mut xml = String::new();
+            std::io::Read::read_to_string(&mut entry, &mut xml)
+                .map_err(|error| format!("Worksheet XML '{name}' is invalid UTF-8: {error}."))?;
+            if let Some((rows, columns)) = worksheet_declared_dimensions(&xml)? {
+                enforce_sheet_dimensions(&name, rows, columns)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn worksheet_declared_dimensions(xml: &str) -> Result<Option<(u64, u32)>, String> {
+    let Some(dimension) = xml.find("<dimension") else {
+        return Ok(None);
+    };
+    let tail = &xml[dimension..];
+    let Some(reference) = tail.find("ref=\"") else {
+        return Ok(None);
+    };
+    let value = &tail[reference + 5..];
+    let end = value
+        .find('"')
+        .ok_or_else(|| "Worksheet dimension reference is malformed.".to_owned())?;
+    let last = value[..end].rsplit(':').next().unwrap_or_default();
+    parse_excel_cell_reference(last).map(Some)
+}
+
+fn parse_excel_cell_reference(reference: &str) -> Result<(u64, u32), String> {
+    let split = reference
+        .find(|character: char| character.is_ascii_digit())
+        .ok_or_else(|| format!("Worksheet dimension '{reference}' is malformed."))?;
+    let (letters, digits) = reference.split_at(split);
+    if letters.is_empty()
+        || digits.is_empty()
+        || !letters
+            .chars()
+            .all(|character| character.is_ascii_alphabetic())
+        || !digits.chars().all(|character| character.is_ascii_digit())
+    {
+        return Err(format!("Worksheet dimension '{reference}' is malformed."));
+    }
+    let mut column = 0_u32;
+    for letter in letters.bytes() {
+        column = column
+            .checked_mul(26)
+            .and_then(|value| value.checked_add(u32::from(letter.to_ascii_uppercase() - b'A' + 1)))
+            .ok_or_else(|| format!("Worksheet dimension '{reference}' is too large."))?;
+    }
+    let row = digits
+        .parse::<u64>()
+        .map_err(|_| format!("Worksheet dimension '{reference}' is malformed."))?;
+    Ok((row, column))
+}
+
 fn source_revision(summary: &fm_domain::EntrySummary, size: u64) -> String {
     format!(
         "{size}:{}:{}",
@@ -665,6 +1142,7 @@ async fn parse_initial_delimited_rows(
         .map(|(index, cells)| StructuredRowDto {
             index: index as u64,
             cells,
+            cell_details: Vec::new(),
         })
         .collect();
     Ok((headers, rows, use_header))
@@ -711,6 +1189,7 @@ fn parse_initial_ndjson_rows(sample: &[u8]) -> (Vec<String>, Vec<StructuredRowDt
         .map(|(index, value)| StructuredRowDto {
             index: index as u64,
             cells: vec![value.to_owned()],
+            cell_details: Vec::new(),
         })
         .collect();
     (vec!["JSON object".to_owned()], rows)
@@ -1011,6 +1490,7 @@ async fn read_rows_from_source(
         .map(|(offset, cells)| StructuredRowDto {
             index: start + offset as u64,
             cells,
+            cell_details: Vec::new(),
         })
         .collect())
 }
@@ -1058,6 +1538,7 @@ async fn read_ndjson_rows(
             rows.push(StructuredRowDto {
                 index: current,
                 cells: vec![line],
+                cell_details: Vec::new(),
             });
         }
         current = current.saturating_add(1);
@@ -1165,6 +1646,67 @@ mod json_lexer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+    fn generated_dense_xlsx(rows: u32, columns: u32) -> Vec<u8> {
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        let static_entries = [
+            (
+                "[Content_Types].xml",
+                r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
+            ),
+            (
+                "_rels/.rels",
+                r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Dense" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+        ];
+        for (name, data) in static_entries {
+            archive.start_file(name, options).expect("start XLSX entry");
+            archive
+                .write_all(data.as_bytes())
+                .expect("write XLSX entry");
+        }
+        archive
+            .start_file("xl/worksheets/sheet1.xml", options)
+            .expect("start worksheet");
+        write!(
+            archive,
+            r#"<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:{}{}"/><sheetData>"#,
+            excel_column_name(columns - 1),
+            rows
+        )
+        .expect("write worksheet header");
+        for row in 1..=rows {
+            write!(archive, r#"<row r="{row}">"#).expect("write row");
+            for column in 0..columns {
+                write!(
+                    archive,
+                    r#"<c r="{}{row}"><v>{}</v></c>"#,
+                    excel_column_name(column),
+                    u64::from(row) * u64::from(columns) + u64::from(column)
+                )
+                .expect("write cell");
+            }
+            archive.write_all(b"</row>").expect("finish row");
+        }
+        archive
+            .write_all(b"</sheetData></worksheet>")
+            .expect("finish worksheet");
+        archive
+            .finish()
+            .expect("finish generated workbook")
+            .into_inner()
+    }
 
     #[test]
     fn detects_supported_dialects_outside_quoted_fields() {
@@ -1194,6 +1736,88 @@ mod tests {
         assert!(require_random_access(true, "row").is_ok());
         let error = require_random_access(false, "row").expect_err("jump must be rejected");
         assert!(error.to_string().contains("sequential-only provider"));
+    }
+
+    #[test]
+    fn spreadsheet_dimension_budgets_accept_boundaries_and_reject_the_next_value() {
+        assert!(
+            enforce_sheet_dimensions(
+                "Boundary",
+                WORKBOOK_ROWS_PER_SHEET,
+                (WORKBOOK_DENSE_CELL_LIMIT / WORKBOOK_ROWS_PER_SHEET) as u32,
+            )
+            .is_ok()
+        );
+        assert!(
+            enforce_sheet_dimensions("Rows", WORKBOOK_ROWS_PER_SHEET + 1, 1)
+                .expect_err("row boundary must be enforced")
+                .contains("row limit")
+        );
+        assert!(
+            enforce_sheet_dimensions("Columns", 1, WORKBOOK_COLUMNS_PER_SHEET + 1)
+                .expect_err("column boundary must be enforced")
+                .contains("column limit")
+        );
+        assert!(
+            enforce_sheet_dimensions(
+                "Cells",
+                WORKBOOK_DENSE_CELL_LIMIT / u64::from(WORKBOOK_COLUMNS_PER_SHEET) + 1,
+                WORKBOOK_COLUMNS_PER_SHEET,
+            )
+            .expect_err("cell boundary must be enforced")
+            .contains("materialization limit")
+        );
+    }
+
+    #[test]
+    fn spreadsheet_scalar_budgets_accept_each_boundary_and_reject_the_next_value() {
+        let budgets = [
+            ("source bytes", WORKBOOK_SOURCE_BYTES),
+            ("expanded bytes", WORKBOOK_EXPANDED_BYTES),
+            ("archive entries", WORKBOOK_ENTRY_LIMIT as u64),
+            ("sheet count", WORKBOOK_SHEET_LIMIT as u64),
+            ("non-empty cells", WORKBOOK_NON_EMPTY_CELL_LIMIT as u64),
+            ("string bytes", WORKBOOK_STRING_BYTES as u64),
+            ("image bytes", WORKBOOK_IMAGE_BYTES),
+            ("total image bytes", WORKBOOK_TOTAL_IMAGE_BYTES),
+        ];
+        for (name, limit) in budgets {
+            assert!(ensure_at_most(limit, limit, name).is_ok(), "{name}");
+            assert!(
+                ensure_at_most(limit + 1, limit, name)
+                    .expect_err("next value must exceed the budget")
+                    .contains(name),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn xlsx_preflight_rejects_adversarial_declared_dimensions() {
+        assert_eq!(
+            worksheet_declared_dimensions(r#"<worksheet><dimension ref="A1:B9"/></worksheet>"#)
+                .expect("valid dimension"),
+            Some((9, 2))
+        );
+        let inflated = format!(
+            r#"<worksheet><dimension ref="A1:A{}"/></worksheet>"#,
+            WORKBOOK_ROWS_PER_SHEET + 1
+        );
+        let (rows, columns) = worksheet_declared_dimensions(&inflated)
+            .expect("valid but inflated dimension")
+            .expect("dimension present");
+        assert!(enforce_sheet_dimensions("sheet.xml", rows, columns).is_err());
+    }
+
+    #[test]
+    #[ignore = "explicit peak-RSS probe for task 0172 spreadsheet budgets"]
+    fn generated_dense_workbook_peak_memory_probe() {
+        let bytes = generated_dense_xlsx(20_000, 20);
+        assert!(bytes.len() as u64 <= WORKBOOK_SOURCE_BYTES);
+        let workbook = parse_spreadsheet(bytes).expect("generated workbook fits every budget");
+        assert_eq!(workbook.sheets[0].metadata.row_count, 20_000);
+        assert_eq!(workbook.sheets[0].metadata.column_count, 20);
+        assert_eq!(workbook.sheets[0].rows.len(), 20_000);
     }
 
     #[tokio::test]

@@ -784,6 +784,7 @@ export class MockFileManagerClient implements FileManagerClient {
       format: OpenStructuredViewRequest['format'];
       delimiter: string;
       headerMode: NonNullable<OpenStructuredViewRequest['headerMode']>;
+      selectedSheet: string;
     }
   >();
   // Generated directories are recreated per request, but their aggregate totals are a pure
@@ -1476,6 +1477,7 @@ export class MockFileManagerClient implements FileManagerClient {
         format: request.format,
         delimiter,
         headerMode: request.headerMode ?? 'auto',
+        selectedSheet: 'Summary',
       });
       return this.mockStructuredView(sessionId);
     });
@@ -1504,6 +1506,7 @@ export class MockFileManagerClient implements FileManagerClient {
       const session = this.structuredSession(request.sessionId);
       if (request.delimiter != null) session.delimiter = request.delimiter;
       if (request.headerMode != null) session.headerMode = request.headerMode;
+      if (request.selectedSheet != null) session.selectedSheet = request.selectedSheet;
       return this.mockStructuredView(request.sessionId);
     });
   }
@@ -2687,27 +2690,53 @@ export class MockFileManagerClient implements FileManagerClient {
   private mockStructuredView(sessionId: string): StructuredView {
     const session = this.structuredSession(sessionId);
     const bytes = this.fileContentFor(session.uri);
-    const externalFallback = session.format === 'excel';
+    const externalFallback = session.format === 'excel' && bytes.length > 16 * 1024 * 1024;
     const jsonText = session.format === 'json';
+    const workbookRecords =
+      session.selectedSheet === 'Details'
+        ? [['Details'], [], ['Sparse row']]
+        : [
+            ['Label', 'Cached formula'],
+            ['Summary', '84'],
+          ];
     const records =
-      externalFallback || jsonText
-        ? []
-        : session.format === 'ndjson'
-          ? new TextDecoder()
-              .decode(bytes)
-              .split(/\r?\n/)
-              .filter(Boolean)
-              .map((line) => [line])
-          : parseMockDelimited(
-              new TextDecoder().decode(bytes).replace(/^\uFEFF/, ''),
-              session.delimiter,
-            );
-    const useHeader = session.headerMode === 'firstRow' || session.headerMode === 'auto';
+      session.format === 'excel' && !externalFallback
+        ? workbookRecords
+        : externalFallback || jsonText
+          ? []
+          : session.format === 'ndjson'
+            ? new TextDecoder()
+                .decode(bytes)
+                .split(/\r?\n/)
+                .filter(Boolean)
+                .map((line) => [line])
+            : parseMockDelimited(
+                new TextDecoder().decode(bytes).replace(/^\uFEFF/, ''),
+                session.delimiter,
+              );
+    const useHeader =
+      session.format !== 'excel' &&
+      (session.headerMode === 'firstRow' || session.headerMode === 'auto');
     const headers = useHeader
       ? (records[0] ?? [])
       : (records[0]?.map((_, index) => `Column ${index + 1}`) ?? []);
     const dataRecords = useHeader ? records.slice(1) : records;
-    const rows = dataRecords.slice(0, 500).map((cells, index) => ({ index, cells }));
+    const rows = dataRecords.slice(0, 500).map((cells, index) => ({
+      index,
+      cells,
+      ...(session.format === 'excel' && session.selectedSheet === 'Summary' && index === 1
+        ? {
+            cellDetails: [
+              {
+                column: 1,
+                display: '84',
+                valueType: 'number' as const,
+                formula: 'B1*2',
+              },
+            ],
+          }
+        : {}),
+    }));
     return {
       sessionId,
       kind: externalFallback ? 'externalFallback' : jsonText ? 'jsonText' : 'table',
@@ -2719,6 +2748,15 @@ export class MockFileManagerClient implements FileManagerClient {
       headerMode: session.headerMode,
       headers,
       rows,
+      ...(session.format === 'excel' && !externalFallback
+        ? {
+            sheets: [
+              { name: 'Summary', rowCount: 2, columnCount: 2 },
+              { name: 'Details', rowCount: 3, columnCount: 1 },
+            ],
+            selectedSheet: session.selectedSheet,
+          }
+        : {}),
       indexedBytes: bytes.length,
       indexedRows: dataRecords.length,
       totalRows: dataRecords.length,
