@@ -1,0 +1,63 @@
+{
+  "Types": [
+    {
+      "ClassName": "ConditionalFormatting",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ConditionalFormattingValueObject",
+      "Attributes": [
+        {
+          "QName": ":value",
+          "PropertyName": "Value",
+          "PropertyComments": "Value",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "DifferentialType",
+      "ExtraXmlns": [
+        "x"
+      ]
+    },
+    {
+      "ClassName": "DataValidations",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DataValidation",
+      "Attributes": [
+        {
+          "QName": "xr:uid",
+          "PropertyName": "XrUid",
+          "PropertyComments": "Revision Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "PivotTableDefinition",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SparklineGroups",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SparklineGroup",
+      "HaveXmlnsFields": true,
+      "Attributes": [
+        {
+          "QName": "xr2:uid",
+          "PropertyName": "Uid",
+          "PropertyComments": "Sparkline Group Unique ID",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    }
+  ]
+}

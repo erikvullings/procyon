@@ -203,6 +203,17 @@ body {
   font-size: var(--fm-font-size);
 }
 
+/*
+ * The file manager UI is not a document -- only text the user actively types
+ * (inputs/textareas) should be selectable. Everything else (chrome, labels,
+ * directory rows) must reject click-and-drag text selection. -webkit- prefix
+ * is required for Tauri's WKWebView, which ignores the unprefixed property.
+ */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Keep native scrollbars visually aligned with the active theme in Tauri/WKWebView. */
 .fm-app-shell * {
   scrollbar-color: var(--fm-border) var(--fm-surface);
@@ -226,17 +237,6 @@ body {
 
 .fm-app-shell *::-webkit-scrollbar-thumb:hover {
   background: var(--fm-text-muted);
-}
-
-/*
- * The file manager UI is not a document -- only text the user actively types
- * (inputs/textareas) should be selectable. Everything else (chrome, labels,
- * directory rows) must reject click-and-drag text selection. -webkit- prefix
- * is required for Tauri's WKWebView, which ignores the unprefixed property.
- */
-* {
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 input,

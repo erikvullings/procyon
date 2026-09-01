@@ -1,0 +1,176 @@
+{
+  "AddTypes": [
+    {
+      "Name": "v:CT_Wrap/v:wrap",
+      "ClassName": "VmlTextWrap",
+      "Summary": "VML namespace text wrapping.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "v:type",
+          "PropertyName": "Type",
+          "PropertyComments": "Wrapping type",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.Vml.Wordprocessing.WrapValues>"
+        }
+      ]
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "Fill",
+      "Attributes": [
+        {
+          "QName": ":detectmouseclick",
+          "PropertyName": "VmlDetectMouseClick",
+          "PropertyComments": "VML detect mouse click compatibility attribute.",
+          "Optional": true,
+          "OverrideType": "TrueFalseValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "ImageData",
+      "Attributes": [
+        {
+          "QName": ":detectmouseclick",
+          "PropertyName": "VmlDetectMouseClick",
+          "PropertyComments": "VML detect mouse click compatibility attribute.",
+          "Optional": true,
+          "OverrideType": "TrueFalseValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Group",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Line",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Oval",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        },
+        {
+          "QName": "wp14:anchorId",
+          "PropertyName": "Wp14AnchorId",
+          "PropertyComments": "Wordprocessing Drawing 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Rectangle",
+      "Attributes": [
+        {
+          "QName": ":type",
+          "PropertyName": "Type",
+          "PropertyComments": "Shape Type Reference",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        },
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        },
+        {
+          "QName": "wp14:anchorId",
+          "PropertyName": "Wp14AnchorId",
+          "PropertyComments": "Wordprocessing Drawing 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "RoundRectangle",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Shape",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Shapetype",
+      "Attributes": [
+        {
+          "QName": "w14:anchorId",
+          "PropertyName": "W14AnchorId",
+          "PropertyComments": "Word 2010 Anchor Identifier",
+          "Optional": true,
+          "OverrideType": "HexBinaryValue"
+        }
+      ]
+    }
+  ],
+  "ChoiceEnums": [
+    {
+      "RustName": "ShapeChoice",
+      "AddVariants": [
+        {
+          "RustName": "VmlTextWrap",
+          "QName": "v:wrap",
+          "Docs": "VML namespace text wrapping used by LibreOffice fixtures.",
+          "PayloadRustType": "VmlTextWrap"
+        }
+      ]
+    },
+    {
+      "RustName": "RectangleChoice",
+      "AddVariants": [
+        {
+          "RustName": "VmlTextWrap",
+          "QName": "v:wrap",
+          "Docs": "VML namespace text wrapping used by LibreOffice fixtures.",
+          "PayloadRustType": "VmlTextWrap"
+        }
+      ]
+    }
+  ]
+}

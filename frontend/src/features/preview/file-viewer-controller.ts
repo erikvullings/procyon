@@ -5,14 +5,11 @@ import type {
   GitLogEntry,
   JsonTokenSpan,
   Location,
-  PptxPreviewResourceDescriptor,
-  PptxPreviewSlide,
   SearchInFileMatch,
   StructuredRow,
 } from '../../models';
 import { IMAGE_EXTENSIONS } from '../directory-table/entry-icons';
 import { editableLanguageForExtension } from '../editor/editor-language';
-import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { archiveEntryLocation, archiveRootForEntry } from '../navigation/archive-location';
 import { copyImageDataUri, copyText } from './clipboard';
 import {
@@ -41,7 +38,6 @@ import {
   textMetadataFor,
 } from './file-metadata';
 import { loadPdfDocument, type PDFDocumentProxy } from './pdf-preview';
-import { preparePptxSlideHtml } from './pptx-preview';
 
 /** Client surface required to drive a Lister-style large-file viewer. `listDirectory` is only
  * used for comic (.cbz/.cbr) page listing. */
@@ -63,12 +59,13 @@ export type FileViewerClient = Pick<
   | 'readDocxPreviewResource'
   | 'closeDocxPreview'
   | 'openPptxPreview'
-  | 'readPptxPreviewResource'
+  | 'readPptxPreviewPdf'
   | 'closePptxPreview'
 >;
 
 /** Bytes fetched per text window load (initial load and each "load more" append). */
 export const TEXT_WINDOW_BYTES = 64 * 1024;
+const PPTX_PDF_RANGE_BYTES = 1024 * 1024;
 
 /** Inline video uses the existing preview limit because base64 data URIs expand bytes by roughly
  * one third and must be held in memory alongside the source buffer. Larger videos stay external. */
@@ -228,19 +225,7 @@ export interface FileViewerExternalDocxContent {
   readonly message: string;
 }
 
-/** Paged semantic PPTX content; only the current slide's sanitized HTML is retained. */
-export interface FileViewerPptxContent {
-  readonly kind: 'pptx';
-  readonly sessionId: string;
-  readonly slides: readonly PptxPreviewSlide[];
-  readonly slideCount: number;
-  readonly currentSlide: number;
-  readonly currentSlideHtml: string | undefined;
-  readonly loadingSlide: boolean;
-  readonly omittedFeatures: readonly string[];
-}
-
-/** PPTX content that exceeded a safety budget or could not be parsed safely. */
+/** PPTX content that exceeded a safety budget or could not be rendered safely. */
 export interface FileViewerExternalPptxContent {
   readonly kind: 'pptxExternal';
   readonly message: string;
@@ -297,7 +282,6 @@ export type FileViewerState =
         | FileViewerEpubContent
         | FileViewerDocxContent
         | FileViewerExternalDocxContent
-        | FileViewerPptxContent
         | FileViewerExternalPptxContent
         | FileViewerArchiveSummaryContent
         | FileViewerStructuredTableContent
@@ -435,9 +419,6 @@ export function createFileViewerController(
   let structuredSessionId: string | undefined;
   let docxSessionId: string | undefined;
   let pptxSessionId: string | undefined;
-  let pptxResources: readonly PptxPreviewResourceDescriptor[] = [];
-  const pptxSlideHtmlCache = new Map<number, string>();
-  let pptxMatchSlides: Array<{ readonly slideIndex: number; readonly localIndex: number }> = [];
   const textWindowCache = new Map<number, FileViewerTextContent>();
 
   function rememberTextWindow(content: FileViewerTextContent): void {
@@ -933,80 +914,18 @@ export function createFileViewerController(
     }
   }
 
-  async function loadPptxSlide(controller: AbortController, index: number): Promise<void> {
-    if (current.status !== 'ready' || current.content.kind !== 'pptx') return;
-    const cached = pptxSlideHtmlCache.get(index);
-    if (cached !== undefined) {
-      publish({
-        ...current,
-        content: {
-          ...current.content,
-          currentSlide: index,
-          currentSlideHtml: highlightedPptxHtml(index, cached),
-          loadingSlide: false,
-        },
-      });
-      return;
-    }
-    const slide = current.content.slides[index];
-    if (slide === undefined) return;
-    const sessionId = current.content.sessionId;
-    let html: string;
-    try {
-      html = await preparePptxSlideHtml(slide.markdown, pptxResources, (resourceId) =>
-        client.readPptxPreviewResource({ sessionId, resourceId }, controller.signal),
-      );
-    } catch (error: unknown) {
-      failPptxPreview(controller, error);
-      return;
-    }
-    if (
-      !isCurrent(controller) ||
-      current.status !== 'ready' ||
-      current.content.kind !== 'pptx' ||
-      current.content.currentSlide !== index
-    ) {
-      return;
-    }
-    pptxSlideHtmlCache.set(index, html);
-    publish({
-      ...current,
-      content: {
-        ...current.content,
-        currentSlideHtml: highlightedPptxHtml(index, html),
-        loadingSlide: false,
-      },
-    });
-  }
-
   function failPptxPreview(controller: AbortController, error: unknown): void {
     if (!isCurrent(controller)) return;
     if (pptxSessionId !== undefined) {
       void client.closePptxPreview({ sessionId: pptxSessionId }).catch(() => undefined);
       pptxSessionId = undefined;
     }
-    pptxResources = [];
-    pptxSlideHtmlCache.clear();
     publish({
       status: 'ready',
       entry,
       metadataPanelOpen: initialMetadataOpen,
       content: { kind: 'pptxExternal', message: errorMessage(error) },
     });
-  }
-
-  function highlightedPptxHtml(slideIndex: number, html: string): string {
-    if (search === undefined || search.currentMatchIndex === undefined) return html;
-    const location = pptxMatchSlides[search.currentMatchIndex];
-    if (location?.slideIndex !== slideIndex) return html;
-    return searchDocxHtml(
-      html,
-      search.query,
-      search.regex,
-      search.caseSensitive,
-      search.wholeWord,
-      location.localIndex,
-    ).html;
   }
 
   async function loadPptx(controller: AbortController): Promise<void> {
@@ -1016,29 +935,36 @@ export function createFileViewerController(
         void client.closePptxPreview({ sessionId: opened.sessionId }).catch(() => undefined);
         return;
       }
-      if (opened.slides.length === 0) {
-        void client.closePptxPreview({ sessionId: opened.sessionId }).catch(() => undefined);
-        publish({ status: 'unsupported', entry });
-        return;
-      }
       pptxSessionId = opened.sessionId;
-      pptxResources = opened.resources;
+      const bytes = new Uint8Array(opened.pdfBytes);
+      let offset = 0;
+      while (offset < bytes.length) {
+        const chunk = await client.readPptxPreviewPdf(
+          {
+            sessionId: opened.sessionId,
+            offset,
+            length: Math.min(PPTX_PDF_RANGE_BYTES, bytes.length - offset),
+          },
+          controller.signal,
+        );
+        if (!isCurrent(controller)) return;
+        if (chunk.offset !== offset || chunk.length !== chunk.data.length || chunk.length === 0) {
+          throw new Error(t('viewer', 'unableToLoad'));
+        }
+        bytes.set(chunk.data, offset);
+        offset += chunk.length;
+        if (chunk.eof && offset !== bytes.length) {
+          throw new Error(t('viewer', 'unableToLoad'));
+        }
+      }
+      const document = await loadPdfDocument(bytes);
+      if (!isCurrent(controller)) return;
       publish({
         status: 'ready',
         entry,
         metadataPanelOpen: initialMetadataOpen,
-        content: {
-          kind: 'pptx',
-          sessionId: opened.sessionId,
-          slides: opened.slides,
-          slideCount: opened.slides.length,
-          currentSlide: 0,
-          currentSlideHtml: undefined,
-          loadingSlide: true,
-          omittedFeatures: opened.omittedFeatures,
-        },
+        content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1 },
       });
-      await loadPptxSlide(controller, 0);
     } catch (error: unknown) {
       failPptxPreview(controller, error);
     }
@@ -1466,17 +1392,6 @@ export function createFileViewerController(
             content: { ...readyState.content, html: readyState.content.sourceHtml },
             search,
           });
-        } else if (readyState.content.kind === 'pptx') {
-          pptxMatchSlides = [];
-          const html = pptxSlideHtmlCache.get(readyState.content.currentSlide);
-          publish({
-            ...readyState,
-            content: {
-              ...readyState.content,
-              ...(html === undefined ? {} : { currentSlideHtml: html }),
-            },
-            search,
-          });
         } else {
           publish({ ...current, search });
         }
@@ -1507,23 +1422,6 @@ export function createFileViewerController(
         content: { ...current.content, html: result.html },
         search,
       });
-      return;
-    }
-    if (current.status === 'ready' && current.content.kind === 'pptx' && search !== undefined) {
-      const location = pptxMatchSlides[index];
-      if (location === undefined) return;
-      search = { ...search, currentMatchIndex: index };
-      publish({
-        ...current,
-        content: {
-          ...current.content,
-          currentSlide: location.slideIndex,
-          currentSlideHtml: undefined,
-          loadingSlide: true,
-        },
-        search,
-      });
-      await loadPptxSlide(beginRequest(), location.slideIndex);
       return;
     }
     const windowOffset = Math.max(0, match.offset - JUMP_CONTEXT_BEFORE_BYTES);
@@ -1605,40 +1503,6 @@ export function createFileViewerController(
           content: { ...current.content, html: result.html },
           search,
         });
-        return;
-      }
-      if (current.status === 'ready' && current.content.kind === 'pptx') {
-        const matches: SearchInFileMatch[] = [];
-        pptxMatchSlides = [];
-        let offset = 0;
-        for (const [slideIndex, slide] of current.content.slides.entries()) {
-          const html = safeMarkdownHtml(slide.markdown);
-          const result = searchDocxHtml(
-            html,
-            options_.query,
-            options_.regex,
-            options_.caseSensitive,
-            options_.wholeWord,
-            undefined,
-          );
-          for (const [localIndex, match] of result.matches.entries()) {
-            matches.push({ ...match, offset: offset + match.offset });
-            pptxMatchSlides.push({ slideIndex, localIndex });
-          }
-          offset +=
-            new DOMParser().parseFromString(html, 'text/html').body.textContent?.length ?? 0;
-          offset += 1;
-        }
-        if (!isCurrent(controller)) return;
-        search = {
-          ...options_,
-          matches,
-          truncated: false,
-          currentMatchIndex: matches.length > 0 ? 0 : undefined,
-          searching: false,
-        };
-        publish({ ...current, search });
-        if (matches.length > 0) await jumpToMatch(0);
         return;
       }
       const result = await client.searchInFile(
@@ -1731,10 +1595,6 @@ export function createFileViewerController(
       await copyText(current.content.text);
     } else if (current.content.kind === 'docx') {
       await copyText(current.content.plainText);
-    } else if (current.content.kind === 'pptx') {
-      const html = current.content.currentSlideHtml ?? '';
-      const text = new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
-      await copyText(text);
     } else if (current.content.kind === 'image') {
       await copyImageDataUri(current.content.dataUri);
     }
@@ -1845,19 +1705,6 @@ export function createFileViewerController(
         },
       });
       void loadEpubChapter(beginRequest(), nextIndex);
-    } else if (current.content.kind === 'pptx') {
-      const nextIndex = current.content.currentSlide + 1;
-      if (nextIndex >= current.content.slideCount) return;
-      publish({
-        ...current,
-        content: {
-          ...current.content,
-          currentSlide: nextIndex,
-          currentSlideHtml: undefined,
-          loadingSlide: true,
-        },
-      });
-      void loadPptxSlide(beginRequest(), nextIndex);
     }
   }
 
@@ -1895,19 +1742,6 @@ export function createFileViewerController(
         },
       });
       void loadEpubChapter(beginRequest(), previousIndex);
-    } else if (current.content.kind === 'pptx') {
-      const previousIndex = current.content.currentSlide - 1;
-      if (previousIndex < 0) return;
-      publish({
-        ...current,
-        content: {
-          ...current.content,
-          currentSlide: previousIndex,
-          currentSlideHtml: undefined,
-          loadingSlide: true,
-        },
-      });
-      void loadPptxSlide(beginRequest(), previousIndex);
     }
   }
 

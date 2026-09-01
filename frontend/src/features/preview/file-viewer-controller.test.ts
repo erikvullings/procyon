@@ -54,7 +54,7 @@ function setup(): {
       readDocxPreviewResource: vi.fn(),
       closeDocxPreview: vi.fn().mockResolvedValue(undefined),
       openPptxPreview: vi.fn(),
-      readPptxPreviewResource: vi.fn(),
+      readPptxPreviewPdf: vi.fn(),
       closePptxPreview: vi.fn().mockResolvedValue(undefined),
       searchInFile: vi.fn(),
       listDirectory: vi.fn(),
@@ -79,34 +79,29 @@ function textOf(state: FileViewerState | undefined): string | undefined {
 }
 
 describe('file viewer controller', () => {
-  it('loads one sanitized PPTX slide at a time and reuses paged navigation', async () => {
+  it('loads rendered PPTX PDF bytes through bounded ranges and reuses the PDF viewer', async () => {
     const context = setup();
+    const pdfBytes = 1024 * 1024 + 2;
     vi.mocked(context.client.openPptxPreview).mockResolvedValue({
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
-      slides: [
-        { index: 0, title: 'Overview', markdown: '# Overview\n\nFirst slide' },
-        {
-          index: 1,
-          title: 'Details',
-          markdown: '# Details\n\n![Chart](pptx-resource:../media/chart.png)',
-        },
-      ],
-      resources: [
-        {
-          resourceId: 'chart',
-          source: '../media/chart.png',
-          mediaType: 'image/png',
-          byteLength: 4,
-        },
-      ],
-      omittedFeatures: ['themes and precise geometry', 'charts'],
+      pdfBytes,
     });
-    vi.mocked(context.client.readPptxPreviewResource).mockResolvedValue({
-      data: [137, 80, 78, 71],
-      mediaType: 'image/png',
-    });
+    vi.mocked(context.client.readPptxPreviewPdf)
+      .mockResolvedValueOnce({
+        data: new Array(1024 * 1024).fill(1),
+        offset: 0,
+        length: 1024 * 1024,
+        eof: false,
+        probablyBinary: true,
+      })
+      .mockResolvedValueOnce({
+        data: [2, 3],
+        offset: 1024 * 1024,
+        length: 2,
+        eof: true,
+      });
 
     const controller = createFileViewerController({
       client: context.client,
@@ -115,95 +110,28 @@ describe('file viewer controller', () => {
     });
     await vi.waitFor(() =>
       expect(context.states.at(-1)).toMatchObject({
-        content: {
-          kind: 'pptx',
-          currentSlide: 0,
-          slideCount: 2,
-          currentSlideHtml: expect.stringContaining('First slide'),
-        },
+        content: { kind: 'pdf', pageCount: 3, currentPage: 1 },
       }),
     );
-
-    controller.nextPage();
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({
-        content: {
-          currentSlide: 1,
-          currentSlideHtml: expect.stringContaining('data:image/png;base64,'),
-        },
-      }),
+    expect(context.client.readPptxPreviewPdf).toHaveBeenNthCalledWith(
+      1,
+      { sessionId: 'pptx-session', offset: 0, length: 1024 * 1024 },
+      expect.any(AbortSignal),
     );
-    controller.previousPage();
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ content: { currentSlide: 0 } }),
+    expect(context.client.readPptxPreviewPdf).toHaveBeenNthCalledWith(
+      2,
+      { sessionId: 'pptx-session', offset: 1024 * 1024, length: 2 },
+      expect.any(AbortSignal),
     );
+    expect(loadPdfDocument).toHaveBeenCalledWith(expect.any(Uint8Array));
     controller.dispose();
     expect(context.client.closePptxPreview).toHaveBeenCalledWith({ sessionId: 'pptx-session' });
   });
 
-  it('searches across PPTX slides and navigates to the matching slide', async () => {
-    const context = setup();
-    vi.mocked(context.client.openPptxPreview).mockResolvedValue({
-      sessionId: 'pptx-session',
-      sourceRevision: 'r1',
-      sourceBytes: 1024,
-      slides: [
-        { index: 0, title: 'Overview', markdown: '# Overview\n\nWelcome' },
-        { index: 1, title: 'Decision', markdown: '# Decision\n\nApprove launch' },
-      ],
-      resources: [],
-      omittedFeatures: [],
-    });
-    const controller = createFileViewerController({
-      client: context.client,
-      entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
-      update: (state) => context.states.push(state),
-    });
-    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
-
-    controller.setSearchOptions({ query: 'Approve' });
-    await controller.runSearch();
-
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({
-        content: { kind: 'pptx', currentSlide: 1 },
-        search: { currentMatchIndex: 0, matches: [{ length: 7 }] },
-      }),
-    );
-  });
-
-  it('copies the currently displayed PPTX slide text', async () => {
-    const context = setup();
-    vi.mocked(context.client.openPptxPreview).mockResolvedValue({
-      sessionId: 'pptx-session',
-      sourceRevision: 'r1',
-      sourceBytes: 1024,
-      slides: [{ index: 0, title: 'Overview', markdown: '# Overview\n\nCopy this content' }],
-      resources: [],
-      omittedFeatures: [],
-    });
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-    const controller = createFileViewerController({
-      client: context.client,
-      entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
-      update: (state) => context.states.push(state),
-    });
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({
-        content: { currentSlideHtml: expect.stringContaining('Copy this content') },
-      }),
-    );
-
-    await controller.copyContent();
-
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Copy this content'));
-  });
-
-  it('retains external-open fallback when PPTX parsing exceeds a budget', async () => {
+  it('retains external-open fallback when PPTX rendering exceeds a budget', async () => {
     const context = setup();
     vi.mocked(context.client.openPptxPreview).mockRejectedValue(
-      new Error('PPTX content preview exceeds the slide-count budget'),
+      new Error('Rendered PDF exceeds the output budget'),
     );
 
     createFileViewerController({
@@ -216,50 +144,28 @@ describe('file viewer controller', () => {
       expect(context.states.at(-1)).toMatchObject({
         content: {
           kind: 'pptxExternal',
-          message: 'PPTX content preview exceeds the slide-count budget',
+          message: 'Rendered PDF exceeds the output budget',
         },
       }),
     );
   });
 
-  it('closes the PPTX session and falls back when a later slide cannot load', async () => {
+  it('closes the PPTX session and falls back when the rendered PDF cannot be read', async () => {
     const context = setup();
     vi.mocked(context.client.openPptxPreview).mockResolvedValue({
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 1024,
-      slides: [
-        { index: 0, title: 'Overview', markdown: '# Overview' },
-        {
-          index: 1,
-          title: 'Details',
-          markdown: '![Chart](pptx-resource:../media/chart.png)',
-        },
-      ],
-      resources: [
-        {
-          resourceId: 'chart',
-          source: '../media/chart.png',
-          mediaType: 'image/png',
-          byteLength: 4,
-        },
-      ],
-      omittedFeatures: [],
+      pdfBytes: 128,
     });
-    vi.mocked(context.client.readPptxPreviewResource).mockRejectedValue(
+    vi.mocked(context.client.readPptxPreviewPdf).mockRejectedValue(
       new Error('The presentation changed'),
     );
-    const controller = createFileViewerController({
+    createFileViewerController({
       client: context.client,
       entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
       update: (state) => context.states.push(state),
     });
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ content: { kind: 'pptx' } }),
-    );
-
-    controller.nextPage();
-
     await vi.waitFor(() =>
       expect(context.states.at(-1)).toMatchObject({
         content: { kind: 'pptxExternal', message: 'The presentation changed' },

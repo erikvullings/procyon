@@ -1,0 +1,453 @@
+{
+  "ChoiceEnums": [
+    {
+      "RustName": "ChartSpaceChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "DataLabelChoice",
+      "Repeated": true
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "ChartSpace",
+      "ExtraXmlns": [
+        "c"
+      ]
+    },
+    {
+      "ClassName": "Formula",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "FormatCode",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "DataLabels",
+      "AddChildren": [
+        {
+          "Name": "c:CT_Layout/c:layout",
+          "PropertyName": "Layout",
+          "PropertyComments": "Out-of-place layout following deleted data labels.",
+          "Optional": true,
+          "BeforeName": "c:CT_DLblsExtensionList/c:extLst"
+        }
+      ]
+    },
+    {
+      "ClassName": "AxisId",
+      "OverrideBaseClass": "OpenXmlLeafElement",
+      "Attributes": [
+        {
+          "QName": ":val",
+          "PropertyName": "Val",
+          "PropertyComments": "Integer Value",
+          "Optional": false,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "ClassName": "CrossingAxis",
+      "OverrideBaseClass": "OpenXmlLeafElement",
+      "Attributes": [
+        {
+          "QName": ":val",
+          "PropertyName": "Val",
+          "PropertyComments": "Integer Value",
+          "Optional": false,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "ClassName": "DataDisplayOptions16",
+      "AddChildren": [
+        {
+          "Name": "c16r3:CT_DataDisplayOptions16/c16r3:dataDisplayOptions16",
+          "PropertyName": "C16r3DataDisplayOptions16",
+          "PropertyComments": "Office 2019 data display options.",
+          "Optional": true,
+          "InitialVersion": "Office2019",
+          "AfterPropertyName": "BooleanFalse"
+        }
+      ],
+      "Attributes": [
+        {
+          "QName": ":uri",
+          "PropertyName": "Uri",
+          "PropertyComments": "Uniform Resource Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Area3DChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Area3DChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AreaChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AreaChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AreaSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AreaSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Bar3DChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Bar3DChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BarChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BarChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BarSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BarSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BubbleChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BubbleChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BubbleSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "BubbleSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CatAxExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CatAxExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Chart",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ChartReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ChartSpaceExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ChartSpaceExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DLblExtension",
+      "Children": [
+        {
+          "Name": "c15:CT_DataLabelFieldTable/c15:dlblFieldTable",
+          "Repeated": true
+        },
+        {
+          "Name": "c:CT_Boolean/c15:xForSave",
+          "Repeated": true
+        },
+        {
+          "Name": "c:CT_Boolean/c15:showDataLabelsRange",
+          "Repeated": true
+        },
+        {
+          "Name": "a:CT_ShapeProperties/c15:spPr",
+          "Repeated": true
+        },
+        {
+          "Name": "c:CT_Layout/c15:layout",
+          "Repeated": true
+        },
+        {
+          "Name": "c16:CT_ChartUniqueID/c16:uniqueId",
+          "Repeated": true
+        }
+      ],
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DLblExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DLblsExtension",
+      "Children": [
+        {
+          "Name": "c:CT_Tx/c15:tx",
+          "Repeated": true
+        }
+      ],
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DLblsExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DataDisplayOptions16",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DateAxExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "DateAxExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Extension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Line3DChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Line3DChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LineChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LineChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LineChart",
+      "Children": [
+        {
+          "PropertyName": "Grouping",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "LineSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "LineSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "MultiLvlStrRefExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "MultiLvlStrRefExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NumRefExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "NumRefExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Pie3DChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Pie3DChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PieChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PieChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PieChartSeries",
+      "Children": [
+        {
+          "PropertyName": "Index",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "PieSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PieSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RadarChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RadarChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RadarSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "RadarSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ScatterChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ScatterChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ScatterSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ScatterSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SerAxExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SerAxExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StockChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StockChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StrDataExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StrDataExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StrRefExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "StrRefExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Surface3DChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Surface3DChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SurfaceChartExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SurfaceChartExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SurfaceSerExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SurfaceSerExtensionList",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "UserShapesReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ValAxExtension",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ValAxExtensionList",
+      "HaveXmlnsFields": true
+    }
+  ]
+}

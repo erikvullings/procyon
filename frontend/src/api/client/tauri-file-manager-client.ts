@@ -56,11 +56,10 @@ import type {
   PluginId,
   PluginLogEntry,
   PptxPreview,
-  PptxPreviewResource,
   PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
-  ReadPptxPreviewResourceRequest,
+  ReadPptxPreviewPdfRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -393,11 +392,11 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<PptxPreview>('open_pptx_preview', { request });
   }
 
-  readPptxPreviewResource(
-    request: ReadPptxPreviewResourceRequest,
+  readPptxPreviewPdf(
+    request: ReadPptxPreviewPdfRequest,
     _signal?: AbortSignal,
-  ): Promise<PptxPreviewResource> {
-    return invoke<PptxPreviewResource>('read_pptx_preview_resource', { request });
+  ): Promise<FileRangeChunk> {
+    return invoke<FileRangeChunk>('read_pptx_preview_pdf', { request });
   }
 
   closePptxPreview(request: PptxPreviewSessionRequest, _signal?: AbortSignal): Promise<void> {

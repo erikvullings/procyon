@@ -1,0 +1,2878 @@
+use std::collections::HashMap;
+
+use bytes::Bytes;
+use ooxmlsdk::parts::chart_part::ChartPart;
+use ooxmlsdk::parts::diagram_colors_part::DiagramColorsPart;
+use ooxmlsdk::parts::diagram_data_part::DiagramDataPart;
+use ooxmlsdk::parts::diagram_layout_definition_part::DiagramLayoutDefinitionPart;
+use ooxmlsdk::parts::diagram_persist_layout_part::DiagramPersistLayoutPart;
+use ooxmlsdk::parts::diagram_style_part::DiagramStylePart;
+use ooxmlsdk::parts::drawings_part::DrawingsPart;
+use ooxmlsdk::parts::extended_chart_part::ExtendedChartPart;
+use ooxmlsdk::parts::image_part::ImagePart;
+use ooxmlsdk::parts::spreadsheet_document::SpreadsheetDocument;
+use ooxmlsdk::schemas::schemas_microsoft_com_office_drawing_2008_diagram as dsp;
+use ooxmlsdk::schemas::schemas_microsoft_com_office_drawing_2012_chart_style as cs;
+use ooxmlsdk::schemas::schemas_microsoft_com_office_drawing_2014_chartex as cx;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_chart as c;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_diagram as dgm;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_main as a;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_spreadsheet_drawing as xdr;
+use ooxmlsdk::sdk::SdkPart;
+
+use crate::common;
+use crate::error::Result;
+use crate::model::{ImageCrop, RgbColor};
+use crate::pptx::drawingml::color::{Color, RgbHexColor, SchemeColor};
+use crate::pptx::drawingml::shape::{FontStyleReference, ShapeStyleReference, ShapeStyleRefs};
+use crate::render::chart as shared_chart;
+
+use super::normalize_hyperlink_target;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DrawingResourceCatalog {
+  pub(crate) anchors: Vec<DrawingAnchorModel>,
+  pub(crate) charts: Vec<ChartResourceCatalog>,
+  pub(crate) extended_charts: Vec<ChartResourceCatalog>,
+  pub(crate) diagrams: DiagramResourceCatalog,
+  pub(crate) images: usize,
+  pub(crate) image_resources: HashMap<String, ImageResource>,
+  pub(crate) web_extension_fallback_images: HashMap<u32, String>,
+  pub(crate) hyperlink_targets: HashMap<String, String>,
+  pub(crate) custom_xml_parts: usize,
+  pub(crate) web_extensions: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ImageResource {
+  pub(crate) data: Bytes,
+  pub(crate) content_type: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DrawingAnchorModel {
+  pub(crate) kind: DrawingAnchorKind,
+  pub(crate) object: DrawingObjectModel,
+  pub(crate) from: Option<DrawingMarkerModel>,
+  pub(crate) to: Option<DrawingMarkerModel>,
+  pub(crate) position: Option<(i64, i64)>,
+  pub(crate) extent: Option<(i64, i64)>,
+  pub(crate) edit_as: Option<xdr::EditAsValues>,
+  pub(crate) lock_with_sheet: bool,
+  pub(crate) print_with_sheet: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DrawingAnchorKind {
+  TwoCell,
+  OneCell,
+  Absolute,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DrawingMarkerModel {
+  pub(crate) column: i32,
+  pub(crate) column_offset_emu: i64,
+  pub(crate) row: i32,
+  pub(crate) row_offset_emu: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DrawingObjectModel {
+  pub(crate) kind: DrawingObjectKind,
+  pub(crate) id: Option<u32>,
+  pub(crate) name: Option<String>,
+  pub(crate) description: Option<String>,
+  pub(crate) hidden: bool,
+  pub(crate) macro_name: Option<String>,
+  pub(crate) text_len: usize,
+  pub(crate) relationship_id: Option<String>,
+  pub(crate) hyperlink_relationship_id: Option<String>,
+  pub(crate) hyperlink_invalid_url: Option<String>,
+  pub(crate) hyperlink_action: Option<String>,
+  pub(crate) graphic_uri: Option<String>,
+  pub(crate) text: String,
+  pub(crate) text_font_size_points100: Option<i32>,
+  pub(crate) text_font_family: Option<String>,
+  pub(crate) text_east_asia_font_family: Option<String>,
+  pub(crate) text_complex_font_family: Option<String>,
+  pub(crate) text_color: Option<Color>,
+  pub(crate) text_bold: Option<bool>,
+  pub(crate) text_italic: Option<bool>,
+  pub(crate) text_alignment: Option<a::TextAlignmentTypeValues>,
+  pub(crate) text_anchor: Option<a::TextAnchoringTypeValues>,
+  pub(crate) text_vertical: Option<a::TextVerticalValues>,
+  pub(crate) text_rotation_deg: f32,
+  pub(crate) text_upright: bool,
+  pub(crate) text_warp: Option<Box<a::PresetTextWarp>>,
+  pub(crate) text_left_inset_emu: Option<i64>,
+  pub(crate) text_top_inset_emu: Option<i64>,
+  pub(crate) text_right_inset_emu: Option<i64>,
+  pub(crate) text_bottom_inset_emu: Option<i64>,
+  pub(crate) child_objects: usize,
+  pub(crate) has_style: bool,
+  pub(crate) shape_style_refs: Option<ShapeStyleRefs>,
+  pub(crate) fill_color: Option<Color>,
+  pub(crate) fill_pattern: Option<common::PatternFill>,
+  pub(crate) fill_gradient: Option<Box<a::GradientFill>>,
+  pub(crate) no_fill: bool,
+  pub(crate) use_group_fill: bool,
+  pub(crate) line_color: Option<Color>,
+  pub(crate) line_pattern: Option<common::PatternFill>,
+  pub(crate) line_gradient: Option<Box<a::GradientFill>>,
+  pub(crate) line_width_emu: Option<i32>,
+  pub(crate) no_line: bool,
+  pub(crate) rotation_deg: f32,
+  pub(crate) flip_horizontal: bool,
+  pub(crate) flip_vertical: bool,
+  pub(crate) image_crop: ImageCrop,
+  pub(crate) image_tile: Option<Box<a::Tile>>,
+  pub(crate) image_rotate_with_shape: bool,
+  pub(crate) image_effects: Vec<a::BlipChoice>,
+  pub(crate) shape_effects: Option<common::DrawingEffectSource>,
+  pub(crate) scene3d: Option<Box<a::Scene3DType>>,
+  pub(crate) shape3d: Option<Box<a::Shape3DType>>,
+  pub(crate) transform_offset_emu: Option<(i64, i64)>,
+  pub(crate) transform_extent_emu: Option<(i64, i64)>,
+  pub(crate) group_child_offset_emu: Option<(i64, i64)>,
+  pub(crate) group_child_extent_emu: Option<(i64, i64)>,
+  pub(crate) children: Vec<DrawingObjectModel>,
+  pub(crate) geometry: Option<DrawingGeometryModel>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DrawingGeometryModel {
+  Custom {
+    geometry: Box<a::CustomGeometry>,
+    outline: Option<Box<a::Outline>>,
+  },
+  Preset {
+    geometry: Box<a::PresetGeometry>,
+    outline: Option<Box<a::Outline>>,
+  },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DrawingObjectKind {
+  Shape,
+  GroupShape,
+  GraphicFrame,
+  ConnectionShape,
+  Picture,
+  ContentPart,
+  Unknown,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ChartResourceCatalog {
+  pub(crate) relationship_id: Option<String>,
+  pub(crate) chart_space: Option<Box<c::ChartSpace>>,
+  pub(crate) extended_chart_space: Option<Box<cx::ChartSpace>>,
+  pub(crate) extended_chart_styles: Vec<cs::ChartStyle>,
+  pub(crate) extended_chart_color_styles: Vec<cs::ColorStyle>,
+  pub(crate) extended: bool,
+  pub(crate) version_len: usize,
+  pub(crate) feature_list_len: usize,
+  pub(crate) has_fallback_image: bool,
+  pub(crate) date1904: bool,
+  pub(crate) rounded_corners: bool,
+  pub(crate) has_style: bool,
+  pub(crate) has_pivot_source: bool,
+  pub(crate) protection_flags: usize,
+  pub(crate) has_title: bool,
+  pub(crate) has_3d_view: bool,
+  pub(crate) chart_type_groups: usize,
+  pub(crate) axes: usize,
+  pub(crate) has_legend: bool,
+  pub(crate) chart_flags: usize,
+  pub(crate) has_root_shape_properties: bool,
+  pub(crate) has_text_properties: bool,
+  pub(crate) external_data_relationship_id: Option<String>,
+  pub(crate) external_data_auto_update: bool,
+  pub(crate) has_print_settings: bool,
+  pub(crate) has_user_shapes_reference: bool,
+  pub(crate) visible_texts: Vec<String>,
+  pub(crate) extension_markers: usize,
+  pub(crate) chartex_data_sets: usize,
+  pub(crate) chartex_series: usize,
+  pub(crate) has_chart_drawing: bool,
+  pub(crate) has_embedded_package: bool,
+  pub(crate) images: usize,
+  pub(crate) has_theme_override: bool,
+  pub(crate) styles: usize,
+  pub(crate) color_styles: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramResourceCatalog {
+  pub(crate) data_parts: Vec<DiagramDataCatalog>,
+  pub(crate) layout_parts: Vec<DiagramLayoutCatalog>,
+  pub(crate) style_parts: Vec<DiagramStyleCatalog>,
+  pub(crate) color_parts: Vec<DiagramColorCatalog>,
+  pub(crate) drawing_parts: Vec<DiagramDrawingCatalog>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramDataCatalog {
+  pub(crate) relationship_id: Option<String>,
+  pub(crate) data_model: Option<Box<dgm::DataModelRoot>>,
+  pub(crate) visible_texts: Vec<String>,
+  pub(crate) points: usize,
+  pub(crate) unknown_points: usize,
+  pub(crate) connections: usize,
+  pub(crate) text_points: usize,
+  pub(crate) property_sets: usize,
+  pub(crate) shape_properties: usize,
+  pub(crate) background: bool,
+  pub(crate) whole: bool,
+  pub(crate) extension_markers: usize,
+  pub(crate) images: usize,
+  pub(crate) slides: usize,
+  pub(crate) worksheets: usize,
+  pub(crate) text_len: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramLayoutCatalog {
+  pub(crate) layout: Option<Box<dgm::LayoutDefinition>>,
+  pub(crate) titles: usize,
+  pub(crate) descriptions: usize,
+  pub(crate) has_category_list: bool,
+  pub(crate) has_sample_data: bool,
+  pub(crate) has_style_data: bool,
+  pub(crate) has_color_data: bool,
+  pub(crate) layout_nodes: usize,
+  pub(crate) algorithms: usize,
+  pub(crate) shapes: usize,
+  pub(crate) presentation_of: usize,
+  pub(crate) constraints: usize,
+  pub(crate) rules: usize,
+  pub(crate) variables: usize,
+  pub(crate) for_each: usize,
+  pub(crate) choose: usize,
+  pub(crate) extension_markers: usize,
+  pub(crate) images: usize,
+  pub(crate) text_len: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramStyleCatalog {
+  pub(crate) style: Option<Box<dgm::StyleDefinition>>,
+  pub(crate) titles: usize,
+  pub(crate) descriptions: usize,
+  pub(crate) has_categories: bool,
+  pub(crate) has_scene3d: bool,
+  pub(crate) labels: usize,
+  pub(crate) extension_markers: usize,
+  pub(crate) text_len: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramColorCatalog {
+  pub(crate) colors: Option<Box<dgm::ColorsDefinition>>,
+  pub(crate) titles: usize,
+  pub(crate) descriptions: usize,
+  pub(crate) has_categories: bool,
+  pub(crate) labels: usize,
+  pub(crate) extension_markers: usize,
+  pub(crate) text_len: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DiagramDrawingCatalog {
+  pub(crate) relationship_id: Option<String>,
+  pub(crate) drawing: Option<Box<dsp::Drawing>>,
+  pub(crate) shapes: usize,
+  pub(crate) groups: usize,
+  pub(crate) text_shapes: usize,
+  pub(crate) styled_shapes: usize,
+  pub(crate) transformed_shapes: usize,
+  pub(crate) extension_markers: usize,
+  pub(crate) images: usize,
+  pub(crate) text_len: usize,
+}
+
+impl DrawingResourceCatalog {
+  pub(crate) fn from_part(
+    package: &SpreadsheetDocument,
+    part: &DrawingsPart,
+    ui_language: Option<&str>,
+  ) -> Result<Self> {
+    let anchors: Vec<DrawingAnchorModel> = {
+      let root = part.root_element(package)?;
+      root
+        .worksheet_drawing_choice
+        .iter()
+        .map(DrawingAnchorModel::from_choice)
+        .collect()
+    };
+    let chart_parts = part
+      .related_parts_of_type::<_, ChartPart>(package)
+      .map(|related| (related.relationship_id().to_string(), related.into_part()))
+      .collect::<Vec<_>>();
+    let extended_chart_parts = part
+      .related_parts_of_type::<_, ExtendedChartPart>(package)
+      .map(|related| (related.relationship_id().to_string(), related.into_part()))
+      .collect::<Vec<_>>();
+    let diagrams = DiagramResourceCatalog::from_part(package, part)?;
+    let image_resources = collect_image_resources(package, part);
+    let web_extension_fallback_images =
+      collect_web_extension_fallback_images(&anchors, &image_resources);
+    let hyperlink_targets = collect_hyperlink_targets(package, part);
+    let images = image_resources.len();
+    Ok(Self {
+      anchors,
+      charts: chart_parts
+        .iter()
+        .map(|(relationship_id, chart)| {
+          ChartResourceCatalog::from_chart_part(
+            package,
+            relationship_id.clone(),
+            chart,
+            ui_language,
+          )
+        })
+        .collect::<Result<Vec<_>>>()?,
+      extended_charts: extended_chart_parts
+        .iter()
+        .map(|(relationship_id, chart)| {
+          ChartResourceCatalog::from_extended_chart_part(package, relationship_id.clone(), chart)
+        })
+        .collect::<Result<Vec<_>>>()?,
+      diagrams,
+      images,
+      image_resources,
+      web_extension_fallback_images,
+      hyperlink_targets,
+      custom_xml_parts: part.custom_xml_parts(package).count(),
+      web_extensions: part.web_extension_parts(package).count(),
+    })
+  }
+}
+
+const WEB_EXTENSION_GRAPHIC_URI: &str =
+  "http://schemas.microsoft.com/office/webextensions/webextension/2010/11";
+
+pub(crate) fn is_web_extension_graphic_frame(object: &DrawingObjectModel) -> bool {
+  object.kind == DrawingObjectKind::GraphicFrame
+    && object.graphic_uri.as_deref() == Some(WEB_EXTENSION_GRAPHIC_URI)
+}
+
+fn collect_web_extension_fallback_images(
+  anchors: &[DrawingAnchorModel],
+  image_resources: &HashMap<String, ImageResource>,
+) -> HashMap<u32, String> {
+  let mut referenced_images = std::collections::HashSet::new();
+  for anchor in anchors {
+    collect_object_image_relationships(&anchor.object, image_resources, &mut referenced_images);
+  }
+  let mut fallback_ids = image_resources
+    .keys()
+    .filter(|relationship_id| !referenced_images.contains(*relationship_id))
+    .cloned()
+    .collect::<Vec<_>>();
+  fallback_ids.sort_by(|left, right| {
+    let left_number = left
+      .strip_prefix("rId")
+      .and_then(|suffix| suffix.parse::<u32>().ok());
+    let right_number = right
+      .strip_prefix("rId")
+      .and_then(|suffix| suffix.parse::<u32>().ok());
+    left_number.cmp(&right_number).then_with(|| left.cmp(right))
+  });
+  let web_extension_ids = anchors
+    .iter()
+    .filter_map(|anchor| {
+      is_web_extension_graphic_frame(&anchor.object)
+        .then_some(anchor.object.id)
+        .flatten()
+    })
+    .collect::<Vec<_>>();
+
+  // Open XML SDK's WebExtension fixture generator emits one fallback `xdr:pic`
+  // image relationship for each `we:webextensionref`. MCE correctly promotes
+  // the supported graphic-frame branch for Microsoft 365, leaving those image
+  // relationships otherwise unreferenced. Only pair them when the one-to-one
+  // invariant holds, so unrelated orphaned package data cannot become visible.
+  if web_extension_ids.len() != fallback_ids.len() {
+    return HashMap::new();
+  }
+  web_extension_ids.into_iter().zip(fallback_ids).collect()
+}
+
+fn collect_object_image_relationships(
+  object: &DrawingObjectModel,
+  image_resources: &HashMap<String, ImageResource>,
+  referenced: &mut std::collections::HashSet<String>,
+) {
+  if let Some(relationship_id) = object.relationship_id.as_ref()
+    && image_resources.contains_key(relationship_id)
+  {
+    referenced.insert(relationship_id.clone());
+  }
+  for child in &object.children {
+    collect_object_image_relationships(child, image_resources, referenced);
+  }
+}
+
+fn collect_image_resources(
+  package: &SpreadsheetDocument,
+  part: &DrawingsPart,
+) -> HashMap<String, ImageResource> {
+  part
+    .related_parts_of_type::<_, ImagePart>(package)
+    .filter_map(|related_part| {
+      Some((
+        related_part.relationship_id().to_string(),
+        ImageResource {
+          data: related_part.part().try_data_bytes(package).ok()?,
+          content_type: related_part
+            .part()
+            .content_type(package)
+            .map(str::to_string),
+        },
+      ))
+    })
+    .collect()
+}
+
+fn collect_hyperlink_targets(
+  package: &SpreadsheetDocument,
+  part: &DrawingsPart,
+) -> HashMap<String, String> {
+  part
+    .hyperlink_relationships(package)
+    .map(|relationship| {
+      (
+        relationship.id().to_string(),
+        normalize_hyperlink_target(relationship.target()),
+      )
+    })
+    .collect()
+}
+
+impl DrawingAnchorModel {
+  fn from_choice(choice: &xdr::WorksheetDrawingChoice) -> Self {
+    match choice {
+      xdr::WorksheetDrawingChoice::TwoCellAnchor(anchor) => Self {
+        kind: DrawingAnchorKind::TwoCell,
+        object: anchor
+          .two_cell_anchor_choice
+          .as_ref()
+          .map(DrawingObjectModel::from_two_cell_choice)
+          .unwrap_or_else(DrawingObjectModel::unknown),
+        from: Some(DrawingMarkerModel::from_from_marker(&anchor.from_marker)),
+        to: Some(DrawingMarkerModel::from_to_marker(&anchor.to_marker)),
+        position: None,
+        extent: None,
+        edit_as: anchor.edit_as,
+        lock_with_sheet: anchor
+          .client_data
+          .lock_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+        print_with_sheet: anchor
+          .client_data
+          .print_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+      },
+      xdr::WorksheetDrawingChoice::OneCellAnchor(anchor) => Self {
+        kind: DrawingAnchorKind::OneCell,
+        object: anchor
+          .one_cell_anchor_choice
+          .as_ref()
+          .map(DrawingObjectModel::from_one_cell_choice)
+          .unwrap_or_else(DrawingObjectModel::unknown),
+        from: Some(DrawingMarkerModel::from_from_marker(&anchor.from_marker)),
+        to: None,
+        position: None,
+        extent: Some((anchor.extent.cx, anchor.extent.cy)),
+        edit_as: None,
+        lock_with_sheet: anchor
+          .client_data
+          .lock_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+        print_with_sheet: anchor
+          .client_data
+          .print_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+      },
+      xdr::WorksheetDrawingChoice::AbsoluteAnchor(anchor) => Self {
+        kind: DrawingAnchorKind::Absolute,
+        object: anchor
+          .absolute_anchor_choice
+          .as_ref()
+          .map(DrawingObjectModel::from_absolute_choice)
+          .unwrap_or_else(DrawingObjectModel::unknown),
+        from: None,
+        to: None,
+        position: Some((anchor.position.x, anchor.position.y)),
+        extent: Some((anchor.extent.cx, anchor.extent.cy)),
+        edit_as: None,
+        lock_with_sheet: anchor
+          .client_data
+          .lock_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+        print_with_sheet: anchor
+          .client_data
+          .print_with_sheet
+          .as_ref()
+          .is_none_or(|value| value.as_bool()),
+      },
+      xdr::WorksheetDrawingChoice::AlternateContent(_) => Self {
+        kind: DrawingAnchorKind::Absolute,
+        object: DrawingObjectModel {
+          text_len: 0,
+          ..DrawingObjectModel::unknown()
+        },
+        from: None,
+        to: None,
+        position: None,
+        extent: None,
+        edit_as: None,
+        lock_with_sheet: false,
+        print_with_sheet: false,
+      },
+    }
+  }
+}
+
+impl DrawingMarkerModel {
+  fn from_from_marker(marker: &xdr::FromMarker) -> Self {
+    Self {
+      column: marker.column_id,
+      column_offset_emu: marker.column_offset.to_emu(),
+      row: marker.row_id,
+      row_offset_emu: marker.row_offset.to_emu(),
+    }
+  }
+
+  fn from_to_marker(marker: &xdr::ToMarker) -> Self {
+    Self {
+      column: marker.column_id,
+      column_offset_emu: marker.column_offset.to_emu(),
+      row: marker.row_id,
+      row_offset_emu: marker.row_offset.to_emu(),
+    }
+  }
+}
+
+impl DrawingObjectModel {
+  fn from_two_cell_choice(choice: &xdr::TwoCellAnchorChoice) -> Self {
+    match choice {
+      xdr::TwoCellAnchorChoice::Shape(shape) => Self::from_shape(shape),
+      xdr::TwoCellAnchorChoice::GroupShape(group) => Self::from_group_shape(group),
+      xdr::TwoCellAnchorChoice::GraphicFrame(frame) => Self::from_graphic_frame(frame),
+      xdr::TwoCellAnchorChoice::ConnectionShape(shape) => Self::from_connection_shape(shape),
+      xdr::TwoCellAnchorChoice::Picture(picture) => Self::from_picture(picture),
+      xdr::TwoCellAnchorChoice::ContentPart(part) => Self::from_content_part(&part.relationship_id),
+      xdr::TwoCellAnchorChoice::AlternateContent(_) => Self {
+        text_len: 0,
+        ..Self::unknown()
+      },
+    }
+  }
+
+  fn from_one_cell_choice(choice: &xdr::OneCellAnchorChoice) -> Self {
+    match choice {
+      xdr::OneCellAnchorChoice::Shape(shape) => Self::from_shape(shape),
+      xdr::OneCellAnchorChoice::GroupShape(group) => Self::from_group_shape(group),
+      xdr::OneCellAnchorChoice::GraphicFrame(frame) => Self::from_graphic_frame(frame),
+      xdr::OneCellAnchorChoice::ConnectionShape(shape) => Self::from_connection_shape(shape),
+      xdr::OneCellAnchorChoice::Picture(picture) => Self::from_picture(picture),
+      xdr::OneCellAnchorChoice::ContentPart(part) => Self::from_content_part(&part.relationship_id),
+      xdr::OneCellAnchorChoice::AlternateContent(_) => Self {
+        text_len: 0,
+        ..Self::unknown()
+      },
+    }
+  }
+
+  fn from_absolute_choice(choice: &xdr::AbsoluteAnchorChoice) -> Self {
+    match choice {
+      xdr::AbsoluteAnchorChoice::Shape(shape) => Self::from_shape(shape),
+      xdr::AbsoluteAnchorChoice::GroupShape(group) => Self::from_group_shape(group),
+      xdr::AbsoluteAnchorChoice::GraphicFrame(frame) => Self::from_graphic_frame(frame),
+      xdr::AbsoluteAnchorChoice::ConnectionShape(shape) => Self::from_connection_shape(shape),
+      xdr::AbsoluteAnchorChoice::Picture(picture) => Self::from_picture(picture),
+      xdr::AbsoluteAnchorChoice::ContentPart(part) => {
+        Self::from_content_part(&part.relationship_id)
+      }
+    }
+  }
+
+  fn from_shape(shape: &xdr::Shape) -> Self {
+    let properties = &shape
+      .non_visual_shape_properties
+      .non_visual_drawing_properties;
+    Self {
+      kind: DrawingObjectKind::Shape,
+      id: Some(properties.id),
+      name: Some(properties.name.clone()),
+      description: properties.description.clone(),
+      hidden: properties.hidden.is_some_and(|value| value.as_bool()),
+      macro_name: shape.r#macro.clone(),
+      relationship_id: shape_blip_fill(&shape.shape_properties)
+        .and_then(|fill| fill.blip.as_deref())
+        .and_then(blip_relationship_id),
+      hyperlink_relationship_id: hyperlink_relationship_id(
+        properties.hyperlink_on_click.as_deref(),
+      ),
+      hyperlink_invalid_url: hyperlink_invalid_url(properties.hyperlink_on_click.as_deref()),
+      hyperlink_action: hyperlink_action(properties.hyperlink_on_click.as_deref()),
+      graphic_uri: None,
+      text: shape
+        .text_body
+        .as_deref()
+        .map(xdr_text_body_text)
+        .unwrap_or_default(),
+      text_font_size_points100: shape
+        .text_body
+        .as_deref()
+        .and_then(xdr_text_body_first_run_font_size),
+      text_font_family: shape.text_body.as_deref().and_then(|text_body| {
+        xdr_text_body_first_run_font_family(text_body, DrawingTextScript::Latin)
+      }),
+      text_east_asia_font_family: shape.text_body.as_deref().and_then(|text_body| {
+        xdr_text_body_first_run_font_family(text_body, DrawingTextScript::EastAsian)
+      }),
+      text_complex_font_family: shape.text_body.as_deref().and_then(|text_body| {
+        xdr_text_body_first_run_font_family(text_body, DrawingTextScript::ComplexScript)
+      }),
+      text_color: shape
+        .text_body
+        .as_deref()
+        .and_then(xdr_text_body_first_run_color)
+        .or_else(|| shape_style_font_color(shape.shape_style.as_deref())),
+      text_bold: shape
+        .text_body
+        .as_deref()
+        .and_then(xdr_text_body_first_run_bold),
+      text_italic: shape
+        .text_body
+        .as_deref()
+        .and_then(xdr_text_body_first_run_italic),
+      text_alignment: shape
+        .text_body
+        .as_deref()
+        .and_then(xdr_text_body_first_paragraph_alignment),
+      text_anchor: shape
+        .text_body
+        .as_deref()
+        .and_then(|text_body| text_body.body_properties.anchor),
+      text_vertical: shape
+        .text_body
+        .as_deref()
+        .and_then(|text_body| text_body.body_properties.vertical),
+      text_rotation_deg: shape
+        .text_body
+        .as_deref()
+        .and_then(|text_body| text_body.body_properties.rotation)
+        .map(|rotation| rotation as f32 / 60_000.0)
+        .unwrap_or_default(),
+      text_upright: shape.text_body.as_deref().is_some_and(|text_body| {
+        text_body
+          .body_properties
+          .up_right
+          .is_some_and(|value| value.as_bool())
+      }),
+      text_warp: shape
+        .text_body
+        .as_deref()
+        .and_then(|text_body| text_body.body_properties.preset_text_warp.clone())
+        .filter(|warp| warp.preset != a::TextShapeValues::TextNoShape),
+      text_left_inset_emu: shape.text_body.as_deref().map(|text_body| {
+        text_body
+          .body_properties
+          .left_inset
+          .map_or(91_440, |value| value.to_emu())
+      }),
+      text_top_inset_emu: shape.text_body.as_deref().map(|text_body| {
+        text_body
+          .body_properties
+          .top_inset
+          .map_or(45_720, |value| value.to_emu())
+      }),
+      text_right_inset_emu: shape.text_body.as_deref().map(|text_body| {
+        text_body
+          .body_properties
+          .right_inset
+          .map_or(91_440, |value| value.to_emu())
+      }),
+      text_bottom_inset_emu: shape.text_body.as_deref().map(|text_body| {
+        text_body
+          .body_properties
+          .bottom_inset
+          .map_or(45_720, |value| value.to_emu())
+      }),
+      text_len: shape.text_link.as_ref().map_or(0, |value| value.len())
+        + shape.text_body.as_deref().map_or(0, xdr_text_body_text_len),
+      child_objects: 0,
+      has_style: shape.shape_style.is_some(),
+      shape_style_refs: shape.shape_style.as_deref().map(xdr_shape_style_refs),
+      fill_color: shape_fill_color(&shape.shape_properties),
+      fill_pattern: shape_fill_pattern(&shape.shape_properties),
+      fill_gradient: shape_fill_gradient(&shape.shape_properties),
+      no_fill: shape_no_fill(&shape.shape_properties),
+      use_group_fill: shape_uses_group_fill(&shape.shape_properties),
+      line_color: shape_line_color(&shape.shape_properties),
+      line_pattern: shape_line_pattern(&shape.shape_properties),
+      line_gradient: shape_line_gradient(&shape.shape_properties),
+      line_width_emu: shape_line_width_emu(&shape.shape_properties),
+      no_line: shape_no_line(&shape.shape_properties),
+      rotation_deg: transform_rotation_deg(shape.shape_properties.transform2_d.as_deref()),
+      flip_horizontal: transform_flip_horizontal(shape.shape_properties.transform2_d.as_deref()),
+      flip_vertical: transform_flip_vertical(shape.shape_properties.transform2_d.as_deref()),
+      image_crop: shape_blip_fill(&shape.shape_properties)
+        .map(drawingml_blip_crop)
+        .unwrap_or_default(),
+      image_tile: shape_blip_fill(&shape.shape_properties).and_then(shape_blip_tile),
+      image_rotate_with_shape: shape_blip_fill(&shape.shape_properties).is_some_and(|fill| {
+        fill
+          .rotate_with_shape
+          .as_ref()
+          .is_some_and(|value| value.as_bool())
+      }),
+      image_effects: shape_blip_fill(&shape.shape_properties)
+        .and_then(|fill| fill.blip.as_deref())
+        .map(|blip| blip.blip_choice.clone())
+        .unwrap_or_default(),
+      shape_effects: xdr_shape_effects(&shape.shape_properties),
+      scene3d: shape.shape_properties.scene3_d_type.clone(),
+      shape3d: shape.shape_properties.shape3_d_type.clone(),
+      transform_offset_emu: transform_offset(shape.shape_properties.transform2_d.as_deref()),
+      transform_extent_emu: transform_extent(shape.shape_properties.transform2_d.as_deref()),
+      group_child_offset_emu: None,
+      group_child_extent_emu: None,
+      children: Vec::new(),
+      geometry: shape_geometry(&shape.shape_properties),
+    }
+  }
+
+  fn from_group_shape(group: &xdr::GroupShape) -> Self {
+    let properties = &group
+      .non_visual_group_shape_properties
+      .non_visual_drawing_properties;
+    Self {
+      kind: DrawingObjectKind::GroupShape,
+      id: Some(properties.id),
+      name: Some(properties.name.clone()),
+      description: properties.description.clone(),
+      hidden: properties.hidden.is_some_and(|value| value.as_bool()),
+      macro_name: None,
+      relationship_id: None,
+      hyperlink_relationship_id: hyperlink_relationship_id(
+        properties.hyperlink_on_click.as_deref(),
+      ),
+      hyperlink_invalid_url: hyperlink_invalid_url(properties.hyperlink_on_click.as_deref()),
+      hyperlink_action: hyperlink_action(properties.hyperlink_on_click.as_deref()),
+      graphic_uri: None,
+      text: group_shape_text(group),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      text_warp: None,
+      text_len: group_shape_text_len(group),
+      child_objects: group.group_shape_choice.len(),
+      has_style: false,
+      shape_style_refs: None,
+      fill_color: group_fill_color(&group.group_shape_properties),
+      fill_pattern: group_fill_pattern(&group.group_shape_properties),
+      fill_gradient: group_fill_gradient(&group.group_shape_properties),
+      no_fill: group_no_fill(&group.group_shape_properties),
+      use_group_fill: group_uses_group_fill(&group.group_shape_properties),
+      line_color: None,
+      line_pattern: None,
+      line_gradient: None,
+      line_width_emu: None,
+      no_line: false,
+      rotation_deg: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.rotation)
+        .map(|rotation| rotation as f32 / 60_000.0)
+        .unwrap_or_default(),
+      flip_horizontal: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.horizontal_flip)
+        .map(bool::from)
+        .unwrap_or(false),
+      flip_vertical: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.vertical_flip)
+        .map(bool::from)
+        .unwrap_or(false),
+      image_crop: ImageCrop::default(),
+      image_tile: None,
+      image_rotate_with_shape: false,
+      image_effects: Vec::new(),
+      shape_effects: group
+        .group_shape_properties
+        .group_shape_properties_choice2
+        .as_ref()
+        .map(|choice| match choice {
+          xdr::GroupShapePropertiesChoice2::EffectList(list) => common::DrawingEffectSource::List {
+            source: list.clone(),
+            resolved: None,
+          },
+          xdr::GroupShapePropertiesChoice2::EffectDag(dag) => common::DrawingEffectSource::Dag {
+            source: dag.clone(),
+            resolved: None,
+          },
+        }),
+      scene3d: group.group_shape_properties.scene3_d_type.clone(),
+      shape3d: None,
+      transform_offset_emu: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.offset.as_ref())
+        .map(|offset| (offset.x.to_emu(), offset.y.to_emu())),
+      transform_extent_emu: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.extents.as_ref())
+        .map(|extents| (extents.cx.to_emu(), extents.cy.to_emu())),
+      group_child_offset_emu: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.child_offset.as_ref())
+        .map(|offset| (offset.x.to_emu(), offset.y.to_emu())),
+      group_child_extent_emu: group
+        .group_shape_properties
+        .transform_group
+        .as_deref()
+        .and_then(|transform| transform.child_extents.as_ref())
+        .map(|extents| (extents.cx.to_emu(), extents.cy.to_emu())),
+      children: group
+        .group_shape_choice
+        .iter()
+        .filter_map(Self::from_group_choice)
+        .collect(),
+      geometry: None,
+    }
+  }
+
+  fn from_graphic_frame(frame: &xdr::GraphicFrame) -> Self {
+    let properties = &frame
+      .non_visual_graphic_frame_properties
+      .non_visual_drawing_properties;
+    Self {
+      kind: DrawingObjectKind::GraphicFrame,
+      id: Some(properties.id),
+      name: Some(properties.name.clone()),
+      description: properties.description.clone(),
+      hidden: properties.hidden.is_some_and(|value| value.as_bool()),
+      macro_name: frame.r#macro.clone(),
+      text_len: 0,
+      relationship_id: graphic_frame_relationship_id(frame),
+      hyperlink_relationship_id: hyperlink_relationship_id(
+        properties.hyperlink_on_click.as_deref(),
+      ),
+      hyperlink_invalid_url: hyperlink_invalid_url(properties.hyperlink_on_click.as_deref()),
+      hyperlink_action: hyperlink_action(properties.hyperlink_on_click.as_deref()),
+      graphic_uri: Some(frame.graphic.graphic_data.uri.clone()),
+      text: String::new(),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      text_warp: None,
+      child_objects: frame.graphic.graphic_data.graphic_data_choice.len(),
+      has_style: false,
+      shape_style_refs: None,
+      fill_color: None,
+      fill_pattern: None,
+      fill_gradient: None,
+      no_fill: false,
+      use_group_fill: false,
+      line_color: None,
+      line_pattern: None,
+      line_gradient: None,
+      line_width_emu: None,
+      no_line: false,
+      rotation_deg: frame
+        .transform
+        .rotation
+        .map(|rotation| rotation as f32 / 60_000.0)
+        .unwrap_or_default(),
+      flip_horizontal: frame
+        .transform
+        .horizontal_flip
+        .map(bool::from)
+        .unwrap_or(false),
+      flip_vertical: frame
+        .transform
+        .vertical_flip
+        .map(bool::from)
+        .unwrap_or(false),
+      image_crop: ImageCrop::default(),
+      image_tile: None,
+      image_rotate_with_shape: false,
+      image_effects: Vec::new(),
+      shape_effects: None,
+      scene3d: None,
+      shape3d: None,
+      transform_offset_emu: frame
+        .transform
+        .offset
+        .as_ref()
+        .map(|offset| (offset.x.to_emu(), offset.y.to_emu())),
+      transform_extent_emu: frame
+        .transform
+        .extents
+        .as_ref()
+        .map(|extents| (extents.cx.to_emu(), extents.cy.to_emu())),
+      group_child_offset_emu: None,
+      group_child_extent_emu: None,
+      children: Vec::new(),
+      geometry: None,
+    }
+  }
+
+  fn from_connection_shape(shape: &xdr::ConnectionShape) -> Self {
+    let properties = &shape
+      .non_visual_connection_shape_properties
+      .non_visual_drawing_properties;
+    Self {
+      kind: DrawingObjectKind::ConnectionShape,
+      id: Some(properties.id),
+      name: Some(properties.name.clone()),
+      description: properties.description.clone(),
+      hidden: properties.hidden.is_some_and(|value| value.as_bool()),
+      macro_name: shape.r#macro.clone(),
+      text_len: 0,
+      relationship_id: shape_blip_fill(&shape.shape_properties)
+        .and_then(|fill| fill.blip.as_deref())
+        .and_then(blip_relationship_id),
+      hyperlink_relationship_id: hyperlink_relationship_id(
+        properties.hyperlink_on_click.as_deref(),
+      ),
+      hyperlink_invalid_url: hyperlink_invalid_url(properties.hyperlink_on_click.as_deref()),
+      hyperlink_action: hyperlink_action(properties.hyperlink_on_click.as_deref()),
+      graphic_uri: None,
+      text: String::new(),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      text_warp: None,
+      child_objects: 0,
+      has_style: shape.shape_style.is_some(),
+      shape_style_refs: shape.shape_style.as_deref().map(xdr_shape_style_refs),
+      fill_color: shape_fill_color(&shape.shape_properties),
+      fill_pattern: shape_fill_pattern(&shape.shape_properties),
+      fill_gradient: shape_fill_gradient(&shape.shape_properties),
+      no_fill: shape_no_fill(&shape.shape_properties),
+      use_group_fill: shape_uses_group_fill(&shape.shape_properties),
+      line_color: shape_line_color(&shape.shape_properties),
+      line_pattern: shape_line_pattern(&shape.shape_properties),
+      line_gradient: shape_line_gradient(&shape.shape_properties),
+      line_width_emu: shape_line_width_emu(&shape.shape_properties),
+      no_line: shape_no_line(&shape.shape_properties),
+      rotation_deg: transform_rotation_deg(shape.shape_properties.transform2_d.as_deref()),
+      flip_horizontal: transform_flip_horizontal(shape.shape_properties.transform2_d.as_deref()),
+      flip_vertical: transform_flip_vertical(shape.shape_properties.transform2_d.as_deref()),
+      image_crop: shape_blip_fill(&shape.shape_properties)
+        .map(drawingml_blip_crop)
+        .unwrap_or_default(),
+      image_tile: shape_blip_fill(&shape.shape_properties).and_then(shape_blip_tile),
+      image_rotate_with_shape: shape_blip_fill(&shape.shape_properties).is_some_and(|fill| {
+        fill
+          .rotate_with_shape
+          .as_ref()
+          .is_some_and(|value| value.as_bool())
+      }),
+      image_effects: shape_blip_fill(&shape.shape_properties)
+        .and_then(|fill| fill.blip.as_deref())
+        .map(|blip| blip.blip_choice.clone())
+        .unwrap_or_default(),
+      shape_effects: xdr_shape_effects(&shape.shape_properties),
+      scene3d: shape.shape_properties.scene3_d_type.clone(),
+      shape3d: shape.shape_properties.shape3_d_type.clone(),
+      transform_offset_emu: transform_offset(shape.shape_properties.transform2_d.as_deref()),
+      transform_extent_emu: transform_extent(shape.shape_properties.transform2_d.as_deref()),
+      group_child_offset_emu: None,
+      group_child_extent_emu: None,
+      children: Vec::new(),
+      geometry: shape_geometry(&shape.shape_properties),
+    }
+  }
+
+  fn from_picture(picture: &xdr::Picture) -> Self {
+    let properties = &picture
+      .non_visual_picture_properties
+      .non_visual_drawing_properties;
+    Self {
+      kind: DrawingObjectKind::Picture,
+      id: Some(properties.id),
+      name: Some(properties.name.clone()),
+      description: properties.description.clone(),
+      hidden: properties.hidden.is_some_and(|value| value.as_bool()),
+      macro_name: picture.r#macro.clone(),
+      text_len: 0,
+      relationship_id: picture
+        .blip_fill
+        .as_deref()
+        .and_then(|blip_fill| blip_fill.blip.as_ref())
+        .and_then(|blip| blip_relationship_id(blip)),
+      hyperlink_relationship_id: hyperlink_relationship_id(
+        properties.hyperlink_on_click.as_deref(),
+      ),
+      hyperlink_invalid_url: hyperlink_invalid_url(properties.hyperlink_on_click.as_deref()),
+      hyperlink_action: hyperlink_action(properties.hyperlink_on_click.as_deref()),
+      graphic_uri: None,
+      text: String::new(),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      text_warp: None,
+      child_objects: 0,
+      has_style: picture.shape_style.is_some(),
+      shape_style_refs: picture.shape_style.as_deref().map(xdr_shape_style_refs),
+      fill_color: None,
+      fill_pattern: None,
+      fill_gradient: None,
+      no_fill: false,
+      use_group_fill: false,
+      line_color: None,
+      line_pattern: None,
+      line_gradient: None,
+      line_width_emu: None,
+      no_line: false,
+      rotation_deg: transform_rotation_deg(picture.shape_properties.transform2_d.as_deref()),
+      flip_horizontal: transform_flip_horizontal(picture.shape_properties.transform2_d.as_deref()),
+      flip_vertical: transform_flip_vertical(picture.shape_properties.transform2_d.as_deref()),
+      image_crop: picture
+        .blip_fill
+        .as_deref()
+        .map(picture_blip_crop)
+        .unwrap_or_default(),
+      image_tile: picture.blip_fill.as_deref().and_then(|fill| {
+        match fill.blip_fill_choice.as_ref() {
+          Some(xdr::BlipFillChoice::Tile(tile)) => Some(tile.clone()),
+          _ => None,
+        }
+      }),
+      image_rotate_with_shape: true,
+      image_effects: picture
+        .blip_fill
+        .as_deref()
+        .and_then(|fill| fill.blip.as_ref())
+        .map(|blip| blip.blip_choice.clone())
+        .unwrap_or_default(),
+      shape_effects: xdr_shape_effects(&picture.shape_properties),
+      scene3d: picture.shape_properties.scene3_d_type.clone(),
+      shape3d: picture.shape_properties.shape3_d_type.clone(),
+      transform_offset_emu: transform_offset(picture.shape_properties.transform2_d.as_deref()),
+      transform_extent_emu: transform_extent(picture.shape_properties.transform2_d.as_deref()),
+      group_child_offset_emu: None,
+      group_child_extent_emu: None,
+      children: Vec::new(),
+      geometry: shape_geometry(&picture.shape_properties),
+    }
+  }
+
+  fn from_content_part(relationship_id: &str) -> Self {
+    Self {
+      kind: DrawingObjectKind::ContentPart,
+      relationship_id: Some(relationship_id.to_string()),
+      hyperlink_relationship_id: None,
+      hyperlink_invalid_url: None,
+      hyperlink_action: None,
+      text: String::new(),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      ..Self::unknown()
+    }
+  }
+
+  fn unknown() -> Self {
+    Self {
+      kind: DrawingObjectKind::Unknown,
+      id: None,
+      name: None,
+      description: None,
+      hidden: false,
+      macro_name: None,
+      text_len: 0,
+      relationship_id: None,
+      hyperlink_relationship_id: None,
+      hyperlink_invalid_url: None,
+      hyperlink_action: None,
+      graphic_uri: None,
+      text: String::new(),
+      text_font_size_points100: None,
+      text_font_family: None,
+      text_east_asia_font_family: None,
+      text_complex_font_family: None,
+      text_color: None,
+      text_bold: None,
+      text_italic: None,
+      text_alignment: None,
+      text_anchor: None,
+      text_left_inset_emu: None,
+      text_top_inset_emu: None,
+      text_right_inset_emu: None,
+      text_bottom_inset_emu: None,
+      text_vertical: None,
+      text_rotation_deg: 0.0,
+      text_upright: false,
+      text_warp: None,
+      child_objects: 0,
+      has_style: false,
+      shape_style_refs: None,
+      fill_color: None,
+      fill_pattern: None,
+      fill_gradient: None,
+      no_fill: false,
+      use_group_fill: false,
+      line_color: None,
+      line_pattern: None,
+      line_gradient: None,
+      line_width_emu: None,
+      no_line: false,
+      rotation_deg: 0.0,
+      flip_horizontal: false,
+      flip_vertical: false,
+      image_crop: ImageCrop::default(),
+      image_tile: None,
+      image_rotate_with_shape: false,
+      image_effects: Vec::new(),
+      shape_effects: None,
+      scene3d: None,
+      shape3d: None,
+      transform_offset_emu: None,
+      transform_extent_emu: None,
+      group_child_offset_emu: None,
+      group_child_extent_emu: None,
+      children: Vec::new(),
+      geometry: None,
+    }
+  }
+
+  fn from_group_choice(choice: &xdr::GroupShapeChoice) -> Option<Self> {
+    Some(match choice {
+      xdr::GroupShapeChoice::Shape(shape) => Self::from_shape(shape),
+      xdr::GroupShapeChoice::GroupShape(group) => Self::from_group_shape(group),
+      xdr::GroupShapeChoice::GraphicFrame(frame) => Self::from_graphic_frame(frame),
+      xdr::GroupShapeChoice::ConnectionShape(shape) => Self::from_connection_shape(shape),
+      xdr::GroupShapeChoice::Picture(picture) => Self::from_picture(picture),
+      xdr::GroupShapeChoice::ContentPart(part) => Self::from_content_part(&part.relationship_id),
+    })
+  }
+}
+
+fn picture_blip_crop(blip_fill: &xdr::BlipFill) -> ImageCrop {
+  let source = blip_fill.source_rectangle.as_ref();
+  ImageCrop {
+    left: source
+      .and_then(|source| source.left.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    top: source
+      .and_then(|source| source.top.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    right: source
+      .and_then(|source| source.right.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    bottom: source
+      .and_then(|source| source.bottom.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+  }
+}
+
+fn shape_blip_fill(properties: &xdr::ShapeProperties) -> Option<&a::BlipFill> {
+  match properties.shape_properties_choice2.as_ref()? {
+    xdr::ShapePropertiesChoice2::BlipFill(fill) => Some(fill),
+    _ => None,
+  }
+}
+
+fn shape_blip_tile(fill: &a::BlipFill) -> Option<Box<a::Tile>> {
+  match fill.blip_fill_choice.as_ref() {
+    Some(a::BlipFillChoice::Stretch(_)) => None,
+    Some(a::BlipFillChoice::Tile(tile)) => Some(tile.clone()),
+    // DrawingML shape bitmap fills default to tile when no mode is authored.
+    None => Some(Box::default()),
+  }
+}
+
+fn drawingml_blip_crop(blip_fill: &a::BlipFill) -> ImageCrop {
+  let source = blip_fill.source_rectangle.as_ref();
+  ImageCrop {
+    left: source
+      .and_then(|source| source.left.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    top: source
+      .and_then(|source| source.top.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    right: source
+      .and_then(|source| source.right.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+    bottom: source
+      .and_then(|source| source.bottom.as_ref())
+      .map(|value| value.as_ratio() as f32)
+      .unwrap_or_default(),
+  }
+}
+
+fn transform_rotation_deg(transform: Option<&a::Transform2D>) -> f32 {
+  transform
+    .and_then(|transform| transform.rotation)
+    .map(|rotation| rotation as f32 / 60_000.0)
+    .unwrap_or_default()
+}
+
+fn transform_offset(transform: Option<&a::Transform2D>) -> Option<(i64, i64)> {
+  transform?
+    .offset
+    .as_ref()
+    .map(|offset| (offset.x.to_emu(), offset.y.to_emu()))
+}
+
+fn transform_extent(transform: Option<&a::Transform2D>) -> Option<(i64, i64)> {
+  transform?
+    .extents
+    .as_ref()
+    .map(|extents| (extents.cx.to_emu(), extents.cy.to_emu()))
+}
+
+fn transform_flip_horizontal(transform: Option<&a::Transform2D>) -> bool {
+  transform
+    .and_then(|transform| transform.horizontal_flip)
+    .map(bool::from)
+    .unwrap_or(false)
+}
+
+fn transform_flip_vertical(transform: Option<&a::Transform2D>) -> bool {
+  transform
+    .and_then(|transform| transform.vertical_flip)
+    .map(bool::from)
+    .unwrap_or(false)
+}
+
+fn blip_relationship_id(blip: &a::Blip) -> Option<String> {
+  // blips as the primary graphic with a bitmap fallback. Preserve that owner
+  // choice here instead of always taking the fallback r:embed.
+  blip
+    .blip_extension_list
+    .as_ref()
+    .and_then(|list| {
+      list.blip_extension.iter().find_map(|extension| {
+        match extension.blip_extension_choice.as_ref()? {
+          a::BlipExtensionChoice::SvgBlip(svg) => svg.embed.clone().or_else(|| svg.link.clone()),
+          _ => None,
+        }
+      })
+    })
+    .or_else(|| blip.embed.clone().or_else(|| blip.link.clone()))
+}
+
+fn hyperlink_relationship_id(hyperlink: Option<&a::HyperlinkOnClick>) -> Option<String> {
+  hyperlink.and_then(|hyperlink| hyperlink.id.clone())
+}
+
+fn hyperlink_invalid_url(hyperlink: Option<&a::HyperlinkOnClick>) -> Option<String> {
+  hyperlink.and_then(|hyperlink| hyperlink.invalid_url.clone())
+}
+
+fn hyperlink_action(hyperlink: Option<&a::HyperlinkOnClick>) -> Option<String> {
+  hyperlink.and_then(|hyperlink| hyperlink.action.clone())
+}
+
+fn graphic_frame_relationship_id(frame: &xdr::GraphicFrame) -> Option<String> {
+  frame
+    .graphic
+    .graphic_data
+    .graphic_data_choice
+    .iter()
+    .find_map(|choice| match choice {
+      a::GraphicDataChoice::ChartReference(reference) => Some(reference.id.to_string()),
+      a::GraphicDataChoice::ExtendedChartReference(reference) => Some(reference.r_id.to_string()),
+      a::GraphicDataChoice::RelationshipIds(relationship_ids) => {
+        Some(relationship_ids.data_part.to_string())
+      }
+      a::GraphicDataChoice::WebExtensionReference(reference) => Some(reference.r_id.to_string()),
+      _ => None,
+    })
+}
+
+fn group_shape_text(group: &xdr::GroupShape) -> String {
+  let mut parts = Vec::new();
+  for choice in &group.group_shape_choice {
+    collect_group_shape_choice_text(choice, &mut parts);
+  }
+  parts.join("\n")
+}
+
+fn group_shape_text_len(group: &xdr::GroupShape) -> usize {
+  group_shape_text(group).len()
+}
+
+fn collect_group_shape_choice_text(choice: &xdr::GroupShapeChoice, parts: &mut Vec<String>) {
+  match choice {
+    xdr::GroupShapeChoice::Shape(shape) => {
+      if let Some(text) = shape.text_body.as_deref().map(xdr_text_body_text)
+        && !text.trim().is_empty()
+      {
+        parts.push(text);
+      }
+    }
+    xdr::GroupShapeChoice::GroupShape(group) => {
+      for choice in &group.group_shape_choice {
+        collect_group_shape_choice_text(choice, parts);
+      }
+    }
+    _ => {}
+  }
+}
+
+fn xdr_text_body_text_len(text_body: &xdr::TextBody) -> usize {
+  xdr_text_body_text(text_body).len()
+}
+
+fn xdr_text_body_text(text_body: &xdr::TextBody) -> String {
+  dml_paragraphs_text(&text_body.paragraph)
+}
+
+fn xdr_text_body_first_run_font_size(text_body: &xdr::TextBody) -> Option<i32> {
+  let properties = xdr_text_body_first_run_properties(text_body)?;
+  properties
+    .run
+    .and_then(|properties| properties.font_size)
+    .or_else(|| {
+      properties
+        .paragraph_default
+        .and_then(|properties| properties.font_size)
+    })
+    .or_else(|| {
+      properties
+        .level_default
+        .and_then(|properties| properties.font_size)
+    })
+    .or_else(|| {
+      properties
+        .list_default
+        .and_then(|properties| properties.font_size)
+    })
+}
+
+#[derive(Clone, Copy)]
+enum DrawingTextScript {
+  Latin,
+  EastAsian,
+  ComplexScript,
+}
+
+fn xdr_text_body_first_run_font_family(
+  text_body: &xdr::TextBody,
+  script: DrawingTextScript,
+) -> Option<String> {
+  let properties = xdr_text_body_first_run_properties(text_body)?;
+  drawingml_run_font_family(properties.run, script)
+    .or_else(|| drawingml_default_run_font_family(properties.paragraph_default, script))
+    .or_else(|| drawingml_default_run_font_family(properties.level_default, script))
+    .or_else(|| drawingml_default_run_font_family(properties.list_default, script))
+    .map(ToString::to_string)
+}
+
+struct DrawingTextRunProperties<'a> {
+  run: Option<&'a a::RunProperties>,
+  paragraph_default: Option<&'a a::DefaultRunProperties>,
+  level_default: Option<&'a a::DefaultRunProperties>,
+  list_default: Option<&'a a::DefaultRunProperties>,
+}
+
+fn xdr_text_body_first_run_properties(
+  text_body: &xdr::TextBody,
+) -> Option<DrawingTextRunProperties<'_>> {
+  text_body.paragraph.iter().find_map(|paragraph| {
+    let run = paragraph
+      .paragraph_choice
+      .iter()
+      .find_map(|choice| match choice {
+        a::ParagraphChoice::Run(run) => Some(run.run_properties.as_deref()),
+        _ => None,
+      })?;
+    let paragraph_default = paragraph
+      .paragraph_properties
+      .as_deref()
+      .and_then(|properties| properties.default_run_properties.as_deref());
+    let level = paragraph
+      .paragraph_properties
+      .as_deref()
+      .and_then(|properties| properties.level)
+      .unwrap_or(0);
+    let list_style = text_body.list_style.as_deref();
+    Some(DrawingTextRunProperties {
+      run,
+      paragraph_default,
+      level_default: list_style.and_then(|style| list_level_default_run_properties(style, level)),
+      list_default: list_style
+        .and_then(|style| style.default_paragraph_properties.as_deref())
+        .and_then(|properties| properties.default_run_properties.as_deref()),
+    })
+  })
+}
+
+fn list_level_default_run_properties(
+  style: &a::ListStyle,
+  level: i32,
+) -> Option<&a::DefaultRunProperties> {
+  match level {
+    0 => style
+      .level1_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    1 => style
+      .level2_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    2 => style
+      .level3_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    3 => style
+      .level4_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    4 => style
+      .level5_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    5 => style
+      .level6_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    6 => style
+      .level7_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    7 => style
+      .level8_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    8 => style
+      .level9_paragraph_properties
+      .as_deref()?
+      .default_run_properties
+      .as_deref(),
+    _ => None,
+  }
+}
+
+fn xdr_text_body_first_paragraph_alignment(
+  text_body: &xdr::TextBody,
+) -> Option<a::TextAlignmentTypeValues> {
+  let paragraph = text_body
+    .paragraph
+    .iter()
+    .find(|paragraph| !paragraph.paragraph_choice.is_empty())?;
+  let direct = paragraph.paragraph_properties.as_deref();
+  let level = direct.and_then(|properties| properties.level).unwrap_or(0);
+  direct
+    .and_then(|properties| properties.alignment)
+    .or_else(|| {
+      text_body
+        .list_style
+        .as_deref()
+        .and_then(|style| list_level_alignment(style, level))
+    })
+    .or_else(|| {
+      text_body
+        .list_style
+        .as_deref()
+        .and_then(|style| style.default_paragraph_properties.as_deref())
+        .and_then(|properties| properties.alignment)
+    })
+}
+
+fn list_level_alignment(style: &a::ListStyle, level: i32) -> Option<a::TextAlignmentTypeValues> {
+  match level {
+    0 => style.level1_paragraph_properties.as_deref()?.alignment,
+    1 => style.level2_paragraph_properties.as_deref()?.alignment,
+    2 => style.level3_paragraph_properties.as_deref()?.alignment,
+    3 => style.level4_paragraph_properties.as_deref()?.alignment,
+    4 => style.level5_paragraph_properties.as_deref()?.alignment,
+    5 => style.level6_paragraph_properties.as_deref()?.alignment,
+    6 => style.level7_paragraph_properties.as_deref()?.alignment,
+    7 => style.level8_paragraph_properties.as_deref()?.alignment,
+    8 => style.level9_paragraph_properties.as_deref()?.alignment,
+    _ => None,
+  }
+}
+
+fn drawingml_run_font_family(
+  properties: Option<&a::RunProperties>,
+  script: DrawingTextScript,
+) -> Option<&str> {
+  let properties = properties?;
+  match script {
+    DrawingTextScript::Latin => properties.latin_font.as_ref()?.typeface.as_deref(),
+    DrawingTextScript::EastAsian => properties.east_asian_font.as_ref()?.typeface.as_deref(),
+    DrawingTextScript::ComplexScript => {
+      properties.complex_script_font.as_ref()?.typeface.as_deref()
+    }
+  }
+  .filter(|typeface| !typeface.is_empty())
+}
+
+fn drawingml_default_run_font_family(
+  properties: Option<&a::DefaultRunProperties>,
+  script: DrawingTextScript,
+) -> Option<&str> {
+  let properties = properties?;
+  match script {
+    DrawingTextScript::Latin => properties.latin_font.as_ref()?.typeface.as_deref(),
+    DrawingTextScript::EastAsian => properties.east_asian_font.as_ref()?.typeface.as_deref(),
+    DrawingTextScript::ComplexScript => {
+      properties.complex_script_font.as_ref()?.typeface.as_deref()
+    }
+  }
+  .filter(|typeface| !typeface.is_empty())
+}
+
+fn xdr_text_body_first_run_color(text_body: &xdr::TextBody) -> Option<Color> {
+  text_body
+    .paragraph
+    .iter()
+    .flat_map(|paragraph| paragraph.paragraph_choice.iter())
+    .find_map(|choice| match choice {
+      a::ParagraphChoice::Run(run) => run.run_properties.as_deref().and_then(drawingml_run_color),
+      _ => None,
+    })
+}
+
+fn xdr_text_body_first_run_bold(text_body: &xdr::TextBody) -> Option<bool> {
+  let properties = xdr_text_body_first_run_properties(text_body)?;
+  properties
+    .run
+    .and_then(|properties| properties.bold.as_ref())
+    .map(|value| value.as_bool())
+    .or_else(|| {
+      properties
+        .paragraph_default
+        .and_then(|properties| properties.bold.as_ref())
+        .map(|value| value.as_bool())
+    })
+    .or_else(|| {
+      properties
+        .level_default
+        .and_then(|properties| properties.bold.as_ref())
+        .map(|value| value.as_bool())
+    })
+    .or_else(|| {
+      properties
+        .list_default
+        .and_then(|properties| properties.bold.as_ref())
+        .map(|value| value.as_bool())
+    })
+}
+
+fn xdr_text_body_first_run_italic(text_body: &xdr::TextBody) -> Option<bool> {
+  let properties = xdr_text_body_first_run_properties(text_body)?;
+  properties
+    .run
+    .and_then(|properties| properties.italic.as_ref())
+    .map(|value| value.as_bool())
+    .or_else(|| {
+      properties
+        .paragraph_default
+        .and_then(|properties| properties.italic.as_ref())
+        .map(|value| value.as_bool())
+    })
+    .or_else(|| {
+      properties
+        .level_default
+        .and_then(|properties| properties.italic.as_ref())
+        .map(|value| value.as_bool())
+    })
+    .or_else(|| {
+      properties
+        .list_default
+        .and_then(|properties| properties.italic.as_ref())
+        .map(|value| value.as_bool())
+    })
+}
+
+fn dgm_text_body_text(text_body: &dgm::TextBody) -> String {
+  dml_paragraphs_text(&text_body.paragraph)
+}
+
+fn dml_paragraphs_text(paragraphs: &[a::Paragraph]) -> String {
+  paragraphs
+    .iter()
+    .filter_map(dml_paragraph_text)
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+fn dml_paragraph_text(paragraph: &a::Paragraph) -> Option<String> {
+  let mut text = String::new();
+  for choice in &paragraph.paragraph_choice {
+    match choice {
+      a::ParagraphChoice::Run(run) => text.push_str(&run.text),
+      a::ParagraphChoice::Field(field) => {
+        if let Some(field_text) = &field.text {
+          text.push_str(field_text);
+        }
+      }
+      a::ParagraphChoice::Break(_) => text.push('\n'),
+      a::ParagraphChoice::TextMath(_) => {}
+      a::ParagraphChoice::AlternateContent(_) => {}
+    }
+  }
+  (!text.is_empty()).then_some(text)
+}
+
+fn shape_fill_color(properties: &xdr::ShapeProperties) -> Option<Color> {
+  match properties.shape_properties_choice2.as_ref()? {
+    xdr::ShapePropertiesChoice2::SolidFill(fill) => solid_fill_color(fill),
+    xdr::ShapePropertiesChoice2::NoFill(_)
+    | xdr::ShapePropertiesChoice2::GradientFill(_)
+    | xdr::ShapePropertiesChoice2::BlipFill(_)
+    | xdr::ShapePropertiesChoice2::PatternFill(_)
+    | xdr::ShapePropertiesChoice2::GroupFill => None,
+  }
+}
+
+fn xdr_shape_effects(properties: &xdr::ShapeProperties) -> Option<common::DrawingEffectSource> {
+  match properties.shape_properties_choice3.as_ref()? {
+    xdr::ShapePropertiesChoice3::EffectList(list) => Some(common::DrawingEffectSource::List {
+      source: list.clone(),
+      resolved: None,
+    }),
+    xdr::ShapePropertiesChoice3::EffectDag(dag) => Some(common::DrawingEffectSource::Dag {
+      source: dag.clone(),
+      resolved: None,
+    }),
+  }
+}
+
+fn shape_fill_pattern(properties: &xdr::ShapeProperties) -> Option<common::PatternFill> {
+  let xdr::ShapePropertiesChoice2::PatternFill(fill) =
+    properties.shape_properties_choice2.as_ref()?
+  else {
+    return None;
+  };
+  drawingml_pattern_fill(fill)
+}
+
+fn shape_fill_gradient(properties: &xdr::ShapeProperties) -> Option<Box<a::GradientFill>> {
+  let xdr::ShapePropertiesChoice2::GradientFill(fill) =
+    properties.shape_properties_choice2.as_ref()?
+  else {
+    return None;
+  };
+  Some(fill.clone())
+}
+
+fn shape_no_fill(properties: &xdr::ShapeProperties) -> bool {
+  matches!(
+    properties.shape_properties_choice2.as_ref(),
+    Some(xdr::ShapePropertiesChoice2::NoFill(_))
+  )
+}
+
+fn shape_uses_group_fill(properties: &xdr::ShapeProperties) -> bool {
+  matches!(
+    properties.shape_properties_choice2.as_ref(),
+    Some(xdr::ShapePropertiesChoice2::GroupFill)
+  )
+}
+
+fn group_fill_color(properties: &xdr::GroupShapeProperties) -> Option<Color> {
+  let xdr::GroupShapePropertiesChoice::SolidFill(fill) =
+    properties.group_shape_properties_choice1.as_ref()?
+  else {
+    return None;
+  };
+  solid_fill_color(fill)
+}
+
+fn group_fill_pattern(properties: &xdr::GroupShapeProperties) -> Option<common::PatternFill> {
+  let xdr::GroupShapePropertiesChoice::PatternFill(fill) =
+    properties.group_shape_properties_choice1.as_ref()?
+  else {
+    return None;
+  };
+  drawingml_pattern_fill(fill)
+}
+
+fn group_fill_gradient(properties: &xdr::GroupShapeProperties) -> Option<Box<a::GradientFill>> {
+  let xdr::GroupShapePropertiesChoice::GradientFill(fill) =
+    properties.group_shape_properties_choice1.as_ref()?
+  else {
+    return None;
+  };
+  Some(fill.clone())
+}
+
+fn group_no_fill(properties: &xdr::GroupShapeProperties) -> bool {
+  matches!(
+    properties.group_shape_properties_choice1.as_ref(),
+    Some(xdr::GroupShapePropertiesChoice::NoFill(_))
+  )
+}
+
+fn group_uses_group_fill(properties: &xdr::GroupShapeProperties) -> bool {
+  matches!(
+    properties.group_shape_properties_choice1.as_ref(),
+    Some(xdr::GroupShapePropertiesChoice::GroupFill)
+  )
+}
+
+fn shape_geometry(properties: &xdr::ShapeProperties) -> Option<DrawingGeometryModel> {
+  match properties.shape_properties_choice1.as_ref()? {
+    xdr::ShapePropertiesChoice::CustomGeometry(geometry) => Some(DrawingGeometryModel::Custom {
+      geometry: geometry.clone(),
+      outline: properties.outline.clone(),
+    }),
+    xdr::ShapePropertiesChoice::PresetGeometry(geometry) => Some(DrawingGeometryModel::Preset {
+      geometry: geometry.clone(),
+      outline: properties.outline.clone(),
+    }),
+  }
+}
+
+fn shape_line_color(properties: &xdr::ShapeProperties) -> Option<Color> {
+  let outline = properties.outline.as_deref()?;
+  match outline.outline_choice1.as_ref()? {
+    a::OutlineChoice::SolidFill(fill) => solid_fill_color(fill),
+    a::OutlineChoice::NoFill(_)
+    | a::OutlineChoice::GradientFill(_)
+    | a::OutlineChoice::PatternFill(_) => None,
+  }
+}
+
+fn shape_line_pattern(properties: &xdr::ShapeProperties) -> Option<common::PatternFill> {
+  let a::OutlineChoice::PatternFill(fill) =
+    properties.outline.as_deref()?.outline_choice1.as_ref()?
+  else {
+    return None;
+  };
+  drawingml_pattern_fill(fill)
+}
+
+fn shape_line_gradient(properties: &xdr::ShapeProperties) -> Option<Box<a::GradientFill>> {
+  let a::OutlineChoice::GradientFill(fill) =
+    properties.outline.as_deref()?.outline_choice1.as_ref()?
+  else {
+    return None;
+  };
+  Some(fill.clone())
+}
+
+fn shape_line_width_emu(properties: &xdr::ShapeProperties) -> Option<i32> {
+  properties.outline.as_deref().and_then(|line| line.width)
+}
+
+fn shape_no_line(properties: &xdr::ShapeProperties) -> bool {
+  properties
+    .outline
+    .as_deref()
+    .and_then(|line| line.outline_choice1.as_ref())
+    .is_some_and(|choice| matches!(choice, a::OutlineChoice::NoFill(_)))
+}
+
+fn xdr_shape_style_refs(style: &xdr::ShapeStyle) -> ShapeStyleRefs {
+  ShapeStyleRefs {
+    line_reference: ShapeStyleReference {
+      index: style.line_reference.index,
+      placeholder_color: style
+        .line_reference
+        .line_reference_choice
+        .as_ref()
+        .and_then(Color::from_line_reference_choice),
+    },
+    fill_reference: ShapeStyleReference {
+      index: style.fill_reference.index,
+      placeholder_color: style
+        .fill_reference
+        .fill_reference_choice
+        .as_ref()
+        .and_then(Color::from_fill_reference_choice),
+    },
+    effect_reference: ShapeStyleReference {
+      index: style.effect_reference.index,
+      placeholder_color: style
+        .effect_reference
+        .effect_reference_choice
+        .as_ref()
+        .and_then(Color::from_effect_reference_choice),
+    },
+    font_reference: FontStyleReference {
+      index: style.font_reference.index,
+      placeholder_color: style
+        .font_reference
+        .font_reference_choice
+        .as_ref()
+        .and_then(Color::from_font_reference_choice),
+    },
+  }
+}
+
+fn shape_style_font_color(style: Option<&xdr::ShapeStyle>) -> Option<Color> {
+  let reference = &style?.font_reference;
+  reference
+    .font_reference_choice
+    .as_ref()
+    .and_then(Color::from_font_reference_choice)
+    .or_else(|| {
+      // DrawingML defines tx1 as the default placeholder text color when a
+      // fontRef omits its color child. LibreOffice's ShapeStyleContext applies
+      // the same fallback before inserting the shape text.
+      Some(Color::Scheme(SchemeColor {
+        value: a::SchemeColorValues::Text1,
+        transformations: Vec::new(),
+      }))
+    })
+}
+
+fn default_scheme_color(value: a::SchemeColorValues) -> Option<RgbColor> {
+  match value {
+    a::SchemeColorValues::Accent1 => Some(RgbColor {
+      r: 0x4f,
+      g: 0x81,
+      b: 0xbd,
+    }),
+    a::SchemeColorValues::Accent2 => Some(RgbColor {
+      r: 0xc0,
+      g: 0x50,
+      b: 0x4d,
+    }),
+    a::SchemeColorValues::Accent3 => Some(RgbColor {
+      r: 0x9b,
+      g: 0xbb,
+      b: 0x59,
+    }),
+    a::SchemeColorValues::Accent4 => Some(RgbColor {
+      r: 0x80,
+      g: 0x64,
+      b: 0xa2,
+    }),
+    a::SchemeColorValues::Accent5 => Some(RgbColor {
+      r: 0x4b,
+      g: 0xac,
+      b: 0xc6,
+    }),
+    a::SchemeColorValues::Accent6 => Some(RgbColor {
+      r: 0xf7,
+      g: 0x96,
+      b: 0x46,
+    }),
+    _ => None,
+  }
+}
+
+fn drawingml_pattern_fill(fill: &a::PatternFill) -> Option<common::PatternFill> {
+  let foreground = match fill
+    .foreground_color
+    .as_ref()
+    .and_then(|color| color.foreground_color_choice.as_ref())
+  {
+    Some(choice) => {
+      Color::from_foreground_color_choice(choice).and_then(resolve_drawingml_pattern_color)?
+    }
+    None => common::Color {
+      r: 0,
+      g: 0,
+      b: 0,
+      a: u8::MAX,
+    },
+  };
+  let background = match fill
+    .background_color
+    .as_ref()
+    .and_then(|color| color.background_color_choice.as_ref())
+  {
+    Some(choice) => {
+      Color::from_background_color_choice(choice).and_then(resolve_drawingml_pattern_color)?
+    }
+    None => common::Color {
+      r: u8::MAX,
+      g: u8::MAX,
+      b: u8::MAX,
+      a: u8::MAX,
+    },
+  };
+  Some(common::PatternFill::drawingml(
+    common::drawingml_pattern::hatch_style(fill.preset),
+    foreground,
+    background,
+  ))
+}
+
+fn resolve_drawingml_pattern_color(color: Color) -> Option<common::Color> {
+  let mut scheme_resolver = |value| {
+    let color = default_scheme_color(value)?;
+    Some(Color::RgbHex(RgbHexColor {
+      value: format!("{:02X}{:02X}{:02X}", color.r, color.g, color.b),
+      transformations: Vec::new(),
+    }))
+  };
+  let color = color.resolve_rgb(&mut scheme_resolver, None)?;
+  Some(common::Color {
+    r: color.r,
+    g: color.g,
+    b: color.b,
+    a: ((color.alpha.clamp(0, 100_000) as u32 * u32::from(u8::MAX)) / 100_000) as u8,
+  })
+}
+
+fn solid_fill_color(fill: &a::SolidFill) -> Option<Color> {
+  Color::from_solid_fill_choice(fill.solid_fill_choice.as_ref()?)
+}
+
+fn drawingml_run_color(properties: &a::RunProperties) -> Option<Color> {
+  match properties.run_properties_choice1.as_ref()? {
+    a::RunPropertiesChoice::SolidFill(fill) => solid_fill_color(fill),
+    _ => None,
+  }
+}
+
+impl DiagramResourceCatalog {
+  fn from_part(package: &SpreadsheetDocument, part: &DrawingsPart) -> Result<Self> {
+    let data_parts = part
+      .related_parts_of_type::<_, DiagramDataPart>(package)
+      .map(|related| (related.relationship_id().to_string(), related.into_part()))
+      .collect::<Vec<_>>();
+    let layout_parts = part
+      .diagram_layout_definition_parts(package)
+      .collect::<Vec<_>>();
+    let style_parts = part.diagram_style_parts(package).collect::<Vec<_>>();
+    let color_parts = part.diagram_colors_parts(package).collect::<Vec<_>>();
+    let drawing_parts = part
+      .related_parts_of_type::<_, DiagramPersistLayoutPart>(package)
+      .map(|related| (related.relationship_id().to_string(), related.into_part()))
+      .collect::<Vec<_>>();
+    Ok(Self {
+      data_parts: data_parts
+        .iter()
+        .map(|(relationship_id, part)| {
+          DiagramDataCatalog::from_part(package, relationship_id.clone(), part)
+        })
+        .collect::<Result<Vec<_>>>()?,
+      layout_parts: layout_parts
+        .iter()
+        .map(|part| DiagramLayoutCatalog::from_part(package, part))
+        .collect::<Result<Vec<_>>>()?,
+      style_parts: style_parts
+        .iter()
+        .map(|part| DiagramStyleCatalog::from_part(package, part))
+        .collect::<Result<Vec<_>>>()?,
+      color_parts: color_parts
+        .iter()
+        .map(|part| DiagramColorCatalog::from_part(package, part))
+        .collect::<Result<Vec<_>>>()?,
+      drawing_parts: drawing_parts
+        .iter()
+        .map(|(relationship_id, part)| {
+          DiagramDrawingCatalog::from_part(package, relationship_id.clone(), part)
+        })
+        .collect::<Result<Vec<_>>>()?,
+    })
+  }
+}
+
+impl DiagramDataCatalog {
+  fn from_part(
+    package: &SpreadsheetDocument,
+    relationship_id: String,
+    part: &DiagramDataPart,
+  ) -> Result<Self> {
+    let model = {
+      let data_model = part.root_element(package)?;
+      Self::from_data_model(Some(relationship_id), data_model)
+    };
+    Ok(Self {
+      images: part.image_parts(package).count(),
+      slides: part.slide_parts(package).count(),
+      worksheets: part.worksheet_parts(package).count(),
+      ..model
+    })
+  }
+
+  fn from_data_model(relationship_id: Option<String>, data_model: &dgm::DataModelRoot) -> Self {
+    let mut catalog = Self {
+      relationship_id,
+      data_model: Some(Box::new(data_model.clone())),
+      background: data_model.background.is_some(),
+      whole: data_model.whole.is_some(),
+      extension_markers: data_model
+        .data_model_extension_list
+        .as_ref()
+        .map_or(0, |list| list.data_model_extension.len()),
+      ..Self::default()
+    };
+    for child in &data_model.point_list.xml_children {
+      match child {
+        dgm::PointListChoice::Point(point) => {
+          catalog.points += 1;
+          catalog.text_len += point.model_id.len();
+          if let Some(text_body) = point.text_body.as_deref() {
+            let text = dgm_text_body_text(text_body);
+            if !text.is_empty() {
+              catalog.visible_texts.push(text);
+            }
+          }
+          if let Some(connection_id) = point.connection_id.as_ref() {
+            catalog.text_len += connection_id.len();
+          }
+          catalog.text_points += usize::from(point.text_body.is_some());
+          catalog.property_sets += usize::from(point.property_set.is_some());
+          catalog.shape_properties += usize::from(point.shape_properties.is_some());
+          catalog.extension_markers += point
+            .pt_extension_list
+            .as_ref()
+            .map_or(0, |list| list.pt_extension.len());
+        }
+        dgm::PointListChoice::AlternateContent(_) => {
+          catalog.unknown_points += 1;
+        }
+      }
+    }
+    if let Some(connections) = data_model.connection_list.as_ref() {
+      catalog.connections = connections.connection.len();
+      for connection in &connections.connection {
+        catalog.text_len += connection.model_id.len()
+          + connection.source_id.len()
+          + connection.destination_id.len()
+          + connection
+            .parent_transition_id
+            .as_ref()
+            .map_or(0, |value| value.len())
+          + connection
+            .sibling_transition_id
+            .as_ref()
+            .map_or(0, |value| value.len())
+          + connection
+            .presentation_id
+            .as_ref()
+            .map_or(0, |value| value.len());
+        catalog.extension_markers += usize::from(connection.extension_list.is_some());
+      }
+    }
+    catalog
+  }
+}
+
+impl DiagramLayoutCatalog {
+  fn from_part(package: &SpreadsheetDocument, part: &DiagramLayoutDefinitionPart) -> Result<Self> {
+    let model = {
+      let layout = part.root_element(package)?;
+      Self::from_layout(layout)
+    };
+    Ok(Self {
+      images: part.image_parts(package).count(),
+      ..model
+    })
+  }
+
+  fn from_layout(layout: &dgm::LayoutDefinition) -> Self {
+    let mut stats = DiagramLayoutCatalog {
+      layout: Some(Box::new(layout.clone())),
+      titles: layout.title.len(),
+      descriptions: layout.description.len(),
+      has_category_list: layout.category_list.is_some(),
+      has_sample_data: layout.sample_data.is_some(),
+      has_style_data: layout.style_data.is_some(),
+      has_color_data: layout.color_data.is_some(),
+      extension_markers: usize::from(layout.diagram_definition_extension_list.is_some()),
+      text_len: layout.unique_id.as_ref().map_or(0, |value| value.len())
+        + layout.min_version.as_ref().map_or(0, |value| value.len())
+        + layout.default_style.as_ref().map_or(0, |value| value.len())
+        + layout
+          .title
+          .iter()
+          .map(|title| title.val.len())
+          .sum::<usize>()
+        + layout
+          .description
+          .iter()
+          .map(|description| description.val.len())
+          .sum::<usize>(),
+      ..Self::default()
+    };
+    collect_layout_node(&layout.layout_node, &mut stats);
+    stats
+  }
+}
+
+impl DiagramStyleCatalog {
+  fn from_part(package: &SpreadsheetDocument, part: &DiagramStylePart) -> Result<Self> {
+    let style = part.root_element(package)?;
+    Ok(Self {
+      style: Some(Box::new(style.clone())),
+      titles: style.style_definition_title.len(),
+      descriptions: style.style_label_description.len(),
+      has_categories: style.style_display_categories.is_some(),
+      has_scene3d: style.scene3_d.is_some(),
+      labels: style.style_label.len(),
+      extension_markers: usize::from(style.extension_list.is_some()),
+      text_len: style.unique_id.as_ref().map_or(0, |value| value.len())
+        + style.min_version.as_ref().map_or(0, |value| value.len())
+        + style
+          .style_definition_title
+          .iter()
+          .map(|title| title.val.len())
+          .sum::<usize>()
+        + style
+          .style_label_description
+          .iter()
+          .map(|description| description.val.len())
+          .sum::<usize>()
+        + style
+          .style_label
+          .iter()
+          .map(|label| label.name.len())
+          .sum::<usize>(),
+    })
+  }
+}
+
+impl DiagramColorCatalog {
+  fn from_part(package: &SpreadsheetDocument, part: &DiagramColorsPart) -> Result<Self> {
+    let colors = part.root_element(package)?;
+    Ok(Self {
+      colors: Some(Box::new(colors.clone())),
+      titles: colors.color_definition_title.len(),
+      descriptions: colors.color_transform_description.len(),
+      has_categories: colors.color_transform_categories.is_some(),
+      labels: colors.color_transform_style_label.len(),
+      extension_markers: usize::from(colors.extension_list.is_some()),
+      text_len: colors.unique_id.as_ref().map_or(0, |value| value.len())
+        + colors.min_version.as_ref().map_or(0, |value| value.len())
+        + colors
+          .color_definition_title
+          .iter()
+          .map(|title| title.val.len())
+          .sum::<usize>()
+        + colors
+          .color_transform_description
+          .iter()
+          .map(|description| description.val.len())
+          .sum::<usize>()
+        + colors
+          .color_transform_style_label
+          .iter()
+          .map(|label| label.name.len())
+          .sum::<usize>(),
+    })
+  }
+}
+
+impl DiagramDrawingCatalog {
+  fn from_part(
+    package: &SpreadsheetDocument,
+    relationship_id: String,
+    part: &DiagramPersistLayoutPart,
+  ) -> Result<Self> {
+    let model = {
+      let drawing = part.root_element(package)?;
+      Self::from_drawing(Some(relationship_id), drawing)
+    };
+    Ok(Self {
+      images: part.image_parts(package).count(),
+      ..model
+    })
+  }
+
+  fn from_drawing(relationship_id: Option<String>, drawing: &dsp::Drawing) -> Self {
+    let mut catalog = Self {
+      relationship_id,
+      drawing: Some(Box::new(drawing.clone())),
+      extension_markers: usize::from(drawing.shape_tree.office_art_extension_list.is_some()),
+      ..Self::default()
+    };
+    for child in &drawing.shape_tree.shape_tree_choice {
+      collect_diagram_shape_tree_choice(child, &mut catalog);
+    }
+    catalog
+  }
+}
+
+impl ChartResourceCatalog {
+  pub(crate) fn from_chart_part(
+    package: &SpreadsheetDocument,
+    relationship_id: String,
+    part: &ChartPart,
+    ui_language: Option<&str>,
+  ) -> Result<Self> {
+    let model = {
+      let chart_space = part.root_element(package)?;
+      Self::from_chart_space(Some(relationship_id), chart_space, ui_language)
+    };
+    Ok(Self {
+      has_chart_drawing: part.chart_drawing_part(package).is_some(),
+      has_embedded_package: part.embedded_package_part(package).is_some(),
+      images: part.image_parts(package).count(),
+      has_theme_override: part.theme_override_part(package).is_some(),
+      styles: part.chart_style_parts(package).count(),
+      color_styles: part.chart_color_style_parts(package).count(),
+      ..model
+    })
+  }
+
+  pub(crate) fn from_extended_chart_part(
+    package: &SpreadsheetDocument,
+    relationship_id: String,
+    part: &ExtendedChartPart,
+  ) -> Result<Self> {
+    let model = {
+      let chart_space = part.root_element(package)?;
+      Self::from_extended_chart_space(Some(relationship_id), chart_space)
+    };
+    let chart_style_parts: Vec<_> = part.chart_style_parts(package).collect();
+    let chart_color_style_parts: Vec<_> = part.chart_color_style_parts(package).collect();
+    let extended_chart_styles = chart_style_parts
+      .iter()
+      .filter_map(|part| part.root_element(package).ok().cloned())
+      .collect::<Vec<_>>();
+    let extended_chart_color_styles = chart_color_style_parts
+      .iter()
+      .filter_map(|part| part.root_element(package).ok().cloned())
+      .collect::<Vec<_>>();
+    Ok(Self {
+      has_chart_drawing: part.chart_drawing_part(package).is_some(),
+      has_embedded_package: part.embedded_package_part(package).is_some(),
+      images: part.image_parts(package).count(),
+      has_theme_override: part.theme_override_part(package).is_some(),
+      styles: extended_chart_styles.len(),
+      color_styles: extended_chart_color_styles.len(),
+      extended_chart_styles,
+      extended_chart_color_styles,
+      ..model
+    })
+  }
+  fn from_chart_space(
+    relationship_id: Option<String>,
+    chart_space: &c::ChartSpace,
+    ui_language: Option<&str>,
+  ) -> Self {
+    let chart = &chart_space.chart;
+    let plot_area = &chart.plot_area;
+    Self {
+      relationship_id,
+      chart_space: Some(Box::new(chart_space.clone())),
+      extended_chart_space: None,
+      extended: false,
+      version_len: chart_space.version.as_ref().map_or(0, |value| value.len()),
+      feature_list_len: chart_space
+        .feature_list
+        .as_ref()
+        .map_or(0, |value| value.len()),
+      has_fallback_image: chart_space.fallback_img.is_some(),
+      date1904: chart_space
+        .date1904
+        .as_ref()
+        .is_some_and(|value| value.val.is_some_and(|value| value.as_bool())),
+      rounded_corners: chart_space
+        .rounded_corners
+        .as_ref()
+        .is_some_and(|value| value.val.is_some_and(|value| value.as_bool())),
+      has_style: chart_space.chart_space_choice.is_some(),
+      has_pivot_source: chart_space.pivot_source.is_some(),
+      protection_flags: chart_space
+        .protection
+        .as_deref()
+        .map_or(0, protection_flag_count),
+      has_title: chart.title.is_some(),
+      has_3d_view: chart.view3_d.is_some(),
+      chart_type_groups: plot_area.plot_area_choice1.len(),
+      axes: plot_area.plot_area_choice2.len(),
+      has_legend: chart.legend.is_some(),
+      chart_flags: usize::from(
+        chart
+          .auto_title_deleted
+          .as_ref()
+          .is_some_and(|value| value.val.is_some_and(|value| value.as_bool())),
+      ) + usize::from(chart.pivot_formats.is_some())
+        + usize::from(chart.floor.is_some())
+        + usize::from(chart.side_wall.is_some())
+        + usize::from(chart.back_wall.is_some())
+        + usize::from(
+          chart
+            .plot_visible_only
+            .as_ref()
+            .is_some_and(|value| value.val.is_some_and(|value| value.as_bool())),
+        )
+        + usize::from(chart.display_blanks_as.is_some())
+        + usize::from(
+          chart
+            .show_data_labels_over_maximum
+            .as_ref()
+            .is_some_and(|value| value.val.is_some_and(|value| value.as_bool())),
+        )
+        + usize::from(plot_area.layout.is_some())
+        + usize::from(plot_area.data_table.is_some())
+        + usize::from(plot_area.shape_properties.is_some()),
+      has_root_shape_properties: chart_space.shape_properties.is_some(),
+      has_text_properties: chart_space.text_properties.is_some(),
+      external_data_relationship_id: chart_space
+        .external_data
+        .as_ref()
+        .map(|external_data| external_data.id.clone()),
+      external_data_auto_update: chart_space
+        .external_data
+        .as_ref()
+        .is_some_and(|external_data| {
+          external_data
+            .auto_update
+            .as_ref()
+            .is_some_and(|value| value.val.is_some_and(|value| value.as_bool()))
+        }),
+      has_print_settings: chart_space.print_settings.is_some(),
+      has_user_shapes_reference: chart_space.user_shapes_reference.is_some(),
+      visible_texts: shared_chart::fixed_output_texts_for_ui_language(chart_space, ui_language),
+      extension_markers: usize::from(chart_space.chart_space_extension_list.is_some())
+        + usize::from(chart.chart_extension_list.is_some())
+        + usize::from(plot_area.extension_list.is_some()),
+      chartex_data_sets: 0,
+      chartex_series: 0,
+      ..Self::default()
+    }
+  }
+
+  fn from_extended_chart_space(
+    relationship_id: Option<String>,
+    chart_space: &cx::ChartSpace,
+  ) -> Self {
+    let chart = &chart_space.chart;
+    let plot_area = &chart.plot_area;
+    let chart_data = chart_space.chart_data.as_ref();
+    Self {
+      relationship_id,
+      extended_chart_space: Some(Box::new(chart_space.clone())),
+      extended: true,
+      version_len: chart_space.version.as_ref().map_or(0, |value| value.len()),
+      feature_list_len: chart_space
+        .feature_list
+        .as_ref()
+        .map_or(0, |value| value.len()),
+      has_fallback_image: chart_space.fallback_img.is_some(),
+      has_title: chart.chart_title.is_some(),
+      chart_type_groups: 1,
+      axes: plot_area.axis.len(),
+      has_legend: chart.legend.is_some(),
+      chart_flags: usize::from(chart_space.shape_properties.is_some())
+        + usize::from(chart_space.tx_pr_text_body.is_some())
+        + usize::from(chart_space.color_mapping_type.is_some())
+        + usize::from(chart_space.format_overrides.is_some())
+        + usize::from(plot_area.shape_properties.is_some())
+        + usize::from(plot_area.plot_area_region.plot_surface.is_some()),
+      has_root_shape_properties: chart_space.shape_properties.is_some(),
+      has_text_properties: chart_space.tx_pr_text_body.is_some(),
+      external_data_relationship_id: chart_data
+        .and_then(|data| data.external_data.as_ref())
+        .map(|external_data| external_data.r_id.clone()),
+      external_data_auto_update: chart_data
+        .and_then(|data| data.external_data.as_ref())
+        .is_some_and(|external_data| {
+          external_data
+            .cx_auto_update
+            .is_some_and(|value| value.as_bool())
+        }),
+      has_print_settings: chart_space.print_settings.is_some(),
+      visible_texts: Vec::new(),
+      extension_markers: usize::from(chart_space.extension_list.is_some())
+        + usize::from(chart.extension_list.is_some())
+        + usize::from(plot_area.extension_list.is_some())
+        + usize::from(plot_area.plot_area_region.extension_list.is_some())
+        + chart_data.map_or(0, |data| usize::from(data.extension_list.is_some())),
+      chartex_data_sets: chart_data.map_or(0, |data| data.data.len()),
+      chartex_series: plot_area.plot_area_region.series.len(),
+      ..Self::default()
+    }
+  }
+}
+
+fn protection_flag_count(protection: &c::Protection) -> usize {
+  usize::from(protection.chart_object.is_some())
+    + usize::from(protection.data.is_some())
+    + usize::from(protection.formatting.is_some())
+    + usize::from(protection.selection.is_some())
+    + usize::from(protection.user_interface.is_some())
+}
+
+fn collect_layout_node(node: &dgm::LayoutNode, stats: &mut DiagramLayoutCatalog) {
+  stats.layout_nodes += 1;
+  stats.text_len += node.name.as_ref().map_or(0, |value| value.len())
+    + node.style_label.as_ref().map_or(0, |value| value.len())
+    + node.move_with.as_ref().map_or(0, |value| value.len());
+  for choice in &node.layout_node_choice {
+    match choice {
+      dgm::LayoutNodeChoice::Algorithm(_) => stats.algorithms += 1,
+      dgm::LayoutNodeChoice::Shape(_) => stats.shapes += 1,
+      dgm::LayoutNodeChoice::PresentationOf(_) => stats.presentation_of += 1,
+      dgm::LayoutNodeChoice::Constraints(_) => stats.constraints += 1,
+      dgm::LayoutNodeChoice::RuleList(_) => stats.rules += 1,
+      dgm::LayoutNodeChoice::VariableList(_) => stats.variables += 1,
+      dgm::LayoutNodeChoice::ForEach(for_each) => collect_for_each(for_each, stats),
+      dgm::LayoutNodeChoice::LayoutNode(child) => collect_layout_node(child, stats),
+      dgm::LayoutNodeChoice::Choose(choose) => collect_choose(choose, stats),
+      dgm::LayoutNodeChoice::ExtensionList(_) => stats.extension_markers += 1,
+    }
+  }
+}
+
+fn collect_for_each(for_each: &dgm::ForEach, stats: &mut DiagramLayoutCatalog) {
+  stats.for_each += 1;
+  stats.text_len += for_each.name.as_ref().map_or(0, |value| value.len())
+    + for_each.reference.as_ref().map_or(0, |value| value.len());
+  for choice in &for_each.for_each_choice {
+    match choice {
+      dgm::ForEachChoice::Algorithm(_) => stats.algorithms += 1,
+      dgm::ForEachChoice::Shape(_) => stats.shapes += 1,
+      dgm::ForEachChoice::PresentationOf(_) => stats.presentation_of += 1,
+      dgm::ForEachChoice::Constraints(_) => stats.constraints += 1,
+      dgm::ForEachChoice::RuleList(_) => stats.rules += 1,
+      dgm::ForEachChoice::ForEach(child) => collect_for_each(child, stats),
+      dgm::ForEachChoice::LayoutNode(child) => collect_layout_node(child, stats),
+      dgm::ForEachChoice::Choose(choose) => collect_choose(choose, stats),
+      dgm::ForEachChoice::ExtensionList(_) => stats.extension_markers += 1,
+    }
+  }
+}
+
+fn collect_choose(choose: &dgm::Choose, stats: &mut DiagramLayoutCatalog) {
+  stats.choose += 1;
+  stats.text_len += choose.name.as_ref().map_or(0, |value| value.len());
+  for choice_if in &choose.diagram_choose_if {
+    stats.text_len += choice_if.name.as_ref().map_or(0, |value| value.len())
+      + choice_if.argument.as_ref().map_or(0, |value| value.len())
+      + choice_if.val.len();
+    for choice in &choice_if.diagram_choose_if_choice {
+      match choice {
+        dgm::DiagramChooseIfChoice::Algorithm(_) => stats.algorithms += 1,
+        dgm::DiagramChooseIfChoice::Shape(_) => stats.shapes += 1,
+        dgm::DiagramChooseIfChoice::PresentationOf(_) => stats.presentation_of += 1,
+        dgm::DiagramChooseIfChoice::Constraints(_) => stats.constraints += 1,
+        dgm::DiagramChooseIfChoice::RuleList(_) => stats.rules += 1,
+        dgm::DiagramChooseIfChoice::ForEach(for_each) => collect_for_each(for_each, stats),
+        dgm::DiagramChooseIfChoice::LayoutNode(node) => collect_layout_node(node, stats),
+        dgm::DiagramChooseIfChoice::Choose(choose) => collect_choose(choose, stats),
+        dgm::DiagramChooseIfChoice::ExtensionList(_) => stats.extension_markers += 1,
+      }
+    }
+  }
+  if let Some(choice_else) = choose.diagram_choose_else.as_ref() {
+    stats.text_len += choice_else.name.as_ref().map_or(0, |value| value.len());
+    for choice in &choice_else.diagram_choose_else_choice {
+      match choice {
+        dgm::DiagramChooseElseChoice::Algorithm(_) => stats.algorithms += 1,
+        dgm::DiagramChooseElseChoice::Shape(_) => stats.shapes += 1,
+        dgm::DiagramChooseElseChoice::PresentationOf(_) => stats.presentation_of += 1,
+        dgm::DiagramChooseElseChoice::Constraints(_) => stats.constraints += 1,
+        dgm::DiagramChooseElseChoice::RuleList(_) => stats.rules += 1,
+        dgm::DiagramChooseElseChoice::ForEach(for_each) => collect_for_each(for_each, stats),
+        dgm::DiagramChooseElseChoice::LayoutNode(node) => collect_layout_node(node, stats),
+        dgm::DiagramChooseElseChoice::Choose(choose) => collect_choose(choose, stats),
+        dgm::DiagramChooseElseChoice::ExtensionList(_) => stats.extension_markers += 1,
+      }
+    }
+  }
+}
+
+fn collect_diagram_shape_tree_choice(
+  choice: &dsp::ShapeTreeChoice,
+  catalog: &mut DiagramDrawingCatalog,
+) {
+  match choice {
+    dsp::ShapeTreeChoice::Shape(shape) => collect_diagram_shape(shape, catalog),
+    dsp::ShapeTreeChoice::GroupShape(group) => collect_diagram_group_shape(group, catalog),
+  }
+}
+
+fn collect_diagram_group_shape_choice(
+  choice: &dsp::GroupShapeChoice,
+  catalog: &mut DiagramDrawingCatalog,
+) {
+  match choice {
+    dsp::GroupShapeChoice::Shape(shape) => collect_diagram_shape(shape, catalog),
+    dsp::GroupShapeChoice::GroupShape(group) => collect_diagram_group_shape(group, catalog),
+  }
+}
+
+fn collect_diagram_shape(shape: &dsp::Shape, catalog: &mut DiagramDrawingCatalog) {
+  catalog.shapes += 1;
+  catalog.text_len += shape.model_id.len()
+    + shape
+      .shape_non_visual_properties
+      .non_visual_drawing_properties
+      .name
+      .len()
+    + shape
+      .shape_non_visual_properties
+      .non_visual_drawing_properties
+      .description
+      .as_ref()
+      .map_or(0, |value| value.len());
+  catalog.text_shapes += usize::from(shape.text_body.is_some());
+  catalog.styled_shapes += usize::from(shape.shape_style.is_some());
+  catalog.transformed_shapes += usize::from(shape.transform2_d.is_some())
+    + usize::from(shape.shape_properties.transform2_d.is_some());
+  catalog.extension_markers += usize::from(shape.office_art_extension_list.is_some())
+    + usize::from(
+      shape
+        .shape_non_visual_properties
+        .non_visual_drawing_shape_properties
+        .extension_list
+        .is_some(),
+    )
+    + usize::from(
+      shape
+        .shape_properties
+        .shape_properties_extension_list
+        .is_some(),
+    );
+}
+
+fn collect_diagram_group_shape(group: &dsp::GroupShape, catalog: &mut DiagramDrawingCatalog) {
+  catalog.groups += 1;
+  catalog.text_len += group
+    .group_shape_non_visual_properties
+    .non_visual_drawing_properties
+    .name
+    .len()
+    + group
+      .group_shape_non_visual_properties
+      .non_visual_drawing_properties
+      .description
+      .as_ref()
+      .map_or(0, |value| value.len());
+  catalog.transformed_shapes += usize::from(
+    group
+      .group_shape_properties
+      .transform_group
+      .as_ref()
+      .is_some(),
+  );
+  catalog.extension_markers += usize::from(group.office_art_extension_list.is_some())
+    + usize::from(group.group_shape_properties.extension_list.is_some())
+    + usize::from(
+      group
+        .group_shape_non_visual_properties
+        .non_visual_group_drawing_shape_properties
+        .non_visual_group_drawing_shape_props_extension_list
+        .is_some(),
+    );
+  for choice in &group.group_shape_choice {
+    collect_diagram_group_shape_choice(choice, catalog);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use ooxmlsdk::sdk::SdkType;
+
+  use super::*;
+
+  fn graphic_frame(xml: &[u8]) -> xdr::GraphicFrame {
+    xdr::GraphicFrame {
+      graphic: Box::new(a::Graphic {
+        graphic_data: a::GraphicData::from_bytes(xml).expect("graphicData"),
+        ..Default::default()
+      }),
+      ..Default::default()
+    }
+  }
+
+  #[test]
+  fn group_fill_and_gradient_outline_survive_drawing_import() {
+    let group = xdr::GroupShape::from_bytes(
+      br#"<xdr:grpSp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:nvGrpSpPr><xdr:cNvPr id="1" name="group"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1000000" cy="1000000"/><a:chOff x="0" y="0"/><a:chExt cx="1000000" cy="1000000"/></a:xfrm><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="child"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="500000" cy="500000"/></a:xfrm><a:prstGeom prst="rect"/><a:grpFill/><a:ln><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="00FF00"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill></a:ln></xdr:spPr></xdr:sp></xdr:grpSp>"#,
+    )
+    .expect("group shape");
+
+    let model = DrawingObjectModel::from_group_shape(&group);
+    assert!(model.fill_gradient.is_some());
+    assert_eq!(model.children.len(), 1);
+    assert!(model.children[0].use_group_fill);
+    assert!(model.children[0].line_gradient.is_some());
+  }
+
+  #[test]
+  fn drawingml_shape_tile_fill_retains_authored_tile_properties() {
+    let shape = xdr::Shape::from_bytes(
+      br#"<xdr:sp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:nvSpPr><xdr:cNvPr id="1" name="tile"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/><a:blipFill><a:blip r:embed="rId1"/><a:srcRect l="10000"/><a:tile tx="9525" sx="50000" flip="x" algn="ctr"/></a:blipFill></xdr:spPr></xdr:sp>"#,
+    )
+    .expect("shape");
+
+    let model = DrawingObjectModel::from_shape(&shape);
+    let tile = model.image_tile.expect("tile retained");
+    assert_eq!(tile.alignment, Some(a::RectangleAlignmentValues::Center));
+    assert_eq!(tile.flip, Some(a::TileFlipValues::Horizontal));
+    assert!((model.image_crop.left - 0.1).abs() < 0.001);
+  }
+
+  #[test]
+  fn shape_text_inherits_font_reference_color_when_run_has_no_fill() {
+    let shape = xdr::Shape::from_bytes(
+      br#"<xdr:sp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:nvSpPr><xdr:cNvPr id="1" name="shape"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/><xdr:style><a:lnRef idx="0"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="0"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></xdr:style><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1100"/><a:t>text</a:t></a:r></a:p></xdr:txBody></xdr:sp>"#,
+    )
+    .expect("shape");
+
+    assert!(matches!(
+      DrawingObjectModel::from_shape(&shape).text_color,
+      Some(Color::Scheme(SchemeColor {
+        value: a::SchemeColorValues::Light1,
+        ..
+      }))
+    ));
+  }
+
+  #[test]
+  fn shape_style_matrix_references_survive_drawing_import() {
+    let shape = xdr::Shape::from_bytes(
+      br#"<xdr:sp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:nvSpPr><xdr:cNvPr id="1" name="shape"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr><xdr:style><a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="3"><a:schemeClr val="accent2"/></a:fillRef><a:effectRef idx="2"><a:schemeClr val="accent3"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="dk1"/></a:fontRef></xdr:style></xdr:sp>"#,
+    )
+    .expect("shape");
+
+    let model = DrawingObjectModel::from_shape(&shape);
+    let refs = model.shape_style_refs.expect("style references");
+    assert_eq!(refs.line_reference.index, 1);
+    assert_eq!(refs.fill_reference.index, 3);
+    assert_eq!(refs.effect_reference.index, 2);
+    assert!(matches!(
+      refs.fill_reference.placeholder_color,
+      Some(Color::Scheme(SchemeColor {
+        value: a::SchemeColorValues::Accent2,
+        ..
+      }))
+    ));
+    assert!(
+      model.fill_color.is_none(),
+      "theme placeholder color is not a direct solid fill"
+    );
+    assert!(!model.no_fill);
+  }
+
+  #[test]
+  fn graphic_frame_relationship_id_distinguishes_chart_reference_qnames() {
+    let extended = graphic_frame(
+      br#"<a:graphicData xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart r:id="rId7"/></a:graphicData>"#,
+    );
+    assert!(matches!(
+      extended.graphic.graphic_data.graphic_data_choice.as_slice(),
+      [a::GraphicDataChoice::ExtendedChartReference(_)]
+    ));
+    assert_eq!(
+      graphic_frame_relationship_id(&extended).as_deref(),
+      Some("rId7")
+    );
+
+    let standard = graphic_frame(
+      br#"<a:graphicData xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId8"/></a:graphicData>"#,
+    );
+    assert!(matches!(
+      standard.graphic.graphic_data.graphic_data_choice.as_slice(),
+      [a::GraphicDataChoice::ChartReference(_)]
+    ));
+    assert_eq!(
+      graphic_frame_relationship_id(&standard).as_deref(),
+      Some("rId8")
+    );
+  }
+
+  #[test]
+  fn web_extension_frames_pair_only_with_the_complete_unused_fallback_set() {
+    let web_extension = |id| DrawingAnchorModel {
+      kind: DrawingAnchorKind::TwoCell,
+      object: DrawingObjectModel {
+        kind: DrawingObjectKind::GraphicFrame,
+        id: Some(id),
+        graphic_uri: Some(WEB_EXTENSION_GRAPHIC_URI.to_string()),
+        ..DrawingObjectModel::unknown()
+      },
+      from: None,
+      to: None,
+      position: None,
+      extent: None,
+      edit_as: None,
+      lock_with_sheet: true,
+      print_with_sheet: true,
+    };
+    let resource = || ImageResource {
+      data: Bytes::new(),
+      content_type: Some("image/png".to_string()),
+    };
+    let anchors = vec![web_extension(2), web_extension(3)];
+    let resources = HashMap::from([
+      ("rId4".to_string(), resource()),
+      ("rId2".to_string(), resource()),
+    ]);
+
+    assert_eq!(
+      collect_web_extension_fallback_images(&anchors, &resources),
+      HashMap::from([(2, "rId2".to_string()), (3, "rId4".to_string())])
+    );
+
+    let mut incomplete = resources;
+    incomplete.insert("orphan".to_string(), resource());
+    assert!(
+      collect_web_extension_fallback_images(&anchors, &incomplete).is_empty(),
+      "an unrelated orphan image must not be rendered as a WebExtension fallback"
+    );
+  }
+
+  #[test]
+  fn shape_text_run_inherits_missing_font_from_default_run_properties() {
+    let text_body = xdr::TextBody::from_bytes(
+      br#"<xdr:txBody xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200"><a:latin typeface="Arial"/><a:ea typeface="Meiryo"/></a:defRPr></a:pPr><a:r><a:rPr sz="1600"/><a:t>test ok</a:t></a:r></a:p></xdr:txBody>"#,
+    )
+    .expect("text body");
+
+    assert_eq!(xdr_text_body_first_run_font_size(&text_body), Some(1600));
+    assert_eq!(
+      xdr_text_body_first_run_font_family(&text_body, DrawingTextScript::Latin).as_deref(),
+      Some("Arial")
+    );
+    assert_eq!(
+      xdr_text_body_first_run_font_family(&text_body, DrawingTextScript::EastAsian).as_deref(),
+      Some("Meiryo")
+    );
+  }
+
+  #[test]
+  fn shape_text_run_font_overrides_default_run_font() {
+    let text_body = xdr::TextBody::from_bytes(
+      br#"<xdr:txBody xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr><a:latin typeface="Arial"/></a:defRPr></a:pPr><a:r><a:rPr><a:latin typeface="Calibri"/></a:rPr><a:t>test ok</a:t></a:r></a:p></xdr:txBody>"#,
+    )
+    .expect("text body");
+
+    assert_eq!(
+      xdr_text_body_first_run_font_family(&text_body, DrawingTextScript::Latin).as_deref(),
+      Some("Calibri")
+    );
+  }
+
+  #[test]
+  fn shape_text_run_inherits_bold_and_overrides_inherited_italic() {
+    let text_body = xdr::TextBody::from_bytes(
+      br#"<xdr:txBody xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr b="1" i="1"/></a:lvl1pPr></a:lstStyle><a:p><a:r><a:rPr i="0"/><a:t>test ok</a:t></a:r></a:p></xdr:txBody>"#,
+    )
+    .expect("text body");
+
+    assert_eq!(xdr_text_body_first_run_bold(&text_body), Some(true));
+    assert_eq!(xdr_text_body_first_run_italic(&text_body), Some(false));
+  }
+
+  #[test]
+  fn shape_text_run_inherits_level_zero_list_style_when_level_is_omitted() {
+    let text_body = xdr::TextBody::from_bytes(
+      br#"<xdr:txBody xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr sz="1200"><a:latin typeface="Arial"/></a:defRPr></a:lvl1pPr></a:lstStyle><a:p><a:r><a:rPr sz="1600"/><a:t>test ok</a:t></a:r></a:p></xdr:txBody>"#,
+    )
+    .expect("text body");
+
+    assert_eq!(xdr_text_body_first_run_font_size(&text_body), Some(1600));
+    assert_eq!(
+      xdr_text_body_first_run_font_family(&text_body, DrawingTextScript::Latin).as_deref(),
+      Some("Arial")
+    );
+    assert_eq!(xdr_text_body_first_paragraph_alignment(&text_body), None);
+  }
+
+  #[test]
+  fn shape_text_paragraph_inherits_list_level_alignment() {
+    let text_body = xdr::TextBody::from_bytes(
+      br#"<xdr:txBody xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:bodyPr/><a:lstStyle><a:lvl1pPr algn="ctr"/><a:lvl2pPr algn="r"/></a:lstStyle><a:p><a:pPr lvl="1"/><a:r><a:t>test ok</a:t></a:r></a:p></xdr:txBody>"#,
+    )
+    .expect("text body");
+
+    assert_eq!(
+      xdr_text_body_first_paragraph_alignment(&text_body),
+      Some(a::TextAlignmentTypeValues::Right)
+    );
+  }
+}

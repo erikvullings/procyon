@@ -1,0 +1,7423 @@
+use super::*;
+
+fn child_uses_parent_default_namespace(
+  qname: &str,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+) -> bool {
+  parent_no_prefix && parse_qname_info(qname).tag_prefix == parent_tag_prefix
+}
+
+fn extra_xmlns_ident(prefix: &str) -> Ident {
+  let mut ident = String::from("has_extra_xmlns");
+  for byte in prefix.bytes() {
+    if byte.is_ascii_alphanumeric() {
+      ident.push('_');
+      ident.push(byte.to_ascii_lowercase() as char);
+    } else {
+      ident.push('_');
+    }
+  }
+  Ident::new(&ident, Span::call_site())
+}
+
+fn static_attribute_qname_key(qname: &str, require_known_prefix: bool) -> syn::Result<String> {
+  let QNameInfo {
+    tag_prefix,
+    local_name,
+  } = parse_qname_info(qname);
+  if local_name.is_empty() {
+    return Err(syn::Error::new(
+      Span::call_site(),
+      format!("attribute QName {qname:?} must have a local name"),
+    ));
+  }
+  if tag_prefix.is_empty() {
+    return Ok(format!("{{}}{local_name}"));
+  }
+  if let Some(uri) = namespaces::uri_by_prefix(&tag_prefix) {
+    return Ok(format!("{{{uri}}}{local_name}"));
+  }
+  if require_known_prefix {
+    return Err(syn::Error::new(
+      Span::call_site(),
+      format!("attribute read alias {qname:?} uses unknown prefix {tag_prefix:?}"),
+    ));
+  }
+  Ok(format!("{{prefix:{tag_prefix}}}{local_name}"))
+}
+
+fn validate_attribute_read_aliases(fields: &[SdkAttrField]) -> syn::Result<()> {
+  let primary_keys = fields
+    .iter()
+    .map(|field| static_attribute_qname_key(&field.name, false))
+    .collect::<syn::Result<Vec<_>>>()?;
+  let mut aliases = std::collections::HashMap::<String, (&Ident, &str)>::new();
+
+  for field in fields {
+    for read_alias in &field.read_aliases {
+      let alias_key = static_attribute_qname_key(read_alias, true)?;
+      if let Some((index, _)) = primary_keys
+        .iter()
+        .enumerate()
+        .find(|(_, primary_key)| **primary_key == alias_key)
+      {
+        return Err(syn::Error::new_spanned(
+          &field.ident,
+          format!(
+            "attribute read alias {read_alias:?} collides with primary attribute field {:?}",
+            fields[index].ident
+          ),
+        ));
+      }
+      if let Some((existing_field, existing_alias)) =
+        aliases.insert(alias_key, (&field.ident, read_alias))
+      {
+        return Err(syn::Error::new_spanned(
+          &field.ident,
+          format!(
+            "attribute read alias {read_alias:?} collides with {existing_alias:?} on field {existing_field:?}"
+          ),
+        ));
+      }
+    }
+  }
+  Ok(())
+}
+
+struct AttributeQNameDispatchTokens {
+  match_arm: proc_macro2::TokenStream,
+  namespace_target: Option<proc_macro2::TokenStream>,
+}
+
+fn known_namespace_variant_tokens(prefix: &str) -> Option<proc_macro2::TokenStream> {
+  let variant = Ident::new(namespaces::variant_by_prefix(prefix)?, Span::call_site());
+  Some(quote! { crate::namespaces::XmlKnownNamespace::#variant })
+}
+
+fn attribute_qname_dispatch_tokens(
+  qname: &str,
+  assign_tokens: proc_macro2::TokenStream,
+) -> AttributeQNameDispatchTokens {
+  let QNameInfo {
+    tag_prefix,
+    local_name,
+  } = parse_qname_info(qname);
+  let name_bytes_lit = LitByteStr::new(qname.as_bytes(), Span::call_site());
+  let local_name_bytes_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+  let namespace = (!tag_prefix.is_empty())
+    .then(|| known_namespace_variant_tokens(&tag_prefix))
+    .flatten();
+  let match_arm = quote! {
+    #name_bytes_lit => {
+      #assign_tokens
+    }
+  };
+  let namespace_target = if tag_prefix == "xml" {
+    None
+  } else {
+    namespace.map(|namespace| {
+      quote! {
+        crate::common::AttributeQNameTarget::new(
+          #local_name_bytes_lit,
+          #namespace,
+          #name_bytes_lit,
+        )
+      }
+    })
+  };
+
+  AttributeQNameDispatchTokens {
+    match_arm,
+    namespace_target,
+  }
+}
+
+fn choice_child_read_tokens(
+  choice_ty: &Type,
+  variant: &Ident,
+  ty: Option<&Type>,
+  boxed: bool,
+  xml_reader: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let value_tokens = if let Some(child_ty) = ty {
+    quote! {
+      <#child_ty as crate::sdk::SdkType>::read_inner(#xml_reader, e, next_empty, read_context)?
+    }
+  } else {
+    quote! {
+      crate::sdk::SdkType::read_inner(#xml_reader, e, next_empty, read_context)?
+    }
+  };
+  let value_tokens = if boxed {
+    quote! { std::boxed::Box::new(#value_tokens) }
+  } else {
+    value_tokens
+  };
+  quote! {
+    #choice_ty::#variant(#value_tokens)
+  }
+}
+
+fn static_xmlns_attr_tokens(prefix: Option<&str>, uri: &str) -> proc_macro2::TokenStream {
+  let mut attr = Vec::with_capacity(uri.len() + prefix.map_or(9, |prefix| prefix.len() + 10));
+  attr.extend_from_slice(b" xmlns");
+  if let Some(prefix) = prefix
+    && !prefix.is_empty()
+  {
+    attr.push(b':');
+    attr.extend_from_slice(prefix.as_bytes());
+  }
+  attr.extend_from_slice(b"=\"");
+  attr.extend_from_slice(uri.as_bytes());
+  attr.push(b'"');
+
+  let attr_lit = LitByteStr::new(&attr, Span::call_site());
+  quote! {
+    writer.write_all(#attr_lit)?;
+  }
+}
+
+fn extra_xmlns_tokens(
+  prefixes: &[String],
+) -> syn::Result<(
+  proc_macro2::TokenStream,
+  proc_macro2::TokenStream,
+  proc_macro2::TokenStream,
+)> {
+  let mut init_tokens = Vec::new();
+  let mut mark_tokens = Vec::new();
+  let mut write_tokens = Vec::new();
+
+  for prefix in prefixes {
+    let Some(uri) = namespaces::uri_by_prefix(prefix) else {
+      return Err(syn::Error::new(
+        Span::call_site(),
+        format!("unknown extra_xmlns prefix {prefix}"),
+      ));
+    };
+    let ident = extra_xmlns_ident(prefix);
+    let prefix_lit = LitByteStr::new(prefix.as_bytes(), Span::call_site());
+    let write_xmlns_tokens = static_xmlns_attr_tokens(Some(prefix), uri);
+    init_tokens.push(quote! {
+      let mut #ident = false;
+    });
+    mark_tokens.push(quote! {
+      if declaration_prefix == #prefix_lit {
+        #ident = true;
+      }
+    });
+    write_tokens.push(quote! {
+      if !#ident {
+        #write_xmlns_tokens
+      }
+    });
+  }
+
+  Ok((
+    quote! { #( #init_tokens )* },
+    quote! { #( #mark_tokens )* },
+    quote! { #( #write_tokens )* },
+  ))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WmlTableStackKind {
+  Table,
+  Row,
+  Cell,
+}
+
+fn wml_table_stack_kind(ident: &Ident, schema_qname: &str) -> Option<WmlTableStackKind> {
+  match (ident.to_string().as_str(), schema_qname) {
+    ("Table", "w:tbl") => Some(WmlTableStackKind::Table),
+    ("TableRow", "w:tr") => Some(WmlTableStackKind::Row),
+    ("TableCell", "w:tc") => Some(WmlTableStackKind::Cell),
+    _ => None,
+  }
+}
+
+fn wml_table_stack_frame_enum_tokens(kind: Option<WmlTableStackKind>) -> proc_macro2::TokenStream {
+  if kind == Some(WmlTableStackKind::Table) {
+    quote! {
+      pub(crate) enum __OoxmlsdkWmlTableStackFrame {
+        Table {
+          value: Table,
+        },
+        Row(TableRow),
+        Cell(TableCell),
+      }
+      pub(crate) enum __OoxmlsdkWmlTableWriteFrame<'a> {
+        Table(std::slice::Iter<'a, TableChoice2>),
+        Row(std::slice::Iter<'a, TableRowChoice>),
+        Cell(std::slice::Iter<'a, TableCellChoice>),
+      }
+    }
+  } else {
+    quote! {}
+  }
+}
+
+fn wml_table_stack_read_table_value_tokens() -> proc_macro2::TokenStream {
+  quote! {
+    {
+      let mut parsed_child = Table::default();
+      let mut __ooxmlsdk_stack = Vec::<__OoxmlsdkWmlTableStackFrame>::new();
+      if !parsed_child.__ooxmlsdk_read_inner_stack_start(
+        xml_reader,
+        read_context,
+        e,
+        next_empty,
+      )? {
+        __ooxmlsdk_stack.push(__OoxmlsdkWmlTableStackFrame::Table {
+          value: parsed_child,
+        });
+        let mut __ooxmlsdk_completed_root = None;
+        while !__ooxmlsdk_stack.is_empty() {
+          let __ooxmlsdk_next_frame = {
+            let __ooxmlsdk_frame = __ooxmlsdk_stack
+              .last_mut()
+              .expect("WML table read frame");
+            match __ooxmlsdk_frame {
+              __OoxmlsdkWmlTableStackFrame::Table {
+                value,
+              } => value.__ooxmlsdk_read_inner_stack_next(xml_reader, read_context)?,
+              __OoxmlsdkWmlTableStackFrame::Row(value) => {
+                value.__ooxmlsdk_read_inner_stack_next(xml_reader, read_context)?
+              }
+              __OoxmlsdkWmlTableStackFrame::Cell(value) => {
+                value.__ooxmlsdk_read_inner_stack_next(xml_reader, read_context)?
+              }
+            }
+          };
+          if let Some(__ooxmlsdk_child_frame) = __ooxmlsdk_next_frame {
+            __ooxmlsdk_stack.push(__ooxmlsdk_child_frame);
+            continue;
+          }
+          let __ooxmlsdk_frame = __ooxmlsdk_stack
+            .pop()
+            .expect("WML table read frame");
+          match __ooxmlsdk_frame {
+            __OoxmlsdkWmlTableStackFrame::Table { value } => {
+              if let Some(__ooxmlsdk_parent_frame) = __ooxmlsdk_stack.last_mut() {
+                match __ooxmlsdk_parent_frame {
+                  __OoxmlsdkWmlTableStackFrame::Cell(parent) => {
+                    parent
+                      .table_cell_choice
+                      .push(TableCellChoice::Table(std::boxed::Box::new(value)));
+                  }
+                  _ => {
+                    return Err(crate::common::SdkError::CommonError(
+                      "invalid WML table stack parent for table".to_string(),
+                    ));
+                  }
+                }
+              } else {
+                __ooxmlsdk_completed_root = Some(value);
+                break;
+              }
+            }
+            __OoxmlsdkWmlTableStackFrame::Row(value) => {
+              if let Some(__ooxmlsdk_parent_frame) = __ooxmlsdk_stack.last_mut() {
+                match __ooxmlsdk_parent_frame {
+                  __OoxmlsdkWmlTableStackFrame::Table {
+                    value: parent,
+                  } => {
+                    parent
+                      .table_choice2
+                      .push(TableChoice2::TableRow(std::boxed::Box::new(value)));
+                  }
+                  _ => {
+                    return Err(crate::common::SdkError::CommonError(
+                      "invalid WML table stack parent for row".to_string(),
+                    ));
+                  }
+                }
+              } else {
+                return Err(crate::common::SdkError::CommonError(
+                  "WML table stack row completed without parent".to_string(),
+                ));
+              }
+            }
+            __OoxmlsdkWmlTableStackFrame::Cell(value) => {
+              if let Some(__ooxmlsdk_parent_frame) = __ooxmlsdk_stack.last_mut() {
+                match __ooxmlsdk_parent_frame {
+                  __OoxmlsdkWmlTableStackFrame::Row(parent) => {
+                    parent
+                      .table_row_choice
+                      .push(TableRowChoice::TableCell(std::boxed::Box::new(value)));
+                  }
+                  _ => {
+                    return Err(crate::common::SdkError::CommonError(
+                      "invalid WML table stack parent for cell".to_string(),
+                    ));
+                  }
+                }
+              } else {
+                return Err(crate::common::SdkError::CommonError(
+                  "WML table stack cell completed without parent".to_string(),
+                ));
+              }
+            }
+          }
+        }
+        parsed_child = match __ooxmlsdk_completed_root {
+          Some(value) => value,
+          None => {
+            return Err(crate::common::SdkError::CommonError(
+              "WML table stack completed without root table".to_string(),
+            ));
+          }
+        };
+      }
+      parsed_child
+    }
+  }
+}
+
+fn qname_match_key(qname: &str) -> String {
+  let QNameInfo {
+    tag_prefix,
+    local_name,
+  } = parse_qname_info(qname);
+  if tag_prefix.is_empty() {
+    local_name
+  } else {
+    format!("{tag_prefix}:{local_name}")
+  }
+}
+
+fn qname_match_targets(qnames: &[String]) -> Vec<proc_macro2::TokenStream> {
+  let mut seen = std::collections::HashSet::new();
+  let mut targets = Vec::new();
+  for qname in qnames {
+    let QNameInfo { local_name, .. } = parse_qname_info(qname);
+    if seen.insert(local_name.clone()) {
+      let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+      targets.push(quote! { #local_name_lit });
+    }
+  }
+  targets
+}
+
+#[derive(Clone)]
+struct GroupedChoiceAttempt {
+  qname: String,
+  condition: Option<proc_macro2::TokenStream>,
+  tokens: proc_macro2::TokenStream,
+  defaultable: bool,
+}
+
+#[derive(Clone)]
+struct QNameDispatchArm {
+  qname: String,
+  tokens: proc_macro2::TokenStream,
+  defaultable: bool,
+}
+
+fn push_qname_dispatch_arm(
+  grouped: &mut std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+  qname: &str,
+  tokens: proc_macro2::TokenStream,
+) {
+  let QNameInfo { local_name, .. } = parse_qname_info(qname);
+  grouped
+    .entry(local_name)
+    .or_default()
+    .push(QNameDispatchArm {
+      qname: qname.to_string(),
+      tokens,
+      defaultable: true,
+    });
+}
+
+fn push_exact_qname_dispatch_arm(
+  grouped: &mut std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+  qname: &str,
+  tokens: proc_macro2::TokenStream,
+) {
+  let QNameInfo { local_name, .. } = parse_qname_info(qname);
+  grouped
+    .entry(local_name)
+    .or_default()
+    .push(QNameDispatchArm {
+      qname: qname.to_string(),
+      tokens,
+      defaultable: false,
+    });
+}
+
+fn qname_dispatch_match_arms(
+  grouped: &std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+  default_tag_prefix: &str,
+) -> Vec<proc_macro2::TokenStream> {
+  qname_dispatch_match_arms_inner(grouped, default_tag_prefix, None)
+}
+
+fn qname_dispatch_match_arms_inner(
+  grouped: &std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+  default_tag_prefix: &str,
+  mismatch_tokens: Option<&proc_macro2::TokenStream>,
+) -> Vec<proc_macro2::TokenStream> {
+  grouped
+    .iter()
+    .map(|(local_name, arms)| {
+      let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+      let Some(first_arm) = arms.first() else {
+        return quote! {};
+      };
+      if let Some(mismatch_tokens) = mismatch_tokens {
+        let mut seen_qnames = std::collections::HashSet::new();
+        let qname_arms = arms.iter().filter_map(|arm| {
+          let qname = qname_match_key(&arm.qname);
+          if !seen_qnames.insert(qname.clone()) {
+            return None;
+          }
+          let qname_lit = LitByteStr::new(qname.as_bytes(), Span::call_site());
+          let tokens = &arm.tokens;
+          Some(quote! {
+            #qname_lit => {
+              #tokens
+            }
+          })
+        });
+        return quote! {
+          #local_name_lit => {
+            match e.name().into_inner() {
+              #( #qname_arms )*
+              _ => {
+                #mismatch_tokens
+              }
+            }
+          }
+        };
+      }
+
+      if arms.len() == 1 && first_arm.defaultable {
+        let tokens = &first_arm.tokens;
+        return quote! {
+          #local_name_lit => {
+            #tokens
+          }
+        };
+      }
+
+      let default_arm = arms
+        .iter()
+        .filter(|arm| arm.defaultable)
+        .find(|arm| parse_qname_info(&arm.qname).tag_prefix == default_tag_prefix)
+        .or_else(|| arms.iter().find(|arm| arm.defaultable));
+      let default_qname = default_arm.map(|arm| arm.qname.as_str());
+      let mut seen_qnames = std::collections::HashSet::new();
+      let qname_arms = arms.iter().filter_map(|arm| {
+        if Some(arm.qname.as_str()) == default_qname {
+          return None;
+        }
+        let qname = qname_match_key(&arm.qname);
+        if !seen_qnames.insert(qname.clone()) {
+          return None;
+        }
+        let qname_lit = LitByteStr::new(qname.as_bytes(), Span::call_site());
+        let tokens = &arm.tokens;
+        Some(quote! {
+          #qname_lit => {
+            #tokens
+          }
+        })
+      });
+      let default_tokens = default_arm
+        .map(|arm| arm.tokens.clone())
+        .unwrap_or_else(|| quote! {});
+      quote! {
+        #local_name_lit => {
+          match e.name().into_inner() {
+            #( #qname_arms )*
+            _ => {
+              #default_tokens
+            }
+          }
+        }
+      }
+    })
+    .collect()
+}
+
+fn extend_qname_dispatch_arms(
+  target: &mut std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+  source: &std::collections::BTreeMap<String, Vec<QNameDispatchArm>>,
+) {
+  for (local_name, arms) in source {
+    target
+      .entry(local_name.clone())
+      .or_default()
+      .extend(arms.clone());
+  }
+}
+
+fn build_grouped_choice_match_tokens(
+  grouped: &std::collections::BTreeMap<String, Vec<GroupedChoiceAttempt>>,
+  default_tag_prefix: &str,
+  as_result: bool,
+) -> Vec<proc_macro2::TokenStream> {
+  let miss_exit = if as_result {
+    quote! { return Ok(true); }
+  } else {
+    quote! {}
+  };
+
+  let grouped_attempt_tokens = |attempts: &[GroupedChoiceAttempt]| {
+    if attempts.len() == 1 {
+      let tokens = &attempts[0].tokens;
+      return quote! {
+        #tokens
+        #miss_exit
+      };
+    }
+
+    let mut ordered_attempts = attempts.to_vec();
+    ordered_attempts.sort_by_key(|attempt| {
+      std::cmp::Reverse(
+        attempt
+          .condition
+          .as_ref()
+          .map(|tokens| tokens.to_string().len())
+          .unwrap_or(0usize),
+      )
+    });
+    let mut branch_tokens = quote! {};
+    for attempt in ordered_attempts.into_iter().rev() {
+      let tokens = attempt.tokens;
+      branch_tokens = if let Some(condition) = attempt.condition {
+        quote! {
+          if #condition {
+            #tokens
+          } else {
+            #branch_tokens
+          }
+        }
+      } else {
+        quote! {
+          #tokens
+        }
+      };
+    }
+
+    quote! {
+      #branch_tokens
+      #miss_exit
+    }
+  };
+
+  let mut match_arms = Vec::new();
+  for (local_name, attempts) in grouped {
+    let mut attempts_by_qname =
+      std::collections::BTreeMap::<String, Vec<GroupedChoiceAttempt>>::new();
+    for attempt in attempts {
+      attempts_by_qname
+        .entry(attempt.qname.clone())
+        .or_default()
+        .push(attempt.clone());
+    }
+
+    if attempts_by_qname.len() == 1 {
+      let attempts = attempts_by_qname
+        .values()
+        .next()
+        .expect("grouped choice qname attempts");
+      if attempts.iter().all(|attempt| attempt.defaultable) {
+        let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+        let tokens = grouped_attempt_tokens(attempts);
+        match_arms.push(quote! {
+          #local_name_lit => {
+            #tokens
+          }
+        });
+        continue;
+      } else {
+        let mut qname_grouped = std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+        let qname = attempts_by_qname
+          .keys()
+          .next()
+          .expect("grouped choice qname")
+          .clone();
+        push_exact_qname_dispatch_arm(&mut qname_grouped, &qname, grouped_attempt_tokens(attempts));
+        match_arms.extend(qname_dispatch_match_arms(
+          &qname_grouped,
+          default_tag_prefix,
+        ));
+        continue;
+      }
+    }
+
+    let mut qname_grouped = std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+    for (qname, attempts) in attempts_by_qname {
+      let tokens = grouped_attempt_tokens(&attempts);
+      if attempts.iter().all(|attempt| attempt.defaultable) {
+        push_qname_dispatch_arm(&mut qname_grouped, &qname, tokens);
+      } else {
+        push_exact_qname_dispatch_arm(&mut qname_grouped, &qname, tokens);
+      }
+    }
+    match_arms.extend(qname_dispatch_match_arms(
+      &qname_grouped,
+      default_tag_prefix,
+    ));
+  }
+
+  match_arms
+}
+
+fn write_typed_child_tokens(
+  child_ty: &syn::Type,
+  value: proc_macro2::TokenStream,
+  qname: &str,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+) -> proc_macro2::TokenStream {
+  let child_no_prefix =
+    child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+  let start_tag_open = write_start_tag_open_tokens(qname, child_no_prefix);
+  let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+  let write_inner_call = if child_no_prefix {
+    quote! {
+      <#child_ty as crate::sdk::SdkType>::write_inner_no_prefix(#value, writer)?
+    }
+  } else {
+    quote! { <#child_ty as crate::sdk::SdkType>::write_inner(#value, writer)? }
+  };
+  quote! {
+    #start_tag_open
+    if !#write_inner_call {
+      #end_tag
+    }
+  }
+}
+
+fn write_text_value_content_tokens(
+  value_expr: proc_macro2::TokenStream,
+  value_ty: &syn::Type,
+  qname: &str,
+) -> proc_macro2::TokenStream {
+  let simple_type = mapped_simple_type_name(Some(value_ty), qname, false);
+  if let Some(kind) = simple_union_effective_type_kind(value_ty, simple_type) {
+    write_simple_union_value_tokens(kind, value_expr)
+  } else if let Some(kind) = integer_effective_type_kind(value_ty, simple_type) {
+    write_integer_value_tokens_by_kind(kind, value_expr)
+  } else if effective_type_name(value_ty, simple_type)
+    .as_deref()
+    .is_some_and(is_xml_schema_float_type_name)
+  {
+    write_xml_schema_float_effective_tokens(value_expr, value_ty, simple_type, qname)
+  } else if is_sdk_enum_effective_type(value_ty, simple_type) {
+    quote! {
+      writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(#value_expr))?;
+    }
+  } else if let Some(tokens) =
+    write_from_bytes_value_tokens(value_ty, simple_type, value_expr.clone())
+  {
+    tokens
+  } else if is_string_like_effective_type(value_ty, simple_type) {
+    quote! {
+      crate::common::write_escaped_content_str(writer, #value_expr.as_ref())?;
+    }
+  } else {
+    missing_static_value_mapping_tokens()
+  }
+}
+
+fn missing_static_value_mapping_tokens() -> proc_macro2::TokenStream {
+  quote! {
+    compile_error!("missing static XML value mapping");
+  }
+}
+
+fn build_choice_write_tokens(
+  choice_ty: &Type,
+  items: &[SdkTypeChoiceItem],
+  field_ident: &Ident,
+  repeated: bool,
+  optional: bool,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+) -> syn::Result<proc_macro2::TokenStream> {
+  let mut arms = Vec::new();
+  for item in items {
+    match item {
+      SdkTypeChoiceItem::Child {
+        variant, ty, qname, ..
+      } => {
+        let _ = ty;
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag_open = write_start_tag_open_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        let write_inner_call = if quote! { #choice_ty }.to_string() == "TableCellChoice"
+          && variant == "Table"
+          && qname == "w:tbl"
+        {
+          quote! { value.__ooxmlsdk_write_inner_stack(writer)? }
+        } else if child_no_prefix {
+          quote! { crate::sdk::SdkType::write_inner_no_prefix(value, writer)? }
+        } else {
+          quote! { crate::sdk::SdkType::write_inner(value, writer)? }
+        };
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag_open
+            if !#write_inner_call {
+              #end_tag
+            }
+          }
+        });
+      }
+      SdkTypeChoiceItem::EmptyChild { variant, qname } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let empty_tag = write_empty_tag_tokens(qname, child_no_prefix);
+        arms.push(quote! {
+          #choice_ty::#variant => {
+            #empty_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::TextChild {
+        variant,
+        ty,
+        is_enum,
+        qname,
+      } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        let content = if *is_enum {
+          quote! {
+            writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(value))?;
+          }
+        } else if let Some(payload_ty) = ty.clone().or_else(|| {
+          mapped_simple_type_name(None, qname, false)
+            .and_then(|mapped_type| syn::parse_str::<Type>(mapped_type).ok())
+        }) {
+          write_text_value_content_tokens(quote! { value }, &payload_ty, qname)
+        } else {
+          missing_static_value_mapping_tokens()
+        };
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag
+            #content
+            #end_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::AnyChild { variant, qname } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag
+            for value in value {
+              writer.write_all(value.as_bytes())?;
+            }
+            #end_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::Sequence { variant, children } => {
+        if children.len() == 1 {
+          let child = &children[0];
+          let qname = &child.qname;
+          let payload_ty = child.ty.as_ref().map(unwrap_option_vec_type);
+          let value_expr = quote! { value };
+          let write_tokens = match child.kind {
+            SdkTypeChoiceSequenceChildKind::Child => {
+              let child_ty = payload_ty
+                .as_ref()
+                .and_then(box_inner_type)
+                .unwrap_or_else(|| {
+                  payload_ty
+                    .clone()
+                    .unwrap_or_else(|| syn::parse_quote! { _ })
+                });
+              write_typed_child_tokens(
+                &child_ty,
+                value_expr,
+                qname,
+                parent_tag_prefix,
+                parent_no_prefix,
+              )
+            }
+            SdkTypeChoiceSequenceChildKind::TextChild => {
+              let payload_ty = payload_ty.unwrap_or_else(|| syn::parse_quote! { _ });
+              let child_ty = box_inner_type(&payload_ty).unwrap_or(payload_ty);
+              let child_no_prefix =
+                child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+              let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+              let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+              let content = write_text_value_content_tokens(value_expr, &child_ty, qname);
+              quote! {
+                #start_tag
+                #content
+                #end_tag
+              }
+            }
+            SdkTypeChoiceSequenceChildKind::AnyChild => build_any_child_write_tokens_for_value(
+              value_expr,
+              qname,
+              parent_tag_prefix,
+              parent_no_prefix,
+              false,
+              false,
+            ),
+            SdkTypeChoiceSequenceChildKind::EmptyChild => {
+              let child_no_prefix =
+                child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+              write_empty_tag_tokens(qname, child_no_prefix)
+            }
+          };
+          arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              #write_tokens
+            }
+          });
+        } else {
+          let write_inner_call = if parent_no_prefix {
+            quote! { crate::sdk::SdkType::write_inner_no_prefix(value, writer)? }
+          } else {
+            quote! { crate::sdk::SdkType::write_inner(value, writer)? }
+          };
+          arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              let _ = #write_inner_call;
+            }
+          });
+        }
+      }
+      SdkTypeChoiceItem::Any { variant, .. } => {
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            writer.write_all(value.as_ref())?;
+          }
+        });
+      }
+      SdkTypeChoiceItem::Text { variant } => {
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            crate::common::write_escaped_content_str(writer, value.as_ref())?;
+          }
+        });
+      }
+    }
+  }
+
+  let write_one = quote! {
+    match choice {
+      #( #arms )*
+    }
+  };
+  if repeated {
+    Ok(quote! {
+      for choice in &self.#field_ident {
+        #write_one
+      }
+    })
+  } else if optional {
+    Ok(quote! {
+      if let Some(choice) = &self.#field_ident {
+        #write_one
+      }
+    })
+  } else {
+    Ok(quote! {
+      let choice = &self.#field_ident;
+      #write_one
+    })
+  }
+}
+
+fn build_wml_table_stack_choice_next_tokens(
+  kind: WmlTableStackKind,
+  choice_ty: &Type,
+  items: &[SdkTypeChoiceItem],
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+) -> syn::Result<proc_macro2::TokenStream> {
+  let mut arms = Vec::new();
+  for item in items {
+    match item {
+      SdkTypeChoiceItem::Child {
+        variant, ty, qname, ..
+      } => {
+        let recursive_frame =
+          if kind == WmlTableStackKind::Table && variant == "TableRow" && qname == "w:tr" {
+            Some(quote! {
+              __OoxmlsdkWmlTableWriteFrame::Row(value.as_ref().table_row_choice.iter())
+            })
+          } else if kind == WmlTableStackKind::Row && variant == "TableCell" && qname == "w:tc" {
+            Some(quote! {
+              __OoxmlsdkWmlTableWriteFrame::Cell(value.as_ref().table_cell_choice.iter())
+            })
+          } else if kind == WmlTableStackKind::Cell && variant == "Table" && qname == "w:tbl" {
+            Some(quote! {
+              __OoxmlsdkWmlTableWriteFrame::Table(value.as_ref().table_choice2.iter())
+            })
+          } else {
+            None
+          };
+        if let Some(frame) = recursive_frame {
+          let child_no_prefix =
+            child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+          let start_tag_open = write_start_tag_open_tokens(qname, child_no_prefix);
+          arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              #start_tag_open
+              value.__ooxmlsdk_write_inner_stack_start(writer)?;
+              return Ok(Some(#frame));
+            }
+          });
+          continue;
+        }
+        let _ = ty;
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag_open = write_start_tag_open_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        let write_inner_call = if child_no_prefix {
+          quote! { crate::sdk::SdkType::write_inner_no_prefix(value, writer)? }
+        } else {
+          quote! { crate::sdk::SdkType::write_inner(value, writer)? }
+        };
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag_open
+            if !#write_inner_call {
+              #end_tag
+            }
+          }
+        });
+      }
+      SdkTypeChoiceItem::EmptyChild { variant, qname } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let empty_tag = write_empty_tag_tokens(qname, child_no_prefix);
+        arms.push(quote! {
+          #choice_ty::#variant => {
+            #empty_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::TextChild {
+        variant,
+        ty,
+        is_enum,
+        qname,
+      } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        let content = if *is_enum {
+          quote! {
+            writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(value))?;
+          }
+        } else if let Some(payload_ty) = ty.clone().or_else(|| {
+          mapped_simple_type_name(None, qname, false)
+            .and_then(|mapped_type| syn::parse_str::<Type>(mapped_type).ok())
+        }) {
+          write_text_value_content_tokens(quote! { value }, &payload_ty, qname)
+        } else {
+          missing_static_value_mapping_tokens()
+        };
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag
+            #content
+            #end_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::AnyChild { variant, qname } => {
+        let child_no_prefix =
+          child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+        let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+        let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #start_tag
+            for value in value {
+              writer.write_all(value.as_bytes())?;
+            }
+            #end_tag
+          }
+        });
+      }
+      SdkTypeChoiceItem::Sequence { variant, children } => {
+        if children.len() == 1 {
+          let child = &children[0];
+          let qname = &child.qname;
+          let payload_ty = child.ty.as_ref().map(unwrap_option_vec_type);
+          let value_expr = quote! { value };
+          let write_tokens = match child.kind {
+            SdkTypeChoiceSequenceChildKind::Child => {
+              let child_ty = payload_ty
+                .as_ref()
+                .and_then(box_inner_type)
+                .unwrap_or_else(|| {
+                  payload_ty
+                    .clone()
+                    .unwrap_or_else(|| syn::parse_quote! { _ })
+                });
+              write_typed_child_tokens(
+                &child_ty,
+                value_expr,
+                qname,
+                parent_tag_prefix,
+                parent_no_prefix,
+              )
+            }
+            SdkTypeChoiceSequenceChildKind::TextChild => {
+              let payload_ty = payload_ty.unwrap_or_else(|| syn::parse_quote! { _ });
+              let child_ty = box_inner_type(&payload_ty).unwrap_or(payload_ty);
+              let child_no_prefix =
+                child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+              let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+              let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+              let content = write_text_value_content_tokens(value_expr, &child_ty, qname);
+              quote! {
+                #start_tag
+                #content
+                #end_tag
+              }
+            }
+            SdkTypeChoiceSequenceChildKind::AnyChild => build_any_child_write_tokens_for_value(
+              value_expr,
+              qname,
+              parent_tag_prefix,
+              parent_no_prefix,
+              false,
+              false,
+            ),
+            SdkTypeChoiceSequenceChildKind::EmptyChild => {
+              let child_no_prefix =
+                child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+              write_empty_tag_tokens(qname, child_no_prefix)
+            }
+          };
+          arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              #write_tokens
+            }
+          });
+        } else {
+          let write_inner_call = if parent_no_prefix {
+            quote! { crate::sdk::SdkType::write_inner_no_prefix(value, writer)? }
+          } else {
+            quote! { crate::sdk::SdkType::write_inner(value, writer)? }
+          };
+          arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              let _ = #write_inner_call;
+            }
+          });
+        }
+      }
+      SdkTypeChoiceItem::Any { variant, .. } => {
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            writer.write_all(value.as_ref())?;
+          }
+        });
+      }
+      SdkTypeChoiceItem::Text { variant } => {
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            crate::common::write_escaped_content_str(writer, value.as_ref())?;
+          }
+        });
+      }
+    }
+  }
+
+  Ok(quote! {
+    while let Some(choice) = choices.next() {
+      match choice {
+        #( #arms )*
+      }
+    }
+    Ok(None)
+  })
+}
+
+fn build_choice_payload_validate_tokens(
+  value_expr: proc_macro2::TokenStream,
+  ty: &Type,
+) -> proc_macro2::TokenStream {
+  if let Some(inner_ty) = vec_inner_type(ty) {
+    let inner_tokens = build_choice_payload_validate_tokens(quote! { value }, &inner_ty);
+    return quote! {
+      for value in #value_expr {
+        #inner_tokens
+      }
+    };
+  }
+
+  if is_option_type(ty) {
+    let inner_ty = unwrap_option_type(ty);
+    let inner_tokens = build_choice_payload_validate_tokens(quote! { value }, &inner_ty);
+    return quote! {
+      if let Some(value) = #value_expr {
+        #inner_tokens
+      }
+    };
+  }
+
+  quote! {
+    #value_expr.validate_into(context);
+  }
+}
+
+fn build_choice_validate_tokens(
+  choice_ty: &Type,
+  items: &[SdkTypeChoiceItem],
+  field_ident: &Ident,
+  repeated: bool,
+  optional: bool,
+) -> proc_macro2::TokenStream {
+  let mut arms = Vec::new();
+  for item in items {
+    match item {
+      SdkTypeChoiceItem::Child { variant, ty, .. } => {
+        let validate_tokens = if let Some(ty) = ty {
+          build_choice_payload_validate_tokens(quote! { value }, ty)
+        } else {
+          quote! {
+            value.validate_into(context);
+          }
+        };
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            #validate_tokens
+          }
+        });
+      }
+      SdkTypeChoiceItem::Sequence { variant, children } => {
+        let _ = children;
+        arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            value.validate_into(context);
+          }
+        });
+      }
+      SdkTypeChoiceItem::EmptyChild { variant, .. } => {
+        arms.push(quote! {
+          #choice_ty::#variant => {}
+        });
+      }
+      SdkTypeChoiceItem::TextChild { variant, .. }
+      | SdkTypeChoiceItem::AnyChild { variant, .. }
+      | SdkTypeChoiceItem::Any { variant, .. }
+      | SdkTypeChoiceItem::Text { variant } => {
+        arms.push(quote! {
+          #choice_ty::#variant(_) => {}
+        });
+      }
+    }
+  }
+
+  let validate_one = quote! {
+    match choice {
+      #( #arms )*
+    }
+  };
+  if repeated {
+    quote! {
+      for choice in &self.#field_ident {
+        #validate_one
+      }
+    }
+  } else if optional {
+    quote! {
+      if let Some(choice) = &self.#field_ident {
+        #validate_one
+      }
+    }
+  } else {
+    quote! {
+      let choice = &self.#field_ident;
+      #validate_one
+    }
+  }
+}
+
+fn validator_methods_tokens(
+  validate_into_body: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if !cfg!(feature = "validators") {
+    return quote! {};
+  }
+
+  quote! {
+    #[cfg(feature = "validators")]
+    #[inline]
+    pub fn validate(&self) -> Vec<crate::validator::ValidationErrorInfo> {
+      let mut context = crate::validator::ValidationContext::default();
+      self.validate_into(&mut context);
+      context.into_errors()
+    }
+
+    #[cfg(feature = "validators")]
+    pub(crate) fn validate_into(&self, context: &mut crate::validator::ValidationContext) {
+      #validate_into_body
+    }
+  }
+}
+
+fn validator_impl_tokens(
+  impl_generics: proc_macro2::TokenStream,
+  ident: &Ident,
+  type_generics: proc_macro2::TokenStream,
+  where_clause: proc_macro2::TokenStream,
+  methods: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if methods.is_empty() {
+    return quote! {};
+  }
+
+  quote! {
+    impl #impl_generics #ident #type_generics #where_clause {
+      #methods
+    }
+  }
+}
+
+fn generate_mce_tokens() -> bool {
+  cfg!(feature = "mce")
+}
+
+pub(crate) fn expand_sdk_type(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = &input.ident;
+  let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+  let Data::Struct(data_struct) = &input.data else {
+    return Err(syn::Error::new_spanned(
+      input,
+      "SdkType can only be derived for structs",
+    ));
+  };
+
+  match &data_struct.fields {
+    Fields::Named(fields) => {
+      if let Some(schema_qname) = parse_sdk_qname(&input.attrs)? {
+        return expand_named_struct(input, &schema_qname, fields);
+      }
+      expand_helper_struct(input, fields)
+    }
+    Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+      if let Some(schema_qname) = parse_sdk_qname(&input.attrs)? {
+        return expand_tuple_wrapper(input, &schema_qname, fields);
+      }
+      Err(syn::Error::new_spanned(
+        fields,
+        "tuple wrappers require an #[sdk(qname = \"...\")] attribute",
+      ))
+    }
+    _ => {
+      let validator_methods_tokens = validator_methods_tokens(quote! {});
+      let validator_impl_tokens = validator_impl_tokens(
+        quote! { #impl_generics },
+        ident,
+        quote! { #type_generics },
+        quote! { #where_clause },
+        validator_methods_tokens,
+      );
+      let public_mce_method_tokens = parse_sdk_xml_header(&input.attrs)?.then(|| {
+        quote! {
+          #[inline]
+          pub fn process_mce(
+            &mut self,
+            settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+          ) -> Result<(), crate::common::SdkError> {
+            if matches!(
+              settings.process_mode,
+              crate::sdk::MarkupCompatibilityProcessMode::NoProcess
+            ) {
+              return Ok(());
+            }
+            let context = crate::mce::MceContext::default();
+            let _ = self.process_mce_with_context(settings, &context)?;
+            Ok(())
+          }
+        }
+      });
+      let mce_methods_tokens = if generate_mce_tokens() {
+        quote! {
+          #[cfg(feature = "mce")]
+          impl #impl_generics #ident #type_generics #where_clause {
+            #public_mce_method_tokens
+
+            #[inline]
+            pub(crate) fn process_mce_with_context(
+              &mut self,
+              _settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+              _context: &crate::mce::MceContext<'_>,
+            ) -> Result<crate::mce::ElementAction, crate::common::SdkError> {
+              Ok(crate::mce::ElementAction::Normal)
+            }
+          }
+        }
+      } else {
+        quote! {}
+      };
+      Ok(quote! {
+        impl #impl_generics crate::sdk::SdkType for #ident #type_generics #where_clause {}
+        #validator_impl_tokens
+        #mce_methods_tokens
+      })
+    }
+  }
+}
+
+fn sdk_type_root_info_tokens(
+  ident: &Ident,
+  local_name_lit: &LitByteStr,
+  schema_qname: &str,
+  prefix_write_mode: PrefixWriteMode,
+  preparse_namespaces: bool,
+  writes_xml_header: bool,
+) -> proc_macro2::TokenStream {
+  let no_prefix = prefix_write_mode.writes_no_prefix();
+  let start_tag_open = tag_literal(schema_qname, "<", "", no_prefix);
+  let end_tag = tag_literal(schema_qname, "</", ">", no_prefix);
+  let writes_inner_without_prefix = prefix_write_mode == PrefixWriteMode::NoPrefixDual;
+
+  quote! {
+    const ROOT_INFO: Option<crate::sdk::SdkTypeRootInfo> = Some(
+      crate::sdk::SdkTypeRootInfo::new(
+        stringify!(#ident),
+        #local_name_lit,
+        #start_tag_open,
+        #end_tag,
+        #preparse_namespaces,
+        #writes_xml_header,
+        #writes_inner_without_prefix,
+      ),
+    );
+  }
+}
+
+fn sdk_type_display_method_tokens() -> proc_macro2::TokenStream {
+  quote! {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      crate::sdk::fmt_sdk_type(self, f)
+    }
+  }
+}
+
+fn sdk_type_from_str_impl_tokens(
+  impl_generics: proc_macro2::TokenStream,
+  ident: &Ident,
+  type_generics: proc_macro2::TokenStream,
+  where_clause: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  quote! {
+    impl #impl_generics std::str::FromStr for #ident #type_generics #where_clause {
+      type Err = crate::common::SdkError;
+
+      fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as crate::sdk::SdkType>::from_bytes(s.as_bytes())
+      }
+    }
+  }
+}
+
+fn write_inner_body_tokens(default_body: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+  default_body
+}
+
+fn body_write_tokens_for(
+  ordered_write_tokens: &[proc_macro2::TokenStream],
+  writes_body: bool,
+) -> proc_macro2::TokenStream {
+  if writes_body {
+    quote! {
+      writer.write_all(b">")?;
+      #( #ordered_write_tokens )*
+      Ok(false)
+    }
+  } else {
+    quote! {
+      writer.write_all(b" />")?;
+      Ok(true)
+    }
+  }
+}
+
+fn stack_body_write_tokens_for(
+  ordered_write_tokens: &[proc_macro2::TokenStream],
+) -> proc_macro2::TokenStream {
+  quote! {
+    writer.write_all(b">")?;
+    #( #ordered_write_tokens )*
+    Ok(())
+  }
+}
+
+fn choice_item_parse_bodies<'a>(
+  ident: &Ident,
+  wml_table_kind: Option<WmlTableStackKind>,
+  field_ident: &Ident,
+  choice_ty: &Type,
+  repeated: bool,
+  item: &'a SdkTypeChoiceItem,
+  xml_child_slot_assign: &proc_macro2::TokenStream,
+) -> Option<(&'a str, proc_macro2::TokenStream)> {
+  match item {
+    SdkTypeChoiceItem::Child {
+      variant,
+      ty,
+      boxed,
+      qname,
+      ..
+    } => {
+      if wml_table_kind == Some(WmlTableStackKind::Cell)
+        && field_ident == "table_cell_choice"
+        && variant == "Table"
+        && qname == "w:tbl"
+      {
+        let read_child_tokens = wml_table_stack_read_table_value_tokens();
+        let choice_value_tokens = quote! { std::boxed::Box::new(#read_child_tokens) };
+        let choice = quote! {
+          #choice_ty::#variant(#choice_value_tokens)
+        };
+        let assign_tokens = if repeated {
+          quote! { #field_ident.push(#choice); }
+        } else {
+          quote! { #field_ident = Some(#choice); }
+        };
+        return Some((
+          qname.as_str(),
+          quote! {
+            #assign_tokens
+            #xml_child_slot_assign
+          },
+        ));
+      }
+
+      let choice = choice_child_read_tokens(
+        choice_ty,
+        variant,
+        ty.as_ref(),
+        *boxed,
+        quote! { xml_reader },
+      );
+      let assign_tokens = if repeated {
+        quote! { #field_ident.push(#choice); }
+      } else {
+        quote! { #field_ident = Some(#choice); }
+      };
+      Some((
+        qname.as_str(),
+        quote! {
+          #assign_tokens
+          #xml_child_slot_assign
+        },
+      ))
+    }
+    SdkTypeChoiceItem::EmptyChild { variant, qname, .. } => {
+      let assign_tokens = if repeated {
+        quote! { #field_ident.push(#choice_ty::#variant); }
+      } else {
+        quote! { #field_ident = Some(#choice_ty::#variant); }
+      };
+      Some((
+        qname.as_str(),
+        quote! {
+          #assign_tokens
+          #xml_child_slot_assign
+        },
+      ))
+    }
+    SdkTypeChoiceItem::TextChild {
+      variant,
+      is_enum,
+      qname,
+      ..
+    } => {
+      let simple_type = mapped_simple_type_name(None, qname, false);
+      let empty_parse_tokens = text_child_empty_parse_tokens(
+        None,
+        simple_type,
+        *is_enum,
+        quote! { stringify!(#ident) },
+        quote! { stringify!(#variant) },
+      );
+      let read_parse_tokens = text_child_read_parse_tokens(
+        None,
+        simple_type,
+        *is_enum,
+        quote! { xml_reader },
+        quote! { e.name() },
+        quote! { stringify!(#ident) },
+        quote! { stringify!(#variant) },
+      );
+      let parsed_tokens = quote! {
+        let parsed_child = if next_empty {
+          #empty_parse_tokens
+        } else {
+          #read_parse_tokens
+        };
+      };
+      let assign_tokens = if repeated {
+        quote! { #field_ident.push(#choice_ty::#variant(parsed_child)); }
+      } else {
+        quote! { #field_ident = Some(#choice_ty::#variant(parsed_child)); }
+      };
+      let body = quote! {
+        #parsed_tokens
+        #assign_tokens
+        #xml_child_slot_assign
+      };
+      Some((qname.as_str(), body))
+    }
+    SdkTypeChoiceItem::AnyChild { variant, qname, .. } => {
+      let parsed_tokens = build_choice_any_child_parse_tokens(ident, qname, quote! { xml_reader });
+      let assign_tokens = if repeated {
+        quote! { #field_ident.push(#choice_ty::#variant(parsed_child.into())); }
+      } else {
+        quote! { #field_ident = Some(#choice_ty::#variant(parsed_child.into())); }
+      };
+      Some((
+        qname.as_str(),
+        quote! {
+          #parsed_tokens
+          #assign_tokens
+          #xml_child_slot_assign
+        },
+      ))
+    }
+    _ => None,
+  }
+}
+
+fn sequence_option_field_parse_body(
+  choice_ty: &Type,
+  variant: &Ident,
+  field_ident: &Ident,
+  _repeated: bool,
+  option_field_ident: &Ident,
+  xml_child_slot_assign: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  quote! {
+    if !matches!(#field_ident, Some(#choice_ty::#variant(_))) {
+      #field_ident = Some(#choice_ty::#variant(Default::default()));
+    }
+    if let Some(#choice_ty::#variant(value)) = &mut #field_ident {
+      value.#option_field_ident = Some(
+        crate::sdk::SdkType::read_inner(xml_reader, e, next_empty, read_context)?
+      );
+    }
+    #xml_child_slot_assign
+  }
+}
+
+fn expand_tuple_wrapper(
+  input: &DeriveInput,
+  schema_qname: &str,
+  fields: &syn::FieldsUnnamed,
+) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = &input.ident;
+  let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+  let inner_ty = &fields
+    .unnamed
+    .first()
+    .ok_or_else(|| syn::Error::new_spanned(fields, "tuple wrapper missing inner field"))?
+    .ty;
+  let QNameInfo { local_name, .. } = parse_qname_info(schema_qname);
+  if local_name.is_empty() {
+    return Err(syn::Error::new_spanned(
+      input,
+      "tuple wrappers require a concrete element qname",
+    ));
+  }
+
+  let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+  let prefix_write_mode = parse_sdk_prefix_write_mode(&input.attrs)?;
+  let root_info_tokens = sdk_type_root_info_tokens(
+    ident,
+    &local_name_lit,
+    schema_qname,
+    prefix_write_mode,
+    false,
+    false,
+  );
+  let display_method_tokens = sdk_type_display_method_tokens();
+  let from_str_impl_tokens = sdk_type_from_str_impl_tokens(
+    quote! { #impl_generics },
+    ident,
+    quote! { #type_generics },
+    quote! { #where_clause },
+  );
+  let validator_methods_tokens = validator_methods_tokens(quote! {
+    self.0.validate_into(context);
+  });
+  let validator_impl_tokens = validator_impl_tokens(
+    quote! { #impl_generics },
+    ident,
+    quote! { #type_generics },
+    quote! { #where_clause },
+    validator_methods_tokens,
+  );
+  let (mce_element_action_tokens, _) = mce_element_action_tokens(&input.attrs, schema_qname)?;
+  let public_mce_method_tokens = parse_sdk_xml_header(&input.attrs)?.then(|| {
+    quote! {
+      #[inline]
+      pub fn process_mce(
+        &mut self,
+        settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+      ) -> Result<(), crate::common::SdkError> {
+        if matches!(
+          settings.process_mode,
+          crate::sdk::MarkupCompatibilityProcessMode::NoProcess
+        ) {
+          return Ok(());
+        }
+        let context = crate::mce::MceContext::default();
+        let _ = self.process_mce_with_context(settings, &context)?;
+        Ok(())
+      }
+    }
+  });
+  let mce_methods_tokens = if generate_mce_tokens() {
+    quote! {
+      #[cfg(feature = "mce")]
+      impl #impl_generics #ident #type_generics #where_clause {
+        #public_mce_method_tokens
+
+        #[inline]
+        pub(crate) fn process_mce_with_context(
+          &mut self,
+          settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+          context: &crate::mce::MceContext<'_>,
+        ) -> Result<crate::mce::ElementAction, crate::common::SdkError> {
+          let _ = (&self.0, settings, context);
+          Ok(#mce_element_action_tokens)
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+
+  Ok(quote! {
+    impl #impl_generics crate::sdk::SdkType for #ident #type_generics #where_clause {
+      fn read_inner<'xml, R: crate::common::XmlRead<'xml>>(
+        xml_reader: &mut R,
+        start: quick_xml::events::BytesStart<'xml>,
+        empty: bool,
+        read_context: &mut crate::common::ReadContext,
+      ) -> Result<Self, crate::common::SdkError> {
+        <#inner_ty as crate::sdk::SdkType>::read_inner(xml_reader, start, empty, read_context)
+          .map(Self)
+      }
+
+      #root_info_tokens
+
+      fn write_inner<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+      ) -> Result<bool, std::io::Error> {
+        <#inner_ty as crate::sdk::SdkType>::write_inner(&self.0, writer)
+      }
+    }
+
+    #mce_methods_tokens
+
+    impl #impl_generics std::ops::Deref for #ident #type_generics #where_clause {
+      type Target = #inner_ty;
+
+      #[inline]
+      fn deref(&self) -> &Self::Target {
+        &self.0
+      }
+    }
+
+    impl #impl_generics std::ops::DerefMut for #ident #type_generics #where_clause {
+      #[inline]
+      fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+      }
+    }
+
+    impl #impl_generics From<#inner_ty> for #ident #type_generics #where_clause {
+      #[inline]
+      fn from(value: #inner_ty) -> Self {
+        Self(value)
+      }
+    }
+
+    #from_str_impl_tokens
+
+    #validator_impl_tokens
+
+    impl #impl_generics ::std::fmt::Display for #ident #type_generics #where_clause {
+      #display_method_tokens
+    }
+  })
+}
+
+fn parse_sdk_element_version(attrs: &[Attribute]) -> syn::Result<Option<&'static str>> {
+  let mut version = None;
+  for attr in attrs {
+    if !attr.path().is_ident("sdk") {
+      continue;
+    }
+    let metas =
+      attr.parse_args_with(syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated)?;
+    for meta in metas {
+      let Meta::NameValue(name_value) = meta else {
+        continue;
+      };
+      if !name_value.path.is_ident("version") {
+        continue;
+      }
+      let Expr::Path(value) = name_value.value else {
+        return Err(syn::Error::new_spanned(
+          name_value,
+          "SdkType version expects an availability identifier",
+        ));
+      };
+      let path = value.path;
+      let candidate = if path.is_ident("office2010") {
+        "Office2010"
+      } else if path.is_ident("office2013") {
+        "Office2013"
+      } else if path.is_ident("office2016") {
+        "Office2016"
+      } else if path.is_ident("office2019") {
+        "Office2019"
+      } else if path.is_ident("office2021") {
+        "Office2021"
+      } else if path.is_ident("microsoft365") {
+        "Microsoft365"
+      } else {
+        return Err(syn::Error::new_spanned(
+          path,
+          "unsupported SdkType element availability version",
+        ));
+      };
+      if version.replace(candidate).is_some() {
+        return Err(syn::Error::new_spanned(
+          path,
+          "SdkType accepts only one element availability version",
+        ));
+      }
+    }
+  }
+  Ok(version)
+}
+
+fn mce_version_tokens(version: &str) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = Ident::new(version, Span::call_site());
+  if matches!(
+    version,
+    "Office2007"
+      | "Office2010"
+      | "Office2013"
+      | "Office2016"
+      | "Office2019"
+      | "Office2021"
+      | "Microsoft365"
+  ) {
+    Ok(quote! { crate::sdk::FileFormatVersion::#ident })
+  } else {
+    Err(syn::Error::new(
+      Span::call_site(),
+      format!("unsupported MCE element availability {version}"),
+    ))
+  }
+}
+
+fn mce_element_action_tokens(
+  attrs: &[Attribute],
+  schema_qname: &str,
+) -> syn::Result<(proc_macro2::TokenStream, bool)> {
+  let QNameInfo {
+    tag_prefix,
+    local_name,
+  } = parse_qname_info(schema_qname);
+  let version = parse_sdk_element_version(attrs)?
+    .or_else(|| namespaces::minimum_version_by_prefix(&tag_prefix))
+    .unwrap_or("Office2007");
+  if version == "Office2007" {
+    return Ok((quote! { crate::mce::ElementAction::Normal }, false));
+  }
+  let namespace = namespaces::uri_by_prefix(&tag_prefix).ok_or_else(|| {
+    syn::Error::new(
+      Span::call_site(),
+      format!("missing namespace URI for MCE element prefix {tag_prefix}"),
+    )
+  })?;
+  let namespace = LitByteStr::new(namespace.as_bytes(), Span::call_site());
+  let local_name = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+  let version = mce_version_tokens(version)?;
+  Ok((
+    quote! {
+      context.element_action(
+        #namespace,
+        #local_name,
+        #version,
+        settings.target_file_format_version,
+      )
+    },
+    true,
+  ))
+}
+
+fn mce_process_child_field_tokens(field: &SdkChildField) -> proc_macro2::TokenStream {
+  let ident = &field.ident;
+  if field.repeated {
+    quote! {
+      let mut index = 0usize;
+      while index < self.#ident.len() {
+        let action = self.#ident[index].process_mce_with_context(settings, context)?;
+        if matches!(action, crate::mce::ElementAction::Normal) {
+          index += 1;
+        } else {
+          self.#ident.remove(index);
+        }
+      }
+    }
+  } else if field.optional {
+    quote! {
+      let action = if let Some(child) = &mut self.#ident {
+        Some(child.process_mce_with_context(settings, context)?)
+      } else {
+        None
+      };
+      if action.is_some_and(|action| !matches!(action, crate::mce::ElementAction::Normal)) {
+        self.#ident = None;
+      }
+    }
+  } else {
+    quote! {
+      let _ = self.#ident.process_mce_with_context(settings, context)?;
+    }
+  }
+}
+
+fn mce_process_static_attr_field_tokens(
+  field: &SdkAttrField,
+) -> syn::Result<Option<proc_macro2::TokenStream>> {
+  if !field.optional {
+    return Ok(None);
+  }
+
+  let prefix = parse_qname_info(&field.name).tag_prefix;
+  let Some(minimum_version) = namespaces::minimum_version_by_prefix(&prefix) else {
+    return Ok(None);
+  };
+  let target_is_older = match minimum_version {
+    "Office2007" => return Ok(None),
+    "Office2010" => quote! {
+      matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Office2007
+      )
+    },
+    "Office2013" => quote! {
+      matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Office2007
+          | crate::sdk::FileFormatVersion::Office2010
+      )
+    },
+    "Office2016" => quote! {
+      matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Office2007
+          | crate::sdk::FileFormatVersion::Office2010
+          | crate::sdk::FileFormatVersion::Office2013
+      )
+    },
+    "Office2019" => quote! {
+      matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Office2007
+          | crate::sdk::FileFormatVersion::Office2010
+          | crate::sdk::FileFormatVersion::Office2013
+          | crate::sdk::FileFormatVersion::Office2016
+      )
+    },
+    "Office2021" => quote! {
+      !matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Office2021
+          | crate::sdk::FileFormatVersion::Microsoft365
+      )
+    },
+    "Microsoft365" => quote! {
+      !matches!(
+        settings.target_file_format_version,
+        crate::sdk::FileFormatVersion::Microsoft365
+      )
+    },
+    version => {
+      return Err(syn::Error::new(
+        Span::call_site(),
+        format!("unsupported namespace minimum version {version}"),
+      ));
+    }
+  };
+  let ident = &field.ident;
+  let qname = LitByteStr::new(field.name.as_bytes(), Span::call_site());
+
+  Ok(Some(quote! {
+    if self.#ident.is_some()
+      && #target_is_older
+      && context.should_remove_attribute_qname_bytes(#qname)
+    {
+      self.#ident = None;
+    }
+  }))
+}
+
+fn mce_process_content_mapping(
+  owner_qname: &str,
+  owner_type: &Ident,
+  field_name: &Ident,
+  field_type: &Type,
+) -> Option<mce_process_content_mapping::Mapping> {
+  let choice_type = unwrap_option_vec_type(field_type);
+  let choice_type = type_terminal_name(&choice_type)?;
+  mce_process_content_mapping::resolve(
+    owner_qname,
+    &owner_type.to_string(),
+    &field_name.to_string(),
+    &choice_type,
+  )
+}
+
+fn mce_process_content_method_tokens(
+  mapping: &mce_process_content_mapping::Mapping,
+) -> syn::Result<proc_macro2::TokenStream> {
+  use mce_process_content_mapping::{Cardinality, FieldMapping};
+
+  let mut promotion_arms = Vec::new();
+  for wrapper in mapping.wrappers {
+    let wrapper_variant = Ident::new(wrapper.variant, Span::call_site());
+    let unwrap_wrapper = if wrapper.boxed {
+      quote! { *wrapper }
+    } else {
+      quote! { wrapper }
+    };
+    let mut promote_fields = Vec::new();
+    for field in wrapper.fields {
+      let tokens = match field {
+        FieldMapping::Direct {
+          field,
+          target_variant,
+          cardinality,
+        } => {
+          let field = Ident::new(field, Span::call_site());
+          let target_variant = Ident::new(target_variant, Span::call_site());
+          match cardinality {
+            Cardinality::Many => quote! {
+              for value in wrapper.#field {
+                output.push(Self::#target_variant(value));
+              }
+            },
+            Cardinality::Optional => quote! {
+              if let Some(value) = wrapper.#field {
+                output.push(Self::#target_variant(value));
+              }
+            },
+            Cardinality::One => quote! {
+              output.push(Self::#target_variant(wrapper.#field));
+            },
+          }
+        }
+        FieldMapping::Choice {
+          field,
+          source_module,
+          source_choice,
+          cardinality,
+          exhaustive,
+          variants,
+          unit_variants,
+          renamed_variants,
+        } => {
+          let field = Ident::new(field, Span::call_site());
+          let source_module = Ident::new(source_module, Span::call_site());
+          let source_choice = Ident::new(source_choice, Span::call_site());
+          let source_type = quote! {
+            crate::schemas::#source_module::#source_choice
+          };
+          let mut conversion_arms = Vec::new();
+          for &variant in *variants {
+            let target_variant = renamed_variants
+              .iter()
+              .find_map(|(source, target)| (*source == variant).then_some(*target))
+              .unwrap_or(variant);
+            let unit = unit_variants.contains(&variant);
+            let source_variant = Ident::new(variant, Span::call_site());
+            let target_variant = Ident::new(target_variant, Span::call_site());
+            conversion_arms.push(if unit {
+              quote! {
+                #source_type::#source_variant => Self::#target_variant,
+              }
+            } else {
+              quote! {
+                #source_type::#source_variant(value) => Self::#target_variant(value),
+              }
+            });
+          }
+          let convert = if *exhaustive {
+            quote! {
+              match value {
+                #( #conversion_arms )*
+              }
+            }
+          } else {
+            quote! {
+              match value {
+                #( #conversion_arms )*
+                _ => continue,
+              }
+            }
+          };
+          match cardinality {
+            Cardinality::Many => quote! {
+              for value in wrapper.#field {
+                output.push(#convert);
+              }
+            },
+            Cardinality::Optional => quote! {
+              if let Some(value) = wrapper.#field {
+                output.push(#convert);
+              }
+            },
+            Cardinality::One => quote! {
+              let value = wrapper.#field;
+              output.push(#convert);
+            },
+          }
+        }
+      };
+      promote_fields.push(tokens);
+    }
+    promotion_arms.push(quote! {
+      Self::#wrapper_variant(wrapper) => {
+        let wrapper = #unwrap_wrapper;
+        #( #promote_fields )*
+        true
+      }
+    });
+  }
+
+  Ok(quote! {
+    pub(crate) fn __ooxmlsdk_promote_process_content(
+      self,
+      output: &mut Vec<Self>,
+    ) -> bool {
+      match self {
+        #( #promotion_arms, )*
+        _ => false,
+      }
+    }
+  })
+}
+
+fn mce_choice_impl_tokens(
+  field: &SdkTypeChoiceField,
+  default_tag_prefix: &str,
+) -> syn::Result<proc_macro2::TokenStream> {
+  if !generate_mce_tokens() {
+    return Ok(quote! {});
+  }
+
+  let ident = &field.ident;
+  let choice_ty = unwrap_option_vec_type(&field.ty);
+  let mut choice_arms = Vec::new();
+  let mut alternate_content_variant = None;
+
+  for item in &field.items {
+    match item {
+      SdkTypeChoiceItem::Child { variant, qname, .. } => {
+        if variant == "AlternateContent" && parse_qname_info(qname).local_name == "AlternateContent"
+        {
+          alternate_content_variant = Some(variant.clone());
+        } else {
+          choice_arms.push(quote! {
+            #choice_ty::#variant(value) => {
+              value.process_mce_with_context(settings, context)
+            }
+          });
+        }
+      }
+      SdkTypeChoiceItem::Sequence { variant, children } => {
+        let _ = children;
+        choice_arms.push(quote! {
+          #choice_ty::#variant(value) => {
+            value.process_mce_with_context(settings, context)
+          }
+        });
+      }
+      SdkTypeChoiceItem::EmptyChild { variant, qname, .. } => {
+        let (action, _) = mce_element_action_tokens(&[], qname)?;
+        choice_arms.push(quote! {
+          #choice_ty::#variant => Ok(#action),
+        });
+      }
+      SdkTypeChoiceItem::TextChild { variant, qname, .. } => {
+        let (action, _) = mce_element_action_tokens(&[], qname)?;
+        choice_arms.push(quote! {
+          #choice_ty::#variant(_) => Ok(#action),
+        });
+      }
+      SdkTypeChoiceItem::AnyChild { .. }
+      | SdkTypeChoiceItem::Any { .. }
+      | SdkTypeChoiceItem::Text { .. } => {}
+    }
+  }
+
+  let process_choice_for = |choice_expr: proc_macro2::TokenStream| {
+    quote! {
+      match #choice_expr {
+        #( #choice_arms )*
+        _ => Ok(crate::mce::ElementAction::Normal),
+      }
+    }
+  };
+  let process_self_choice = process_choice_for(quote! { self });
+
+  let mut parse_replacement_dispatch =
+    std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+  for item in &field.items {
+    match item {
+      SdkTypeChoiceItem::Child {
+        variant,
+        ty,
+        boxed,
+        qname,
+        ..
+      } => {
+        let read_child_tokens = choice_child_read_tokens(
+          &choice_ty,
+          variant,
+          ty.as_ref(),
+          *boxed,
+          quote! { &mut child_reader },
+        );
+        push_qname_dispatch_arm(
+          &mut parse_replacement_dispatch,
+          qname,
+          quote! { Some(#read_child_tokens) },
+        );
+      }
+      SdkTypeChoiceItem::EmptyChild { variant, qname, .. } => {
+        push_qname_dispatch_arm(
+          &mut parse_replacement_dispatch,
+          qname,
+          quote! { Some(#choice_ty::#variant) },
+        );
+      }
+      SdkTypeChoiceItem::TextChild {
+        variant,
+        is_enum,
+        qname,
+        ..
+      } => {
+        let simple_type = mapped_simple_type_name(None, qname, false);
+        let empty_parse_tokens = text_child_empty_parse_tokens(
+          None,
+          simple_type,
+          *is_enum,
+          quote! { stringify!(#ident) },
+          quote! { stringify!(#variant) },
+        );
+        let value_parse_tokens = text_child_value_parse_tokens(
+          None,
+          simple_type,
+          *is_enum,
+          quote! { value },
+          quote! { stringify!(#ident) },
+          quote! { stringify!(#variant) },
+        );
+        push_qname_dispatch_arm(
+          &mut parse_replacement_dispatch,
+          qname,
+          quote! {
+            let parsed_child = if next_empty {
+              #empty_parse_tokens
+            } else {
+              let value = child_reader.read_text(
+                e.name(),
+                stringify!(#ident),
+                stringify!(#variant),
+              )?;
+              #value_parse_tokens
+            };
+            Some(#choice_ty::#variant(parsed_child))
+          },
+        );
+      }
+      SdkTypeChoiceItem::AnyChild { variant, qname, .. } => {
+        let parsed_tokens =
+          build_choice_any_child_parse_tokens(ident, qname, quote! { &mut child_reader });
+        push_qname_dispatch_arm(
+          &mut parse_replacement_dispatch,
+          qname,
+          quote! {
+            #parsed_tokens
+            Some(#choice_ty::#variant(parsed_child.into()))
+          },
+        );
+      }
+      SdkTypeChoiceItem::Sequence { .. }
+      | SdkTypeChoiceItem::Any { .. }
+      | SdkTypeChoiceItem::Text { .. } => {}
+    }
+  }
+  let parse_replacement_arms =
+    qname_dispatch_match_arms(&parse_replacement_dispatch, default_tag_prefix);
+
+  let mut mce_replacement_read_methods = Vec::new();
+  if alternate_content_variant.is_some() {
+    mce_replacement_read_methods.push(quote! {
+      fn __ooxmlsdk_read_mce_replacement_child(
+        child_xml: std::boxed::Box<[u8]>,
+      ) -> Result<Option<Self>, crate::common::SdkError> {
+        let mut child_reader = crate::common::from_bytes_inner(child_xml.as_ref());
+        let mut child_read_context = crate::common::ReadContext::default();
+        let read_context = &mut child_read_context;
+        loop {
+          match child_reader.next()? {
+            crate::common::PayloadEvent::Start(e, next_empty) => {
+              read_context.enter_root(&e, next_empty, child_reader.decoder())?;
+              let event_name = crate::common::xml_local_name(e.name());
+              return Ok(match event_name {
+                #( #parse_replacement_arms )*
+                _ => None,
+              });
+            }
+            crate::common::PayloadEvent::Eof => {
+              return Err(crate::common::unexpected_eof(stringify!(#ident)));
+            }
+            _ => {}
+          }
+        }
+      }
+    });
+  }
+  let mce_alternate_content_arm = alternate_content_variant.as_ref().map(|variant| {
+    quote! {
+      #choice_ty::#variant(alternate_content) => {
+        crate::mce::process_alternate_content_children(
+          alternate_content.as_mut(),
+          settings,
+          context,
+          |child_xml, child_context| {
+            if let Some(mut child) = Self::__ooxmlsdk_read_mce_replacement_child(child_xml)? {
+              let action = Self::process_mce_choice_with_context(
+                &mut child,
+                settings,
+                child_context,
+              )?;
+              if matches!(action, crate::mce::ElementAction::Normal) {
+                processed.push(child);
+              }
+            }
+            Ok(())
+          },
+        )?;
+      }
+    }
+  });
+  let has_process_content = field.process_content_mapping.is_some();
+  let process_content_method = field
+    .process_content_mapping
+    .as_ref()
+    .map(mce_process_content_method_tokens)
+    .transpose()?
+    .unwrap_or_else(|| quote! {});
+  let process_content_action = if has_process_content {
+    quote! {
+      crate::mce::ElementAction::ProcessContent => {
+        item.__ooxmlsdk_promote_process_content(&mut processed);
+      }
+    }
+  } else {
+    quote! {
+      crate::mce::ElementAction::ProcessContent => {}
+    }
+  };
+  let process_repeated_choices = if alternate_content_variant.is_none() && has_process_content {
+    quote! {
+      let mut processed = Vec::with_capacity(values.len());
+      for mut item in std::mem::take(values) {
+        match Self::process_mce_choice_with_context(&mut item, settings, context)? {
+          crate::mce::ElementAction::Normal => processed.push(item),
+          crate::mce::ElementAction::Ignore => {}
+          #process_content_action
+        }
+      }
+      *values = processed;
+    }
+  } else if alternate_content_variant.is_none() {
+    quote! {
+      let mut index = 0usize;
+      while index < values.len() {
+        let action = Self::process_mce_choice_with_context(
+          &mut values[index],
+          settings,
+          context,
+        )?;
+        if matches!(action, crate::mce::ElementAction::Normal) {
+          index += 1;
+        } else {
+          values.remove(index);
+        }
+      }
+    }
+  } else {
+    quote! {
+      let mut processed = Vec::with_capacity(values.len());
+      for mut item in std::mem::take(values) {
+        match &mut item {
+          #mce_alternate_content_arm
+          _ => {
+            match Self::process_mce_choice_with_context(&mut item, settings, context)? {
+              crate::mce::ElementAction::Normal => processed.push(item),
+              crate::mce::ElementAction::Ignore => {}
+              #process_content_action
+            }
+          }
+        }
+      }
+      *values = processed;
+    }
+  };
+
+  Ok(quote! {
+    #[cfg(feature = "mce")]
+    impl #choice_ty {
+      #process_content_method
+
+      #( #mce_replacement_read_methods )*
+
+      pub(crate) fn process_mce_choice_with_context(
+        &mut self,
+        settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+        context: &crate::mce::MceContext<'_>,
+      ) -> Result<crate::mce::ElementAction, crate::common::SdkError> {
+        #process_self_choice
+      }
+
+      fn process_mce_choices_with_context(
+        values: &mut Vec<Self>,
+        settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+        context: &crate::mce::MceContext<'_>,
+      ) -> Result<(), crate::common::SdkError> {
+        #process_repeated_choices
+        Ok(())
+      }
+    }
+  })
+}
+
+fn mce_process_choice_field_tokens(field: &SdkTypeChoiceField) -> proc_macro2::TokenStream {
+  let ident = &field.ident;
+  let choice_ty = unwrap_option_vec_type(&field.ty);
+  let has_alternate_content = field.items.iter().any(|item| {
+    matches!(
+      item,
+      SdkTypeChoiceItem::Child { variant, qname, .. }
+        if variant == "AlternateContent"
+          && parse_qname_info(qname).local_name == "AlternateContent"
+    )
+  });
+  if field.repeated {
+    quote! {
+      #choice_ty::process_mce_choices_with_context(&mut self.#ident, settings, context)?;
+    }
+  } else if field.optional && has_alternate_content {
+    quote! {
+      let mut choices = self.#ident.take().into_iter().collect::<Vec<_>>();
+      #choice_ty::process_mce_choices_with_context(&mut choices, settings, context)?;
+      self.#ident = choices.into_iter().next();
+    }
+  } else if field.optional {
+    quote! {
+      let action = if let Some(choice) = &mut self.#ident {
+        Some(#choice_ty::process_mce_choice_with_context(
+          choice,
+          settings,
+          context,
+        )?)
+      } else {
+        None
+      };
+      if action.is_some_and(|action| !matches!(action, crate::mce::ElementAction::Normal)) {
+        self.#ident = None;
+      }
+    }
+  } else {
+    quote! {
+      let _ = #choice_ty::process_mce_choice_with_context(
+        &mut self.#ident,
+        settings,
+        context,
+      )?;
+    }
+  }
+}
+
+fn mce_context_scope_tokens(
+  xmlns_fields: &[Ident],
+  mc_ignorable_field: Option<&Ident>,
+  mc_preserve_attributes_field: Option<&Ident>,
+  mc_preserve_elements_field: Option<&Ident>,
+  mc_process_content_field: Option<&Ident>,
+  mc_must_understand_field: Option<&Ident>,
+) -> (
+  proc_macro2::TokenStream,
+  proc_macro2::TokenStream,
+  proc_macro2::TokenStream,
+) {
+  let xmlns_expr = if let Some(ident) = xmlns_fields.first() {
+    quote! { self.#ident.as_slice() }
+  } else {
+    quote! { &[] as &[crate::common::XmlNamespace] }
+  };
+  let mc_ignorable_expr = if let Some(ident) = mc_ignorable_field {
+    quote! { self.#ident.as_deref() }
+  } else {
+    quote! { None }
+  };
+  let mc_preserve_attributes_expr = if let Some(ident) = mc_preserve_attributes_field {
+    quote! { self.#ident.as_deref() }
+  } else {
+    quote! { None }
+  };
+  let mc_preserve_elements_expr = if let Some(ident) = mc_preserve_elements_field {
+    quote! { self.#ident.as_deref() }
+  } else {
+    quote! { None }
+  };
+  let mc_process_content_expr = if let Some(ident) = mc_process_content_field {
+    quote! { self.#ident.as_deref() }
+  } else {
+    quote! { None }
+  };
+  let mc_must_understand_expr = if let Some(ident) = mc_must_understand_field {
+    quote! { self.#ident.as_deref() }
+  } else {
+    quote! { None }
+  };
+
+  if xmlns_fields.is_empty()
+    && mc_ignorable_field.is_none()
+    && mc_preserve_attributes_field.is_none()
+    && mc_preserve_elements_field.is_none()
+    && mc_process_content_field.is_none()
+    && mc_must_understand_field.is_none()
+  {
+    (quote! {}, quote! {}, quote! {})
+  } else {
+    (
+      quote! {},
+      quote! {
+        let __mce_context = context.child_context(
+          #xmlns_expr,
+          crate::mce::MceContextAttributes {
+            ignorable: #mc_ignorable_expr,
+            preserve_attributes: #mc_preserve_attributes_expr,
+            preserve_elements: #mc_preserve_elements_expr,
+            process_content: #mc_process_content_expr,
+            must_understand: #mc_must_understand_expr,
+          },
+          settings,
+        )?;
+        let context = &__mce_context;
+      },
+      quote! {},
+    )
+  }
+}
+
+fn validator_source_union(validator: &SdkFieldValidator) -> (u32, Option<u64>) {
+  match validator {
+    SdkFieldValidator::Pattern {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::StringLength {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::StringFormat {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::StringSet {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::NumberRange {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::NumberType {
+      source_id,
+      union_id,
+      ..
+    }
+    | SdkFieldValidator::NumberSign {
+      source_id,
+      union_id,
+      ..
+    } => (*source_id, *union_id),
+  }
+}
+
+fn validator_token(
+  ident: &Ident,
+  field_ident: &Ident,
+  parse_ty: &Type,
+  validator: &SdkFieldValidator,
+) -> proc_macro2::TokenStream {
+  match validator {
+    SdkFieldValidator::Pattern { regex, .. } => quote! {
+      {
+        static VALIDATOR_REGEX: std::sync::LazyLock<regex::Regex> =
+          std::sync::LazyLock::new(|| {
+            regex::Regex::new(concat!(r"\A(?:", #regex, r")\z"))
+              .expect("generated validator regex must compile")
+          });
+        crate::validator::validate_pattern_regex(
+          stringify!(#ident),
+          stringify!(#field_ident),
+          value,
+          &VALIDATOR_REGEX,
+        )?;
+      }
+    },
+    SdkFieldValidator::StringLength { min, max, .. } => {
+      let min_tokens = match min {
+        Some(min) => quote! { Some(#min) },
+        None => quote! { None },
+      };
+      let max_tokens = match max {
+        Some(max) => quote! { Some(#max) },
+        None => quote! { None },
+      };
+      let length_kind_tokens = if is_hex_binary_type(parse_ty)
+        || matches!(
+          validator,
+          SdkFieldValidator::StringLength {
+            type_name: Some(type_name),
+            ..
+          } if type_name == "w:ST_HexColorRGB"
+        ) {
+        quote! { crate::validator::StringLengthKind::HexBinaryBytes }
+      } else {
+        quote! { crate::validator::StringLengthKind::Characters }
+      };
+      let format_tokens = if is_hex_binary_type(parse_ty)
+        || matches!(
+          validator,
+          SdkFieldValidator::StringLength {
+            type_name: Some(type_name),
+            ..
+          } if type_name == "w:ST_HexColorRGB"
+        ) {
+        quote! {
+          crate::validator::validate_binary_format(
+            stringify!(#ident),
+            stringify!(#field_ident),
+            value,
+            crate::validator::BinaryFormatKind::Hex,
+          )?;
+        }
+      } else {
+        quote! {}
+      };
+      quote! {
+        #format_tokens
+        crate::validator::validate_string_length_with_kind(
+          stringify!(#ident),
+          stringify!(#field_ident),
+          value.to_string(),
+          #min_tokens,
+          #max_tokens,
+          #length_kind_tokens,
+        )?;
+      }
+    }
+    SdkFieldValidator::StringFormat { kind, .. } => {
+      let kind_tokens = match kind {
+        SdkStringFormatKind::Token => quote! { crate::validator::StringFormatKind::Token },
+        SdkStringFormatKind::NcName => quote! { crate::validator::StringFormatKind::NcName },
+        SdkStringFormatKind::QName => quote! { crate::validator::StringFormatKind::QName },
+        SdkStringFormatKind::Uri => quote! { crate::validator::StringFormatKind::Uri },
+        SdkStringFormatKind::Id => quote! { crate::validator::StringFormatKind::Id },
+      };
+      quote! {
+        crate::validator::validate_string_format(
+          stringify!(#ident),
+          stringify!(#field_ident),
+          value,
+          #kind_tokens,
+        )?;
+      }
+    }
+    SdkFieldValidator::StringSet { values, .. } => quote! {
+      crate::validator::validate_string_set(
+        stringify!(#ident),
+        stringify!(#field_ident),
+        value,
+        &[ #( #values ),* ],
+      )?;
+    },
+    SdkFieldValidator::NumberRange {
+      min,
+      max,
+      min_inclusive,
+      max_inclusive,
+      ..
+    } => {
+      let range_tokens = number_range_runtime_bounds(min, max, *min_inclusive, *max_inclusive);
+      quote! {
+        crate::validator::validate_number_range(
+          stringify!(#ident),
+          stringify!(#field_ident),
+          value,
+          #range_tokens,
+        )?;
+      }
+    }
+    SdkFieldValidator::NumberType { type_name, .. } => quote! {
+      crate::validator::validate_number_type(
+        stringify!(#ident),
+        stringify!(#field_ident),
+        value,
+        #type_name,
+      )?;
+    },
+    SdkFieldValidator::NumberSign { kind, .. } => {
+      let kind_tokens = match kind {
+        SdkNumberSignKind::NonNegative => {
+          quote! { crate::validator::NumberSignKind::NonNegative }
+        }
+        SdkNumberSignKind::Positive => quote! { crate::validator::NumberSignKind::Positive },
+      };
+      quote! {
+        crate::validator::validate_number_sign(
+          stringify!(#ident),
+          stringify!(#field_ident),
+          value,
+          #kind_tokens,
+        )?;
+      }
+    }
+  }
+}
+
+fn number_range_runtime_bounds(
+  min: &Option<String>,
+  max: &Option<String>,
+  min_inclusive: bool,
+  max_inclusive: bool,
+) -> proc_macro2::TokenStream {
+  let min_tokens = min.as_ref().map(|min| number_range_f64_literal(min));
+  let max_tokens = max.as_ref().map(|max| number_range_f64_literal(max));
+  let start = match (min_tokens, min_inclusive) {
+    (Some(min), true) => quote! { std::ops::Bound::Included(#min) },
+    (Some(min), false) => quote! { std::ops::Bound::Excluded(#min) },
+    (None, _) => quote! { std::ops::Bound::Unbounded },
+  };
+  let end = match (max_tokens, max_inclusive) {
+    (Some(max), true) => quote! { std::ops::Bound::Included(#max) },
+    (Some(max), false) => quote! { std::ops::Bound::Excluded(#max) },
+    (None, _) => quote! { std::ops::Bound::Unbounded },
+  };
+  quote! { (#start, #end) }
+}
+
+fn number_range_f64_literal(value: &str) -> proc_macro2::TokenStream {
+  format!("{value}f64")
+    .parse()
+    .unwrap_or_else(|_| quote! { #value.parse::<f64>().expect("numeric validator bound") })
+}
+
+struct TextChildParseArmOptions {
+  repeated: bool,
+  as_result: bool,
+  list: bool,
+}
+
+fn field_decl_init_tokens(
+  owner_ident: &Ident,
+  field_ident: &Ident,
+  repeated: bool,
+  optional: bool,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+  if repeated {
+    (
+      quote! { let mut #field_ident = Vec::new(); },
+      quote! { #field_ident },
+    )
+  } else if optional {
+    (
+      quote! { let mut #field_ident = None; },
+      quote! { #field_ident },
+    )
+  } else {
+    (
+      quote! { let mut #field_ident = None; },
+      quote! {
+        #field_ident: match #field_ident {
+          Some(value) => value,
+          None => return Err(crate::common::missing_field(
+            stringify!(#owner_ident),
+            stringify!(#field_ident),
+          )),
+        }
+      },
+    )
+  }
+}
+
+fn sdk_type_read_inner_call_tokens(child_ty: &Type) -> proc_macro2::TokenStream {
+  quote! { <#child_ty as crate::sdk::SdkType>::read_inner }
+}
+
+fn sdk_type_read_inner_value_tokens(
+  child_ty: Option<&Type>,
+  xml_reader: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if let Some(child_ty) = child_ty {
+    quote! {
+      <#child_ty as crate::sdk::SdkType>::read_inner(
+        #xml_reader,
+        e,
+        next_empty,
+        read_context,
+      )?
+    }
+  } else {
+    quote! {
+      crate::sdk::SdkType::read_inner(#xml_reader, e, next_empty, read_context)?
+    }
+  }
+}
+
+fn text_child_simple_union_kind(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+) -> Option<SimpleUnionTypeKind> {
+  if let Some(value_ty) = value_ty {
+    simple_union_effective_type_kind(value_ty, simple_type)
+  } else {
+    simple_type.and_then(simple_union_type_kind_name)
+  }
+}
+
+fn text_child_is_string_like(value_ty: Option<&Type>, simple_type: Option<&str>) -> bool {
+  if let Some(value_ty) = value_ty {
+    is_string_like_effective_type(value_ty, simple_type)
+  } else {
+    simple_type.is_some_and(is_string_like_type_name)
+  }
+}
+
+fn text_child_integer_kind(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+) -> Option<IntegerTypeKind> {
+  if let Some(value_ty) = value_ty {
+    integer_effective_type_kind(value_ty, simple_type)
+  } else {
+    simple_type.and_then(integer_type_kind_name)
+  }
+}
+
+fn text_child_empty_parse_tokens(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+  is_enum: bool,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if let Some(kind) = text_child_simple_union_kind(value_ty, simple_type) {
+    parse_simple_union_value_tokens(kind, quote! { String::new() })
+  } else if is_enum {
+    if let Some(value_ty) = value_ty {
+      quote! {
+        <#value_ty as crate::sdk::SdkEnum>::from_xml_bytes(b"")?
+      }
+    } else {
+      quote! {
+        crate::sdk::SdkEnum::from_xml_bytes(b"")?
+      }
+    }
+  } else if text_child_is_string_like(value_ty, simple_type) {
+    quote! { Default::default() }
+  } else if let Some(value_ty) = value_ty {
+    quote! {
+      crate::common::parse_value::<#value_ty>("", #owner_expr, #field_expr)?
+    }
+  } else if simple_type.is_some() {
+    quote! {
+      crate::common::parse_value("", #owner_expr, #field_expr)?
+    }
+  } else {
+    quote! { Default::default() }
+  }
+}
+
+fn text_child_value_parse_tokens(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+  is_enum: bool,
+  value_expr: proc_macro2::TokenStream,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if let Some(kind) = text_child_simple_union_kind(value_ty, simple_type) {
+    parse_simple_union_value_tokens(kind, value_expr)
+  } else if is_enum {
+    if let Some(value_ty) = value_ty {
+      quote! {
+        <#value_ty as crate::sdk::SdkEnum>::from_xml_bytes(#value_expr.as_bytes())?
+      }
+    } else {
+      quote! {
+        crate::sdk::SdkEnum::from_xml_bytes(#value_expr.as_bytes())?
+      }
+    }
+  } else if text_child_is_string_like(value_ty, simple_type) {
+    quote! { #value_expr }
+  } else if let Some(value_ty) = value_ty {
+    quote! {
+      crate::common::parse_text_child_value::<#value_ty>(#value_expr.as_ref(), #owner_expr, #field_expr)?
+    }
+  } else if simple_type.is_some() {
+    quote! {
+      crate::common::parse_text_child_value(#value_expr.as_ref(), #owner_expr, #field_expr)?
+    }
+  } else {
+    quote! { #value_expr }
+  }
+}
+
+fn text_child_is_sdk_enum(value_ty: Option<&Type>, simple_type: Option<&str>) -> bool {
+  if let Some(value_ty) = value_ty {
+    is_sdk_enum_effective_type(value_ty, simple_type)
+  } else {
+    simple_type.is_some_and(is_sdk_enum_type_name)
+  }
+}
+
+fn read_integer_text_child_tokens(
+  kind: IntegerTypeKind,
+  xml_reader_expr: proc_macro2::TokenStream,
+  end_expr: proc_macro2::TokenStream,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let read_fn = match kind {
+    IntegerTypeKind::U8 => quote! { crate::common::read_u8_text_child_value },
+    IntegerTypeKind::I8 => quote! { crate::common::read_i8_text_child_value },
+    IntegerTypeKind::U16 => quote! { crate::common::read_u16_text_child_value },
+    IntegerTypeKind::I16 => quote! { crate::common::read_i16_text_child_value },
+    IntegerTypeKind::U32 => quote! { crate::common::read_u32_text_child_value },
+    IntegerTypeKind::I32 => quote! { crate::common::read_i32_text_child_value },
+    IntegerTypeKind::U64 => quote! { crate::common::read_u64_text_child_value },
+    IntegerTypeKind::I64 => quote! { crate::common::read_i64_text_child_value },
+  };
+  quote! {
+    #read_fn(
+      #xml_reader_expr,
+      #end_expr,
+      #owner_expr,
+      #field_expr,
+    )?
+  }
+}
+
+fn read_float_text_child_tokens(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+  xml_reader_expr: proc_macro2::TokenStream,
+  end_expr: proc_macro2::TokenStream,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> Option<proc_macro2::TokenStream> {
+  let read_fn = match value_ty
+    .and_then(|value_ty| effective_type_name(value_ty, simple_type))
+    .or_else(|| simple_type.map(str::to_string))
+    .as_deref()
+  {
+    Some("SingleValue" | "f32") => quote! { crate::common::read_f32_text_child_value },
+    Some("DoubleValue" | "f64") => quote! { crate::common::read_f64_text_child_value },
+    _ => return None,
+  };
+  Some(quote! {
+    #read_fn(
+      #xml_reader_expr,
+      #end_expr,
+      #owner_expr,
+      #field_expr,
+    )?
+  })
+}
+
+fn text_child_read_parse_tokens(
+  value_ty: Option<&Type>,
+  simple_type: Option<&str>,
+  is_enum: bool,
+  xml_reader_expr: proc_macro2::TokenStream,
+  end_expr: proc_macro2::TokenStream,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  if let Some(kind) = text_child_simple_union_kind(value_ty, simple_type) {
+    let parse_value_tokens = parse_simple_union_value_tokens(kind, quote! { value });
+    if let Some(value_ty) = value_ty {
+      return quote! {
+        crate::common::read_text_child_value(
+          #xml_reader_expr,
+          #end_expr,
+          #owner_expr,
+          #field_expr,
+          |value| <#value_ty>::from_bytes(value).ok(),
+          |value| { #parse_value_tokens },
+        )?
+      };
+    }
+    return quote! {{
+      let value = #xml_reader_expr.read_text(#end_expr, #owner_expr, #field_expr)?;
+      #parse_value_tokens
+    }};
+  }
+
+  if is_enum || text_child_is_sdk_enum(value_ty, simple_type) {
+    let read_fn = if let Some(value_ty) = value_ty {
+      quote! { crate::common::read_enum_text_child_value::<_, #value_ty> }
+    } else {
+      quote! { crate::common::read_enum_text_child_value }
+    };
+    return quote! {
+      #read_fn(
+        #xml_reader_expr,
+        #end_expr,
+        #owner_expr,
+        #field_expr,
+      )?
+    };
+  }
+
+  if let Some(kind) = text_child_integer_kind(value_ty, simple_type) {
+    return read_integer_text_child_tokens(kind, xml_reader_expr, end_expr, owner_expr, field_expr);
+  }
+
+  if let Some(tokens) = read_float_text_child_tokens(
+    value_ty,
+    simple_type,
+    xml_reader_expr.clone(),
+    end_expr.clone(),
+    owner_expr.clone(),
+    field_expr.clone(),
+  ) {
+    return tokens;
+  }
+
+  if let Some(value_ty) = value_ty
+    && is_from_bytes_attr_effective_type(value_ty, simple_type)
+  {
+    return quote! {
+      crate::common::read_text_child_value(
+        #xml_reader_expr,
+        #end_expr,
+        #owner_expr,
+        #field_expr,
+        |value| <#value_ty>::from_bytes(value).ok(),
+        |value| crate::common::parse_text_child_value::<#value_ty>(
+          value,
+          #owner_expr,
+          #field_expr,
+        ),
+      )?
+    };
+  }
+
+  let value_parse_tokens = text_child_value_parse_tokens(
+    value_ty,
+    simple_type,
+    is_enum,
+    quote! { value },
+    owner_expr.clone(),
+    field_expr.clone(),
+  );
+  quote! {{
+    let value = #xml_reader_expr.read_text(#end_expr, #owner_expr, #field_expr)?;
+    #value_parse_tokens
+  }}
+}
+
+fn parse_simple_union_attr_tokens(kind: SimpleUnionTypeKind) -> proc_macro2::TokenStream {
+  match kind {
+    SimpleUnionTypeKind::TwipsMeasure => {
+      quote! { crate::common::parse_twips_measure_attr(&attr, decoder)? }
+    }
+    SimpleUnionTypeKind::SignedTwipsMeasure => {
+      quote! { crate::common::parse_signed_twips_measure_attr(&attr, decoder)? }
+    }
+    SimpleUnionTypeKind::DecimalNumberOrPercent => {
+      quote! { crate::common::parse_decimal_number_or_percent_attr(&attr, decoder)? }
+    }
+    SimpleUnionTypeKind::MeasurementOrPercent => {
+      quote! { crate::common::parse_measurement_or_percent_attr(&attr, decoder)? }
+    }
+  }
+}
+
+fn parse_from_bytes_attr_tokens(
+  value_ty: &Type,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  quote! {
+    if let Ok(value) = <#value_ty>::from_bytes(attr.value.as_ref())
+    {
+      value
+    } else {
+      let value =
+        attr.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)?;
+      match <#value_ty>::from_bytes(value.as_bytes()) {
+        Ok(value) => value,
+        Err(_) => {
+          return Err(crate::common::invalid_field_value(#owner_expr, #field_expr, value));
+        }
+      }
+    }
+  }
+}
+
+fn parse_bytes_list_attr_tokens(
+  value_ty: &Type,
+  simple_type: Option<&str>,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let parse = parse_bytes_value_tokens(value_ty, simple_type);
+  quote! {
+    crate::common::parse_bytes_list_attr::<#value_ty, _>(
+      &attr,
+      decoder,
+      #owner_expr,
+      #field_expr,
+      #parse,
+    )?
+  }
+}
+
+fn parse_bytes_value_tokens(
+  value_ty: &Type,
+  simple_type: Option<&str>,
+) -> proc_macro2::TokenStream {
+  if let Some(kind) = integer_effective_type_kind(value_ty, simple_type) {
+    parse_integer_bytes_fn_by_kind(kind)
+  } else if effective_type_name(value_ty, simple_type).as_deref() == Some("SingleValue") {
+    quote! { crate::common::parse_f32_bytes_raw }
+  } else if effective_type_name(value_ty, simple_type).as_deref() == Some("DoubleValue") {
+    quote! { crate::common::parse_f64_bytes_raw }
+  } else if is_sdk_enum_effective_type(value_ty, simple_type) {
+    quote! { <#value_ty as crate::sdk::SdkEnum>::try_from_xml_bytes }
+  } else if simple_union_effective_type_kind(value_ty, simple_type).is_some()
+    || is_from_bytes_attr_effective_type(value_ty, simple_type)
+  {
+    quote! { |value| <#value_ty>::from_bytes(value).ok() }
+  } else {
+    quote! { compile_error!("unmapped XML list value type") }
+  }
+}
+
+fn write_list_attr_tokens(
+  value_ty: &Type,
+  simple_type: Option<&str>,
+  values_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let value_write = if let Some(kind) = simple_union_effective_type_kind(value_ty, simple_type) {
+    write_simple_union_value_tokens(kind, quote! { value })
+  } else if let Some(kind) = integer_effective_type_kind(value_ty, simple_type) {
+    write_integer_value_tokens_by_kind(kind, quote! { value })
+  } else if effective_type_name(value_ty, simple_type)
+    .as_deref()
+    .is_some_and(is_xml_schema_float_type_name)
+  {
+    write_xml_schema_float_effective_tokens(quote! { value }, value_ty, simple_type, "")
+  } else if is_sdk_enum_effective_type(value_ty, simple_type) {
+    quote! { writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(value))?; }
+  } else if let Some(tokens) =
+    write_from_bytes_value_tokens(value_ty, simple_type, quote! { value })
+  {
+    tokens
+  } else {
+    quote! { compile_error!("unmapped XML list value type"); }
+  };
+  quote! {
+    crate::common::write_list_value_with(
+      writer,
+      #values_expr,
+      |writer, value| {
+        #value_write
+        Ok(())
+      },
+    )?;
+  }
+}
+
+fn parse_float_attr_tokens(
+  value_ty: &Type,
+  simple_type: Option<&str>,
+  owner_expr: proc_macro2::TokenStream,
+  field_expr: proc_macro2::TokenStream,
+) -> Option<proc_macro2::TokenStream> {
+  match effective_type_name(value_ty, simple_type).as_deref() {
+    Some("SingleValue" | "f32") => Some(quote! {
+      crate::common::parse_f32_attr(&attr, decoder, #owner_expr, #field_expr)?
+    }),
+    Some("DoubleValue" | "f64") => Some(quote! {
+      crate::common::parse_f64_attr(&attr, decoder, #owner_expr, #field_expr)?
+    }),
+    _ => None,
+  }
+}
+
+fn write_simple_union_attr_tokens(
+  kind: SimpleUnionTypeKind,
+  attr_prefix_lit: &LitByteStr,
+  value_expr: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let write_value_tokens = match kind {
+    SimpleUnionTypeKind::TwipsMeasure => {
+      quote! { crate::common::write_twips_measure_value(writer, #value_expr)?; }
+    }
+    SimpleUnionTypeKind::SignedTwipsMeasure => {
+      quote! { crate::common::write_signed_twips_measure_value(writer, #value_expr)?; }
+    }
+    SimpleUnionTypeKind::DecimalNumberOrPercent => {
+      quote! { crate::common::write_decimal_number_or_percent_value(writer, #value_expr)?; }
+    }
+    SimpleUnionTypeKind::MeasurementOrPercent => {
+      quote! { crate::common::write_measurement_or_percent_value(writer, #value_expr)?; }
+    }
+  };
+  quote! {
+    writer.write_all(#attr_prefix_lit)?;
+    #write_value_tokens
+    writer.write_all(b"\"")?;
+  }
+}
+
+fn build_text_child_parse_body(
+  owner_ident: &Ident,
+  field_ident: &Ident,
+  qname: &str,
+  field_ty: &Type,
+  xml_child_slot_assign: proc_macro2::TokenStream,
+  options: TextChildParseArmOptions,
+) -> proc_macro2::TokenStream {
+  let value_ty = if options.list {
+    vec_inner_type(&unwrap_option_type(field_ty))
+      .unwrap_or_else(|| unwrap_option_vec_type(field_ty))
+  } else {
+    unwrap_option_vec_type(field_ty)
+  };
+  let simple_type = mapped_simple_type_name(Some(&value_ty), qname, options.list);
+  let simple_union_kind = simple_union_effective_type_kind(&value_ty, simple_type);
+  let list_is_string_like = is_string_like_effective_type(&value_ty, simple_type);
+  let parse_from_text_tokens = if options.list {
+    quote! {{
+      crate::common::parse_list_value::<#value_ty>(
+        text.as_ref(),
+        stringify!(#owner_ident),
+        stringify!(#field_ident),
+      )?
+    }}
+  } else if let Some(kind) = simple_union_kind {
+    let parse_tokens = parse_simple_union_value_tokens(kind, quote! { value });
+    quote! {{
+      let value = text;
+      #parse_tokens
+    }}
+  } else if is_string_like_effective_type(&value_ty, simple_type) {
+    quote! { text }
+  } else {
+    quote! {{
+      crate::common::parse_text_child_value::<#value_ty>(
+        text.as_ref(),
+        stringify!(#owner_ident),
+        stringify!(#field_ident),
+      )?
+    }}
+  };
+  let empty_value_tokens = if options.list {
+    quote! {
+      crate::common::parse_list_value::<#value_ty>(
+        "",
+        stringify!(#owner_ident),
+        stringify!(#field_ident),
+      )?
+    }
+  } else if let Some(kind) = simple_union_kind {
+    parse_simple_union_value_tokens(kind, quote! { String::new() })
+  } else if is_string_like_effective_type(&value_ty, simple_type) {
+    quote! { Default::default() }
+  } else {
+    quote! {
+      crate::common::parse_value::<#value_ty>(
+        "",
+        stringify!(#owner_ident),
+        stringify!(#field_ident),
+      )?
+    }
+  };
+  let read_parse_tokens = if options.list {
+    if list_is_string_like {
+      quote! {{
+        let text = xml_reader.read_text(
+          e.name(),
+          stringify!(#owner_ident),
+          stringify!(#field_ident),
+        )?;
+        #parse_from_text_tokens
+      }}
+    } else {
+      let parse = parse_bytes_value_tokens(&value_ty, simple_type);
+      quote! {
+        crate::common::read_text_child_value(
+          xml_reader,
+          e.name(),
+          stringify!(#owner_ident),
+          stringify!(#field_ident),
+          |value| crate::common::try_parse_bytes_list_value(value, &#parse),
+          |value| crate::common::parse_list_value::<#value_ty>(
+            value,
+            stringify!(#owner_ident),
+            stringify!(#field_ident),
+          ),
+        )?
+      }
+    }
+  } else {
+    text_child_read_parse_tokens(
+      Some(&value_ty),
+      simple_type,
+      false,
+      quote! { xml_reader },
+      quote! { e.name() },
+      quote! { stringify!(#owner_ident) },
+      quote! { stringify!(#field_ident) },
+    )
+  };
+  let assign_tokens = if options.repeated {
+    quote! { #field_ident.push(parsed_child); }
+  } else {
+    quote! { #field_ident = Some(parsed_child); }
+  };
+  let finish_tokens = if options.as_result {
+    quote! { Ok(true) }
+  } else {
+    quote! {}
+  };
+
+  quote! {
+    let parsed_child = if next_empty {
+      #empty_value_tokens
+    } else {
+      #read_parse_tokens
+    };
+    #assign_tokens
+    #xml_child_slot_assign
+    #finish_tokens
+  }
+}
+
+struct TextChildWriteSpec<'a> {
+  qname: &'a str,
+  parent_tag_prefix: &'a str,
+  parent_no_prefix: bool,
+  repeated: bool,
+  optional: bool,
+  list: bool,
+}
+
+fn build_text_child_write_tokens(
+  field_ident: &Ident,
+  field_ty: &Type,
+  spec: TextChildWriteSpec<'_>,
+) -> proc_macro2::TokenStream {
+  let TextChildWriteSpec {
+    qname,
+    parent_tag_prefix,
+    parent_no_prefix,
+    repeated,
+    optional,
+    list,
+  } = spec;
+  let inner_ty = if list {
+    vec_inner_type(&unwrap_option_type(field_ty)).unwrap_or_else(|| unwrap_wrapped_type(field_ty))
+  } else {
+    unwrap_wrapped_type(field_ty)
+  };
+  let simple_type = mapped_simple_type_name(Some(&inner_ty), qname, list);
+  let write_value_tokens = |value_expr: proc_macro2::TokenStream| {
+    let child_no_prefix =
+      child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+    let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+    let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+    let value_write_tokens = if list && is_string_like_effective_type(&inner_ty, simple_type) {
+      quote! {
+        crate::common::write_list_content_str_value(writer, #value_expr.as_slice())?;
+      }
+    } else if list {
+      write_list_attr_tokens(&inner_ty, simple_type, quote! { #value_expr.as_slice() })
+    } else if let Some(kind) = simple_union_effective_type_kind(&inner_ty, simple_type) {
+      write_simple_union_value_tokens(kind, value_expr.clone())
+    } else if let Some(kind) = integer_effective_type_kind(&inner_ty, simple_type) {
+      write_integer_value_tokens_by_kind(kind, value_expr.clone())
+    } else if effective_type_name(&inner_ty, simple_type)
+      .as_deref()
+      .is_some_and(is_xml_schema_float_type_name)
+    {
+      write_xml_schema_float_effective_tokens(value_expr.clone(), &inner_ty, simple_type, qname)
+    } else if is_sdk_enum_effective_type(&inner_ty, simple_type) {
+      quote! {
+        writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(#value_expr))?;
+      }
+    } else if let Some(tokens) =
+      write_from_bytes_value_tokens(&inner_ty, simple_type, value_expr.clone())
+    {
+      tokens
+    } else if is_string_like_effective_type(&inner_ty, simple_type) {
+      quote! {
+        crate::common::write_escaped_content_str(writer, #value_expr.as_ref())?;
+      }
+    } else {
+      missing_static_value_mapping_tokens()
+    };
+    quote! {
+      #start_tag
+      #value_write_tokens
+      #end_tag
+    }
+  };
+
+  if repeated {
+    let write_child_tokens = write_value_tokens(quote! { child });
+    quote! {
+      for child in &self.#field_ident {
+        #write_child_tokens
+      }
+    }
+  } else if optional {
+    let write_child_tokens = write_value_tokens(quote! { child });
+    quote! {
+      if let Some(child) = &self.#field_ident {
+        #write_child_tokens
+      }
+    }
+  } else {
+    let write_child_tokens = write_value_tokens(quote! { &self.#field_ident });
+    quote! {
+      #write_child_tokens
+    }
+  }
+}
+
+fn build_empty_child_write_tokens(
+  field_ident: &Ident,
+  qname: &str,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+  repeated: bool,
+  optional: bool,
+) -> proc_macro2::TokenStream {
+  let child_no_prefix =
+    child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+  let empty_tag = write_empty_tag_tokens(qname, child_no_prefix);
+  let write_tokens = quote! {
+    #empty_tag
+  };
+
+  if repeated {
+    quote! {
+      for _ in &self.#field_ident {
+        #write_tokens
+      }
+    }
+  } else if optional {
+    quote! {
+      if self.#field_ident.is_some() {
+        #write_tokens
+      }
+    }
+  } else {
+    quote! {
+      #write_tokens
+    }
+  }
+}
+
+fn build_any_child_parse_body(
+  owner_ident: &Ident,
+  field_ident: &Ident,
+  qname: &str,
+  repeated: bool,
+  xml_child_slot_assign: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let assign_tokens = if repeated {
+    quote! { #field_ident.push(parsed_child); }
+  } else {
+    quote! { #field_ident = Some(parsed_child); }
+  };
+  let parse_tokens = build_choice_any_child_parse_tokens(owner_ident, qname, quote! { xml_reader });
+
+  quote! {
+    #parse_tokens
+    #assign_tokens
+    #xml_child_slot_assign
+  }
+}
+
+fn build_any_child_write_tokens(
+  field_ident: &Ident,
+  qname: &str,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+  repeated: bool,
+  optional: bool,
+) -> proc_macro2::TokenStream {
+  build_any_child_write_tokens_for_value(
+    quote! { &self.#field_ident },
+    qname,
+    parent_tag_prefix,
+    parent_no_prefix,
+    repeated,
+    optional,
+  )
+}
+
+fn build_any_child_write_tokens_for_value(
+  value_expr: proc_macro2::TokenStream,
+  qname: &str,
+  parent_tag_prefix: &str,
+  parent_no_prefix: bool,
+  repeated: bool,
+  optional: bool,
+) -> proc_macro2::TokenStream {
+  let child_no_prefix =
+    child_uses_parent_default_namespace(qname, parent_tag_prefix, parent_no_prefix);
+  let start_tag = write_start_tag_tokens(qname, child_no_prefix);
+  let end_tag = write_end_tag_tokens(qname, child_no_prefix);
+  let write_value_tokens = quote! {
+    #start_tag
+    for value in value {
+      writer.write_all(value.as_bytes())?;
+    }
+    #end_tag
+  };
+
+  if repeated {
+    quote! {
+      for value in #value_expr {
+        #write_value_tokens
+      }
+    }
+  } else if optional {
+    quote! {
+      if let Some(value) = #value_expr {
+        #write_value_tokens
+      }
+    }
+  } else {
+    quote! {
+      let value = #value_expr;
+      #write_value_tokens
+    }
+  }
+}
+
+fn build_any_child_parse_tokens(
+  field_ident: &Ident,
+  field_ty: &Type,
+  repeated: bool,
+  xml_child_slot_assign: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let field_item_ty = unwrap_option_vec_type(field_ty);
+  debug_assert!(is_box_u8_slice_type(&field_item_ty));
+  let assign = if repeated {
+    quote! { #field_ident.push(xml); }
+  } else {
+    quote! { #field_ident = Some(xml); }
+  };
+  quote! {
+    let xml = if next_empty {
+      crate::common::XmlRead::read_raw_empty_xml_bytes(xml_reader, e)?
+    } else {
+      crate::common::XmlRead::read_raw_element_xml_bytes(xml_reader, e)?
+    };
+    #assign
+    #xml_child_slot_assign
+  }
+}
+
+fn build_choice_any_child_parse_tokens(
+  owner_ident: &Ident,
+  qname: &str,
+  xml_reader: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let QNameInfo { local_name, .. } = parse_qname_info(qname);
+  let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+  quote! {
+    let mut parsed_child = Vec::new();
+    if !next_empty {
+      loop {
+        match (#xml_reader).next()? {
+          crate::common::PayloadEvent::Start(e, empty) => {
+            let xml = if empty {
+              crate::common::XmlRead::read_raw_empty_xml_string(#xml_reader, e)?
+            } else {
+              crate::common::XmlRead::read_raw_element_xml_string(#xml_reader, e)?
+            };
+            parsed_child.push(xml);
+          }
+          crate::common::PayloadEvent::End(end) => {
+            if crate::common::xml_local_name(end.name()) == #local_name_lit {
+              break;
+            }
+          }
+          crate::common::PayloadEvent::Eof => {
+            return Err(crate::common::unexpected_eof(stringify!(#owner_ident)));
+          }
+          _ => {}
+        }
+      }
+    }
+  }
+}
+
+fn build_pure_any_child_parse_tokens(
+  field_ident: &Ident,
+  field_ty: &Type,
+  repeated: bool,
+) -> proc_macro2::TokenStream {
+  let field_item_ty = unwrap_option_vec_type(field_ty);
+  debug_assert!(is_box_u8_slice_type(&field_item_ty));
+  let assign = if repeated {
+    quote! { #field_ident.push(xml); }
+  } else {
+    quote! { #field_ident = Some(xml); }
+  };
+
+  quote! {
+    let xml = if next_empty {
+      crate::common::XmlRead::read_raw_empty_xml_bytes(xml_reader, e)?
+    } else {
+      crate::common::XmlRead::read_raw_element_xml_bytes(xml_reader, e)?
+    };
+    #assign
+  }
+}
+
+fn build_unmatched_child_tokens() -> proc_macro2::TokenStream {
+  quote! {
+    if !next_empty {
+      crate::common::XmlRead::skip_element(xml_reader, e.name())?;
+    }
+  }
+}
+
+fn expand_helper_struct(
+  input: &DeriveInput,
+  fields: &syn::FieldsNamed,
+) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = &input.ident;
+  let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+
+  let mut child_fields = Vec::new();
+  let mut empty_child_fields = Vec::new();
+  let mut text_child_fields = Vec::new();
+  let mut any_child_fields = Vec::new();
+  let mut choice_fields = Vec::new();
+  for field in &fields.named {
+    let field_ident = field
+      .ident
+      .as_ref()
+      .ok_or_else(|| syn::Error::new_spanned(field, "SdkType requires named fields"))?;
+    let parsed_attrs = parse_sdk_type_field_attrs(&field.attrs)?;
+    match parsed_attrs.kind {
+      Some(SdkTypeFieldKind::Child { qname }) => child_fields.push(SdkChildField {
+        ident: field_ident.clone(),
+        qname,
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      Some(SdkTypeFieldKind::Mce { .. }) => {
+        return Err(syn::Error::new_spanned(
+          field,
+          "helper structs do not support #[sdk(mce(...))]",
+        ));
+      }
+      Some(SdkTypeFieldKind::EmptyChild { qname }) => empty_child_fields.push(SdkEmptyChildField {
+        ident: field_ident.clone(),
+        qname,
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      Some(SdkTypeFieldKind::TextChild { qname, list }) => {
+        text_child_fields.push(SdkTextChildField {
+          ident: field_ident.clone(),
+          qname,
+          ty: field.ty.clone(),
+          optional: is_option_type(&field.ty),
+          repeated: !list && contains_vec_type(&field.ty),
+          list,
+        })
+      }
+      Some(SdkTypeFieldKind::AnyChild { qname }) => any_child_fields.push(SdkAnyChildField {
+        ident: field_ident.clone(),
+        qname,
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      Some(SdkTypeFieldKind::Choice) => choice_fields.push(SdkTypeChoiceField {
+        ident: field_ident.clone(),
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+        process_content_mapping: None,
+        accepts_text: parsed_attrs.choice_accepts_text,
+        accepts_any: parsed_attrs.choice_accepts_any,
+        specific_qnames: parsed_attrs.choice_qnames,
+        items: parsed_attrs.choice_items,
+      }),
+      Some(SdkTypeFieldKind::Text { .. }) => {
+        return Err(syn::Error::new_spanned(
+          field,
+          "helper structs do not support #[sdk(text)]",
+        ));
+      }
+      Some(SdkTypeFieldKind::Any) => {
+        return Err(syn::Error::new_spanned(
+          field,
+          "helper structs do not support #[sdk(any)]",
+        ));
+      }
+      Some(SdkTypeFieldKind::Attr { .. }) | None => {
+        return Err(syn::Error::new_spanned(
+          field,
+          "helper structs require #[sdk(child(...))], #[sdk(empty_child(...))], #[sdk(text_child(...))], #[sdk(any_child(...))] or #[sdk(choice)] fields",
+        ));
+      }
+    }
+  }
+  let mut child_decl_tokens = Vec::new();
+  let mut child_match_tokens_borrowed =
+    std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+  let mut child_init_tokens = Vec::new();
+  let mut child_validate_tokens = Vec::new();
+  for field in &child_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot_assign = quote! { __ooxmlsdk_seen_child = true; };
+    let payload_ty = unwrap_option_vec_type(&field.ty);
+    let child_ty = if let Some(inner_ty) = box_inner_type(&payload_ty) {
+      inner_ty
+    } else {
+      payload_ty.clone()
+    };
+    let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+      quote! { std::boxed::Box::new(parsed_child) }
+    } else {
+      quote! { parsed_child }
+    };
+    let build_body = || {
+      let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+      if field.repeated {
+        quote! {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #field_ident.push(#parsed_child_expr);
+          #xml_child_slot_assign
+        }
+      } else {
+        quote! {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #field_ident = Some(#parsed_child_expr);
+          #xml_child_slot_assign
+        }
+      }
+    };
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+
+    if cfg!(feature = "validators") {
+      if field.repeated {
+        child_validate_tokens.push(quote! {
+          for child in &self.#field_ident {
+            child.validate_into(context);
+          }
+        });
+      } else if field.optional {
+        child_validate_tokens.push(quote! {
+          if let Some(child) = &self.#field_ident {
+            child.validate_into(context);
+          }
+        });
+      } else {
+        child_validate_tokens.push(quote! {
+          self.#field_ident.validate_into(context);
+        });
+      }
+    }
+    push_qname_dispatch_arm(&mut child_match_tokens_borrowed, &field.qname, build_body());
+  }
+
+  let mut choice_decl_tokens = Vec::new();
+  let mut choice_init_tokens = Vec::new();
+  let mut choice_validate_tokens = Vec::new();
+  for field in &choice_fields {
+    let field_ident = &field.ident;
+    let choice_ty = unwrap_option_vec_type(&field.ty);
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    choice_decl_tokens.push(decl_tokens);
+    choice_init_tokens.push(init_tokens);
+    if cfg!(feature = "validators") {
+      if field.repeated {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          true,
+          false,
+        ));
+      } else if field.optional {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          false,
+          true,
+        ));
+      } else {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          false,
+          false,
+        ));
+      }
+    }
+  }
+
+  for field in &text_child_fields {
+    let field_ident = &field.ident;
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+    let parse_body = build_text_child_parse_body(
+      ident,
+      field_ident,
+      &field.qname,
+      &field.ty,
+      quote! { __ooxmlsdk_seen_child = true; },
+      TextChildParseArmOptions {
+        repeated: field.repeated,
+        as_result: false,
+        list: field.list,
+      },
+    );
+    push_qname_dispatch_arm(&mut child_match_tokens_borrowed, &field.qname, parse_body);
+  }
+
+  for field in &any_child_fields {
+    let field_ident = &field.ident;
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+    push_qname_dispatch_arm(
+      &mut child_match_tokens_borrowed,
+      &field.qname,
+      build_any_child_parse_body(
+        ident,
+        field_ident,
+        &field.qname,
+        field.repeated,
+        quote! { __ooxmlsdk_seen_child = true; },
+      ),
+    );
+  }
+
+  let default_dispatch_prefix = String::new();
+  let child_match_tokens_borrowed =
+    qname_dispatch_match_arms(&child_match_tokens_borrowed, &default_dispatch_prefix);
+  let unmatched_child_tokens_borrowed = quote! {
+    if __ooxmlsdk_seen_child {
+      let _ = event_name;
+      xml_reader.unread(if next_empty {
+        crate::common::PayloadEvent::Start(e, true)
+      } else {
+        crate::common::PayloadEvent::Start(e, false)
+      })?;
+      break;
+    }
+    return Err(crate::common::unexpected_tag(
+      stringify!(#ident),
+      "known child",
+      event_name,
+    ));
+  };
+  let main_dispatch_tokens_borrowed = quote! {
+    match event_name {
+      #( #child_match_tokens_borrowed )*
+      _ => {
+        #unmatched_child_tokens_borrowed
+      }
+    }
+  };
+  let mce_child_process_tokens = if generate_mce_tokens() {
+    child_fields
+      .iter()
+      .map(mce_process_child_field_tokens)
+      .collect::<Vec<_>>()
+  } else {
+    Vec::new()
+  };
+  let mce_choice_process_tokens = if generate_mce_tokens() {
+    choice_fields
+      .iter()
+      .map(mce_process_choice_field_tokens)
+      .collect::<Vec<_>>()
+  } else {
+    Vec::new()
+  };
+  let mut mce_choice_impl_keys = std::collections::HashSet::new();
+  let mce_choice_impl_tokens = if generate_mce_tokens() {
+    choice_fields
+      .iter()
+      .filter_map(|field| {
+        let choice_ty = unwrap_option_vec_type(&field.ty);
+        mce_choice_impl_keys
+          .insert(quote! { #choice_ty }.to_string())
+          .then(|| mce_choice_impl_tokens(field, &default_dispatch_prefix))
+      })
+      .collect::<syn::Result<Vec<_>>>()?
+  } else {
+    Vec::new()
+  };
+  let mut ordered_write_tokens = Vec::new();
+  for field in &fields.named {
+    let field_ident = field
+      .ident
+      .as_ref()
+      .ok_or_else(|| syn::Error::new_spanned(field, "SdkType requires named fields"))?;
+    let parsed_attrs = parse_sdk_type_field_attrs(&field.attrs)?;
+    match parsed_attrs.kind {
+      Some(SdkTypeFieldKind::Child { qname, .. }) | Some(SdkTypeFieldKind::Mce { qname, .. }) => {
+        let repeated = contains_vec_type(&field.ty);
+        let optional = is_option_type(&field.ty);
+        let payload_ty = unwrap_option_vec_type(&field.ty);
+        let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+        let child_write_call =
+          write_typed_child_tokens(&child_ty, quote! { child }, &qname, "", false);
+        let self_write_call =
+          write_typed_child_tokens(&child_ty, quote! { &self.#field_ident }, &qname, "", false);
+        if repeated {
+          ordered_write_tokens.push(quote! {
+            for child in &self.#field_ident {
+              #child_write_call
+            }
+          });
+        } else if optional {
+          ordered_write_tokens.push(quote! {
+            if let Some(child) = &self.#field_ident {
+              #child_write_call
+            }
+          });
+        } else {
+          ordered_write_tokens.push(quote! {
+            #self_write_call
+          });
+        }
+      }
+      Some(SdkTypeFieldKind::TextChild { qname, list, .. }) => {
+        let repeated = !list && contains_vec_type(&field.ty);
+        ordered_write_tokens.push(build_text_child_write_tokens(
+          field_ident,
+          &field.ty,
+          TextChildWriteSpec {
+            qname: &qname,
+            parent_tag_prefix: "",
+            parent_no_prefix: false,
+            repeated,
+            optional: is_option_type(&field.ty),
+            list,
+          },
+        ));
+      }
+      Some(SdkTypeFieldKind::AnyChild { qname, .. }) => {
+        ordered_write_tokens.push(build_any_child_write_tokens(
+          field_ident,
+          &qname,
+          "",
+          false,
+          contains_vec_type(&field.ty),
+          is_option_type(&field.ty),
+        ));
+      }
+      Some(SdkTypeFieldKind::EmptyChild { qname, .. }) => {
+        ordered_write_tokens.push(build_empty_child_write_tokens(
+          field_ident,
+          &qname,
+          "",
+          false,
+          contains_vec_type(&field.ty),
+          is_option_type(&field.ty),
+        ));
+      }
+      Some(SdkTypeFieldKind::Choice) => {
+        let choice_ty = unwrap_option_vec_type(&field.ty);
+        ordered_write_tokens.push(build_choice_write_tokens(
+          &choice_ty,
+          &parsed_attrs.choice_items,
+          field_ident,
+          contains_vec_type(&field.ty),
+          is_option_type(&field.ty),
+          "",
+          false,
+        )?);
+      }
+      Some(SdkTypeFieldKind::Attr { .. })
+      | Some(SdkTypeFieldKind::Text { .. })
+      | Some(SdkTypeFieldKind::Any)
+      | None => {}
+    }
+  }
+  let read_inner_body = quote! {
+    let mut pending_event = Some((start, empty));
+
+    #( #child_decl_tokens )*
+    #( #choice_decl_tokens )*
+    let mut __ooxmlsdk_seen_child = false;
+
+    loop {
+      if let Some((e, next_empty)) = pending_event.take() {
+        let event_name = crate::common::xml_local_name(e.name());
+        #main_dispatch_tokens_borrowed
+      }
+
+      match xml_reader.next()? {
+        crate::common::PayloadEvent::Start(e, next_empty) => {
+          let event_name = crate::common::xml_local_name(e.name());
+          #main_dispatch_tokens_borrowed
+        }
+        crate::common::PayloadEvent::End(e) => {
+          if __ooxmlsdk_seen_child {
+            xml_reader.unread(crate::common::PayloadEvent::End(e))?;
+          }
+          break;
+        }
+        crate::common::PayloadEvent::Eof => {
+          return Err(crate::common::unexpected_eof(stringify!(#ident)));
+        }
+        _ => continue,
+      }
+    }
+
+    Ok(Self {
+      #( #child_init_tokens, )*
+      #( #choice_init_tokens, )*
+    })
+  };
+  let write_inner_body = write_inner_body_tokens(quote! {
+    #( #ordered_write_tokens )*
+    Ok(false)
+  });
+  let validator_methods_tokens = validator_methods_tokens(quote! {
+    #( #child_validate_tokens )*
+    #( #choice_validate_tokens )*
+  });
+  let validator_impl_tokens = validator_impl_tokens(
+    quote! { #impl_generics },
+    ident,
+    quote! { #type_generics },
+    quote! { #where_clause },
+    validator_methods_tokens,
+  );
+  let mce_methods_tokens = if generate_mce_tokens() {
+    quote! {
+      #[cfg(feature = "mce")]
+      impl #impl_generics #ident #type_generics #where_clause {
+        pub(crate) fn process_mce_with_context(
+          &mut self,
+          settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+          context: &crate::mce::MceContext<'_>,
+        ) -> Result<crate::mce::ElementAction, crate::common::SdkError> {
+          #( #mce_child_process_tokens )*
+          #( #mce_choice_process_tokens )*
+          Ok(crate::mce::ElementAction::Normal)
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+
+  Ok(quote! {
+    #( #mce_choice_impl_tokens )*
+    impl #impl_generics crate::sdk::SdkType for #ident #type_generics #where_clause {
+      fn read_inner<'xml, R: crate::common::XmlRead<'xml>>(
+        xml_reader: &mut R,
+        start: quick_xml::events::BytesStart<'xml>,
+        empty: bool,
+        read_context: &mut crate::common::ReadContext,
+      ) -> Result<Self, crate::common::SdkError> {
+        #read_inner_body
+      }
+
+      fn write_inner<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+      ) -> Result<bool, std::io::Error> {
+        #write_inner_body
+      }
+    }
+    #validator_impl_tokens
+
+    #mce_methods_tokens
+  })
+}
+
+fn expand_named_struct(
+  input: &DeriveInput,
+  schema_qname: &str,
+  fields: &syn::FieldsNamed,
+) -> syn::Result<proc_macro2::TokenStream> {
+  let ident = &input.ident;
+  let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+  let QNameInfo {
+    tag_prefix,
+    local_name,
+  } = parse_qname_info(schema_qname);
+  let local_name_lit = LitByteStr::new(local_name.as_bytes(), Span::call_site());
+  let prefix_write_mode = parse_sdk_prefix_write_mode(&input.attrs)?;
+  let no_prefix = prefix_write_mode.writes_no_prefix();
+  let no_prefix_only = prefix_write_mode.writes_no_prefix_only();
+  let has_xml_header = parse_sdk_xml_header(&input.attrs)?;
+  let (mce_element_action_tokens, has_mce_element_action) =
+    mce_element_action_tokens(&input.attrs, schema_qname)?;
+  let extra_xmlns = parse_sdk_extra_xmlns(&input.attrs)?;
+  let (extra_xmlns_init_tokens, extra_xmlns_mark_tokens, extra_xmlns_write_tokens) =
+    extra_xmlns_tokens(&extra_xmlns)?;
+  let end_tag = write_end_tag_tokens(schema_qname, no_prefix);
+  let wml_table_kind = wml_table_stack_kind(ident, schema_qname);
+  let fixed_namespace_uri = namespaces::uri_by_prefix(&tag_prefix);
+  let mut attr_fields = Vec::new();
+  let mut child_fields = Vec::new();
+  let mut mce_fields = Vec::new();
+  let mut empty_child_fields = Vec::new();
+  let mut text_child_fields = Vec::new();
+  let mut any_child_fields = Vec::new();
+  let mut choice_fields = Vec::new();
+  let mut any_fields = Vec::new();
+  let mut text_field = None;
+  let mut xmlns_fields = Vec::new();
+  let mut mc_ignorable_field = None;
+  let mut mc_preserve_attributes_field = None;
+  let mut mc_preserve_elements_field = None;
+  let mut mc_process_content_field = None;
+  let mut mc_must_understand_field = None;
+  let mut ordered_field_specs = Vec::new();
+
+  for field in &fields.named {
+    let field_ident = field
+      .ident
+      .as_ref()
+      .ok_or_else(|| syn::Error::new_spanned(field, "SdkType requires named fields"))?;
+    if is_xmlns_field(field_ident) {
+      xmlns_fields.push(field_ident.clone());
+      continue;
+    }
+    if field_ident == "mc_ignorable" {
+      mc_ignorable_field = Some(field_ident.clone());
+      continue;
+    }
+    if field_ident == "mc_preserve_attributes" {
+      mc_preserve_attributes_field = Some(field_ident.clone());
+      continue;
+    }
+    if field_ident == "mc_preserve_elements" {
+      mc_preserve_elements_field = Some(field_ident.clone());
+      continue;
+    }
+    if field_ident == "mc_process_content" {
+      mc_process_content_field = Some(field_ident.clone());
+      continue;
+    }
+    if field_ident == "mc_must_understand" {
+      mc_must_understand_field = Some(field_ident.clone());
+      continue;
+    }
+    let parsed_attrs = parse_sdk_type_field_attrs(&field.attrs)?;
+    let Some(field_kind) = parsed_attrs.kind else {
+      return Err(syn::Error::new_spanned(
+        field,
+        "missing #[sdk(...)] field attribute",
+      ));
+    };
+    ordered_field_specs.push((
+      field_ident.clone(),
+      field.ty.clone(),
+      field_kind.clone(),
+      parsed_attrs.choice_items.clone(),
+    ));
+
+    match field_kind {
+      SdkTypeFieldKind::Attr {
+        name,
+        list,
+        read_aliases,
+        empty_as_none,
+      } => attr_fields.push(SdkAttrField {
+        ident: field_ident.clone(),
+        name,
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        list,
+        read_aliases,
+        empty_as_none,
+        validators: parsed_attrs.validators,
+      }),
+      SdkTypeFieldKind::Child { qname } => child_fields.push(SdkChildField {
+        ident: field_ident.clone(),
+        qname,
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      SdkTypeFieldKind::Mce { qname, children } => mce_fields.push(SdkAlternateContentField {
+        ident: field_ident.clone(),
+        qname,
+        children,
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      SdkTypeFieldKind::EmptyChild { qname } => empty_child_fields.push(SdkEmptyChildField {
+        ident: field_ident.clone(),
+        qname,
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      SdkTypeFieldKind::TextChild { qname, list } => text_child_fields.push(SdkTextChildField {
+        ident: field_ident.clone(),
+        qname,
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: !list && contains_vec_type(&field.ty),
+        list,
+      }),
+      SdkTypeFieldKind::AnyChild { qname } => any_child_fields.push(SdkAnyChildField {
+        ident: field_ident.clone(),
+        qname,
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      SdkTypeFieldKind::Choice => choice_fields.push(SdkTypeChoiceField {
+        ident: field_ident.clone(),
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+        process_content_mapping: mce_process_content_mapping(
+          schema_qname,
+          ident,
+          field_ident,
+          &field.ty,
+        ),
+        accepts_text: parsed_attrs.choice_accepts_text,
+        accepts_any: parsed_attrs.choice_accepts_any,
+        specific_qnames: parsed_attrs.choice_qnames,
+        items: parsed_attrs.choice_items,
+      }),
+      SdkTypeFieldKind::Any => any_fields.push(SdkAnyField {
+        ident: field_ident.clone(),
+        ty: field.ty.clone(),
+        optional: is_option_type(&field.ty),
+        repeated: contains_vec_type(&field.ty),
+      }),
+      SdkTypeFieldKind::Text { list } => {
+        text_field = Some(SdkTextField {
+          ident: field_ident.clone(),
+          ty: field.ty.clone(),
+          optional: is_option_type(&field.ty),
+          list,
+        });
+      }
+    }
+  }
+
+  if any_fields.len() > 1 {
+    return Err(syn::Error::new_spanned(
+      input,
+      "SdkType currently supports at most one #[sdk(any)] field",
+    ));
+  }
+  validate_attribute_read_aliases(&attr_fields)?;
+
+  let has_xmlns_fields = !xmlns_fields.is_empty();
+  let has_mc_ignorable_field = mc_ignorable_field.is_some();
+  let has_mc_preserve_attributes_field = mc_preserve_attributes_field.is_some();
+  let has_mc_preserve_elements_field = mc_preserve_elements_field.is_some();
+  let has_mc_process_content_field = mc_process_content_field.is_some();
+  let has_mc_must_understand_field = mc_must_understand_field.is_some();
+  let has_mc_fields = has_mc_ignorable_field
+    || has_mc_preserve_attributes_field
+    || has_mc_preserve_elements_field
+    || has_mc_process_content_field
+    || has_mc_must_understand_field;
+  let tracks_xml_child_slot = !mce_fields.is_empty();
+  let end_name_matches = quote! { e.name() == __end_qname };
+  let end_qname_decl = quote! { let __end_qname = e.name(); };
+
+  let mut xml_child_slot_by_field = std::collections::HashMap::<String, usize>::new();
+  let mut xml_child_slot_count = 0usize;
+  for (field_ident, _, field_kind, _) in &ordered_field_specs {
+    if matches!(
+      field_kind,
+      SdkTypeFieldKind::Child { .. }
+        | SdkTypeFieldKind::Mce { .. }
+        | SdkTypeFieldKind::EmptyChild { .. }
+        | SdkTypeFieldKind::TextChild { .. }
+        | SdkTypeFieldKind::AnyChild { .. }
+        | SdkTypeFieldKind::Choice
+        | SdkTypeFieldKind::Any
+    ) {
+      xml_child_slot_count += 1usize;
+      xml_child_slot_by_field.insert(field_ident.to_string(), xml_child_slot_count);
+    }
+  }
+
+  let xml_child_slot_assign_tokens = |xml_child_slot: usize| {
+    if !tracks_xml_child_slot {
+      quote! {}
+    } else {
+      quote! {
+        __xml_child_slot = #xml_child_slot;
+      }
+    }
+  };
+
+  let namespace_list_parser_tokens = |attribute: proc_macro2::TokenStream| {
+    let parse = if has_xmlns_fields {
+      quote! {
+        crate::common::parse_xml_namespace_list(read_context, &xmlns, value.as_bytes())
+      }
+    } else {
+      quote! {
+        crate::common::parse_xml_namespace_list_on(read_context, &e, value.as_bytes())
+      }
+    };
+    quote! {{
+      let value = #attribute.decoded_and_normalized_value(
+        quick_xml::XmlVersion::Implicit1_0,
+        decoder,
+      )?;
+      #parse
+    }}
+  };
+  let mut attr_decl_tokens = Vec::new();
+  let mut attr_post_parse_tokens = Vec::new();
+  let mut attr_parse_tokens = Vec::new();
+  let mut attr_namespace_parse_tokens = Vec::new();
+  let mut attr_namespace_targets = Vec::new();
+  let mut attr_write_tokens = Vec::new();
+  let mut attr_init_tokens = Vec::new();
+  let mut attr_finish_tokens = Vec::new();
+  let mut attr_validate_tokens = Vec::new();
+  for field in &attr_fields {
+    let field_ident = &field.ident;
+    let name_lit = LitStr::new(&field.name, Span::call_site());
+    let value_ty = if field.list {
+      vec_inner_type(&unwrap_option_type(&field.ty)).ok_or_else(|| {
+        syn::Error::new_spanned(&field.ty, "#[sdk(attr(..., list))] requires Vec<T>")
+      })?
+    } else {
+      unwrap_wrapped_type(&field.ty)
+    };
+    let namespace_list = type_terminal_name(&value_ty).as_deref() == Some("XmlNamespace");
+    let simple_type = if namespace_list {
+      None
+    } else {
+      mapped_simple_type_name(Some(&value_ty), &field.name, field.list)
+    };
+    let simple_union_kind = simple_union_effective_type_kind(&value_ty, simple_type);
+    let from_bytes_attr = is_from_bytes_attr_effective_type(&value_ty, simple_type);
+    let integer_kind = integer_effective_type_kind(&value_ty, simple_type);
+    let parser = if namespace_list {
+      namespace_list_parser_tokens(quote! { attr })
+    } else if field.list {
+      if is_string_like_effective_type(&value_ty, simple_type) {
+        quote! {
+          crate::common::parse_list_attr::<#value_ty>(
+            &attr,
+            decoder,
+            stringify!(#ident),
+            #name_lit,
+          )?
+        }
+      } else {
+        parse_bytes_list_attr_tokens(
+          &value_ty,
+          simple_type,
+          quote! { stringify!(#ident) },
+          quote! { #name_lit },
+        )
+      }
+    } else if let Some(kind) = simple_union_kind {
+      parse_simple_union_attr_tokens(kind)
+    } else if from_bytes_attr {
+      parse_from_bytes_attr_tokens(
+        &value_ty,
+        quote! { stringify!(#ident) },
+        quote! { #name_lit },
+      )
+    } else if let Some(kind) = integer_kind {
+      parse_integer_attr_tokens_by_kind(
+        kind,
+        quote! { &attr },
+        quote! { decoder },
+        quote! { stringify!(#ident) },
+        quote! { #name_lit },
+      )
+    } else if let Some(parser) = parse_float_attr_tokens(
+      &value_ty,
+      simple_type,
+      quote! { stringify!(#ident) },
+      quote! { #name_lit },
+    ) {
+      parser
+    } else if is_sdk_enum_effective_type(&value_ty, simple_type) {
+      quote! { crate::common::parse_enum_attr::<#value_ty>(&attr, decoder)? }
+    } else if is_string_like_effective_type(&value_ty, simple_type) {
+      quote! {
+        attr
+          .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)?
+          .into_owned()
+      }
+    } else {
+      quote! {
+        compile_error!("unmapped XML attribute value type")
+      }
+    };
+    let parse_storage_ident = namespace_list.then(|| {
+      Ident::new(
+        &format!("__ooxmlsdk_{}_attribute", field_ident),
+        Span::call_site(),
+      )
+    });
+    let assign_attr_tokens = if let Some(parse_storage_ident) = &parse_storage_ident {
+      if field.empty_as_none {
+        quote! {
+          if !attr.value.as_ref().is_empty() {
+            #parse_storage_ident = Some(attr.clone());
+          }
+        }
+      } else {
+        quote! {
+          #parse_storage_ident = Some(attr.clone());
+        }
+      }
+    } else if field.empty_as_none {
+      quote! {
+        if !attr.value.as_ref().is_empty() {
+          #field_ident = Some(#parser);
+        }
+      }
+    } else {
+      quote! {
+        #field_ident = Some(#parser);
+      }
+    };
+    let primary_dispatch = attribute_qname_dispatch_tokens(&field.name, assign_attr_tokens.clone());
+    attr_parse_tokens.push(primary_dispatch.match_arm.clone());
+    if let Some(namespace_target) = primary_dispatch.namespace_target {
+      attr_namespace_parse_tokens.push(primary_dispatch.match_arm);
+      attr_namespace_targets.push(namespace_target);
+    }
+    let assigned_ident = parse_storage_ident.as_ref().unwrap_or(field_ident);
+    let assign_read_alias_tokens = quote! {
+      if #assigned_ident.is_none() {
+        #assign_attr_tokens
+      }
+    };
+    for read_alias in &field.read_aliases {
+      let alias_dispatch =
+        attribute_qname_dispatch_tokens(read_alias, assign_read_alias_tokens.clone());
+      attr_parse_tokens.push(alias_dispatch.match_arm.clone());
+      if let Some(namespace_target) = alias_dispatch.namespace_target {
+        attr_namespace_parse_tokens.push(alias_dispatch.match_arm);
+        attr_namespace_targets.push(namespace_target);
+      }
+    }
+    if let Some(parse_storage_ident) = &parse_storage_ident {
+      let parser = namespace_list_parser_tokens(quote! { attr });
+      attr_decl_tokens.push(quote! {
+        let mut #parse_storage_ident =
+          None::<quick_xml::events::attributes::Attribute<'xml>>;
+      });
+      attr_post_parse_tokens.push(quote! {
+        let #field_ident = if let Some(attr) = #parse_storage_ident {
+          Some(#parser)
+        } else {
+          None
+        };
+      });
+    } else {
+      attr_decl_tokens.push(quote! { let mut #field_ident = None; });
+    }
+    if field.optional {
+      attr_init_tokens.push(quote! { #field_ident });
+    } else {
+      attr_finish_tokens.push(quote! {
+        #field_ident: match #field_ident {
+          Some(value) => value,
+          None => return Err(crate::common::missing_field(
+            stringify!(#ident),
+            stringify!(#field_ident),
+          )),
+        }
+      });
+    }
+    let attr_prefix_lit = LitByteStr::new(
+      format!(" {}=\"", field.name).as_bytes(),
+      proc_macro2::Span::call_site(),
+    );
+    let attr_write_value_tokens = if namespace_list {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        crate::common::write_xml_namespace_list_value(writer, value.as_slice())?;
+        writer.write_all(b"\"")?;
+      }
+    } else if field.list && is_string_like_effective_type(&value_ty, simple_type) {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        crate::common::write_list_str_value(writer, value.as_slice())?;
+        writer.write_all(b"\"")?;
+      }
+    } else if field.list {
+      let write_list_tokens =
+        write_list_attr_tokens(&value_ty, simple_type, quote! { value.as_slice() });
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        #write_list_tokens
+        writer.write_all(b"\"")?;
+      }
+    } else if let Some(kind) = simple_union_kind {
+      write_simple_union_attr_tokens(kind, &attr_prefix_lit, quote! { value })
+    } else if let Some(kind) = integer_kind {
+      let write_value_tokens = write_integer_value_tokens_by_kind(kind, quote! { value });
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        #write_value_tokens
+        writer.write_all(b"\"")?;
+      }
+    } else if effective_type_name(&value_ty, simple_type)
+      .as_deref()
+      .is_some_and(is_xml_schema_float_type_name)
+    {
+      let write_value_tokens =
+        write_xml_schema_float_effective_tokens(quote! { value }, &value_ty, simple_type, "");
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        #write_value_tokens
+        writer.write_all(b"\"")?;
+      }
+    } else if is_string_like_effective_type(&value_ty, simple_type) {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        crate::common::write_escaped_str(writer, value.as_ref())?;
+        writer.write_all(b"\"")?;
+      }
+    } else if is_sdk_enum_effective_type(&value_ty, simple_type) {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(value))?;
+        writer.write_all(b"\"")?;
+      }
+    } else if let Some(write_value_tokens) =
+      write_from_bytes_value_tokens(&value_ty, simple_type, quote! { value })
+    {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        #write_value_tokens
+        writer.write_all(b"\"")?;
+      }
+    } else {
+      quote! {
+        writer.write_all(#attr_prefix_lit)?;
+        compile_error!("unmapped XML attribute value type");
+        writer.write_all(b"\"")?;
+      }
+    };
+    if field.optional {
+      attr_write_tokens.push(quote! {
+        if let Some(value) = &self.#field_ident {
+          #attr_write_value_tokens
+        }
+      });
+    } else {
+      attr_write_tokens.push(quote! {
+        let value = &self.#field_ident;
+        #attr_write_value_tokens
+      });
+    }
+
+    if cfg!(feature = "validators") {
+      let mut direct_validator_tokens = if simple_union_kind.is_some() {
+        Vec::new()
+      } else if is_hex_binary_effective_type(&value_ty, simple_type) {
+        vec![quote! {
+          crate::validator::validate_binary_format(
+            stringify!(#ident),
+            stringify!(#field_ident),
+            value,
+            crate::validator::BinaryFormatKind::Hex,
+          )?;
+        }]
+      } else if is_base64_binary_effective_type(&value_ty, simple_type) {
+        vec![quote! {
+          crate::validator::validate_binary_format(
+            stringify!(#ident),
+            stringify!(#field_ident),
+            value,
+            crate::validator::BinaryFormatKind::Base64,
+          )?;
+        }]
+      } else if is_decimal_value_effective_type(&value_ty, simple_type) {
+        vec![quote! {
+          crate::validator::validate_decimal_format(
+            stringify!(#ident),
+            stringify!(#field_ident),
+            value,
+          )?;
+        }]
+      } else if is_datetime_value_effective_type(&value_ty, simple_type) {
+        vec![quote! {
+          crate::validator::validate_datetime_format(
+            stringify!(#ident),
+            stringify!(#field_ident),
+            value,
+          )?;
+        }]
+      } else {
+        Vec::new()
+      };
+      let mut union_validator_tokens: std::collections::BTreeMap<
+        u32,
+        Vec<proc_macro2::TokenStream>,
+      > = std::collections::BTreeMap::new();
+      if simple_union_kind.is_none() {
+        for validator in &field.validators {
+          let token = validator_token(ident, field_ident, &value_ty, validator);
+          let (source_id, union_id) = validator_source_union(validator);
+          if union_id.is_some() {
+            union_validator_tokens
+              .entry(source_id)
+              .or_default()
+              .push(token);
+          } else {
+            direct_validator_tokens.push(token);
+          }
+        }
+      }
+      let union_validator_tokens: Vec<_> = if union_validator_tokens.is_empty() {
+        Vec::new()
+      } else {
+        let branch_tokens: Vec<_> = union_validator_tokens
+          .into_values()
+          .map(|tokens| {
+            quote! {
+              (|| -> Result<(), crate::common::SdkError> {
+                #( #tokens )*
+                Ok::<(), crate::common::SdkError>(())
+              })()
+            }
+          })
+          .collect();
+        vec![quote! {
+          {
+            let mut first_error: Option<crate::common::SdkError> = None;
+            let mut matched = false;
+            for branch_result in [#( #branch_tokens ),*] {
+              match branch_result {
+                Ok(()) => {
+                  matched = true;
+                  break;
+                }
+                Err(err) => {
+                  if first_error.is_none() {
+                    first_error = Some(err);
+                  }
+                }
+              }
+            }
+            if !matched {
+              return Err(first_error.unwrap_or_else(|| {
+                crate::common::SdkError::CommonError(format!(
+                  "all union validator branches failed for {}.{}",
+                  stringify!(#ident),
+                  stringify!(#field_ident),
+                ))
+              }));
+            }
+          }
+        }]
+      };
+      let mut validator_tokens = direct_validator_tokens;
+      validator_tokens.extend(union_validator_tokens);
+      if !validator_tokens.is_empty() {
+        if field.list && field.optional {
+          attr_validate_tokens.push(quote! {
+            if let Some(values) = &self.#field_ident {
+              context.check(|| -> Result<(), crate::common::SdkError> {
+                for value in values {
+                  #( #validator_tokens )*
+                }
+                Ok(())
+              });
+            }
+          });
+        } else if field.list {
+          attr_validate_tokens.push(quote! {
+            {
+              let values = &self.#field_ident;
+              context.check(|| -> Result<(), crate::common::SdkError> {
+                for value in values {
+                  #( #validator_tokens )*
+                }
+                Ok(())
+              });
+            }
+          });
+        } else if field.optional {
+          attr_validate_tokens.push(quote! {
+            if let Some(value) = &self.#field_ident {
+              context.check(|| -> Result<(), crate::common::SdkError> {
+                #( #validator_tokens )*
+                Ok(())
+              });
+            }
+          });
+        } else {
+          attr_validate_tokens.push(quote! {
+            {
+              let value = &self.#field_ident;
+              context.check(|| -> Result<(), crate::common::SdkError> {
+                #( #validator_tokens )*
+                Ok(())
+              });
+            }
+          });
+        }
+      }
+    }
+  }
+
+  let (xmlns_preparse_tokens, xmlns_parse_tokens) = if has_xmlns_fields {
+    (
+      quote! {
+        let __ooxmlsdk_root_namespace_scope =
+          read_context.take_root_namespaces_pending();
+      },
+      quote! {
+        b"xmlns" => {
+          let (uri, known, canonical) =
+            crate::common::parse_xml_namespace_uri(&attr, b"", decoder)?;
+          crate::common::XmlNamespace::push_normalized_resolved(
+            &mut xmlns,
+            &mut __ooxmlsdk_xmlns_state,
+            b"",
+            uri.as_ref(),
+            known,
+            canonical,
+          );
+          if __ooxmlsdk_root_namespace_scope {
+            read_context.declare_namespace_resolved(b"", uri.as_ref(), canonical);
+          }
+        }
+        key if key.starts_with(b"xmlns:") => {
+          let (uri, known, canonical) =
+            crate::common::parse_xml_namespace_uri(&attr, &key[6..], decoder)?;
+          crate::common::XmlNamespace::push_normalized_resolved(
+            &mut xmlns,
+            &mut __ooxmlsdk_xmlns_state,
+            &key[6..],
+            uri.as_ref(),
+            known,
+            canonical,
+          );
+          if __ooxmlsdk_root_namespace_scope {
+            read_context.declare_namespace_resolved(&key[6..], uri.as_ref(), canonical);
+          }
+        }
+      },
+    )
+  } else {
+    (quote! {}, quote! {})
+  };
+  let mc_ignorable_assign_tokens = has_mc_ignorable_field.then(|| {
+    quote! {
+      __ooxmlsdk_mc_ignorable_attribute = Some(attr.clone());
+    }
+  });
+  let mc_preserve_attributes_assign_tokens = has_mc_preserve_attributes_field.then(|| {
+    quote! {
+      mc_preserve_attributes = Some(attr.value.as_ref().into());
+    }
+  });
+  let mc_preserve_elements_assign_tokens = has_mc_preserve_elements_field.then(|| {
+    quote! {
+      mc_preserve_elements = Some(attr.value.as_ref().into());
+    }
+  });
+  let mc_process_content_assign_tokens = has_mc_process_content_field.then(|| {
+    quote! {
+      mc_process_content = Some(attr.value.as_ref().into());
+    }
+  });
+  let mc_must_understand_assign_tokens = has_mc_must_understand_field.then(|| {
+    quote! {
+      __ooxmlsdk_mc_must_understand_attribute = Some(attr.clone());
+    }
+  });
+  for (qname, assign_tokens) in [
+    ("mc:Ignorable", mc_ignorable_assign_tokens),
+    (
+      "mc:PreserveAttributes",
+      mc_preserve_attributes_assign_tokens,
+    ),
+    ("mc:PreserveElements", mc_preserve_elements_assign_tokens),
+    ("mc:ProcessContent", mc_process_content_assign_tokens),
+    ("mc:MustUnderstand", mc_must_understand_assign_tokens),
+  ] {
+    let Some(assign_tokens) = assign_tokens else {
+      continue;
+    };
+    let dispatch = attribute_qname_dispatch_tokens(qname, assign_tokens);
+    attr_parse_tokens.push(dispatch.match_arm.clone());
+    attr_namespace_parse_tokens.push(dispatch.match_arm);
+    attr_namespace_targets.push(
+      dispatch
+        .namespace_target
+        .expect("MCE attributes use a known namespace"),
+    );
+  }
+  let mc_ignorable_decl_tokens = has_mc_ignorable_field.then(|| {
+    quote! {
+      let mut __ooxmlsdk_mc_ignorable_attribute =
+        None::<quick_xml::events::attributes::Attribute<'xml>>;
+    }
+  });
+  let mc_preserve_attributes_decl_tokens = has_mc_preserve_attributes_field.then(|| {
+    quote! {
+      let mut mc_preserve_attributes = None::<std::boxed::Box<[u8]>>;
+    }
+  });
+  let mc_preserve_elements_decl_tokens = has_mc_preserve_elements_field.then(|| {
+    quote! {
+      let mut mc_preserve_elements = None::<std::boxed::Box<[u8]>>;
+    }
+  });
+  let mc_process_content_decl_tokens = has_mc_process_content_field.then(|| {
+    quote! {
+      let mut mc_process_content = None::<std::boxed::Box<[u8]>>;
+    }
+  });
+  let mc_must_understand_decl_tokens = has_mc_must_understand_field.then(|| {
+    quote! {
+      let mut __ooxmlsdk_mc_must_understand_attribute =
+        None::<quick_xml::events::attributes::Attribute<'xml>>;
+    }
+  });
+  let mc_ignorable_post_parse_tokens = has_mc_ignorable_field.then(|| {
+    let parser = namespace_list_parser_tokens(quote! { attr });
+    quote! {
+      let mc_ignorable =
+        if let Some(attr) = __ooxmlsdk_mc_ignorable_attribute {
+          Some(#parser)
+        } else {
+          None
+        };
+    }
+  });
+  let mc_must_understand_post_parse_tokens = has_mc_must_understand_field.then(|| {
+    let parser = namespace_list_parser_tokens(quote! { attr });
+    quote! {
+      let mc_must_understand =
+        if let Some(attr) = __ooxmlsdk_mc_must_understand_attribute {
+          Some(#parser)
+        } else {
+          None
+        };
+    }
+  });
+  let attr_namespace_resolve_decl_tokens = (!attr_namespace_targets.is_empty()).then(|| {
+    quote! {
+      const __OOXMLSDK_ATTRIBUTE_QNAME_TARGETS: &[crate::common::AttributeQNameTarget] = &[
+        #( #attr_namespace_targets, )*
+      ];
+    }
+  });
+  let attribute_dispatch_tokens = |xmlns_tokens: &proc_macro2::TokenStream| {
+    if attr_namespace_targets.is_empty() {
+      quote! {
+        match attr.key.as_ref() {
+          #xmlns_tokens
+          #( #attr_parse_tokens )*
+          _ => {}
+        }
+      }
+    } else {
+      quote! {
+        match attr.key.as_ref() {
+          #xmlns_tokens
+          #( #attr_parse_tokens )*
+          key => {
+            match read_context.resolve_attribute_key(
+              &e,
+              key,
+              __OOXMLSDK_ATTRIBUTE_QNAME_TARGETS,
+            ) {
+              #( #attr_namespace_parse_tokens )*
+              _ => {}
+            }
+          }
+        }
+      }
+    }
+  };
+  let attribute_loop_body_with_xmlns = attribute_dispatch_tokens(&xmlns_parse_tokens);
+  let namespace_attr_parse_tokens = if attr_fields.is_empty() && !has_xmlns_fields && !has_mc_fields
+  {
+    quote! {}
+  } else {
+    let decoder_decl_tokens = if attr_fields.is_empty()
+      && !has_xmlns_fields
+      && !has_mc_ignorable_field
+      && !has_mc_must_understand_field
+    {
+      quote! {}
+    } else {
+      quote! { let decoder = xml_reader.decoder(); }
+    };
+    if has_xmlns_fields {
+      quote! {
+        let mut xmlns = Vec::<crate::common::XmlNamespace>::new();
+        let mut __ooxmlsdk_xmlns_state = crate::common::XmlNamespaceState::new();
+        #mc_ignorable_decl_tokens
+        #mc_preserve_attributes_decl_tokens
+        #mc_preserve_elements_decl_tokens
+        #mc_process_content_decl_tokens
+        #mc_must_understand_decl_tokens
+        #decoder_decl_tokens
+        #xmlns_preparse_tokens
+        if __ooxmlsdk_root_namespace_scope {
+          xmlns.reserve((e.attributes_raw().len() / 64).min(64));
+        }
+        #attr_namespace_resolve_decl_tokens
+        for attr in e.attributes().with_checks(false) {
+          let attr = attr?;
+          #attribute_loop_body_with_xmlns
+        }
+        #( #attr_post_parse_tokens )*
+        #mc_ignorable_post_parse_tokens
+        #mc_must_understand_post_parse_tokens
+      }
+    } else {
+      quote! {
+        #mc_ignorable_decl_tokens
+        #mc_preserve_attributes_decl_tokens
+        #mc_preserve_elements_decl_tokens
+        #mc_process_content_decl_tokens
+        #mc_must_understand_decl_tokens
+        #decoder_decl_tokens
+        #attr_namespace_resolve_decl_tokens
+        for attr in e.attributes().with_checks(false) {
+          let attr = attr?;
+          #attribute_loop_body_with_xmlns
+        }
+        #( #attr_post_parse_tokens )*
+        #mc_ignorable_post_parse_tokens
+        #mc_must_understand_post_parse_tokens
+      }
+    }
+  };
+  let mut child_match_tokens_borrowed =
+    std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+  let mut child_decl_tokens = Vec::new();
+  let mut child_init_tokens = Vec::new();
+  let mut child_validate_tokens = Vec::new();
+  for field in &child_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let payload_ty = unwrap_option_vec_type(&field.ty);
+    let child_ty = if let Some(inner_ty) = box_inner_type(&payload_ty) {
+      inner_ty
+    } else {
+      payload_ty.clone()
+    };
+    let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+      quote! { std::boxed::Box::new(parsed_child) }
+    } else {
+      quote! { parsed_child }
+    };
+    let build_body = || {
+      let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+      if field.repeated {
+        quote! {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #field_ident.push(#parsed_child_expr);
+          #xml_child_slot_assign
+        }
+      } else {
+        quote! {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #field_ident = Some(#parsed_child_expr);
+          #xml_child_slot_assign
+        }
+      }
+    };
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+
+    if cfg!(feature = "validators") {
+      if field.repeated {
+        child_validate_tokens.push(quote! {
+          for child in &self.#field_ident {
+            child.validate_into(context);
+          }
+        });
+      } else if field.optional {
+        child_validate_tokens.push(quote! {
+          if let Some(child) = &self.#field_ident {
+            child.validate_into(context);
+          }
+        });
+      } else {
+        child_validate_tokens.push(quote! {
+          self.#field_ident.validate_into(context);
+        });
+      }
+    }
+    push_qname_dispatch_arm(&mut child_match_tokens_borrowed, &field.qname, build_body());
+  }
+
+  if let Some(first_mce_field) = mce_fields.first() {
+    let mut mce_slot_parse_tokens = Vec::new();
+    for (index, field) in mce_fields.iter().enumerate() {
+      if field.qname != first_mce_field.qname {
+        return Err(syn::Error::new_spanned(
+          &field.ident,
+          "all static MCE fields must use the same AlternateContent QName",
+        ));
+      }
+      let field_ident = &field.ident;
+      let xml_child_slot = xml_child_slot_by_field
+        .get(&field_ident.to_string())
+        .copied()
+        .unwrap_or_default();
+      let payload_ty = unwrap_option_vec_type(&field.ty);
+      let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+      let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+        quote! { std::boxed::Box::new(parsed_child) }
+      } else {
+        quote! { parsed_child }
+      };
+      let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+      let assign = if field.repeated {
+        quote! { #field_ident.push(#parsed_child_expr); }
+      } else {
+        quote! { #field_ident = Some(#parsed_child_expr); }
+      };
+      let condition = if index + 1 == mce_fields.len() {
+        quote! { true }
+      } else {
+        quote! { __xml_child_slot < #xml_child_slot }
+      };
+      mce_slot_parse_tokens.push(quote! {
+        if #condition {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #assign
+          __xml_child_slot = #xml_child_slot;
+        } else
+      });
+
+      let (decl_tokens, init_tokens) =
+        field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+      child_decl_tokens.push(decl_tokens);
+      child_init_tokens.push(init_tokens);
+      if cfg!(feature = "validators") {
+        if field.repeated {
+          child_validate_tokens.push(quote! {
+            for child in &self.#field_ident {
+              child.validate_into(context);
+            }
+          });
+        } else if field.optional {
+          child_validate_tokens.push(quote! {
+            if let Some(child) = &self.#field_ident {
+              child.validate_into(context);
+            }
+          });
+        }
+      }
+    }
+    push_qname_dispatch_arm(
+      &mut child_match_tokens_borrowed,
+      &first_mce_field.qname,
+      quote! { #( #mce_slot_parse_tokens )* {} },
+    );
+  }
+
+  for field in &empty_child_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let build_body = || {
+      let assign_tokens = if field.repeated {
+        quote! { #field_ident.push(()); }
+      } else {
+        quote! { #field_ident = Some(()); }
+      };
+      quote! {
+        #assign_tokens
+        #xml_child_slot_assign
+      }
+    };
+
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+    push_qname_dispatch_arm(&mut child_match_tokens_borrowed, &field.qname, build_body());
+  }
+
+  for field in &text_child_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+    let parse_body = build_text_child_parse_body(
+      ident,
+      field_ident,
+      &field.qname,
+      &field.ty,
+      xml_child_slot_assign.clone(),
+      TextChildParseArmOptions {
+        repeated: field.repeated,
+        as_result: false,
+        list: field.list,
+      },
+    );
+    push_qname_dispatch_arm(&mut child_match_tokens_borrowed, &field.qname, parse_body);
+  }
+
+  for field in &any_child_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    child_decl_tokens.push(decl_tokens);
+    child_init_tokens.push(init_tokens);
+    push_qname_dispatch_arm(
+      &mut child_match_tokens_borrowed,
+      &field.qname,
+      build_any_child_parse_body(
+        ident,
+        field_ident,
+        &field.qname,
+        field.repeated,
+        xml_child_slot_assign,
+      ),
+    );
+  }
+
+  let mut choice_decl_tokens = Vec::new();
+  let mut choice_init_tokens = Vec::new();
+  let mut choice_text_parse_tokens = Vec::new();
+  let mut choice_validate_tokens = Vec::new();
+  let mut flat_choice_fallback_match_tokens_borrowed = Vec::new();
+  let mut choice_any_fallback_tokens_borrowed = None;
+  let mut choice_match_tokens_borrowed =
+    std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+  let mut grouped_choice_match_tokens_borrowed =
+    std::collections::BTreeMap::<String, Vec<GroupedChoiceAttempt>>::new();
+  let default_dispatch_prefix = parse_qname_info(schema_qname).tag_prefix;
+  let mut specific_choice_qname_counts = std::collections::HashMap::<String, usize>::new();
+  for field in &choice_fields {
+    if field.accepts_any.unwrap_or(false) {
+      continue;
+    }
+    let mut seen = std::collections::HashSet::new();
+    for qname in &field.specific_qnames {
+      if seen.insert(qname) {
+        *specific_choice_qname_counts
+          .entry(qname.clone())
+          .or_insert(0usize) += 1usize;
+      }
+    }
+  }
+  let required_child_by_ident = child_fields
+    .iter()
+    .filter(|field| !field.optional)
+    .map(|field| (field.ident.to_string(), field.ident.clone()))
+    .collect::<std::collections::HashMap<_, _>>();
+  let mut required_before_choice = std::collections::HashMap::<String, Vec<Ident>>::new();
+  let mut prior_required_children = Vec::<Ident>::new();
+  for (field_ident, _, field_kind, _) in &ordered_field_specs {
+    match field_kind {
+      SdkTypeFieldKind::Choice => {
+        required_before_choice.insert(field_ident.to_string(), prior_required_children.clone());
+      }
+      SdkTypeFieldKind::Child { .. } => {
+        if let Some(required_ident) = required_child_by_ident.get(&field_ident.to_string()) {
+          prior_required_children.push(required_ident.clone());
+        }
+      }
+      _ => {}
+    }
+  }
+  for field in &choice_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let choice_ty = unwrap_option_vec_type(&field.ty);
+    let build_text_block = |string_expr: proc_macro2::TokenStream| {
+      if field.accepts_text == Some(false) {
+        return quote! {};
+      }
+      let text_variant = field.items.iter().find_map(|item| match item {
+        SdkTypeChoiceItem::Text { variant } => Some(variant),
+        _ => None,
+      });
+      let Some(text_variant) = text_variant else {
+        return quote! {};
+      };
+      if field.repeated {
+        quote! {
+          #field_ident.push(#choice_ty::#text_variant(#string_expr.to_string()));
+          #xml_child_slot_assign
+          handled_text = true;
+        }
+      } else {
+        quote! {
+          if !handled_text {
+            #field_ident = Some(#choice_ty::#text_variant(#string_expr.to_string()));
+            #xml_child_slot_assign
+            handled_text = true;
+          }
+        }
+      }
+    };
+    let field_accepts_any = field.accepts_any.unwrap_or(false);
+    let required_before = required_before_choice
+      .get(&field_ident.to_string())
+      .cloned()
+      .unwrap_or_default();
+    let choice_order_condition = if required_before.is_empty() {
+      None
+    } else {
+      Some(quote! { #( #required_before.is_some() )&&* })
+    };
+    let specific_qnames: Vec<_> = field
+      .specific_qnames
+      .iter()
+      .filter(|qname| !qname.is_empty())
+      .cloned()
+      .collect();
+    let flatten_choice_items = !field.items.is_empty()
+      && (field_accepts_any
+        || specific_qnames.iter().all(|qname| {
+          specific_choice_qname_counts
+            .get(qname)
+            .copied()
+            .unwrap_or_default()
+            == 1usize
+        }));
+    if flatten_choice_items {
+      {
+        let mut queue_choice_dispatch_parse =
+          |qname: &str, body: proc_macro2::TokenStream, defaultable: bool| {
+            let tokens = if field_accepts_any {
+              body
+            } else {
+              quote! {
+                #body
+              }
+            };
+            if defaultable {
+              push_qname_dispatch_arm(&mut choice_match_tokens_borrowed, qname, tokens);
+            } else {
+              push_exact_qname_dispatch_arm(&mut choice_match_tokens_borrowed, qname, tokens);
+            }
+          };
+        for item in &field.items {
+          if let Some((qname, body)) = choice_item_parse_bodies(
+            ident,
+            wml_table_kind,
+            field_ident,
+            &choice_ty,
+            field.repeated,
+            item,
+            &xml_child_slot_assign,
+          ) {
+            queue_choice_dispatch_parse(qname, body, true);
+            continue;
+          }
+          match item {
+            SdkTypeChoiceItem::Sequence { variant, children } => {
+              let occupied_qnames = field
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                  SdkTypeChoiceItem::Child { qname, .. }
+                  | SdkTypeChoiceItem::EmptyChild { qname, .. }
+                  | SdkTypeChoiceItem::TextChild { qname, .. }
+                  | SdkTypeChoiceItem::AnyChild { qname, .. } => Some(qname),
+                  SdkTypeChoiceItem::Sequence { .. }
+                  | SdkTypeChoiceItem::Any { .. }
+                  | SdkTypeChoiceItem::Text { .. } => None,
+                })
+                .collect::<Vec<_>>();
+              let sequence_qnames = children
+                .iter()
+                .filter(|child| !occupied_qnames.contains(&&child.qname))
+                .map(|child| child.qname.clone())
+                .collect::<Vec<_>>();
+              if sequence_qnames.is_empty() {
+                continue;
+              }
+              let option_sequence = !field.repeated
+                && children.iter().all(|child| {
+                  matches!(child.kind, SdkTypeChoiceSequenceChildKind::Child)
+                    && child.option_field.is_some()
+                });
+              if option_sequence {
+                for child in children {
+                  let option_field_ident =
+                    child.option_field.as_ref().expect("sequence option field");
+                  let body = sequence_option_field_parse_body(
+                    &choice_ty,
+                    variant,
+                    field_ident,
+                    field.repeated,
+                    option_field_ident,
+                    &xml_child_slot_assign,
+                  );
+                  queue_choice_dispatch_parse(&child.qname, body, true);
+                }
+                continue;
+              }
+              let assign_tokens = if field.repeated {
+                quote! { #field_ident.push(#choice_ty::#variant(std::boxed::Box::new(parsed_child))); }
+              } else {
+                quote! { #field_ident = Some(#choice_ty::#variant(std::boxed::Box::new(parsed_child))); }
+              };
+              let body = quote! {
+                  let parsed_child = crate::sdk::SdkType::read_inner(
+                    xml_reader,
+                    e,
+                    next_empty,
+                    read_context,
+                  )?;
+                  #assign_tokens
+                  #xml_child_slot_assign
+              };
+              for qname in &sequence_qnames {
+                queue_choice_dispatch_parse(qname, body.clone(), true);
+              }
+            }
+            SdkTypeChoiceItem::Any { variant, qnames } => {
+              let assign_tokens = if field.repeated {
+                quote! { #field_ident.push(#choice_ty::#variant(xml)); }
+              } else {
+                quote! { #field_ident = Some(#choice_ty::#variant(xml)); }
+              };
+              let body = quote! {
+                  let xml = if next_empty {
+                    crate::common::XmlRead::read_raw_empty_xml_bytes(xml_reader, e)?
+                  } else {
+                    crate::common::XmlRead::read_raw_element_xml_bytes(xml_reader, e)?
+                  };
+                  #assign_tokens
+                  #xml_child_slot_assign
+              };
+              choice_any_fallback_tokens_borrowed = Some(quote! {
+                #body
+              });
+              for qname in qnames {
+                queue_choice_dispatch_parse(qname, body.clone(), false);
+              }
+            }
+            SdkTypeChoiceItem::Child { .. }
+            | SdkTypeChoiceItem::EmptyChild { .. }
+            | SdkTypeChoiceItem::TextChild { .. }
+            | SdkTypeChoiceItem::AnyChild { .. } => {}
+            SdkTypeChoiceItem::Text { .. } => {}
+          }
+        }
+      }
+    }
+    if !flatten_choice_items && !field.items.is_empty() && !field_accepts_any {
+      let grouped_choice_match_qnames = |qnames: &[String]| {
+        let mut seen = std::collections::HashSet::new();
+        let mut targets = Vec::new();
+
+        for qname in qnames {
+          if seen.insert(qname.clone()) {
+            targets.push(qname.clone());
+          }
+        }
+
+        targets
+      };
+      let mut push_grouped_choice_attempts =
+        |qnames: Vec<String>, tokens: proc_macro2::TokenStream, defaultable: bool| {
+          if qnames.is_empty() {
+            return;
+          }
+          for qname in qnames {
+            let QNameInfo { local_name, .. } = parse_qname_info(&qname);
+            grouped_choice_match_tokens_borrowed
+              .entry(local_name.clone())
+              .or_default()
+              .push(GroupedChoiceAttempt {
+                qname: qname.clone(),
+                condition: choice_order_condition.clone(),
+                tokens: tokens.clone(),
+                defaultable,
+              });
+          }
+        };
+
+      for item in &field.items {
+        if let Some((qname, parse)) = choice_item_parse_bodies(
+          ident,
+          wml_table_kind,
+          field_ident,
+          &choice_ty,
+          field.repeated,
+          item,
+          &xml_child_slot_assign,
+        ) {
+          let targets = grouped_choice_match_qnames(std::slice::from_ref(&qname.to_string()));
+          push_grouped_choice_attempts(targets, parse, true);
+          continue;
+        }
+        match item {
+          SdkTypeChoiceItem::Sequence { variant, children } => {
+            let occupied_qnames = field
+              .items
+              .iter()
+              .filter_map(|item| match item {
+                SdkTypeChoiceItem::Child { qname, .. }
+                | SdkTypeChoiceItem::EmptyChild { qname, .. }
+                | SdkTypeChoiceItem::TextChild { qname, .. }
+                | SdkTypeChoiceItem::AnyChild { qname, .. } => Some(qname),
+                SdkTypeChoiceItem::Sequence { .. }
+                | SdkTypeChoiceItem::Any { .. }
+                | SdkTypeChoiceItem::Text { .. } => None,
+              })
+              .collect::<Vec<_>>();
+            let sequence_qnames = children
+              .iter()
+              .filter(|child| !occupied_qnames.contains(&&child.qname))
+              .map(|child| child.qname.clone())
+              .collect::<Vec<_>>();
+            if sequence_qnames.is_empty() {
+              continue;
+            }
+            let option_sequence = !field.repeated
+              && children.iter().all(|child| {
+                matches!(child.kind, SdkTypeChoiceSequenceChildKind::Child)
+                  && child.option_field.is_some()
+              });
+            if option_sequence {
+              for child in children {
+                let option_field_ident =
+                  child.option_field.as_ref().expect("sequence option field");
+                let parse = sequence_option_field_parse_body(
+                  &choice_ty,
+                  variant,
+                  field_ident,
+                  field.repeated,
+                  option_field_ident,
+                  &xml_child_slot_assign,
+                );
+                push_grouped_choice_attempts(
+                  grouped_choice_match_qnames(std::slice::from_ref(&child.qname)),
+                  parse,
+                  true,
+                );
+              }
+              continue;
+            }
+            let targets = grouped_choice_match_qnames(&sequence_qnames);
+            let assign_tokens = if field.repeated {
+              quote! { #field_ident.push(#choice_ty::#variant(std::boxed::Box::new(parsed_child))); }
+            } else {
+              quote! { #field_ident = Some(#choice_ty::#variant(std::boxed::Box::new(parsed_child))); }
+            };
+            let parse = quote! {
+              let parsed_child = crate::sdk::SdkType::read_inner(
+                xml_reader,
+                e,
+                next_empty,
+                read_context,
+              )?;
+              #assign_tokens
+              #xml_child_slot_assign
+            };
+            push_grouped_choice_attempts(targets, parse, true);
+          }
+          SdkTypeChoiceItem::Child { .. }
+          | SdkTypeChoiceItem::EmptyChild { .. }
+          | SdkTypeChoiceItem::TextChild { .. }
+          | SdkTypeChoiceItem::AnyChild { .. }
+          | SdkTypeChoiceItem::Text { .. } => {}
+          SdkTypeChoiceItem::Any { variant, qnames } => {
+            if qnames.is_empty() {
+              continue;
+            }
+            let assign_tokens = if field.repeated {
+              quote! { #field_ident.push(#choice_ty::#variant(xml)); }
+            } else {
+              quote! { #field_ident = Some(#choice_ty::#variant(xml)); }
+            };
+            let parse = quote! {
+              let xml = if next_empty {
+                crate::common::XmlRead::read_raw_empty_xml_bytes(xml_reader, e)?
+              } else {
+                crate::common::XmlRead::read_raw_element_xml_bytes(xml_reader, e)?
+              };
+              #assign_tokens
+              #xml_child_slot_assign
+            };
+            push_grouped_choice_attempts(grouped_choice_match_qnames(qnames), parse, false);
+          }
+        }
+      }
+    }
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    choice_decl_tokens.push(decl_tokens);
+    choice_init_tokens.push(init_tokens);
+    if cfg!(feature = "validators") {
+      if field.repeated {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          true,
+          false,
+        ));
+      } else if field.optional {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          false,
+          true,
+        ));
+      } else {
+        choice_validate_tokens.push(build_choice_validate_tokens(
+          &choice_ty,
+          &field.items,
+          field_ident,
+          false,
+          false,
+        ));
+      }
+    }
+    choice_text_parse_tokens.push(build_text_block(quote! { &text_value }));
+  }
+  let grouped_choice_match_tokens_borrowed = build_grouped_choice_match_tokens(
+    &grouped_choice_match_tokens_borrowed,
+    &default_dispatch_prefix,
+    false,
+  );
+  flat_choice_fallback_match_tokens_borrowed.extend(grouped_choice_match_tokens_borrowed);
+
+  let mut any_decl_tokens = Vec::new();
+  let mut any_init_tokens = Vec::new();
+  let mut any_parse_tokens_borrowed = Vec::new();
+  for field in &any_fields {
+    let field_ident = &field.ident;
+    let xml_child_slot = xml_child_slot_by_field
+      .get(&field_ident.to_string())
+      .copied()
+      .unwrap_or_default();
+    let xml_child_slot_assign = xml_child_slot_assign_tokens(xml_child_slot);
+    let (decl_tokens, init_tokens) =
+      field_decl_init_tokens(ident, field_ident, field.repeated, field.optional);
+    any_decl_tokens.push(decl_tokens);
+    any_init_tokens.push(init_tokens);
+    any_parse_tokens_borrowed.push(build_any_child_parse_tokens(
+      field_ident,
+      &field.ty,
+      field.repeated,
+      xml_child_slot_assign,
+    ));
+  }
+  let pure_any_parse_tokens_borrowed = if let Some(field) = any_fields.first() {
+    let field_ident = &field.ident;
+    build_pure_any_child_parse_tokens(field_ident, &field.ty, field.repeated)
+  } else {
+    quote! {}
+  };
+  let mut child_choice_match_tokens_borrowed = child_match_tokens_borrowed.clone();
+  extend_qname_dispatch_arms(
+    &mut child_choice_match_tokens_borrowed,
+    &choice_match_tokens_borrowed,
+  );
+  let child_match_tokens_borrowed =
+    qname_dispatch_match_arms(&child_match_tokens_borrowed, &default_dispatch_prefix);
+  let child_choice_match_tokens_borrowed = qname_dispatch_match_arms(
+    &child_choice_match_tokens_borrowed,
+    &default_dispatch_prefix,
+  );
+
+  let has_child_dispatch = !child_fields.is_empty()
+    || !empty_child_fields.is_empty()
+    || !text_child_fields.is_empty()
+    || !any_child_fields.is_empty();
+  let has_text_child_dispatch = !text_child_fields.is_empty() || !any_child_fields.is_empty();
+  let has_choice_dispatch = !choice_fields.is_empty();
+  let has_any_choice_dispatch = choice_fields.iter().any(|field| {
+    field.accepts_any.unwrap_or(false)
+      || field
+        .items
+        .iter()
+        .any(|item| matches!(item, SdkTypeChoiceItem::Any { .. }))
+  });
+  let has_any_dispatch = !any_fields.is_empty();
+  let pure_any_dispatch =
+    !has_child_dispatch && !has_choice_dispatch && has_any_dispatch && !has_text_child_dispatch;
+  let unmatched_child_tokens_borrowed = if pure_any_dispatch || has_any_choice_dispatch {
+    quote! {}
+  } else {
+    build_unmatched_child_tokens()
+  };
+  let outer_choice_any_fallback_tokens_borrowed = if has_any_choice_dispatch {
+    choice_any_fallback_tokens_borrowed
+      .clone()
+      .unwrap_or_else(|| quote! {})
+  } else {
+    quote! {}
+  };
+  let child_choice_dispatch_tokens_borrowed =
+    if !has_child_dispatch && !has_choice_dispatch && !has_any_dispatch {
+      unmatched_child_tokens_borrowed.clone()
+    } else if pure_any_dispatch {
+      pure_any_parse_tokens_borrowed
+    } else if !has_child_dispatch && !has_any_dispatch {
+      quote! {
+        match event_name {
+          #( #child_choice_match_tokens_borrowed )*
+          _ => {
+            #outer_choice_any_fallback_tokens_borrowed
+            #unmatched_child_tokens_borrowed
+          }
+        }
+      }
+    } else if !has_child_dispatch {
+      quote! {
+        match event_name {
+          #( #child_choice_match_tokens_borrowed )*
+          _ => {
+            #outer_choice_any_fallback_tokens_borrowed
+            #( #any_parse_tokens_borrowed )*
+          }
+        }
+      }
+    } else if !has_choice_dispatch && !has_any_dispatch {
+      quote! {
+        match event_name {
+          #( #child_match_tokens_borrowed )*
+          _ => {
+            #unmatched_child_tokens_borrowed
+          }
+        }
+      }
+    } else if !has_any_dispatch {
+      quote! {
+        match event_name {
+          #( #child_choice_match_tokens_borrowed )*
+          #( #flat_choice_fallback_match_tokens_borrowed )*
+          _ => {
+            #outer_choice_any_fallback_tokens_borrowed
+            #unmatched_child_tokens_borrowed
+          }
+        }
+      }
+    } else {
+      quote! {
+        match event_name {
+          #( #child_choice_match_tokens_borrowed )*
+          #( #flat_choice_fallback_match_tokens_borrowed )*
+          _ => {
+            #outer_choice_any_fallback_tokens_borrowed
+            #( #any_parse_tokens_borrowed )*
+          }
+        }
+      }
+    };
+  let text_decl_tokens = if let Some(text_field) = &text_field {
+    let field_ident = &text_field.ident;
+    let _ = text_field.optional;
+    quote! { let mut #field_ident = None; }
+  } else {
+    quote! {}
+  };
+  let text_read_tokens = if let Some(text_field) = &text_field {
+    let field_ident = &text_field.ident;
+    quote! {
+      crate::common::DeEvent::FastBytesText(text) => {
+        crate::common::append_fast_bytes_text_field(
+          &mut #field_ident,
+          text,
+          stringify!(#ident),
+          stringify!(#field_ident),
+        )?;
+      }
+      crate::common::DeEvent::Text(text) => {
+        crate::common::append_de_text_field(&mut #field_ident, text);
+      }
+    }
+  } else {
+    if choice_fields.is_empty() {
+      quote! {}
+    } else {
+      quote! {
+        crate::common::DeEvent::FastBytesText(text) => {
+          let mut text_value = None;
+          crate::common::append_fast_bytes_text_field(
+            &mut text_value,
+            text,
+            stringify!(#ident),
+            "#text",
+          )?;
+          let text_value = text_value.unwrap_or_default();
+          let mut handled_text = false;
+          #( #choice_text_parse_tokens )*
+          if !handled_text && !text_value.trim().is_empty() {
+            return Err(crate::common::unexpected_tag(
+              stringify!(#ident),
+              "known child",
+              b"#text",
+            ));
+          }
+        }
+        crate::common::DeEvent::Text(text) => {
+          let text_value = text.as_ref();
+          let mut handled_text = false;
+          #( #choice_text_parse_tokens )*
+          if !handled_text && !text.is_blank() {
+            return Err(crate::common::unexpected_tag(
+              stringify!(#ident),
+              "known child",
+              b"#text",
+            ));
+          }
+        }
+      }
+    }
+  };
+  let build_ordered_write_tokens = |parent_no_prefix: bool,
+                                    stop_before_field: Option<&str>|
+   -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut ordered_write_tokens = Vec::new();
+    for (field_ident, field_ty, field_kind, choice_items) in &ordered_field_specs {
+      if stop_before_field.is_some_and(|stop| field_ident == stop) {
+        break;
+      }
+      match field_kind {
+        SdkTypeFieldKind::Child { qname, .. } | SdkTypeFieldKind::Mce { qname, .. } => {
+          let repeated = contains_vec_type(field_ty);
+          let optional = is_option_type(field_ty);
+          let payload_ty = unwrap_option_vec_type(field_ty);
+          let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+          let child_write_call = write_typed_child_tokens(
+            &child_ty,
+            quote! { child },
+            qname,
+            &tag_prefix,
+            parent_no_prefix,
+          );
+          let self_write_call = write_typed_child_tokens(
+            &child_ty,
+            quote! { &self.#field_ident },
+            qname,
+            &tag_prefix,
+            parent_no_prefix,
+          );
+          if repeated {
+            ordered_write_tokens.push(quote! {
+              for child in &self.#field_ident {
+                #child_write_call
+              }
+            });
+          } else if optional {
+            ordered_write_tokens.push(quote! {
+              if let Some(child) = &self.#field_ident {
+                #child_write_call
+              }
+            });
+          } else {
+            ordered_write_tokens.push(quote! {
+              #self_write_call
+            });
+          }
+        }
+        SdkTypeFieldKind::TextChild { qname, list, .. } => {
+          let repeated = !list && contains_vec_type(field_ty);
+          ordered_write_tokens.push(build_text_child_write_tokens(
+            field_ident,
+            field_ty,
+            TextChildWriteSpec {
+              qname,
+              parent_tag_prefix: &tag_prefix,
+              parent_no_prefix,
+              repeated,
+              optional: is_option_type(field_ty),
+              list: *list,
+            },
+          ));
+        }
+        SdkTypeFieldKind::AnyChild { qname, .. } => {
+          ordered_write_tokens.push(build_any_child_write_tokens(
+            field_ident,
+            qname,
+            &tag_prefix,
+            parent_no_prefix,
+            contains_vec_type(field_ty),
+            is_option_type(field_ty),
+          ));
+        }
+        SdkTypeFieldKind::EmptyChild { qname, .. } => {
+          ordered_write_tokens.push(build_empty_child_write_tokens(
+            field_ident,
+            qname,
+            &tag_prefix,
+            parent_no_prefix,
+            contains_vec_type(field_ty),
+            is_option_type(field_ty),
+          ));
+        }
+        SdkTypeFieldKind::Choice => {
+          let choice_ty = unwrap_wrapped_type(field_ty);
+          let repeated = contains_vec_type(field_ty);
+          let optional = is_option_type(field_ty);
+          ordered_write_tokens.push(build_choice_write_tokens(
+            &choice_ty,
+            choice_items,
+            field_ident,
+            repeated,
+            optional,
+            &tag_prefix,
+            parent_no_prefix,
+          )?);
+        }
+        SdkTypeFieldKind::Any => {
+          let repeated = contains_vec_type(field_ty);
+          let optional = is_option_type(field_ty);
+          let value_bytes_expr = if is_box_u8_slice_type(&unwrap_option_vec_type(field_ty)) {
+            quote! { value.as_ref() }
+          } else {
+            quote! { value.as_bytes() }
+          };
+          let field_bytes_expr = if is_box_u8_slice_type(&unwrap_option_vec_type(field_ty)) {
+            quote! { self.#field_ident.as_ref() }
+          } else {
+            quote! { self.#field_ident.as_bytes() }
+          };
+          if repeated {
+            ordered_write_tokens.push(quote! {
+              for value in &self.#field_ident {
+                writer.write_all(#value_bytes_expr)?;
+              }
+            });
+          } else if optional {
+            ordered_write_tokens.push(quote! {
+              if let Some(value) = &self.#field_ident {
+                writer.write_all(#value_bytes_expr)?;
+              }
+            });
+          } else {
+            ordered_write_tokens.push(quote! {
+              writer.write_all(#field_bytes_expr)?;
+            });
+          }
+        }
+        SdkTypeFieldKind::Text { list } => {
+          let inner_ty = if *list {
+            vec_inner_type(&unwrap_option_type(field_ty))
+              .unwrap_or_else(|| unwrap_wrapped_type(field_ty))
+          } else {
+            unwrap_wrapped_type(field_ty)
+          };
+          let optional_text_write_tokens = if *list && is_string_like_type(&inner_ty) {
+            quote! {
+              crate::common::write_list_content_str_value(writer, value.as_slice())?;
+            }
+          } else if *list {
+            write_list_attr_tokens(&inner_ty, None, quote! { value.as_slice() })
+          } else if let Some(kind) = simple_union_type_kind(&inner_ty) {
+            write_simple_union_value_tokens(kind, quote! { value })
+          } else if let Some(kind) = integer_effective_type_kind(&inner_ty, None) {
+            write_integer_value_tokens_by_kind(kind, quote! { value })
+          } else if is_xml_schema_float_type(&inner_ty) {
+            write_xml_schema_float_tokens(quote! { value }, &inner_ty)
+          } else if is_sdk_enum_effective_type(&inner_ty, None) {
+            quote! {
+              writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(value))?;
+            }
+          } else if let Some(tokens) =
+            write_from_bytes_value_tokens(&inner_ty, None, quote! { value })
+          {
+            tokens
+          } else if is_string_like_type(&inner_ty) {
+            quote! {
+              crate::common::write_escaped_content_str(writer, value.as_ref())?;
+            }
+          } else {
+            missing_static_value_mapping_tokens()
+          };
+          let required_text_write_tokens = if *list && is_string_like_type(&inner_ty) {
+            quote! {
+              crate::common::write_list_content_str_value(writer, self.#field_ident.as_slice())?;
+            }
+          } else if *list {
+            write_list_attr_tokens(&inner_ty, None, quote! { self.#field_ident.as_slice() })
+          } else if let Some(kind) = simple_union_type_kind(&inner_ty) {
+            write_simple_union_value_tokens(kind, quote! { &self.#field_ident })
+          } else if let Some(kind) = integer_effective_type_kind(&inner_ty, None) {
+            write_integer_value_tokens_by_kind(kind, quote! { &self.#field_ident })
+          } else if is_xml_schema_float_type(&inner_ty) {
+            write_xml_schema_float_tokens(quote! { &self.#field_ident }, &inner_ty)
+          } else if is_sdk_enum_effective_type(&inner_ty, None) {
+            quote! {
+              writer.write_all(crate::sdk::SdkEnum::as_xml_bytes(&self.#field_ident))?;
+            }
+          } else if let Some(tokens) =
+            write_from_bytes_value_tokens(&inner_ty, None, quote! { &self.#field_ident })
+          {
+            tokens
+          } else if is_string_like_type(&inner_ty) {
+            quote! {
+              crate::common::write_escaped_content_str(writer, self.#field_ident.as_ref())?;
+            }
+          } else {
+            missing_static_value_mapping_tokens()
+          };
+          if is_option_type(field_ty) {
+            ordered_write_tokens.push(quote! {
+              if let Some(value) = &self.#field_ident {
+                #optional_text_write_tokens
+              }
+            });
+          } else {
+            ordered_write_tokens.push(quote! {
+              #required_text_write_tokens
+            });
+          }
+        }
+        SdkTypeFieldKind::Attr { .. } => {}
+      }
+    }
+    Ok(ordered_write_tokens)
+  };
+  let ordered_write_tokens = build_ordered_write_tokens(no_prefix_only, None)?;
+  let ordered_write_tokens_no_prefix = if prefix_write_mode == PrefixWriteMode::NoPrefixDual {
+    Some(build_ordered_write_tokens(true, None)?)
+  } else {
+    None
+  };
+  let text_finish_tokens = if let Some(text_field) = &text_field {
+    let field_ident = &text_field.ident;
+    let inner_ty = if text_field.list {
+      vec_inner_type(&unwrap_option_type(&text_field.ty))
+        .unwrap_or_else(|| unwrap_wrapped_type(&text_field.ty))
+    } else {
+      unwrap_wrapped_type(&text_field.ty)
+    };
+    let field_name_lit = LitStr::new(&field_ident.to_string(), Span::call_site());
+    if text_field.list {
+      let parse_value_tokens = quote! {
+        crate::common::parse_list_value::<#inner_ty>(&value, stringify!(#ident), #field_name_lit)?
+      };
+      if text_field.optional {
+        quote! {
+          #field_ident: match #field_ident {
+            Some(value) => Some(#parse_value_tokens),
+            None => None,
+          },
+        }
+      } else {
+        quote! {
+          #field_ident: {
+            let value = match #field_ident {
+              Some(value) => value,
+              None => return Err(crate::common::missing_field(
+                stringify!(#ident),
+                #field_name_lit,
+              )),
+            };
+            #parse_value_tokens
+          },
+        }
+      }
+    } else if let Some(kind) = simple_union_type_kind(&inner_ty) {
+      let parse_value_tokens = parse_simple_union_value_tokens(kind, quote! { value });
+      if text_field.optional {
+        quote! {
+          #field_ident: match #field_ident {
+            Some(value) => Some(#parse_value_tokens),
+            None => None,
+          },
+        }
+      } else {
+        quote! {
+          #field_ident: {
+            let value = match #field_ident {
+              Some(value) => value,
+              None => return Err(crate::common::missing_field(
+                stringify!(#ident),
+                #field_name_lit,
+              )),
+            };
+            #parse_value_tokens
+          },
+        }
+      }
+    } else if is_string_like_type(&inner_ty) {
+      quote! {
+        #field_ident,
+      }
+    } else {
+      let parse_value_tokens = quote! {
+        crate::common::parse_value::<#inner_ty>(&value, stringify!(#ident), #field_name_lit)?
+      };
+      if text_field.optional {
+        quote! {
+          #field_ident: match #field_ident {
+            Some(value) => Some(#parse_value_tokens),
+            None => None,
+          },
+        }
+      } else {
+        quote! {
+          #field_ident: {
+            let value = match #field_ident {
+              Some(value) => value,
+              None => return Err(crate::common::missing_field(
+                stringify!(#ident),
+                #field_name_lit,
+              )),
+            };
+            #parse_value_tokens
+          },
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let choice_accepts_text = choice_fields.iter().any(|field| {
+    field.accepts_text.unwrap_or_else(|| {
+      field
+        .items
+        .iter()
+        .any(|item| matches!(item, SdkTypeChoiceItem::Text { .. }))
+    })
+  });
+  let tag_decl_tokens_borrowed = quote! {};
+  let child_event_name_tokens = quote! {
+    let event_name = crate::common::xml_local_name(e.name());
+  };
+  let stack_attr_assign_tokens = if wml_table_kind.is_some() {
+    let mut tokens = Vec::new();
+    for field in &attr_fields {
+      let field_ident = &field.ident;
+      if field.optional {
+        tokens.push(quote! {
+          self.#field_ident = #field_ident;
+        });
+      } else {
+        tokens.push(quote! {
+          self.#field_ident = match #field_ident {
+            Some(value) => value,
+            None => return Err(crate::common::missing_field(
+              stringify!(#ident),
+              stringify!(#field_ident),
+            )),
+          };
+        });
+      }
+    }
+    if let Some(field_ident) = xmlns_fields.first() {
+      tokens.push(quote! {
+        self.#field_ident = #field_ident;
+      });
+    }
+    if let Some(field_ident) = &mc_ignorable_field {
+      tokens.push(quote! {
+        self.#field_ident = #field_ident;
+      });
+    }
+    for field_ident in [
+      &mc_preserve_attributes_field,
+      &mc_preserve_elements_field,
+      &mc_process_content_field,
+      &mc_must_understand_field,
+    ]
+    .into_iter()
+    .flatten()
+    {
+      tokens.push(quote! {
+        self.#field_ident = #field_ident;
+      });
+    }
+    quote! { #( #tokens )* }
+  } else {
+    quote! {}
+  };
+  let stack_end_name_matches = match wml_table_kind {
+    Some(WmlTableStackKind::Table) => {
+      quote! { crate::common::xml_local_name(e.name()) == b"tbl" }
+    }
+    Some(WmlTableStackKind::Row) => {
+      quote! { crate::common::xml_local_name(e.name()) == b"tr" }
+    }
+    Some(WmlTableStackKind::Cell) => {
+      quote! { crate::common::xml_local_name(e.name()) == b"tc" }
+    }
+    None => quote! { #end_name_matches },
+  };
+  #[derive(Clone, Copy, PartialEq, Eq)]
+  enum WmlTableReadTarget {
+    Local,
+    Stack,
+  }
+  #[derive(Clone, Copy, PartialEq, Eq)]
+  enum WmlTableReadPhase {
+    BeforeContent,
+    Content,
+  }
+  let build_wml_table_phase_dispatch_tokens = |target: WmlTableReadTarget,
+                                               phase: WmlTableReadPhase|
+   -> syn::Result<proc_macro2::TokenStream> {
+    let mut match_tokens = std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+    let terminal_tokens = |starts_content: bool| {
+      if phase == WmlTableReadPhase::BeforeContent && starts_content {
+        quote! { break; }
+      } else {
+        quote! {}
+      }
+    };
+    for field in &child_fields {
+      let field_ident = &field.ident;
+      if field_ident != "table_properties" && field_ident != "table_grid" {
+        continue;
+      }
+      let payload_ty = unwrap_option_vec_type(&field.ty);
+      let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+      let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+        quote! { std::boxed::Box::new(parsed_child) }
+      } else {
+        quote! { parsed_child }
+      };
+      let assign_tokens = if target == WmlTableReadTarget::Stack {
+        if field.repeated {
+          quote! { self.#field_ident.push(#parsed_child_expr); }
+        } else if field.optional {
+          quote! { self.#field_ident = Some(#parsed_child_expr); }
+        } else {
+          quote! { self.#field_ident = #parsed_child_expr; }
+        }
+      } else if field.repeated {
+        quote! { #field_ident.push(#parsed_child_expr); }
+      } else if field.optional {
+        quote! { #field_ident = Some(#parsed_child_expr); }
+      } else {
+        quote! { #field_ident = #parsed_child_expr; }
+      };
+      let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+      let terminal = terminal_tokens(true);
+      push_qname_dispatch_arm(
+        &mut match_tokens,
+        &field.qname,
+        quote! {
+          let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+          #assign_tokens
+          #terminal
+        },
+      );
+    }
+
+    let table_choice1_qnames = choice_fields
+      .iter()
+      .find(|field| field.ident == "table_choice1")
+      .map(|field| {
+        field
+          .items
+          .iter()
+          .filter_map(|item| match item {
+            SdkTypeChoiceItem::Child { qname, .. } => Some(qname.clone()),
+            _ => None,
+          })
+          .collect::<std::collections::HashSet<_>>()
+      })
+      .unwrap_or_default();
+    for field in &choice_fields {
+      let field_ident = &field.ident;
+      let include_field = match phase {
+        WmlTableReadPhase::BeforeContent => {
+          field_ident == "table_choice1" || field_ident == "table_choice2"
+        }
+        WmlTableReadPhase::Content => field_ident == "table_choice2",
+      };
+      if !include_field {
+        continue;
+      }
+      let choice_ty = unwrap_option_vec_type(&field.ty);
+      for item in &field.items {
+        let SdkTypeChoiceItem::Child {
+          variant,
+          ty,
+          boxed: _,
+          qname,
+          ..
+        } = item
+        else {
+          return Err(syn::Error::new_spanned(
+            field_ident,
+            "WML table phase read supports only child choice items",
+          ));
+        };
+        if phase == WmlTableReadPhase::BeforeContent
+          && field_ident == "table_choice2"
+          && table_choice1_qnames.contains(qname)
+        {
+          continue;
+        }
+        let choice_assign_tokens = |parsed_child_expr: proc_macro2::TokenStream| {
+          if target == WmlTableReadTarget::Stack {
+            if field.repeated {
+              quote! {
+                self.#field_ident.push(#choice_ty::#variant(#parsed_child_expr));
+              }
+            } else if field.optional {
+              quote! {
+                self.#field_ident = Some(#choice_ty::#variant(#parsed_child_expr));
+              }
+            } else {
+              quote! {
+                self.#field_ident = #choice_ty::#variant(#parsed_child_expr);
+              }
+            }
+          } else if field.repeated {
+            quote! {
+              #field_ident.push(#choice_ty::#variant(#parsed_child_expr));
+            }
+          } else if field.optional {
+            quote! {
+              #field_ident = Some(#choice_ty::#variant(#parsed_child_expr));
+            }
+          } else {
+            quote! {
+              #field_ident = #choice_ty::#variant(#parsed_child_expr);
+            }
+          }
+        };
+        let starts_content = field_ident == "table_choice2";
+        let terminal = terminal_tokens(starts_content);
+        let tokens = if target == WmlTableReadTarget::Stack
+          && field_ident == "table_choice2"
+          && variant == "TableRow"
+          && qname == "w:tr"
+        {
+          let choice_assign_tokens =
+            choice_assign_tokens(quote! { std::boxed::Box::new(parsed_child) });
+          quote! {
+            let mut parsed_child = TableRow::default();
+            if parsed_child.__ooxmlsdk_read_inner_stack_start(
+              xml_reader,
+              read_context,
+              e,
+              next_empty,
+            )? {
+              #choice_assign_tokens
+              #terminal
+            } else {
+              return Ok(Some(__OoxmlsdkWmlTableStackFrame::Row(parsed_child)));
+            }
+          }
+        } else {
+          let read_child_tokens =
+            sdk_type_read_inner_value_tokens(ty.as_ref(), quote! { xml_reader });
+          let choice_assign_tokens = choice_assign_tokens(quote! { #read_child_tokens });
+          quote! {
+            #choice_assign_tokens
+            #terminal
+          }
+        };
+        push_qname_dispatch_arm(&mut match_tokens, qname, tokens);
+      }
+    }
+    let match_arms = qname_dispatch_match_arms(&match_tokens, &default_dispatch_prefix);
+    Ok(quote! {
+      match event_name {
+        #( #match_arms )*
+        _ => {
+          #unmatched_child_tokens_borrowed
+        }
+      }
+    })
+  };
+  let table_children_loop_tokens = if wml_table_kind == Some(WmlTableStackKind::Table) {
+    let phase1_dispatch = build_wml_table_phase_dispatch_tokens(
+      WmlTableReadTarget::Local,
+      WmlTableReadPhase::BeforeContent,
+    )?;
+    let phase2_dispatch =
+      build_wml_table_phase_dispatch_tokens(WmlTableReadTarget::Local, WmlTableReadPhase::Content)?;
+    quote! {
+      if !empty_tag {
+        '__ooxmlsdk_table_read: {
+          loop {
+            match xml_reader.next_tag_event()? {
+              #tag_decl_tokens_borrowed
+              crate::common::PayloadEvent::Start(e, next_empty) => {
+                #child_event_name_tokens
+                #phase1_dispatch
+              }
+              crate::common::PayloadEvent::End(e) => {
+                if #end_name_matches {
+                  break '__ooxmlsdk_table_read;
+                }
+              }
+              crate::common::PayloadEvent::Eof => {
+                return Err(crate::common::unexpected_eof(stringify!(#ident)));
+              }
+              _ => {}
+            }
+          }
+          loop {
+            match xml_reader.next_tag_event()? {
+              #tag_decl_tokens_borrowed
+              crate::common::PayloadEvent::Start(e, next_empty) => {
+                #child_event_name_tokens
+                #phase2_dispatch
+              }
+              crate::common::PayloadEvent::End(e) => {
+                if #end_name_matches {
+                  break;
+                }
+              }
+              crate::common::PayloadEvent::Eof => {
+                return Err(crate::common::unexpected_eof(stringify!(#ident)));
+              }
+              _ => {}
+            }
+          }
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let stack_child_choice_dispatch_tokens =
+    if let Some(kind) = wml_table_kind.filter(|kind| *kind != WmlTableStackKind::Table) {
+      if !empty_child_fields.is_empty()
+        || !text_child_fields.is_empty()
+        || !any_child_fields.is_empty()
+        || !any_fields.is_empty()
+        || text_field.is_some()
+        || choice_accepts_text
+        || has_any_choice_dispatch
+      {
+        return Err(syn::Error::new_spanned(
+          ident,
+          "WML table stack read supports only existing child and child-choice parsing",
+        ));
+      }
+
+      let mut stack_child_match_tokens =
+        std::collections::BTreeMap::<String, Vec<QNameDispatchArm>>::new();
+      for field in &child_fields {
+        let field_ident = &field.ident;
+        let payload_ty = unwrap_option_vec_type(&field.ty);
+        let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+        let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+          quote! { std::boxed::Box::new(parsed_child) }
+        } else {
+          quote! { parsed_child }
+        };
+        let assign_tokens = if field.repeated {
+          quote! { self.#field_ident.push(#parsed_child_expr); }
+        } else if field.optional {
+          quote! { self.#field_ident = Some(#parsed_child_expr); }
+        } else {
+          quote! { self.#field_ident = #parsed_child_expr; }
+        };
+        let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+        push_qname_dispatch_arm(
+          &mut stack_child_match_tokens,
+          &field.qname,
+          quote! {
+            let parsed_child = #deserialize_call(xml_reader, e, next_empty, read_context)?;
+            #assign_tokens
+          },
+        );
+      }
+
+      let mut stack_choice_match_tokens =
+        std::collections::BTreeMap::<String, Vec<GroupedChoiceAttempt>>::new();
+      for field in &choice_fields {
+        let field_ident = &field.ident;
+        if !required_before_choice
+          .get(&field_ident.to_string())
+          .is_none_or(Vec::is_empty)
+        {
+          return Err(syn::Error::new_spanned(
+            field_ident,
+            "WML table stack read does not support required child gating before recursive choices",
+          ));
+        }
+        let choice_ty = unwrap_option_vec_type(&field.ty);
+        for item in &field.items {
+          let SdkTypeChoiceItem::Child {
+            variant,
+            ty,
+            boxed: _,
+            qname,
+            ..
+          } = item
+          else {
+            return Err(syn::Error::new_spanned(
+              field_ident,
+              "WML table stack read supports only child choice items",
+            ));
+          };
+          let choice_assign_tokens = |parsed_child_expr: proc_macro2::TokenStream| {
+            if field.repeated {
+              quote! {
+                self.#field_ident.push(#choice_ty::#variant(#parsed_child_expr));
+              }
+            } else if field.optional {
+              quote! {
+                self.#field_ident = Some(#choice_ty::#variant(#parsed_child_expr));
+              }
+            } else {
+              quote! {
+                self.#field_ident = #choice_ty::#variant(#parsed_child_expr);
+              }
+            }
+          };
+          let recursive_frame_tokens =
+            if kind == WmlTableStackKind::Table && variant == "TableRow" && qname == "w:tr" {
+              Some((
+                quote! { TableRow },
+                quote! { __OoxmlsdkWmlTableStackFrame::Row(parsed_child) },
+              ))
+            } else if kind == WmlTableStackKind::Row && variant == "TableCell" && qname == "w:tc" {
+              Some((
+                quote! { TableCell },
+                quote! { __OoxmlsdkWmlTableStackFrame::Cell(parsed_child) },
+              ))
+            } else if kind == WmlTableStackKind::Cell && variant == "Table" && qname == "w:tbl" {
+              Some((
+                quote! { Table },
+                quote! {
+                  __OoxmlsdkWmlTableStackFrame::Table {
+                    value: parsed_child,
+                  }
+                },
+              ))
+            } else {
+              None
+            };
+          let tokens = if let Some((child_ty, frame_tokens)) = recursive_frame_tokens {
+            let choice_assign_tokens =
+              choice_assign_tokens(quote! { std::boxed::Box::new(parsed_child) });
+            quote! {
+                let mut parsed_child = #child_ty::default();
+                if parsed_child.__ooxmlsdk_read_inner_stack_start(
+                  xml_reader,
+                  read_context,
+                  e,
+                  next_empty,
+                )? {
+                  #choice_assign_tokens
+                } else {
+                return Ok(Some(#frame_tokens));
+              }
+            }
+          } else {
+            let read_child_tokens =
+              sdk_type_read_inner_value_tokens(ty.as_ref(), quote! { xml_reader });
+            let choice_assign_tokens = choice_assign_tokens(quote! { parsed_child });
+            quote! {
+              let parsed_child = #read_child_tokens;
+              #choice_assign_tokens
+            }
+          };
+          let QNameInfo { local_name, .. } = parse_qname_info(qname);
+          stack_choice_match_tokens
+            .entry(local_name)
+            .or_default()
+            .push(GroupedChoiceAttempt {
+              qname: qname.clone(),
+              condition: None,
+              tokens,
+              defaultable: true,
+            });
+        }
+      }
+      let stack_child_match_tokens =
+        qname_dispatch_match_arms(&stack_child_match_tokens, &default_dispatch_prefix);
+      let stack_choice_match_tokens = build_grouped_choice_match_tokens(
+        &stack_choice_match_tokens,
+        &default_dispatch_prefix,
+        false,
+      );
+      quote! {
+        match event_name {
+          #( #stack_child_match_tokens )*
+          #( #stack_choice_match_tokens )*
+          _ => {
+            #unmatched_child_tokens_borrowed
+          }
+        }
+      }
+    } else {
+      quote! {}
+    };
+  let borrowed_children_text_loop_tokens = quote! {
+    if !empty_tag {
+      loop {
+        match xml_reader.next_de_event(stringify!(#ident), "#text")? {
+          crate::common::DeEvent::Start(e, next_empty) => {
+            #child_event_name_tokens
+            #child_choice_dispatch_tokens_borrowed
+          }
+          #text_read_tokens
+          crate::common::DeEvent::End(e) => {
+            if #end_name_matches {
+              break;
+            }
+          }
+          crate::common::DeEvent::Eof => {
+            return Err(crate::common::unexpected_eof(stringify!(#ident)));
+          }
+          _ => {}
+        }
+      }
+    }
+  };
+  let borrowed_children_tag_loop_tokens = quote! {
+    if !empty_tag {
+      loop {
+        match xml_reader.next_tag_event()? {
+          #tag_decl_tokens_borrowed
+          crate::common::PayloadEvent::Start(e, next_empty) => {
+            #child_event_name_tokens
+            #child_choice_dispatch_tokens_borrowed
+          }
+          crate::common::PayloadEvent::End(e) => {
+            if #end_name_matches {
+              break;
+            }
+          }
+          crate::common::PayloadEvent::Eof => {
+            return Err(crate::common::unexpected_eof(stringify!(#ident)));
+          }
+          _ => {}
+        }
+      }
+    }
+  };
+  let borrowed_children_loop_tokens = if wml_table_kind == Some(WmlTableStackKind::Table) {
+    table_children_loop_tokens.clone()
+  } else if text_field.is_some() || choice_accepts_text {
+    borrowed_children_text_loop_tokens.clone()
+  } else {
+    borrowed_children_tag_loop_tokens.clone()
+  };
+  let stack_children_tag_loop_tokens = quote! {
+    loop {
+      match xml_reader.next_tag_event()? {
+        #tag_decl_tokens_borrowed
+        crate::common::PayloadEvent::Start(e, next_empty) => {
+          #child_event_name_tokens
+          #stack_child_choice_dispatch_tokens
+        }
+        crate::common::PayloadEvent::End(e) => {
+          if #stack_end_name_matches {
+            return Ok(None);
+          }
+        }
+        crate::common::PayloadEvent::Eof => {
+          return Err(crate::common::unexpected_eof(stringify!(#ident)));
+        }
+        _ => {}
+      }
+    }
+  };
+  let stack_children_loop_tokens = if wml_table_kind == Some(WmlTableStackKind::Table) {
+    let phase1_dispatch = build_wml_table_phase_dispatch_tokens(
+      WmlTableReadTarget::Stack,
+      WmlTableReadPhase::BeforeContent,
+    )?;
+    let phase2_dispatch =
+      build_wml_table_phase_dispatch_tokens(WmlTableReadTarget::Stack, WmlTableReadPhase::Content)?;
+    quote! {
+      if self.table_properties.is_none()
+        && self.table_grid.is_none()
+        && self.table_choice2.is_empty()
+      {
+        loop {
+          match xml_reader.next_tag_event()? {
+            #tag_decl_tokens_borrowed
+            crate::common::PayloadEvent::Start(e, next_empty) => {
+              #child_event_name_tokens
+              #phase1_dispatch
+            }
+            crate::common::PayloadEvent::End(e) => {
+              if #stack_end_name_matches {
+                return Ok(None);
+              }
+            }
+            crate::common::PayloadEvent::Eof => {
+              return Err(crate::common::unexpected_eof(stringify!(#ident)));
+            }
+            _ => {}
+          }
+        }
+      }
+      loop {
+        match xml_reader.next_tag_event()? {
+          #tag_decl_tokens_borrowed
+          crate::common::PayloadEvent::Start(e, next_empty) => {
+            #child_event_name_tokens
+            #phase2_dispatch
+          }
+          crate::common::PayloadEvent::End(e) => {
+            if #stack_end_name_matches {
+              return Ok(None);
+            }
+          }
+          crate::common::PayloadEvent::Eof => {
+            return Err(crate::common::unexpected_eof(stringify!(#ident)));
+          }
+          _ => {}
+        }
+      }
+    }
+  } else {
+    stack_children_tag_loop_tokens
+  };
+  let special_namespace_write_tokens = if has_xmlns_fields {
+    if has_xml_header
+      && no_prefix
+      && let Some(fixed_namespace_uri) = fixed_namespace_uri
+    {
+      let fixed_xmlns_tokens = static_xmlns_attr_tokens(None, fixed_namespace_uri);
+      quote! {
+        #extra_xmlns_init_tokens
+        let mut has_default_xmlns = false;
+        for declaration in &self.xmlns {
+          let (declaration_prefix, declaration_uri) = declaration.parts();
+          if declaration_prefix.is_empty() {
+            has_default_xmlns = true;
+            crate::common::write_xmlns_attr(writer, None, declaration_uri)?;
+          } else {
+            #extra_xmlns_mark_tokens
+            crate::common::write_xmlns_attr(writer, Some(declaration_prefix), declaration_uri)?;
+          }
+        }
+        if !has_default_xmlns {
+          #fixed_xmlns_tokens
+        }
+        #extra_xmlns_write_tokens
+      }
+    } else {
+      quote! {
+        #extra_xmlns_init_tokens
+        for declaration in &self.xmlns {
+          let (declaration_prefix, declaration_uri) = declaration.parts();
+          let prefix = if declaration_prefix.is_empty() {
+            None
+          } else {
+            #extra_xmlns_mark_tokens
+            Some(declaration_prefix)
+          };
+          crate::common::write_xmlns_attr(writer, prefix, declaration_uri)?;
+        }
+        #extra_xmlns_write_tokens
+      }
+    }
+  } else if !extra_xmlns.is_empty() {
+    quote! {
+      #extra_xmlns_init_tokens
+      #extra_xmlns_write_tokens
+    }
+  } else {
+    quote! {}
+  };
+  let mc_ignorable_write_tokens = if has_mc_ignorable_field {
+    quote! {
+      if let Some(value) = &self.mc_ignorable {
+        crate::common::write_mc_ignorable_attr(writer, value.as_slice())?;
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let mc_preserve_attributes_write_tokens = has_mc_preserve_attributes_field.then(|| {
+    quote! {
+      if let Some(value) = &self.mc_preserve_attributes {
+        crate::common::write_mc_preserve_attributes_attr(writer, value.as_ref())?;
+      }
+    }
+  });
+  let mc_preserve_elements_write_tokens = has_mc_preserve_elements_field.then(|| {
+    quote! {
+      if let Some(value) = &self.mc_preserve_elements {
+        crate::common::write_mc_attr(writer, b" mc:PreserveElements=\"", value.as_ref())?;
+      }
+    }
+  });
+  let mc_process_content_write_tokens = has_mc_process_content_field.then(|| {
+    quote! {
+      if let Some(value) = &self.mc_process_content {
+        crate::common::write_mc_process_content_attr(writer, value.as_ref())?;
+      }
+    }
+  });
+  let mc_must_understand_write_tokens = has_mc_must_understand_field.then(|| {
+    quote! {
+      if let Some(value) = &self.mc_must_understand {
+        crate::common::write_mc_must_understand_attr(writer, value.as_slice())?;
+      }
+    }
+  });
+  let special_namespace_init_tokens = if has_xmlns_fields {
+    quote! {
+      xmlns,
+    }
+  } else {
+    quote! {}
+  };
+  let mc_ignorable_init_tokens = if has_mc_ignorable_field {
+    quote! {
+      mc_ignorable,
+    }
+  } else {
+    quote! {}
+  };
+  let mc_preserve_attributes_init_tokens =
+    has_mc_preserve_attributes_field.then(|| quote! { mc_preserve_attributes, });
+  let mc_preserve_elements_init_tokens =
+    has_mc_preserve_elements_field.then(|| quote! { mc_preserve_elements, });
+  let mc_process_content_init_tokens =
+    has_mc_process_content_field.then(|| quote! { mc_process_content, });
+  let mc_must_understand_init_tokens =
+    has_mc_must_understand_field.then(|| quote! { mc_must_understand, });
+  let xml_child_slot_decl_tokens = tracks_xml_child_slot.then(|| {
+    quote! {
+      let mut __xml_child_slot = 0usize;
+    }
+  });
+  let writes_body = !child_fields.is_empty()
+    || !mce_fields.is_empty()
+    || !empty_child_fields.is_empty()
+    || !text_child_fields.is_empty()
+    || !any_child_fields.is_empty()
+    || !choice_fields.is_empty()
+    || !any_fields.is_empty()
+    || text_field.is_some();
+  let body_write_tokens = body_write_tokens_for(&ordered_write_tokens, writes_body);
+  let body_write_no_prefix_tokens = if prefix_write_mode == PrefixWriteMode::NoPrefixDual {
+    let ordered_write_tokens_no_prefix = ordered_write_tokens_no_prefix
+      .as_ref()
+      .expect("no-prefix write tokens");
+    body_write_tokens_for(ordered_write_tokens_no_prefix, writes_body)
+  } else {
+    quote! {}
+  };
+  let mce_static_attr_process_tokens = if generate_mce_tokens() {
+    attr_fields
+      .iter()
+      .map(mce_process_static_attr_field_tokens)
+      .collect::<syn::Result<Vec<_>>>()?
+      .into_iter()
+      .flatten()
+      .collect::<Vec<_>>()
+  } else {
+    Vec::new()
+  };
+  let mce_child_process_tokens = if generate_mce_tokens() {
+    child_fields
+      .iter()
+      .map(mce_process_child_field_tokens)
+      .collect::<Vec<_>>()
+  } else {
+    Vec::new()
+  };
+  let mut mce_replacement_parse_arms = std::collections::HashMap::new();
+  if generate_mce_tokens() {
+    for field in &child_fields {
+      let field_ident = &field.ident;
+      let payload_ty = unwrap_option_vec_type(&field.ty);
+      let child_ty = box_inner_type(&payload_ty).unwrap_or_else(|| payload_ty.clone());
+      let parsed_child_expr = if box_inner_type(&payload_ty).is_some() {
+        quote! { std::boxed::Box::new(parsed_child) }
+      } else {
+        quote! { parsed_child }
+      };
+      let assign = if field.repeated {
+        quote! { self.#field_ident.push(#parsed_child_expr); }
+      } else if field.optional {
+        quote! { self.#field_ident = Some(#parsed_child_expr); }
+      } else {
+        quote! { self.#field_ident = #parsed_child_expr; }
+      };
+      let targets = qname_match_targets(std::slice::from_ref(&field.qname));
+      let deserialize_call = sdk_type_read_inner_call_tokens(&child_ty);
+      mce_replacement_parse_arms.insert(
+        field_ident.to_string(),
+        quote! {
+          #( #targets )|* => {
+            let mut parsed_child = #deserialize_call(
+              &mut child_reader,
+              e,
+              next_empty,
+              read_context,
+            )?;
+            let action = parsed_child.process_mce_with_context(settings, child_context)?;
+            if matches!(action, crate::mce::ElementAction::Normal) {
+              #assign
+            }
+          }
+        },
+      );
+    }
+    for field in &empty_child_fields {
+      let field_ident = &field.ident;
+      let assign = if field.repeated {
+        quote! { self.#field_ident.push(()); }
+      } else if field.optional {
+        quote! { self.#field_ident = Some(()); }
+      } else {
+        quote! { self.#field_ident = (); }
+      };
+      let targets = qname_match_targets(std::slice::from_ref(&field.qname));
+      mce_replacement_parse_arms.insert(
+        field_ident.to_string(),
+        quote! {
+          #( #targets )|* => { #assign }
+        },
+      );
+    }
+    for field in &text_child_fields {
+      let field_ident = &field.ident;
+      let field_ty = &field.ty;
+      let targets = qname_match_targets(std::slice::from_ref(&field.qname));
+      let parse_body = build_text_child_parse_body(
+        ident,
+        field_ident,
+        &field.qname,
+        field_ty,
+        quote! {},
+        TextChildParseArmOptions {
+          repeated: field.repeated,
+          as_result: false,
+          list: field.list,
+        },
+      );
+      let merge = if field.repeated {
+        quote! { self.#field_ident.extend(#field_ident); }
+      } else {
+        quote! { self.#field_ident = #field_ident; }
+      };
+      mce_replacement_parse_arms.insert(
+        field_ident.to_string(),
+        quote! {
+          #( #targets )|* => {
+            let mut #field_ident: #field_ty = Default::default();
+            let xml_reader = &mut child_reader;
+            #parse_body
+            #merge
+          }
+        },
+      );
+    }
+  }
+  let mce_static_field_select_tokens = if generate_mce_tokens() {
+    mce_fields
+      .iter()
+      .map(|field| {
+        let field_ident = &field.ident;
+        let payload_ty = unwrap_option_vec_type(&field.ty);
+        let alternate_content_expr = if box_inner_type(&payload_ty).is_some() {
+          quote! { alternate_content.as_mut() }
+        } else {
+          quote! { &mut alternate_content }
+        };
+        // MCE is conceptually expanded before the selected child is matched
+        // against the surrounding particle. When multiple static
+        // AlternateContent slots are separated only by optional children, the
+        // initial XML parse cannot unambiguously assign an AlternateContent
+        // node to one slot. Accept every promoted child supported by the
+        // containing type here; the selected child's QName determines its
+        // actual field.
+        let mut seen_children = std::collections::HashSet::new();
+        let parse_arms = mce_fields
+          .iter()
+          .flat_map(|field| field.children.iter())
+          .filter(|child| seen_children.insert(child.to_string()))
+          .map(|child| {
+            mce_replacement_parse_arms
+              .get(&child.to_string())
+              .cloned()
+              .ok_or_else(|| {
+                syn::Error::new_spanned(
+                  child,
+                  "sdk mce child must name a child, empty_child, or text_child field",
+                )
+              })
+          })
+          .collect::<syn::Result<Vec<_>>>()?;
+        Ok(quote! {
+          for mut alternate_content in std::mem::take(&mut self.#field_ident) {
+            crate::mce::process_alternate_content_children(
+              #alternate_content_expr,
+              settings,
+              context,
+              |child_xml, child_context| {
+                let mut child_reader = crate::common::from_bytes_inner(child_xml.as_ref());
+                let mut child_read_context = crate::common::ReadContext::default();
+                let read_context = &mut child_read_context;
+                loop {
+                  match child_reader.next()? {
+                    crate::common::PayloadEvent::Start(e, next_empty) => {
+                      read_context.enter_root(&e, next_empty, child_reader.decoder())?;
+                      let event_name = crate::common::xml_local_name(e.name());
+                      match event_name {
+                        #( #parse_arms )*
+                        _ => {
+                          return Err(crate::common::unexpected_tag(
+                            stringify!(#ident),
+                            "static MCE child",
+                            event_name,
+                          ));
+                        }
+                      }
+                      return Ok(());
+                    }
+                    crate::common::PayloadEvent::Eof => {
+                      return Err(crate::common::unexpected_eof(stringify!(#ident)));
+                    }
+                    _ => {}
+                  }
+                }
+              },
+            )?;
+          }
+        })
+      })
+      .collect::<syn::Result<Vec<_>>>()?
+  } else {
+    Vec::new()
+  };
+  let mce_choice_process_tokens = if generate_mce_tokens() {
+    choice_fields
+      .iter()
+      .map(mce_process_choice_field_tokens)
+      .collect::<Vec<_>>()
+  } else {
+    Vec::new()
+  };
+  let mut mce_choice_impl_keys = std::collections::HashSet::new();
+  let mce_choice_impl_tokens = if generate_mce_tokens() {
+    choice_fields
+      .iter()
+      .filter_map(|field| {
+        let choice_ty = unwrap_option_vec_type(&field.ty);
+        mce_choice_impl_keys
+          .insert(quote! { #choice_ty }.to_string())
+          .then(|| mce_choice_impl_tokens(field, &default_dispatch_prefix))
+      })
+      .collect::<syn::Result<Vec<_>>>()?
+  } else {
+    Vec::new()
+  };
+  let (mce_context_push_tokens, mce_context_process_tokens, mce_context_pop_tokens) =
+    if generate_mce_tokens() {
+      mce_context_scope_tokens(
+        &xmlns_fields,
+        mc_ignorable_field.as_ref(),
+        mc_preserve_attributes_field.as_ref(),
+        mc_preserve_elements_field.as_ref(),
+        mc_process_content_field.as_ref(),
+        mc_must_understand_field.as_ref(),
+      )
+    } else {
+      (quote! {}, quote! {}, quote! {})
+    };
+  let mce_static_field_process_tokens = if mce_fields.is_empty() {
+    quote! {}
+  } else {
+    quote! {
+      {
+        #mce_context_process_tokens
+        #( #mce_static_field_select_tokens )*
+      }
+    }
+  };
+  let public_mce_method_tokens = has_xml_header.then(|| {
+    quote! {
+      #[inline]
+      pub fn process_mce(
+        &mut self,
+        settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+      ) -> Result<(), crate::common::SdkError> {
+        if matches!(
+          settings.process_mode,
+          crate::sdk::MarkupCompatibilityProcessMode::NoProcess
+        ) {
+          return Ok(());
+        }
+        let context = crate::mce::MceContext::default();
+        let _ = self.process_mce_with_context(settings, &context)?;
+        Ok(())
+      }
+    }
+  });
+  let mce_method_inline = (!has_mce_element_action
+    && mce_fields.is_empty()
+    && mce_static_attr_process_tokens.is_empty()
+    && child_fields.is_empty()
+    && choice_fields.is_empty()
+    && !has_mc_fields
+    && !has_xmlns_fields)
+    .then(|| quote! { #[inline(always)] });
+  let mce_methods_tokens = if generate_mce_tokens() {
+    quote! {
+      #[cfg(feature = "mce")]
+      impl #impl_generics #ident #type_generics #where_clause {
+        #public_mce_method_tokens
+
+        #mce_method_inline
+        pub(crate) fn process_mce_with_context(
+          &mut self,
+          settings: &crate::sdk::MarkupCompatibilityProcessSettings,
+          context: &crate::mce::MceContext<'_>,
+        ) -> Result<crate::mce::ElementAction, crate::common::SdkError> {
+          #mce_static_field_process_tokens
+          #mce_context_push_tokens
+          #mce_context_process_tokens
+          let __mce_element_action = #mce_element_action_tokens;
+          #( #mce_static_attr_process_tokens )*
+          #( #mce_child_process_tokens )*
+          #( #mce_choice_process_tokens )*
+          #mce_context_pop_tokens
+          Ok(__mce_element_action)
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let public_root_from_str_tokens = if local_name.is_empty() {
+    quote! {}
+  } else {
+    sdk_type_from_str_impl_tokens(
+      quote! { #impl_generics },
+      ident,
+      quote! { #type_generics },
+      quote! { #where_clause },
+    )
+  };
+  let public_root_info_tokens = if local_name.is_empty() {
+    quote! {}
+  } else {
+    sdk_type_root_info_tokens(
+      ident,
+      &local_name_lit,
+      schema_qname,
+      prefix_write_mode,
+      has_xmlns_fields,
+      has_xml_header,
+    )
+  };
+  let public_root_display_tokens = if local_name.is_empty() {
+    quote! {}
+  } else {
+    let display_method_tokens = sdk_type_display_method_tokens();
+    quote! {
+      impl #impl_generics ::std::fmt::Display for #ident #type_generics #where_clause {
+        #display_method_tokens
+      }
+    }
+  };
+  let stack_frame_enum_tokens = wml_table_stack_frame_enum_tokens(wml_table_kind);
+  let default_read_inner_body = quote! {
+    #end_qname_decl
+    #( #attr_decl_tokens )*
+    #namespace_attr_parse_tokens
+    #( #child_decl_tokens )*
+    #( #choice_decl_tokens )*
+    #( #any_decl_tokens )*
+    #xml_child_slot_decl_tokens
+    #text_decl_tokens
+
+    #borrowed_children_loop_tokens
+
+    Ok(Self {
+      #( #attr_init_tokens, )*
+      #( #child_init_tokens, )*
+      #( #choice_init_tokens, )*
+      #( #any_init_tokens, )*
+      #text_finish_tokens
+      #( #attr_finish_tokens, )*
+      #special_namespace_init_tokens
+      #mc_ignorable_init_tokens
+      #mc_preserve_attributes_init_tokens
+      #mc_preserve_elements_init_tokens
+      #mc_process_content_init_tokens
+      #mc_must_understand_init_tokens
+    })
+  };
+  let stack_read_inner_method_tokens = if wml_table_kind.is_some() {
+    let stack_read_inner_start_body = quote! {
+        #( #attr_decl_tokens )*
+        #namespace_attr_parse_tokens
+        #stack_attr_assign_tokens
+        let _ = &mut *xml_reader;
+        let _ = &e;
+
+        Ok(empty_tag)
+    };
+    quote! {
+      impl #impl_generics #ident #type_generics #where_clause {
+        pub(crate) fn __ooxmlsdk_read_inner_stack_start<'xml, R: crate::common::XmlRead<'xml>>(
+          &mut self,
+          xml_reader: &mut R,
+          read_context: &mut crate::common::ReadContext,
+          e: quick_xml::events::BytesStart<'xml>,
+          empty_tag: bool,
+        ) -> Result<bool, crate::common::SdkError> {
+          #stack_read_inner_start_body
+        }
+
+        pub(crate) fn __ooxmlsdk_read_inner_stack_next<'xml, R: crate::common::XmlRead<'xml>>(
+          &mut self,
+          xml_reader: &mut R,
+          read_context: &mut crate::common::ReadContext,
+        ) -> Result<Option<__OoxmlsdkWmlTableStackFrame>, crate::common::SdkError> {
+          #stack_children_loop_tokens
+        }
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let stack_write_inner_method_tokens = if let Some(kind) = wml_table_kind {
+    let recursive_choice_field_name = match kind {
+      WmlTableStackKind::Table => "table_choice2",
+      WmlTableStackKind::Row => "table_row_choice",
+      WmlTableStackKind::Cell => "table_cell_choice",
+    };
+    let Some(recursive_choice_field) = choice_fields
+      .iter()
+      .find(|field| field.ident == recursive_choice_field_name)
+    else {
+      return Err(syn::Error::new_spanned(
+        ident,
+        "WML table stack write path missing recursive choice field",
+      ));
+    };
+    let recursive_choice_ty = unwrap_option_vec_type(&recursive_choice_field.ty);
+    let stack_prefix_write_tokens =
+      build_ordered_write_tokens(false, Some(recursive_choice_field_name))?;
+    if !writes_body {
+      return Err(syn::Error::new_spanned(
+        ident,
+        "WML table stack write path requires element body",
+      ));
+    }
+    let stack_start_body = stack_body_write_tokens_for(&stack_prefix_write_tokens);
+    let stack_next_body = build_wml_table_stack_choice_next_tokens(
+      kind,
+      &recursive_choice_ty,
+      &recursive_choice_field.items,
+      &tag_prefix,
+      false,
+    )?;
+    let stack_driver_tokens = if kind == WmlTableStackKind::Table {
+      quote! {
+        pub(crate) fn __ooxmlsdk_write_inner_stack<W: std::io::Write>(
+          &self,
+          writer: &mut W,
+        ) -> Result<bool, std::io::Error> {
+          self.__ooxmlsdk_write_inner_stack_start(writer)?;
+          let mut __ooxmlsdk_stack = Vec::<__OoxmlsdkWmlTableWriteFrame<'_>>::new();
+          __ooxmlsdk_stack.push(__OoxmlsdkWmlTableWriteFrame::Table(self.table_choice2.iter()));
+          while !__ooxmlsdk_stack.is_empty() {
+            let __ooxmlsdk_next_frame = {
+              let __ooxmlsdk_frame = __ooxmlsdk_stack.last_mut().expect("WML table write frame");
+              match __ooxmlsdk_frame {
+                __OoxmlsdkWmlTableWriteFrame::Table(choices) => {
+                  Table::__ooxmlsdk_write_inner_stack_next(writer, choices)?
+                }
+                __OoxmlsdkWmlTableWriteFrame::Row(choices) => {
+                  TableRow::__ooxmlsdk_write_inner_stack_next(writer, choices)?
+                }
+                __OoxmlsdkWmlTableWriteFrame::Cell(choices) => {
+                  TableCell::__ooxmlsdk_write_inner_stack_next(writer, choices)?
+                }
+              }
+            };
+            if let Some(__ooxmlsdk_next_frame) = __ooxmlsdk_next_frame {
+              __ooxmlsdk_stack.push(__ooxmlsdk_next_frame);
+            } else {
+              let __ooxmlsdk_frame = __ooxmlsdk_stack.pop().expect("WML table write frame");
+              match __ooxmlsdk_frame {
+                __OoxmlsdkWmlTableWriteFrame::Table(_) => {
+                  Table::__ooxmlsdk_write_inner_stack_end(writer)?;
+                }
+                __OoxmlsdkWmlTableWriteFrame::Row(_) => {
+                  TableRow::__ooxmlsdk_write_inner_stack_end(writer)?;
+                }
+                __OoxmlsdkWmlTableWriteFrame::Cell(_) => {
+                  TableCell::__ooxmlsdk_write_inner_stack_end(writer)?;
+                }
+              }
+            }
+          }
+          Ok(true)
+        }
+      }
+    } else {
+      quote! {}
+    };
+    let clear_recursive_tables_tokens = if kind == WmlTableStackKind::Table {
+      quote! {
+        pub fn clear_recursive_tables(&mut self) {
+          fn __ooxmlsdk_clear_table_choice2(
+            __ooxmlsdk_choices: &mut Vec<TableChoice2>,
+            __ooxmlsdk_stack: &mut Vec<std::boxed::Box<Table>>,
+          ) {
+            for __ooxmlsdk_choice in __ooxmlsdk_choices {
+              if let TableChoice2::TableRow(__ooxmlsdk_row) = __ooxmlsdk_choice {
+                for __ooxmlsdk_row_choice in &mut __ooxmlsdk_row.table_row_choice {
+                  if let TableRowChoice::TableCell(__ooxmlsdk_cell) = __ooxmlsdk_row_choice {
+                    for __ooxmlsdk_cell_choice in __ooxmlsdk_cell
+                      .table_cell_choice
+                      .extract_if(.., |__ooxmlsdk_cell_choice| {
+                        matches!(__ooxmlsdk_cell_choice, TableCellChoice::Table(_))
+                      })
+                    {
+                      let TableCellChoice::Table(__ooxmlsdk_table) = __ooxmlsdk_cell_choice else {
+                        unreachable!("filtered WML table choice");
+                      };
+                      __ooxmlsdk_stack.push(__ooxmlsdk_table);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          let mut __ooxmlsdk_stack = Vec::<std::boxed::Box<Table>>::new();
+          __ooxmlsdk_clear_table_choice2(&mut self.table_choice2, &mut __ooxmlsdk_stack);
+          while let Some(mut __ooxmlsdk_table) = __ooxmlsdk_stack.pop() {
+            __ooxmlsdk_clear_table_choice2(
+              &mut __ooxmlsdk_table.table_choice2,
+              &mut __ooxmlsdk_stack,
+            );
+          }
+        }
+      }
+    } else {
+      quote! {}
+    };
+    quote! {
+      impl #impl_generics #ident #type_generics #where_clause {
+        #clear_recursive_tables_tokens
+
+        pub(crate) fn __ooxmlsdk_write_inner_stack_start<W: std::io::Write>(
+          &self,
+          writer: &mut W,
+        ) -> Result<(), std::io::Error> {
+          #special_namespace_write_tokens
+          #( #attr_write_tokens )*
+          #mc_ignorable_write_tokens
+          #mc_preserve_attributes_write_tokens
+          #mc_preserve_elements_write_tokens
+          #mc_process_content_write_tokens
+          #mc_must_understand_write_tokens
+          #stack_start_body
+        }
+
+        pub(crate) fn __ooxmlsdk_write_inner_stack_next<'a, W: std::io::Write>(
+          writer: &mut W,
+          choices: &mut std::slice::Iter<'a, #recursive_choice_ty>,
+        ) -> Result<Option<__OoxmlsdkWmlTableWriteFrame<'a>>, std::io::Error> {
+          #stack_next_body
+        }
+
+        pub(crate) fn __ooxmlsdk_write_inner_stack_end<W: std::io::Write>(
+          writer: &mut W,
+        ) -> Result<(), std::io::Error> {
+          #end_tag
+          Ok(())
+        }
+
+        #stack_driver_tokens
+      }
+    }
+  } else {
+    quote! {}
+  };
+  let read_inner_body = default_read_inner_body.clone();
+  let write_inner_body = write_inner_body_tokens(quote! {
+    #special_namespace_write_tokens
+    #( #attr_write_tokens )*
+    #mc_ignorable_write_tokens
+    #mc_preserve_attributes_write_tokens
+    #mc_preserve_elements_write_tokens
+    #mc_process_content_write_tokens
+    #mc_must_understand_write_tokens
+    #body_write_tokens
+  });
+  let validator_methods_tokens = validator_methods_tokens(quote! {
+    #( #attr_validate_tokens )*
+    #( #child_validate_tokens )*
+    #( #choice_validate_tokens )*
+  });
+  let validator_impl_tokens = validator_impl_tokens(
+    quote! { #impl_generics },
+    ident,
+    quote! { #type_generics },
+    quote! { #where_clause },
+    validator_methods_tokens,
+  );
+  let write_inner_no_prefix_method_tokens = if prefix_write_mode == PrefixWriteMode::NoPrefixDual {
+    let write_inner_no_prefix_body = write_inner_body_tokens(quote! {
+      #special_namespace_write_tokens
+      #( #attr_write_tokens )*
+      #mc_ignorable_write_tokens
+      #mc_preserve_attributes_write_tokens
+      #mc_preserve_elements_write_tokens
+      #mc_process_content_write_tokens
+      #mc_must_understand_write_tokens
+      #body_write_no_prefix_tokens
+    });
+    quote! {
+      fn write_inner_no_prefix<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+      ) -> Result<bool, std::io::Error> {
+        #write_inner_no_prefix_body
+      }
+    }
+  } else {
+    quote! {}
+  };
+  Ok(quote! {
+    #( #mce_choice_impl_tokens )*
+    #stack_frame_enum_tokens
+    #stack_read_inner_method_tokens
+    #stack_write_inner_method_tokens
+    impl #impl_generics crate::sdk::SdkType for #ident #type_generics #where_clause {
+      fn read_inner<'xml, R: crate::common::XmlRead<'xml>>(
+        xml_reader: &mut R,
+        e: quick_xml::events::BytesStart<'xml>,
+        empty_tag: bool,
+        read_context: &mut crate::common::ReadContext,
+      ) -> Result<Self, crate::common::SdkError> {
+        #read_inner_body
+      }
+
+      #public_root_info_tokens
+
+      fn write_inner<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+      ) -> Result<bool, std::io::Error> {
+        #write_inner_body
+      }
+
+      #write_inner_no_prefix_method_tokens
+    }
+
+    #validator_impl_tokens
+
+    #mce_methods_tokens
+
+    #public_root_from_str_tokens
+
+    #public_root_display_tokens
+  })
+}

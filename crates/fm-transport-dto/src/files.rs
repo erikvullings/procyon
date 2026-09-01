@@ -538,7 +538,7 @@ pub struct ReadDocxPreviewResourceResponseDto {
     pub media_type: String,
 }
 
-/// Opens a bounded, provider-neutral PPTX content-preview session.
+/// Opens a bounded, provider-neutral PowerPoint-to-PDF preview session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenPptxPreviewRequestDto {
@@ -546,34 +546,7 @@ pub struct OpenPptxPreviewRequestDto {
     pub location: LocationDto,
 }
 
-/// One slide retained independently to preserve bounded paged viewer state.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PptxPreviewSlideDto {
-    /// Zero-based position in presentation order.
-    pub index: u32,
-    /// Parser-identified title, when present.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    /// Semantic Markdown for this slide only. Hosts must sanitize before DOM insertion.
-    pub markdown: String,
-}
-
-/// One embedded image retained by a bounded PPTX preview session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PptxPreviewResourceDto {
-    /// Opaque resource identifier scoped to the preview session.
-    pub resource_id: Uuid,
-    /// Parser-local source referenced by slide Markdown.
-    pub source: String,
-    /// Browser media type for the bounded image bytes.
-    pub media_type: String,
-    /// Exact retained byte count.
-    pub byte_length: u64,
-}
-
-/// Initial semantic PPTX slides and bounded resource descriptors.
+/// Rendered PDF session metadata. PDF bytes are fetched in bounded ranges.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenPptxPreviewResponseDto {
@@ -583,12 +556,8 @@ pub struct OpenPptxPreviewResponseDto {
     pub source_revision: String,
     /// Source package bytes at session creation.
     pub source_bytes: u64,
-    /// Slides in package-declared presentation order.
-    pub slides: Vec<PptxPreviewSlideDto>,
-    /// Embedded images referenced by slide Markdown, fetched separately by id.
-    pub resources: Vec<PptxPreviewResourceDto>,
-    /// PowerPoint fidelity features deliberately omitted from this content view.
-    pub omitted_features: Vec<String>,
+    /// Exact byte length of the retained rendered PDF.
+    pub pdf_bytes: u64,
 }
 
 /// Identifies a PPTX preview session.
@@ -599,24 +568,16 @@ pub struct PptxPreviewSessionRequestDto {
     pub session_id: Uuid,
 }
 
-/// Requests one bounded embedded PPTX resource.
+/// Requests one bounded byte range from a rendered PowerPoint PDF.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ReadPptxPreviewResourceRequestDto {
+pub struct ReadPptxPreviewPdfRequestDto {
     /// Opaque backend session identifier.
     pub session_id: Uuid,
-    /// Opaque resource identifier from the open response.
-    pub resource_id: Uuid,
-}
-
-/// Embedded PPTX image bytes and their browser media type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadPptxPreviewResourceResponseDto {
-    /// Bounded raw image bytes.
-    pub data: Vec<u8>,
-    /// Browser media type for the bytes.
-    pub media_type: String,
+    /// Zero-based byte offset in the rendered PDF.
+    pub offset: u64,
+    /// Requested byte count, capped server-side.
+    pub length: u64,
 }
 
 /// Requests a file's git commit history (`POST /api/v1/files/git-history`), for the Alt+Space

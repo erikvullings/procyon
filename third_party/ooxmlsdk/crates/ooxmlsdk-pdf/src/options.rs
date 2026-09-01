@@ -1,0 +1,344 @@
+use std::sync::Arc;
+
+/// Options for OOXML to PDF conversion.
+#[derive(Clone, Debug)]
+pub struct PdfOptions {
+  /// PDF version or conformance standards requested from the backend.
+  pub standards: Vec<PdfStandard>,
+
+  /// Whether PDF content streams should be compressed.
+  pub compress_content_streams: bool,
+
+  /// JPEG quality used when the PDF filter asks raster graphics to be stored as JPEG.
+  pub jpeg_quality: Option<u8>,
+
+  /// Input file name used by spreadsheet formulas such as CELL("filename").
+  pub source_file_name: Option<String>,
+
+  /// BCP 47 user-interface language for generated document labels.
+  pub ui_language: Option<String>,
+
+  /// BCP 47 locale for locale-dependent number, date, currency, and value
+  /// formatting. This does not select translated application labels.
+  pub format_locale: Option<String>,
+
+  /// BCP 47 language for document authoring defaults and the PDF document
+  /// language. This does not select translated application labels or value
+  /// formatting conventions.
+  pub default_document_language: Option<String>,
+
+  /// Local civil time used to refresh unlocked WordprocessingML DATE, TIME,
+  /// PRINTDATE, and SAVEDATE fields. When absent, persisted field results
+  /// remain authoritative.
+  pub field_update_datetime: Option<ooxmlsdk_layout::options::FieldUpdateDateTime>,
+
+  /// IANA time-zone name used to convert absolute package-property
+  /// timestamps when fields such as WordprocessingML CREATEDATE are
+  /// refreshed. This is independent from UI language and format locale.
+  pub field_update_time_zone: Option<String>,
+
+  pub general: PdfGeneralOptions,
+  pub images: PdfImageOptions,
+  pub links: PdfLinkOptions,
+  pub forms: PdfFormOptions,
+  pub viewer: PdfViewerOptions,
+  pub metadata: PdfMetadataOptions,
+  /// Files embedded in the PDF name tree and, where supported, associated with the document.
+  pub attachments: Vec<PdfAttachment>,
+  pub watermark: Option<PdfWatermarkOptions>,
+  pub spreadsheet: PdfSpreadsheetOptions,
+}
+
+impl Default for PdfOptions {
+  fn default() -> Self {
+    Self {
+      standards: Vec::new(),
+      compress_content_streams: true,
+      jpeg_quality: None,
+      source_file_name: None,
+      ui_language: None,
+      format_locale: None,
+      default_document_language: None,
+      field_update_datetime: None,
+      field_update_time_zone: None,
+      general: PdfGeneralOptions::default(),
+      images: PdfImageOptions::default(),
+      links: PdfLinkOptions::default(),
+      forms: PdfFormOptions::default(),
+      viewer: PdfViewerOptions::default(),
+      metadata: PdfMetadataOptions::default(),
+      attachments: Vec::new(),
+      watermark: None,
+      spreadsheet: PdfSpreadsheetOptions::default(),
+    }
+  }
+}
+
+/// A file to embed in the generated PDF.
+#[derive(Clone, Debug)]
+pub struct PdfAttachment {
+  pub path: String,
+  pub mime_type: String,
+  pub description: String,
+  pub association: PdfAttachmentAssociation,
+  pub data: Arc<[u8]>,
+  pub modification_date: Option<PdfDateTime>,
+  pub compress: Option<bool>,
+}
+
+/// How an attachment relates to the generated PDF.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PdfAttachmentAssociation {
+  Source,
+  Data,
+  Alternative,
+  Supplement,
+  #[default]
+  Unspecified,
+}
+
+/// A deterministic PDF timestamp, including an optional UTC offset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PdfDateTime {
+  pub year: u16,
+  pub month: Option<u8>,
+  pub day: Option<u8>,
+  pub hour: Option<u8>,
+  pub minute: Option<u8>,
+  pub second: Option<u8>,
+  pub utc_offset_hour: Option<i8>,
+  pub utc_offset_minute: Option<u8>,
+}
+
+impl PdfOptions {
+  pub(crate) fn effective_jpeg_quality(&self) -> Option<u8> {
+    self.images.jpeg_quality.or(self.jpeg_quality)
+  }
+
+  pub(crate) fn take_layout_options(&mut self) -> ooxmlsdk_layout::options::LayoutOptions {
+    ooxmlsdk_layout::options::LayoutOptions {
+      source_file_name: self.source_file_name.clone(),
+      ui_language: self.ui_language.clone(),
+      format_locale: self.format_locale.clone(),
+      default_document_language: self.default_document_language.clone(),
+      field_update_datetime: self.field_update_datetime,
+      field_update_time_zone: self.field_update_time_zone.clone(),
+      ..Default::default()
+    }
+  }
+
+  pub(crate) fn canonical_document_language(&self) -> Option<String> {
+    ooxmlsdk_layout::localization::canonical_office_locale_tag(
+      self.default_document_language.as_deref(),
+    )
+    .or_else(|| {
+      ooxmlsdk_layout::localization::canonical_office_locale_tag(self.ui_language.as_deref())
+    })
+  }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PdfStandard {
+  Pdf14,
+  Pdf15,
+  Pdf16,
+  Pdf17,
+  Pdf20,
+  PdfA1a,
+  PdfA1b,
+  PdfA2a,
+  PdfA2b,
+  PdfA2u,
+  PdfA3a,
+  PdfA3b,
+  PdfA3u,
+  PdfA4,
+  PdfA4f,
+  PdfA4e,
+  PdfUa1,
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfGeneralOptions {
+  pub tagged_pdf: bool,
+  pub pdf_ua_compliance: bool,
+  pub export_bookmarks: bool,
+  pub open_bookmark_levels: Option<i32>,
+  pub page_range: Option<String>,
+  pub skip_empty_pages: bool,
+  pub remove_transparencies: bool,
+}
+
+impl Default for PdfGeneralOptions {
+  fn default() -> Self {
+    Self {
+      tagged_pdf: false,
+      pdf_ua_compliance: false,
+      export_bookmarks: true,
+      open_bookmark_levels: None,
+      page_range: None,
+      skip_empty_pages: false,
+      remove_transparencies: false,
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfImageOptions {
+  pub use_lossless_compression: bool,
+  pub jpeg_quality: Option<u8>,
+  pub reduce_resolution: bool,
+  pub max_resolution_dpi: Option<u32>,
+}
+
+impl Default for PdfImageOptions {
+  fn default() -> Self {
+    Self {
+      use_lossless_compression: false,
+      jpeg_quality: None,
+      reduce_resolution: false,
+      max_resolution_dpi: Some(300),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfLinkOptions {
+  pub export_relative_filesystem_links: bool,
+  pub convert_office_targets_to_pdf_targets: bool,
+  pub export_bookmarks_to_pdf_destinations: bool,
+  pub default_action: PdfLinkDefaultAction,
+}
+
+impl Default for PdfLinkOptions {
+  fn default() -> Self {
+    Self {
+      export_relative_filesystem_links: false,
+      convert_office_targets_to_pdf_targets: false,
+      export_bookmarks_to_pdf_destinations: false,
+      default_action: PdfLinkDefaultAction::Uri,
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PdfLinkDefaultAction {
+  #[default]
+  Uri,
+  UriDestination,
+  Launch,
+  RemoveExternalLinks,
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfFormOptions {
+  pub export_form_fields: bool,
+  pub submit_format: PdfFormSubmitFormat,
+  pub allow_duplicate_field_names: bool,
+}
+
+impl Default for PdfFormOptions {
+  fn default() -> Self {
+    Self {
+      export_form_fields: false,
+      submit_format: PdfFormSubmitFormat::Pdf,
+      allow_duplicate_field_names: false,
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PdfFormSubmitFormat {
+  Html,
+  Xml,
+  Fdf,
+  #[default]
+  Pdf,
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfViewerOptions {
+  pub page_mode: PdfViewerPageMode,
+  pub page_layout: PdfPageLayout,
+  pub magnification: PdfViewerMagnification,
+  pub initial_page: u32,
+  pub hide_toolbar: bool,
+  pub hide_menubar: bool,
+  pub hide_window_controls: bool,
+  pub fit_window: bool,
+  pub center_window: bool,
+  pub display_document_title: bool,
+  pub full_screen: bool,
+  pub first_page_left: bool,
+}
+
+impl Default for PdfViewerOptions {
+  fn default() -> Self {
+    Self {
+      page_mode: PdfViewerPageMode::Default,
+      page_layout: PdfPageLayout::Default,
+      magnification: PdfViewerMagnification::Default,
+      initial_page: 1,
+      hide_toolbar: false,
+      hide_menubar: false,
+      hide_window_controls: false,
+      fit_window: false,
+      center_window: false,
+      display_document_title: true,
+      full_screen: false,
+      first_page_left: false,
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PdfViewerPageMode {
+  #[default]
+  Default,
+  UseOutlines,
+  UseThumbs,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PdfPageLayout {
+  #[default]
+  Default,
+  SinglePage,
+  Continuous,
+  ContinuousFacing,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum PdfViewerMagnification {
+  #[default]
+  Default,
+  FitInWindow,
+  FitWidth,
+  FitVisible,
+  Zoom(f32),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct PdfMetadataOptions {
+  pub title: Option<String>,
+  pub author: Option<String>,
+  pub subject: Option<String>,
+  pub keywords: Option<String>,
+  pub creator: Option<String>,
+  pub producer: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfWatermarkOptions {
+  pub text: String,
+  pub color_rgb: Option<u32>,
+  pub font_name: Option<String>,
+  pub font_height_pt: Option<f32>,
+  pub rotate_degrees: Option<f32>,
+  pub tiled_text: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct PdfSpreadsheetOptions {
+  pub single_page_sheets: bool,
+}

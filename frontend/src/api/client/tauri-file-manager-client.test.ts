@@ -578,35 +578,34 @@ describe('TauriFileManagerClient', () => {
       });
     });
 
-    it('uses the shared PPTX session DTOs for open, resource read, and close', async () => {
+    it('uses the shared PPTX session DTOs for open, PDF range read, and close', async () => {
       const client = new TauriFileManagerClient();
       const location = { providerId: 'local', uri: 'file:///briefing.pptx' };
       const preview = {
         sessionId: 'pptx-session',
         sourceRevision: 'r1',
         sourceBytes: 2048,
-        slides: [{ index: 0, title: 'Overview', markdown: '# Overview' }],
-        resources: [],
-        omittedFeatures: ['charts'],
+        pdfBytes: 512,
       };
       invoke
         .mockResolvedValueOnce(preview)
-        .mockResolvedValueOnce({ data: [137, 80], mediaType: 'image/png' })
+        .mockResolvedValueOnce({ data: [37, 80, 68, 70], offset: 0, length: 4, eof: false })
         .mockResolvedValueOnce(undefined);
 
       await expect(client.openPptxPreview({ location })).resolves.toEqual(preview);
       await expect(
-        client.readPptxPreviewResource({
+        client.readPptxPreviewPdf({
           sessionId: 'pptx-session',
-          resourceId: 'image-1',
+          offset: 0,
+          length: 4,
         }),
-      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      ).resolves.toEqual({ data: [37, 80, 68, 70], offset: 0, length: 4, eof: false });
       await expect(client.closePptxPreview({ sessionId: 'pptx-session' })).resolves.toBeUndefined();
       expect(invoke).toHaveBeenNthCalledWith(1, 'open_pptx_preview', {
         request: { location },
       });
-      expect(invoke).toHaveBeenNthCalledWith(2, 'read_pptx_preview_resource', {
-        request: { sessionId: 'pptx-session', resourceId: 'image-1' },
+      expect(invoke).toHaveBeenNthCalledWith(2, 'read_pptx_preview_pdf', {
+        request: { sessionId: 'pptx-session', offset: 0, length: 4 },
       });
       expect(invoke).toHaveBeenNthCalledWith(3, 'close_pptx_preview', {
         request: { sessionId: 'pptx-session' },

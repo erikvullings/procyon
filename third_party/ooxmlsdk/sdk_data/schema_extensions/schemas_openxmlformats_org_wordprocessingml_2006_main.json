@@ -1,0 +1,1876 @@
+{
+  "Enums": [
+    {
+      "Name": "StrictCharacterSet",
+      "AddFacets": [
+        {
+          "Name": "ChsWindows1252",
+          "Value": "windows-1252"
+        },
+        {
+          "Name": "ChsUtf8",
+          "Value": "utf-8"
+        },
+        {
+          "Name": "ChsIso88592",
+          "Value": "iso-8859-2"
+        }
+      ]
+    },
+    {
+      "Name": "CompatSettingNameValues",
+      "AddFacets": [
+        {
+          "Name": "ParaSpaceMax",
+          "Value": "paraSpaceMax"
+        }
+      ]
+    },
+    {
+      "Name": "FontTypeHintValues",
+      "AddFacets": [
+        {
+          "Name": "Ascii",
+          "Value": "ascii"
+        }
+      ]
+    },
+    {
+      "Name": "LevelJustificationValues",
+      "AddFacets": [
+        {
+          "Name": "Start",
+          "Value": "start",
+          "Version": "Office2010"
+        },
+        {
+          "Name": "End",
+          "Value": "end",
+          "Version": "Office2010"
+        }
+      ]
+    },
+    {
+      "Name": "TableRowAlignmentValues",
+      "AddFacets": [
+        {
+          "Name": "Start",
+          "Value": "start"
+        },
+        {
+          "Name": "End",
+          "Value": "end"
+        }
+      ]
+    },
+    {
+      "Name": "LevelSuffixValues",
+      "AddFacets": [
+        {
+          "Name": "Tab",
+          "Value": "tab",
+          "Aliases": [
+            "Tab"
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "MultiLevelValues",
+      "AddFacets": [
+        {
+          "Name": "SingleLevel",
+          "Value": "singleLevel",
+          "Aliases": [
+            "SingleLevel"
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "HeaderFooterValues",
+      "AddFacets": [
+        {
+          "Name": "Default",
+          "Value": "default",
+          "Aliases": [
+            "odd"
+          ]
+        }
+      ]
+    }
+  ],
+  "AddTypes": [
+    {
+      "Name": "w:CT_UnsignedDecimalNumber/w:tabIndex",
+      "ClassName": "TabIndex",
+      "Summary": "Structured Document Tag Tab Index.",
+      "BaseClass": "UnsignedDecimalNumberType",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "PropertyComments": "Decimal Number Value",
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_OnOff/w:doNotEmbedSmartTags",
+      "ClassName": "DoNotEmbedSmartTags",
+      "Summary": "Do Not Embed Smart Tags.",
+      "BaseClass": "OnOffType",
+      "Kind": "Derived",
+      "ApiKind": "Struct"
+    },
+    {
+      "Name": "w:CT_SmartTagType/w:smartTagType",
+      "ClassName": "SmartTagType",
+      "Summary": "Smart Tag Type.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:namespaceuri",
+          "PropertyName": "NamespaceUri",
+          "PropertyComments": "Smart tag namespace URI.",
+          "OverrideType": "StringValue"
+        },
+        {
+          "QName": "w:name",
+          "PropertyName": "Name",
+          "PropertyComments": "Smart tag name.",
+          "OverrideType": "StringValue"
+        },
+        {
+          "QName": "w:url",
+          "PropertyName": "Url",
+          "PropertyComments": "Smart tag URL.",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_SmartTagPr/w:smartTagPr",
+      "ClassName": "SmartTagProperties",
+      "Summary": "Smart Tag Properties.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        {
+          "Name": "w:CT_XmlAttr/w:attr",
+          "PropertyName": "CustomXmlAttribute",
+          "PropertyComments": "Smart tag attribute.",
+          "Repeated": true
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_Empty/w:tblCol",
+      "ClassName": "OutOfPlaceTableColumn",
+      "Summary": "Out-of-place table grid column.",
+      "BaseClass": "EmptyType",
+      "Kind": "Leaf",
+      "ApiKind": "Struct"
+    },
+    {
+      "Name": "w:CT_TextMakerGutter/w:tmGutter",
+      "ClassName": "TextMakerGutter",
+      "Summary": "TextMaker gutter setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "PropertyComments": "TextMaker gutter value.",
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerSection/w:tmSection",
+      "ClassName": "TextMakerSection",
+      "Summary": "TextMaker section setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:h",
+          "PropertyName": "Height",
+          "PropertyComments": "TextMaker section height.",
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerPreferenceOne/w:tmPrefOne",
+      "ClassName": "TextMakerPreferenceOne",
+      "Summary": "TextMaker preference one.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerPreferenceTwo/w:tmPrefTwo",
+      "ClassName": "TextMakerPreferenceTwo",
+      "Summary": "TextMaker preference two.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerFormatPreference/w:tmFmtPref",
+      "ClassName": "TextMakerFormatPreference",
+      "Summary": "TextMaker format preference.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsPlace",
+      "ClassName": "TextMakerCommentsPlace",
+      "Summary": "TextMaker comment placement.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsWidth",
+      "ClassName": "TextMakerCommentsWidth",
+      "Summary": "TextMaker comment width.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsColor",
+      "ClassName": "TextMakerCommentsColor",
+      "Summary": "TextMaker comment color.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerCommentsProperties/w:tmCommentsPr",
+      "ClassName": "TextMakerCommentsProperties",
+      "Summary": "TextMaker comment settings.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        {
+          "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsPlace",
+          "PropertyName": "Place",
+          "PropertyComments": "TextMaker comment placement.",
+          "Optional": true
+        },
+        {
+          "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsWidth",
+          "PropertyName": "Width",
+          "PropertyComments": "TextMaker comment width.",
+          "Optional": true
+        },
+        {
+          "Name": "w:CT_TextMakerIntegerValue/w:tmCommentsColor",
+          "PropertyName": "Color",
+          "PropertyComments": "TextMaker comment color.",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewEnabled",
+      "ClassName": "TextMakerReviewEnabled",
+      "Summary": "TextMaker review enabled setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewShow",
+      "ClassName": "TextMakerReviewShow",
+      "Summary": "TextMaker review visibility setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewPrint",
+      "ClassName": "TextMakerReviewPrint",
+      "Summary": "TextMaker review print setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmRevisionNum",
+      "ClassName": "TextMakerRevisionNumber",
+      "Summary": "TextMaker revision number.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkIns",
+      "ClassName": "TextMakerReviewInsertionMark",
+      "Summary": "TextMaker insertion review mark.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorIns",
+      "ClassName": "TextMakerReviewInsertionColor",
+      "Summary": "TextMaker insertion review color.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkDel",
+      "ClassName": "TextMakerReviewDeletionMark",
+      "Summary": "TextMaker deletion review mark.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorDel",
+      "ClassName": "TextMakerReviewDeletionColor",
+      "Summary": "TextMaker deletion review color.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkFmt",
+      "ClassName": "TextMakerReviewFormatMark",
+      "Summary": "TextMaker formatting review mark.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorFmt",
+      "ClassName": "TextMakerReviewFormatColor",
+      "Summary": "TextMaker formatting review color.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkLn",
+      "ClassName": "TextMakerReviewLineMark",
+      "Summary": "TextMaker line review mark.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorLn",
+      "ClassName": "TextMakerReviewLineColor",
+      "Summary": "TextMaker line review color.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmReviewToolTip",
+      "ClassName": "TextMakerReviewToolTip",
+      "Summary": "TextMaker review tooltip setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerReviewProperties/w:tmReviewPr",
+      "ClassName": "TextMakerReviewProperties",
+      "Summary": "TextMaker review settings.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewEnabled", "PropertyName": "Enabled", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewShow", "PropertyName": "Show", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewPrint", "PropertyName": "Print", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmRevisionNum", "PropertyName": "RevisionNumber", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkIns", "PropertyName": "InsertionMark", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorIns", "PropertyName": "InsertionColor", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkDel", "PropertyName": "DeletionMark", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorDel", "PropertyName": "DeletionColor", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkFmt", "PropertyName": "FormatMark", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorFmt", "PropertyName": "FormatColor", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewMarkLn", "PropertyName": "LineMark", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewColorLn", "PropertyName": "LineColor", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmReviewToolTip", "PropertyName": "ToolTip", "Optional": true }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosPage",
+      "ClassName": "TextMakerLastPositionPage",
+      "Summary": "TextMaker last position page.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:val", "PropertyName": "Val", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosSelect",
+      "ClassName": "TextMakerLastPositionSelection",
+      "Summary": "TextMaker last position selection.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:val", "PropertyName": "Val", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosFrameIdx",
+      "ClassName": "TextMakerLastPositionFrameIndex",
+      "Summary": "TextMaker last position frame index.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:val", "PropertyName": "Val", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosPgfIdx",
+      "ClassName": "TextMakerLastPositionParagraphIndex",
+      "Summary": "TextMaker last position paragraph index.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:val", "PropertyName": "Val", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosIdx",
+      "ClassName": "TextMakerLastPositionIndex",
+      "Summary": "TextMaker last position index.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:val", "PropertyName": "Val", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerLastPositionPoint/w:tmLastPosCaret",
+      "ClassName": "TextMakerLastPositionCaret",
+      "Summary": "TextMaker last caret position.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosPgfIdx", "PropertyName": "ParagraphIndex", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosIdx", "PropertyName": "Index", "Optional": true }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerLastPositionPoint/w:tmLastPosAnchor",
+      "ClassName": "TextMakerLastPositionAnchor",
+      "Summary": "TextMaker last anchor position.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosPgfIdx", "PropertyName": "ParagraphIndex", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosIdx", "PropertyName": "Index", "Optional": true }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerLastPositionRectangle/w:tmLastPosTblRect",
+      "ClassName": "TextMakerLastPositionTableRectangle",
+      "Summary": "TextMaker last table rectangle.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        { "QName": "w:left", "PropertyName": "Left", "Optional": true, "OverrideType": "Int32Value" },
+        { "QName": "w:top", "PropertyName": "Top", "Optional": true, "OverrideType": "Int32Value" },
+        { "QName": "w:right", "PropertyName": "Right", "Optional": true, "OverrideType": "Int32Value" },
+        { "QName": "w:bottom", "PropertyName": "Bottom", "Optional": true, "OverrideType": "Int32Value" }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerLastPosition/w:tmLastPos",
+      "ClassName": "TextMakerLastPosition",
+      "Summary": "TextMaker last editing position.",
+      "BaseClass": "OpenXmlCompositeElement",
+      "Kind": "Composite",
+      "CompositeKind": "OneSequence",
+      "ApiKind": "Struct",
+      "Children": [
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosPage", "PropertyName": "Page", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosSelect", "PropertyName": "Selection", "Optional": true },
+        { "Name": "w:CT_TextMakerIntegerValue/w:tmLastPosFrameIdx", "PropertyName": "FrameIndex", "Optional": true },
+        { "Name": "w:CT_TextMakerLastPositionPoint/w:tmLastPosCaret", "PropertyName": "Caret", "Optional": true },
+        { "Name": "w:CT_TextMakerLastPositionPoint/w:tmLastPosAnchor", "PropertyName": "Anchor", "Optional": true },
+        { "Name": "w:CT_TextMakerLastPositionRectangle/w:tmLastPosTblRect", "PropertyName": "TableRectangle", "Optional": true }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerApplicationRevision/w:tmAppRevision",
+      "ClassName": "TextMakerApplicationRevision",
+      "Summary": "TextMaker application revision metadata.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:date",
+          "PropertyName": "Date",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        },
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "Name": "w:CT_TextMakerHyphenationLines/w:hyphenationLines",
+      "ClassName": "TextMakerHyphenationLines",
+      "Summary": "TextMaker hyphenation lines setting.",
+      "BaseClass": "OpenXmlLeafElement",
+      "Kind": "Leaf",
+      "ApiKind": "Struct",
+      "Attributes": [
+        {
+          "QName": "w:val",
+          "PropertyName": "Val",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "Text",
+      "HaveMcIgnorable": false
+    },
+    {
+      "ClassName": "DocDefaults",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "AltChunk",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Comments",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "ConditionalFormatStyle",
+      "Attributes": [
+        {
+          "PropertyName": "Val",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Color",
+      "Attributes": [
+        {
+          "PropertyName": "Val",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Shading",
+      "Attributes": [
+        {
+          "PropertyName": "Val",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "LongHexNumberType",
+      "Attributes": [
+        {
+          "PropertyName": "Val",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Column",
+      "Attributes": [
+        {
+          "PropertyName": "Width",
+          "OverrideType": "SignedTwipsMeasureValue"
+        },
+        {
+          "PropertyName": "Space",
+          "OverrideType": "SignedTwipsMeasureValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "DataBinding",
+      "Attributes": [
+        {
+          "PropertyName": "StoreItemId",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Document",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true,
+      "HaveMcProcessContent": true,
+      "HaveMcMustUnderstand": true,
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "Compatibility",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Empty/w14:enableOpenTypeKerning",
+          "PropertyName": "EnableOpenTypeKerning",
+          "PropertyComments": "Enable OpenType kerning.",
+          "Optional": true,
+          "AfterPropertyName": "UseFarEastLayout",
+          "InitialVersion": "Office2010"
+        }
+      ]
+    },
+    {
+      "ClassName": "DocGrid",
+      "Attributes": [
+        {
+          "PropertyName": "CharacterSpace",
+          "OverrideType": "IntegerValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Indentation",
+      "Attributes": [
+        {
+          "PropertyName": "Left",
+          "ReadAliases": [
+            ":left"
+          ]
+        },
+        {
+          "PropertyName": "Hanging",
+          "OverrideType": "SignedTwipsMeasureValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "HeaderReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "FooterReference",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Drawing",
+      "HaveMcMustUnderstand": true
+    },
+    {
+      "ClassName": "Endnotes",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "FieldData",
+      "Attributes": [
+        {
+          "QName": "xml:space",
+          "PropertyName": "Space",
+          "PropertyComments": "Content Contains Significant Whitespace",
+          "Optional": true,
+          "OverrideType": "EnumValue<DocumentFormat.OpenXml.SpaceProcessingModeValues>"
+        }
+      ]
+    },
+    {
+      "ClassName": "FrameProperties",
+      "Attributes": [
+        {
+          "QName": ":fillcolor",
+          "PropertyName": "FillColor",
+          "PropertyComments": "Frame Fill Color",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Fonts",
+      "HaveMcIgnorable": true,
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "MoveBookmarkType",
+      "Attributes": [
+        {
+          "PropertyName": "Date",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Footnotes",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Footer",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "GlossaryDocument",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Header",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Numbering",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "PreviousTableProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_UnsignedDecimalNumberMax3/w:tblStyleRowBandSize",
+          "PropertyName": "TableStyleRowBandSize",
+          "PropertyComments": "Defines the TableStyleRowBandSize Class.",
+          "Optional": true,
+          "AfterPropertyName": "BiDiVisual"
+        },
+        {
+          "Name": "w:CT_UnsignedDecimalNumberMax3/w:tblStyleColBandSize",
+          "PropertyName": "TableStyleColumnBandSize",
+          "PropertyComments": "Defines the TableStyleColumnBandSize Class.",
+          "Optional": true,
+          "AfterPropertyName": "TableStyleRowBandSize"
+        }
+      ]
+    },
+    {
+      "ClassName": "TableProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_UnsignedDecimalNumberMax3/w:tblStyleRowBandSize",
+          "PropertyName": "TableStyleRowBandSize",
+          "PropertyComments": "Defines the TableStyleRowBandSize Class.",
+          "Optional": true,
+          "AfterPropertyName": "BiDiVisual"
+        },
+        {
+          "Name": "w:CT_UnsignedDecimalNumberMax3/w:tblStyleColBandSize",
+          "PropertyName": "TableStyleColumnBandSize",
+          "PropertyComments": "Defines the TableStyleColumnBandSize Class.",
+          "Optional": true,
+          "AfterPropertyName": "TableStyleRowBandSize"
+        }
+      ]
+    },
+    {
+      "ClassName": "TablePositionProperties",
+      "Attributes": [
+        {
+          "PropertyName": "TablePositionXAlignment",
+          "EmptyAsNone": true
+        },
+        {
+          "PropertyName": "TablePositionYAlignment",
+          "EmptyAsNone": true
+        }
+      ]
+    },
+    {
+      "ClassName": "DocumentProtection",
+      "Attributes": [
+        {
+          "PropertyName": "CryptographicAlgorithmSid",
+          "EmptyAsNone": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Level",
+      "AlternateContent": [
+        {
+          "AfterField": "start_numbering_value",
+          "Children": [
+            "numbering_format"
+          ]
+        }
+      ]
+    },
+    {
+      "ClassName": "NumberingSymbolRunProperties",
+      "Children": [
+        {
+          "Name": "w:CT_Fonts/w:rFonts",
+          "PropertyName": "RunFonts",
+          "Repeated": true
+        }
+      ],
+      "AddChildren": [
+        {
+          "Name": "w:CT_Highlight/w:highlight",
+          "PropertyName": "Highlight",
+          "PropertyComments": "Defines the Highlight Class.",
+          "Optional": true,
+          "AfterPropertyName": "FontSizeComplexScript"
+        },
+        {
+          "Name": "w14:CT_Glow/w14:glow",
+          "PropertyName": "Glow",
+          "PropertyComments": "Defines the Glow Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "SpecVanish"
+        },
+        {
+          "Name": "w14:CT_Shadow/w14:shadow",
+          "PropertyName": "Shadow14",
+          "PropertyComments": "Defines the Shadow Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Glow"
+        },
+        {
+          "Name": "w14:CT_Reflection/w14:reflection",
+          "PropertyName": "Reflection",
+          "PropertyComments": "Defines the Reflection Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Shadow14"
+        },
+        {
+          "Name": "w14:CT_TextOutlineEffect/w14:textOutline",
+          "PropertyName": "TextOutlineEffect",
+          "PropertyComments": "Defines the TextOutlineEffect Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Reflection"
+        },
+        {
+          "Name": "w14:CT_FillTextEffect/w14:textFill",
+          "PropertyName": "FillTextEffect",
+          "PropertyComments": "Defines the FillTextEffect Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "TextOutlineEffect"
+        },
+        {
+          "Name": "w14:CT_Scene3D/w14:scene3d",
+          "PropertyName": "Scene3D",
+          "PropertyComments": "Defines the Scene3D Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "FillTextEffect"
+        },
+        {
+          "Name": "w14:CT_Props3D/w14:props3d",
+          "PropertyName": "Properties3D",
+          "PropertyComments": "Defines the Properties3D Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Scene3D"
+        },
+        {
+          "Name": "w14:CT_Ligatures/w14:ligatures",
+          "PropertyName": "Ligatures",
+          "PropertyComments": "Defines the Ligatures Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Properties3D"
+        },
+        {
+          "Name": "w14:CT_NumForm/w14:numForm",
+          "PropertyName": "NumberingFormat",
+          "PropertyComments": "Defines the NumberingFormat Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Ligatures"
+        },
+        {
+          "Name": "w14:CT_NumSpacing/w14:numSpacing",
+          "PropertyName": "NumberSpacing",
+          "PropertyComments": "Defines the NumberSpacing Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberingFormat"
+        },
+        {
+          "Name": "w14:CT_StylisticSets/w14:stylisticSets",
+          "PropertyName": "StylisticSets",
+          "PropertyComments": "Defines the StylisticSets Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberSpacing"
+        },
+        {
+          "Name": "w14:CT_OnOff/w14:cntxtAlts",
+          "PropertyName": "ContextualAlternatives",
+          "PropertyComments": "Defines the ContextualAlternatives Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "StylisticSets"
+        },
+        {
+          "Name": "w:CT_RPr/w:rPr",
+          "PropertyName": "RunProperties",
+          "PropertyComments": "Nested run properties found in legacy numbering output.",
+          "Optional": true,
+          "AfterPropertyName": "ContextualAlternatives"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphBorders",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Border/w:insideH",
+          "PropertyName": "InsideHorizontalBorder",
+          "PropertyComments": "Out-of-place inside horizontal paragraph border.",
+          "Optional": true,
+          "AfterPropertyName": "BetweenBorder"
+        },
+        {
+          "Name": "w:CT_Border/w:insideV",
+          "PropertyName": "InsideVerticalBorder",
+          "PropertyComments": "Out-of-place inside vertical paragraph border.",
+          "Optional": true,
+          "AfterPropertyName": "InsideHorizontalBorder"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_PPr/w:pPr",
+          "PropertyName": "NestedParagraphProperties",
+          "PropertyComments": "Out-of-place nested paragraph properties.",
+          "Optional": true,
+          "BeforeName": "w:CT_String/w:pStyle"
+        },
+        {
+          "Name": "w:CT_NonNegativeDecimalNumber/w:numId",
+          "PropertyName": "NumberingId",
+          "PropertyComments": "Out-of-place numbering identifier.",
+          "Optional": true,
+          "AfterPropertyName": "NumberingProperties"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphPropertiesDefault",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Spacing/w:spacing",
+          "PropertyName": "SpacingBetweenLines",
+          "PropertyComments": "Out-of-place default paragraph spacing.",
+          "Optional": true,
+          "AfterPropertyName": "ParagraphPropertiesBaseStyle"
+        },
+        {
+          "Name": "w:CT_Shd/w:shd",
+          "PropertyName": "Shading",
+          "PropertyComments": "Out-of-place default paragraph shading.",
+          "Optional": true,
+          "AfterPropertyName": "SpacingBetweenLines"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphPropertiesBaseStyle",
+      "AddChildren": [
+        {
+          "Name": "w:CT_TextMakerHyphenationLines/w:hyphenationLines",
+          "PropertyName": "TextMakerHyphenationLines",
+          "PropertyComments": "TextMaker hyphenation lines setting.",
+          "Optional": true,
+          "AfterPropertyName": "SuppressAutoHyphens"
+        }
+      ]
+    },
+    {
+      "ClassName": "RunPropertiesBaseStyle",
+      "AddChildren": [
+        {
+          "Name": "w:CT_OnOff/w:rtl",
+          "PropertyName": "RightToLeftText",
+          "PropertyComments": "Right-to-left text.",
+          "Optional": true,
+          "AfterPropertyName": "SpecVanish"
+        }
+      ]
+    },
+    {
+      "ClassName": "RunPropertiesDefault",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Color/w:color",
+          "PropertyName": "Color",
+          "PropertyComments": "Out-of-place default run color.",
+          "Optional": true,
+          "AfterPropertyName": "RunPropertiesBaseStyle"
+        }
+      ]
+    },
+    {
+      "ClassName": "SectionProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_TextMakerGutter/w:tmGutter",
+          "PropertyName": "TextMakerGutter",
+          "PropertyComments": "TextMaker gutter setting.",
+          "Optional": true,
+          "AfterName": "w:CT_PaperSource/w:paperSrc"
+        },
+        {
+          "Name": "w:CT_TextMakerSection/w:tmSection",
+          "PropertyName": "TextMakerSection",
+          "PropertyComments": "TextMaker section setting.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerGutter"
+        },
+        {
+          "Name": "w:CT_OnOff/w:mirrorMargins",
+          "PropertyName": "MirrorMargins",
+          "PropertyComments": "Mirror page margins.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerGutter"
+        }
+      ]
+    },
+    {
+      "ClassName": "StyleRunProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_OnOff/w:rtl",
+          "PropertyName": "RightToLeftText",
+          "PropertyComments": "Right-to-left text.",
+          "Optional": true,
+          "AfterPropertyName": "SpecVanish"
+        }
+      ]
+    },
+    {
+      "ClassName": "StyleParagraphProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_OnOff/w:qFormat",
+          "PropertyName": "PrimaryStyle",
+          "PropertyComments": "Out-of-place primary style marker.",
+          "Optional": true,
+          "AfterPropertyName": "OutlineLevel"
+        }
+      ]
+    },
+    {
+      "ClassName": "TableGrid",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Empty/w:tblCol",
+          "PropertyName": "OutOfPlaceTableColumn",
+          "PropertyComments": "Out-of-place table grid column.",
+          "Repeated": true,
+          "AfterName": "w:CT_TblGridCol/w:gridCol"
+        }
+      ]
+    },
+    {
+      "ClassName": "MailMerge",
+      "Children": [
+        {
+          "PropertyName": "DataType",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Paragraph",
+      "HaveXmlnsFields": true,
+      "Attributes": [
+        {
+          "QName": "w14:editId",
+          "PropertyName": "W14EditId",
+          "PropertyComments": "Legacy paragraph edit identifier",
+          "Version": "Office2010",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphPropertiesChange",
+      "Children": [
+        {
+          "PropertyName": "ParagraphPropertiesExtended",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "StyleParagraphProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_ParaRPr/w:rPr",
+          "PropertyName": "ParagraphMarkRunProperties",
+          "PropertyComments": "Paragraph Mark Run Properties.",
+          "Optional": true,
+          "AfterPropertyName": "OutlineLevel"
+        }
+      ]
+    },
+    {
+      "ClassName": "StyleTableProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_TblLayoutType/w:tblLayout",
+          "PropertyName": "TableLayout",
+          "PropertyComments": "Table Layout.",
+          "Optional": true,
+          "AfterPropertyName": "Shading"
+        }
+      ]
+    },
+    {
+      "ClassName": "Run"
+    },
+    {
+      "ClassName": "CustomXmlRun",
+      "AddChildren": [
+        {
+          "Name": "w:CT_SmartTagPr/w:smartTagPr",
+          "PropertyName": "SmartTagProperties",
+          "PropertyComments": "Smart Tag Properties.",
+          "Optional": true,
+          "AfterPropertyName": "CustomXmlProperties"
+        }
+      ]
+    },
+    {
+      "ClassName": "RunFonts"
+    },
+    {
+      "ClassName": "RunPropertiesDefault",
+      "HaveMcIgnorable": true,
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SdtPlaceholder",
+      "Children": [
+        {
+          "Name": "w:CT_String/w:docPart",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Settings",
+      "HaveMcIgnorable": true,
+      "Children": [
+        {
+          "Name": "w:CT_Compat/w:compat",
+          "Repeated": true
+        }
+      ],
+      "AddChildren": [
+        {
+          "Name": "w:CT_OnOff/w:doNotEmbedSmartTags",
+          "PropertyName": "DoNotEmbedSmartTags",
+          "PropertyComments": "Do Not Embed Smart Tags.",
+          "Optional": true,
+          "AfterName": "w:CT_ShapeDefaults/w:shapeDefaults"
+        },
+        {
+          "Name": "w:CT_CompatSetting/w:compatSetting",
+          "PropertyName": "CompatibilitySetting",
+          "PropertyComments": "Compatibility Setting.",
+          "Optional": true,
+          "AfterName": "w14:CT_LongHexNumber/w14:docId"
+        },
+        {
+          "Name": "w:CT_SmartTagType/w:smartTagType",
+          "PropertyName": "SmartTagType",
+          "PropertyComments": "Smart Tag Type.",
+          "Repeated": true,
+          "AfterPropertyName": "DoNotEmbedSmartTags"
+        },
+        {
+          "Name": "w:CT_TextMakerPreferenceOne/w:tmPrefOne",
+          "PropertyName": "TextMakerPreferenceOne",
+          "PropertyComments": "TextMaker preference one.",
+          "Optional": true,
+          "AfterPropertyName": "SmartTagType"
+        },
+        {
+          "Name": "w:CT_TextMakerPreferenceTwo/w:tmPrefTwo",
+          "PropertyName": "TextMakerPreferenceTwo",
+          "PropertyComments": "TextMaker preference two.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerPreferenceOne"
+        },
+        {
+          "Name": "w:CT_TextMakerFormatPreference/w:tmFmtPref",
+          "PropertyName": "TextMakerFormatPreference",
+          "PropertyComments": "TextMaker format preference.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerPreferenceTwo"
+        },
+        {
+          "Name": "w:CT_TextMakerCommentsProperties/w:tmCommentsPr",
+          "PropertyName": "TextMakerCommentsProperties",
+          "PropertyComments": "TextMaker comment settings.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerFormatPreference"
+        },
+        {
+          "Name": "w:CT_TextMakerReviewProperties/w:tmReviewPr",
+          "PropertyName": "TextMakerReviewProperties",
+          "PropertyComments": "TextMaker review settings.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerCommentsProperties"
+        },
+        {
+          "Name": "w:CT_TextMakerLastPosition/w:tmLastPos",
+          "PropertyName": "TextMakerLastPosition",
+          "PropertyComments": "TextMaker last editing position.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerReviewProperties"
+        },
+        {
+          "Name": "w:CT_TextMakerApplicationRevision/w:tmAppRevision",
+          "PropertyName": "TextMakerApplicationRevision",
+          "PropertyComments": "TextMaker application revision metadata.",
+          "Optional": true,
+          "AfterPropertyName": "TextMakerLastPosition"
+        }
+      ]
+    },
+    {
+      "ClassName": "SpacingBetweenLines",
+      "Attributes": [
+        {
+          "PropertyName": "Before",
+          "OverrideType": "SignedTwipsMeasureValue"
+        },
+        {
+          "PropertyName": "After",
+          "OverrideType": "SignedTwipsMeasureValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Style",
+      "HaveXmlnsFields": true,
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "Styles",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "StyleRunProperties",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Highlight/w:highlight",
+          "PropertyName": "Highlight",
+          "PropertyComments": "Text Highlighting.",
+          "Optional": true,
+          "AfterPropertyName": "FontSizeComplexScript"
+        },
+        {
+          "Name": "w14:CT_Glow/w14:glow",
+          "PropertyName": "Glow",
+          "PropertyComments": "Defines the Glow Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "SpecVanish"
+        },
+        {
+          "Name": "w14:CT_Shadow/w14:shadow",
+          "PropertyName": "Shadow14",
+          "PropertyComments": "Defines the Shadow Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Glow"
+        },
+        {
+          "Name": "w14:CT_Reflection/w14:reflection",
+          "PropertyName": "Reflection",
+          "PropertyComments": "Defines the Reflection Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Shadow14"
+        },
+        {
+          "Name": "w14:CT_TextOutlineEffect/w14:textOutline",
+          "PropertyName": "TextOutlineEffect",
+          "PropertyComments": "Defines the TextOutlineEffect Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Reflection"
+        },
+        {
+          "Name": "w14:CT_FillTextEffect/w14:textFill",
+          "PropertyName": "FillTextEffect",
+          "PropertyComments": "Defines the FillTextEffect Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "TextOutlineEffect"
+        },
+        {
+          "Name": "w14:CT_Scene3D/w14:scene3d",
+          "PropertyName": "Scene3D",
+          "PropertyComments": "Defines the Scene3D Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "FillTextEffect"
+        },
+        {
+          "Name": "w14:CT_Props3D/w14:props3d",
+          "PropertyName": "Properties3D",
+          "PropertyComments": "Defines the Properties3D Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Scene3D"
+        },
+        {
+          "Name": "w14:CT_Ligatures/w14:ligatures",
+          "PropertyName": "Ligatures",
+          "PropertyComments": "Defines the Ligatures Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Properties3D"
+        },
+        {
+          "Name": "w14:CT_NumForm/w14:numForm",
+          "PropertyName": "NumberingFormat",
+          "PropertyComments": "Defines the NumberingFormat Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Ligatures"
+        },
+        {
+          "Name": "w14:CT_NumSpacing/w14:numSpacing",
+          "PropertyName": "NumberSpacing",
+          "PropertyComments": "Defines the NumberSpacing Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberingFormat"
+        },
+        {
+          "Name": "w14:CT_StylisticSets/w14:stylisticSets",
+          "PropertyName": "StylisticSets",
+          "PropertyComments": "Defines the StylisticSets Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberSpacing"
+        },
+        {
+          "Name": "w14:CT_OnOff/w14:cntxtAlts",
+          "PropertyName": "ContextualAlternatives",
+          "PropertyComments": "Defines the ContextualAlternatives Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "StylisticSets"
+        }
+      ]
+    },
+    {
+      "ClassName": "RunPropertiesBaseStyle",
+      "AddChildren": [
+        {
+          "Name": "w:CT_Highlight/w:highlight",
+          "PropertyName": "Highlight",
+          "PropertyComments": "Text Highlighting.",
+          "Optional": true,
+          "AfterPropertyName": "FontSizeComplexScript"
+        },
+        {
+          "Name": "w14:CT_Ligatures/w14:ligatures",
+          "PropertyName": "Ligatures",
+          "PropertyComments": "Defines the Ligatures Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "SpecVanish"
+        },
+        {
+          "Name": "w14:CT_NumForm/w14:numForm",
+          "PropertyName": "NumberingFormat",
+          "PropertyComments": "Defines the NumberingFormat Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "Ligatures"
+        },
+        {
+          "Name": "w14:CT_NumSpacing/w14:numSpacing",
+          "PropertyName": "NumberSpacing",
+          "PropertyComments": "Defines the NumberSpacing Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberingFormat"
+        },
+        {
+          "Name": "w14:CT_StylisticSets/w14:stylisticSets",
+          "PropertyName": "StylisticSets",
+          "PropertyComments": "Defines the StylisticSets Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "NumberSpacing"
+        },
+        {
+          "Name": "w14:CT_OnOff/w14:cntxtAlts",
+          "PropertyName": "ContextualAlternatives",
+          "PropertyComments": "Defines the ContextualAlternatives Class.",
+          "Optional": true,
+          "InitialVersion": "Office2010",
+          "AfterPropertyName": "StylisticSets"
+        }
+      ]
+    },
+    {
+      "ClassName": "WebSettings",
+      "HaveMcIgnorable": true
+    },
+    {
+      "ClassName": "AbstractNum",
+      "Attributes": [
+        {
+          "QName": "w15:restartNumberingAfterBreak",
+          "PropertyName": "W15RestartNumberingAfterBreak",
+          "PropertyComments": "Restart Numbering After Break",
+          "Optional": true,
+          "OverrideType": "OnOffValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "CustomXmlElement",
+      "Attributes": [
+        {
+          "QName": "w:uri",
+          "PropertyName": "Uri",
+          "PropertyComments": "Custom XML Markup Namespace",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        },
+        {
+          "QName": "w:element",
+          "PropertyName": "Element",
+          "PropertyComments": "Custom XML Element Name",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Deleted"
+    },
+    {
+      "ClassName": "EmbeddedObject"
+    },
+    {
+      "ClassName": "Inserted"
+    },
+    {
+      "ClassName": "NumberingInstance",
+      "Attributes": [
+        {
+          "QName": "w16cid:durableId",
+          "PropertyName": "W16CidDurableId",
+          "PropertyComments": "Durable Numbering Definition Identifier",
+          "Optional": true,
+          "OverrideType": "Int32Value"
+        }
+      ]
+    },
+    {
+      "ClassName": "ParagraphPropertiesExtended"
+    },
+    {
+      "ClassName": "Picture"
+    },
+    {
+      "ClassName": "TableRow",
+      "Attributes": [
+        {
+          "QName": "w14:editId",
+          "PropertyName": "W14EditId",
+          "PropertyComments": "Legacy table row edit identifier",
+          "Version": "Office2010",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Table",
+      "HaveXmlnsFields": true,
+      "Children": [
+        {
+          "Name": "w:CT_TblPr/w:tblPr",
+          "Optional": true
+        },
+        {
+          "Name": "w:CT_TblGrid/w:tblGrid",
+          "Optional": true
+        }
+      ]
+    }
+  ],
+  "ChoiceEnums": [
+    {
+      "RustName": "BodyChoice",
+      "AddVariants": [
+        {
+          "RustName": "Break",
+          "QName": "w:br",
+          "Docs": "Out-of-place break in the document body.",
+          "PayloadRustType": "Break"
+        },
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "ParagraphChoice",
+      "AddVariants": [
+        {
+          "RustName": "Break",
+          "QName": "w:br",
+          "Docs": "Out-of-place break in a paragraph.",
+          "PayloadRustType": "Break"
+        },
+        {
+          "RustName": "Table",
+          "QName": "w:tbl",
+          "Docs": "Out-of-place table in a paragraph.",
+          "PayloadRustType": "Table"
+        },
+        {
+          "RustName": "SmartTagRun",
+          "QName": "w:smartTag",
+          "Docs": "Smart tag run content.",
+          "PayloadRustType": "CustomXmlRun"
+        },
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "CustomXmlRunChoice",
+      "AddVariants": [
+        {
+          "RustName": "SmartTagRun",
+          "QName": "w:smartTag",
+          "Docs": "Smart tag run content.",
+          "PayloadRustType": "CustomXmlRun"
+        }
+      ]
+    },
+    {
+      "RustName": "RunChoice",
+      "AddVariants": [
+        {
+          "RustName": "Run",
+          "QName": "w:r",
+          "Docs": "Out-of-place nested run.",
+          "PayloadRustType": "Run"
+        },
+        {
+          "RustName": "SymbolCharExt",
+          "QName": "w16se:sym",
+          "Docs": "Extended Symbol Character.",
+          "PayloadRustType": "SymbolChar"
+        },
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "RunPropertiesChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "SdtPropertiesChoice",
+      "AddVariants": [
+        {
+          "RustName": "TabIndex",
+          "QName": "w:tabIndex",
+          "Docs": "Structured Document Tag Tab Index.",
+          "PayloadRustType": "TabIndex"
+        }
+      ]
+    },
+    {
+      "RustName": "TableCellChoice",
+      "AddVariants": [
+        {
+          "RustName": "Break",
+          "QName": "w:CT_Br/w:br",
+          "Docs": "Out-of-place break in table cell.",
+          "PayloadRustType": "Break"
+        }
+      ]
+    },
+    {
+      "RustName": "TableStyleConditionalFormattingTableRowPropertiesChoice",
+      "AddVariants": [
+        {
+          "RustName": "ConditionalFormatStyle",
+          "QName": "w:cnfStyle",
+          "Docs": "Defines the ConditionalFormatStyle Class.",
+          "PayloadRustType": "ConditionalFormatStyle"
+        },
+        {
+          "RustName": "DivId",
+          "QName": "w:divId",
+          "Docs": "Defines the DivId Class.",
+          "PayloadRustType": "DivId"
+        },
+        {
+          "RustName": "GridBefore",
+          "QName": "w:gridBefore",
+          "Docs": "Defines the GridBefore Class.",
+          "PayloadRustType": "GridBefore"
+        },
+        {
+          "RustName": "GridAfter",
+          "QName": "w:gridAfter",
+          "Docs": "Defines the GridAfter Class.",
+          "PayloadRustType": "GridAfter"
+        },
+        {
+          "RustName": "WidthBeforeTableRow",
+          "QName": "w:wBefore",
+          "Docs": "Defines the WidthBeforeTableRow Class.",
+          "PayloadRustType": "WidthBeforeTableRow"
+        },
+        {
+          "RustName": "WidthAfterTableRow",
+          "QName": "w:wAfter",
+          "Docs": "Defines the WidthAfterTableRow Class.",
+          "PayloadRustType": "WidthAfterTableRow"
+        },
+        {
+          "RustName": "TableRowHeight",
+          "QName": "w:trHeight",
+          "Docs": "Defines the TableRowHeight Class.",
+          "PayloadRustType": "TableRowHeight"
+        }
+      ]
+    }
+  ]
+}

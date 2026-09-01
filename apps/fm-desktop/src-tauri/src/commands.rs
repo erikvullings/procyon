@@ -28,20 +28,20 @@ use fm_transport_dto::{
     OperationQueueStatusDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
     PptxPreviewSessionRequestDto, ReadDocxPreviewResourceRequestDto,
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewResourceRequestDto, ReadPptxPreviewResourceResponseDto,
-    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
-    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto,
-    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
-    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto,
-    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, ScanDiskUsageRequestDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
-    SearchStructuredRowsResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
-    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
-    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
-    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto,
-    StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
-    UpdateConnectionRequestDto, UpdateStructuredViewRequestDto, VerificationReportDto,
-    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
+    ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
+    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
+    SaveChecksumFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
+    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
+    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
+    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
+    StructuredViewStatusDto, SyncPlanDto, UpdateConnectionRequestDto,
+    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -731,13 +731,13 @@ pub(crate) async fn open_pptx_preview(
 }
 
 #[tauri::command]
-pub(crate) async fn read_pptx_preview_resource(
+pub(crate) async fn read_pptx_preview_pdf(
     state: State<'_, AppState>,
-    request: ReadPptxPreviewResourceRequestDto,
-) -> Result<ReadPptxPreviewResourceResponseDto, ApplicationErrorDto> {
+    request: ReadPptxPreviewPdfRequestDto,
+) -> Result<ReadFileRangeResponseDto, ApplicationErrorDto> {
     state
         .service
-        .read_pptx_preview_resource(request)
+        .read_pptx_preview_pdf(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

@@ -3404,7 +3404,7 @@
         "type": "object"
       },
       "OpenPptxPreviewRequestDto": {
-        "description": "Opens a bounded, provider-neutral PPTX content-preview session.",
+        "description": "Opens a bounded, provider-neutral PowerPoint-to-PDF preview session.",
         "properties": {
           "location": {
             "$ref": "#/components/schemas/LocationDto",
@@ -3417,33 +3417,18 @@
         "type": "object"
       },
       "OpenPptxPreviewResponseDto": {
-        "description": "Initial semantic PPTX slides and bounded resource descriptors.",
+        "description": "Rendered PDF session metadata. PDF bytes are fetched in bounded ranges.",
         "properties": {
-          "omittedFeatures": {
-            "description": "PowerPoint fidelity features deliberately omitted from this content view.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "resources": {
-            "description": "Embedded images referenced by slide Markdown, fetched separately by id.",
-            "items": {
-              "$ref": "#/components/schemas/PptxPreviewResourceDto"
-            },
-            "type": "array"
+          "pdfBytes": {
+            "description": "Exact byte length of the retained rendered PDF.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           },
           "sessionId": {
             "description": "Opaque backend session identifier.",
             "format": "uuid",
             "type": "string"
-          },
-          "slides": {
-            "description": "Slides in package-declared presentation order.",
-            "items": {
-              "$ref": "#/components/schemas/PptxPreviewSlideDto"
-            },
-            "type": "array"
           },
           "sourceBytes": {
             "description": "Source package bytes at session creation.",
@@ -3460,9 +3445,7 @@
           "sessionId",
           "sourceRevision",
           "sourceBytes",
-          "slides",
-          "resources",
-          "omittedFeatures"
+          "pdfBytes"
         ],
         "type": "object"
       },
@@ -4379,37 +4362,6 @@
         ],
         "type": "object"
       },
-      "PptxPreviewResourceDto": {
-        "description": "One embedded image retained by a bounded PPTX preview session.",
-        "properties": {
-          "byteLength": {
-            "description": "Exact retained byte count.",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "mediaType": {
-            "description": "Browser media type for the bounded image bytes.",
-            "type": "string"
-          },
-          "resourceId": {
-            "description": "Opaque resource identifier scoped to the preview session.",
-            "format": "uuid",
-            "type": "string"
-          },
-          "source": {
-            "description": "Parser-local source referenced by slide Markdown.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "resourceId",
-          "source",
-          "mediaType",
-          "byteLength"
-        ],
-        "type": "object"
-      },
       "PptxPreviewSessionRequestDto": {
         "description": "Identifies a PPTX preview session.",
         "properties": {
@@ -4421,33 +4373,6 @@
         },
         "required": [
           "sessionId"
-        ],
-        "type": "object"
-      },
-      "PptxPreviewSlideDto": {
-        "description": "One slide retained independently to preserve bounded paged viewer state.",
-        "properties": {
-          "index": {
-            "description": "Zero-based position in presentation order.",
-            "format": "int32",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "markdown": {
-            "description": "Semantic Markdown for this slide only. Hosts must sanitize before DOM insertion.",
-            "type": "string"
-          },
-          "title": {
-            "description": "Parser-identified title, when present.",
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "index",
-          "markdown"
         ],
         "type": "object"
       },
@@ -4626,13 +4551,20 @@
         ],
         "type": "object"
       },
-      "ReadPptxPreviewResourceRequestDto": {
-        "description": "Requests one bounded embedded PPTX resource.",
+      "ReadPptxPreviewPdfRequestDto": {
+        "description": "Requests one bounded byte range from a rendered PowerPoint PDF.",
         "properties": {
-          "resourceId": {
-            "description": "Opaque resource identifier from the open response.",
-            "format": "uuid",
-            "type": "string"
+          "length": {
+            "description": "Requested byte count, capped server-side.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Zero-based byte offset in the rendered PDF.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           },
           "sessionId": {
             "description": "Opaque backend session identifier.",
@@ -4642,30 +4574,8 @@
         },
         "required": [
           "sessionId",
-          "resourceId"
-        ],
-        "type": "object"
-      },
-      "ReadPptxPreviewResourceResponseDto": {
-        "description": "Embedded PPTX image bytes and their browser media type.",
-        "properties": {
-          "data": {
-            "description": "Bounded raw image bytes.",
-            "items": {
-              "format": "int32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "mediaType": {
-            "description": "Browser media type for the bytes.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "data",
-          "mediaType"
+          "offset",
+          "length"
         ],
         "type": "object"
       },
@@ -9749,17 +9659,17 @@
             "description": ""
           }
         },
-        "summary": "Opens a bounded semantic PPTX content-preview session."
+        "summary": "Opens a bounded rendered PowerPoint preview session."
       }
     },
-    "/api/v1/files/pptx/resource": {
+    "/api/v1/files/pptx/pdf": {
       "post": {
-        "operationId": "readPptxPreviewResource",
+        "operationId": "readPptxPreviewPdf",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReadPptxPreviewResourceRequestDto"
+                "$ref": "#/components/schemas/ReadPptxPreviewPdfRequestDto"
               }
             }
           },
@@ -9770,7 +9680,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadPptxPreviewResourceResponseDto"
+                  "$ref": "#/components/schemas/ReadFileRangeResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
                 }
               }
             },
@@ -9797,7 +9717,7 @@
             "description": ""
           }
         },
-        "summary": "Reads one bounded embedded image from a PPTX preview session."
+        "summary": "Reads one bounded byte range from a rendered PowerPoint PDF."
       }
     },
     "/api/v1/files/range": {

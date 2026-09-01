@@ -1,0 +1,18 @@
+[package]
+name = "olecfsdk-ooxml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/olecfsdk-ooxml"
+description = "Direct typed conversion from legacy Office binary files to OOXML"
+keywords = ["office", "docx", "xlsx", "pptx", "conversion"]
+categories.workspace = true
+readme.workspace = true
+
+[dependencies]
+olecfsdk = { workspace = true }
+ooxmlsdk = { workspace = true }
+thiserror = { workspace = true }

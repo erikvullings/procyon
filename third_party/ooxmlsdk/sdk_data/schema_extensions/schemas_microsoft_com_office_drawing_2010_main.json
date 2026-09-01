@@ -1,0 +1,56 @@
+{
+  "Types": [
+    {
+      "ClassName": "HiddenEffectsProperties",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "HiddenFillProperties",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "HiddenLineProperties",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ImageProperties",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ShadowObscured",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "TextMath",
+      "HaveXmlnsFields": true,
+      "AddChoice": [
+        {
+          "RustName": "Paragraph",
+          "QName": "m:oMathPara",
+          "PayloadRustType": "Paragraph",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_office_document_2006_math"
+        },
+        {
+          "RustName": "OfficeMath",
+          "QName": "m:oMath",
+          "PayloadRustType": "OfficeMath",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_office_document_2006_math"
+        },
+        {
+          "RustName": "Run",
+          "QName": "m:r",
+          "PayloadRustType": "Run",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_office_document_2006_math"
+        }
+      ]
+    },
+    {
+      "ClassName": "UseLocalDpi",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "CompatExtension",
+      "HaveXmlnsFields": true
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "Types": [
+    {
+      "ClassName": "CommonTimeNode",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ControlList",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "OutlineViewSlideListEntry",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Picture",
+      "AlternateContent": [
+        {
+          "AfterField": "non_visual_picture_properties",
+          "Children": [
+            "blip_fill"
+          ]
+        }
+      ],
+      "Children": [
+        {
+          "PropertyName": "BlipFill",
+          "Optional": true
+        }
+      ]
+    },
+    {
+      "ClassName": "Presentation",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true
+    },
+    {
+      "ClassName": "PresentationProperties",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true
+    },
+    {
+      "ClassName": "Shape",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Slide",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true,
+      "AlternateContent": [
+        {
+          "AfterField": "color_map_override",
+          "Children": [
+            "transition"
+          ]
+        }
+      ]
+    },
+    {
+      "ClassName": "SlideLayout",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true,
+      "AlternateContent": [
+        {
+          "AfterField": "color_map_override",
+          "Children": [
+            "transition"
+          ]
+        }
+      ]
+    },
+    {
+      "ClassName": "SlideLayoutExtensionList",
+      "Attributes": [
+        {
+          "QName": ":mod",
+          "PropertyName": "Modify",
+          "PropertyComments": "Modify",
+          "Optional": true,
+          "OverrideType": "BooleanValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "SlideListEntry",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "SlideMaster",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true,
+      "AlternateContent": [
+        {
+          "AfterField": "slide_layout_id_list",
+          "Children": [
+            "transition"
+          ]
+        }
+      ]
+    },
+    {
+      "ClassName": "NotesMaster",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true
+    },
+    {
+      "ClassName": "NotesSlide",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true
+    },
+    {
+      "ClassName": "SlideMasterExtensionList",
+      "Attributes": [
+        {
+          "QName": ":mod",
+          "PropertyName": "Modify",
+          "PropertyComments": "Modify",
+          "Optional": true,
+          "OverrideType": "BooleanValue"
+        }
+      ]
+    },
+    {
+      "ClassName": "Transition",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "ViewProperties",
+      "HaveMcIgnorable": true,
+      "HaveMcPreserveAttributes": true
+    }
+  ],
+  "ChoiceEnums": [
+    {
+      "RustName": "BackgroundPropertiesChoice2",
+      "AddVariants": [
+        {
+          "RustName": "PandocEffectsList",
+          "QName": "a:effectsLst",
+          "Docs": "Pandoc compatibility form of effectLst.",
+          "PayloadRustType": "EffectList",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_drawingml_2006_main"
+        }
+      ]
+    },
+    {
+      "RustName": "ShapeTreeChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "GroupShapeChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    }
+  ]
+}

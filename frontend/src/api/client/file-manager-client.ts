@@ -52,11 +52,10 @@ import type {
   PluginId,
   PluginLogEntry,
   PptxPreview,
-  PptxPreviewResource,
   PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
-  ReadPptxPreviewResourceRequest,
+  ReadPptxPreviewPdfRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -266,10 +265,10 @@ export interface FileManagerClient {
   ): Promise<DocxPreviewResource>;
   closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void>;
   openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview>;
-  readPptxPreviewResource(
-    request: ReadPptxPreviewResourceRequest,
+  readPptxPreviewPdf(
+    request: ReadPptxPreviewPdfRequest,
     signal?: AbortSignal,
-  ): Promise<PptxPreviewResource>;
+  ): Promise<FileRangeChunk>;
   closePptxPreview(request: PptxPreviewSessionRequest, signal?: AbortSignal): Promise<void>;
   openStructuredView(
     request: OpenStructuredViewRequest,

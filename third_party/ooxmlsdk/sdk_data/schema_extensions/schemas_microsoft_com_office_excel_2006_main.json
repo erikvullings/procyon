@@ -1,0 +1,20 @@
+{
+  "Types": [
+    {
+      "ClassName": "Macrosheet",
+      "Attributes": [
+        {
+          "QName": "xr6:uid",
+          "PropertyName": "Xr6Uid",
+          "PropertyComments": "Revision 6 Unique Identifier",
+          "Optional": true,
+          "OverrideType": "StringValue"
+        }
+      ],
+      "HaveMcIgnorable": true,
+      "ExtraXmlns": [
+        "x"
+      ]
+    }
+  ]
+}

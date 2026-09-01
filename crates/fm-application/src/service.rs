@@ -813,7 +813,7 @@ impl FileManagerService {
         self.docx_preview.close(request).await
     }
 
-    /// Opens a bounded, provider-neutral semantic PPTX preview session.
+    /// Opens a bounded, provider-neutral rendered PowerPoint preview session.
     pub async fn open_pptx_preview(
         &self,
         request: fm_transport_dto::OpenPptxPreviewRequestDto,
@@ -821,12 +821,12 @@ impl FileManagerService {
         self.pptx_preview.open(request).await
     }
 
-    /// Reads one bounded embedded image from a PPTX preview session.
-    pub async fn read_pptx_preview_resource(
+    /// Reads one bounded byte range from a rendered PowerPoint PDF.
+    pub async fn read_pptx_preview_pdf(
         &self,
-        request: fm_transport_dto::ReadPptxPreviewResourceRequestDto,
-    ) -> Result<fm_transport_dto::ReadPptxPreviewResourceResponseDto, ApplicationError> {
-        self.pptx_preview.read_resource(request).await
+        request: fm_transport_dto::ReadPptxPreviewPdfRequestDto,
+    ) -> Result<fm_transport_dto::ReadFileRangeResponseDto, ApplicationError> {
+        self.pptx_preview.read_pdf(request).await
     }
 
     /// Cancels and releases a PPTX preview session.

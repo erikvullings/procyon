@@ -1,0 +1,20 @@
+{
+  "Types": [
+    {
+      "ClassName": "DataModel",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "PointList",
+      "AlternateContentChoice": true
+    },
+    {
+      "ClassName": "RelationshipIds",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Shape",
+      "HaveXmlnsFields": true
+    }
+  ]
+}

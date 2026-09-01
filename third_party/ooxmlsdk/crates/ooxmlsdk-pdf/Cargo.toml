@@ -1,0 +1,36 @@
+[package]
+name = "ooxmlsdk-pdf"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.92"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation.workspace = true
+description = "PDF conversion support for ooxmlsdk"
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[dependencies]
+emfsdk = { workspace = true }
+hypher = { workspace = true }
+icu_segmenter = { workspace = true }
+image = { workspace = true }
+jpeg-encoder = { workspace = true }
+krilla = { workspace = true }
+krilla-svg = { workspace = true }
+kurbo = { workspace = true }
+lopdf = { workspace = true }
+ooxmlsdk = { workspace = true, features = ["parts", "mce"] }
+ooxmlsdk-fonts = { workspace = true }
+ooxmlsdk-formula = { workspace = true }
+ooxmlsdk-layout = { workspace = true }
+png = { workspace = true }
+rustc-hash = { workspace = true }
+skrifa = { workspace = true }
+smallvec = { workspace = true }
+thiserror = { workspace = true }
+unicode-bidi = { workspace = true }
+unicode-script = { workspace = true }
+usvg = { workspace = true }

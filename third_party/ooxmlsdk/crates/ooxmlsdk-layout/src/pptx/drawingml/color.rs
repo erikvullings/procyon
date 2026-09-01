@@ -1,0 +1,1275 @@
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_diagram as dgm;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_main as a;
+use ooxmlsdk::schemas::schemas_openxmlformats_org_presentationml_2006_main as p;
+
+use crate::common::color_math;
+
+const COLOR_PERCENT_MAX: i32 = 100_000;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Color {
+  RgbHex(RgbHexColor),
+  RgbPercent(RgbPercentColor),
+  Hsl(HslColor),
+  Scheme(SchemeColor),
+  Preset(PresetColor),
+  System(SystemColor),
+}
+
+impl Color {
+  pub(crate) fn from_solid_fill_choice(choice: &a::SolidFillChoice) -> Option<Self> {
+    match choice {
+      a::SolidFillChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::SolidFillChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::SolidFillChoice::HslColor(color) => Some(hsl_color(color)),
+      a::SolidFillChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::SolidFillChoice::PresetColor(color) => Some(preset_color(color)),
+      a::SolidFillChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_highlight_choice(choice: &a::HighlightChoice) -> Option<Self> {
+    match choice {
+      a::HighlightChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::HighlightChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::HighlightChoice::HslColor(color) => Some(hsl_color(color)),
+      a::HighlightChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::HighlightChoice::PresetColor(color) => Some(preset_color(color)),
+      a::HighlightChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_bullet_color_choice(choice: &a::BulletColorChoice) -> Option<Self> {
+    match choice {
+      a::BulletColorChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::BulletColorChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::BulletColorChoice::HslColor(color) => Some(hsl_color(color)),
+      a::BulletColorChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::BulletColorChoice::PresetColor(color) => Some(preset_color(color)),
+      a::BulletColorChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_extrusion_color_choice(choice: &a::ExtrusionColorChoice) -> Option<Self> {
+    match choice {
+      a::ExtrusionColorChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ExtrusionColorChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ExtrusionColorChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ExtrusionColorChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ExtrusionColorChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ExtrusionColorChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_contour_color_choice(choice: &a::ContourColorChoice) -> Option<Self> {
+    match choice {
+      a::ContourColorChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ContourColorChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ContourColorChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ContourColorChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ContourColorChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ContourColorChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_underline_fill_choice(choice: &a::UnderlineFillChoice) -> Option<Self> {
+    match choice {
+      a::UnderlineFillChoice::SolidFill(fill) => fill
+        .solid_fill_choice
+        .as_ref()
+        .and_then(Self::from_solid_fill_choice),
+      a::UnderlineFillChoice::GradientFill(fill) => best_solid_gradient_color(fill),
+      a::UnderlineFillChoice::PatternFill(fill) => best_solid_pattern_color(fill),
+      a::UnderlineFillChoice::NoFill(_)
+      | a::UnderlineFillChoice::BlipFill(_)
+      | a::UnderlineFillChoice::GroupFill => None,
+    }
+  }
+
+  pub(crate) fn from_gradient_stop_choice(choice: &a::GradientStopChoice) -> Option<Self> {
+    match choice {
+      a::GradientStopChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::GradientStopChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::GradientStopChoice::HslColor(color) => Some(hsl_color(color)),
+      a::GradientStopChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::GradientStopChoice::PresetColor(color) => Some(preset_color(color)),
+      a::GradientStopChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_preset_shadow_choice(choice: &a::PresetShadowChoice) -> Option<Self> {
+    match choice {
+      a::PresetShadowChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::PresetShadowChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::PresetShadowChoice::HslColor(color) => Some(hsl_color(color)),
+      a::PresetShadowChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::PresetShadowChoice::PresetColor(color) => Some(preset_color(color)),
+      a::PresetShadowChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_color_replacement_choice(choice: &a::ColorReplacementChoice) -> Option<Self> {
+    match choice {
+      a::ColorReplacementChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ColorReplacementChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ColorReplacementChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ColorReplacementChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ColorReplacementChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ColorReplacementChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_duotone_choice(choice: &a::DuotoneChoice) -> Option<Self> {
+    match choice {
+      a::DuotoneChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::DuotoneChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::DuotoneChoice::HslColor(color) => Some(hsl_color(color)),
+      a::DuotoneChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::DuotoneChoice::PresetColor(color) => Some(preset_color(color)),
+      a::DuotoneChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_alpha_inverse_choice(choice: &a::AlphaInverseChoice) -> Option<Self> {
+    match choice {
+      a::AlphaInverseChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::AlphaInverseChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::AlphaInverseChoice::HslColor(color) => Some(hsl_color(color)),
+      a::AlphaInverseChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::AlphaInverseChoice::PresetColor(color) => Some(preset_color(color)),
+      a::AlphaInverseChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_foreground_color_choice(choice: &a::ForegroundColorChoice) -> Option<Self> {
+    match choice {
+      a::ForegroundColorChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ForegroundColorChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ForegroundColorChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ForegroundColorChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ForegroundColorChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ForegroundColorChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_background_color_choice(choice: &a::BackgroundColorChoice) -> Option<Self> {
+    match choice {
+      a::BackgroundColorChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::BackgroundColorChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::BackgroundColorChoice::HslColor(color) => Some(hsl_color(color)),
+      a::BackgroundColorChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::BackgroundColorChoice::PresetColor(color) => Some(preset_color(color)),
+      a::BackgroundColorChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_diagram_fill_color_choice(choice: &dgm::FillColorListChoice) -> Option<Self> {
+    match choice {
+      dgm::FillColorListChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      dgm::FillColorListChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      dgm::FillColorListChoice::HslColor(color) => Some(hsl_color(color)),
+      dgm::FillColorListChoice::SchemeColor(color) => Some(scheme_color(color)),
+      dgm::FillColorListChoice::PresetColor(color) => Some(preset_color(color)),
+      dgm::FillColorListChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_diagram_line_color_choice(choice: &dgm::LineColorListChoice) -> Option<Self> {
+    match choice {
+      dgm::LineColorListChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      dgm::LineColorListChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      dgm::LineColorListChoice::HslColor(color) => Some(hsl_color(color)),
+      dgm::LineColorListChoice::SchemeColor(color) => Some(scheme_color(color)),
+      dgm::LineColorListChoice::PresetColor(color) => Some(preset_color(color)),
+      dgm::LineColorListChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_diagram_text_fill_color_choice(
+    choice: &dgm::TextFillColorListChoice,
+  ) -> Option<Self> {
+    match choice {
+      dgm::TextFillColorListChoice::RgbColorModelPercentage(color) => {
+        Some(rgb_percent_color(color))
+      }
+      dgm::TextFillColorListChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      dgm::TextFillColorListChoice::HslColor(color) => Some(hsl_color(color)),
+      dgm::TextFillColorListChoice::SchemeColor(color) => Some(scheme_color(color)),
+      dgm::TextFillColorListChoice::PresetColor(color) => Some(preset_color(color)),
+      dgm::TextFillColorListChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_fill_reference_choice(choice: &a::FillReferenceChoice) -> Option<Self> {
+    match choice {
+      a::FillReferenceChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::FillReferenceChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::FillReferenceChoice::HslColor(color) => Some(hsl_color(color)),
+      a::FillReferenceChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::FillReferenceChoice::PresetColor(color) => Some(preset_color(color)),
+      a::FillReferenceChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_line_reference_choice(choice: &a::LineReferenceChoice) -> Option<Self> {
+    match choice {
+      a::LineReferenceChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::LineReferenceChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::LineReferenceChoice::HslColor(color) => Some(hsl_color(color)),
+      a::LineReferenceChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::LineReferenceChoice::PresetColor(color) => Some(preset_color(color)),
+      a::LineReferenceChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_effect_reference_choice(choice: &a::EffectReferenceChoice) -> Option<Self> {
+    match choice {
+      a::EffectReferenceChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::EffectReferenceChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::EffectReferenceChoice::HslColor(color) => Some(hsl_color(color)),
+      a::EffectReferenceChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::EffectReferenceChoice::PresetColor(color) => Some(preset_color(color)),
+      a::EffectReferenceChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_font_reference_choice(choice: &a::FontReferenceChoice) -> Option<Self> {
+    match choice {
+      a::FontReferenceChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::FontReferenceChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::FontReferenceChoice::HslColor(color) => Some(hsl_color(color)),
+      a::FontReferenceChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::FontReferenceChoice::PresetColor(color) => Some(preset_color(color)),
+      a::FontReferenceChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_table_cell_text_style_choice(
+    choice: &a::TableCellTextStyleChoice2,
+  ) -> Option<Self> {
+    match choice {
+      a::TableCellTextStyleChoice2::RgbColorModelPercentage(color) => {
+        Some(rgb_percent_color(color))
+      }
+      a::TableCellTextStyleChoice2::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::TableCellTextStyleChoice2::HslColor(color) => Some(hsl_color(color)),
+      a::TableCellTextStyleChoice2::SchemeColor(color) => Some(scheme_color(color)),
+      a::TableCellTextStyleChoice2::PresetColor(color) => Some(preset_color(color)),
+      a::TableCellTextStyleChoice2::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_background_style_reference_choice(
+    choice: &p::BackgroundStyleReferenceChoice,
+  ) -> Option<Self> {
+    match choice {
+      p::BackgroundStyleReferenceChoice::RgbColorModelPercentage(color) => {
+        Some(rgb_percent_color(color))
+      }
+      p::BackgroundStyleReferenceChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      p::BackgroundStyleReferenceChoice::HslColor(color) => Some(hsl_color(color)),
+      p::BackgroundStyleReferenceChoice::SchemeColor(color) => Some(scheme_color(color)),
+      p::BackgroundStyleReferenceChoice::PresetColor(color) => Some(preset_color(color)),
+      p::BackgroundStyleReferenceChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_color_from_choice(choice: &a::ColorFromChoice) -> Option<Self> {
+    match choice {
+      a::ColorFromChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ColorFromChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ColorFromChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ColorFromChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ColorFromChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ColorFromChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_color_to_choice(choice: &a::ColorToChoice) -> Option<Self> {
+    match choice {
+      a::ColorToChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::ColorToChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::ColorToChoice::HslColor(color) => Some(hsl_color(color)),
+      a::ColorToChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::ColorToChoice::PresetColor(color) => Some(preset_color(color)),
+      a::ColorToChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_glow_choice(choice: &a::GlowChoice) -> Option<Self> {
+    match choice {
+      a::GlowChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::GlowChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::GlowChoice::HslColor(color) => Some(hsl_color(color)),
+      a::GlowChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::GlowChoice::PresetColor(color) => Some(preset_color(color)),
+      a::GlowChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_inner_shadow_choice(choice: &a::InnerShadowChoice) -> Option<Self> {
+    match choice {
+      a::InnerShadowChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::InnerShadowChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::InnerShadowChoice::HslColor(color) => Some(hsl_color(color)),
+      a::InnerShadowChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::InnerShadowChoice::PresetColor(color) => Some(preset_color(color)),
+      a::InnerShadowChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn from_outer_shadow_choice(choice: &a::OuterShadowChoice) -> Option<Self> {
+    match choice {
+      a::OuterShadowChoice::RgbColorModelPercentage(color) => Some(rgb_percent_color(color)),
+      a::OuterShadowChoice::RgbColorModelHex(color) => Some(rgb_hex_color(color)),
+      a::OuterShadowChoice::HslColor(color) => Some(hsl_color(color)),
+      a::OuterShadowChoice::SchemeColor(color) => Some(scheme_color(color)),
+      a::OuterShadowChoice::PresetColor(color) => Some(preset_color(color)),
+      a::OuterShadowChoice::SystemColor(color) => Some(system_color(color)),
+    }
+  }
+
+  pub(crate) fn resolve_rgb<F>(
+    &self,
+    scheme_resolver: &mut F,
+    placeholder_color: Option<&Color>,
+  ) -> Option<ResolvedColor>
+  where
+    F: FnMut(a::SchemeColorValues) -> Option<Color>,
+  {
+    self.resolve_rgb_with_policy(
+      scheme_resolver,
+      placeholder_color,
+      ColorTransformPolicy::Standard,
+    )
+  }
+
+  pub(crate) fn resolve_rgb_with_saturation_overflow<F>(
+    &self,
+    scheme_resolver: &mut F,
+    placeholder_color: Option<&Color>,
+  ) -> Option<ResolvedColor>
+  where
+    F: FnMut(a::SchemeColorValues) -> Option<Color>,
+  {
+    self.resolve_rgb_with_policy(
+      scheme_resolver,
+      placeholder_color,
+      ColorTransformPolicy::PreserveSaturationModOverflow,
+    )
+  }
+
+  fn resolve_rgb_with_policy<F>(
+    &self,
+    scheme_resolver: &mut F,
+    placeholder_color: Option<&Color>,
+    policy: ColorTransformPolicy,
+  ) -> Option<ResolvedColor>
+  where
+    F: FnMut(a::SchemeColorValues) -> Option<Color>,
+  {
+    let (mut color, transformations) = match self {
+      Self::RgbHex(color) => (
+        ResolvedColor::from_hex(&color.value)?,
+        color.transformations.as_slice(),
+      ),
+      Self::RgbPercent(color) => (
+        ResolvedColor::new(
+          crgb_percent_to_channel(color.red),
+          crgb_percent_to_channel(color.green),
+          crgb_percent_to_channel(color.blue),
+        ),
+        color.transformations.as_slice(),
+      ),
+      Self::Hsl(color) => (
+        drawingml_hsl_to_rgb(color.hue, color.saturation, color.luminance),
+        color.transformations.as_slice(),
+      ),
+      Self::System(color) => (
+        ResolvedColor::from_hex(color.last_color.as_deref()?)?,
+        color.transformations.as_slice(),
+      ),
+      Self::Preset(color) => (
+        preset_color_rgb(color.value)?,
+        color.transformations.as_slice(),
+      ),
+      Self::Scheme(color) => {
+        let base = if color.value == a::SchemeColorValues::PhColor {
+          match placeholder_color {
+            Some(Self::Scheme(placeholder))
+              if placeholder.value == a::SchemeColorValues::PhColor =>
+            {
+              None
+            }
+            _ => placeholder_color.cloned(),
+          }
+        } else {
+          scheme_resolver(color.value)
+        }?;
+        let mut resolved =
+          base.resolve_rgb_with_policy(scheme_resolver, placeholder_color, policy)?;
+        apply_transformations_with_policy(&mut resolved, &color.transformations, policy);
+        return Some(resolved);
+      }
+    };
+    apply_transformations_with_policy(&mut color, transformations, policy);
+    Some(color)
+  }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ColorTransformPolicy {
+  Standard,
+  PreserveSaturationModOverflow,
+}
+
+fn best_solid_gradient_color(fill: &a::GradientFill) -> Option<Color> {
+  // FillProperties::getBestSolidColor() uses the first gradient stop, or the
+  // second stop when there are more than two stops.
+  let stops = &fill.gradient_stop_list.as_ref()?.gradient_stop;
+  let index = usize::from(stops.len() > 2);
+  stops
+    .get(index)?
+    .gradient_stop_choice
+    .as_ref()
+    .and_then(Color::from_gradient_stop_choice)
+}
+
+fn best_solid_pattern_color(fill: &a::PatternFill) -> Option<Color> {
+  // prefers used pattern background color, otherwise foreground color.
+  fill
+    .background_color
+    .as_ref()
+    .and_then(|color| color.background_color_choice.as_ref())
+    .and_then(Color::from_background_color_choice)
+    .or_else(|| {
+      fill
+        .foreground_color
+        .as_ref()
+        .and_then(|color| color.foreground_color_choice.as_ref())
+        .and_then(Color::from_foreground_color_choice)
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RgbHexColor {
+  pub(crate) value: String,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RgbPercentColor {
+  pub(crate) red: i32,
+  pub(crate) green: i32,
+  pub(crate) blue: i32,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct HslColor {
+  pub(crate) hue: i32,
+  pub(crate) saturation: i32,
+  pub(crate) luminance: i32,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SchemeColor {
+  pub(crate) value: a::SchemeColorValues,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PresetColor {
+  pub(crate) value: a::PresetColorValues,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SystemColor {
+  pub(crate) value: a::SystemColorValues,
+  pub(crate) last_color: Option<String>,
+  pub(crate) transformations: Vec<ColorTransformation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ResolvedColor {
+  pub(crate) r: u8,
+  pub(crate) g: u8,
+  pub(crate) b: u8,
+  pub(crate) alpha: i32,
+}
+
+impl ResolvedColor {
+  pub(crate) fn new(r: u8, g: u8, b: u8) -> Self {
+    Self {
+      r,
+      g,
+      b,
+      alpha: COLOR_PERCENT_MAX,
+    }
+  }
+
+  pub(crate) fn from_hex(hex: &str) -> Option<Self> {
+    if hex.len() != 6 {
+      return None;
+    }
+    Some(Self::new(
+      u8::from_str_radix(&hex[0..2], 16).ok()?,
+      u8::from_str_radix(&hex[2..4], 16).ok()?,
+      u8::from_str_radix(&hex[4..6], 16).ok()?,
+    ))
+  }
+}
+
+pub(crate) fn apply_excel_tint(mut color: ResolvedColor, tint: f64) -> ResolvedColor {
+  if tint == 0.0 {
+    return color;
+  }
+
+  // ECMA-376 Part 1, 18.3.1.15 defines SpreadsheetML tint in HLS
+  // luminance. Office output follows the integral RGB/HLS conversion from
+  // Microsoft KB Q29240 with the legacy 0..240 HLS range. That integer
+  // boundary is observable in Office PDFs and differs by a few channels from
+  // DrawingML's 0..100000 transformations and a floating-point HSL round trip.
+  let (hue, mut luminance, saturation) = excel_rgb_to_hls(color);
+  let tint = tint.clamp(-1.0, 1.0);
+  if tint < 0.0 {
+    luminance = (f64::from(luminance) * (1.0 + tint)).floor() as i32;
+  } else {
+    luminance = (f64::from(luminance) * (1.0 - tint) + f64::from(EXCEL_HLS_MAX)
+      - f64::from(EXCEL_HLS_MAX) * (1.0 - tint))
+      .floor() as i32;
+  }
+  let resolved = excel_hls_to_rgb(hue, luminance.clamp(0, EXCEL_HLS_MAX), saturation);
+  set_rgb_preserve_alpha(&mut color, resolved);
+  color
+}
+
+const EXCEL_HLS_MAX: i32 = 240;
+const EXCEL_RGB_MAX: i32 = 255;
+
+fn excel_rgb_to_hls(color: ResolvedColor) -> (i32, i32, i32) {
+  let red = i32::from(color.r);
+  let green = i32::from(color.g);
+  let blue = i32::from(color.b);
+  let maximum = red.max(green).max(blue);
+  let minimum = red.min(green).min(blue);
+  let luminance = ((maximum + minimum) * EXCEL_HLS_MAX + EXCEL_RGB_MAX) / (2 * EXCEL_RGB_MAX);
+  if maximum == minimum {
+    return (EXCEL_HLS_MAX * 2 / 3, luminance, 0);
+  }
+
+  let spread = maximum - minimum;
+  let saturation = if luminance <= EXCEL_HLS_MAX / 2 {
+    (spread * EXCEL_HLS_MAX + (maximum + minimum) / 2) / (maximum + minimum)
+  } else {
+    (spread * EXCEL_HLS_MAX + (2 * EXCEL_RGB_MAX - maximum - minimum) / 2)
+      / (2 * EXCEL_RGB_MAX - maximum - minimum)
+  };
+  let hue_sector = EXCEL_HLS_MAX / 6;
+  let red_delta = ((maximum - red) * hue_sector + spread / 2) / spread;
+  let green_delta = ((maximum - green) * hue_sector + spread / 2) / spread;
+  let blue_delta = ((maximum - blue) * hue_sector + spread / 2) / spread;
+  let hue = if red == maximum {
+    blue_delta - green_delta
+  } else if green == maximum {
+    EXCEL_HLS_MAX / 3 + red_delta - blue_delta
+  } else {
+    EXCEL_HLS_MAX * 2 / 3 + green_delta - red_delta
+  }
+  .rem_euclid(EXCEL_HLS_MAX);
+  (hue, luminance, saturation)
+}
+
+fn excel_hls_to_rgb(hue: i32, luminance: i32, saturation: i32) -> ResolvedColor {
+  if saturation == 0 {
+    let channel = (luminance * EXCEL_RGB_MAX / EXCEL_HLS_MAX) as u8;
+    return ResolvedColor::new(channel, channel, channel);
+  }
+
+  let magic_2 = if luminance <= EXCEL_HLS_MAX / 2 {
+    (luminance * (EXCEL_HLS_MAX + saturation) + EXCEL_HLS_MAX / 2) / EXCEL_HLS_MAX
+  } else {
+    luminance + saturation - (luminance * saturation + EXCEL_HLS_MAX / 2) / EXCEL_HLS_MAX
+  };
+  let magic_1 = 2 * luminance - magic_2;
+  let channel = |channel_hue| {
+    ((excel_hue_to_rgb(magic_1, magic_2, channel_hue) * EXCEL_RGB_MAX + EXCEL_HLS_MAX / 2)
+      / EXCEL_HLS_MAX) as u8
+  };
+  ResolvedColor::new(
+    channel(hue + EXCEL_HLS_MAX / 3),
+    channel(hue),
+    channel(hue - EXCEL_HLS_MAX / 3),
+  )
+}
+
+fn excel_hue_to_rgb(magic_1: i32, magic_2: i32, hue: i32) -> i32 {
+  let hue = hue.rem_euclid(EXCEL_HLS_MAX);
+  if hue < EXCEL_HLS_MAX / 6 {
+    magic_1 + ((magic_2 - magic_1) * hue + EXCEL_HLS_MAX / 12) / (EXCEL_HLS_MAX / 6)
+  } else if hue < EXCEL_HLS_MAX / 2 {
+    magic_2
+  } else if hue < EXCEL_HLS_MAX * 2 / 3 {
+    magic_1
+      + ((magic_2 - magic_1) * (EXCEL_HLS_MAX * 2 / 3 - hue) + EXCEL_HLS_MAX / 12)
+        / (EXCEL_HLS_MAX / 6)
+  } else {
+    magic_1
+  }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ColorTransformation {
+  pub(crate) kind: ColorTransformationKind,
+  pub(crate) value: Option<i32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ColorTransformationKind {
+  Red,
+  RedMod,
+  RedOff,
+  Green,
+  GreenMod,
+  GreenOff,
+  Blue,
+  BlueMod,
+  BlueOff,
+  Alpha,
+  AlphaMod,
+  AlphaOff,
+  Hue,
+  HueMod,
+  HueOff,
+  Sat,
+  SatMod,
+  SatOff,
+  Lum,
+  LumMod,
+  LumOff,
+  Shade,
+  Tint,
+  Gray,
+  Comp,
+  Inv,
+  Gamma,
+  InvGamma,
+}
+
+pub(crate) fn rgb_hex_color(color: &a::RgbColorModelHex) -> Color {
+  Color::RgbHex(RgbHexColor {
+    value: color.val.clone(),
+    transformations: transformations_from_rgb_color_model_hex_choices(
+      &color.rgb_color_model_hex_choice,
+    ),
+  })
+}
+
+pub(crate) fn rgb_percent_color(color: &a::RgbColorModelPercentage) -> Color {
+  Color::RgbPercent(RgbPercentColor {
+    red: percent_value(color.red_portion),
+    green: percent_value(color.green_portion),
+    blue: percent_value(color.blue_portion),
+    transformations: transformations_from_rgb_color_model_percentage_choices(
+      &color.rgb_color_model_percentage_choice,
+    ),
+  })
+}
+
+pub(crate) fn hsl_color(color: &a::HslColor) -> Color {
+  Color::Hsl(HslColor {
+    hue: color.hue_value,
+    saturation: percent_value(color.sat_value),
+    luminance: percent_value(color.lum_value),
+    transformations: transformations_from_hsl_color_choices(&color.hsl_color_choice),
+  })
+}
+
+pub(crate) fn scheme_color(color: &a::SchemeColor) -> Color {
+  Color::Scheme(SchemeColor {
+    value: color.val,
+    transformations: transformations_from_scheme_color_choices(&color.scheme_color_choice),
+  })
+}
+
+pub(crate) fn preset_color(color: &a::PresetColor) -> Color {
+  Color::Preset(PresetColor {
+    value: color.val,
+    transformations: transformations_from_preset_color_choices(&color.preset_color_choice),
+  })
+}
+
+pub(crate) fn system_color(color: &a::SystemColor) -> Color {
+  Color::System(SystemColor {
+    value: color.val,
+    last_color: color.last_color.clone(),
+    transformations: transformations_from_system_color_choices(&color.system_color_choice),
+  })
+}
+
+fn percent_value(value: ooxmlsdk::simple_type::DrawingmlPercentageValue) -> i32 {
+  value.as_drawingml_percent()
+}
+
+macro_rules! color_transformations_from_choices {
+  ($fn_name:ident, $choice_ty:ident) => {
+    fn $fn_name(choices: &[a::$choice_ty]) -> Vec<ColorTransformation> {
+      choices
+        .iter()
+        .map(|choice| match choice {
+          a::$choice_ty::Tint(value) => {
+            valued_transform(ColorTransformationKind::Tint, percent_value(value.val))
+          }
+          a::$choice_ty::Shade(value) => {
+            valued_transform(ColorTransformationKind::Shade, percent_value(value.val))
+          }
+          a::$choice_ty::Complement => empty_transform(ColorTransformationKind::Comp),
+          a::$choice_ty::Inverse => empty_transform(ColorTransformationKind::Inv),
+          a::$choice_ty::Gray => empty_transform(ColorTransformationKind::Gray),
+          a::$choice_ty::Alpha(value) => {
+            valued_transform(ColorTransformationKind::Alpha, percent_value(value.val))
+          }
+          a::$choice_ty::AlphaOffset(value) => {
+            valued_transform(ColorTransformationKind::AlphaOff, percent_value(value.val))
+          }
+          a::$choice_ty::AlphaModulation(value) => {
+            valued_transform(ColorTransformationKind::AlphaMod, percent_value(value.val))
+          }
+          a::$choice_ty::Hue(value) => valued_transform(ColorTransformationKind::Hue, value.val),
+          a::$choice_ty::HueOffset(value) => {
+            valued_transform(ColorTransformationKind::HueOff, value.val)
+          }
+          a::$choice_ty::HueModulation(value) => {
+            valued_transform(ColorTransformationKind::HueMod, percent_value(value.val))
+          }
+          a::$choice_ty::Saturation(value) => {
+            valued_transform(ColorTransformationKind::Sat, percent_value(value.val))
+          }
+          a::$choice_ty::SaturationOffset(value) => {
+            valued_transform(ColorTransformationKind::SatOff, percent_value(value.val))
+          }
+          a::$choice_ty::SaturationModulation(value) => {
+            valued_transform(ColorTransformationKind::SatMod, percent_value(value.val))
+          }
+          a::$choice_ty::Luminance(value) => {
+            valued_transform(ColorTransformationKind::Lum, percent_value(value.val))
+          }
+          a::$choice_ty::LuminanceOffset(value) => {
+            valued_transform(ColorTransformationKind::LumOff, percent_value(value.val))
+          }
+          a::$choice_ty::LuminanceModulation(value) => {
+            valued_transform(ColorTransformationKind::LumMod, percent_value(value.val))
+          }
+          a::$choice_ty::Red(value) => {
+            valued_transform(ColorTransformationKind::Red, percent_value(value.val))
+          }
+          a::$choice_ty::RedOffset(value) => {
+            valued_transform(ColorTransformationKind::RedOff, percent_value(value.val))
+          }
+          a::$choice_ty::RedModulation(value) => {
+            valued_transform(ColorTransformationKind::RedMod, percent_value(value.val))
+          }
+          a::$choice_ty::Green(value) => {
+            valued_transform(ColorTransformationKind::Green, percent_value(value.val))
+          }
+          a::$choice_ty::GreenOffset(value) => {
+            valued_transform(ColorTransformationKind::GreenOff, percent_value(value.val))
+          }
+          a::$choice_ty::GreenModulation(value) => {
+            valued_transform(ColorTransformationKind::GreenMod, percent_value(value.val))
+          }
+          a::$choice_ty::Blue(value) => {
+            valued_transform(ColorTransformationKind::Blue, percent_value(value.val))
+          }
+          a::$choice_ty::BlueOffset(value) => {
+            valued_transform(ColorTransformationKind::BlueOff, percent_value(value.val))
+          }
+          a::$choice_ty::BlueModulation(value) => {
+            valued_transform(ColorTransformationKind::BlueMod, percent_value(value.val))
+          }
+          a::$choice_ty::Gamma => empty_transform(ColorTransformationKind::Gamma),
+          a::$choice_ty::InverseGamma => empty_transform(ColorTransformationKind::InvGamma),
+        })
+        .collect()
+    }
+  };
+}
+
+fn valued_transform(kind: ColorTransformationKind, value: i32) -> ColorTransformation {
+  ColorTransformation {
+    kind,
+    value: Some(value),
+  }
+}
+
+fn empty_transform(kind: ColorTransformationKind) -> ColorTransformation {
+  ColorTransformation { kind, value: None }
+}
+
+color_transformations_from_choices!(
+  transformations_from_rgb_color_model_hex_choices,
+  RgbColorModelHexChoice
+);
+color_transformations_from_choices!(
+  transformations_from_rgb_color_model_percentage_choices,
+  RgbColorModelPercentageChoice
+);
+color_transformations_from_choices!(transformations_from_hsl_color_choices, HslColorChoice);
+color_transformations_from_choices!(transformations_from_system_color_choices, SystemColorChoice);
+color_transformations_from_choices!(transformations_from_scheme_color_choices, SchemeColorChoice);
+color_transformations_from_choices!(transformations_from_preset_color_choices, PresetColorChoice);
+
+fn preset_color_rgb(value: a::PresetColorValues) -> Option<ResolvedColor> {
+  let hex = match value {
+    a::PresetColorValues::AliceBlue => "F0F8FF",
+    a::PresetColorValues::AntiqueWhite => "FAEBD7",
+    a::PresetColorValues::Aqua => "00FFFF",
+    a::PresetColorValues::Aquamarine => "7FFFD4",
+    a::PresetColorValues::Azure => "F0FFFF",
+    a::PresetColorValues::Beige => "F5F5DC",
+    a::PresetColorValues::Bisque => "FFE4C4",
+    a::PresetColorValues::Black => "000000",
+    a::PresetColorValues::BlanchedAlmond => "FFEBCD",
+    a::PresetColorValues::Blue => "0000FF",
+    a::PresetColorValues::BlueViolet => "8A2BE2",
+    a::PresetColorValues::Brown => "A52A2A",
+    a::PresetColorValues::BurlyWood => "DEB887",
+    a::PresetColorValues::CadetBlue => "5F9EA0",
+    a::PresetColorValues::Chartreuse => "7FFF00",
+    a::PresetColorValues::Chocolate => "D2691E",
+    a::PresetColorValues::Coral => "FF7F50",
+    a::PresetColorValues::CornflowerBlue => "6495ED",
+    a::PresetColorValues::Cornsilk => "FFF8DC",
+    a::PresetColorValues::Crimson => "DC143C",
+    a::PresetColorValues::Cyan => "00FFFF",
+    a::PresetColorValues::DarkBlue | a::PresetColorValues::DarkBlue2010 => "00008B",
+    a::PresetColorValues::DarkCyan | a::PresetColorValues::DarkCyan2010 => "008B8B",
+    a::PresetColorValues::DarkGoldenrod | a::PresetColorValues::DarkGoldenrod2010 => "B8860B",
+    a::PresetColorValues::DarkGray
+    | a::PresetColorValues::DarkGray2010
+    | a::PresetColorValues::DarkGrey
+    | a::PresetColorValues::DarkGrey2010 => "A9A9A9",
+    a::PresetColorValues::DarkGreen | a::PresetColorValues::DarkGreen2010 => "006400",
+    a::PresetColorValues::DarkKhaki | a::PresetColorValues::DarkKhaki2010 => "BDB76B",
+    a::PresetColorValues::DarkMagenta | a::PresetColorValues::DarkMagenta2010 => "8B008B",
+    a::PresetColorValues::DarkOliveGreen | a::PresetColorValues::DarkOliveGreen2010 => "556B2F",
+    a::PresetColorValues::DarkOrange | a::PresetColorValues::DarkOrange2010 => "FF8C00",
+    a::PresetColorValues::DarkOrchid | a::PresetColorValues::DarkOrchid2010 => "9932CC",
+    a::PresetColorValues::DarkRed | a::PresetColorValues::DarkRed2010 => "8B0000",
+    a::PresetColorValues::DarkSalmon | a::PresetColorValues::DarkSalmon2010 => "E9967A",
+    a::PresetColorValues::DarkSeaGreen | a::PresetColorValues::DarkSeaGreen2010 => "8FBC8F",
+    a::PresetColorValues::DarkSlateBlue | a::PresetColorValues::DarkSlateBlue2010 => "483D8B",
+    a::PresetColorValues::DarkSlateGray
+    | a::PresetColorValues::DarkSlateGray2010
+    | a::PresetColorValues::DarkSlateGrey
+    | a::PresetColorValues::DarkSlateGrey2010 => "2F4F4F",
+    a::PresetColorValues::DarkTurquoise | a::PresetColorValues::DarkTurquoise2010 => "00CED1",
+    a::PresetColorValues::DarkViolet | a::PresetColorValues::DarkViolet2010 => "9400D3",
+    a::PresetColorValues::DeepPink => "FF1493",
+    a::PresetColorValues::DeepSkyBlue => "00BFFF",
+    a::PresetColorValues::DimGray | a::PresetColorValues::DimGrey => "696969",
+    a::PresetColorValues::DodgerBlue => "1E90FF",
+    a::PresetColorValues::Firebrick => "B22222",
+    a::PresetColorValues::FloralWhite => "FFFAF0",
+    a::PresetColorValues::ForestGreen => "228B22",
+    a::PresetColorValues::Fuchsia => "FF00FF",
+    a::PresetColorValues::Gainsboro => "DCDCDC",
+    a::PresetColorValues::GhostWhite => "F8F8FF",
+    a::PresetColorValues::Gold => "FFD700",
+    a::PresetColorValues::Goldenrod => "DAA520",
+    a::PresetColorValues::Gray | a::PresetColorValues::Grey => "808080",
+    a::PresetColorValues::Green => "008000",
+    a::PresetColorValues::GreenYellow => "ADFF2F",
+    a::PresetColorValues::Honeydew => "F0FFF0",
+    a::PresetColorValues::HotPink => "FF69B4",
+    a::PresetColorValues::IndianRed => "CD5C5C",
+    a::PresetColorValues::Indigo => "4B0082",
+    a::PresetColorValues::Ivory => "FFFFF0",
+    a::PresetColorValues::Khaki => "F0E68C",
+    a::PresetColorValues::Lavender => "E6E6FA",
+    a::PresetColorValues::LavenderBlush => "FFF0F5",
+    a::PresetColorValues::LawnGreen => "7CFC00",
+    a::PresetColorValues::LemonChiffon => "FFFACD",
+    a::PresetColorValues::LightBlue | a::PresetColorValues::LightBlue2010 => "ADD8E6",
+    a::PresetColorValues::LightCoral | a::PresetColorValues::LightCoral2010 => "F08080",
+    a::PresetColorValues::LightCyan | a::PresetColorValues::LightCyan2010 => "E0FFFF",
+    a::PresetColorValues::LightGoldenrodYellow | a::PresetColorValues::LightGoldenrodYellow2010 => {
+      "FAFAD2"
+    }
+    a::PresetColorValues::LightGray
+    | a::PresetColorValues::LightGray2010
+    | a::PresetColorValues::LightGrey
+    | a::PresetColorValues::LightGrey2010 => "D3D3D3",
+    a::PresetColorValues::LightGreen | a::PresetColorValues::LightGreen2010 => "90EE90",
+    a::PresetColorValues::LightPink | a::PresetColorValues::LightPink2010 => "FFB6C1",
+    a::PresetColorValues::LightSalmon | a::PresetColorValues::LightSalmon2010 => "FFA07A",
+    a::PresetColorValues::LightSeaGreen | a::PresetColorValues::LightSeaGreen2010 => "20B2AA",
+    a::PresetColorValues::LightSkyBlue | a::PresetColorValues::LightSkyBlue2010 => "87CEFA",
+    a::PresetColorValues::LightSlateGray
+    | a::PresetColorValues::LightSlateGray2010
+    | a::PresetColorValues::LightSlateGrey
+    | a::PresetColorValues::LightSlateGrey2010 => "778899",
+    a::PresetColorValues::LightSteelBlue | a::PresetColorValues::LightSteelBlue2010 => "B0C4DE",
+    a::PresetColorValues::LightYellow | a::PresetColorValues::LightYellow2010 => "FFFFE0",
+    a::PresetColorValues::Lime => "00FF00",
+    a::PresetColorValues::LimeGreen => "32CD32",
+    a::PresetColorValues::Linen => "FAF0E6",
+    a::PresetColorValues::Magenta => "FF00FF",
+    a::PresetColorValues::Maroon => "800000",
+    a::PresetColorValues::MedAquamarine | a::PresetColorValues::MediumAquamarine2010 => "66CDAA",
+    a::PresetColorValues::MediumBlue | a::PresetColorValues::MediumBlue2010 => "0000CD",
+    a::PresetColorValues::MediumOrchid | a::PresetColorValues::MediumOrchid2010 => "BA55D3",
+    a::PresetColorValues::MediumPurple | a::PresetColorValues::MediumPurple2010 => "9370DB",
+    a::PresetColorValues::MediumSeaGreen | a::PresetColorValues::MediumSeaGreen2010 => "3CB371",
+    a::PresetColorValues::MediumSlateBlue | a::PresetColorValues::MediumSlateBlue2010 => "7B68EE",
+    a::PresetColorValues::MediumSpringGreen | a::PresetColorValues::MediumSpringGreen2010 => {
+      "00FA9A"
+    }
+    a::PresetColorValues::MediumTurquoise | a::PresetColorValues::MediumTurquoise2010 => "48D1CC",
+    a::PresetColorValues::MediumVioletRed | a::PresetColorValues::MediumVioletRed2010 => "C71585",
+    a::PresetColorValues::MidnightBlue => "191970",
+    a::PresetColorValues::MintCream => "F5FFFA",
+    a::PresetColorValues::MistyRose => "FFE4E1",
+    a::PresetColorValues::Moccasin => "FFE4B5",
+    a::PresetColorValues::NavajoWhite => "FFDEAD",
+    a::PresetColorValues::Navy => "000080",
+    a::PresetColorValues::OldLace => "FDF5E6",
+    a::PresetColorValues::Olive => "808000",
+    a::PresetColorValues::OliveDrab => "6B8E23",
+    a::PresetColorValues::Orange => "FFA500",
+    a::PresetColorValues::OrangeRed => "FF4500",
+    a::PresetColorValues::Orchid => "DA70D6",
+    a::PresetColorValues::PaleGoldenrod => "EEE8AA",
+    a::PresetColorValues::PaleGreen => "98FB98",
+    a::PresetColorValues::PaleTurquoise => "AFEEEE",
+    a::PresetColorValues::PaleVioletRed => "DB7093",
+    a::PresetColorValues::PapayaWhip => "FFEFD5",
+    a::PresetColorValues::PeachPuff => "FFDAB9",
+    a::PresetColorValues::Peru => "CD853F",
+    a::PresetColorValues::Pink => "FFC0CB",
+    a::PresetColorValues::Plum => "DDA0DD",
+    a::PresetColorValues::PowderBlue => "B0E0E6",
+    a::PresetColorValues::Purple => "800080",
+    a::PresetColorValues::Red => "FF0000",
+    a::PresetColorValues::RosyBrown => "BC8F8F",
+    a::PresetColorValues::RoyalBlue => "4169E1",
+    a::PresetColorValues::SaddleBrown => "8B4513",
+    a::PresetColorValues::Salmon => "FA8072",
+    a::PresetColorValues::SandyBrown => "F4A460",
+    a::PresetColorValues::SeaGreen => "2E8B57",
+    a::PresetColorValues::SeaShell => "FFF5EE",
+    a::PresetColorValues::Sienna => "A0522D",
+    a::PresetColorValues::Silver => "C0C0C0",
+    a::PresetColorValues::SkyBlue => "87CEEB",
+    a::PresetColorValues::SlateBlue => "6A5ACD",
+    a::PresetColorValues::SlateGray | a::PresetColorValues::SlateGrey => "708090",
+    a::PresetColorValues::Snow => "FFFAFA",
+    a::PresetColorValues::SpringGreen => "00FF7F",
+    a::PresetColorValues::SteelBlue => "4682B4",
+    a::PresetColorValues::Tan => "D2B48C",
+    a::PresetColorValues::Teal => "008080",
+    a::PresetColorValues::Thistle => "D8BFD8",
+    a::PresetColorValues::Tomato => "FF6347",
+    a::PresetColorValues::Turquoise => "40E0D0",
+    a::PresetColorValues::Violet => "EE82EE",
+    a::PresetColorValues::Wheat => "F5DEB3",
+    a::PresetColorValues::White => "FFFFFF",
+    a::PresetColorValues::WhiteSmoke => "F5F5F5",
+    a::PresetColorValues::Yellow => "FFFF00",
+    a::PresetColorValues::YellowGreen => "9ACD32",
+  };
+  ResolvedColor::from_hex(hex)
+}
+
+pub(crate) fn apply_transformations(
+  color: &mut ResolvedColor,
+  transformations: &[ColorTransformation],
+) {
+  apply_transformations_with_policy(color, transformations, ColorTransformPolicy::Standard);
+}
+
+fn apply_transformations_with_policy(
+  color: &mut ResolvedColor,
+  transformations: &[ColorTransformation],
+  policy: ColorTransformPolicy,
+) {
+  for transformation in transformations {
+    let value = transformation.value.unwrap_or(0);
+    match transformation.kind {
+      ColorTransformationKind::Red => color.r = crgb_percent_to_channel(value),
+      ColorTransformationKind::RedMod => color.r = mod_crgb_channel(color.r, value),
+      ColorTransformationKind::RedOff => color.r = off_crgb_channel(color.r, value),
+      ColorTransformationKind::Green => color.g = crgb_percent_to_channel(value),
+      ColorTransformationKind::GreenMod => color.g = mod_crgb_channel(color.g, value),
+      ColorTransformationKind::GreenOff => color.g = off_crgb_channel(color.g, value),
+      ColorTransformationKind::Blue => color.b = crgb_percent_to_channel(value),
+      ColorTransformationKind::BlueMod => color.b = mod_crgb_channel(color.b, value),
+      ColorTransformationKind::BlueOff => color.b = off_crgb_channel(color.b, value),
+      ColorTransformationKind::Alpha => color.alpha = clamp_percent(value),
+      ColorTransformationKind::AlphaMod => {
+        color.alpha = mod_value(color.alpha, value, COLOR_PERCENT_MAX);
+      }
+      ColorTransformationKind::AlphaOff => {
+        color.alpha = offset_value(color.alpha, value, COLOR_PERCENT_MAX)
+      }
+      ColorTransformationKind::Shade => apply_shade(color, value),
+      ColorTransformationKind::Tint => apply_tint(color, value),
+      ColorTransformationKind::Gray => apply_gray(color),
+      ColorTransformationKind::Comp => {
+        let (h, s, l) = drawingml_rgb_to_hsl(*color);
+        set_rgb_preserve_alpha(color, drawingml_hsl_to_rgb(wrap_hue(h, 180 * 60_000), s, l));
+      }
+      ColorTransformationKind::Inv => {
+        apply_inverse(color);
+      }
+      ColorTransformationKind::Gamma => apply_gamma(color, false),
+      ColorTransformationKind::InvGamma => apply_gamma(color, true),
+      ColorTransformationKind::Hue
+      | ColorTransformationKind::HueMod
+      | ColorTransformationKind::HueOff
+      | ColorTransformationKind::Sat
+      | ColorTransformationKind::SatMod
+      | ColorTransformationKind::SatOff
+      | ColorTransformationKind::Lum
+      | ColorTransformationKind::LumMod
+      | ColorTransformationKind::LumOff => {
+        apply_hsl_transform(color, transformation.kind, value, policy)
+      }
+    }
+    color.alpha = clamp_percent(color.alpha);
+  }
+}
+
+fn apply_hsl_transform(
+  color: &mut ResolvedColor,
+  kind: ColorTransformationKind,
+  value: i32,
+  policy: ColorTransformPolicy,
+) {
+  let (mut h, mut s, mut l) = drawingml_rgb_to_hsl(*color);
+  match kind {
+    ColorTransformationKind::Hue => h = value.rem_euclid(360 * 60_000),
+    ColorTransformationKind::HueMod => h = mod_value(h, value, 360 * 60_000),
+    ColorTransformationKind::HueOff => h = wrap_hue(h, value),
+    ColorTransformationKind::Sat => s = clamp_percent(value),
+    ColorTransformationKind::SatMod => {
+      s = if policy == ColorTransformPolicy::PreserveSaturationModOverflow {
+        mod_value_without_upper_bound(s, value)
+      } else {
+        mod_value(s, value, COLOR_PERCENT_MAX)
+      }
+    }
+    ColorTransformationKind::SatOff => s = offset_value(s, value, COLOR_PERCENT_MAX),
+    ColorTransformationKind::Lum => l = clamp_percent(value),
+    ColorTransformationKind::LumMod => l = mod_value(l, value, COLOR_PERCENT_MAX),
+    ColorTransformationKind::LumOff => l = offset_value(l, value, COLOR_PERCENT_MAX),
+    _ => {}
+  }
+  if l == 0 || l == COLOR_PERCENT_MAX {
+    s = 0;
+  }
+  let rgb = if kind == ColorTransformationKind::SatMod && s > COLOR_PERCENT_MAX {
+    drawingml_hsl_to_rgb_with_saturation_overflow(h, s, l)
+  } else {
+    drawingml_hsl_to_rgb(h, s, l)
+  };
+  set_rgb_preserve_alpha(color, rgb);
+}
+
+fn apply_shade(color: &mut ResolvedColor, value: i32) {
+  let [r, g, b] = color_math::drawingml_shade_srgb8([color.r, color.g, color.b], value);
+  color.r = r;
+  color.g = g;
+  color.b = b;
+}
+
+fn apply_tint(color: &mut ResolvedColor, value: i32) {
+  let [r, g, b] = color_math::drawingml_tint_srgb8([color.r, color.g, color.b], value);
+  color.r = r;
+  color.g = g;
+  color.b = b;
+}
+
+fn apply_gray(color: &mut ResolvedColor) {
+  let gray = (u32::from(color.r) * 22 + u32::from(color.g) * 72 + u32::from(color.b) * 6) / 100;
+  color.r = gray as u8;
+  color.g = gray as u8;
+  color.b = gray as u8;
+}
+
+fn apply_gamma(color: &mut ResolvedColor, inverse: bool) {
+  color.r = gamma_channel(color.r, inverse);
+  color.g = gamma_channel(color.g, inverse);
+  color.b = gamma_channel(color.b, inverse);
+}
+
+fn apply_inverse(color: &mut ResolvedColor) {
+  color.r = crgb_percent_to_channel(COLOR_PERCENT_MAX - channel_to_crgb_percent(color.r));
+  color.g = crgb_percent_to_channel(COLOR_PERCENT_MAX - channel_to_crgb_percent(color.g));
+  color.b = crgb_percent_to_channel(COLOR_PERCENT_MAX - channel_to_crgb_percent(color.b));
+}
+
+fn set_rgb_preserve_alpha(color: &mut ResolvedColor, rgb: ResolvedColor) {
+  color.r = rgb.r;
+  color.g = rgb.g;
+  color.b = rgb.b;
+}
+
+fn gamma_channel(value: u8, inverse: bool) -> u8 {
+  let linear = channel_to_crgb_percent(value);
+  let transformed = if inverse {
+    srgb_to_linear_percent(linear)
+  } else {
+    linear_to_srgb_percent(linear)
+  };
+  crgb_percent_to_channel(transformed)
+}
+
+fn crgb_percent_to_channel(value: i32) -> u8 {
+  // ECMA-376 Part 1, 20.1.2.3.30 and 20.1.2.3.32 distinguish linear
+  // scRGB from sRGB. `color` owns the IEC 61966-2-1 transfer function; this
+  // adapter retains DrawingML's integer fixed-point boundary and rounding.
+  color_math::drawingml_scrgb_to_srgb8(value)
+}
+
+fn channel_to_crgb_percent(value: u8) -> i32 {
+  color_math::drawingml_srgb8_to_scrgb(value)
+}
+
+fn linear_to_srgb_percent(value: i32) -> i32 {
+  color_math::drawingml_linear_to_srgb_percent(value)
+}
+
+fn srgb_to_linear_percent(value: i32) -> i32 {
+  color_math::drawingml_srgb_to_linear_percent(value)
+}
+
+fn mod_crgb_channel(channel: u8, value: i32) -> u8 {
+  crgb_percent_to_channel(mod_value(
+    channel_to_crgb_percent(channel),
+    value,
+    COLOR_PERCENT_MAX,
+  ))
+}
+
+fn off_crgb_channel(channel: u8, value: i32) -> u8 {
+  crgb_percent_to_channel(offset_value(
+    channel_to_crgb_percent(channel),
+    value,
+    COLOR_PERCENT_MAX,
+  ))
+}
+
+fn mod_value(value: i32, modifier: i32, max: i32) -> i32 {
+  (i64::from(value) * i64::from(modifier) / i64::from(COLOR_PERCENT_MAX)).clamp(0, i64::from(max))
+    as i32
+}
+
+fn mod_value_without_upper_bound(value: i32, modifier: i32) -> i32 {
+  (i64::from(value) * i64::from(modifier) / i64::from(COLOR_PERCENT_MAX))
+    .clamp(0, i64::from(i32::MAX)) as i32
+}
+
+fn offset_value(value: i32, offset: i32, max: i32) -> i32 {
+  (i64::from(value) + i64::from(offset)).clamp(0, i64::from(max)) as i32
+}
+
+fn wrap_hue(value: i32, offset: i32) -> i32 {
+  (i64::from(value) + i64::from(offset)).rem_euclid(i64::from(360 * 60_000)) as i32
+}
+
+fn clamp_percent(value: i32) -> i32 {
+  value.clamp(0, COLOR_PERCENT_MAX)
+}
+
+fn drawingml_rgb_to_hsl(color: ResolvedColor) -> (i32, i32, i32) {
+  let hsl = color_math::HslColor::from_srgb8([color.r, color.g, color.b]);
+  (
+    (hsl.hue_degrees * 60_000.0).round() as i32,
+    (hsl.saturation * COLOR_PERCENT_MAX as f32).round() as i32,
+    (hsl.lightness * COLOR_PERCENT_MAX as f32).round() as i32,
+  )
+}
+
+fn drawingml_hsl_to_rgb(hue: i32, saturation: i32, luminance: i32) -> ResolvedColor {
+  let [r, g, b] = color_math::HslColor {
+    hue_degrees: hue.rem_euclid(360 * 60_000) as f32 / 60_000.0,
+    saturation: clamp_percent(saturation) as f32 / COLOR_PERCENT_MAX as f32,
+    lightness: clamp_percent(luminance) as f32 / COLOR_PERCENT_MAX as f32,
+  }
+  .to_srgb8();
+  ResolvedColor::new(r, g, b)
+}
+
+fn drawingml_hsl_to_rgb_with_saturation_overflow(
+  hue: i32,
+  saturation: i32,
+  luminance: i32,
+) -> ResolvedColor {
+  let hue = hue.rem_euclid(360 * 60_000) as f64 / 60_000.0;
+  let saturation = f64::from(saturation.max(0)) / f64::from(COLOR_PERCENT_MAX);
+  let luminance = f64::from(clamp_percent(luminance)) / f64::from(COLOR_PERCENT_MAX);
+  let chroma = (1.0 - (2.0 * luminance - 1.0).abs()) * saturation;
+  let secondary = chroma * (1.0 - ((hue / 60.0).rem_euclid(2.0) - 1.0).abs());
+  let offset = luminance - chroma * 0.5;
+  let [red, green, blue] = match hue {
+    value if value < 60.0 => [chroma, secondary, 0.0],
+    value if value < 120.0 => [secondary, chroma, 0.0],
+    value if value < 180.0 => [0.0, chroma, secondary],
+    value if value < 240.0 => [0.0, secondary, chroma],
+    value if value < 300.0 => [secondary, 0.0, chroma],
+    _ => [chroma, 0.0, secondary],
+  };
+  let channel = |value: f64| ((value + offset).clamp(0.0, 1.0) * 255.0).round() as u8;
+  ResolvedColor::new(channel(red), channel(green), channel(blue))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn scrgb_conversion_matches_ecma_examples() {
+    assert_eq!(crgb_percent_to_channel(50_000), 0xbc);
+
+    let mut tint = ResolvedColor::new(0, 255, 0);
+    apply_tint(&mut tint, 50_000);
+    assert_eq!(tint, ResolvedColor::new(0xbc, 255, 0xbc));
+
+    let mut shade = ResolvedColor::new(0, 255, 0);
+    apply_shade(&mut shade, 50_000);
+    assert_eq!(shade, ResolvedColor::new(0, 0xbc, 0));
+  }
+
+  #[test]
+  fn srgb_linear_conversion_round_trips_every_channel() {
+    for channel in 0..=u8::MAX {
+      assert_eq!(
+        crgb_percent_to_channel(channel_to_crgb_percent(channel)),
+        channel
+      );
+    }
+  }
+
+  #[test]
+  fn tint_uses_linear_srgb_components() {
+    let mut color = ResolvedColor::new(0, 0, 0);
+    apply_tint(&mut color, 75_000);
+    assert_eq!(color, ResolvedColor::new(0x89, 0x89, 0x89));
+  }
+
+  #[test]
+  fn excel_tint_keeps_luminance_transformations_in_hsl_space() {
+    let color = ResolvedColor::from_hex("1CC5D5").expect("valid theme color");
+    assert_eq!(
+      apply_excel_tint(color, -0.499984740745262),
+      ResolvedColor::from_hex("0E6369").expect("valid Office result")
+    );
+    assert_eq!(
+      apply_excel_tint(color, -0.249_946_592_608_417),
+      ResolvedColor::from_hex("15939D").expect("valid Office result")
+    );
+  }
+}

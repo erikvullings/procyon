@@ -5,7 +5,7 @@
 import type { LocationDto } from './locationDto.ts';
 
 /**
- * Opens a bounded, provider-neutral PPTX content-preview session.
+ * Opens a bounded, provider-neutral PowerPoint-to-PDF preview session.
  */
 export interface OpenPptxPreviewRequestDto {
   /** Provider-neutral PPTX source location. */

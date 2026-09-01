@@ -1,0 +1,54 @@
+{
+  "Types": [
+    {
+      "ClassName": "WorksheetDrawing",
+      "ExtraXmlns": [
+        "xdr"
+      ]
+    },
+    {
+      "ClassName": "Picture",
+      "Children": [
+        {
+          "PropertyName": "BlipFill",
+          "Optional": true
+        }
+      ]
+    }
+  ],
+  "ChoiceEnums": [
+    {
+      "RustName": "TwoCellAnchorChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "OneCellAnchorChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    },
+    {
+      "RustName": "WorksheetDrawingChoice",
+      "AddVariants": [
+        {
+          "RustName": "AlternateContent",
+          "QName": "mc:AlternateContent",
+          "PayloadRustType": "AlternateContent",
+          "PayloadModulePath": "crate::schemas::schemas_openxmlformats_org_markup_compatibility_2006"
+        }
+      ]
+    }
+  ]
+}

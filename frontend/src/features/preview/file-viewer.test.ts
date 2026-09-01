@@ -451,37 +451,6 @@ describe('FileViewer', () => {
     expect(onPreviousPage).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a PPTX as a clearly labelled paged content preview', () => {
-    mount(
-      baseAttrs({
-        status: 'ready',
-        entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
-        content: {
-          kind: 'pptx',
-          sessionId: 'pptx-session',
-          slides: [
-            { index: 0, title: 'Overview', markdown: '# Overview' },
-            { index: 1, title: 'Details', markdown: '# Details' },
-          ],
-          slideCount: 2,
-          currentSlide: 1,
-          currentSlideHtml: '<h1>Details</h1><p>Second slide</p>',
-          loadingSlide: false,
-          omittedFeatures: ['themes and precise geometry', 'charts'],
-        },
-      }),
-    );
-
-    expect(root.querySelector('.fm-file-viewer-page-count')?.textContent).toBe('2 / 2');
-    expect(root.querySelector('.fm-file-viewer-pptx-label')?.textContent).toBe(
-      'PowerPoint content preview',
-    );
-    expect(root.querySelector('.fm-file-viewer-pptx-slide')?.textContent).toContain('Second slide');
-    expect(root.querySelector('.fm-file-viewer-pptx-limitations')?.textContent).toContain(
-      'themes and precise geometry, charts',
-    );
-  });
-
   it('disables PDF page navigation at the first/last page', () => {
     mount(
       baseAttrs({

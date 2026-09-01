@@ -53,11 +53,10 @@ import type {
   PluginId,
   PluginLogEntry,
   PptxPreview,
-  PptxPreviewResource,
   PptxPreviewSessionRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
-  ReadPptxPreviewResourceRequest,
+  ReadPptxPreviewPdfRequest,
   ReadStructuredJsonWindowRequest,
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
@@ -174,7 +173,7 @@ import {
   listPlugins as requestPlugins,
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
-  readPptxPreviewResource as requestPptxPreviewResource,
+  readPptxPreviewPdf as requestPptxPreviewPdf,
   readFileRange as requestReadFileRange,
   getRuntimeCapabilities as requestRuntimeCapabilities,
   saveEditableFile as requestSaveEditableFile,
@@ -662,16 +661,16 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data;
   }
 
-  async readPptxPreviewResource(
-    request: ReadPptxPreviewResourceRequest,
+  async readPptxPreviewPdf(
+    request: ReadPptxPreviewPdfRequest,
     signal?: AbortSignal,
-  ): Promise<PptxPreviewResource> {
-    const response = await requestPptxPreviewResource(
+  ): Promise<FileRangeChunk> {
+    const response = await requestPptxPreviewPdf(
       request,
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected readPptxPreviewResource response status: ${response.status}`);
+      throw new Error(`Unexpected readPptxPreviewPdf response status: ${response.status}`);
     return response.data;
   }
 

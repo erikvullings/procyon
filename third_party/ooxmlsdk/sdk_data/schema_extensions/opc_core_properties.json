@@ -1,0 +1,45 @@
+{
+  "AddTypes": [
+    {
+      "Name": "cp:CT_ContentType/cp:contentType",
+      "ClassName": "ContentType",
+      "Summary": "cp:contentType",
+      "Kind": "LeafText",
+      "ApiKind": "LeafTextWrapper",
+      "TextValueType": "StringValue"
+    }
+  ],
+  "Types": [
+    {
+      "ClassName": "CoreProperties",
+      "AddChildren": [
+        {
+          "Name": "cp:CT_ContentType/cp:contentType",
+          "PropertyName": "ContentType",
+          "PropertyComments": "cp:contentType",
+          "Optional": true,
+          "AfterName": "cp:CT_ContentStatus/cp:contentStatus"
+        }
+      ]
+    },
+    {
+      "ClassName": "Creator",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Created",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Language",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Modified",
+      "HaveXmlnsFields": true
+    },
+    {
+      "ClassName": "Subject"
+    }
+  ]
+}

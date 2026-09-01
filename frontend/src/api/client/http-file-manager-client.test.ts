@@ -38,7 +38,7 @@ const requestOpenDocxPreview = vi.fn();
 const requestReadDocxPreviewResource = vi.fn();
 const requestCloseDocxPreview = vi.fn();
 const requestOpenPptxPreview = vi.fn();
-const requestReadPptxPreviewResource = vi.fn();
+const requestReadPptxPreviewPdf = vi.fn();
 const requestClosePptxPreview = vi.fn();
 const requestSearchInFile = vi.fn();
 const requestOpenStructuredView = vi.fn();
@@ -92,7 +92,7 @@ vi.mock('../generated/file-manager-api', () => ({
   readDocxPreviewResource: (...args: unknown[]) => requestReadDocxPreviewResource(...args),
   closeDocxPreview: (...args: unknown[]) => requestCloseDocxPreview(...args),
   openPptxPreview: (...args: unknown[]) => requestOpenPptxPreview(...args),
-  readPptxPreviewResource: (...args: unknown[]) => requestReadPptxPreviewResource(...args),
+  readPptxPreviewPdf: (...args: unknown[]) => requestReadPptxPreviewPdf(...args),
   closePptxPreview: (...args: unknown[]) => requestClosePptxPreview(...args),
   searchInFile: (...args: unknown[]) => requestSearchInFile(...args),
   openStructuredView: (...args: unknown[]) => requestOpenStructuredView(...args),
@@ -1103,7 +1103,7 @@ describe('HttpFileManagerClient', () => {
       );
     });
 
-    it('uses the generated PPTX session endpoints with the caller signal', async () => {
+    it('uses the generated PPTX PDF session endpoints with the caller signal', async () => {
       const client = new HttpFileManagerClient();
       const controller = new AbortController();
       const location = { providerId: 'local', uri: 'file:///briefing.pptx' };
@@ -1111,19 +1111,17 @@ describe('HttpFileManagerClient', () => {
         sessionId: 'pptx-session',
         sourceRevision: 'r1',
         sourceBytes: 2048,
-        slides: [{ index: 0, title: 'Overview', markdown: '# Overview' }],
-        resources: [],
-        omittedFeatures: ['charts'],
+        pdfBytes: 512,
       };
       requestOpenPptxPreview.mockResolvedValue({
         status: 200,
         headers: new Headers(),
         data: preview,
       });
-      requestReadPptxPreviewResource.mockResolvedValue({
+      requestReadPptxPreviewPdf.mockResolvedValue({
         status: 200,
         headers: new Headers(),
-        data: { data: [137, 80], mediaType: 'image/png' },
+        data: { data: [37, 80, 68, 70], offset: 0, length: 4, eof: false },
       });
       requestClosePptxPreview.mockResolvedValue({
         status: 204,
@@ -1135,11 +1133,11 @@ describe('HttpFileManagerClient', () => {
         preview,
       );
       await expect(
-        client.readPptxPreviewResource(
-          { sessionId: 'pptx-session', resourceId: 'image-1' },
+        client.readPptxPreviewPdf(
+          { sessionId: 'pptx-session', offset: 0, length: 4 },
           controller.signal,
         ),
-      ).resolves.toEqual({ data: [137, 80], mediaType: 'image/png' });
+      ).resolves.toEqual({ data: [37, 80, 68, 70], offset: 0, length: 4, eof: false });
       await expect(
         client.closePptxPreview({ sessionId: 'pptx-session' }, controller.signal),
       ).resolves.toBeUndefined();
