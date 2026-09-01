@@ -49,6 +49,7 @@ export interface FileViewerAttrs {
     delimiter: string,
     headerMode: 'auto' | 'firstRow' | 'none',
   ) => void;
+  readonly onSelectStructuredSheet: (sheetName: string) => void;
   readonly onLoadJsonWindow: (offset: number) => void;
   readonly onSearchStructuredRows: (query: string, cursor?: number) => void;
   readonly onSortStructuredRows: (column: number) => void;
@@ -421,6 +422,7 @@ const StructuredTable: FactoryComponent<{
       const { attrs, state } = wrapper;
       if (state.content.kind !== 'structuredTable') return undefined;
       const content = state.content;
+      const workbook = (content.sheets?.length ?? 0) > 0;
       const sortEnabled =
         content.searchQuery !== '' ||
         (content.indexingComplete && content.sourceBytes <= STRUCTURED_SORT_MAX_BYTES);
@@ -461,40 +463,61 @@ const StructuredTable: FactoryComponent<{
         (_, index) => columnStart + index,
       );
       return m('.fm-structured-view', [
+        workbook
+          ? m(
+              '.fm-structured-sheet-tabs',
+              content.sheets?.map((sheet) =>
+                m(
+                  'button.fm-structured-sheet-tab',
+                  {
+                    type: 'button',
+                    className: sheet.name === content.selectedSheet ? 'active' : undefined,
+                    'aria-pressed': sheet.name === content.selectedSheet,
+                    onclick: () => attrs.onSelectStructuredSheet(sheet.name),
+                  },
+                  sheet.name,
+                ),
+              ),
+            )
+          : undefined,
         m('.fm-structured-toolbar', [
-          m(Select<string>, {
-            className: 'fm-structured-option',
-            appearance: 'outlined',
-            label: t('viewer', 'structuredDelimiter'),
-            options: [
-              { id: ',', label: t('viewer', 'structuredComma') },
-              { id: ';', label: t('viewer', 'structuredSemicolon') },
-              { id: '\t', label: t('viewer', 'structuredTab') },
-              { id: '|', label: t('viewer', 'structuredPipe') },
-            ],
-            checkedId: content.delimiter,
-            onchange: (values: string[]) => {
-              const delimiter = values[0];
-              if (delimiter !== undefined)
-                attrs.onStructuredOptionsChange(delimiter, content.headerMode);
-            },
-          }),
-          m(Select<'auto' | 'firstRow' | 'none'>, {
-            className: 'fm-structured-option',
-            appearance: 'outlined',
-            label: t('viewer', 'structuredHeader'),
-            options: [
-              { id: 'auto' as const, label: t('viewer', 'structuredAuto') },
-              { id: 'firstRow' as const, label: t('viewer', 'structuredFirstRow') },
-              { id: 'none' as const, label: t('viewer', 'structuredNoHeader') },
-            ],
-            checkedId: content.headerMode,
-            onchange: (values: ('auto' | 'firstRow' | 'none')[]) => {
-              const headerMode = values[0];
-              if (headerMode !== undefined)
-                attrs.onStructuredOptionsChange(content.delimiter, headerMode);
-            },
-          }),
+          workbook
+            ? undefined
+            : m(Select<string>, {
+                className: 'fm-structured-option',
+                appearance: 'outlined',
+                label: t('viewer', 'structuredDelimiter'),
+                options: [
+                  { id: ',', label: t('viewer', 'structuredComma') },
+                  { id: ';', label: t('viewer', 'structuredSemicolon') },
+                  { id: '\t', label: t('viewer', 'structuredTab') },
+                  { id: '|', label: t('viewer', 'structuredPipe') },
+                ],
+                checkedId: content.delimiter,
+                onchange: (values: string[]) => {
+                  const delimiter = values[0];
+                  if (delimiter !== undefined)
+                    attrs.onStructuredOptionsChange(delimiter, content.headerMode);
+                },
+              }),
+          workbook
+            ? undefined
+            : m(Select<'auto' | 'firstRow' | 'none'>, {
+                className: 'fm-structured-option',
+                appearance: 'outlined',
+                label: t('viewer', 'structuredHeader'),
+                options: [
+                  { id: 'auto' as const, label: t('viewer', 'structuredAuto') },
+                  { id: 'firstRow' as const, label: t('viewer', 'structuredFirstRow') },
+                  { id: 'none' as const, label: t('viewer', 'structuredNoHeader') },
+                ],
+                checkedId: content.headerMode,
+                onchange: (values: ('auto' | 'firstRow' | 'none')[]) => {
+                  const headerMode = values[0];
+                  if (headerMode !== undefined)
+                    attrs.onStructuredOptionsChange(content.delimiter, headerMode);
+                },
+              }),
           m('input', {
             type: 'search',
             value: content.searchQuery,
@@ -584,17 +607,29 @@ const StructuredTable: FactoryComponent<{
                   },
                 },
                 columns.map((column) =>
-                  m(
-                    '.fm-structured-cell',
-                    {
-                      style: {
-                        left: `${column * STRUCTURED_COLUMN_WIDTH}px`,
-                        width: `${STRUCTURED_COLUMN_WIDTH}px`,
+                  (() => {
+                    const detail = row.cellDetails?.find((cell) => cell.column === column);
+                    const formula = detail?.formula ?? undefined;
+                    const title =
+                      formula === undefined
+                        ? (row.cells[column] ?? '')
+                        : t('viewer', 'structuredFormulaValue', {
+                            formula,
+                            value: detail?.display ?? row.cells[column] ?? '',
+                          });
+                    return m(
+                      '.fm-structured-cell',
+                      {
+                        style: {
+                          left: `${column * STRUCTURED_COLUMN_WIDTH}px`,
+                          width: `${STRUCTURED_COLUMN_WIDTH}px`,
+                        },
+                        title,
+                        'data-value-type': detail?.valueType,
                       },
-                      title: row.cells[column] ?? '',
-                    },
-                    row.cells[column] ?? '',
-                  ),
+                      row.cells[column] ?? '',
+                    );
+                  })(),
                 ),
               ),
             ),

@@ -460,6 +460,7 @@ export const en = {
     structuredIndexedRows: 'Indexed {count} rows…',
     structuredSortColumn: 'Sort by this column',
     structuredColumn: 'Column {number}',
+    structuredFormulaValue: 'Formula: ={formula}\nCached value: {value}',
     previousWindow: 'Previous window',
     nextWindow: 'Next window',
   },

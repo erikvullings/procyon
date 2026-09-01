@@ -35,6 +35,7 @@ function baseAttrs(
     onLoadPrevious: vi.fn(),
     onLoadStructuredRows: vi.fn(),
     onStructuredOptionsChange: vi.fn(),
+    onSelectStructuredSheet: vi.fn(),
     onLoadJsonWindow: vi.fn(),
     onSearchStructuredRows: vi.fn(),
     onSortStructuredRows: vi.fn(),
@@ -771,6 +772,61 @@ describe('FileViewer', () => {
 
     root.querySelector<HTMLButtonElement>('.fm-structured-sort')?.click();
     expect(onSortStructuredRows).toHaveBeenCalledWith(0);
+  });
+
+  it('renders workbook sheet tabs and formula source beside its cached value', () => {
+    const onSelectStructuredSheet = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'budget.xlsx', extension: 'xlsx' }),
+          content: {
+            kind: 'structuredTable',
+            sessionId: 'excel-1',
+            sourceBytes: 10_000,
+            delimiter: ',',
+            headerMode: 'none',
+            headers: ['A'],
+            rows: [
+              {
+                index: 0,
+                cells: ['84'],
+                cellDetails: [{ column: 0, display: '84', valueType: 'number', formula: 'B1*2' }],
+              },
+            ],
+            sheets: [
+              { name: 'Summary', rowCount: 1, columnCount: 1 },
+              { name: 'Details', rowCount: 3, columnCount: 1 },
+            ],
+            selectedSheet: 'Summary',
+            rowStart: 0,
+            indexedRows: 1,
+            totalRows: 1,
+            sourceIndexedRows: 1,
+            sourceTotalRows: 1,
+            indexingComplete: true,
+            loadingRows: false,
+            warning: undefined,
+            searchQuery: '',
+            searchMatches: [],
+            searchNextCursor: undefined,
+            searching: false,
+          },
+        },
+        { onSelectStructuredSheet },
+      ),
+    );
+
+    expect(root.querySelectorAll('.fm-structured-sheet-tab')).toHaveLength(2);
+    expect(root.querySelector('.fm-structured-toolbar .fm-structured-option')).toBeNull();
+    expect(
+      root.querySelector('.fm-structured-row .fm-structured-cell')?.getAttribute('title'),
+    ).toContain('B1*2');
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.fm-structured-sheet-tab'))
+      .find((button) => button.textContent === 'Details')
+      ?.click();
+    expect(onSelectStructuredSheet).toHaveBeenCalledWith('Details');
   });
 
   it('renders wrapped highlighted JSON with Materialized previous and next controls', () => {

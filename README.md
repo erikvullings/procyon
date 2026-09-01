@@ -43,9 +43,16 @@ specification and [TASKS/README.md](TASKS/README.md) for the implementation task
   support
 
 **Viewing & editing**
-- F3 Lister-style instant large-file viewer with lazy search, bounded semantic DOCX previews,
-  visually rendered PPTX previews, and native playback for short videos; large/MKV videos offer
-  OS-default external playback without loading the file into memory
+- F3 Lister-style instant large-file viewer with lazy search, virtualized CSV/JSON tables, bounded
+  multi-sheet Excel previews, semantic DOCX previews, visually rendered PPTX previews, and native
+  playback for short videos; large/MKV videos offer OS-default external playback without loading
+  the file into memory
+- Excel preview is read-only and uses conservative hard limits: 16 MiB source, 64 MiB expanded
+  workbook/string data, 4,096 archive entries, 64 sheets, 100,000 rows and 2,048 columns per sheet,
+  500,000 materialized cells, 400,000 non-empty cells, 64 KiB per cell/formula string, 8 MiB per
+  image and 16 MiB total images. Files outside these limits remain available externally with the
+  limit shown in the viewer. A generated 400,000-cell fixture peaks below 200 MB RSS in the
+  development profile on the reference macOS host.
 - In-app text editor with Markdown preview (F4)
 - File/folder Properties dialog (byte-precise sizes, timestamps, permissions, aggregate totals for
   multi-selection)

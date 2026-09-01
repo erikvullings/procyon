@@ -754,6 +754,77 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({ content: { kind: 'structuredJson' } });
   });
 
+  it('opens a workbook in the shared table and switches its selected sheet in place', async () => {
+    const context = setup();
+    vi.mocked(context.client.openStructuredView).mockResolvedValue({
+      sessionId: 'excel-session',
+      kind: 'table',
+      sourceRevision: 'r1',
+      sourceBytes: 20_000,
+      randomAccess: true,
+      headerMode: 'none',
+      headers: ['A'],
+      rows: [{ index: 0, cells: ['Summary'] }],
+      sheets: [
+        { name: 'Summary', rowCount: 1, columnCount: 1 },
+        { name: 'Details', rowCount: 3, columnCount: 1 },
+      ],
+      selectedSheet: 'Summary',
+      indexedBytes: 20_000,
+      indexedRows: 1,
+      totalRows: 1,
+      indexingComplete: true,
+    });
+    vi.mocked(context.client.updateStructuredView).mockResolvedValue({
+      sessionId: 'excel-session',
+      kind: 'table',
+      sourceRevision: 'r1',
+      sourceBytes: 20_000,
+      randomAccess: true,
+      headerMode: 'none',
+      headers: ['A'],
+      rows: [
+        { index: 0, cells: ['Details'] },
+        { index: 1, cells: [] },
+        { index: 2, cells: ['Sparse'] },
+      ],
+      sheets: [
+        { name: 'Summary', rowCount: 1, columnCount: 1 },
+        { name: 'Details', rowCount: 3, columnCount: 1 },
+      ],
+      selectedSheet: 'Details',
+      indexedBytes: 20_000,
+      indexedRows: 3,
+      totalRows: 3,
+      indexingComplete: true,
+    });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.xlsx', extension: 'xlsx' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    expect(context.states.at(-1)).toMatchObject({
+      content: { kind: 'structuredTable', selectedSheet: 'Summary' },
+    });
+    await controller.selectStructuredSheet('Details');
+    expect(context.client.updateStructuredView).toHaveBeenCalledWith(
+      { sessionId: 'excel-session', selectedSheet: 'Details' },
+      expect.any(AbortSignal),
+    );
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        selectedSheet: 'Details',
+        rows: [
+          { index: 0, cells: ['Details'] },
+          { index: 1, cells: [] },
+          { index: 2, cells: ['Sparse'] },
+        ],
+      },
+    });
+  });
+
   it('uses structured search matches as the active table rows and restores rows when cleared', async () => {
     const context = setup();
     vi.mocked(context.client.openStructuredView).mockResolvedValue({

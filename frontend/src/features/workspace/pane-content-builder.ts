@@ -856,6 +856,8 @@ export function createPaneContentBuilder(
                       void viewer.controller.loadStructuredRows(startRow),
                     onStructuredOptionsChange: (delimiter, headerMode) =>
                       void viewer.controller.setStructuredOptions(delimiter, headerMode),
+                    onSelectStructuredSheet: (sheetName) =>
+                      void viewer.controller.selectStructuredSheet(sheetName),
                     onLoadJsonWindow: (offset) => void viewer.controller.loadJsonWindow(offset),
                     onSearchStructuredRows: (query, cursor) =>
                       void viewer.controller.searchStructuredRows(query, cursor),

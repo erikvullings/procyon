@@ -1000,7 +1000,7 @@ describe('HttpFileManagerClient', () => {
       await expect(client.openStructuredView(open)).resolves.toEqual(view);
       await expect(client.getStructuredViewStatus(session)).resolves.toEqual(status);
       await expect(
-        client.updateStructuredView({ ...session, delimiter: ';', headerMode: 'none' }),
+        client.updateStructuredView({ ...session, selectedSheet: 'Details' }),
       ).resolves.toEqual(view);
       await expect(
         client.readStructuredRows({ ...session, startRow: 1, count: 200 }),

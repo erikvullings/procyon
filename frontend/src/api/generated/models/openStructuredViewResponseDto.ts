@@ -4,6 +4,7 @@
  */
 import type { StructuredHeaderModeDto } from './structuredHeaderModeDto.ts';
 import type { StructuredRowDto } from './structuredRowDto.ts';
+import type { StructuredSheetDto } from './structuredSheetDto.ts';
 import type { StructuredViewKindDto } from './structuredViewKindDto.ts';
 
 /**
@@ -37,8 +38,15 @@ export interface OpenStructuredViewResponseDto {
   randomAccess: boolean;
   /** Bounded initial logical-record page. */
   rows: StructuredRowDto[];
+  /**
+     * Selected worksheet name for workbook sessions.
+     * @nullable
+     */
+  selectedSheet?: string | null;
   /** Opaque backend session identifier. */
   sessionId: string;
+  /** Workbook sheets in source order. Empty for non-workbook formats. */
+  sheets?: StructuredSheetDto[];
   /**
      * Source size at session creation.
      * @minimum 0

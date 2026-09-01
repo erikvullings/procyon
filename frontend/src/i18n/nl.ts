@@ -464,6 +464,7 @@ export const nl = {
     structuredIndexedRows: '{count} rijen geïndexeerd…',
     structuredSortColumn: 'Op deze kolom sorteren',
     structuredColumn: 'Kolom {number}',
+    structuredFormulaValue: 'Formule: ={formula}\nOpgeslagen waarde: {value}',
     previousWindow: 'Vorig venster',
     nextWindow: 'Volgend venster',
   },

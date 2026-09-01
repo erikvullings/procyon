@@ -121,6 +121,12 @@ export interface FileViewerStructuredTableContent {
   readonly indexingComplete: boolean;
   readonly loadingRows: boolean;
   readonly warning: string | undefined;
+  readonly sheets?: readonly {
+    readonly name: string;
+    readonly rowCount: number;
+    readonly columnCount: number;
+  }[];
+  readonly selectedSheet?: string;
   readonly searchQuery: string;
   readonly searchMatches: readonly StructuredRow[];
   readonly searchNextCursor: number | undefined;
@@ -332,6 +338,7 @@ export interface FileViewerController {
   loadPrevious(): Promise<void>;
   loadStructuredRows(startRow: number): Promise<void>;
   setStructuredOptions(delimiter: string, headerMode: 'auto' | 'firstRow' | 'none'): Promise<void>;
+  selectStructuredSheet(sheetName: string): Promise<void>;
   loadJsonWindow(offset: number): Promise<void>;
   searchStructuredRows(query: string, cursor?: number): Promise<void>;
   sortStructuredRows(column: number): Promise<void>;
@@ -591,6 +598,8 @@ export function createFileViewerController(
         indexingComplete: opened.indexingComplete,
         loadingRows: false,
         warning: opened.warning ?? undefined,
+        sheets: opened.sheets ?? [],
+        ...(opened.selectedSheet == null ? {} : { selectedSheet: opened.selectedSheet }),
         searchQuery: '',
         searchMatches: [],
         searchNextCursor: undefined,
@@ -1159,10 +1168,15 @@ export function createFileViewerController(
         current.content.kind !== 'structuredTable'
       )
         return;
+      const {
+        sortColumn: _sortColumn,
+        sortDirection: _sortDirection,
+        ...content
+      } = current.content;
       publish({
         ...current,
         content: {
-          ...current.content,
+          ...content,
           rows: result.rows,
           rowStart: result.rows[0]?.index ?? boundedStart,
           indexedRows: result.indexedRows,
@@ -1211,6 +1225,53 @@ export function createFileViewerController(
           sourceTotalRows: updated.totalRows ?? undefined,
           indexingComplete: updated.indexingComplete,
           loadingRows: false,
+        },
+      });
+    } catch (error: unknown) {
+      if (isCurrent(controller)) publish({ status: 'error', entry, message: errorMessage(error) });
+    }
+  }
+
+  async function selectStructuredSheet(sheetName: string): Promise<void> {
+    if (
+      current.status !== 'ready' ||
+      current.content.kind !== 'structuredTable' ||
+      (current.content.sheets?.length ?? 0) === 0 ||
+      current.content.selectedSheet === sheetName
+    )
+      return;
+    const sessionId = current.content.sessionId;
+    const controller = beginRequest();
+    try {
+      const updated = await client.updateStructuredView(
+        { sessionId, selectedSheet: sheetName },
+        controller.signal,
+      );
+      if (
+        !isCurrent(controller) ||
+        current.status !== 'ready' ||
+        current.content.kind !== 'structuredTable'
+      )
+        return;
+      publish({
+        ...current,
+        content: {
+          ...current.content,
+          headers: updated.headers,
+          rows: updated.rows,
+          rowStart: updated.rows[0]?.index ?? 0,
+          indexedRows: updated.indexedRows,
+          totalRows: updated.totalRows ?? undefined,
+          sourceIndexedRows: updated.indexedRows,
+          sourceTotalRows: updated.totalRows ?? undefined,
+          indexingComplete: updated.indexingComplete,
+          loadingRows: false,
+          warning: updated.warning ?? undefined,
+          sheets: updated.sheets ?? current.content.sheets ?? [],
+          selectedSheet: updated.selectedSheet ?? sheetName,
+          searchQuery: '',
+          searchMatches: [],
+          searchNextCursor: undefined,
         },
       });
     } catch (error: unknown) {
@@ -1881,6 +1942,7 @@ export function createFileViewerController(
     loadPrevious,
     loadStructuredRows,
     setStructuredOptions,
+    selectStructuredSheet,
     loadJsonWindow,
     searchStructuredRows,
     sortStructuredRows,

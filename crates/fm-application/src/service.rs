@@ -2027,6 +2027,70 @@ mod tests {
             .into()
     }
 
+    fn write_xlsx_fixture(path: &Path) {
+        let file = std::fs::File::create(path).expect("create XLSX fixture");
+        let mut archive = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        let entries = [
+            (
+                "[Content_Types].xml",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#,
+            ),
+            (
+                "_rels/.rels",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Summary" sheetId="1" r:id="rId1"/><sheet name="Details" sheetId="2" r:id="rId2"/></sheets>
+</workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+</Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:F2"/><sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>Label</t></is></c><c r="B1"><v>42</v></c><c r="C1" t="b"><v>1</v></c><c r="D1" t="e"><v>#DIV/0!</v></c><c r="E1" t="d"><v>2026-09-01T18:30:00Z</v></c><c r="F1"><f>B1*2</f><v>84</v></c></row>
+<row r="2"><c r="A2" t="inlineStr"><is><t>Second</t></is></c></row>
+</sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:A3"/><sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>Other sheet</t></is></c></row>
+<row r="3"><c r="A3" t="inlineStr"><is><t>Sparse row</t></is></c></row>
+</sheetData></worksheet>"#,
+            ),
+        ];
+        for (name, data) in entries {
+            archive.start_file(name, options).expect("start XLSX entry");
+            archive
+                .write_all(data.as_bytes())
+                .expect("write XLSX entry");
+        }
+        archive.finish().expect("finish XLSX fixture");
+    }
+
     #[tokio::test]
     async fn read_file_range_reads_the_requested_bytes_at_an_offset() {
         let (dir, service) = service();
@@ -2073,6 +2137,196 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn structured_excel_opens_multiple_sheets_with_typed_cells_and_cached_formulas() {
+        let (dir, service) = service();
+        let target = dir.path().join("typed.xlsx");
+        write_xlsx_fixture(&target);
+
+        let opened = service
+            .open_structured_view(fm_transport_dto::OpenStructuredViewRequestDto {
+                location: location_dto_for(&target),
+                format: fm_transport_dto::StructuredViewFormatDto::Excel,
+                delimiter: None,
+                header_mode: fm_transport_dto::StructuredHeaderModeDto::None,
+            })
+            .await
+            .expect("open bounded workbook");
+
+        assert_eq!(opened.kind, fm_transport_dto::StructuredViewKindDto::Table);
+        assert_eq!(opened.selected_sheet.as_deref(), Some("Summary"));
+        assert_eq!(
+            opened
+                .sheets
+                .iter()
+                .map(|sheet| sheet.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Summary", "Details"]
+        );
+        assert_eq!(
+            opened.rows[0].cells,
+            [
+                "Label",
+                "42",
+                "true",
+                "#DIV/0!",
+                "2026-09-01T18:30:00Z",
+                "84"
+            ]
+        );
+        assert_eq!(
+            opened.rows[0].cell_details[5].formula.as_deref(),
+            Some("B1*2")
+        );
+        assert_eq!(
+            opened.rows[0].cell_details[3].value_type,
+            fm_transport_dto::StructuredCellValueTypeDto::Error
+        );
+        assert_eq!(
+            opened.rows[0].cell_details[4].value_type,
+            fm_transport_dto::StructuredCellValueTypeDto::DateTime
+        );
+    }
+
+    #[tokio::test]
+    async fn structured_excel_switches_sheets_and_pages_sparse_rows_without_dense_session_state() {
+        let (dir, service) = service();
+        let target = dir.path().join("sparse.xlsx");
+        write_xlsx_fixture(&target);
+        let opened = service
+            .open_structured_view(fm_transport_dto::OpenStructuredViewRequestDto {
+                location: location_dto_for(&target),
+                format: fm_transport_dto::StructuredViewFormatDto::Excel,
+                delimiter: None,
+                header_mode: fm_transport_dto::StructuredHeaderModeDto::None,
+            })
+            .await
+            .expect("open bounded workbook");
+
+        let selected = service
+            .update_structured_view(fm_transport_dto::UpdateStructuredViewRequestDto {
+                session_id: opened.session_id,
+                delimiter: None,
+                header_mode: None,
+                selected_sheet: Some("Details".to_owned()),
+            })
+            .await
+            .expect("select worksheet");
+        assert_eq!(selected.selected_sheet.as_deref(), Some("Details"));
+        assert_eq!(selected.total_rows, Some(3));
+        assert_eq!(selected.rows[0].cells, ["Other sheet"]);
+        assert!(selected.rows[1].cells.is_empty());
+        assert_eq!(selected.rows[2].cells, ["Sparse row"]);
+
+        let page = service
+            .read_structured_rows(fm_transport_dto::ReadStructuredRowsRequestDto {
+                session_id: opened.session_id,
+                start_row: 1,
+                count: 2,
+            })
+            .await
+            .expect("read sparse page");
+        assert_eq!(page.rows.len(), 2);
+        assert!(page.rows[0].cells.is_empty());
+        assert_eq!(page.rows[1].cells, ["Sparse row"]);
+    }
+
+    #[tokio::test]
+    async fn structured_excel_falls_back_with_the_specific_source_or_parse_limit() {
+        let (dir, service) = service();
+        let oversized = dir.path().join("oversized.xls");
+        let file = std::fs::File::create(&oversized).expect("create oversized workbook");
+        file.set_len(crate::structured_view::WORKBOOK_SOURCE_BYTES + 1)
+            .expect("size oversized workbook");
+        let source_fallback = service
+            .open_structured_view(fm_transport_dto::OpenStructuredViewRequestDto {
+                location: location_dto_for(&oversized),
+                format: fm_transport_dto::StructuredViewFormatDto::Excel,
+                delimiter: None,
+                header_mode: fm_transport_dto::StructuredHeaderModeDto::None,
+            })
+            .await
+            .expect("open oversized workbook as fallback");
+        assert_eq!(
+            source_fallback.kind,
+            fm_transport_dto::StructuredViewKindDto::ExternalFallback
+        );
+        assert!(
+            source_fallback
+                .warning
+                .as_deref()
+                .is_some_and(|warning| warning.contains("source") && warning.contains("limit"))
+        );
+
+        let corrupt = dir.path().join("corrupt.xlsb");
+        std::fs::write(&corrupt, b"not a workbook").expect("write corrupt workbook");
+        let parse_fallback = service
+            .open_structured_view(fm_transport_dto::OpenStructuredViewRequestDto {
+                location: location_dto_for(&corrupt),
+                format: fm_transport_dto::StructuredViewFormatDto::Excel,
+                delimiter: None,
+                header_mode: fm_transport_dto::StructuredHeaderModeDto::None,
+            })
+            .await
+            .expect("open corrupt workbook as fallback");
+        assert!(
+            parse_fallback
+                .warning
+                .as_deref()
+                .is_some_and(|warning| warning.contains("corrupt or unsupported"))
+        );
+    }
+
+    #[tokio::test]
+    async fn structured_excel_revision_change_invalidates_sheet_access_and_close_releases_state() {
+        let (dir, service) = service();
+        let target = dir.path().join("revision.xlsx");
+        write_xlsx_fixture(&target);
+        let opened = service
+            .open_structured_view(fm_transport_dto::OpenStructuredViewRequestDto {
+                location: location_dto_for(&target),
+                format: fm_transport_dto::StructuredViewFormatDto::Excel,
+                delimiter: None,
+                header_mode: fm_transport_dto::StructuredHeaderModeDto::None,
+            })
+            .await
+            .expect("open bounded workbook");
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&target)
+            .expect("open workbook for revision change")
+            .write_all(b"changed")
+            .expect("change workbook revision");
+
+        assert!(matches!(
+            service
+                .update_structured_view(fm_transport_dto::UpdateStructuredViewRequestDto {
+                    session_id: opened.session_id,
+                    delimiter: None,
+                    header_mode: None,
+                    selected_sheet: Some("Details".to_owned()),
+                })
+                .await,
+            Err(ApplicationError::FileRevisionConflict { .. })
+        ));
+        service
+            .close_structured_view(fm_transport_dto::StructuredViewSessionRequestDto {
+                session_id: opened.session_id,
+            })
+            .await
+            .expect("close invalidated workbook");
+        assert!(matches!(
+            service
+                .read_structured_rows(fm_transport_dto::ReadStructuredRowsRequestDto {
+                    session_id: opened.session_id,
+                    start_row: 0,
+                    count: 1,
+                })
+                .await,
+            Err(ApplicationError::NotFound)
+        ));
+    }
+
+    #[tokio::test]
     async fn structured_csv_supports_bom_dialect_and_header_overrides_without_reopen() {
         let (dir, service) = service();
         let target = dir.path().join("dialect.csv");
@@ -2093,6 +2347,7 @@ mod tests {
                 session_id: opened.session_id,
                 delimiter: Some(";".to_owned()),
                 header_mode: Some(fm_transport_dto::StructuredHeaderModeDto::None),
+                selected_sheet: None,
             })
             .await
             .expect("correct options in the same session");

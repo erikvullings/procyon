@@ -665,11 +665,10 @@ describe('TauriFileManagerClient', () => {
       invoke.mockResolvedValueOnce(view);
       await client.updateStructuredView({
         sessionId: 'session-1',
-        delimiter: ';',
-        headerMode: 'none',
+        selectedSheet: 'Details',
       });
       expect(invoke).toHaveBeenLastCalledWith('update_structured_view', {
-        request: { sessionId: 'session-1', delimiter: ';', headerMode: 'none' },
+        request: { sessionId: 'session-1', selectedSheet: 'Details' },
       });
 
       invoke.mockResolvedValueOnce({

@@ -1,6 +1,6 @@
 # 0172 Bounded spreadsheet preview
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0100
@@ -60,3 +60,13 @@ licensing. Do not copy or link VisiGrid core code.
 - 2026-08-29: Created as the implementation follow-up to 0100's honest Excel fallback. Calamine is
   recommended for the built-in MIT path. VisiGrid 0.29 is useful reference material and an external
   application target, but its AGPL core must not be embedded or copied into Procyon.
+- 2026-09-01 copilot: Added provider-neutral Calamine previews for bounded XLSX/XLSB/XLS workbooks
+  through the existing structured-view session, including ZIP preflight, explicit source/archive/
+  workbook/sheet/row/column/cell/string/image budgets, sparse retained rows, bounded pages, sheet
+  switching, typed cell metadata, formula source plus cached values, revision invalidation, and
+  precise external fallback reasons. Added shared Mithril sheet tabs and formula tooltips, generated
+  HTTP contracts, thin HTTP/Tauri parity coverage, and equivalent mock behavior. Verified 8 task
+  backend tests (including the explicit generated 400,000-cell memory probe at 195,231,744-byte peak
+  RSS) and 3 task frontend tests; full `fm-application` (406 passed, 1 explicit probe ignored by
+  default), `fm-transport-dto` (130 passed), and frontend (1,682 passed) suites, TypeScript
+  typecheck, affected-crate clippy with warnings denied, and generated API regeneration all pass.
