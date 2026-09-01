@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, Select, toast } from 'mithril-materialized';
-import { closeIcon, copyIcon, infoCircleIcon } from '../../components/tabler-icons';
+import { closeIcon, copyIcon, infoCircleIcon, searchIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { GitLogEntry } from '../../models';
@@ -50,6 +50,7 @@ export interface FileViewerAttrs {
     headerMode: 'auto' | 'firstRow' | 'none',
   ) => void;
   readonly onSelectStructuredSheet: (sheetName: string) => void;
+  readonly onToggleStructuredRowNumbers: () => void;
   readonly onLoadJsonWindow: (offset: number) => void;
   readonly onSearchStructuredRows: (query: string, cursor?: number) => void;
   readonly onSortStructuredRows: (column: number) => void;
@@ -406,8 +407,30 @@ function renderTextBody(
   ]);
 }
 
-const STRUCTURED_ROW_HEIGHT = 32;
+const STRUCTURED_ROW_HEIGHT = 20;
 const STRUCTURED_COLUMN_WIDTH = 180;
+const STRUCTURED_ROW_NUMBER_DIGIT_WIDTH = 7;
+const STRUCTURED_ROW_NUMBER_PADDING = 8;
+
+function structuredSortIndicator(direction: 'ascending' | 'descending'): m.Children {
+  return m(
+    'svg.fm-sort-indicator',
+    {
+      'aria-hidden': 'true',
+      viewBox: '0 0 16 16',
+      width: 12,
+      height: 12,
+    },
+    m('path', {
+      d: direction === 'ascending' ? 'M4 9 8 5l4 4' : 'M4 7l4 4 4-4',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.5,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+    }),
+  );
+}
 
 const StructuredTable: FactoryComponent<{
   readonly attrs: FileViewerAttrs;
@@ -423,6 +446,12 @@ const StructuredTable: FactoryComponent<{
       if (state.content.kind !== 'structuredTable') return undefined;
       const content = state.content;
       const workbook = (content.sheets?.length ?? 0) > 0;
+      const largestRowNumber = content.totalRows ?? content.indexedRows;
+      const rowNumberWidth =
+        content.showRowNumbers === true
+          ? Math.max(1, String(largestRowNumber).length) * STRUCTURED_ROW_NUMBER_DIGIT_WIDTH +
+            STRUCTURED_ROW_NUMBER_PADDING
+          : 0;
       const sortEnabled =
         content.searchQuery !== '' ||
         (content.indexingComplete && content.sourceBytes <= STRUCTURED_SORT_MAX_BYTES);
@@ -443,10 +472,11 @@ const StructuredTable: FactoryComponent<{
         ...content.rows.map((row) => row.cells.length),
         1,
       );
-      const columnStart = Math.max(0, Math.floor(scrollLeft / STRUCTURED_COLUMN_WIDTH) - 2);
+      const dataScrollLeft = Math.max(0, scrollLeft - rowNumberWidth);
+      const columnStart = Math.max(0, Math.floor(dataScrollLeft / STRUCTURED_COLUMN_WIDTH) - 2);
       const columnEnd = Math.min(
         columnCount,
-        Math.ceil((scrollLeft + viewportWidth) / STRUCTURED_COLUMN_WIDTH) + 2,
+        Math.ceil((dataScrollLeft + viewportWidth) / STRUCTURED_COLUMN_WIDTH) + 2,
       );
       const visibleRows = content.rows.filter(
         (row) => row.index >= visible.start && row.index < visible.end,
@@ -463,24 +493,17 @@ const StructuredTable: FactoryComponent<{
         (_, index) => columnStart + index,
       );
       return m('.fm-structured-view', [
-        workbook
-          ? m(
-              '.fm-structured-sheet-tabs',
-              content.sheets?.map((sheet) =>
-                m(
-                  'button.fm-structured-sheet-tab',
-                  {
-                    type: 'button',
-                    className: sheet.name === content.selectedSheet ? 'active' : undefined,
-                    'aria-pressed': sheet.name === content.selectedSheet,
-                    onclick: () => attrs.onSelectStructuredSheet(sheet.name),
-                  },
-                  sheet.name,
-                ),
-              ),
-            )
-          : undefined,
         m('.fm-structured-toolbar', [
+          m('.fm-structured-search', [
+            searchIcon({ size: 14, className: 'fm-structured-search-icon' }),
+            m('input', {
+              type: 'search',
+              value: content.searchQuery,
+              placeholder: t('viewer', 'structuredSearchRows'),
+              oninput: (event: InputEvent) =>
+                attrs.onSearchStructuredRows((event.currentTarget as HTMLInputElement).value),
+            }),
+          ]),
           workbook
             ? undefined
             : m(Select<string>, {
@@ -518,13 +541,6 @@ const StructuredTable: FactoryComponent<{
                     attrs.onStructuredOptionsChange(content.delimiter, headerMode);
                 },
               }),
-          m('input', {
-            type: 'search',
-            value: content.searchQuery,
-            placeholder: t('viewer', 'structuredSearchRows'),
-            oninput: (event: InputEvent) =>
-              attrs.onSearchStructuredRows((event.currentTarget as HTMLInputElement).value),
-          }),
           m(
             'span.fm-structured-progress',
             content.indexingComplete
@@ -542,39 +558,53 @@ const StructuredTable: FactoryComponent<{
             '.fm-structured-header-row',
             {
               style: {
-                width: `${columnCount * STRUCTURED_COLUMN_WIDTH}px`,
+                width: `${rowNumberWidth + columnCount * STRUCTURED_COLUMN_WIDTH}px`,
                 transform: `translateX(${-scrollLeft}px)`,
               },
             },
-            columns.map((column) =>
-              m(
-                '.fm-structured-cell.fm-structured-header-cell',
-                {
-                  style: {
-                    left: `${column * STRUCTURED_COLUMN_WIDTH}px`,
-                    width: `${STRUCTURED_COLUMN_WIDTH}px`,
-                  },
-                },
+            [
+              content.showRowNumbers === true
+                ? m(
+                    '.fm-structured-cell.fm-structured-header-cell.fm-structured-header-row-number',
+                    {
+                      style: {
+                        left: '0',
+                        width: `${rowNumberWidth}px`,
+                      },
+                    },
+                    '#',
+                  )
+                : undefined,
+              columns.map((column) =>
                 m(
-                  'button.fm-structured-sort',
+                  '.fm-structured-cell.fm-structured-header-cell',
                   {
-                    type: 'button',
-                    disabled: !sortEnabled,
-                    title: sortEnabled ? t('viewer', 'structuredSortColumn') : sortDisabledReason,
-                    onclick: () => attrs.onSortStructuredRows(column),
+                    style: {
+                      left: `${rowNumberWidth + column * STRUCTURED_COLUMN_WIDTH}px`,
+                      width: `${STRUCTURED_COLUMN_WIDTH}px`,
+                    },
                   },
-                  [
-                    content.headers[column] ??
-                      t('viewer', 'structuredColumn', { number: column + 1 }),
-                    content.sortColumn === column
-                      ? content.sortDirection === 'ascending'
-                        ? ' ↑'
-                        : ' ↓'
-                      : undefined,
-                  ],
+                  m(
+                    'button.fm-structured-sort',
+                    {
+                      type: 'button',
+                      disabled: !sortEnabled,
+                      'aria-sort':
+                        content.sortColumn === column ? content.sortDirection : undefined,
+                      title: sortEnabled ? t('viewer', 'structuredSortColumn') : sortDisabledReason,
+                      onclick: () => attrs.onSortStructuredRows(column),
+                    },
+                    [
+                      content.headers[column] ??
+                        t('viewer', 'structuredColumn', { number: column + 1 }),
+                      content.sortColumn === column && content.sortDirection !== undefined
+                        ? structuredSortIndicator(content.sortDirection)
+                        : undefined,
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ]),
         m(
@@ -593,7 +623,7 @@ const StructuredTable: FactoryComponent<{
             {
               style: {
                 height: `${visible.totalHeight}px`,
-                width: `${columnCount * STRUCTURED_COLUMN_WIDTH}px`,
+                width: `${rowNumberWidth + columnCount * STRUCTURED_COLUMN_WIDTH}px`,
               },
             },
             visibleRows.map((row) =>
@@ -605,36 +635,83 @@ const StructuredTable: FactoryComponent<{
                     top: `${row.index * STRUCTURED_ROW_HEIGHT}px`,
                     height: `${STRUCTURED_ROW_HEIGHT}px`,
                   },
+                  'data-row-stripe': row.index % 2 === 1 ? 'alternate' : undefined,
                 },
-                columns.map((column) =>
-                  (() => {
-                    const detail = row.cellDetails?.find((cell) => cell.column === column);
-                    const formula = detail?.formula ?? undefined;
-                    const title =
-                      formula === undefined
-                        ? (row.cells[column] ?? '')
-                        : t('viewer', 'structuredFormulaValue', {
-                            formula,
-                            value: detail?.display ?? row.cells[column] ?? '',
-                          });
-                    return m(
-                      '.fm-structured-cell',
-                      {
-                        style: {
-                          left: `${column * STRUCTURED_COLUMN_WIDTH}px`,
-                          width: `${STRUCTURED_COLUMN_WIDTH}px`,
+                [
+                  content.showRowNumbers === true
+                    ? m(
+                        '.fm-structured-cell.fm-structured-row-number-cell',
+                        {
+                          style: {
+                            left: '0',
+                            width: `${rowNumberWidth}px`,
+                          },
                         },
-                        title,
-                        'data-value-type': detail?.valueType,
-                      },
-                      row.cells[column] ?? '',
-                    );
-                  })(),
-                ),
+                        row.index + 1,
+                      )
+                    : undefined,
+                  columns.map((column) =>
+                    (() => {
+                      const detail = row.cellDetails?.find((cell) => cell.column === column);
+                      const formula = detail?.formula ?? undefined;
+                      const title =
+                        formula === undefined
+                          ? (row.cells[column] ?? '')
+                          : t('viewer', 'structuredFormulaValue', {
+                              formula,
+                              value: detail?.display ?? row.cells[column] ?? '',
+                            });
+                      return m(
+                        '.fm-structured-cell',
+                        {
+                          style: {
+                            left: `${rowNumberWidth + column * STRUCTURED_COLUMN_WIDTH}px`,
+                            width: `${STRUCTURED_COLUMN_WIDTH}px`,
+                          },
+                          title,
+                          'data-value-type': detail?.valueType,
+                        },
+                        row.cells[column] ?? '',
+                      );
+                    })(),
+                  ),
+                ],
               ),
             ),
           ),
         ),
+        workbook
+          ? m('.fm-structured-sheet-tabs', [
+              m(
+                '.fm-structured-sheet-tab-list',
+                content.sheets?.map((sheet) =>
+                  m(
+                    'button.fm-structured-sheet-tab',
+                    {
+                      type: 'button',
+                      className: sheet.name === content.selectedSheet ? 'active' : undefined,
+                      'aria-pressed': sheet.name === content.selectedSheet,
+                      onclick: () => attrs.onSelectStructuredSheet(sheet.name),
+                    },
+                    sheet.name,
+                  ),
+                ),
+              ),
+              tooltip(
+                t('viewer', 'structuredShowRowNumbers'),
+                m('label.fm-structured-row-number-toggle', [
+                  m('span', t('viewer', 'structuredRowsToggle')),
+                  m('input.browser-default', {
+                    type: 'checkbox',
+                    checked: content.showRowNumbers === true,
+                    'aria-label': t('viewer', 'structuredShowRowNumbers'),
+                    onchange: attrs.onToggleStructuredRowNumbers,
+                  }),
+                ]),
+                { className: 'fm-structured-row-number-control' },
+              ),
+            ])
+          : undefined,
       ]);
     },
   };

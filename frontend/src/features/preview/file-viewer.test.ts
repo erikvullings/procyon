@@ -36,6 +36,7 @@ function baseAttrs(
     onLoadStructuredRows: vi.fn(),
     onStructuredOptionsChange: vi.fn(),
     onSelectStructuredSheet: vi.fn(),
+    onToggleStructuredRowNumbers: vi.fn(),
     onLoadJsonWindow: vi.fn(),
     onSearchStructuredRows: vi.fn(),
     onSortStructuredRows: vi.fn(),
@@ -776,6 +777,7 @@ describe('FileViewer', () => {
 
   it('renders workbook sheet tabs and formula source beside its cached value', () => {
     const onSelectStructuredSheet = vi.fn();
+    const onToggleStructuredRowNumbers = vi.fn();
     mount(
       baseAttrs(
         {
@@ -814,19 +816,134 @@ describe('FileViewer', () => {
             searching: false,
           },
         },
-        { onSelectStructuredSheet },
+        { onSelectStructuredSheet, onToggleStructuredRowNumbers },
       ),
     );
 
     expect(root.querySelectorAll('.fm-structured-sheet-tab')).toHaveLength(2);
+    expect(
+      root
+        .querySelector('.fm-structured-view')
+        ?.lastElementChild?.classList.contains('fm-structured-sheet-tabs'),
+    ).toBe(true);
+    expect(
+      root
+        .querySelector('.fm-structured-view')
+        ?.firstElementChild?.classList.contains('fm-structured-toolbar'),
+    ).toBe(true);
+    expect(
+      root
+        .querySelector('.fm-structured-toolbar')
+        ?.firstElementChild?.classList.contains('fm-structured-search'),
+    ).toBe(true);
+    expect(
+      root.querySelector('.fm-structured-toolbar .fm-structured-row-number-toggle'),
+    ).toBeNull();
+    expect(
+      root.querySelector('.fm-structured-sheet-tabs .fm-structured-row-number-toggle'),
+    ).not.toBeNull();
+    expect(root.querySelector('.fm-structured-row-number-toggle')?.textContent).toBe('Rows');
+    expect(
+      root.querySelector('.fm-structured-row-number-control')?.getAttribute('data-tooltip'),
+    ).toBe('Show row numbers');
+    expect(root.querySelector('.fm-structured-row-number-toggle')?.lastElementChild?.tagName).toBe(
+      'INPUT',
+    );
     expect(root.querySelector('.fm-structured-toolbar .fm-structured-option')).toBeNull();
+    expect(root.querySelector('.fm-structured-row-number-cell')).toBeNull();
     expect(
       root.querySelector('.fm-structured-row .fm-structured-cell')?.getAttribute('title'),
     ).toContain('B1*2');
+    root.querySelector<HTMLInputElement>('.fm-structured-row-number-toggle input')?.click();
+    expect(onToggleStructuredRowNumbers).toHaveBeenCalledTimes(1);
     Array.from(root.querySelectorAll<HTMLButtonElement>('.fm-structured-sheet-tab'))
       .find((button) => button.textContent === 'Details')
       ?.click();
     expect(onSelectStructuredSheet).toHaveBeenCalledWith('Details');
+  });
+
+  it('shows an optional row-number column and the shared sort caret', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'budget.xlsx', extension: 'xlsx' }),
+        content: {
+          kind: 'structuredTable',
+          sessionId: 'excel-1',
+          sourceBytes: 10_000,
+          delimiter: ',',
+          headerMode: 'none',
+          headers: ['A'],
+          rows: [{ index: 0, cells: ['Value'] }],
+          sheets: [{ name: 'Summary', rowCount: 6_717, columnCount: 1 }],
+          selectedSheet: 'Summary',
+          rowStart: 0,
+          indexedRows: 1,
+          totalRows: 6_717,
+          sourceIndexedRows: 1,
+          sourceTotalRows: 6_717,
+          indexingComplete: true,
+          loadingRows: false,
+          warning: undefined,
+          searchQuery: '',
+          searchMatches: [],
+          searchNextCursor: undefined,
+          searching: false,
+          showRowNumbers: true,
+          sortColumn: 0,
+          sortDirection: 'ascending',
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-structured-header-row-number')?.textContent).toBe('#');
+    expect(root.querySelector('.fm-structured-row-number-cell')?.textContent).toBe('1');
+    expect(root.querySelector('.fm-structured-row-number-cell')?.getAttribute('style')).toContain(
+      'width: 36px',
+    );
+    expect(root.querySelector('.fm-structured-row')?.getAttribute('style')).toContain(
+      'height: 20px',
+    );
+    expect(root.querySelector('.fm-structured-sort .fm-sort-indicator')).not.toBeNull();
+  });
+
+  it('uses the directory table zebra stripe pattern for spreadsheet rows', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'budget.xlsx', extension: 'xlsx' }),
+        content: {
+          kind: 'structuredTable',
+          sessionId: 'excel-1',
+          sourceBytes: 10_000,
+          delimiter: ',',
+          headerMode: 'none',
+          headers: ['A'],
+          rows: [
+            { index: 0, cells: ['First'] },
+            { index: 1, cells: ['Second'] },
+          ],
+          sheets: [{ name: 'Summary', rowCount: 2, columnCount: 1 }],
+          selectedSheet: 'Summary',
+          rowStart: 0,
+          indexedRows: 2,
+          totalRows: 2,
+          sourceIndexedRows: 2,
+          sourceTotalRows: 2,
+          indexingComplete: true,
+          loadingRows: false,
+          warning: undefined,
+          searchQuery: '',
+          searchMatches: [],
+          searchNextCursor: undefined,
+          searching: false,
+        },
+      }),
+    );
+
+    const rows = root.querySelectorAll('.fm-structured-row');
+    expect(rows[0]?.hasAttribute('data-row-stripe')).toBe(false);
+    expect(rows[1]?.getAttribute('data-row-stripe')).toBe('alternate');
   });
 
   it('renders wrapped highlighted JSON with Materialized previous and next controls', () => {

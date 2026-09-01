@@ -457,6 +457,8 @@ export const en = {
     structuredNoHeader: 'No header',
     structuredSearchRows: 'Search/filter indexed rows',
     structuredRows: '{count} rows',
+    structuredRowsToggle: 'Rows',
+    structuredShowRowNumbers: 'Show row numbers',
     structuredIndexedRows: 'Indexed {count} rows…',
     structuredSortColumn: 'Sort by this column',
     structuredColumn: 'Column {number}',
