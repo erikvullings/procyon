@@ -2360,7 +2360,7 @@ describe('Pane tab strip', () => {
     expect(onRetrySystemLocations).toHaveBeenCalledOnce();
   });
 
-  it('opens an SSH server from the Servers section at /home/<username>', async () => {
+  it('opens an SSH server from the Servers section at the platform-neutral root', async () => {
     const onNavigateLocation = vi.fn();
     mount(
       attrs({
@@ -2376,7 +2376,7 @@ describe('Pane tab strip', () => {
 
     expect(onNavigateLocation).toHaveBeenCalledWith({
       providerId: 'sftp',
-      uri: 'sftp://server-1/home/erik',
+      uri: 'sftp://server-1/',
     });
   });
 

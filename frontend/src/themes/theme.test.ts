@@ -95,10 +95,13 @@ describe('theme stylesheet', () => {
     expect(themeBlock(/\.fm-operation-centre\s*\{([^}]*border-top[^}]*)\}/)).toContain(
       'position: relative',
     );
+    const sharedControls = themeBlock(
+      /\.fm-operation-centre-close,\s*\.fm-operation-centre-show-all\s*\{([^}]*)\}/,
+    );
+    expect(sharedControls).toContain('position: absolute');
+    expect(sharedControls).toContain('right: 0.25rem');
     const close = themeBlock(/\.fm-operation-centre-close\s*\{([^}]*)\}/);
-    expect(close).toContain('position: absolute');
     expect(close).toContain('top: 0.25rem');
-    expect(close).toContain('right: 0.25rem');
   });
 
   it('defines every file-manager design token', () => {

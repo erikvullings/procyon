@@ -12,6 +12,29 @@ function directoryPathComponents(name: string): string[] {
   return name.split(/[\\/]/u);
 }
 
+function validateNameComponent(name: string): string | undefined {
+  if (name.includes('\0') || /[<>:"|?*]/u.test(name)) {
+    return t('operation', 'folderNameInvalidCharacters');
+  }
+  const stem = name.split('.')[0]?.trimEnd().toUpperCase();
+  if (
+    stem !== undefined &&
+    (/^(?:CON|PRN|AUX|NUL)$/u.test(stem) || /^(?:COM|LPT)[1-9]$/u.test(stem))
+  ) {
+    return t('operation', 'folderNameReserved');
+  }
+  return undefined;
+}
+
+/** Validates one cross-platform-safe file or directory entry name. */
+export function validateEntryName(name: string): string | undefined {
+  if (name.length === 0) return t('operation', 'folderNameRequired');
+  if (name === '.' || name === '..' || /[\\/]/u.test(name)) {
+    return t('operation', 'folderNameInvalidCharacters');
+  }
+  return validateNameComponent(name);
+}
+
 /** Validates one or more cross-platform-safe directory names. */
 export function validateDirectoryName(name: string): string | undefined {
   if (name.length === 0) return t('operation', 'folderNameRequired');
@@ -24,16 +47,8 @@ export function validateDirectoryName(name: string): string | undefined {
     return t('operation', 'folderPathInvalid');
   }
   for (const component of components) {
-    if (component.includes('\0') || /[<>:"|?*]/u.test(component)) {
-      return t('operation', 'folderNameInvalidCharacters');
-    }
-    const stem = component.split('.')[0]?.trimEnd().toUpperCase();
-    if (
-      stem !== undefined &&
-      (/^(?:CON|PRN|AUX|NUL)$/u.test(stem) || /^(?:COM|LPT)[1-9]$/u.test(stem))
-    ) {
-      return t('operation', 'folderNameReserved');
-    }
+    const error = validateNameComponent(component);
+    if (error !== undefined) return error;
   }
   return undefined;
 }

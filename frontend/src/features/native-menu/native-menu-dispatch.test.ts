@@ -271,7 +271,7 @@ describe('dispatchNativeMenuAction', () => {
     dispatchNativeMenuAction(mocks.context, `${GO_MENU_CONNECTION_ID_PREFIX}connection-1`);
     expect(mocks.navigateToLocation).toHaveBeenCalledExactlyOnceWith({
       providerId: 'sftp',
-      uri: 'sftp://connection-1/home/erik',
+      uri: 'sftp://connection-1/',
     });
   });
 

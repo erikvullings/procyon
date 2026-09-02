@@ -1,5 +1,5 @@
 import type { MultiRenameCaseTransform, MultiRenameRules, MultiRenameSequence } from '../../models';
-import { validateDirectoryName } from './create-directory-dialog';
+import { validateEntryName } from './create-directory-dialog';
 
 /** How the whole proposed name is cased after every other rule has been applied. */
 export type CaseTransform = MultiRenameCaseTransform;
@@ -201,7 +201,7 @@ export function proposeRenames(
     const newName = newNames[index] ?? entry.name;
     const changed = newName !== entry.name;
     const folded = foldForCollision(newName);
-    const invalidNameReason = validateDirectoryName(newName);
+    const invalidNameReason = validateEntryName(newName);
     const collision: RenameCollisionKind | undefined =
       (foldedCounts.get(folded) ?? 0) > 1
         ? 'plan'

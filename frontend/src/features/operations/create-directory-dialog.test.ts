@@ -2,7 +2,11 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { setLocale } from '../../i18n';
-import { CreateDirectoryDialog, validateDirectoryName } from './create-directory-dialog';
+import {
+  CreateDirectoryDialog,
+  validateDirectoryName,
+  validateEntryName,
+} from './create-directory-dialog';
 
 let root: HTMLElement;
 
@@ -30,6 +34,14 @@ describe('CreateDirectoryDialog', () => {
     expect(validateDirectoryName('bad\0name')).toBe('The name contains invalid characters.');
     expect(validateDirectoryName('COM1.txt')).toBe('That name is reserved by Windows.');
     expect(validateDirectoryName('資料')).toBeUndefined();
+  });
+
+  it('keeps path separators invalid for single file and rename entry names', () => {
+    expect(validateEntryName('parent/child')).toBe('The name contains invalid characters.');
+    expect(validateEntryName(String.raw`parent\child`)).toBe(
+      'The name contains invalid characters.',
+    );
+    expect(validateEntryName('report.txt')).toBeUndefined();
   });
 
   it('is focused and confirms with Enter while Escape cancels', async () => {

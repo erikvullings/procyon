@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
-import { validateDirectoryName } from './create-directory-dialog';
+import { validateEntryName } from './create-directory-dialog';
 
 export interface CreateFileDialogAttrs {
   readonly open: boolean;
@@ -20,7 +20,7 @@ function blurActive(): void {
 
 /**
  * Materialized modal used by the Shift+F4 "new file here" action (Total
- * Commander parity, task 0128). Reuses `validateDirectoryName`'s
+ * Commander parity, task 0128). Reuses `validateEntryName`'s
  * cross-platform-safe single-segment name check - the same rules that make a
  * name unsafe for a directory make it unsafe for a file.
  */
@@ -30,7 +30,7 @@ export const CreateFileDialog: FactoryComponent<CreateFileDialogAttrs> = () => {
   let wasOpen = false;
 
   function confirm(attrs: CreateFileDialogAttrs): void {
-    error = validateDirectoryName(name);
+    error = validateEntryName(name);
     if (error === undefined) {
       blurActive();
       attrs.onConfirm(name);
@@ -68,7 +68,7 @@ export const CreateFileDialog: FactoryComponent<CreateFileDialogAttrs> = () => {
             'aria-invalid': error === undefined ? undefined : 'true',
             oninput: (event: InputEvent) => {
               name = (event.currentTarget as HTMLInputElement).value;
-              error = validateDirectoryName(name);
+              error = validateEntryName(name);
             },
             onkeydown: (event: KeyboardEvent) => {
               if (event.key === 'Escape') {
@@ -92,7 +92,7 @@ export const CreateFileDialog: FactoryComponent<CreateFileDialogAttrs> = () => {
           { label: t('button', 'cancel'), onclick: () => cancel(attrs) },
           {
             label: t('button', 'create'),
-            disabled: validateDirectoryName(name) !== undefined,
+            disabled: validateEntryName(name) !== undefined,
             onclick: () => confirm(attrs),
           },
         ],
