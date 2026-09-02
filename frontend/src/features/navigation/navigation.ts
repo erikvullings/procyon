@@ -219,6 +219,43 @@ export function createNavigationController(
   // Cleared on success or on `dispose()`; see `BACKGROUND_RETRY_THRESHOLD`.
   const backgroundFailureCounts = new Map<string, number>();
   const backgroundRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // macOS may present one privacy prompt per concurrent access to a protected folder. Keep only
+  // identical locations sequential; unrelated local and remote panes still load in parallel.
+  const locationAccessTails = new Map<
+    string,
+    { readonly paneId: PaneId; readonly completion: Promise<void> }
+  >();
+
+  async function withSerializedLocationAccess<T>(
+    location: Location,
+    paneId: PaneId,
+    access: () => Promise<T>,
+  ): Promise<T> {
+    const key = `${location.providerId}:${location.uri}`;
+    const previous = locationAccessTails.get(key);
+    let release = (): void => undefined;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const currentAccess = { paneId, completion: current };
+    locationAccessTails.set(key, currentAccess);
+    if (previous !== undefined && previous.paneId !== paneId) await previous.completion;
+    try {
+      return await access();
+    } finally {
+      release();
+      if (locationAccessTails.get(key) === currentAccess) locationAccessTails.delete(key);
+    }
+  }
+
+  function listDirectory(
+    request: ListDirectoryRequest,
+    signal: AbortSignal,
+  ): Promise<DirectorySnapshot> {
+    return withSerializedLocationAccess(request.location, request.paneId, () =>
+      options.client.listDirectory(request, signal),
+    );
+  }
 
   function clearBackgroundRetry(key: string): void {
     const timer = backgroundRetryTimers.get(key);
@@ -377,7 +414,7 @@ export function createNavigationController(
       continuationToken !== undefined &&
       mergedEntries.length < minEntries
     ) {
-      const nextSnapshot = await options.client.listDirectory(
+      const nextSnapshot = await listDirectory(
         requestFor(
           workspace,
           paneId,
@@ -428,7 +465,7 @@ export function createNavigationController(
     }
     try {
       let snapshot = await withArchiveCredential(tab.location, () =>
-        options.client.listDirectory(
+        listDirectory(
           requestFor(workspace, paneId, request.id, tab.location, tab),
           request.controller.signal,
         ),
@@ -535,14 +572,16 @@ export function createNavigationController(
         location: currentLocation,
         ...viewOptionsFor(currentTab),
       };
-      try {
-        return await options.client.navigatePane(payload, currentSignal);
-      } catch (error: unknown) {
-        if (currentSignal.aborted || !isRetryableNavigationError(error)) {
-          throw error;
+      return withSerializedLocationAccess(currentLocation, currentPaneId, async () => {
+        try {
+          return await options.client.navigatePane(payload, currentSignal);
+        } catch (error: unknown) {
+          if (currentSignal.aborted || !isRetryableNavigationError(error)) {
+            throw error;
+          }
+          return options.client.navigatePane(payload, currentSignal);
         }
-        return options.client.navigatePane(payload, currentSignal);
-      }
+      });
     };
     try {
       // Explicit destinations can be validated without mutating workspace history. This keeps a
@@ -640,7 +679,7 @@ export function createNavigationController(
     }
     const request = begin(paneId, tabId, 'load');
     try {
-      const snapshot = await options.client.listDirectory(
+      const snapshot = await listDirectory(
         requestFor(workspace, paneId, request.id, current.location, tab, current.continuationToken),
         request.controller.signal,
       );

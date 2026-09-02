@@ -8,6 +8,7 @@ import type {
   PaneId,
   WorkspaceProjection,
 } from '../../models';
+import { compactConnectionName } from '../panes/tab-strip';
 import {
   constrainSplitRatio,
   pathFromUri,
@@ -284,7 +285,7 @@ describe('WorkspaceLayoutView pane focus', () => {
       },
     },
   ] as const)(
-    'uses the saved $kind name at the configured root and keeps its plug icon in subfolders',
+    'uses the saved $kind name at the configured root and keeps its identity in subfolders',
     ({ kind, providerId, rootUri, childUri, configuration }) => {
       const workspace = projection();
       const tab = workspace.panesById.left?.tabsById['left-tab'];
@@ -314,24 +315,66 @@ describe('WorkspaceLayoutView pane focus', () => {
 
       mount(viewAttrs);
       expect(root.querySelector('[data-pane-id="left"] .fm-pane-tab-title')?.textContent).toBe(
-        `${kind} account`,
+        compactConnectionName(`${kind} account`),
       );
       expect(
         root.querySelector('[data-pane-id="left"] .fm-pane-tab-connection-icon'),
+      ).not.toBeNull();
+      expect(
+        root.querySelector('[data-pane-id="left"] .fm-pane-tab-connection-name'),
       ).not.toBeNull();
 
       tab.location = { providerId, uri: childUri };
       tab.title = 'Documents';
       m.redraw.sync();
 
-      expect(root.querySelector('[data-pane-id="left"] .fm-pane-tab-title')?.textContent).toBe(
-        'Documents',
-      );
+      const tabTitle = root.querySelector('[data-pane-id="left"] .fm-pane-tab-title');
+      expect(tabTitle?.textContent).toContain('Documents');
+      expect(tabTitle?.textContent).toContain(compactConnectionName(`${kind} account`));
       expect(
         root.querySelector('[data-pane-id="left"] .fm-pane-tab-connection-icon'),
       ).not.toBeNull();
     },
   );
+
+  it('abbreviates a long connection name before the remote folder name', () => {
+    const workspace = projection();
+    const tab = workspace.panesById.left?.tabsById['left-tab'];
+    if (tab === undefined) throw new Error('left tab fixture missing');
+    const connectionId = '11111111-1111-4111-8111-111111111111';
+    tab.location = {
+      providerId: 'onedrive',
+      uri: `onedrive://${connectionId}/Documents`,
+    };
+    tab.title = 'Documents';
+    const base = attrs({ workspace });
+    const basePaneContent = base.paneContent;
+
+    mount({
+      ...base,
+      paneContent: (paneId) => ({
+        ...basePaneContent(paneId),
+        connections: [
+          {
+            id: connectionId,
+            name: 'OneDrive Personal',
+            kind: 'oneDrive',
+            configuration: { kind: 'oneDrive', accountHint: null },
+            hasCredential: true,
+            status: 'connected',
+            rootLocation: `onedrive://${connectionId}/`,
+            createdAt: '2026-08-13T00:00:00Z',
+            updatedAt: '2026-08-13T00:00:00Z',
+          },
+        ],
+      }),
+    });
+
+    const renderedTab = root.querySelector<HTMLElement>('[data-pane-id="left"] [role="tab"]');
+    expect(renderedTab?.textContent).toContain('ODP');
+    expect(renderedTab?.textContent).toContain('Documents');
+    expect(renderedTab?.title).toContain('OneDrive Personal');
+  });
 
   it('activates a pane when anywhere inside it is clicked', () => {
     const onActivatePane = vi.fn<(paneId: PaneId) => void>();

@@ -89,6 +89,7 @@ export function createSettingsController(context: SettingsControllerContext): Se
     ): Promise<void> {
       const workspace = context.getWorkspace();
       if (workspace === undefined) return;
+      const panesToReload = new Set<PaneId>();
       for (const paneId of workspace.paneOrder) {
         for (const tabId of workspace.panesById[paneId]?.tabOrder ?? []) {
           const current = context.getWorkspace();
@@ -112,11 +113,14 @@ export function createSettingsController(context: SettingsControllerContext): Se
           } catch {
             continue;
           }
-          if (activeTabKey(paneId) !== tabKey(paneId, tabId))
+          if (activeTabKey(paneId) === tabKey(paneId, tabId)) {
+            panesToReload.add(paneId);
+          } else {
             context.getDirectories().delete(tabKey(paneId, tabId));
+          }
         }
       }
-      for (const paneId of workspace.paneOrder) void context.getNavigation().load(paneId);
+      for (const paneId of panesToReload) void context.getNavigation().load(paneId);
     },
 
     async applyCurrentShowHiddenSetting(

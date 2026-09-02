@@ -541,6 +541,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             ...(uri === undefined ? {} : { locationUri: uri }),
             isSearchTab: uri?.startsWith('search://') ?? false,
             isConnectionTab: connection !== undefined,
+            ...(connection === undefined ? {} : { connectionName: connection.name }),
             ...(presentation === undefined ? {} : { searchKind: presentation.kind }),
           };
         }),

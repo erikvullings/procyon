@@ -126,12 +126,36 @@
 }
 
 .fm-pane-tab-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fm-pane-tab-connection-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-pane-tab-folder-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-pane-tab-connection-separator {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
 }
 
 .fm-pane-tab-title > * {

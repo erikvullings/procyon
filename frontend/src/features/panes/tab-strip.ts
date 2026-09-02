@@ -103,7 +103,29 @@ export interface PaneTab {
   readonly isSearchTab?: boolean;
   /** Whether this tab belongs to a saved remote connection. */
   readonly isConnectionTab?: boolean;
+  /** User-chosen saved connection name, shown before the remote folder name. */
+  readonly connectionName?: string;
   readonly searchKind?: 'filename' | 'content';
+}
+
+const MAX_FULL_CONNECTION_NAME_LENGTH = 12;
+
+/** Keeps short saved names intact and turns longer word/camel-case names into initials. */
+export function compactConnectionName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= MAX_FULL_CONNECTION_NAME_LENGTH) return trimmed;
+
+  const words = trimmed
+    .replace(/([\p{Ll}\d])(\p{Lu})/gu, '$1 $2')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 0);
+  if (words.length > 1) {
+    return words
+      .map((word) => Array.from(word)[0])
+      .join('')
+      .toLocaleUpperCase();
+  }
+  return `${Array.from(trimmed).slice(0, 8).join('')}…`;
 }
 
 export interface TabStripAttrs {
@@ -155,6 +177,12 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
         [
           ...attrs.tabs.map((tab) => {
             const isReorderTarget = preview?.tabId === tab.id;
+            const compactConnection =
+              tab.connectionName === undefined
+                ? undefined
+                : compactConnectionName(tab.connectionName);
+            const showsConnectionAndFolder =
+              compactConnection !== undefined && tab.title !== tab.connectionName;
             return m(
               '.fm-pane-tab',
               {
@@ -162,7 +190,10 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
                 role: 'tab',
                 tabindex: 0,
                 'data-tab-id': tab.id,
-                title: tab.path,
+                title:
+                  tab.connectionName === undefined
+                    ? tab.path
+                    : `${tab.connectionName} — ${tab.path}`,
                 'aria-selected': tab.id === attrs.activeTabId ? 'true' : 'false',
                 onclick: (event: MouseEvent) => {
                   event.stopPropagation();
@@ -266,7 +297,15 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
                             size: 12,
                             className: 'fm-pane-tab-connection-icon',
                           }),
-                          tab.title,
+                          compactConnection === undefined
+                            ? tab.title
+                            : m('span.fm-pane-tab-connection-name', compactConnection),
+                          showsConnectionAndFolder
+                            ? m('span.fm-pane-tab-connection-separator', '·')
+                            : undefined,
+                          showsConnectionAndFolder
+                            ? m('span.fm-pane-tab-folder-name', tab.title)
+                            : undefined,
                         ]
                       : tab.title,
                 ),

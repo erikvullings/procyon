@@ -184,6 +184,65 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
+  it('serializes initial pane loads that target the same protected location', async () => {
+    const client = new MockFileManagerClient();
+    const originalStartWorkspace = client.startWorkspace.bind(client);
+    vi.spyOn(client, 'startWorkspace').mockImplementation(async (workspaceId, signal) => {
+      const workspace = await originalStartWorkspace(workspaceId, signal);
+      const leftPane = workspace.panesById.left;
+      const rightPane = workspace.panesById.right;
+      const leftTab = leftPane?.tabsById[leftPane.activeTabId];
+      const rightTab = rightPane?.tabsById[rightPane.activeTabId];
+      if (
+        leftPane === undefined ||
+        rightPane === undefined ||
+        leftTab === undefined ||
+        rightTab === undefined
+      ) {
+        throw new Error('expected two active pane tabs');
+      }
+      return {
+        ...workspace,
+        panesById: {
+          ...workspace.panesById,
+          right: {
+            ...rightPane,
+            tabsById: {
+              ...rightPane.tabsById,
+              [rightTab.id]: { ...rightTab, location: leftTab.location },
+            },
+          },
+        },
+      };
+    });
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    const originalListDirectory = listDirectory.getMockImplementation();
+    let releaseFirstLoad: (() => void) | undefined;
+    const firstLoadGate = new Promise<void>((resolve) => {
+      releaseFirstLoad = resolve;
+    });
+    let callCount = 0;
+    listDirectory.mockImplementation(async (request, signal) => {
+      callCount += 1;
+      if (callCount === 1) await firstLoadGate;
+      if (originalListDirectory === undefined)
+        throw new Error('missing listDirectory implementation');
+      return originalListDirectory(request, signal);
+    });
+
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(listDirectory).toHaveBeenCalled());
+    expect(listDirectory).toHaveBeenCalledTimes(1);
+    releaseFirstLoad?.();
+    await vi.waitFor(() => expect(listDirectory).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    expect(listDirectory).toHaveBeenCalledTimes(2);
+    expect(listDirectory.mock.calls[0]?.[0].location).toEqual(
+      listDirectory.mock.calls[1]?.[0].location,
+    );
+  });
+
   it('shows the directory table and loads the mock root directory', async () => {
     mountShell('mock');
 
