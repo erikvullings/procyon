@@ -16,7 +16,7 @@ members = ["crates/*", "apps/*", "apps/fm-desktop/src-tauri"]
 edition = "2024"
 license = "MIT"
 rust-version = "1.97"
-version = "0.1.0-13"
+version = "0.1.0-14"
 
 # Line-tables-only debug info is enough for backtraces/line-level debugging
 # and is much cheaper to generate and link than full debug info, which
