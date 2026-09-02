@@ -669,7 +669,7 @@ export const en = {
     port: 'Port',
     username: 'Username',
     startFolder: 'Start folder (optional)',
-    startFolderHelp: 'Leave empty to use the default /home/<username>.',
+    startFolderHelp: 'Leave empty to start at the server root.',
     authentication: 'Authentication',
     hostKeyPolicy: 'Host key policy',
     password: 'Password',

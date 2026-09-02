@@ -5,7 +5,6 @@ import {
   connectionForLocation,
   connectionStatusGlyph,
   connectionStatusLabel,
-  defaultSshStartPath,
   isBrowsable,
   remoteRootLocation,
   saveConnection,
@@ -260,12 +259,12 @@ describe('sftpStartPathForConnection', () => {
     ).toBe('/srv/data');
   });
 
-  it('falls back to /home/<username> when startPath is not configured', () => {
+  it('falls back to the server root when startPath is not configured', () => {
     expect(
       sftpStartPathForConnection(
         sampleConnection({ configuration: sshConfiguration({ startPath: null }) }),
       ),
-    ).toBe('/home/erik');
+    ).toBe('/');
   });
 
   it('normalizes a configured startPath missing leading slash', () => {
@@ -274,16 +273,6 @@ describe('sftpStartPathForConnection', () => {
         sampleConnection({ configuration: sshConfiguration({ startPath: 'var/lib' }) }),
       ),
     ).toBe('/var/lib');
-  });
-});
-
-describe('defaultSshStartPath', () => {
-  it('builds a home path for a non-empty username', () => {
-    expect(defaultSshStartPath('tno')).toBe('/home/tno');
-  });
-
-  it('falls back to root for an empty username', () => {
-    expect(defaultSshStartPath('  ')).toBe('/');
   });
 });
 

@@ -4,7 +4,9 @@
    chrome, rather than bare unstyled text. */
 
 .fm-app-shell .modal.fm-connections-modal {
-  width: min(30rem, calc(100vw - 2rem));
+  width: min(34rem, calc(100vw - 2rem));
+  max-width: min(34rem, calc(100vw - 2rem));
+  --mm-modal-max-height: min(90vh, 48rem);
 }
 
 .fm-connections-list {
@@ -22,7 +24,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  max-height: 18rem;
+  max-height: min(30rem, calc(90vh - 10rem));
   margin: 0;
   padding: 0;
   overflow-y: auto;

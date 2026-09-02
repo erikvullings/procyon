@@ -231,3 +231,31 @@ describe('ConnectionsManager OneDrive authorization', () => {
     expect(root.textContent).not.toContain('Waiting for Microsoft sign-in');
   });
 });
+
+describe('ConnectionsManager form editing', () => {
+  it.each(['c', 'x', 'v'])(
+    'keeps Mod-%s inside text fields without preventing the native clipboard operation',
+    async (key) => {
+      mount(attrs({ connections: [] }));
+      await flush();
+      button('New connection…').click();
+      m.redraw.sync();
+      const input = root.querySelector<HTMLInputElement>('input[type="text"]');
+      if (input === null) throw new Error('connection name input not found');
+      const documentKeydown = vi.fn();
+      document.addEventListener('keydown', documentKeydown);
+      const event = new KeyboardEvent('keydown', {
+        key,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      input.dispatchEvent(event);
+      document.removeEventListener('keydown', documentKeydown);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(documentKeydown).not.toHaveBeenCalled();
+    },
+  );
+});

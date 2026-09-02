@@ -676,7 +676,7 @@ export const nl = {
     port: 'Poort',
     username: 'Gebruikersnaam',
     startFolder: 'Startmap (optioneel)',
-    startFolderHelp: 'Laat leeg om de standaard /home/<gebruikersnaam> te gebruiken.',
+    startFolderHelp: 'Laat leeg om in de hoofdmap van de server te beginnen.',
     authentication: 'Authenticatie',
     hostKeyPolicy: 'Hostsleutelbeleid',
     password: 'Wachtwoord',

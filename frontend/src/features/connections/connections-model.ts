@@ -106,12 +106,6 @@ export function connectionForLocation(
   );
 }
 
-/** Fallback start path for SSH connections when no explicit override is saved. */
-export function defaultSshStartPath(username: string): string {
-  const trimmed = username.trim();
-  return trimmed.length === 0 ? '/' : `/home/${trimmed}`;
-}
-
 /** Resolves the effective SFTP start path for a browsable connection. */
 export function sftpStartPathForConnection(connection: Connection): string {
   if (connection.configuration.kind !== 'ssh') return '/';
@@ -119,7 +113,7 @@ export function sftpStartPathForConnection(connection: Connection): string {
   if (configured !== undefined && configured.length > 0) {
     return configured.startsWith('/') ? configured : `/${configured}`;
   }
-  return defaultSshStartPath(connection.configuration.username);
+  return '/';
 }
 
 /**

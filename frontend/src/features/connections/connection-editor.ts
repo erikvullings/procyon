@@ -80,6 +80,17 @@ const TECHNICAL_TEXT_ATTRS = {
   spellcheck: false,
 } as const;
 
+function preserveNativeClipboardShortcut(event: KeyboardEvent): void {
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    ['c', 'v', 'x'].includes(event.key.toLowerCase())
+  ) {
+    // Keep application-level file clipboard shortcuts from seeing text-editing keystrokes.
+    event.stopPropagation();
+  }
+}
+
 type ViewMode =
   | { readonly kind: 'list' }
   | { readonly kind: 'form'; readonly editingId?: ConnectionId };
@@ -876,9 +887,7 @@ export const ConnectionsManager: FactoryComponent<ConnectionsManagerAttrs> = () 
         m(TextInput, {
           label: t('connections', 'startFolder'),
           value: configuration.startPath ?? '',
-          placeholder: configuration.username
-            ? `/home/${configuration.username}`
-            : '/home/username',
+          placeholder: '/',
           helperText: t('connections', 'startFolderHelp'),
           oninput: (value: string) => {
             const trimmed = value.trim();
@@ -1148,7 +1157,7 @@ export const ConnectionsManager: FactoryComponent<ConnectionsManagerAttrs> = () 
   }
 
   function renderForm(editingId: ConnectionId | undefined) {
-    return m('.fm-connection-form', [
+    return m('.fm-connection-form', { onkeydown: preserveNativeClipboardShortcut }, [
       m('.row', [
         m(TextInput, {
           label: t('connections', 'name'),
