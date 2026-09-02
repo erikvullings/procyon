@@ -156,3 +156,8 @@ Existing building blocks and gaps, confirmed by inspection:
   shared read-only CodeMirror 6 component. Search matches now use a CodeMirror selection and
   scroll effect, the highlight.js dependency and obsolete DOM highlighter/tests were removed,
   and the focused preview suite passes (52 tests).
+- 2026-09-02 copilot: Text-window navigation now uses the materialized pagination control at the
+  bottom of the viewer, expressed as page counts rather than byte ranges and omitted for one-page
+  files. Rendered Markdown and CodeMirror descendants explicitly permit mouse selection; Markdown
+  handles Cmd/Ctrl+A and Cmd/Ctrl+C locally so file-selection shortcuts cannot steal them, and
+  CodeMirror selection text keeps the theme foreground colour in dark mode.

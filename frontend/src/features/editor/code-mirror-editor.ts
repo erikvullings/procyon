@@ -101,6 +101,7 @@ export const CodeMirrorEditor: FactoryComponent<CodeMirrorEditorAttrs> = () => {
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fm-accent)' },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
         backgroundColor: 'var(--fm-selection)',
+        color: 'var(--fm-text)',
       },
       '.cm-gutters': {
         backgroundColor: 'var(--fm-surface)',
@@ -164,7 +165,7 @@ export const CodeMirrorEditor: FactoryComponent<CodeMirrorEditorAttrs> = () => {
         }
         // Keeps these chords from bubbling to the app-wide keymap, which would otherwise
         // intercept them (save/undo/redo, and Mod-F for the in-editor find panel).
-        if (isMod && ['s', 'z', 'y', 'f'].includes(event.key.toLowerCase()))
+        if (isMod && ['a', 'c', 's', 'z', 'y', 'f'].includes(event.key.toLowerCase()))
           event.stopPropagation();
         return false;
       },

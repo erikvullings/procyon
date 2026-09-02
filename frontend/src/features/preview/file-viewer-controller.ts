@@ -337,6 +337,7 @@ export interface FileViewerControllerOptions {
 export interface FileViewerController {
   loadMore(): Promise<void>;
   loadPrevious(): Promise<void>;
+  loadTextPage(pageIndex: number): Promise<void>;
   loadStructuredRows(startRow: number): Promise<void>;
   setStructuredOptions(delimiter: string, headerMode: 'auto' | 'firstRow' | 'none'): Promise<void>;
   selectStructuredSheet(sheetName: string): Promise<void>;
@@ -1124,6 +1125,7 @@ export function createFileViewerController(
       publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), content: cached });
       return;
     }
+
     const ready = current as Extract<FileViewerState, { status: 'ready' }>;
     publish({ ...ready, content: { ...content, loadingMore: true } });
     const controller = beginRequest();
@@ -1144,6 +1146,42 @@ export function createFileViewerController(
       };
       rememberTextWindow(previous);
       publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), content: previous });
+    } catch (error: unknown) {
+      if (isCurrent(controller)) publish({ status: 'error', entry, message: errorMessage(error) });
+    }
+  }
+
+  async function loadTextPage(pageIndex: number): Promise<void> {
+    const content = textContent();
+    if (content === undefined || content.loadingMore) return;
+    const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;
+    if (offset === content.windowOffset || (entry.size !== undefined && offset >= entry.size))
+      return;
+    const cached = textWindowCache.get(offset);
+    if (cached !== undefined) {
+      publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), content: cached });
+      return;
+    }
+    const ready = current as Extract<FileViewerState, { status: 'ready' }>;
+    publish({ ...ready, content: { ...content, loadingMore: true } });
+    const controller = beginRequest();
+    try {
+      const chunk = await client.readFileRange(
+        { location: entry.location, offset, length: TEXT_WINDOW_BYTES },
+        controller.signal,
+      );
+      if (!isCurrent(controller)) return;
+      const page: FileViewerTextContent = {
+        kind: 'text',
+        windowOffset: offset,
+        windowEnd: offset + chunk.length,
+        text: new TextDecoder().decode(new Uint8Array(chunk.data)),
+        atStart: offset === 0,
+        atEnd: chunk.eof,
+        loadingMore: false,
+      };
+      rememberTextWindow(page);
+      publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), content: page });
     } catch (error: unknown) {
       if (isCurrent(controller)) publish({ status: 'error', entry, message: errorMessage(error) });
     }
@@ -1984,6 +2022,7 @@ export function createFileViewerController(
   return {
     loadMore,
     loadPrevious,
+    loadTextPage,
     loadStructuredRows,
     setStructuredOptions,
     selectStructuredSheet,

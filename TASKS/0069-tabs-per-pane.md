@@ -111,3 +111,7 @@ and §37.
     and `cargo fmt --all --check` all clean.
   - Left `frontend/src/api/client/tauri-file-manager-client.ts` (a pre-existing, unrelated one-line
     import-type change already present on disk before this task) and commit `d8a1f68` untouched.
+- 2026-09-02 copilot: Activating a hidden tab now immediately aborts the previous tab's request and
+  refreshes the activated location, rather than waiting for the persisted `ActivateTab` command to
+  round-trip first. This also hands the pane's backend watcher to the newly active tab promptly, so
+  files added while a tab was hidden are visible on activation.

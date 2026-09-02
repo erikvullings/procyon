@@ -601,6 +601,48 @@ describe('file viewer controller', () => {
     });
   });
 
+  it('loads an arbitrary bounded text page selected from pagination', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange)
+      .mockResolvedValueOnce({
+        data: [104],
+        offset: 0,
+        length: 1,
+        eof: false,
+      })
+      .mockResolvedValueOnce({
+        data: [112],
+        offset: 2 * TEXT_WINDOW_BYTES,
+        length: 1,
+        eof: true,
+      });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ size: 2 * TEXT_WINDOW_BYTES + 1 }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    await controller.loadTextPage(2);
+
+    expect(context.client.readFileRange).toHaveBeenLastCalledWith(
+      {
+        location: entry().location,
+        offset: 2 * TEXT_WINDOW_BYTES,
+        length: TEXT_WINDOW_BYTES,
+      },
+      expect.any(AbortSignal),
+    );
+    expect(textOf(context.states.at(-1))).toBe('p');
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        windowOffset: 2 * TEXT_WINDOW_BYTES,
+        windowEnd: 2 * TEXT_WINDOW_BYTES + 1,
+        atEnd: true,
+      },
+    });
+  });
+
   it('does not loadMore past the end of the file', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({

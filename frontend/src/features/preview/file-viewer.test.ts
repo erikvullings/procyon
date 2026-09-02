@@ -33,6 +33,7 @@ function baseAttrs(
     state,
     onLoadMore: vi.fn(),
     onLoadPrevious: vi.fn(),
+    onLoadTextPage: vi.fn(),
     onLoadStructuredRows: vi.fn(),
     onStructuredOptionsChange: vi.fn(),
     onSelectStructuredSheet: vi.fn(),
@@ -207,6 +208,7 @@ describe('FileViewer', () => {
     );
     expect(root.querySelector('.cm-content')?.textContent).toBe('hello');
     expect(root.querySelector('.fm-file-viewer-search-input')).not.toBeNull();
+    expect(root.querySelector('.fm-file-viewer-text-pagination')).toBeNull();
   });
 
   it('renders Markdown for F3 instead of showing its source', () => {
@@ -229,6 +231,48 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-markdown h1')?.textContent).toBe('Title');
     expect(root.querySelector('.fm-file-viewer-markdown')?.classList).toContain('browser-default');
     expect(root.querySelector('.cm-editor')).toBeNull();
+  });
+
+  it('selects and copies rendered Markdown without bubbling into file shortcuts', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'README.md', extension: 'md' }),
+        content: {
+          kind: 'text',
+          windowOffset: 0,
+          windowEnd: 18,
+          text: '# Selectable text',
+          atStart: true,
+          atEnd: true,
+          loadingMore: false,
+        },
+      }),
+    );
+    const markdown = root.querySelector<HTMLElement>('.fm-file-viewer-markdown');
+    if (markdown === null) throw new Error('Markdown preview missing');
+    expect(markdown.tabIndex).toBe(0);
+    const selectAll = new KeyboardEvent('keydown', {
+      key: 'a',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    markdown.dispatchEvent(selectAll);
+    expect(selectAll.defaultPrevented).toBe(true);
+    expect(document.getSelection()?.toString()).toContain('Selectable text');
+
+    const bubbledCopy = vi.fn();
+    root.addEventListener('keydown', bubbledCopy);
+    const copy = new KeyboardEvent('keydown', {
+      key: 'c',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    markdown.dispatchEvent(copy);
+    expect(copy.defaultPrevented).toBe(false);
+    expect(bubbledCopy).not.toHaveBeenCalled();
   });
 
   it('highlights the active search match within the loaded window', () => {
@@ -310,31 +354,31 @@ describe('FileViewer', () => {
     expect(onResetZoom).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onLoadMore from bounded next-window navigation', () => {
-    const onLoadMore = vi.fn();
+  it('shows page-based text pagination only when the file has multiple windows', () => {
+    const onLoadTextPage = vi.fn();
     mount(
       baseAttrs(
         {
           status: 'ready',
-          entry: entry(),
+          entry: entry({ size: 3 * 64 * 1024 }),
           content: {
             kind: 'text',
-            windowOffset: 0,
-            windowEnd: 5,
+            windowOffset: 64 * 1024,
+            windowEnd: 128 * 1024,
             text: 'hello',
-            atStart: true,
+            atStart: false,
             atEnd: false,
             loadingMore: false,
           },
         },
-        { onLoadMore },
+        { onLoadTextPage },
       ),
     );
-    const next = [
-      ...root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-window-controls button'),
-    ].find((button) => button.textContent === 'Next window');
-    next?.click();
-    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    const pagination = root.querySelector('.fm-file-viewer-text-pagination');
+    expect(pagination?.textContent).toContain('Page 2 of 3');
+    expect(pagination?.textContent).not.toContain('bytes');
+    pagination?.querySelectorAll<HTMLButtonElement>('.pagination-controls button')[2]?.click();
+    expect(onLoadTextPage).toHaveBeenCalledWith(2);
   });
 
   it('forwards search input, option toggles, and match navigation', () => {

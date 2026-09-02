@@ -137,6 +137,13 @@ export function createTabController(
       // Task 0069's acceptance criteria: "switching tabs is instant: the previous snapshot is
       // reused if still valid, otherwise refetched."
       const hasCachedSnapshot = context.hasCachedSnapshot(paneId, tabId);
+      // Hand the backend pane subscription to the activated tab immediately. Waiting for the
+      // persisted ActivateTab command first leaves a stale cached listing visible and unwatched
+      // while that round-trip is in flight.
+      context.getNavigation().abort(paneId, previousTabId);
+      void context
+        .getNavigation()
+        .load(paneId, hasCachedSnapshot ? { background: true } : undefined);
       void dispatchWorkspaceCommand(
         client,
         {
@@ -148,14 +155,14 @@ export function createTabController(
         },
         (next) => {
           replaceWorkspace(next);
-          context.getNavigation().abort(paneId, previousTabId);
-          void context
-            .getNavigation()
-            .load(paneId, hasCachedSnapshot ? { background: true } : undefined);
         },
       ).catch(() => {
         const current = context.getWorkspace();
-        if (current?.revision === workspace.revision) context.setWorkspace(workspace);
+        if (current?.revision === workspace.revision) {
+          context.getNavigation().abort(paneId, tabId);
+          context.setWorkspace(workspace);
+          void context.getNavigation().load(paneId, { background: true });
+        }
       });
     },
 

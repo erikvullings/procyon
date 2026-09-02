@@ -416,6 +416,10 @@
   font-family: var(--fm-font-family);
   font-size: var(--fm-font-size);
   line-height: 1.45;
+}
+
+.fm-file-viewer-markdown,
+.fm-file-viewer-markdown * {
   user-select: text;
   -webkit-user-select: text;
 }
@@ -423,9 +427,16 @@
 /* Lister-style viewer is the deliberate exception to the app-wide `user-select: none` (see
  * `frontend/src/themes/theme.css`) - unlike directory listings and chrome, viewed file content is
  * meant to be selected and copied (mouse-drag or the copy button in the header). */
-.fm-file-viewer-body-text .cm-content {
+.fm-file-viewer-body-text .cm-content,
+.fm-file-viewer-body-text .cm-content * {
   user-select: text;
   -webkit-user-select: text;
+}
+
+.fm-file-viewer-markdown::selection,
+.fm-file-viewer-markdown *::selection {
+  background: var(--fm-selection);
+  color: var(--fm-text);
 }
 
 /* The viewer is read-only (edits are blocked at the CodeMirror state level, not via DOM
@@ -603,7 +614,6 @@
   color: var(--fm-text);
 }
 
-.fm-file-viewer-window-controls,
 .fm-structured-toolbar {
   display: flex;
   flex: 0 0 auto;
@@ -628,6 +638,25 @@
 .fm-file-viewer-body-text {
   display: flex;
   flex-direction: column;
+}
+
+.fm-file-viewer-text-pagination {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+}
+
+.fm-file-viewer-text-pagination .datatable-pagination {
+  justify-content: center;
+  width: auto;
+  min-height: var(--fm-row-height);
+  padding: 0 0.5rem;
+}
+
+.fm-file-viewer-text-pagination .pagination-info {
+  display: none;
 }
 
 .fm-file-viewer-body-text > .fm-code-mirror-editor,

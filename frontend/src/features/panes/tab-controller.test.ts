@@ -84,6 +84,24 @@ describe('createTabController', () => {
     expect(client.dispatchWorkspaceCommand).not.toHaveBeenCalled();
   });
 
+  it('starts refreshing and hands off the watcher as soon as a hidden tab is activated', () => {
+    const workspace = projection({ activeTabIdByPane: { 'pane-1': 'tab-1' } });
+    const context = makeContext(workspace);
+    const load = vi.fn().mockResolvedValue(undefined);
+    const abort = vi.fn();
+    context.getNavigation = () => ({ load, abort }) as unknown as NavigationController;
+    context.hasCachedSnapshot = () => true;
+    const client = {
+      dispatchWorkspaceCommand: vi.fn(() => new Promise<WorkspaceProjection>(() => undefined)),
+      getWorkspace: vi.fn(),
+    } as unknown as FileManagerClient;
+
+    createTabController(client, context).activateTab('pane-1' as PaneId, 'tab-2' as TabId);
+
+    expect(abort).toHaveBeenCalledWith('pane-1', 'tab-1');
+    expect(load).toHaveBeenCalledWith('pane-1', { background: true });
+  });
+
   it('openTabAt adds a tab at an arbitrary location rather than duplicating the active tab', async () => {
     const workspace = projection();
     const context = makeContext(workspace);

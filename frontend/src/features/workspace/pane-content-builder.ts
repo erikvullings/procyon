@@ -852,6 +852,7 @@ export function createPaneContentBuilder(
                     state: viewer.state,
                     onLoadMore: () => void viewer.controller.loadMore(),
                     onLoadPrevious: () => void viewer.controller.loadPrevious(),
+                    onLoadTextPage: (pageIndex) => void viewer.controller.loadTextPage(pageIndex),
                     onLoadStructuredRows: (startRow) =>
                       void viewer.controller.loadStructuredRows(startRow),
                     onStructuredOptionsChange: (delimiter, headerMode) =>

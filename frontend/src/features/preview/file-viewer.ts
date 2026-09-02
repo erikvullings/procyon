@@ -1,5 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, Select, toast } from 'mithril-materialized';
+import { FlatButton, PaginationControls, Select, toast } from 'mithril-materialized';
 import { closeIcon, copyIcon, infoCircleIcon, searchIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -20,7 +20,7 @@ import type {
   FileViewerSearchState,
   FileViewerState,
 } from './file-viewer-controller';
-import { STRUCTURED_SORT_MAX_BYTES } from './file-viewer-controller';
+import { STRUCTURED_SORT_MAX_BYTES, TEXT_WINDOW_BYTES } from './file-viewer-controller';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
 import { type PDFDocumentProxy, renderPdfPageToCanvas } from './pdf-preview';
 import './file-viewer.css';
@@ -44,6 +44,7 @@ export interface FileViewerAttrs {
   readonly state: FileViewerState;
   readonly onLoadMore: () => void;
   readonly onLoadPrevious: () => void;
+  readonly onLoadTextPage: (pageIndex: number) => void;
   readonly onLoadStructuredRows: (startRow: number) => void;
   readonly onStructuredOptionsChange: (
     delimiter: string,
@@ -111,7 +112,25 @@ const MarkdownPreview: FactoryComponent<MarkdownPreviewAttrs> = () => {
   return {
     oncreate: render,
     onupdate: render,
-    view: () => m('.fm-file-viewer-markdown.browser-default'),
+    view: () =>
+      m('.fm-file-viewer-markdown.browser-default', {
+        tabindex: 0,
+        onkeydown: (event: KeyboardEvent) => {
+          if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+          const key = event.key.toLowerCase();
+          if (key === 'a') {
+            event.preventDefault();
+            event.stopPropagation();
+            const range = document.createRange();
+            range.selectNodeContents(event.currentTarget as HTMLElement);
+            const selection = document.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+          } else if (key === 'c') {
+            event.stopPropagation();
+          }
+        },
+      }),
   };
 };
 
@@ -361,23 +380,12 @@ function renderTextBody(
   const content = state.content;
   if (content.kind !== 'text') return undefined;
   const editableLanguage = editableLanguageForExtension(state.entry.extension, state.entry.name);
+  const paginated = !content.atStart || !content.atEnd;
+  const knownOrMinimumBytes =
+    state.entry.size ?? content.windowEnd + (content.atEnd ? 0 : TEXT_WINDOW_BYTES);
+  const totalBytes = Math.max(knownOrMinimumBytes, content.windowEnd);
+  const currentPage = Math.floor(content.windowOffset / TEXT_WINDOW_BYTES);
   return m('.fm-file-viewer-body.fm-file-viewer-body-text', {}, [
-    m('.fm-file-viewer-window-controls', [
-      m(
-        'button',
-        { type: 'button', disabled: content.atStart, onclick: attrs.onLoadPrevious },
-        t('viewer', 'previousWindow'),
-      ),
-      m(
-        'span',
-        `${content.windowOffset.toLocaleString()}–${content.windowEnd.toLocaleString()} bytes`,
-      ),
-      m(
-        'button',
-        { type: 'button', disabled: content.atEnd, onclick: attrs.onLoadMore },
-        t('viewer', 'nextWindow'),
-      ),
-    ]),
     editableLanguage === 'markdown'
       ? m(MarkdownPreview, {
           text: content.text,
@@ -404,6 +412,19 @@ function renderTextBody(
               }),
         }),
     content.loadingMore ? m('.fm-file-viewer-loading-more', t('viewer', 'loadingMore')) : undefined,
+    paginated
+      ? m(
+          '.fm-file-viewer-text-pagination',
+          m(PaginationControls, {
+            pagination: {
+              page: currentPage,
+              pageSize: TEXT_WINDOW_BYTES,
+              total: totalBytes,
+            },
+            onPaginationChange: ({ page }) => attrs.onLoadTextPage(page),
+          }),
+        )
+      : undefined,
   ]);
 }
 
