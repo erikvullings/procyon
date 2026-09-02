@@ -18,6 +18,18 @@ export function createOperationsState(operations: readonly Operation[] = []): Op
   };
 }
 
+/** Restores history without replacing newer event-driven operation snapshots. */
+export function mergeOperationHistory(
+  state: OperationCentreState,
+  history: readonly Operation[],
+): OperationCentreState {
+  const restored = createOperationsState(history);
+  return {
+    byId: { ...restored.byId, ...state.byId },
+    failuresById: { ...restored.failuresById, ...state.failuresById },
+  };
+}
+
 /** Applies an event-stream batch atomically; the operation centre never polls. */
 export function reduceOperationEvents(
   state: OperationCentreState,

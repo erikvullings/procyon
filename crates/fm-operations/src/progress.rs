@@ -54,4 +54,9 @@ impl ProgressPublisher {
             ..OperationProgress::default()
         })
     }
+
+    pub(crate) fn rollback(&mut self, bytes: u64) {
+        self.completed_bytes = self.completed_bytes.saturating_sub(bytes);
+        self.bytes_at_last_emission = self.bytes_at_last_emission.min(self.completed_bytes);
+    }
 }

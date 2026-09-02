@@ -95,6 +95,8 @@ export interface AppDialogsContext {
   openEditorForCreatedFile(location: Location, name: string): void;
   cancelAutoDismiss(operationId: OperationId): void;
   rememberDismissedOperation(operationId: OperationId): void;
+  hasDismissedOperations(): boolean;
+  showAllOperations(): void;
   refetchAffectedPanes(): void;
   redraw(): void;
 }
@@ -193,17 +195,23 @@ export function renderAppDialogs(
             ctx.rememberDismissedOperation(operationId);
             ctx.setOperations(dismissOperation(ctx.getOperations(), operationId));
           },
+          hasDismissedOperations: ctx.hasDismissedOperations(),
+          onShowAll: () => ctx.showAllOperations(),
         })
       : undefined,
     m(CreateDirectoryDialog, {
       open: ds.createDirectoryOpen,
       onCancel: () => dialogs.cancelCreateDirectory(),
-      onConfirm: (name: string) =>
-        dialogs.confirmCreateDirectory(name, ctx.getActiveDirectoryLocation(), (loc, n) =>
-          ctx
-            .getOpsController()
-            .createDirectory(loc, n)
-            .then(() => undefined),
+      onConfirm: (name: string, createIntermediateDirectories: boolean) =>
+        dialogs.confirmCreateDirectory(
+          name,
+          ctx.getActiveDirectoryLocation(),
+          (loc, n, createIntermediates) =>
+            ctx
+              .getOpsController()
+              .createDirectory(loc, n, createIntermediates)
+              .then(() => undefined),
+          createIntermediateDirectories,
         ),
     }),
     m(CreateFileDialog, {

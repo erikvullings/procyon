@@ -15,7 +15,8 @@ use fm_archive::{create_7z_archive, create_zip_archive};
 use fm_domain::{EntryId, EntryKind, Location, ProviderId};
 use fm_operations::{
     ConflictResolution, EntryFingerprint, ExecutionError, ExecutionOutcome, Operation,
-    OperationExecutor, OperationPlan, OperationUndo, PauseToken, PlanItem, UndoAction, UndoPlan,
+    OperationExecutor, OperationPlan, OperationProgressReporter, OperationUndo, PauseToken,
+    PlanItem, UndoAction, UndoPlan,
 };
 use fm_platform::{PlatformAdapter, PlatformCapabilities};
 use fm_settings::Settings;
@@ -932,6 +933,7 @@ impl OperationExecutor for UndoExecutor {
         _operation: &Operation,
         item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1107,6 +1109,7 @@ impl OperationExecutor for GuardedUndoExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1153,7 +1156,7 @@ impl OperationExecutor for GuardedUndoExecutor {
         }
         match self
             .inner
-            .execute(operation, item, resolution, pause, cancellation)
+            .execute(operation, item, resolution, progress, pause, cancellation)
             .await
         {
             Err(ExecutionError::Conflict(_)) => Err(ExecutionError::Failed(
@@ -1209,6 +1212,7 @@ impl OperationExecutor for CreateArchiveExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1354,6 +1358,7 @@ impl OperationExecutor for DeleteExecutor {
         _operation: &Operation,
         item: &PlanItem,
         _resolution: Option<fm_operations::ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<fm_operations::ExecutionOutcome, ExecutionError> {
@@ -1439,6 +1444,7 @@ impl OperationExecutor for TrashExecutor {
         _operation: &Operation,
         item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         _cancellation: &CancellationToken,
     ) -> Result<fm_operations::ExecutionOutcome, ExecutionError> {
@@ -1532,6 +1538,7 @@ impl OperationExecutor for CopyGroupExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1554,7 +1561,7 @@ impl OperationExecutor for CopyGroupExecutor {
                 .contains_key(&item.entry.location.uri)
             {
                 return executor
-                    .execute(operation, item, resolution, pause, cancellation)
+                    .execute(operation, item, resolution, progress, pause, cancellation)
                     .await;
             }
         }
@@ -1621,6 +1628,7 @@ impl OperationExecutor for MoveGroupExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1645,7 +1653,7 @@ impl OperationExecutor for MoveGroupExecutor {
                     .contains_key(&item.entry.location.uri)
             {
                 return executor
-                    .execute(operation, item, resolution, pause, cancellation)
+                    .execute(operation, item, resolution, progress, pause, cancellation)
                     .await;
             }
         }
@@ -1737,6 +1745,7 @@ impl OperationExecutor for DuplicateExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -1748,7 +1757,7 @@ impl OperationExecutor for DuplicateExecutor {
                 .contains_key(&item.entry.location.uri)
             {
                 return copy
-                    .execute(operation, item, resolution, pause, cancellation)
+                    .execute(operation, item, resolution, progress, pause, cancellation)
                     .await;
             }
         }
@@ -1836,13 +1845,14 @@ impl OperationExecutor for MoveExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
         if *self.fallback.lock().unwrap_or_else(|e| e.into_inner()) {
             return self
                 .copy
-                .execute(operation, item, resolution, pause, cancellation)
+                .execute(operation, item, resolution, progress, pause, cancellation)
                 .await;
         }
         let name = item
@@ -2169,6 +2179,7 @@ impl OperationExecutor for CopyExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -2256,10 +2267,10 @@ impl OperationExecutor for CopyExecutor {
         } else {
             let source_item = PlanItem::new(planned.source.clone(), item.bytes);
             self.copy_file(
-                operation,
                 &source_item,
                 &planned.destination,
-                resolution,
+                effective_resolution(operation.conflict_policy, resolution),
+                progress,
                 pause,
                 cancellation,
             )
@@ -2448,10 +2459,10 @@ impl CopyExecutor {
 
     async fn copy_file(
         &self,
-        operation: &Operation,
         item: &PlanItem,
         final_destination: &Location,
-        resolution: Option<ConflictResolution>,
+        effective: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -2557,6 +2568,7 @@ impl CopyExecutor {
                         }
                     }
                 }
+                progress.report_bytes(read as u64);
             };
             // Cancellation must reach *both* sides, not just this loop:
             // dropping the reader releases the source provider's handle
@@ -2577,7 +2589,6 @@ impl CopyExecutor {
             return Err(fm_vfs::VfsError::Cancelled.into());
         }
 
-        let effective = effective_resolution(operation.conflict_policy, resolution);
         let overwrite = effective == Some(ConflictResolution::Overwrite);
         let mut destination = final_destination.clone();
         let mut suffix = 1_u32;
@@ -2675,6 +2686,7 @@ impl OperationExecutor for RenameExecutor {
         _operation: &Operation,
         item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -2756,13 +2768,14 @@ impl OperationExecutor for RenameGroupExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
         for executor in &self.renames {
             if executor.source == item.entry.location {
                 return executor
-                    .execute(operation, item, resolution, pause, cancellation)
+                    .execute(operation, item, resolution, progress, pause, cancellation)
                     .await;
             }
         }
@@ -2813,6 +2826,7 @@ impl OperationExecutor for CreateDirectoryExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -2823,12 +2837,37 @@ impl OperationExecutor for CreateDirectoryExecutor {
             return Ok(ExecutionOutcome::Completed);
         }
         let mut parent = self.parent.clone();
-        for component in self.name.split(['/', '\\']) {
-            let created = self
+        let components = self.name.split(['/', '\\']).collect::<Vec<_>>();
+        for (index, component) in components.iter().enumerate() {
+            match self
                 .provider
                 .create_directory(&parent, component, cancellation.clone())
-                .await?;
-            parent = created.location;
+                .await
+            {
+                Ok(created) => parent = created.location,
+                Err(fm_vfs::VfsError::AlreadyExists { .. }) if index + 1 < components.len() => {
+                    let location = parent
+                        .join(component)
+                        .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+                    let existing = self
+                        .provider
+                        .inspect(
+                            &EntryRef {
+                                id: EntryId::new(),
+                                location,
+                            },
+                            cancellation.clone(),
+                        )
+                        .await?;
+                    if existing.kind != EntryKind::Directory {
+                        return Err(ExecutionError::Failed(
+                            "an intermediate path component is not a directory".into(),
+                        ));
+                    }
+                    parent = existing.location;
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
         Ok(ExecutionOutcome::Completed)
     }
@@ -2859,6 +2898,7 @@ impl OperationExecutor for CreateFileExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -3437,6 +3477,7 @@ mod tests {
                     &task_operation,
                     &task_item,
                     None,
+                    &|_| {},
                     &PauseToken::default(),
                     &task_cancellation,
                 )
@@ -3666,12 +3707,16 @@ mod tests {
             item.bytes, expected_len,
             "the plan must already know the source's real size"
         );
+        let reported_bytes = AtomicU64::new(0);
 
         executor
             .execute(
                 &operation,
                 &item,
                 None,
+                &|additional_bytes| {
+                    reported_bytes.fetch_add(additional_bytes, Ordering::Relaxed);
+                },
                 &PauseToken::default(),
                 &cancellation,
             )
@@ -3683,6 +3728,7 @@ mod tests {
             Some(expected_len),
             "open_write_sized must receive the plan's already-known source size"
         );
+        assert_eq!(reported_bytes.load(Ordering::Relaxed), expected_len);
     }
 
     /// Task 0110 review: `PlanItem::bytes` is only a plan-time snapshot,
@@ -3772,6 +3818,7 @@ mod tests {
                 &operation,
                 &item,
                 None,
+                &|_| {},
                 &PauseToken::default(),
                 &cancellation,
             )
@@ -4248,6 +4295,7 @@ mod tests {
                 &operation,
                 &item,
                 None,
+                &|_| {},
                 &PauseToken::default(),
                 &cancellation,
             )
@@ -4313,6 +4361,7 @@ mod tests {
                 &operation,
                 &item,
                 None,
+                &|_| {},
                 &PauseToken::default(),
                 &cancellation,
             )

@@ -5,6 +5,7 @@ import type { BackendEvent, Operation } from '../../models';
 import { OperationCentre } from './operation-centre';
 import {
   createOperationsState,
+  mergeOperationHistory,
   reduceOperationEvents,
   transitionOperationState,
 } from './operation-state';
@@ -37,6 +38,19 @@ const event = (eventId: number, payload: BackendEvent['payload']): BackendEvent 
 });
 
 describe('operation progress reducer', () => {
+  it('restores history without overwriting a newer event snapshot', () => {
+    const current = createOperationsState([
+      { ...operation('completed', 'same'), completedAt: '2026-07-31T10:01:00Z' },
+    ]);
+    const merged = mergeOperationHistory(current, [
+      operation('running', 'same'),
+      operation('failed', 'dismissed'),
+    ]);
+
+    expect(merged.byId.same?.state).toBe('completed');
+    expect(merged.byId.dismissed?.state).toBe('failed');
+  });
+
   it('batches realistically interleaved operation events without assuming group order', () => {
     const initial = createOperationsState([operation('queued', 'a'), operation('running', 'b')]);
     const next = reduceOperationEvents(initial, [
@@ -286,6 +300,47 @@ describe('OperationCentre states', () => {
     expect(root.textContent).toBe('No operations to show.');
   });
 
+  it('shows the most recent operation first', () => {
+    const older = { ...operation('running', 'older'), createdAt: '2026-07-31T10:00:00Z' };
+    const newer = { ...operation('running', 'newer'), createdAt: '2026-07-31T10:01:00Z' };
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([older, newer]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(
+      [...root.querySelectorAll<HTMLElement>('.fm-operation')].map(
+        (element) => element.dataset.operationId,
+      ),
+    ).toEqual(['newer', 'older']);
+  });
+
+  it('restores dismissed history through Show all', () => {
+    const onShowAll = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+          hasDismissedOperations: true,
+          onShowAll,
+        }),
+    });
+
+    root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all')?.click();
+    expect(onShowAll).toHaveBeenCalledOnce();
+  });
+
   it('shows a match count instead of the current-entry filename for a running search', () => {
     const search: Operation = {
       ...operation('running', 'search'),
@@ -405,7 +460,9 @@ describe('OperationCentre states', () => {
       .querySelector<HTMLButtonElement>('[data-operation-id="undoable"] [data-action="undo"]')
       ?.click();
     expect(onUndo).toHaveBeenCalledWith('undoable');
-    expect(root.querySelector('[data-operation-id="undoable"] [data-action="dismiss"]')).toBeNull();
+    expect(
+      root.querySelector('[data-operation-id="undoable"] [data-action="dismiss"]'),
+    ).not.toBeNull();
     expect(
       root.querySelector<HTMLTimeElement>('[data-operation-id="undoable"] time')?.dateTime,
     ).toBe('2026-08-31T15:00:02Z');

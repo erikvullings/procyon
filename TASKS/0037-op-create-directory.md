@@ -38,3 +38,6 @@ simplest, to prove the whole path from keypress to event-driven refresh.
 - Verified with `pnpm test` (full Rust workspace, 236 frontend tests, 28 script tests),
   `pnpm run lint`, and strict frontend `tsc --noEmit`. Both Axum and Tauri targets compile and their
   automated tests pass; no packaged Tauri GUI smoke test was performed.
+- 2026-09-02: The New Folder dialog now accepts slash-separated paths such as `parent/child`,
+  explicitly enabling the existing intermediate-directory operation option while preserving
+  cross-platform validation and single-folder defaults.

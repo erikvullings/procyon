@@ -83,6 +83,11 @@ async fn creates_unicode_directory_and_only_explicit_intermediates() {
         OperationStateDto::Completed
     );
     assert!(root.path().join("one/two").is_dir());
+    assert_eq!(
+        create(&service, &location, "one/three", true).await.state,
+        OperationStateDto::Completed
+    );
+    assert!(root.path().join("one/three").is_dir());
 }
 
 #[tokio::test]

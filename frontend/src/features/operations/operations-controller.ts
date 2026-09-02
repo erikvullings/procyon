@@ -29,7 +29,12 @@ export interface OperationsController {
     compressionLevel?: number,
     signal?: AbortSignal,
   ): Promise<Operation>;
-  createDirectory(location: Location, name: string, signal?: AbortSignal): Promise<Operation>;
+  createDirectory(
+    location: Location,
+    name: string,
+    createIntermediateDirectories?: boolean,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
   /** Creates an empty file at `location` (Shift+F4). */
   createFile(location: Location, name: string, signal?: AbortSignal): Promise<Operation>;
   rename(source: Location, destination: Location, signal?: AbortSignal): Promise<Operation>;
@@ -96,7 +101,7 @@ export function createOperationsController(client: FileManagerClient): Operation
       );
     },
 
-    createDirectory(location, name, signal) {
+    createDirectory(location, name, createIntermediateDirectories = false, signal) {
       return client.startOperation(
         {
           type: 'createDirectory',
@@ -104,7 +109,7 @@ export function createOperationsController(client: FileManagerClient): Operation
           destination: location,
           conflictPolicy: 'ask',
           name,
-          createIntermediateDirectories: false,
+          createIntermediateDirectories,
         },
         signal,
       );

@@ -20,8 +20,13 @@ afterEach(() => {
 describe('CreateDirectoryDialog', () => {
   it('validates empty, traversal, invalid-character and reserved names', () => {
     expect(validateDirectoryName('')).toBe('Enter a folder name.');
-    expect(validateDirectoryName('../escape')).toBe('Use a single folder name.');
-    expect(validateDirectoryName('bad/name')).toBe('Use a single folder name.');
+    expect(validateDirectoryName('../escape')).toBe(
+      'Enter folder names separated by a single slash.',
+    );
+    expect(validateDirectoryName('parent//child')).toBe(
+      'Enter folder names separated by a single slash.',
+    );
+    expect(validateDirectoryName('parent/child')).toBeUndefined();
     expect(validateDirectoryName('bad\0name')).toBe('The name contains invalid characters.');
     expect(validateDirectoryName('COM1.txt')).toBe('That name is reserved by Windows.');
     expect(validateDirectoryName('資料')).toBeUndefined();
@@ -40,10 +45,25 @@ describe('CreateDirectoryDialog', () => {
     input.value = 'New folder';
     input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect(confirm).toHaveBeenCalledWith('New folder');
+    expect(confirm).toHaveBeenCalledWith('New folder', false);
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('normalizes and explicitly enables intermediate creation for a nested path', () => {
+    const confirm = vi.fn();
+    m.mount(root, {
+      view: () => m(CreateDirectoryDialog, { open: true, onConfirm: confirm, onCancel: vi.fn() }),
+    });
+    m.redraw.sync();
+    const input = document.querySelector<HTMLInputElement>('#create-directory-name');
+    if (!input) throw new Error('input missing');
+    input.value = 'parent\\child';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(confirm).toHaveBeenCalledWith('parent/child', true);
   });
 
   it('redraws its visible and accessible copy after a runtime locale switch', () => {
@@ -52,6 +72,7 @@ describe('CreateDirectoryDialog', () => {
     });
     m.redraw.sync();
     expect(root.textContent).toContain('New folder');
+    expect(root.textContent).toContain('Use / to create subfolders in one go.');
 
     setLocale('nl');
     m.redraw.sync();

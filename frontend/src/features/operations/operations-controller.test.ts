@@ -109,6 +109,21 @@ describe('OperationsController', () => {
     );
   });
 
+  it('createDirectory explicitly enables intermediate directories for a nested path', async () => {
+    await controller.createDirectory(dest, 'parent/child', true);
+    expect(client.startOperation).toHaveBeenCalledWith(
+      {
+        type: 'createDirectory',
+        sources: [],
+        destination: dest,
+        conflictPolicy: 'ask',
+        name: 'parent/child',
+        createIntermediateDirectories: true,
+      },
+      undefined,
+    );
+  });
+
   it('createFile passes name and no sources', async () => {
     await controller.createFile(dest, 'new-file.txt');
     expect(client.startOperation).toHaveBeenCalledWith(

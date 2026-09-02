@@ -108,6 +108,7 @@ import { rootLocationFor } from '../features/navigation/root-location';
 import {
   createOperationsState,
   dismissOperation,
+  mergeOperationHistory,
   shouldAutoDismissOperation,
 } from '../features/operations/operation-state';
 import {
@@ -781,6 +782,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let pendingOperationEvents: BackendEvent[] = [];
   let operationFrame: number | undefined;
   const autoDismissTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
+  const operationCentreOpenTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
   const dismissedOperationIds = loadDismissedOperationIds();
   let removed = false;
 
@@ -817,6 +819,56 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (existing === undefined) return;
     clearTimeout(existing);
     autoDismissTimers.delete(operationId);
+  }
+
+  function operationIsActive(operation: Operation): boolean {
+    return (
+      operation.state === 'queued' ||
+      operation.state === 'planning' ||
+      operation.state === 'running' ||
+      operation.state === 'paused' ||
+      operation.state === 'waitingForConflictResolution' ||
+      operation.state === 'cancelling'
+    );
+  }
+
+  function scheduleOperationCentreOpen(operationId: OperationId, delayMs: number): void {
+    if (operationCentreOpenTimers.has(operationId)) return;
+    operationCentreOpenTimers.set(
+      operationId,
+      setTimeout(() => {
+        operationCentreOpenTimers.delete(operationId);
+        const operation = operations.byId[operationId];
+        if (operation !== undefined && operationIsActive(operation)) {
+          setOperationCentreVisible(true);
+          m.redraw();
+        }
+      }, delayMs),
+    );
+  }
+
+  function cancelOperationCentreOpen(operationId: OperationId): void {
+    const timer = operationCentreOpenTimers.get(operationId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    operationCentreOpenTimers.delete(operationId);
+  }
+
+  function clearOperationSourceSelections(operation: Operation): void {
+    const sourceUris = new Set(operation.sources.map((source) => source.location.uri));
+    for (const [key, selection] of selections) {
+      const directory = directories.get(key);
+      if (directory === undefined || selection.selectedEntryIds.length === 0) continue;
+      const sourceIds = new Set(
+        directory.entries
+          .filter((entry) => sourceUris.has(entry.location.uri))
+          .map((entry) => entry.id),
+      );
+      const selectedEntryIds = selection.selectedEntryIds.filter((id) => !sourceIds.has(id));
+      if (selectedEntryIds.length !== selection.selectedEntryIds.length) {
+        selections.set(key, { ...selection, selectedEntryIds });
+      }
+    }
   }
   const DEFAULT_SORT: readonly SortDescriptor[] = [
     { columnId: 'core.name', direction: 'ascending' },
@@ -1819,12 +1871,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
-  function toggleOperationCentre(): void {
+  function setOperationCentreVisible(visible: boolean): void {
     const previous = workspace;
-    if (previous === undefined) return;
+    if (previous === undefined || previous.operationCentre.visible === visible) return;
     const preferences = {
       ...previous.operationCentre,
-      visible: !previous.operationCentre.visible,
+      visible,
     };
     replaceWorkspace({ ...previous, operationCentre: preferences });
     void dispatchWorkspaceCommand(
@@ -1842,6 +1894,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         html: workspaceErrorMessage(error, t('shell', 'operationCentreUpdateFailed')),
       });
     });
+  }
+
+  function toggleOperationCentre(): void {
+    setOperationCentreVisible(workspace?.operationCentre.visible !== true);
+  }
+
+  function showAllOperations(): void {
+    void attrsClient
+      .listOperations()
+      .then((listed) => {
+        dismissedOperationIds.clear();
+        persistDismissedOperationIds(dismissedOperationIds);
+        operations = mergeOperationHistory(operations, listed);
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: workspaceErrorMessage(error, t('operation', 'historyLoadFailed')),
+        });
+      });
   }
 
   /** A short display label for the tree sidebar's root row - the host segment of a remote
@@ -2020,6 +2092,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDismissedOperationIds: () => dismissedOperationIds,
     clearDismissedOperation,
     scheduleAutoDismiss,
+    scheduleOperationCentreOpen,
+    cancelOperationCentreOpen,
+    clearOperationSourceSelections,
     removeOperationSourcesFromSearchResults,
     removeOperationSourcesFromDiskUsage,
     getActiveDirectoryRevision: (paneId) => directories.get(activeTabKey(paneId))?.revision,
@@ -3040,6 +3115,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getFinderTagsLoader: () => finderTagsLoader,
     cancelAutoDismiss,
     rememberDismissedOperation,
+    hasDismissedOperations: () => dismissedOperationIds.size > 0,
+    showAllOperations,
     refetchAffectedPanes,
     redraw: () => m.redraw(),
   };
@@ -3259,6 +3336,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 !shouldAutoDismissOperation(operation) && !dismissedOperationIds.has(operation.id),
             );
             operations = createOperationsState(relevant);
+            for (const operation of relevant) {
+              if (!operationIsActive(operation)) continue;
+              const elapsed = Date.now() - Date.parse(operation.createdAt);
+              scheduleOperationCentreOpen(operation.id, Math.max(0, 3_000 - elapsed));
+            }
             m.redraw();
           }
         })
@@ -3288,6 +3370,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (operationFrame !== undefined) cancelAnimationFrame(operationFrame);
       for (const timer of autoDismissTimers.values()) clearTimeout(timer);
       autoDismissTimers.clear();
+      for (const timer of operationCentreOpenTimers.values()) clearTimeout(timer);
+      operationCentreOpenTimers.clear();
       workspaceRequest?.abort();
       unsubscribeEvents?.();
       unsubscribeNativeFileDrops?.();

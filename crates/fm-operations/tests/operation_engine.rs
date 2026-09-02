@@ -9,8 +9,8 @@ use fm_events::{EventBus, SessionId, SubscriptionEvent};
 use fm_operations::{
     ConflictEntry, ConflictPolicy, ConflictResolution, CycleDetector, EntryType, ExecutionError,
     ExecutionOutcome, Operation, OperationConflict, OperationExecutor, OperationKind,
-    OperationPlan, OperationState, PauseToken, PlanItem, ProgressPublisher, SafetyError, Scheduler,
-    validate_paths, validate_replacement,
+    OperationPlan, OperationProgressReporter, OperationState, PauseToken, PlanItem,
+    ProgressPublisher, SafetyError, Scheduler, validate_paths, validate_replacement,
 };
 use fm_vfs::EntryRef;
 use tokio_util::sync::CancellationToken;
@@ -346,6 +346,7 @@ impl OperationExecutor for CancellablePlanningExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         _cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -451,6 +452,7 @@ impl OperationExecutor for BlockingExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<fm_operations::ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         _cancellation: &CancellationToken,
     ) -> Result<fm_operations::ExecutionOutcome, ExecutionError> {
@@ -535,6 +537,7 @@ impl OperationExecutor for ChunkedExecutor {
         _operation: &Operation,
         _item: &PlanItem,
         _resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         _cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -602,6 +605,7 @@ impl OperationExecutor for ItemConflictExecutor {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        _progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         _cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
@@ -622,6 +626,7 @@ impl OperationExecutor for ItemConflictExecutor {
                 },
             }));
         }
+
         if item.entry == operation.sources[1] {
             self.later_item_completed
                 .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -632,6 +637,139 @@ impl OperationExecutor for ItemConflictExecutor {
     async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
         Ok(())
     }
+}
+
+#[derive(Default)]
+struct StreamingProgressExecutor {
+    progress_reported: tokio::sync::Notify,
+    finish_transfer: tokio::sync::Notify,
+}
+
+#[async_trait]
+impl OperationExecutor for StreamingProgressExecutor {
+    async fn plan(
+        &self,
+        operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationPlan, ExecutionError> {
+        Ok(OperationPlan::new(vec![PlanItem::new(
+            operation.sources[0].clone(),
+            400,
+        )]))
+    }
+
+    async fn execute(
+        &self,
+        _operation: &Operation,
+        _item: &PlanItem,
+        _resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
+        _pause: &PauseToken,
+        _cancellation: &CancellationToken,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        progress.report_bytes(128);
+        self.progress_reported.notify_one();
+        self.finish_transfer.notified().await;
+        progress.report_bytes(272);
+        Ok(ExecutionOutcome::Completed)
+    }
+
+    async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn scheduler_reports_bytes_while_a_single_item_is_still_running() {
+    let scheduler = Scheduler::new(1, EventBus::new(16));
+    let executor = Arc::new(StreamingProgressExecutor::default());
+    let id = scheduler.submit(operation(), executor.clone()).unwrap();
+    executor.progress_reported.notified().await;
+
+    let running = scheduler.get(id).unwrap();
+    assert_eq!(running.state, OperationState::Running);
+    assert_eq!(running.progress.completed_items, 0);
+    assert_eq!(running.progress.completed_bytes, 128);
+
+    executor.finish_transfer.notify_one();
+    scheduler.wait(id).await.unwrap();
+    let completed = scheduler.get(id).unwrap();
+    assert_eq!(completed.progress.completed_items, 1);
+    assert_eq!(completed.progress.completed_bytes, 400);
+}
+
+struct LateConflictExecutor;
+
+#[async_trait]
+impl OperationExecutor for LateConflictExecutor {
+    async fn plan(
+        &self,
+        operation: &Operation,
+        _cancellation: &CancellationToken,
+    ) -> Result<OperationPlan, ExecutionError> {
+        Ok(OperationPlan::new(vec![PlanItem::new(
+            operation.sources[0].clone(),
+            100,
+        )]))
+    }
+
+    async fn execute(
+        &self,
+        _operation: &Operation,
+        _item: &PlanItem,
+        resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
+        _pause: &PauseToken,
+        _cancellation: &CancellationToken,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        if resolution == Some(ConflictResolution::Skip) {
+            return Ok(ExecutionOutcome::Skipped);
+        }
+        progress.report_bytes(100);
+        Err(ExecutionError::Conflict(OperationConflict {
+            id: "late-conflict".into(),
+            source: ConflictEntry {
+                name: "source.bin".into(),
+                kind: EntryKind::File,
+                size: Some(100),
+                modified_at: None,
+            },
+            destination: ConflictEntry {
+                name: "source.bin".into(),
+                kind: EntryKind::File,
+                size: Some(100),
+                modified_at: None,
+            },
+        }))
+    }
+
+    async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn late_conflict_rolls_back_attempted_bytes_before_skip() {
+    let scheduler = Scheduler::new(1, EventBus::new(16));
+    let id = scheduler
+        .submit(operation(), Arc::new(LateConflictExecutor))
+        .unwrap();
+    for _ in 0..200 {
+        if scheduler.get(id).unwrap().state == OperationState::WaitingForConflictResolution {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    let waiting = scheduler.get(id).unwrap();
+    assert_eq!(waiting.state, OperationState::WaitingForConflictResolution);
+    assert_eq!(waiting.progress.completed_bytes, 0);
+
+    scheduler
+        .resolve_conflict(id, ConflictResolution::Skip, false)
+        .unwrap();
+    scheduler.wait(id).await.unwrap();
+    assert_eq!(scheduler.get(id).unwrap().progress.completed_bytes, 0);
 }
 
 #[tokio::test]

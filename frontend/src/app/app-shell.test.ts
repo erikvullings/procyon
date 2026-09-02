@@ -154,8 +154,11 @@ async function openOperationCentre(container: HTMLElement = root): Promise<void>
       container.querySelector<HTMLButtonElement>('.fm-operation-centre-button')?.disabled,
     ).toBe(false),
   );
-  container.querySelector<HTMLButtonElement>('.fm-operation-centre-button')?.click();
-  m.redraw.sync();
+  const button = container.querySelector<HTMLButtonElement>('.fm-operation-centre-button');
+  if (button?.getAttribute('aria-pressed') !== 'true') {
+    button?.click();
+    m.redraw.sync();
+  }
   await vi.waitFor(() =>
     expect(
       container
@@ -658,6 +661,46 @@ describe('AppShell', () => {
     );
   });
 
+  it('opens the operation centre when a job remains active for three seconds', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const createdAt = new Date(Date.now()).toISOString();
+
+    try {
+      client.emit({
+        eventId: 500,
+        timestamp: createdAt,
+        payload: {
+          type: 'operation.created',
+          operation: {
+            id: 'long-copy',
+            kind: 'copy',
+            state: 'running',
+            sources: [],
+            progress: { completedItems: 0, completedBytes: 0 },
+            conflictPolicy: 'ask',
+            createdAt,
+          },
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(2_999);
+      expect(root.querySelector('.fm-operation-centre')).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      m.redraw.sync();
+      expect(root.querySelector('.fm-operation-centre')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+      raf.mockRestore();
+    }
+  });
+
   it('previews modified function-key commands while a modifier is held', async () => {
     const client = new MockFileManagerClient();
     const invokeAction = vi.spyOn(client, 'invokeAction');
@@ -975,6 +1018,7 @@ describe('AppShell', () => {
       destination: { uri: 'mock:///Documents' },
       conflictPolicy: 'ask',
     });
+    await vi.waitFor(() => expect(activePane?.querySelector('.fm-selected-row')).toBeNull());
   });
 
   it('packages the selected entries into a ZIP with Alt+F5', async () => {
@@ -1932,7 +1976,7 @@ describe('AppShell', () => {
     expect(listOperations).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps manually dismissed failed operations hidden after remount', async () => {
+  it('keeps manually dismissed operations hidden after remount and restores them on demand', async () => {
     const client = new MockFileManagerClient();
     const failed: Operation = {
       id: 'failed-copy-1',
@@ -1963,6 +2007,11 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
     expect(root.querySelector('.fm-operation[data-state="failed"]')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation[data-state="failed"]')).not.toBeNull(),
+    );
   });
 
   it('restores completed undoable operations into the centre after restart', async () => {

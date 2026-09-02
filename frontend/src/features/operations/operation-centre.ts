@@ -17,6 +17,8 @@ export interface OperationCentreAttrs {
   onResume: (operationId: OperationId) => void;
   onUndo?: (operationId: OperationId) => void;
   onDismiss: (operationId: OperationId) => void;
+  hasDismissedOperations?: boolean;
+  onShowAll?: () => void;
   onClose?: () => void;
   formatSettings?: EntryFormatSettings;
 }
@@ -181,7 +183,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
       // duplicating that as a background card here is redundant.
       .filter((operation) => operation.state !== 'waitingForConflictResolution')
       .filter(isWorthShowing)
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const formatSettings = attrs.formatSettings ?? DEFAULT_ENTRY_FORMAT_SETTINGS;
     return m('.fm-operation-centre', { 'aria-label': t('operation', 'centre') }, [
       m(
@@ -366,7 +368,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                     operation.state === 'paused'
                       ? button(t('button', 'resume'), 'resume', () => attrs.onResume(operation.id))
                       : undefined,
-                    terminal && operation.undo?.available !== true
+                    terminal
                       ? button(t('button', 'dismiss'), 'dismiss', () =>
                           attrs.onDismiss(operation.id),
                         )
@@ -387,6 +389,16 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
               onclick: attrs.onClose,
             },
             closeIcon({ size: 13 }),
+          ),
+      attrs.hasDismissedOperations !== true || attrs.onShowAll === undefined
+        ? undefined
+        : m(
+            'button.fm-operation-centre-show-all',
+            {
+              type: 'button',
+              onclick: attrs.onShowAll,
+            },
+            t('operation', 'showAll'),
           ),
     ]);
   },

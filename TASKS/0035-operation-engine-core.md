@@ -55,3 +55,6 @@ one at a time in 0037–0044.
   strict workspace Clippy, and the full `pnpm test` suite. `CLAUDE.md` does not exist. Platform path
   comparisons were executed on macOS; Windows case-insensitive behavior is exercised through the
   explicit filesystem-sensitivity input rather than on a Windows host.
+- 2026-09-02: Executors can now report bytes while processing a plan item. Direct-stream copies
+  publish coalesced progress throughout large single-file transfers instead of remaining at zero
+  until the entire file completes.

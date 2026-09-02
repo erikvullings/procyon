@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -104,6 +105,21 @@ pub enum ExecutionOutcome {
     Skipped,
 }
 
+/// Receives bytes as an executor processes the current plan item.
+pub trait OperationProgressReporter: Send + Sync {
+    /// Adds newly processed bytes to the operation's progress.
+    fn report_bytes(&self, additional_bytes: u64);
+}
+
+impl<F> OperationProgressReporter for F
+where
+    F: Fn(u64) + Send + Sync,
+{
+    fn report_bytes(&self, additional_bytes: u64) {
+        self(additional_bytes);
+    }
+}
+
 /// Planning/execution boundary implemented by future operation-kind tasks.
 #[async_trait]
 pub trait OperationExecutor: Send + Sync + 'static {
@@ -120,6 +136,7 @@ pub trait OperationExecutor: Send + Sync + 'static {
         operation: &Operation,
         item: &PlanItem,
         resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError>;
@@ -150,6 +167,66 @@ pub trait OperationExecutor: Send + Sync + 'static {
     /// Whether execution must wait for explicit user confirmation after planning.
     fn requires_confirmation(&self) -> bool {
         false
+    }
+}
+
+struct ItemProgressReporter<'a> {
+    scheduler: &'a Scheduler,
+    job: &'a Job,
+    publisher: &'a Mutex<ProgressPublisher>,
+    current_entry: EntryRef,
+    reported_bytes: AtomicU64,
+}
+
+impl ItemProgressReporter<'_> {
+    fn finish_completed(&self, planned_bytes: u64) {
+        let remaining = planned_bytes.saturating_sub(self.reported_bytes.load(Ordering::Acquire));
+        self.report_bytes(remaining);
+    }
+
+    fn rollback(&self) {
+        let reported_bytes = self.reported_bytes.swap(0, Ordering::AcqRel);
+        if reported_bytes == 0 {
+            return;
+        }
+        self.publisher
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .rollback(reported_bytes);
+        let mut state = self.job.lock();
+        state.operation.progress.completed_bytes = state
+            .operation
+            .progress
+            .completed_bytes
+            .saturating_sub(reported_bytes);
+        state.operation.progress.bytes_per_second = None;
+        self.scheduler.publish_progress(&state.operation);
+    }
+}
+
+impl OperationProgressReporter for ItemProgressReporter<'_> {
+    fn report_bytes(&self, additional_bytes: u64) {
+        if additional_bytes == 0 {
+            return;
+        }
+        self.reported_bytes
+            .fetch_add(additional_bytes, Ordering::AcqRel);
+        let published = self
+            .publisher
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .record(Instant::now(), additional_bytes);
+        let mut state = self.job.lock();
+        state.operation.progress.completed_bytes = state
+            .operation
+            .progress
+            .completed_bytes
+            .saturating_add(additional_bytes);
+        state.operation.progress.current_entry = Some(self.current_entry.clone());
+        if let Some(progress) = published {
+            state.operation.progress.bytes_per_second = progress.bytes_per_second;
+            self.scheduler.publish_progress(&state.operation);
+        }
     }
 }
 
@@ -494,7 +571,7 @@ impl Scheduler {
                 return Ok(());
             }
         }
-        let mut progress = ProgressPublisher::new(Duration::from_millis(100), 0.25);
+        let progress = Mutex::new(ProgressPublisher::new(Duration::from_millis(100), 0.25));
         let mut deferred = Vec::new();
         for item in &plan.items {
             self.wait_while_blocked(&job).await;
@@ -504,26 +581,40 @@ impl Scheduler {
             }
             let snapshot = job.snapshot();
             let resolution = job.lock().apply_to_all;
+            let reporter = ItemProgressReporter {
+                scheduler: self,
+                job: &job,
+                publisher: &progress,
+                current_entry: item.entry.clone(),
+                reported_bytes: AtomicU64::new(0),
+            };
             let execution = executor
-                .execute(&snapshot, item, resolution, &job.pause, &job.cancellation)
+                .execute(
+                    &snapshot,
+                    item,
+                    resolution,
+                    &reporter,
+                    &job.pause,
+                    &job.cancellation,
+                )
                 .await;
             if job.is_cancelled() && execution.is_err() {
                 self.finish_cancelled(&job, executor.as_ref()).await?;
                 return Ok(());
             }
-            let mut completed_bytes = item.bytes;
             match execution {
-                Ok(ExecutionOutcome::Completed) => {}
-                Ok(ExecutionOutcome::Skipped) => completed_bytes = 0,
+                Ok(ExecutionOutcome::Completed) => reporter.finish_completed(item.bytes),
+                Ok(ExecutionOutcome::Skipped) => {}
                 Err(error) => match error {
                     ExecutionError::Warning { entry, message } => {
+                        reporter.rollback();
                         job.lock()
                             .operation
                             .errors
                             .push(crate::OperationEntryError { entry, message });
-                        completed_bytes = 0;
                     }
                     ExecutionError::Conflict(conflict) => {
+                        reporter.rollback();
                         if job.lock().pending_conflict.is_none() {
                             self.register_conflict(&job, conflict.clone())?;
                         }
@@ -537,16 +628,7 @@ impl Scheduler {
                 let mut state = job.lock();
                 state.operation.progress.completed_items =
                     state.operation.progress.completed_items.saturating_add(1);
-                state.operation.progress.completed_bytes = state
-                    .operation
-                    .progress
-                    .completed_bytes
-                    .saturating_add(completed_bytes);
                 state.operation.progress.current_entry = Some(item.entry.clone());
-                if let Some(rate) = progress.record(Instant::now(), completed_bytes) {
-                    state.operation.progress.bytes_per_second = rate.bytes_per_second;
-                    self.publish_progress(&state.operation);
-                }
             }
             if job.is_cancelled() {
                 self.finish_cancelled(&job, executor.as_ref()).await?;
@@ -554,7 +636,7 @@ impl Scheduler {
             }
         }
         for (item, known_conflict) in deferred {
-            let outcome = loop {
+            loop {
                 let sticky_resolution = {
                     let mut state = job.lock();
                     let resolution = state.apply_to_all;
@@ -576,36 +658,40 @@ impl Scheduler {
                     return Ok(());
                 }
                 let snapshot = job.snapshot();
+                let reporter = ItemProgressReporter {
+                    scheduler: self,
+                    job: &job,
+                    publisher: &progress,
+                    current_entry: item.entry.clone(),
+                    reported_bytes: AtomicU64::new(0),
+                };
                 match executor
                     .execute(
                         &snapshot,
                         &item,
                         Some(resolution),
+                        &reporter,
                         &job.pause,
                         &job.cancellation,
                     )
                     .await
                 {
-                    Ok(outcome) => break outcome,
+                    Ok(outcome) => {
+                        if outcome == ExecutionOutcome::Completed {
+                            reporter.finish_completed(item.bytes);
+                        }
+                        break;
+                    }
                     Err(ExecutionError::Conflict(conflict)) => {
+                        reporter.rollback();
                         self.register_conflict(&job, conflict)?;
                     }
                     Err(error) => return Err(error.into()),
                 }
-            };
-            let completed_bytes = if outcome == ExecutionOutcome::Completed {
-                item.bytes
-            } else {
-                0
-            };
+            }
             let mut state = job.lock();
             state.operation.progress.completed_items =
                 state.operation.progress.completed_items.saturating_add(1);
-            state.operation.progress.completed_bytes = state
-                .operation
-                .progress
-                .completed_bytes
-                .saturating_add(completed_bytes);
             state.operation.progress.current_entry = Some(item.entry);
         }
         self.wait_while_blocked(&job).await;

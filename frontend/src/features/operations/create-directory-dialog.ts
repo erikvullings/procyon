@@ -4,25 +4,36 @@ import { t } from '../../i18n';
 
 export interface CreateDirectoryDialogAttrs {
   readonly open: boolean;
-  readonly onConfirm: (name: string) => void;
+  readonly onConfirm: (name: string, createIntermediateDirectories: boolean) => void;
   readonly onCancel: () => void;
 }
 
-/** Validates a single cross-platform-safe directory name. */
+function directoryPathComponents(name: string): string[] {
+  return name.split(/[\\/]/u);
+}
+
+/** Validates one or more cross-platform-safe directory names. */
 export function validateDirectoryName(name: string): string | undefined {
-  if (name.length === 0) return 'Enter a folder name.';
-  if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
-    return 'Use a single folder name.';
-  }
-  if (name.includes('\0') || /[<>:"|?*]/u.test(name)) {
-    return 'The name contains invalid characters.';
-  }
-  const stem = name.split('.')[0]?.trimEnd().toUpperCase();
+  if (name.length === 0) return t('operation', 'folderNameRequired');
+  const components = directoryPathComponents(name);
   if (
-    stem !== undefined &&
-    (/^(?:CON|PRN|AUX|NUL)$/u.test(stem) || /^(?:COM|LPT)[1-9]$/u.test(stem))
+    components.some(
+      (component) => component.length === 0 || component === '.' || component === '..',
+    )
   ) {
-    return 'That name is reserved by Windows.';
+    return t('operation', 'folderPathInvalid');
+  }
+  for (const component of components) {
+    if (component.includes('\0') || /[<>:"|?*]/u.test(component)) {
+      return t('operation', 'folderNameInvalidCharacters');
+    }
+    const stem = component.split('.')[0]?.trimEnd().toUpperCase();
+    if (
+      stem !== undefined &&
+      (/^(?:CON|PRN|AUX|NUL)$/u.test(stem) || /^(?:COM|LPT)[1-9]$/u.test(stem))
+    ) {
+      return t('operation', 'folderNameReserved');
+    }
   }
   return undefined;
 }
@@ -46,7 +57,8 @@ export const CreateDirectoryDialog: FactoryComponent<CreateDirectoryDialogAttrs>
     error = validateDirectoryName(name);
     if (error === undefined) {
       blurActive();
-      attrs.onConfirm(name);
+      const components = directoryPathComponents(name);
+      attrs.onConfirm(components.join('/'), components.length > 1);
     }
   }
 
@@ -94,6 +106,7 @@ export const CreateDirectoryDialog: FactoryComponent<CreateDirectoryDialogAttrs>
               }
             },
           }),
+          m('span.fm-field-help', t('operation', 'folderPathHelp')),
           error === undefined ? undefined : m('.fm-field-error', error),
         ]),
         isOpen: attrs.open,

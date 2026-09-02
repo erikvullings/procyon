@@ -62,7 +62,12 @@ export interface DialogUIController {
   confirmCreateDirectory(
     name: string,
     activeLocation: Location | undefined,
-    createDirectory: (location: Location, name: string) => Promise<void>,
+    createDirectory: (
+      location: Location,
+      name: string,
+      createIntermediateDirectories: boolean,
+    ) => Promise<void>,
+    createIntermediateDirectories: boolean,
   ): void;
   openCreateFile(location?: Location): void;
   cancelCreateFile(): void;
@@ -127,14 +132,20 @@ export function createDialogUIController(): DialogUIController {
       state.createDirectoryLocation = undefined;
     },
 
-    confirmCreateDirectory(name, activeLocation, createDirectory): void {
+    confirmCreateDirectory(
+      name,
+      activeLocation,
+      createDirectory,
+      createIntermediateDirectories,
+    ): void {
       const location = state.createDirectoryLocation ?? activeLocation;
       if (location === undefined) return;
       state.createDirectoryOpen = false;
       state.createDirectoryLocation = undefined;
-      const uri = `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`;
+      const firstDirectory = name.split('/')[0] ?? name;
+      const uri = `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(firstDirectory)}`;
       state.pendingCreatedLocation = uri;
-      void createDirectory(location, name).catch(() => {
+      void createDirectory(location, name, createIntermediateDirectories).catch(() => {
         state.pendingCreatedLocation = undefined;
       });
     },

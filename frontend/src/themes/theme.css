@@ -1118,28 +1118,42 @@ input[type="text"].fm-shortcuts-help-capture-input {
   width: 100%;
   gap: 1rem;
   align-items: stretch;
-  padding-right: 1.75rem;
+  padding-right: 5rem;
   overflow-x: auto;
 }
 
-.fm-operation-centre-close {
+.fm-operation-centre-close,
+.fm-operation-centre-show-all {
   position: absolute;
   z-index: 1;
-  top: 0.25rem;
   right: 0.25rem;
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-operation-centre-close {
+  top: 0.25rem;
   display: inline-grid;
   width: 1.25rem;
   height: 1.25rem;
   padding: 0;
   border: 0;
   place-items: center;
-  background: var(--fm-surface-elevated);
-  color: var(--fm-text-muted);
-  cursor: pointer;
+}
+
+.fm-operation-centre-show-all {
+  bottom: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  font: inherit;
 }
 
 .fm-operation-centre-close:hover,
-.fm-operation-centre-close:focus-visible {
+.fm-operation-centre-close:focus-visible,
+.fm-operation-centre-show-all:hover,
+.fm-operation-centre-show-all:focus-visible {
   color: var(--fm-text);
 }
 
@@ -1542,6 +1556,11 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-field-error {
   color: var(--fm-error);
+  font-size: 0.8rem;
+}
+
+.fm-field-help {
+  color: var(--fm-text-muted);
   font-size: 0.8rem;
 }
 

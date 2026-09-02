@@ -33,6 +33,17 @@ import {
 
 const FAST_OPERATION_DISMISS_THRESHOLD_MS = 500;
 const AUTO_DISMISS_DELAY_MS = 5_000;
+const LONG_RUNNING_OPERATION_DELAY_MS = 3_000;
+
+function isTerminalOperation(operation: Operation): boolean {
+  return (
+    operation.state === 'completed' ||
+    operation.state === 'completedWithWarnings' ||
+    operation.state === 'failed' ||
+    operation.state === 'cancelled' ||
+    operation.state === 'interrupted'
+  );
+}
 
 function shouldRefreshOnTerminalOperation(operation: Operation): boolean {
   if (operation.kind === 'search' || operation.kind === 'compare') return false;
@@ -77,6 +88,9 @@ export interface BackendEventContext {
   getDismissedOperationIds(): ReadonlySet<OperationId>;
   clearDismissedOperation(id: OperationId): void;
   scheduleAutoDismiss(id: OperationId, delayMs: number): void;
+  scheduleOperationCentreOpen(id: OperationId, delayMs: number): void;
+  cancelOperationCentreOpen(id: OperationId): void;
+  clearOperationSourceSelections(operation: Operation): void;
   removeOperationSourcesFromSearchResults(operation: Operation): void;
   removeOperationSourcesFromDiskUsage(operation: Operation): void;
 
@@ -242,6 +256,15 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               const previousState = previous.byId[id]?.state;
               if (previousState === current.state) continue;
               ctx.clearDismissedOperation(id);
+              if (previousState === undefined && !isTerminalOperation(current)) {
+                ctx.scheduleOperationCentreOpen(id, LONG_RUNNING_OPERATION_DELAY_MS);
+              }
+              if (isTerminalOperation(current)) {
+                ctx.cancelOperationCentreOpen(id);
+              }
+              if (current.kind === 'copy') {
+                ctx.clearOperationSourceSelections(current);
+              }
               if (shouldRefreshOnTerminalOperation(current)) {
                 panesNeedRefresh = true;
               }
