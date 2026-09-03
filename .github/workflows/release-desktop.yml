@@ -119,6 +119,22 @@ jobs:
           )"
           test -n "$APP_PATH"
           test -n "$DMG_PATH"
+          while IFS= read -r -d '' CANDIDATE; do
+            if ! file "$CANDIDATE" | grep -q 'Mach-O'; then
+              continue
+            fi
+            LINKED_LIBRARIES="$(otool -L "$CANDIDATE")"
+            printf '%s\n' "$LINKED_LIBRARIES"
+            EXTERNAL_DEPENDENCIES="$(
+              sed -n 's/^[[:space:]]*\(.*\) (compatibility version .*/\1/p' <<< "$LINKED_LIBRARIES" |
+                grep -Ev '^(/System/Library/|/usr/lib/|@)' || true
+            )"
+            if [[ -n "$EXTERNAL_DEPENDENCIES" ]]; then
+              echo "::error::$CANDIDATE has external build-machine dependencies"
+              printf '%s\n' "$EXTERNAL_DEPENDENCIES"
+              exit 1
+            fi
+          done < <(find "$APP_PATH" -type f -print0)
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 |
             grep -F "Authority=Developer ID Application"

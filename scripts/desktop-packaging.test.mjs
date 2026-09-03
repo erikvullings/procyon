@@ -58,6 +58,11 @@ test('Tauri targets installable macOS, Windows, and Linux bundle formats', () =>
   assert.deepEqual(config.bundle.targets, ['app', 'dmg', 'msi', 'nsis', 'deb', 'appimage']);
 });
 
+test('desktop archive support statically links liblzma', () => {
+  const workspaceCargo = read('Cargo.toml');
+  assert.match(workspaceCargo, /xz2 = \{version = "0\.1", features = \["static"\]\}/);
+});
+
 test('pull-request CI builds desktop bundles without any signing credentials', () => {
   const ciText = workflowText('ci.yml');
   const ci = workflow('ci.yml');
@@ -94,6 +99,10 @@ test('protected release workflow signs and notarizes macOS packages only', () =>
   assert.match(releaseText, /stapler validate/);
   assert.match(releaseText, /--timeout 45m/);
   assert.match(releaseText, /--no-s3-acceleration/);
+  assert.match(releaseText, /otool -L/);
+  assert.match(releaseText, /Mach-O/);
+  assert.match(releaseText, /System\/Library/);
+  assert.match(releaseText, /external build-machine dependencies/);
   assert.equal(release.jobs.macos['timeout-minutes'], 120);
 
   const buildStep = release.jobs.macos.steps.find((step) =>
