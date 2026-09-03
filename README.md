@@ -637,7 +637,8 @@ normalization is constrained to a configured root. See
 
 The local provider lists directories in bounded, cancellable pages and fetches detailed metadata
 separately. Listings identify dotfiles, Windows hidden attributes, symbolic links and reparse
-points without following links; Finder alias detection remains a later macOS enhancement.
+points without following links. Finder alias resolution remains a later macOS enhancement and is
+reported explicitly as unsupported through the `finderAliases` runtime capability.
 
 On macOS, entries can be tagged (colored Finder tags, read lazily per row and shown as small
 dots next to the name) and given a Spotlight comment (Get Info's "Comments:" field), both stored

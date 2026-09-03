@@ -49,7 +49,8 @@ pub enum PlatformKindDto {
     "plugins": false,
     "serverAdministration": false,
     "extendedAttributes": false,
-    "finderTags": false
+    "finderTags": false,
+    "finderAliases": false
 }))]
 pub struct RuntimeCapabilitiesDto {
     /// Which host is serving the application.
@@ -83,6 +84,8 @@ pub struct RuntimeCapabilitiesDto {
     pub extended_attributes: bool,
     /// Whether Finder tags can be read/written (task 0136).
     pub finder_tags: bool,
+    /// Whether macOS Finder alias files can be resolved to their targets.
+    pub finder_aliases: bool,
 }
 
 #[cfg(test)]
@@ -106,6 +109,7 @@ mod tests {
             server_administration: false,
             extended_attributes: false,
             finder_tags: false,
+            finder_aliases: false,
         }
     }
 
@@ -133,6 +137,7 @@ mod tests {
             "\"serverAdministration\"",
             "\"extendedAttributes\"",
             "\"finderTags\"",
+            "\"finderAliases\"",
         ] {
             assert!(json.contains(field), "expected {json} to contain {field}");
         }

@@ -1,6 +1,6 @@
 # 0059 macOS platform integration
 
-Status: in_progress
+Status: done
 Priority: medium
 Owner: unassigned
 Agent: copilot
@@ -104,3 +104,8 @@ needed for the MVP/version 1; keep the rest behind capability flags.
   The core macOS integration is implemented and verified, but the acceptance criterion requiring
   aliases to be resolved or explicitly capability-reported remains unmet. The follow-up will add
   truthful capability reporting rather than silently claiming alias support.
+- 2026-09-03 copilot: Added the public `finderAliases` runtime capability, derived from a dedicated
+  `PlatformCapabilities::FINDER_ALIASES` bit. The macOS adapter deliberately leaves the bit unset
+  until alias resolution is implemented, so browser, Tauri, and diagnostics clients report
+  unsupported behavior explicitly instead of inferring support from the host OS. The roadmap now
+  names this capability and the deferred enhancement.

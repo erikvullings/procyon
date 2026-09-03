@@ -25,6 +25,7 @@ function fixtureCapabilities() {
   return {
     clipboard: true,
     extendedAttributes: false,
+    finderAliases: false,
     finderTags: false,
     nativeDragOut: false,
     nativeFileIcons: false,

@@ -18,6 +18,8 @@ export interface RuntimeCapabilitiesDto {
      * "Finder comment") can be read/written (task 0136).
      */
   extendedAttributes: boolean;
+  /** Whether macOS Finder alias files can be resolved to their targets. */
+  finderAliases: boolean;
   /** Whether Finder tags can be read/written (task 0136). */
   finderTags: boolean;
   /** Whether dragging entries out to the OS is supported. */

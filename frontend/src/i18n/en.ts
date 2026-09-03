@@ -834,6 +834,7 @@ export const en = {
     nativeMenus: 'Native Menus',
     platformContextMenu: 'Services / Send To Menu',
     nativeFileIcons: 'Native File Icons',
+    finderAliases: 'Finder Alias Resolution',
     systemTrash: 'System Trash',
     plugins: 'Plugins',
     connectionState: 'Connection State',

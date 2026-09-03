@@ -843,6 +843,7 @@ export const nl = {
     nativeMenus: "Systeemeigen menu's",
     platformContextMenu: 'Voorzieningen / Verzenden naar-menu',
     nativeFileIcons: 'Systeemeigen bestandspictogrammen',
+    finderAliases: 'Finder-aliassen oplossen',
     systemTrash: 'Systeemprullenbak',
     plugins: 'Plug-ins',
     connectionState: 'Verbindingsstatus',

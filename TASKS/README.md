@@ -224,8 +224,8 @@ Native OS hooks (Finder/Explorer, Trash, menu bar, terminal), packaging, and des
 behavior.
 
 - [x] 0058 Platform adapter traits and capability reporting
-- [ ] 0059 macOS platform integration *(in_progress — core integration is complete; macOS aliases
-  still need truthful capability reporting)*
+- [x] 0059 macOS platform integration *(Finder alias resolution is explicitly reported unsupported
+  through the runtime capability contract)*
 - [ ] 0060 Windows platform integration *(in_progress — core integration is complete; explicit
   `.lnk` opening and real UNC-share verification remain)*
 - [x] 0061 Open with default application, reveal in file manager, open terminal

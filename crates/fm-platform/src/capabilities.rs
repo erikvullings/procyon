@@ -41,6 +41,8 @@ bitflags::bitflags! {
         const PLATFORM_CONTEXT_MENU = 1 << 14;
         /// Present a local file through the OS Quick Look preview panel.
         const QUICK_LOOK = 1 << 15;
+        /// Resolve macOS Finder alias files to their targets.
+        const FINDER_ALIASES = 1 << 16;
     }
 }
 

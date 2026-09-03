@@ -27,6 +27,7 @@ describe('Diagnostics', () => {
           plugins: true,
           serverAdministration: false,
           extendedAttributes: true,
+          finderAliases: false,
           finderTags: true,
         },
         connectionState: {
@@ -129,6 +130,7 @@ describe('Diagnostics', () => {
           plugins: false,
           serverAdministration: false,
           extendedAttributes: false,
+          finderAliases: false,
           finderTags: false,
         },
         connectionState: {
