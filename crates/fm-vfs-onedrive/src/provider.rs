@@ -143,6 +143,15 @@ impl FileSystemProvider for OneDriveFileSystemProvider {
         ProviderId::new(ONEDRIVE_PROVIDER)
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["onedrive"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        fm_vfs::validate_connection_location(location, ONEDRIVE_PROVIDER, self.schemes(), true)?;
+        crate::graph::Parsed::parse(location).map(|_| ())
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
             | ProviderCapabilities::READ

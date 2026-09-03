@@ -146,6 +146,12 @@ impl FileSystemProvider for FtpFileSystemProvider {
     fn id(&self) -> ProviderId {
         ProviderId::new("ftp")
     }
+    fn schemes(&self) -> &'static [&'static str] {
+        &["ftp", "ftps"]
+    }
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        fm_vfs::validate_connection_location(location, "ftp", self.schemes(), false)
+    }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
             | ProviderCapabilities::READ

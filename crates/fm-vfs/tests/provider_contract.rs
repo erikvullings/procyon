@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 struct StubProvider {
     id: ProviderId,
+    schemes: &'static [&'static str],
     capabilities: ProviderCapabilities,
 }
 
@@ -20,6 +21,10 @@ struct StubProvider {
 impl FileSystemProvider for StubProvider {
     fn id(&self) -> ProviderId {
         self.id.clone()
+    }
+
+    fn schemes(&self) -> &'static [&'static str] {
+        self.schemes
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -118,6 +123,7 @@ fn unsupported_capabilities_are_rejected_before_a_caller_starts_io() {
 fn registry_resolves_a_location_to_its_provider() {
     let provider = Arc::new(StubProvider {
         id: ProviderId::new("file"),
+        schemes: &[],
         capabilities: ProviderCapabilities::LIST,
     });
     let mut registry = ProviderRegistry::new();
@@ -131,6 +137,29 @@ fn registry_resolves_a_location_to_its_provider() {
         .expect("registered provider must resolve");
 
     assert_eq!(resolved.id(), ProviderId::new("file"));
+}
+
+#[test]
+fn registry_routes_a_new_scheme_without_domain_registration() {
+    let provider = Arc::new(StubProvider {
+        id: ProviderId::new("future"),
+        schemes: &["future-provider"],
+        capabilities: ProviderCapabilities::LIST,
+    });
+    let mut registry = ProviderRegistry::new();
+    registry.register(provider);
+
+    let location = registry
+        .parse("future-provider://opaque/path")
+        .expect("registered future scheme");
+    assert_eq!(location.provider_id, ProviderId::new("future"));
+    assert_eq!(
+        location.join("child").expect("generic path join"),
+        Location::new(
+            ProviderId::new("future"),
+            "future-provider://opaque/path/child"
+        )
+    );
 }
 
 #[test]
@@ -202,6 +231,7 @@ fn every_vfs_error_has_a_stable_machine_readable_code() {
 fn a_provider_without_the_watch_capability_reports_unsupported_change_tracking_by_default() {
     let provider = StubProvider {
         id: ProviderId::new("search"),
+        schemes: &[],
         capabilities: ProviderCapabilities::LIST,
     };
 
@@ -212,6 +242,7 @@ fn a_provider_without_the_watch_capability_reports_unsupported_change_tracking_b
 fn a_provider_advertising_the_watch_capability_reports_native_watch_change_tracking_by_default() {
     let provider = StubProvider {
         id: ProviderId::new("local"),
+        schemes: &[],
         capabilities: ProviderCapabilities::LIST | ProviderCapabilities::WATCH,
     };
 
@@ -222,6 +253,7 @@ fn a_provider_advertising_the_watch_capability_reports_native_watch_change_track
 fn transfer_capabilities_default_to_the_provider_id_as_endpoint_and_its_static_bits() {
     let provider = StubProvider {
         id: ProviderId::new("local"),
+        schemes: &[],
         capabilities: ProviderCapabilities::READ
             | ProviderCapabilities::WRITE
             | ProviderCapabilities::MOVE
@@ -248,6 +280,7 @@ fn transfer_capabilities_default_to_the_provider_id_as_endpoint_and_its_static_b
 fn transfer_capabilities_without_the_matching_bits_advertise_nothing() {
     let provider = StubProvider {
         id: ProviderId::new("search"),
+        schemes: &[],
         capabilities: ProviderCapabilities::LIST | ProviderCapabilities::READ,
     };
 

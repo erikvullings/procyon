@@ -11,8 +11,19 @@ Location {
 
 The local provider ID is `local`; its URI scheme is `file`. Keeping these identifiers distinct
 lets provider dispatch remain stable while using the standard file-URI spelling in bookmarks and
-history. The `archive`, `search` and `sftp` schemes are reserved for planned providers and are
-currently rejected as unsupported.
+history. Other registered schemes include `archive`, `search`, `sftp`, `ftp`, `ftps`, `webdav`,
+`s3`, and `onedrive`.
+
+`Location::parse()` only checks the structural `scheme://` prefix and keeps the URI opaque. It
+retains the persisted aliases `file -> local` and `ftps -> ftp`, but does not know the set of
+installed providers or their URI grammars. Each `FileSystemProvider` declares its schemes and
+validates its own locations. `ProviderRegistry::parse()` is the admission boundary for raw URIs:
+it routes by scheme, assigns the owning provider ID, and delegates validation. Registry resolution
+also validates already-deserialized `Location` values before returning a provider.
+
+This split lets a new provider register a scheme without changing `fm-domain`. Conventionally
+hierarchical opaque URIs can also use `Location::join`, `parent`, and `name`; providers with a
+specialized URI shape retain their own path rules.
 
 ## Local URI syntax
 
@@ -26,9 +37,9 @@ currently rejected as unsupported.
 - Long Windows paths gain the `\\?\` or `\\?\UNC\` native prefix when converted back once the
   path reaches the legacy Windows path limit.
 
-Parsing rejects null bytes, empty path segments, reserved Windows device names and a provider ID
-that does not match the URI scheme. `join`, `parent` and `name` operate on complete decoded
-segments rather than concatenating strings.
+Local-provider admission rejects null bytes, empty path segments, reserved Windows device names,
+and a provider ID or scheme that does not belong to the local provider. `join`, `parent` and
+`name` operate on complete decoded segments rather than concatenating strings.
 
 Normalization is lexical and performs no filesystem access. Callers supply an allowed root;
 `.` and `..` are resolved and any result outside that root is rejected.

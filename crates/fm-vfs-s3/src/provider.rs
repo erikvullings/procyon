@@ -146,6 +146,14 @@ impl FileSystemProvider for S3FileSystemProvider {
         ProviderId::new(S3_PROVIDER)
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["s3"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        fm_vfs::validate_connection_location(location, S3_PROVIDER, self.schemes(), true)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
             | ProviderCapabilities::READ

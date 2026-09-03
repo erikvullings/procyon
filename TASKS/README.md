@@ -315,8 +315,8 @@ content streaming, and mapping concerns live in dedicated modules with interface
 - [x] 0121 Extract File Editor Service *(needs 0119)*
 - [x] 0122 Extract Connection Facade *(needs 0119)*
 - [x] 0123 Extract Plugin Manager module *(needs 0119)*
-- [ ] 0124 Narrow Location URI parsing in fm-domain *(open — provider-specific URI parsing still
-  lives in `fm-domain`)*
+- [x] 0124 Narrow Location URI parsing in fm-domain *(structural parsing is provider-neutral;
+  registered providers own scheme routing and URI admission)*
 - [x] 0125 Make Search Engine VFS-provider agnostic *(independent)*
 - [x] 0119 Decompose FileManagerService into capability sub-services
 - [x] 0152 Give Scheduler::run_job an atomic interruption-state seam *(fm-operations; found and

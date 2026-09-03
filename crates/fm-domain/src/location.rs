@@ -19,25 +19,10 @@ use thiserror::Error;
 use crate::ids::ProviderId;
 
 const LOCAL_SCHEME: &str = "file";
-const SEARCH_SCHEME: &str = "search";
-const SEARCH_AUTHORITY: &str = "local";
-/// Schemes named by the specification but not yet backed by a provider
-/// (task 0104 removed `"sftp"` from this list once it gained a real
-/// provider; kept as the seam a later task, e.g. FTP/FTPS, reserves its own
-/// scheme ahead of implementing it).
-const RESERVED_SCHEMES: &[&str] = &[];
 
-/// Static scheme-to-provider mapping for data providers (excludes search).
-const SCHEME_MAP: [(&str, &str); 8] = [
-    ("file", "local"),
-    ("archive", "archive"),
-    ("sftp", "sftp"),
-    ("ftp", "ftp"),
-    ("ftps", "ftp"),
-    ("s3", "s3"),
-    ("webdav", "webdav"),
-    ("onedrive", "onedrive"),
-];
+/// Legacy scheme aliases whose persisted provider ids predate the convention
+/// that a provider id equals its URI scheme.
+const PROVIDER_ID_ALIASES: [(&str, &str); 2] = [("file", "local"), ("ftps", "ftp")];
 
 /// A provider-neutral pointer to a location.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -113,61 +98,29 @@ impl Location {
         }
     }
 
-    /// Parses and validates a provider-neutral URI.
+    /// Parses the scheme of an opaque provider URI.
+    ///
+    /// Provider-specific validation belongs to the registered filesystem
+    /// provider. This method deliberately accepts schemes unknown to
+    /// `fm-domain`, so adding a provider never requires changing this crate.
     pub fn parse(uri: &str) -> Result<Self, LocationError> {
         let scheme = parse_scheme(uri)?;
-        if scheme == SEARCH_SCHEME {
-            validate_search_uri(uri)?;
-            return Ok(Self::new(ProviderId::new(SEARCH_SCHEME), uri));
-        }
-        let provider_id = provider_for_scheme(scheme)?;
-        if scheme == "archive" {
-            ParsedArchiveUri::parse(uri)?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        if scheme == "sftp" {
-            let parsed = ParsedSftpUri::parse(uri)?;
-            parsed.validate_segments()?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        if matches!(scheme, "ftp" | "ftps") {
-            let parsed = ParsedFtpUri::parse(uri)?;
-            parsed.validate_segments()?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        if scheme == "s3" {
-            let parsed = ParsedS3Uri::parse(uri)?;
-            parsed.validate_segments()?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        if scheme == "webdav" {
-            let parsed = ParsedWebDavUri::parse(uri)?;
-            parsed.validate_segments()?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        if scheme == "onedrive" {
-            let parsed = ParsedOneDriveUri::parse(uri)?;
-            parsed.validate_segments()?;
-            return Ok(Self::new(ProviderId::new(provider_id), uri));
-        }
-        // file scheme (fallthrough)
-        let parsed = ParsedFileUri::parse(uri)?;
-        parsed.validate_segments()?;
-        // A directory's trailing slash is dropped so one directory has one URI.
-        let canonical = if parsed.segments.is_empty() {
-            uri
-        } else {
-            uri.strip_suffix('/').unwrap_or(uri)
-        };
-        Ok(Self::new(ProviderId::new(provider_id), canonical))
+        let provider_id = provider_id_for_scheme(scheme);
+        let uri = canonicalize_local_trailing_slash(scheme, uri);
+        Ok(Self::new(provider_id, uri))
+    }
+
+    /// Returns this location's syntactically valid URI scheme.
+    pub fn scheme(&self) -> Result<&str, LocationError> {
+        parse_scheme(&self.uri)
     }
 
     /// Creates a validated location and verifies its provider matches the URI.
     pub fn try_new(provider_id: ProviderId, uri: impl Into<String>) -> Result<Self, LocationError> {
         let uri = uri.into();
         let scheme = parse_scheme(&uri)?;
-        let expected_provider = provider_for_scheme(scheme)?;
-        if provider_id.as_str() != expected_provider {
+        let expected_provider = provider_id_for_scheme(scheme);
+        if provider_id != expected_provider {
             return Err(LocationError::MismatchedProvider {
                 provider_id: provider_id.as_str().to_owned(),
                 scheme: scheme.to_owned(),
@@ -188,6 +141,13 @@ impl Location {
     pub fn to_native_path(&self) -> Result<PathBuf, LocationError> {
         self.ensure_local()?;
         location_to_native_path(&ParsedFileUri::parse(&self.uri)?)
+    }
+
+    /// Validates the provider-specific shape of a local `file://` URI without
+    /// requiring that the current host can represent it as a native path.
+    pub fn validate_local_uri(&self) -> Result<(), LocationError> {
+        self.ensure_local()?;
+        ParsedFileUri::parse(&self.uri)?.validate_segments()
     }
 
     /// Lexically resolves `.` and `..` and rejects a result outside `root`.
@@ -232,6 +192,9 @@ impl Location {
         if self.provider_id.as_str() == "onedrive" {
             return ParsedOneDriveUri::parse(&self.uri)?.parent();
         }
+        if self.provider_id.as_str() != "local" && self.provider_id.as_str() != "search" {
+            return ParsedHierarchicalUri::parse(self)?.parent();
+        }
         self.ensure_local()?;
         let mut parsed = ParsedFileUri::parse(&self.uri)?;
         parsed.validate_segments()?;
@@ -267,6 +230,10 @@ impl Location {
             validate_name(name)?;
             return ParsedOneDriveUri::parse(&self.uri)?.join(name);
         }
+        if self.provider_id.as_str() != "local" && self.provider_id.as_str() != "search" {
+            validate_name(name)?;
+            return ParsedHierarchicalUri::parse(self)?.join(name);
+        }
         self.ensure_local()?;
         validate_name(name)?;
         let mut parsed = ParsedFileUri::parse(&self.uri)?;
@@ -294,6 +261,9 @@ impl Location {
         }
         if self.provider_id.as_str() == "onedrive" {
             return ParsedOneDriveUri::parse(&self.uri)?.name();
+        }
+        if self.provider_id.as_str() != "local" && self.provider_id.as_str() != "search" {
+            return ParsedHierarchicalUri::parse(self)?.name();
         }
         self.ensure_local()?;
         let parsed = ParsedFileUri::parse(&self.uri)?;
@@ -326,6 +296,97 @@ struct ParsedFileUri {
 struct ParsedArchiveUri {
     outer: String,
     inner_segments: Vec<Vec<u8>>,
+}
+
+/// Structural path algebra for conventionally hierarchical provider URIs.
+///
+/// Provider-specific admission remains in `fm-vfs`; this representation only
+/// lets a newly registered scheme use safe `join`, `parent`, and `name`
+/// operations without adding another branch to `fm-domain`.
+#[derive(Debug)]
+struct ParsedHierarchicalUri {
+    provider_id: ProviderId,
+    scheme: String,
+    authority: String,
+    segments: Vec<Vec<u8>>,
+}
+
+impl ParsedHierarchicalUri {
+    fn parse(location: &Location) -> Result<Self, LocationError> {
+        let scheme = location.scheme()?.to_owned();
+        let (_, remainder) = location
+            .uri
+            .split_once("://")
+            .ok_or(LocationError::InvalidUri)?;
+        if remainder.contains(['?', '#']) {
+            return Err(LocationError::InvalidUri);
+        }
+        let (authority, path) = remainder.split_once('/').ok_or(LocationError::InvalidUri)?;
+        if authority.is_empty() {
+            return Err(LocationError::InvalidUri);
+        }
+        let segments = if path.is_empty() {
+            Vec::new()
+        } else {
+            let encoded: Vec<_> = path.split('/').collect();
+            if encoded.iter().any(|segment| segment.is_empty()) {
+                return Err(LocationError::EmptySegment);
+            }
+            encoded
+                .into_iter()
+                .map(percent_decode)
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for segment in &segments {
+            if segment.contains(&0) || segment.contains(&b'/') || segment.contains(&b'\\') {
+                return Err(LocationError::InvalidName(
+                    String::from_utf8_lossy(segment).into_owned(),
+                ));
+            }
+        }
+        Ok(Self {
+            provider_id: location.provider_id.clone(),
+            scheme,
+            authority: authority.to_owned(),
+            segments,
+        })
+    }
+
+    fn into_location(self) -> Location {
+        let path = self
+            .segments
+            .iter()
+            .map(|segment| percent_encode(segment))
+            .collect::<Vec<_>>()
+            .join("/");
+        Location::new(
+            self.provider_id,
+            format!("{}://{}/{path}", self.scheme, self.authority),
+        )
+    }
+
+    fn join(mut self, name: &str) -> Result<Location, LocationError> {
+        self.segments.push(name.as_bytes().to_vec());
+        Ok(self.into_location())
+    }
+
+    fn parent(mut self) -> Result<Option<Location>, LocationError> {
+        if self.segments.pop().is_none() {
+            Ok(None)
+        } else {
+            Ok(Some(self.into_location()))
+        }
+    }
+
+    fn name(&self) -> Result<String, LocationError> {
+        String::from_utf8(
+            self.segments
+                .last()
+                .ok_or_else(|| LocationError::InvalidName("provider root has no name".to_owned()))?
+                .clone(),
+        )
+        .map_err(|_| LocationError::InvalidUnicode)
+    }
 }
 
 /// `sftp://<connection-id>/<remote-path>` (spec §6.5).
@@ -948,7 +1009,7 @@ impl ParsedFileUri {
 }
 
 fn parse_scheme(uri: &str) -> Result<&str, LocationError> {
-    let (scheme, _) = uri.split_once(':').ok_or(LocationError::InvalidUri)?;
+    let (scheme, _) = uri.split_once("://").ok_or(LocationError::InvalidUri)?;
     if scheme.is_empty()
         || !scheme.bytes().enumerate().all(|(index, byte)| {
             byte.is_ascii_alphabetic()
@@ -960,43 +1021,29 @@ fn parse_scheme(uri: &str) -> Result<&str, LocationError> {
     Ok(scheme)
 }
 
-fn provider_for_scheme(scheme: &str) -> Result<&'static str, LocationError> {
-    if scheme == SEARCH_SCHEME {
-        return Ok(SEARCH_SCHEME);
-    }
-    SCHEME_MAP
+fn provider_id_for_scheme(scheme: &str) -> ProviderId {
+    let provider_id = PROVIDER_ID_ALIASES
         .iter()
         .find(|(s, _)| *s == scheme)
         .map(|(_, p)| *p)
-        .ok_or_else(|| {
-            if RESERVED_SCHEMES.contains(&scheme) {
-                LocationError::UnsupportedProvider(scheme.to_owned())
-            } else {
-                LocationError::UnknownProvider(scheme.to_owned())
-            }
-        })
+        .unwrap_or(scheme);
+    ProviderId::new(provider_id)
 }
 
-/// Validates the `search://local/{searchId}` shape (spec §24, task 0068).
-///
-/// Search locations are deliberately not routed through [`ParsedFileUri`]:
-/// they address a virtual, provider-owned result set rather than a native
-/// path, so segment decoding, percent-encoding and native-path conversion
-/// never apply to them.
-fn validate_search_uri(uri: &str) -> Result<(), LocationError> {
-    let remainder = uri
-        .strip_prefix("search://")
-        .ok_or(LocationError::InvalidUri)?;
-    let mut segments = remainder.split('/');
-    let authority = segments.next().unwrap_or_default();
-    if authority != SEARCH_AUTHORITY {
-        return Err(LocationError::InvalidUri);
+fn canonicalize_local_trailing_slash<'a>(scheme: &str, uri: &'a str) -> &'a str {
+    if scheme != LOCAL_SCHEME {
+        return uri;
     }
-    let search_id = segments.next().ok_or(LocationError::InvalidUri)?;
-    if search_id.is_empty() || segments.next().is_some() {
-        return Err(LocationError::InvalidUri);
+    let remainder = uri.strip_prefix("file://").unwrap_or_default();
+    let path = remainder
+        .strip_prefix('/')
+        .or_else(|| remainder.split_once('/').map(|(_, path)| path))
+        .unwrap_or_default();
+    if !path.ends_with("//") && path.strip_suffix('/').is_some_and(|path| !path.is_empty()) {
+        uri.strip_suffix('/').unwrap_or(uri)
+    } else {
+        uri
     }
-    Ok(())
 }
 
 /// Validates a single path segment name (empty, traversal, separators, null bytes, Windows reserved names).

@@ -14,7 +14,7 @@ use fm_ssh::{
 };
 use fm_vfs::{
     CONSERVATIVE_POLL_INTERVAL, ChangeTracking, EntryRef, FileSystemProvider, ListOptions,
-    ProviderCapabilities, RemoveOptions, VfsError, WriteOptions,
+    ProviderCapabilities, ProviderRegistry, RemoveOptions, VfsError, WriteOptions,
 };
 use fm_vfs_sftp::{SftpFileSystemProvider, SshConnectionResolver};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -138,6 +138,18 @@ async fn id_and_capabilities_are_reported_accurately() {
             "unexpectedly advertised {unexpected:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn registry_rejects_malformed_sftp_locations_through_the_owning_provider() {
+    let (provider, _fixture) = provider_and_fixture().await;
+    let mut registry = ProviderRegistry::new();
+    registry.register(Arc::new(provider));
+
+    assert!(matches!(
+        registry.parse("sftp://not-a-connection-id/home"),
+        Err(VfsError::InvalidLocation { .. })
+    ));
 }
 
 /// Task 0108: the endpoint must identify the *connection*, not the provider

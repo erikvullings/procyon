@@ -1,6 +1,6 @@
 # 0124 Narrow Location URI parsing in fm-domain
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend
 Depends on: none
@@ -19,7 +19,8 @@ The domain layer should carry an opaque URI and delegate scheme-specific validat
 - Duplicated `validate_name()` logic consolidated — single source of truth
 - `fm-domain` no longer needs to be updated when new provider schemes are added
 - All existing `Location` contract tests pass
-- Zero behavioural changes to URI parsing outcomes
+- Zero behavioural changes at provider admission; structural parsing intentionally accepts opaque
+  provider URIs until the registry delegates validation to their owner
 
 ## Implementation Notes
 - The provider registration in `ProviderRegistry` is the right seam: during registration, each provider declares the schemes it handles and a validation function
@@ -33,3 +34,11 @@ The domain layer should carry an opaque URI and delegate scheme-specific validat
   No implementation was recorded, and current `fm-domain/src/location.rs` still dispatches among
   provider-specific parsers from `Location::parse()`. This is a substantial architecture refactor,
   not a finishing-touch task.
+- 2026-09-03 copilot: Implemented the refactor. `Location::parse()` now performs only structural
+  scheme extraction plus the persisted `file -> local` and `ftps -> ftp` aliases.
+  `FileSystemProvider` declares its schemes and validates owned locations; `ProviderRegistry`
+  routes raw URIs by scheme and validates both parsed and deserialized locations before use.
+  Local, SFTP, FTP/FTPS, WebDAV, S3, OneDrive, archive, and search providers now own their URI
+  admission rules. Shared connection-URI safety checks and local filename validation reuse the
+  domain source of truth. Contract tests cover provider routing, unknown schemes, aliases,
+  provider-specific rejection, and path navigation for a newly registered future scheme.
