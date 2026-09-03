@@ -58,7 +58,14 @@ jobs:
             --output "$CERTIFICATE_PATH"
           echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $CERTIFICATE_PATH" |
             shasum -a 256 -c -
-          security import "$CERTIFICATE_PATH" -k signing_temp.keychain -f x509
+          if ! IMPORT_OUTPUT="$(
+            security import "$CERTIFICATE_PATH" -k signing_temp.keychain -f x509 2>&1
+          )"; then
+            if [[ "$IMPORT_OUTPUT" != *"specified item already exists"* ]]; then
+              echo "$IMPORT_OUTPUT" >&2
+              exit 1
+            fi
+          fi
           rm "$CERTIFICATE_PATH"
       - name: Select Developer ID Application identity
         run: |
