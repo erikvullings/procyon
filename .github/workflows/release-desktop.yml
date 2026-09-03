@@ -25,9 +25,6 @@ jobs:
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: macos-latest
     environment: desktop-release
-    env:
-      APPLE_KEYCHAIN_PATH: ${{ runner.temp }}/apple-signing.keychain-db
-      APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
     steps:
       - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
@@ -45,6 +42,10 @@ jobs:
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
+      - name: Configure temporary signing paths
+        run: |
+          echo "APPLE_KEYCHAIN_PATH=$RUNNER_TEMP/apple-signing.keychain-db" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
       - name: Import Developer ID Application certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
