@@ -44,39 +44,20 @@ jobs:
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
       - name: Configure temporary signing paths
         run: |
-          echo "APPLE_KEYCHAIN_PATH=$RUNNER_TEMP/apple-signing.keychain-db" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
       - name: Import Developer ID Application certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Select Developer ID Application identity
         run: |
-          test -n "$APPLE_CERTIFICATE"
-          test -n "$APPLE_CERTIFICATE_PASSWORD"
-          CERTIFICATE_PATH="$RUNNER_TEMP/apple-certificate.p12"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$CERTIFICATE_PATH"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$APPLE_KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$APPLE_KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$APPLE_KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" \
-            -k "$APPLE_KEYCHAIN_PATH" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$APPLE_KEYCHAIN_PATH"
-          security list-keychains -d user -s "$APPLE_KEYCHAIN_PATH"
           IDENTITY="$(
-            security find-identity -v -p codesigning "$APPLE_KEYCHAIN_PATH" |
+            security find-identity -v -p codesigning |
               awk -F'"' '/Developer ID Application/ { print $2; exit }'
           )"
           test -n "$IDENTITY"
           echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          rm "$CERTIFICATE_PATH"
       - name: Prepare App Store Connect API key
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -144,11 +125,7 @@ jobs:
           if-no-files-found: error
       - name: Remove temporary signing credentials
         if: always()
-        run: |
-          rm -f "$APPLE_API_KEY_PATH" "$RUNNER_TEMP/apple-certificate.p12"
-          if [[ -f "$APPLE_KEYCHAIN_PATH" ]]; then
-            security delete-keychain "$APPLE_KEYCHAIN_PATH"
-          fi
+        run: rm -f "$APPLE_API_KEY_PATH"
 
   linux:
     name: Linux packages

@@ -85,6 +85,7 @@ test('protected release workflow signs and notarizes macOS packages only', () =>
   assert.match(releaseText, /secrets\.APPLE_API_ISSUER/);
   assert.match(releaseText, /secrets\.APPLE_API_KEY/);
   assert.match(releaseText, /secrets\.APPLE_API_KEY_P8/);
+  assert.match(releaseText, /apple-actions\/import-codesign-certs@v7/);
   assert.match(releaseText, /Developer ID Application/);
   assert.match(releaseText, /codesign --verify/);
   assert.match(releaseText, /spctl --assess/);
