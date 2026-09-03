@@ -232,6 +232,7 @@ behavior.
 - [ ] 0063 Desktop packaging, signing and notarization *(in_progress — unsigned packaging is
   complete; Apple signing/notarization awaits Developer Program activation, and Windows signing
   remains unconfigured)*
+- [ ] 0175 Mac App Store distribution *(needs 0063; separate sandboxed variant)*
 - [x] 0126 Embedded terminal drawer
 - [x] 0132 Windows defect: operation routes return 500 / deadlock *(pre-existing, found while
   verifying 0060; blocked the Windows pre-commit hook)*

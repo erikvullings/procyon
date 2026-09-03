@@ -69,23 +69,30 @@ test('pull-request CI builds desktop bundles without any signing credentials', (
   assert.doesNotMatch(ciText, /APPLE_|WINDOWS_|CERTIFICATE|SIGNING|notariz/i);
 });
 
-test('tag-only protected release workflow publishes unsigned desktop packages', () => {
+test('protected release workflow signs and notarizes macOS packages only', () => {
   const releaseText = workflowText('release-desktop.yml');
   const release = workflow('release-desktop.yml');
   assert.deepEqual(release.on.push.tags, ['v*']);
+  assert.ok(release.on.workflow_dispatch);
   assert.equal(release.on.pull_request, undefined);
 
   for (const jobName of ['macos', 'windows', 'linux']) {
     assert.equal(release.jobs[jobName].environment, 'desktop-release');
   }
 
-  assert.doesNotMatch(
-    releaseText,
-    /APPLE_|WINDOWS_CERTIFICATE|Developer ID|codesign|notariz|stapler|signtool/i,
-  );
+  assert.match(releaseText, /secrets\.APPLE_CERTIFICATE/);
+  assert.match(releaseText, /secrets\.APPLE_CERTIFICATE_PASSWORD/);
+  assert.match(releaseText, /secrets\.APPLE_API_ISSUER/);
+  assert.match(releaseText, /secrets\.APPLE_API_KEY/);
+  assert.match(releaseText, /secrets\.APPLE_API_KEY_P8/);
+  assert.match(releaseText, /Developer ID Application/);
+  assert.match(releaseText, /codesign --verify/);
+  assert.match(releaseText, /spctl --assess/);
+  assert.match(releaseText, /stapler validate/);
+  assert.doesNotMatch(releaseText, /WINDOWS_CERTIFICATE|signtool/i);
 });
 
-test('release workflow publishes unsigned macOS, Windows, and Linux packages', () => {
+test('release workflow publishes signed macOS and unsigned Windows and Linux packages', () => {
   const releaseText = workflowText('release-desktop.yml');
   const release = workflow('release-desktop.yml');
   const chocolateyText = workflowText('publish-chocolatey.yml');
@@ -211,13 +218,12 @@ test('README documents release versioning, package managers, smoke checks, and n
   assert.match(readme, /Cargo\.toml/);
   assert.match(readme, /v<version>/);
   assert.match(readme, /release notes/i);
-  assert.match(readme, /unsigned macOS/i);
-  assert.match(readme, /Gatekeeper/i);
+  assert.match(readme, /Developer ID Application/i);
+  assert.match(readme, /notariz/i);
   assert.match(readme, /SmartScreen/i);
-  assert.doesNotMatch(
-    readme,
-    /APPLE_CERTIFICATE|APPLE_ID|APPLE_PASSWORD|APPLE_TEAM_ID|WINDOWS_CERTIFICATE/,
-  );
+  assert.match(readme, /APPLE_CERTIFICATE/);
+  assert.match(readme, /APPLE_API_KEY_P8/);
+  assert.doesNotMatch(readme, /APPLE_ID|APPLE_PASSWORD|APPLE_TEAM_ID|WINDOWS_CERTIFICATE/);
   assert.match(readme, /manual smoke/i);
   assert.match(readme, /brew install --cask/);
   assert.match(readme, /choco install procyon/);

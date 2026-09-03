@@ -3,6 +3,7 @@ name: Release desktop
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -10,6 +11,7 @@ permissions:
 jobs:
   release:
     name: Create GitHub prerelease
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: softprops/action-gh-release@v2
@@ -18,8 +20,9 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
 
   macos:
-    name: Unsigned macOS bundles
+    name: Signed and notarized macOS bundles
     needs: [release]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: macos-latest
     environment: desktop-release
     steps:
@@ -37,13 +40,115 @@ jobs:
       - name: Install lld
         run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
+        if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
-      - name: Build unsigned macOS bundles
+      - name: Configure temporary signing paths
+        run: |
+          echo "APPLE_KEYCHAIN_PATH=$RUNNER_TEMP/apple-signing.keychain-db" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+      - name: Import Developer ID Application certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "$APPLE_CERTIFICATE"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          CERTIFICATE_PATH="$RUNNER_TEMP/apple-certificate.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$CERTIFICATE_PATH"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$APPLE_KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$APPLE_KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$APPLE_KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$APPLE_KEYCHAIN_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$APPLE_KEYCHAIN_PATH"
+          security list-keychains -d user -s "$APPLE_KEYCHAIN_PATH"
+          IDENTITY="$(
+            security find-identity -v -p codesigning "$APPLE_KEYCHAIN_PATH" |
+              awk -F'"' '/Developer ID Application/ { print $2; exit }'
+          )"
+          test -n "$IDENTITY"
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm "$CERTIFICATE_PATH"
+      - name: Prepare App Store Connect API key
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          test -n "$APPLE_API_KEY"
+          test -n "$APPLE_API_KEY_P8"
+          test -n "$APPLE_API_ISSUER"
+          printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          chmod 600 "$APPLE_API_KEY_PATH"
+      - name: Build, sign, notarize, and staple macOS bundles
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: pnpm run build:tauri --target universal-apple-darwin
+      - name: Notarize and staple the DMG
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          DMG_PATH="$(
+            find target/universal-apple-darwin/release/bundle/dmg \
+              -maxdepth 1 -type f -name '*.dmg' -print -quit
+          )"
+          test -n "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+      - name: Verify signature, notarization, stapling, and universal binary
+        run: |
+          APP_PATH="$(
+            find target/universal-apple-darwin/release/bundle/macos \
+              -maxdepth 1 -type d -name '*.app' -print -quit
+          )"
+          DMG_PATH="$(
+            find target/universal-apple-darwin/release/bundle/dmg \
+              -maxdepth 1 -type f -name '*.dmg' -print -quit
+          )"
+          test -n "$APP_PATH"
+          test -n "$DMG_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 |
+            grep -F "Authority=Developer ID Application"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          hdiutil verify "$DMG_PATH"
+          ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/Procyon")"
+          grep -qw arm64 <<< "$ARCHITECTURES"
+          grep -qw x86_64 <<< "$ARCHITECTURES"
       - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
         with:
           files: |
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: signed-notarized-macos-${{ github.sha }}
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+      - name: Remove temporary signing credentials
+        if: always()
+        run: |
+          rm -f "$APPLE_API_KEY_PATH" "$RUNNER_TEMP/apple-certificate.p12"
+          if [[ -f "$APPLE_KEYCHAIN_PATH" ]]; then
+            security delete-keychain "$APPLE_KEYCHAIN_PATH"
+          fi
 
   linux:
     name: Linux packages
@@ -106,11 +211,12 @@ jobs:
   homebrew:
     name: Publish Homebrew cask
     needs: [macos]
+    if: github.event_name == 'push'
     runs-on: macos-latest
     environment: desktop-release
     steps:
       - uses: actions/checkout@v5
-      - name: Download the unsigned DMG
+      - name: Download the signed and notarized DMG
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download "$GITHUB_REF_NAME" --pattern "*.dmg" --dir package-input
