@@ -92,6 +92,16 @@ test('protected release workflow signs and notarizes macOS packages only', () =>
   assert.match(releaseText, /codesign --verify/);
   assert.match(releaseText, /spctl --assess/);
   assert.match(releaseText, /stapler validate/);
+  assert.match(releaseText, /--timeout 45m/);
+  assert.match(releaseText, /--no-s3-acceleration/);
+  assert.equal(release.jobs.macos['timeout-minutes'], 120);
+
+  const buildStep = release.jobs.macos.steps.find((step) =>
+    /Build signed macOS bundles/.test(step.name ?? ''),
+  );
+  assert.ok(buildStep, 'expected a signed macOS build step');
+  assert.equal(buildStep.env?.APPLE_API_ISSUER, undefined);
+  assert.equal(buildStep.env?.APPLE_API_KEY, undefined);
   assert.doesNotMatch(releaseText, /WINDOWS_CERTIFICATE|signtool/i);
 });
 
