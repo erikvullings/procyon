@@ -19,7 +19,18 @@ fn ftp_and_ftps_locations_preserve_transport_security() {
 use proptest::prelude::*;
 
 #[test]
-fn parses_local_archive_and_search_uris_and_rejects_unknown_providers() {
+fn structurally_parses_a_future_provider_scheme_without_domain_registration() {
+    let root = Location::parse("future-provider://opaque/").unwrap();
+    let location = root.join("provider path").unwrap();
+
+    assert_eq!(location.provider_id, ProviderId::new("future-provider"));
+    assert_eq!(location.uri, "future-provider://opaque/provider%20path");
+    assert_eq!(location.name().unwrap(), "provider path");
+    assert_eq!(location.parent().unwrap(), Some(root));
+}
+
+#[test]
+fn structurally_parses_local_archive_search_and_unknown_provider_uris() {
     let location = Location::parse("file:///Users/erik/Documents").unwrap();
     assert_eq!(location.provider_id, ProviderId::new("local"));
 
@@ -28,12 +39,14 @@ fn parses_local_archive_and_search_uris_and_rejects_unknown_providers() {
     let search = Location::parse("search://local/11111111-1111-4111-8111-111111111111").unwrap();
     assert_eq!(search.provider_id, ProviderId::new("search"));
     assert_eq!(
-        Location::parse("search://local?query=report"),
-        Err(LocationError::InvalidUri)
+        Location::parse("search://local?query=report")
+            .unwrap()
+            .provider_id,
+        ProviderId::new("search")
     );
     assert_eq!(
-        Location::parse("https://example.test"),
-        Err(LocationError::UnknownProvider("https".to_owned()))
+        Location::parse("https://example.test").unwrap().provider_id,
+        ProviderId::new("https")
     );
 }
 
@@ -44,15 +57,9 @@ fn sftp_locations_reference_a_connection_id_rather_than_a_host() {
     assert_eq!(location.provider_id, ProviderId::new("sftp"));
 
     // A non-UUID authority is not a valid connection id.
-    assert_eq!(
-        Location::parse("sftp://example.test/home"),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse("sftp://example.test/home").is_ok());
     // No path at all (missing the mandatory leading `/`) is invalid.
-    assert_eq!(
-        Location::parse(&format!("sftp://{connection_id}")),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse(&format!("sftp://{connection_id}")).is_ok());
     // The bare root is valid.
     assert!(Location::parse(&format!("sftp://{connection_id}/")).is_ok());
 }
@@ -84,15 +91,20 @@ fn sftp_locations_support_safe_path_navigation() {
 }
 
 #[test]
-fn sftp_locations_reject_traversal_and_reserved_names() {
+fn sftp_location_helpers_reject_malformed_paths_and_decode_names() {
     let connection_id = "11111111-1111-4111-8111-111111111111";
     assert_eq!(
-        Location::parse(&format!("sftp://{connection_id}//double-slash")),
+        Location::parse(&format!("sftp://{connection_id}//double-slash"))
+            .unwrap()
+            .name(),
         Err(LocationError::EmptySegment)
     );
     assert_eq!(
-        Location::parse(&format!("sftp://{connection_id}/CON.txt")),
-        Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
+        Location::parse(&format!("sftp://{connection_id}/CON.txt"))
+            .unwrap()
+            .name()
+            .unwrap(),
+        "CON.txt"
     );
 }
 
@@ -103,15 +115,9 @@ fn s3_locations_reference_a_connection_id_rather_than_a_bucket_host() {
     assert_eq!(location.provider_id, ProviderId::new("s3"));
 
     // A non-UUID authority is not a valid connection id.
-    assert_eq!(
-        Location::parse("s3://my-bucket/key"),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse("s3://my-bucket/key").is_ok());
     // No path at all (missing the mandatory leading `/`) is invalid.
-    assert_eq!(
-        Location::parse(&format!("s3://{connection_id}")),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse(&format!("s3://{connection_id}")).is_ok());
     // The bare root is valid.
     assert!(Location::parse(&format!("s3://{connection_id}/")).is_ok());
 }
@@ -143,15 +149,20 @@ fn s3_locations_support_safe_prefix_navigation() {
 }
 
 #[test]
-fn s3_locations_reject_traversal_and_reserved_names() {
+fn s3_location_helpers_reject_malformed_paths_and_decode_names() {
     let connection_id = "11111111-1111-4111-8111-111111111111";
     assert_eq!(
-        Location::parse(&format!("s3://{connection_id}//double-slash")),
+        Location::parse(&format!("s3://{connection_id}//double-slash"))
+            .unwrap()
+            .name(),
         Err(LocationError::EmptySegment)
     );
     assert_eq!(
-        Location::parse(&format!("s3://{connection_id}/CON.txt")),
-        Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
+        Location::parse(&format!("s3://{connection_id}/CON.txt"))
+            .unwrap()
+            .name()
+            .unwrap(),
+        "CON.txt"
     );
 }
 
@@ -183,14 +194,8 @@ fn webdav_locations_reference_a_connection_id_rather_than_a_host() {
     let location = Location::parse(&format!("webdav://{connection_id}/home/erik")).unwrap();
     assert_eq!(location.provider_id, ProviderId::new("webdav"));
 
-    assert_eq!(
-        Location::parse("webdav://example.test/home"),
-        Err(LocationError::InvalidUri)
-    );
-    assert_eq!(
-        Location::parse(&format!("webdav://{connection_id}")),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse("webdav://example.test/home").is_ok());
+    assert!(Location::parse(&format!("webdav://{connection_id}")).is_ok());
     assert!(Location::parse(&format!("webdav://{connection_id}/")).is_ok());
 }
 
@@ -221,15 +226,20 @@ fn webdav_locations_support_safe_path_navigation() {
 }
 
 #[test]
-fn webdav_locations_reject_traversal_and_reserved_names() {
+fn webdav_location_helpers_reject_malformed_paths_and_decode_names() {
     let connection_id = "11111111-1111-4111-8111-111111111111";
     assert_eq!(
-        Location::parse(&format!("webdav://{connection_id}//double-slash")),
+        Location::parse(&format!("webdav://{connection_id}//double-slash"))
+            .unwrap()
+            .name(),
         Err(LocationError::EmptySegment)
     );
     assert_eq!(
-        Location::parse(&format!("webdav://{connection_id}/CON.txt")),
-        Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
+        Location::parse(&format!("webdav://{connection_id}/CON.txt"))
+            .unwrap()
+            .name()
+            .unwrap(),
+        "CON.txt"
     );
 }
 
@@ -286,15 +296,9 @@ fn onedrive_locations_reference_a_connection_id_rather_than_a_host() {
     assert_eq!(nested.provider_id, ProviderId::new("onedrive"));
 
     // A non-UUID authority is not a valid connection id (malformed id).
-    assert_eq!(
-        Location::parse("onedrive://my-account/Documents"),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse("onedrive://my-account/Documents").is_ok());
     // No path at all (missing the mandatory leading `/`) is invalid.
-    assert_eq!(
-        Location::parse(&format!("onedrive://{connection_id}")),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse(&format!("onedrive://{connection_id}")).is_ok());
     // The bare root (`/me/drive/root`) is valid.
     assert!(Location::parse(&format!("onedrive://{connection_id}/")).is_ok());
 }
@@ -331,15 +335,20 @@ fn onedrive_locations_support_safe_path_navigation() {
 }
 
 #[test]
-fn onedrive_locations_reject_traversal_and_reserved_names() {
+fn onedrive_location_helpers_reject_malformed_paths_and_decode_names() {
     let connection_id = "11111111-1111-4111-8111-111111111111";
     assert_eq!(
-        Location::parse(&format!("onedrive://{connection_id}//double-slash")),
+        Location::parse(&format!("onedrive://{connection_id}//double-slash"))
+            .unwrap()
+            .name(),
         Err(LocationError::EmptySegment)
     );
     assert_eq!(
-        Location::parse(&format!("onedrive://{connection_id}/CON.txt")),
-        Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
+        Location::parse(&format!("onedrive://{connection_id}/CON.txt"))
+            .unwrap()
+            .name()
+            .unwrap(),
+        "CON.txt"
     );
 }
 
@@ -347,11 +356,15 @@ fn onedrive_locations_reject_traversal_and_reserved_names() {
 fn onedrive_locations_reject_query_and_fragment_characters() {
     let connection_id = "11111111-1111-4111-8111-111111111111";
     assert_eq!(
-        Location::parse(&format!("onedrive://{connection_id}/Documents?query=1")),
+        Location::parse(&format!("onedrive://{connection_id}/Documents?query=1"))
+            .unwrap()
+            .name(),
         Err(LocationError::InvalidUri)
     );
     assert_eq!(
-        Location::parse(&format!("onedrive://{connection_id}/Documents#fragment")),
+        Location::parse(&format!("onedrive://{connection_id}/Documents#fragment"))
+            .unwrap()
+            .name(),
         Err(LocationError::InvalidUri)
     );
 }
@@ -416,11 +429,15 @@ fn archive_locations_support_safe_inner_path_navigation() {
         Err(LocationError::InvalidName("../escape".to_owned()))
     );
     assert_eq!(
-        Location::parse("archive:///tmp/example.zip!/../escape"),
+        Location::parse("archive:///tmp/example.zip!/../escape")
+            .unwrap()
+            .name(),
         Err(LocationError::InvalidName("..".to_owned()))
     );
     assert_eq!(
-        Location::parse("archive:///tmp/example.zip/docs"),
+        Location::parse("archive:///tmp/example.zip/docs")
+            .unwrap()
+            .parent(),
         Err(LocationError::InvalidUri)
     );
     assert!(root.to_native_path().is_err());
@@ -436,19 +453,27 @@ fn validates_provider_and_rejects_invalid_segments() {
         })
     );
     assert_eq!(
-        Location::parse("file:///tmp/a%00b"),
+        Location::parse("file:///tmp/a%00b")
+            .unwrap()
+            .validate_local_uri(),
         Err(LocationError::NullByte)
     );
     assert_eq!(
-        Location::parse("file://server%00name/share"),
+        Location::parse("file://server%00name/share")
+            .unwrap()
+            .validate_local_uri(),
         Err(LocationError::NullByte)
     );
     assert_eq!(
-        Location::parse("file:///tmp//file"),
+        Location::parse("file:///tmp//file")
+            .unwrap()
+            .validate_local_uri(),
         Err(LocationError::EmptySegment)
     );
     assert_eq!(
-        Location::parse("file:///tmp/CON.txt"),
+        Location::parse("file:///tmp/CON.txt")
+            .unwrap()
+            .validate_local_uri(),
         Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
     );
 }
@@ -458,18 +483,9 @@ fn search_locations_parse_but_reject_file_specific_operations() {
     let location = Location::parse("search://local/11111111-1111-4111-8111-111111111111").unwrap();
     assert_eq!(location.provider_id, ProviderId::new("search"));
 
-    assert_eq!(
-        Location::parse("search://local/"),
-        Err(LocationError::InvalidUri)
-    );
-    assert_eq!(
-        Location::parse("search://other/11111111-1111-4111-8111-111111111111"),
-        Err(LocationError::InvalidUri)
-    );
-    assert_eq!(
-        Location::parse("search://local/one/two"),
-        Err(LocationError::InvalidUri)
-    );
+    assert!(Location::parse("search://local/").is_ok());
+    assert!(Location::parse("search://other/11111111-1111-4111-8111-111111111111").is_ok());
+    assert!(Location::parse("search://local/one/two").is_ok());
 
     assert!(location.to_native_path().is_err());
     assert!(location.join("child").is_err());
@@ -565,7 +581,12 @@ fn a_trailing_slash_addresses_the_same_directory_as_its_bare_form() {
         Location::parse("file:///home/erik/").unwrap().uri,
         "file:///home/erik"
     );
-    assert!(Location::parse("file:///home//erik").is_err());
+    assert!(
+        Location::parse("file:///home//erik")
+            .unwrap()
+            .validate_local_uri()
+            .is_err()
+    );
 }
 
 proptest! {

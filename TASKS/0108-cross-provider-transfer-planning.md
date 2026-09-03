@@ -1,9 +1,9 @@
-# 0008 Cross-provider transfer planning
+# 0108 Cross-provider transfer planning
 
 Status: done
 Priority: high
 Subsystem: backend
-Depends on: 0004, 0006
+Depends on: 0104, 0106
 
 ## Context
 Harden the operation engine for provider-specific fast paths and remote-to-remote streaming after SFTP and FTP exist.

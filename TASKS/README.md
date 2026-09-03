@@ -110,7 +110,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [ ] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [ ] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
 - [x] 0093 Copy filename and path actions
-- [x] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
+- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
   drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
 
 ## Actions, shortcuts & command palette
@@ -141,15 +141,15 @@ Looking at and editing file contents without leaving the app.
 - [x] 0099 In-app text file editor with Markdown preview *(after 0088)*
 - [x] 0100 Read-only streaming structured-data viewer
 - [x] 0140 File/folder Properties dialog *(split out of 0129)*
-- [ ] 0141 Archive summary preview *(split out of 0071)*
+- [x] 0141 Archive summary preview *(split out of 0071)*
 - [ ] 0142 Plugin-contributed preview renderers *(split out of 0071)*
-- [ ] 0149 Saved Multi-Rename presets *(needs 0072; quick win layered on the existing rule engine)*
+- [x] 0149 Saved Multi-Rename presets *(needs 0072; quick win layered on the existing rule engine)*
 - [x] 0150 Video playback in the F3 Lister viewer *(needs 0088; native `<video>`, mirrors the
   existing `<audio>` path — see the task for the large-file caveat)*
 - [ ] 0158 Safe large structured-file editing *(needs 0100; safety gate, copy-only if approved)*
 - [x] 0159 Structured viewer Tauri UX regressions *(needs 0100)*
 - [x] 0171 DOCX preview in the F3 viewer *(needs 0088)*
-- [ ] 0172 Bounded spreadsheet preview *(needs 0100)*
+- [x] 0172 Bounded spreadsheet preview *(needs 0100)*
 - [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
 
@@ -209,7 +209,8 @@ cloud and network locations, and the connection framework underneath them.
   causes friction)*
 - [x] 0146 S3-compatible object storage provider *(needs 0103, 0108, 0109 — unlike 0110/0111, no
   OS mount covers this)*
-- [x] 0147 WebDAV provider *(needs 0103, 0108, 0109 — same reasoning as 0146)*
+- [ ] 0147 WebDAV provider *(in_progress — implementation and protocol-fixture coverage complete;
+  verification against a real Nextcloud/ownCloud/mod_dav server remains)*
 
 **Parked (freezer)** — not declined outright, just not planned near-term; revisit only if a
 concrete need surfaces:
@@ -223,22 +224,26 @@ Native OS hooks (Finder/Explorer, Trash, menu bar, terminal), packaging, and des
 behavior.
 
 - [x] 0058 Platform adapter traits and capability reporting
-- [x] 0059 macOS platform integration
-- [x] 0060 Windows platform integration *(shell icons split out to 0130, native menu bar to 0131;
-  thumbnails remain an unimplemented capability)*
+- [x] 0059 macOS platform integration *(Finder alias resolution is explicitly reported unsupported
+  through the runtime capability contract)*
+- [ ] 0060 Windows platform integration *(in_progress — core integration is complete; explicit
+  `.lnk` opening and real UNC-share verification remain)*
 - [x] 0061 Open with default application, reveal in file manager, open terminal
-- [x] 0063 Desktop packaging, signing and notarization
+- [ ] 0063 Desktop packaging, signing and notarization *(in_progress — unsigned packaging is
+  complete; Apple signing/notarization awaits Developer Program activation, and Windows signing
+  remains unconfigured)*
 - [ ] 0175 Mac App Store distribution *(needs 0063; separate sandboxed variant)*
 - [x] 0126 Embedded terminal drawer
 - [x] 0132 Windows defect: operation routes return 500 / deadlock *(pre-existing, found while
   verifying 0060; blocked the Windows pre-commit hook)*
-- [x] 0133 Populate native menu bar content (macOS + Windows) *(frontend-driven spec rendered by
-  AppKit and Win32 HMENU; manual Windows visual verification remains outstanding)*
+- [ ] 0133 Populate native menu bar content (macOS + Windows) *(in_progress — macOS manually
+  verified; manual Windows visual verification remains)*
 - [ ] 0127 External terminal application choice *(pick a specific app, e.g. ghostty/Warp, from the
   context menu)*
-- [x] 0131 Windows native menu bar *(split out of 0060; HWND hook point and HMENU attachment
-  implemented, with content completed by 0133)*
-- [ ] 0137 Services menu (macOS) / "Send to" (Windows) integration
+- [ ] 0131 Windows native menu bar *(in_progress — HWND hook point and HMENU attachment are
+  implemented; manual Windows verification remains)*
+- [ ] 0137 Services menu (macOS) / "Send to" (Windows) integration *(in_progress — implementation
+  and automated coverage complete; manual macOS and Windows invocation checks remain)*
 - [x] 0148 Application deleter (macOS) *(needs 0059, 0061; macOS-only — Windows/Linux already have
   their own uninstall conventions)*
 
@@ -311,7 +316,8 @@ content streaming, and mapping concerns live in dedicated modules with interface
 - [x] 0121 Extract File Editor Service *(needs 0119)*
 - [x] 0122 Extract Connection Facade *(needs 0119)*
 - [x] 0123 Extract Plugin Manager module *(needs 0119)*
-- [x] 0124 Narrow Location URI parsing in fm-domain *(independent)*
+- [x] 0124 Narrow Location URI parsing in fm-domain *(structural parsing is provider-neutral;
+  registered providers own scheme routing and URI admission)*
 - [x] 0125 Make Search Engine VFS-provider agnostic *(independent)*
 - [x] 0119 Decompose FileManagerService into capability sub-services
 - [x] 0152 Give Scheduler::run_job an atomic interruption-state seam *(fm-operations; found and

@@ -1,9 +1,9 @@
-# 0007 External remote desktop launch
+# 0107 External remote desktop launch
 
 Status: open
 Priority: medium
 Subsystem: backend
-Depends on: 0003
+Depends on: 0103
 
 ## Context
 Allow a saved connection to launch an external RDP or VNC client. Do not embed remote-desktop rendering in this task.

@@ -5,7 +5,7 @@ Priority: medium
 Owner: unassigned
 Agent: claude
 Area: cross-cutting
-Depends on: 0070, 0096, 0102, 0133
+Depends on: 0070, 0096, 0102
 
 ## Context
 

@@ -57,6 +57,16 @@ impl FileSystemProvider for LocalFileSystemProvider {
         ProviderId::new("local")
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["file"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        location
+            .validate_local_uri()
+            .map_err(|_| invalid_location(location))
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         let capabilities = ProviderCapabilities::LIST
             | ProviderCapabilities::WATCH

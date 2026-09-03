@@ -400,6 +400,14 @@ impl FileSystemProvider for WebDavFileSystemProvider {
         ProviderId::new("webdav")
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["webdav"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        fm_vfs::validate_connection_location(location, "webdav", self.schemes(), true)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
             | ProviderCapabilities::READ

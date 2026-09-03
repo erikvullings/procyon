@@ -1,9 +1,9 @@
-# 0004 SFTP provider
+# 0104 SFTP provider
 
 Status: done
 Priority: high
 Subsystem: backend
-Depends on: 0003
+Depends on: 0103
 
 ## Context
 Add SSH-based file management via SFTP as a new `FileSystemProvider`. The product may call this SSH/SFTP, but legacy SCP is not the primary implementation.

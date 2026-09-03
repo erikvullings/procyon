@@ -1,6 +1,6 @@
 # 0131 Windows native menu bar
 
-Status: done
+Status: in_progress
 Priority: low
 Owner: unassigned
 Agent: claude
@@ -96,3 +96,6 @@ not a full native menu with items, just the install point `apps/fm-desktop` can 
 - **Known Limitations**:
   - Manual visual verification of the running Tauri menu bar remains outstanding
   - Tested on the Windows development setup; real-world installer testing remains TBD
+- 2026-09-03 copilot: Status corrected to `in_progress`. The implementation and automated Windows
+  coverage are complete, but the task explicitly requires manual verification in a running Windows
+  desktop app and no such result is recorded.

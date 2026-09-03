@@ -191,6 +191,14 @@ impl FileSystemProvider for SftpFileSystemProvider {
         ProviderId::new(SFTP_PROVIDER)
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["sftp"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        fm_vfs::validate_connection_location(location, SFTP_PROVIDER, self.schemes(), true)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
             | ProviderCapabilities::READ

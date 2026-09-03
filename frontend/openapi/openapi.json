@@ -4798,6 +4798,7 @@
         "example": {
           "clipboard": true,
           "extendedAttributes": false,
+          "finderAliases": false,
           "finderTags": false,
           "nativeDragOut": false,
           "nativeFileIcons": false,
@@ -4819,6 +4820,10 @@
           },
           "extendedAttributes": {
             "description": "Whether generic extended attributes (currently: the Spotlight\n\"Finder comment\") can be read/written (task 0136).",
+            "type": "boolean"
+          },
+          "finderAliases": {
+            "description": "Whether macOS Finder alias files can be resolved to their targets.",
             "type": "boolean"
           },
           "finderTags": {
@@ -4889,7 +4894,8 @@
           "plugins",
           "serverAdministration",
           "extendedAttributes",
-          "finderTags"
+          "finderTags",
+          "finderAliases"
         ],
         "type": "object"
       },

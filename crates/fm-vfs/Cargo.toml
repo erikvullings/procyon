@@ -16,6 +16,7 @@ serde.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 tokio-util.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true

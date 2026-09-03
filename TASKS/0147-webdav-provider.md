@@ -1,6 +1,6 @@
 # 0147 WebDAV provider
 
-Status: done
+Status: in_progress
 Priority: medium
 Owner: unassigned
 Agent: claude
@@ -182,3 +182,6 @@ reliable OS mount to lean on.
   provider-contract and `fm-operations` safety-planning levels instead; a follow-up task extending
   that cross-provider suite to include WebDAV would close this gap with the same rigor 0108 used for
   SFTP/FTP.
+- 2026-09-03 copilot: Status corrected to `in_progress`. The provider implementation and isolated
+  real-protocol fixture coverage are complete, but the explicit acceptance criterion requiring a
+  run against a real WebDAV server implementation has not been met.

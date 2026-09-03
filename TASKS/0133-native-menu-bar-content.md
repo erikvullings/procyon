@@ -1,6 +1,6 @@
 # 0133 Populate native menu bar content (macOS + Windows)
 
-Status: done
+Status: in_progress
 Priority: high
 Owner: unassigned
 Agent: claude
@@ -262,3 +262,6 @@ the app's capabilities and which text fields/inputs rely on for their built-in E
   - Manual visual verification of the running Tauri menu bar remains outstanding; this Windows
     implementation is compile- and unit-tested here, but has not been exercised through an
     installed desktop binary on a separate Windows machine.
+- 2026-09-03 copilot: Status corrected to `in_progress`. macOS has been manually verified, but the
+  acceptance criterion requires both platforms and the Windows menu remains compile-/unit-tested
+  only.

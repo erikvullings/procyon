@@ -322,6 +322,14 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         ProviderId::new("archive")
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["archive"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        ParsedArchiveLocation::parse(location).map(|_| ())
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         // The scheme-level baseline is intentionally read-only. Callers with a location use
         // `capabilities_for`, which adds mutation only for ZIP.
@@ -892,12 +900,29 @@ impl ParsedArchiveLocation {
             .uri
             .strip_prefix(ARCHIVE_PREFIX)
             .ok_or_else(|| invalid(location))?;
+        if remainder.contains(['?', '#']) {
+            return Err(invalid(location));
+        }
         let (outer, inner) = remainder.split_once('!').ok_or_else(|| invalid(location))?;
-        let local =
-            Location::parse(&format!("{FILE_PREFIX}{outer}")).map_err(|_| invalid(location))?;
-        let archive_path = local.to_native_path().map_err(|_| invalid(location))?;
-        let inner = decode_archive_inner_path(inner.strip_prefix('/').unwrap_or(inner))
+        if outer.is_empty() || outer.contains('!') {
+            return Err(invalid(location));
+        }
+        let local = Location::parse(&format!("{FILE_PREFIX}{outer}"))
+            .and_then(|location| {
+                location.validate_local_uri()?;
+                Ok(location)
+            })
             .map_err(|_| invalid(location))?;
+        let archive_path = local.to_native_path().map_err(|_| invalid(location))?;
+        if archive_path.parent().is_none() {
+            return Err(invalid(location));
+        }
+        let inner = if inner.is_empty() {
+            ""
+        } else {
+            inner.strip_prefix('/').ok_or_else(|| invalid(location))?
+        };
+        let inner = decode_archive_inner_path(inner).map_err(|_| invalid(location))?;
         Ok(Self {
             archive_path,
             inner,
@@ -911,7 +936,11 @@ fn decode_archive_inner_path(inner: &str) -> Result<String, ()> {
     }
     inner
         .split('/')
-        .map(percent_decode_segment)
+        .map(|segment| {
+            let decoded = percent_decode_segment(segment)?;
+            fm_domain::location::validate_name(&decoded).map_err(|_| ())?;
+            Ok(decoded)
+        })
         .collect::<Result<Vec<_>, _>>()
         .map(|segments| segments.join("/"))
 }

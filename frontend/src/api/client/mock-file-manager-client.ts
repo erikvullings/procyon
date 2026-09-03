@@ -810,6 +810,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getRuntimeCapabilities', signal, () => ({
       clipboard: false,
       extendedAttributes: true,
+      finderAliases: false,
       finderTags: true,
       nativeDragOut: false,
       nativeFileIcons: this.nativeIconExtensions.size > 0,
@@ -838,6 +839,7 @@ export class MockFileManagerClient implements FileManagerClient {
       runtimeCapabilities: {
         clipboard: false,
         extendedAttributes: true,
+        finderAliases: false,
         finderTags: true,
         nativeDragOut: false,
         nativeFileIcons: this.nativeIconExtensions.size > 0,

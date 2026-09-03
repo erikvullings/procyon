@@ -89,6 +89,7 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
       plugins: false,
       serverAdministration: false,
       extendedAttributes: false,
+      finderAliases: false,
       finderTags: false,
     },
     connectionState: {

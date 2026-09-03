@@ -5,13 +5,36 @@ use std::fs;
 use fm_domain::{EntryKind, Location, ProviderId};
 use fm_vfs::{
     CopyCommitOptions, EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities,
-    ProviderChange, TransferEndpoint, VfsError, WriteOptions,
+    ProviderChange, ProviderRegistry, TransferEndpoint, VfsError, WriteOptions,
 };
 use fm_vfs_local::LocalFileSystemProvider;
 use futures::StreamExt;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
+
+#[test]
+fn registry_admits_only_file_uris_validated_by_the_local_provider() {
+    let mut registry = ProviderRegistry::new();
+    registry.register(std::sync::Arc::new(LocalFileSystemProvider::new()));
+
+    let location = registry
+        .parse("file:///tmp/example")
+        .expect("valid file URI");
+    assert_eq!(location.provider_id, ProviderId::new("local"));
+    assert!(matches!(
+        registry.parse("file:///tmp//example"),
+        Err(VfsError::InvalidLocation { .. })
+    ));
+    assert!(matches!(
+        registry.parse("file:///tmp//"),
+        Err(VfsError::InvalidLocation { .. })
+    ));
+    assert!(matches!(
+        registry.parse("unknown://opaque/path"),
+        Err(VfsError::UnknownProvider { .. })
+    ));
+}
 
 #[tokio::test]
 async fn creates_one_unicode_child_directory_without_creating_parents() {

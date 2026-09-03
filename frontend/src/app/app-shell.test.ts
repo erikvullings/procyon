@@ -3315,6 +3315,7 @@ describe('AppShell', () => {
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
       clipboard: false,
       extendedAttributes: false,
+      finderAliases: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,
@@ -3371,6 +3372,7 @@ describe('AppShell', () => {
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
       clipboard: false,
       extendedAttributes: false,
+      finderAliases: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,
@@ -4113,6 +4115,7 @@ describe('tabs per pane (task 0069)', () => {
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
       clipboard: false,
       extendedAttributes: false,
+      finderAliases: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,

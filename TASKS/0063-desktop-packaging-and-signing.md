@@ -1,11 +1,11 @@
 # 0063 Desktop packaging, signing and notarization
 
-Status: done
+Status: in_progress
 Priority: low
 Owner: unassigned
 Agent: unassigned
 Area: desktop
-Depends on: 0062
+Depends on: none
 
 ## Context
 `file-manager-coding-agent-spec.md` §31 (signing only in protected release workflows), §33 step 10
@@ -63,3 +63,9 @@ and §37 (signed macOS and Windows installers).
   signature verification so the freeware release pipeline requires no paid platform certificates.
   Chocolatey now packages the unsigned NSIS installer, and the README documents the expected
   Microsoft Defender SmartScreen warning.
+- 2026-09-03 copilot: Status corrected to `in_progress`. Cross-platform packaging and release
+  publication are complete, but the task's signing criteria are intentionally not met: current
+  macOS and Windows artifacts are unsigned and macOS is not notarized. Apple work is blocked until
+  the newly purchased Developer Program membership becomes active and credentials are configured;
+  Windows signing also remains unconfigured. Removed the stale dependency on 0062 because signing
+  does not depend on drag-and-drop.

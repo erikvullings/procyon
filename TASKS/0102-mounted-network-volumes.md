@@ -1,9 +1,9 @@
-# 0002 Mounted network volumes
+# 0102 Mounted network volumes
 
 Status: done
 Priority: high
 Subsystem: backend
-Depends on: 0001
+Depends on: 0101
 
 ## Context
 Add discovery and presentation of network filesystems already mounted by the OS, with SMB/Samba on macOS as the primary use case. Do not implement SMB itself: mounted shares use the existing local provider.

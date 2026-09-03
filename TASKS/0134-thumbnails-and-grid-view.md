@@ -1,6 +1,6 @@
 # 0134 Thumbnails for images/video and a grid/icon view mode
 
-Status: done (image/CBZ/CBR/video/PDF thumbnails, table icon-column overlay, grid view with three icon sizes, grid sort menu, photo-day grouping, filter/type-select, and F3 fullscreen preview are all shipped and verified — see Agent Notes)
+Status: done
 Priority: high
 Owner: unassigned
 Agent: unassigned

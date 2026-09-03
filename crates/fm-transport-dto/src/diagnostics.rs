@@ -123,6 +123,7 @@ mod tests {
                 server_administration: false,
                 extended_attributes: true,
                 finder_tags: true,
+                finder_aliases: false,
             },
             connection_state: ConnectionStateDto {
                 connected: true,

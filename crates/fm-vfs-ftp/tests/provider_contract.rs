@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use fm_domain::Location;
 use fm_vfs::{
     CONSERVATIVE_POLL_INTERVAL, ChangeTracking, EntryRef, FileSystemProvider, ListOptions,
-    ProviderCapabilities, VfsError,
+    ProviderCapabilities, ProviderRegistry, VfsError,
 };
 use fm_vfs_ftp::{FtpConnectionParameters, FtpConnectionResolver, FtpFileSystemProvider};
 use tokio::{
@@ -63,6 +63,24 @@ fn provider(secure: bool) -> FtpFileSystemProvider {
 
 fn provider_at(secure: bool, port: u16) -> FtpFileSystemProvider {
     FtpFileSystemProvider::new(Arc::new(Resolver { secure, port }))
+}
+
+#[test]
+fn registry_routes_ftp_and_ftps_to_the_same_validating_provider() {
+    let mut registry = ProviderRegistry::new();
+    registry.register(Arc::new(provider(false)));
+    let id = "11111111-1111-4111-8111-111111111111";
+
+    for scheme in ["ftp", "ftps"] {
+        let location = registry
+            .parse(&format!("{scheme}://{id}/pub"))
+            .expect("valid FTP-family location");
+        assert_eq!(location.provider_id.as_str(), "ftp");
+    }
+    assert!(matches!(
+        registry.parse("ftp://not-a-connection/pub"),
+        Err(VfsError::InvalidLocation { .. })
+    ));
 }
 
 struct Fixture {

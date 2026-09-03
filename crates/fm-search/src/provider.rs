@@ -45,6 +45,19 @@ impl FileSystemProvider for SearchFileSystemProvider {
         ProviderId::new("search")
     }
 
+    fn schemes(&self) -> &'static [&'static str] {
+        &["search"]
+    }
+
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        if location.provider_id != self.id() {
+            return Err(VfsError::InvalidLocation {
+                location: location.uri.clone(),
+            });
+        }
+        parse_search_id(location).map(|_| ())
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::LIST
     }
@@ -204,6 +217,30 @@ mod tests {
                 capability: ProviderCapabilities::WATCH
             })
         ));
+    }
+
+    #[test]
+    fn registry_delegates_search_uri_validation_to_the_search_provider() {
+        let provider = SearchFileSystemProvider::new(Arc::new(SearchResultsStore::new()));
+        let mut registry = fm_vfs::ProviderRegistry::new();
+        registry.register(Arc::new(provider));
+        let search_id = Uuid::new_v4();
+
+        assert!(
+            registry
+                .parse(&format!("{SEARCH_URI_PREFIX}{search_id}"))
+                .is_ok()
+        );
+        for uri in [
+            "search://local/",
+            "search://other/11111111-1111-4111-8111-111111111111",
+            "search://local/one/two",
+        ] {
+            assert!(matches!(
+                registry.parse(uri),
+                Err(VfsError::InvalidLocation { .. })
+            ));
+        }
     }
 
     #[tokio::test]

@@ -118,6 +118,13 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
                 ? t('diagnostics', 'yes')
                 : t('diagnostics', 'no'),
             ),
+            m('dt', t('diagnostics', 'finderAliases')),
+            m(
+              'dd',
+              diag.runtimeCapabilities.finderAliases
+                ? t('diagnostics', 'yes')
+                : t('diagnostics', 'no'),
+            ),
             m('dt', t('diagnostics', 'systemTrash')),
             m(
               'dd',

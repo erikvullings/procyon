@@ -1,10 +1,10 @@
 //! Public archive-provider behavior for task 0076.
 
-use std::io::Write;
+use std::{io::Write, sync::Arc};
 
 use fm_archive::{ArchiveFileSystemProvider, ArchiveLimits};
 use fm_domain::{EntryKind, Location};
-use fm_vfs::{FileSystemProvider, ListOptions, ProviderCapabilities, VfsError};
+use fm_vfs::{FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError};
 use rars::rar50::{Rar50Writer, StoredEntry, WriterOptions};
 use tempfile::tempdir;
 use tokio::io::AsyncReadExt;
@@ -16,6 +16,25 @@ fn zip_location(path: &std::path::Path) -> Location {
     let file = Location::from_native_path(path).expect("temporary path is absolute");
     Location::parse(&format!("archive://{}!", &file.uri["file://".len()..]))
         .expect("archive URI is valid")
+}
+
+#[test]
+fn registry_delegates_archive_uri_validation_to_the_archive_provider() {
+    let root = tempdir().expect("temporary root");
+    let location = zip_location(&root.path().join("example.zip"));
+    let mut registry = ProviderRegistry::new();
+    registry.register(Arc::new(ArchiveFileSystemProvider::new()));
+
+    assert_eq!(
+        registry
+            .parse(&location.uri)
+            .expect("valid archive location"),
+        location
+    );
+    assert!(matches!(
+        registry.parse(&format!("{}/../escape", location.uri)),
+        Err(VfsError::InvalidLocation { .. })
+    ));
 }
 
 #[tokio::test]

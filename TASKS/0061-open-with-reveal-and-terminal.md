@@ -5,7 +5,7 @@ Priority: medium
 Owner: unassigned
 Agent: unassigned
 Area: platform
-Depends on: 0059, 0060
+Depends on: none
 
 ## Context
 `file-manager-coding-agent-spec.md` §16 milestone 3, §21 (`revealInSystemFileManager`,
@@ -292,4 +292,3 @@ Depends on: 0059, 0060
     (only the already-documented pre-existing `fm-plugin-runtime` icon-count failure, unrelated).
     Frontend: `tsc --noEmit` (clean), `vitest run` (468 tests, 59 files, all passing, up from 466),
     repo-wide `pnpm run lint` (cargo fmt --check + clippy + `biome check .`, all clean).
-

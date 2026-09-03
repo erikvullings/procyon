@@ -275,6 +275,7 @@ pub(crate) fn runtime_capabilities_dto(
         server_administration: false,
         extended_attributes: capabilities.contains(PlatformCapabilities::EXTENDED_ATTRIBUTES),
         finder_tags: capabilities.contains(PlatformCapabilities::FINDER_TAGS),
+        finder_aliases: capabilities.contains(PlatformCapabilities::FINDER_ALIASES),
     }
 }
 
@@ -477,6 +478,17 @@ mod tests {
         );
         assert!(dto.extended_attributes);
         assert!(!dto.finder_tags);
+    }
+
+    #[test]
+    fn runtime_capabilities_dto_reports_finder_alias_support_truthfully() {
+        let unsupported =
+            runtime_capabilities_dto(RuntimeKindDto::Tauri, PlatformCapabilities::empty());
+        assert!(!unsupported.finder_aliases);
+
+        let supported =
+            runtime_capabilities_dto(RuntimeKindDto::Tauri, PlatformCapabilities::FINDER_ALIASES);
+        assert!(supported.finder_aliases);
     }
 
     #[test]

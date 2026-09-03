@@ -9,6 +9,7 @@ mod capabilities;
 mod change_tracking;
 mod content;
 mod error;
+mod location_validation;
 mod provider;
 mod registry;
 mod transfer;
@@ -21,6 +22,7 @@ pub use content::{
     search_content,
 };
 pub use error::VfsError;
+pub use location_validation::validate_connection_location;
 pub use provider::FileSystemProvider;
 pub use registry::ProviderRegistry;
 pub use transfer::{TransferCapabilities, TransferEndpoint};

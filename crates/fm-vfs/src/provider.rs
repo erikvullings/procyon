@@ -18,6 +18,35 @@ pub trait FileSystemProvider: Send + Sync {
     /// Returns the stable id used by owned [`Location`] values.
     fn id(&self) -> ProviderId;
 
+    /// Declares the URI schemes routed to this provider.
+    ///
+    /// Providers whose id equals their sole scheme may keep the default.
+    fn schemes(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// Validates an opaque location before any provider operation.
+    ///
+    /// The default supports providers whose id and URI scheme are identical.
+    fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
+        let provider_id = self.id();
+        let scheme = location.scheme().map_err(|_| VfsError::InvalidLocation {
+            location: location.uri.clone(),
+        })?;
+        let owned_scheme = if self.schemes().is_empty() {
+            scheme == provider_id.as_str()
+        } else {
+            self.schemes().contains(&scheme)
+        };
+        if location.provider_id == provider_id && owned_scheme {
+            Ok(())
+        } else {
+            Err(VfsError::InvalidLocation {
+                location: location.uri.clone(),
+            })
+        }
+    }
+
     /// Reports the operations this provider currently supports.
     fn capabilities(&self) -> ProviderCapabilities;
 
