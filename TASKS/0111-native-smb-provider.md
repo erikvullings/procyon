@@ -1,9 +1,9 @@
-# 0011 Native SMB provider
+# 0111 Native SMB provider
 
 Status: open
 Priority: low
 Subsystem: backend
-Depends on: 0003, 0008, 0009
+Depends on: 0103, 0108, 0109
 
 ## Context
 Optional direct `smb://` browsing without mounting through the OS. Only pursue if 0002 is insufficient for real use cases.

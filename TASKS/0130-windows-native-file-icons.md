@@ -5,7 +5,7 @@ Priority: low
 Owner: unassigned
 Agent: unassigned
 Area: platform
-Depends on: 0060, 0091
+Depends on: 0091
 
 ## Context
 Split out of 0060 ("Windows platform integration"). That task's acceptance criteria listed shell

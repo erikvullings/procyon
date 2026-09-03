@@ -5,7 +5,7 @@ Priority: medium
 Owner: unassigned
 Agent: claude
 Area: frontend
-Depends on: 0129
+Depends on: none
 
 ## Context
 

@@ -1,6 +1,6 @@
 # 0059 macOS platform integration
 
-Status: done
+Status: in_progress
 Priority: medium
 Owner: unassigned
 Agent: copilot
@@ -100,3 +100,7 @@ needed for the MVP/version 1; keep the rest behind capability flags.
     --all-targets -- -D warnings` (zero warnings), `cargo fmt --all --check` (clean except the
     pre-existing drift in `crates/fm-application/src/service.rs`, unrelated to this task and left
     untouched).
+- 2026-09-03 copilot: Status corrected to `in_progress` during a repository-wide task audit.
+  The core macOS integration is implemented and verified, but the acceptance criterion requiring
+  aliases to be resolved or explicitly capability-reported remains unmet. The follow-up will add
+  truthful capability reporting rather than silently claiming alias support.

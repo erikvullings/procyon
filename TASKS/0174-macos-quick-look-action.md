@@ -3,7 +3,7 @@
 Status: done
 Priority: medium
 Subsystem: platform, frontend
-Depends on: 0059, 0088
+Depends on: 0088
 Owner: copilot
 Agent: copilot
 

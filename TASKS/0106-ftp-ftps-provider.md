@@ -1,9 +1,9 @@
-# 0006 FTP and FTPS provider
+# 0106 FTP and FTPS provider
 
 Status: done
 Priority: medium
 Subsystem: backend
-Depends on: 0003
+Depends on: 0103
 
 ## Context
 Add FTP/FTPS as another `FileSystemProvider`. SFTP remains separate via 0004. Plain FTP must be clearly marked insecure.

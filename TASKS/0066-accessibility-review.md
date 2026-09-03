@@ -1,6 +1,6 @@
 # 0066 Accessibility review
 
-Status: in-progress (automated phase complete, manual testing required)
+Status: in_progress
 Priority: medium
 Owner: unassigned
 Agent: unassigned

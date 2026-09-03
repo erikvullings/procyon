@@ -5,7 +5,7 @@ Priority: low
 Owner: unassigned
 Agent: unassigned
 Area: cross-cutting
-Depends on: 0059, 0061
+Depends on: 0061
 
 ## Context
 

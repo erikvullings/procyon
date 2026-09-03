@@ -5,7 +5,7 @@ Priority: medium
 Owner: unassigned
 Agent: claude
 Area: platform
-Depends on: 0058, 0059
+Depends on: 0058
 
 ## Context
 

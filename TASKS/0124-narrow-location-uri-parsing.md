@@ -1,6 +1,6 @@
 # 0124 Narrow Location URI parsing in fm-domain
 
-Status: done
+Status: open
 Priority: medium
 Subsystem: backend
 Depends on: none
@@ -29,3 +29,7 @@ The domain layer should carry an opaque URI and delegate scheme-specific validat
 - Consider: does `Location` become a simple `{ provider_id, uri }` struct? It currently adds ~400 lines of parsing logic on top of that.
 
 ## Agent Notes
+- 2026-09-03 copilot: Status corrected from `done` to `open` during a repository-wide task audit.
+  No implementation was recorded, and current `fm-domain/src/location.rs` still dispatches among
+  provider-specific parsers from `Location::parse()`. This is a substantial architecture refactor,
+  not a finishing-touch task.

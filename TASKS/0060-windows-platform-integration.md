@@ -1,6 +1,6 @@
 # 0060 Windows platform integration
 
-Status: done
+Status: in_progress
 Priority: medium
 Owner: unassigned
 Agent: unassigned
@@ -86,3 +86,7 @@ Depends on: 0058
   task, 0132.
 - Not verified: drag to/from Explorer, and behaviour on a real UNC share or a mapped network drive
   (no server available in this environment).
+- 2026-09-03 copilot: Status corrected to `in_progress` during a repository-wide task audit.
+  Explicit `.lnk` target resolution on open is still absent, and real UNC-share behavior still
+  requires manual Windows verification. The implementation follow-up will address `.lnk` opening;
+  the task remains in progress until its platform verification is recorded.

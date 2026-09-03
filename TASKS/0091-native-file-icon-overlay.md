@@ -5,7 +5,7 @@ Priority: low
 Owner: unassigned
 Agent: unassigned
 Area: backend,frontend
-Depends on: 0085, 0059
+Depends on: 0085
 
 ## Context
 Split out of task 0085 ("do both, layered" design) because the combined scope was too large for

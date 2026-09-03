@@ -1,9 +1,9 @@
-# 0009 Remote change tracking
+# 0109 Remote change tracking
 
 Status: done
 Priority: medium
 Subsystem: backend
-Depends on: 0004, 0006
+Depends on: 0104, 0106
 
 ## Context
 Generalize directory change tracking so remote providers can use polling or future delta APIs instead of pretending to support native filesystem watch semantics.
