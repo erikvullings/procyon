@@ -1050,6 +1050,8 @@ impl PlatformAdapter for WindowsPlatformAdapter {
 
     fn open_with_default_application(&self, path: &Path) -> Result<(), PlatformError> {
         let target = require_existing(path)?;
+        // ShellExecute resolves `.lnk` files as Windows Shell links. Keeping
+        // that resolution here means directory listing never follows targets.
         let verb: Vec<u16> = "open\0".encode_utf16().collect();
         let result = unsafe {
             ShellExecuteW(
@@ -1327,8 +1329,50 @@ impl PlatformAdapter for WindowsPlatformAdapter {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    use std::time::{Duration, Instant};
 
     use super::*;
+    use windows::Win32::System::Com::{
+        CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+        CoUninitialize, IPersistFile,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    use windows::core::{HSTRING, Interface};
+
+    struct ComApartment;
+
+    impl ComApartment {
+        fn initialize() -> Self {
+            unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+                .ok()
+                .expect("initialize COM for shortcut fixture");
+            Self
+        }
+    }
+
+    impl Drop for ComApartment {
+        fn drop(&mut self) {
+            unsafe { CoUninitialize() };
+        }
+    }
+
+    fn create_shortcut(shortcut: &Path, target: &Path, arguments: &str) {
+        let _apartment = ComApartment::initialize();
+        let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }
+            .expect("create ShellLink");
+        unsafe {
+            link.SetPath(&HSTRING::from(target.as_os_str()))
+                .expect("set shortcut target");
+            link.SetArguments(&HSTRING::from(arguments))
+                .expect("set shortcut arguments");
+        }
+        let persist: IPersistFile = link.cast().expect("query IPersistFile");
+        unsafe {
+            persist
+                .Save(&HSTRING::from(shortcut.as_os_str()), true)
+                .expect("save shortcut");
+        }
+    }
 
     #[test]
     fn windows_menu_shortcuts_use_windows_modifier_labels() {
@@ -1635,5 +1679,36 @@ mod tests {
             adapter.open_with_default_application(missing),
             Err(PlatformError::NotFound { .. })
         ));
+    }
+
+    #[test]
+    fn explicit_open_resolves_and_launches_a_shortcut_target() {
+        let root = tempfile::tempdir().expect("temporary shortcut root");
+        let script = root.path().join("shortcut-target.cmd");
+        let marker = root.path().join("opened.txt");
+        let shortcut = root.path().join("target.lnk");
+        std::fs::write(&script, "@echo resolved>\"%~1\"\r\n").expect("write shortcut target");
+        create_shortcut(&shortcut, &script, &format!("\"{}\"", marker.display()));
+
+        WindowsPlatformAdapter::new()
+            .open_with_default_application(&shortcut)
+            .expect("open shortcut through the Windows Shell");
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut marker_contents = None;
+        while Instant::now() < deadline {
+            marker_contents = std::fs::read_to_string(&marker)
+                .ok()
+                .filter(|contents| contents == "resolved\r\n");
+            if marker_contents.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(
+            marker_contents.as_deref(),
+            Some("resolved\r\n"),
+            "shortcut target did not finish writing its marker"
+        );
     }
 }

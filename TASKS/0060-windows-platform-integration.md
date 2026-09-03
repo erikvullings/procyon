@@ -90,3 +90,10 @@ Depends on: 0058
   Explicit `.lnk` target resolution on open is still absent, and real UNC-share behavior still
   requires manual Windows verification. The implementation follow-up will address `.lnk` opening;
   the task remains in progress until its platform verification is recorded.
+- 2026-09-03 copilot: Verified and specified the existing Windows Shell boundary for shortcuts:
+  `open_with_default_application` passes the `.lnk` to `ShellExecuteW`, which resolves and launches
+  its target only when the user explicitly opens the entry; directory listing remains ordinary VFS
+  metadata and never follows the link. A Windows-only integration test creates a real ShellLink to
+  a command fixture, opens it through the public adapter, and observes the target side effect. The
+  task remains `in_progress` because the integration test and complete platform verification,
+  including real UNC/mapped-share behavior, still require execution on Windows.
