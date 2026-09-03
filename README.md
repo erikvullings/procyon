@@ -739,24 +739,28 @@ To prepare a release:
 4. Commit the version change, then push an annotated `v<version>` tag (for example `v0.2.0`). The
    workflow rejects tags that do not exactly match the Cargo version.
 
-The tag-only `.github/workflows/release-desktop.yml` workflow uses the protected
-`desktop-release` GitHub environment. No Apple or Windows signing certificates are required: the
-macOS and Windows artefacts are deliberately published unsigned, and the macOS build is not
-notarized. Configure only:
+The tag-only `.github/workflows/release-desktop.yml` release path uses the protected
+`desktop-release` GitHub environment. macOS artefacts are signed with a Developer ID Application
+certificate, notarized by Apple, and stapled before publication. Windows artefacts remain unsigned.
+Configure:
 
+- `APPLE_CERTIFICATE` as the base64-encoded `.p12`, `APPLE_CERTIFICATE_PASSWORD` as its export
+  password, `APPLE_API_ISSUER` and `APPLE_API_KEY` as the App Store Connect issuer and key IDs, and
+  `APPLE_API_KEY_P8` as the complete API private-key contents;
 - the `HOMEBREW_TAP_REPOSITORY` environment variable as the `owner/homebrew-tap` repository that
   will hold the cask, and `HOMEBREW_TAP_TOKEN` as a fine-grained token allowed to write to it;
 - `CHOCOLATEY_API_KEY` as the API key for the `procyon` package on the Chocolatey Community
   Repository.
 
 Pull-request CI does not reference those secrets. The workflow publishes generated release notes,
-unsigned macOS and Windows installers, and Linux packages. It then calculates checksums from those
-exact release assets, updates `Casks/procyon.rb` in the configured Homebrew tap, and generates and
-pushes the Chocolatey package. The unsigned macOS release is a universal binary for Apple Silicon
-and Intel Macs. Installing it through Homebrew does not bypass Gatekeeper: users must explicitly
-approve the app in macOS Privacy & Security or remove the quarantine attribute only if they trust
-the downloaded release. Windows users should expect a Microsoft Defender SmartScreen warning and
-must choose to run the installer only after verifying that it came from the official release.
+signed and notarized macOS packages, unsigned Windows installers, and Linux packages. It then
+calculates checksums from those exact release assets, updates `Casks/procyon.rb` in the configured
+Homebrew tap, and generates and pushes the Chocolatey package. The macOS release is a universal
+binary for Apple Silicon and Intel Macs. A manual workflow dispatch runs only the protected macOS
+signing path, verifies the signature, Gatekeeper assessment, notarization tickets, and architectures,
+then uploads a temporary workflow artefact without creating a release. Windows users should expect
+a Microsoft Defender SmartScreen warning and must choose to run the installer only after verifying
+that it came from the official release.
 
 After the first packages have been published, users can install Procyon with:
 
@@ -786,9 +790,9 @@ CI performs an unsigned packaging smoke test on disposable macOS and Windows run
 installs an artefact, launches the packaged executable, verifies that it remains running, and then
 cleans up. Before promoting a release, also perform this manual smoke on each supported platform:
 
-- macOS: download the `.dmg` on a different Mac, mount it, drag Procyon to Applications, confirm the
-  expected Gatekeeper warning for the unsigned macOS app, explicitly approve it in Privacy &
-  Security, browse a directory, and quit normally.
+- macOS: download the `.dmg` on a different Mac, mount it, drag Procyon to Applications, confirm
+  Gatekeeper opens the identified-developer build without an override, browse a directory, and quit
+  normally.
 - Windows: download both installers on a clean Windows VM, confirm the expected SmartScreen warning
   for the unsigned publisher, install one format only after verifying its source, launch Procyon,
   browse a directory, quit, uninstall, and repeat with the other installer format.
