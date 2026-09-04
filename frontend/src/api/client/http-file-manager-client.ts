@@ -225,6 +225,11 @@ import { settingsFromDto, settingsToDto } from './settings-mapping';
  * shared module so the Tauri/mock adapters can reuse it.
  */
 export class HttpFileManagerClient implements FileManagerClient {
+  async openExternalUrl(url: string): Promise<void> {
+    const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
+    if (opened === null) throw new Error('The browser blocked the external link.');
+    opened.opener = null;
+  }
   private readonly eventStream = new SseEventStream({ tokenProvider: getSessionToken });
   readonly connection = this.eventStream.status;
 

@@ -27,8 +27,11 @@ import {
   type EpubImageResource,
   inlineEpubChapterImages,
   parseEpubContainer,
+  parseEpubNavigationEntries,
   parseEpubPackage,
+  parseEpubSectionLabels,
   repairEpubChapterOrder,
+  resolveEpubPath,
   sanitizeEpubSvg,
 } from './epub-preview';
 import {
@@ -74,7 +77,6 @@ export const VIDEO_INLINE_SIZE_LIMIT_BYTES = PREVIEW_SIZE_LIMIT_BYTES;
 /** Bytes of context fetched before a search match when jumping to it. */
 const JUMP_CONTEXT_BEFORE_BYTES = TEXT_WINDOW_BYTES / 2;
 
-const ZOOM_STEP = 1.25;
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 8;
 
@@ -190,6 +192,13 @@ export interface FileViewerPdfContent {
   readonly document: PDFDocumentProxy;
   readonly pageCount: number;
   readonly currentPage: number;
+  readonly outline?: readonly FileViewerPdfOutlineItem[];
+}
+
+export interface FileViewerPdfOutlineItem {
+  readonly label: string;
+  readonly level: number;
+  readonly page: number;
 }
 
 /** A comic archive (.cbz/.cbr), paginated as its image entries in name order. Only the current
@@ -214,6 +223,17 @@ export interface FileViewerEpubContent {
   readonly currentChapter: number;
   readonly currentChapterHtml: string | undefined;
   readonly loadingChapter: boolean;
+  readonly zoom: number;
+  readonly sectionLabels: readonly (string | undefined)[];
+  readonly outline?: readonly FileViewerEpubOutlineItem[];
+  readonly targetFragment?: string;
+}
+
+export interface FileViewerEpubOutlineItem {
+  readonly label: string;
+  readonly level: number;
+  readonly chapterIndex: number;
+  readonly fragment?: string;
 }
 
 /** Sanitized semantic DOCX content plus an honest list of omitted Word layout features. */
@@ -252,10 +272,14 @@ export interface FileViewerArchiveSummaryContent {
  * highlight - matching the pages a query appears on is the whole feature). */
 export interface FileViewerPdfSearchState {
   readonly query: string;
+  readonly regex?: boolean;
+  readonly caseSensitive?: boolean;
+  readonly wholeWord?: boolean;
   /** 1-based page numbers containing `query`, in ascending order. */
   readonly matches: readonly number[];
   readonly currentMatchIndex: number | undefined;
   readonly searching: boolean;
+  readonly error?: string | undefined;
 }
 
 /** Search bar state for text-mode viewing (task 0088's VS-Code-like content search). */
@@ -297,6 +321,8 @@ export type FileViewerState =
       readonly search?: FileViewerSearchState;
       /** Simple PDF text search state (`pdf` content only). */
       readonly pdfSearch?: FileViewerPdfSearchState;
+      /** Simple section-level EPUB text search state (`epub` content only). */
+      readonly epubSearch?: FileViewerPdfSearchState;
       /** Alt+Space info sub-panel (image/text technical metadata - task 0071). Absent/`false`
        * means closed - optional so callers/tests that never touch the panel don't need to set it. */
       readonly metadataPanelOpen?: boolean;
@@ -353,6 +379,7 @@ export interface FileViewerController {
   goToPreviousMatch(): Promise<void>;
   zoomIn(): void;
   zoomOut(): void;
+  setZoom(zoom: number): void;
   resetZoom(): void;
   /** Copies the currently loaded text window or image to the system clipboard. No-op for audio
    * (played back, not copyable) or non-`ready` states. */
@@ -367,6 +394,13 @@ export interface FileViewerController {
   setPdfSearchQuery(query: string): void;
   goToNextPdfMatch(): void;
   goToPreviousPdfMatch(): void;
+  setEpubSearchQuery(query: string): void;
+  goToNextEpubMatch(): void;
+  goToPreviousEpubMatch(): void;
+  goToEpubSection(sectionIndex: number, fragment?: string): void;
+  followEpubLink(href: string): void;
+  goToPdfPage(pageNumber: number): void;
+  goToTextOffset(offset: number, length: number): void;
   dispose(): void;
 }
 
@@ -391,6 +425,65 @@ function errorMessage(error: unknown): string {
 
 function clampZoom(zoom: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
+}
+
+const DEFAULT_PAGED_SEARCH_STATE: FileViewerPdfSearchState = {
+  query: '',
+  regex: false,
+  caseSensitive: false,
+  wholeWord: false,
+  matches: [],
+  currentMatchIndex: undefined,
+  searching: false,
+  error: undefined,
+};
+
+function nextZoomStep(zoom: number): number {
+  return clampZoom((Math.floor((zoom * 100 + 0.001) / 25) * 25 + 25) / 100);
+}
+
+function previousZoomStep(zoom: number): number {
+  return clampZoom((Math.ceil((zoom * 100 - 0.001) / 25) * 25 - 25) / 100);
+}
+
+function searchExpression(search: FileViewerPdfSearchState): RegExp {
+  const source =
+    search.regex === true ? search.query : search.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    search.wholeWord === true ? `\\b(?:${source})\\b` : source,
+    search.caseSensitive === true ? 'u' : 'iu',
+  );
+}
+
+async function pdfOutline(
+  document: PDFDocumentProxy,
+): Promise<readonly FileViewerPdfOutlineItem[]> {
+  if (typeof document.getOutline !== 'function') return [];
+  try {
+    const source = await document.getOutline();
+    if (source === null) return [];
+    const result: FileViewerPdfOutlineItem[] = [];
+    async function append(items: typeof source, level: number): Promise<void> {
+      for (const item of items) {
+        const destination =
+          typeof item.dest === 'string' ? await document.getDestination(item.dest) : item.dest;
+        const reference = destination?.[0];
+        const page =
+          typeof reference === 'number'
+            ? reference + 1
+            : reference === undefined
+              ? undefined
+              : (await document.getPageIndex(reference)) + 1;
+        const label = item.title.trim();
+        if (page !== undefined && label !== '') result.push({ label, level, page });
+        await append(item.items, level + 1);
+      }
+    }
+    await append(source, 1);
+    return result;
+  } catch {
+    return [];
+  }
 }
 
 /** Drives a Lister-style viewer session for exactly one entry (task 0088). */
@@ -421,10 +514,13 @@ export function createFileViewerController(
   let epubChapterPaths: readonly string[] = [];
   let epubImageResources: ReadonlyMap<string, EpubImageResource> = new Map();
   let epubArchiveRoot: Location | undefined;
+  const epubChapterTextCache = new Map<number, string>();
   /** Per-page extracted text, cached lazily by `runPdfSearch` (1-based page number -> lowercased
    * text) so repeated searches on the same document don't re-extract every page each time. */
   const pdfPageTextCache = new Map<number, string>();
   let pdfSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let pdfSearchGeneration = 0;
+  let epubSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredStatusTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredSessionId: string | undefined;
   let docxSessionId: string | undefined;
@@ -683,11 +779,13 @@ export function createFileViewerController(
     if (!isCurrent(controller)) return;
     const document = await loadPdfDocument(bytes);
     if (!isCurrent(controller)) return;
+    const outline = await pdfOutline(document);
+    if (!isCurrent(controller)) return;
     publish({
       status: 'ready',
       entry,
       metadataPanelOpen: initialMetadataOpen,
-      content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1 },
+      content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1, outline },
     });
   }
 
@@ -812,6 +910,10 @@ export function createFileViewerController(
     );
     if (!isCurrent(controller)) return;
     if (current.status !== 'ready' || current.content.kind !== 'epub') return;
+    epubChapterTextCache.set(
+      chapterIndex,
+      new DOMParser().parseFromString(html, 'text/html').body.textContent?.toLowerCase() ?? '',
+    );
     publish({
       ...current,
       content: {
@@ -853,6 +955,8 @@ export function createFileViewerController(
       return;
     }
     let chapterPaths = book.chapterPaths;
+    let sectionLabelsByPath: ReadonlyMap<string, string> = new Map();
+    let outline: readonly FileViewerEpubOutlineItem[] = [];
     if (book.navigationPath !== undefined) {
       const navigationBytes = await readEntireFileBytes(
         client,
@@ -860,11 +964,14 @@ export function createFileViewerController(
         controller.signal,
       );
       if (!isCurrent(controller)) return;
-      chapterPaths = repairEpubChapterOrder(
-        chapterPaths,
-        new TextDecoder().decode(navigationBytes),
-        book.navigationPath,
-      );
+      const navigationXml = new TextDecoder().decode(navigationBytes);
+      chapterPaths = repairEpubChapterOrder(chapterPaths, navigationXml, book.navigationPath);
+      sectionLabelsByPath = parseEpubSectionLabels(navigationXml, book.navigationPath);
+      outline = parseEpubNavigationEntries(navigationXml, book.navigationPath).flatMap((item) => {
+        const chapterIndex = chapterPaths.indexOf(item.path);
+        if (chapterIndex === -1) return [];
+        return [{ ...item, chapterIndex }];
+      });
     }
     epubArchiveRoot = archiveRoot;
     epubChapterPaths = chapterPaths;
@@ -881,6 +988,9 @@ export function createFileViewerController(
         currentChapter: 0,
         currentChapterHtml: undefined,
         loadingChapter: true,
+        zoom: 1,
+        sectionLabels: chapterPaths.map((path) => sectionLabelsByPath.get(path)),
+        outline,
       },
     });
     await loadEpubChapter(controller, 0);
@@ -1516,6 +1626,18 @@ export function createFileViewerController(
   function setSearchOptions(
     patch: Partial<Pick<FileViewerSearchState, 'query' | 'regex' | 'caseSensitive' | 'wholeWord'>>,
   ): void {
+    if (current.status === 'ready' && current.content.kind === 'pdf') {
+      const next = { ...(current.pdfSearch ?? DEFAULT_PAGED_SEARCH_STATE), ...patch };
+      publish({ ...current, pdfSearch: next });
+      setPdfSearchQuery(next.query);
+      return;
+    }
+    if (current.status === 'ready' && current.content.kind === 'epub') {
+      const next = { ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE), ...patch };
+      publish({ ...current, epubSearch: next });
+      setEpubSearchQuery(next.query);
+      return;
+    }
     search = { ...(search ?? DEFAULT_SEARCH_STATE), ...patch };
     if (current.status === 'ready') {
       publish({ ...current, search });
@@ -1723,26 +1845,58 @@ export function createFileViewerController(
   }
 
   function zoomIn(): void {
+    if (current.status === 'ready' && current.content.kind === 'epub') {
+      publish({
+        ...current,
+        content: { ...current.content, zoom: nextZoomStep(current.content.zoom) },
+      });
+      return;
+    }
     const content = imageContent();
     if (content === undefined) return;
     const base = content.fitToContainer ? 1 : content.zoom;
     publish({
       ...(current as Extract<FileViewerState, { status: 'ready' }>),
-      content: { ...content, zoom: clampZoom(base * ZOOM_STEP), fitToContainer: false },
+      content: { ...content, zoom: nextZoomStep(base), fitToContainer: false },
     });
   }
 
   function zoomOut(): void {
+    if (current.status === 'ready' && current.content.kind === 'epub') {
+      publish({
+        ...current,
+        content: { ...current.content, zoom: previousZoomStep(current.content.zoom) },
+      });
+      return;
+    }
     const content = imageContent();
     if (content === undefined) return;
     const base = content.fitToContainer ? 1 : content.zoom;
     publish({
       ...(current as Extract<FileViewerState, { status: 'ready' }>),
-      content: { ...content, zoom: clampZoom(base / ZOOM_STEP), fitToContainer: false },
+      content: { ...content, zoom: previousZoomStep(base), fitToContainer: false },
+    });
+  }
+
+  function setZoom(zoom: number): void {
+    if (!Number.isFinite(zoom)) return;
+    if (current.status === 'ready' && current.content.kind === 'epub') {
+      publish({ ...current, content: { ...current.content, zoom: clampZoom(zoom) } });
+      return;
+    }
+    const content = imageContent();
+    if (content === undefined) return;
+    publish({
+      ...(current as Extract<FileViewerState, { status: 'ready' }>),
+      content: { ...content, zoom: clampZoom(zoom), fitToContainer: false },
     });
   }
 
   function resetZoom(): void {
+    if (current.status === 'ready' && current.content.kind === 'epub') {
+      publish({ ...current, content: { ...current.content, zoom: 1 } });
+      return;
+    }
     const content = imageContent();
     if (content === undefined) return;
     publish({
@@ -1857,10 +2011,11 @@ export function createFileViewerController(
     } else if (current.content.kind === 'epub') {
       const nextIndex = current.content.currentChapter + 1;
       if (nextIndex >= current.content.chapterCount) return;
+      const { targetFragment: _targetFragment, ...content } = current.content;
       publish({
         ...current,
         content: {
-          ...current.content,
+          ...content,
           currentChapter: nextIndex,
           currentChapterHtml: undefined,
           loadingChapter: true,
@@ -1894,10 +2049,11 @@ export function createFileViewerController(
     } else if (current.content.kind === 'epub') {
       const previousIndex = current.content.currentChapter - 1;
       if (previousIndex < 0) return;
+      const { targetFragment: _targetFragment, ...content } = current.content;
       publish({
         ...current,
         content: {
-          ...current.content,
+          ...content,
           currentChapter: previousIndex,
           currentChapterHtml: undefined,
           loadingChapter: true,
@@ -1907,74 +2063,217 @@ export function createFileViewerController(
     }
   }
 
+  function goToEpubSection(sectionIndex: number, fragment?: string): void {
+    if (
+      current.status !== 'ready' ||
+      current.content.kind !== 'epub' ||
+      sectionIndex < 0 ||
+      sectionIndex >= current.content.chapterCount
+    )
+      return;
+    const { targetFragment: _targetFragment, ...content } = current.content;
+    if (sectionIndex === current.content.currentChapter) {
+      publish({
+        ...current,
+        content: fragment === undefined ? content : { ...content, targetFragment: fragment },
+      });
+      return;
+    }
+    publish({
+      ...current,
+      content: {
+        ...content,
+        currentChapter: sectionIndex,
+        currentChapterHtml: undefined,
+        loadingChapter: true,
+        ...(fragment === undefined ? {} : { targetFragment: fragment }),
+      },
+    });
+    void loadEpubChapter(beginRequest(), sectionIndex);
+  }
+
+  function followEpubLink(href: string): void {
+    if (current.status !== 'ready' || current.content.kind !== 'epub') return;
+    const currentPath = epubChapterPaths[current.content.currentChapter];
+    if (currentPath === undefined) return;
+    const hashIndex = href.indexOf('#');
+    const hrefPath = (hashIndex === -1 ? href : href.slice(0, hashIndex)).split('?')[0] ?? '';
+    const fragment = hashIndex === -1 ? undefined : href.slice(hashIndex + 1);
+    const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/') + 1);
+    const targetPath = hrefPath === '' ? currentPath : resolveEpubPath(currentDirectory, hrefPath);
+    const targetIndex = epubChapterPaths.indexOf(targetPath);
+    if (targetIndex === -1) return;
+    if (targetIndex === current.content.currentChapter) {
+      const { targetFragment: _targetFragment, ...content } = current.content;
+      publish({
+        ...current,
+        content: fragment === undefined ? content : { ...content, targetFragment: fragment },
+      });
+      return;
+    }
+    const { targetFragment: _targetFragment, ...content } = current.content;
+    publish({
+      ...current,
+      content: {
+        ...content,
+        currentChapter: targetIndex,
+        currentChapterHtml: undefined,
+        loadingChapter: true,
+        ...(fragment === undefined ? {} : { targetFragment: fragment }),
+      },
+    });
+    void loadEpubChapter(beginRequest(), targetIndex);
+  }
+
+  function goToPdfPage(pageNumber: number): void {
+    if (
+      current.status !== 'ready' ||
+      current.content.kind !== 'pdf' ||
+      pageNumber < 1 ||
+      pageNumber > current.content.pageCount
+    )
+      return;
+    publish({ ...current, content: { ...current.content, currentPage: pageNumber } });
+  }
+
+  function goToTextOffset(offset: number, length: number): void {
+    if (current.status !== 'ready' || current.content.kind !== 'text') return;
+    if (offset < 0 || offset > current.content.text.length) return;
+    publish({
+      ...current,
+      content: {
+        ...current.content,
+        highlightOffset: offset,
+        highlightLength: Math.max(1, Math.min(length, current.content.text.length - offset)),
+      },
+    });
+  }
+
   async function pdfPageText(document: PDFDocumentProxy, pageNumber: number): Promise<string> {
     const cached = pdfPageTextCache.get(pageNumber);
     if (cached !== undefined) return cached;
     const page = await document.getPage(pageNumber);
     const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
-      .toLowerCase();
+    const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
     pdfPageTextCache.set(pageNumber, text);
     return text;
   }
 
-  async function runPdfSearch(): Promise<void> {
+  async function runPdfSearch(generation: number): Promise<void> {
     if (current.status !== 'ready' || current.content.kind !== 'pdf') return;
     const document = current.content.document;
-    const query = current.pdfSearch?.query.trim().toLowerCase() ?? '';
+    const initialPage = current.content.currentPage;
+    const pagedSearch = current.pdfSearch ?? DEFAULT_PAGED_SEARCH_STATE;
+    const query = pagedSearch.query.trim();
     if (query === '') return;
+    let expression: RegExp;
+    try {
+      expression = searchExpression({ ...pagedSearch, query });
+    } catch (error: unknown) {
+      publish({
+        ...current,
+        pdfSearch: {
+          ...pagedSearch,
+          searching: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return;
+    }
     publish({
       ...current,
-      pdfSearch: { ...current.pdfSearch, query, searching: true } as FileViewerPdfSearchState,
+      pdfSearch: { ...pagedSearch, query, searching: true, error: undefined },
     });
     const matches: number[] = [];
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      if (current.status !== 'ready' || current.content.kind !== 'pdf') return;
+    const pageOrder = [
+      initialPage,
+      ...Array.from({ length: document.numPages }, (_, index) => index + 1).filter(
+        (pageNumber) => pageNumber !== initialPage,
+      ),
+    ];
+    for (const pageNumber of pageOrder) {
+      if (
+        generation !== pdfSearchGeneration ||
+        current.status !== 'ready' ||
+        current.content.kind !== 'pdf'
+      )
+        return;
       const text = await pdfPageText(document, pageNumber);
-      if (text.includes(query)) matches.push(pageNumber);
+      if (generation !== pdfSearchGeneration) return;
+      if (expression.test(text)) {
+        matches.push(pageNumber);
+        publish({
+          ...current,
+          content:
+            matches.length === 1
+              ? { ...current.content, currentPage: pageNumber }
+              : current.content,
+          pdfSearch: {
+            ...pagedSearch,
+            query,
+            matches: [...matches],
+            currentMatchIndex: 0,
+            searching: true,
+            error: undefined,
+          },
+        });
+      }
     }
-    if (current.status !== 'ready' || current.content.kind !== 'pdf') return;
+    if (
+      generation !== pdfSearchGeneration ||
+      current.status !== 'ready' ||
+      current.content.kind !== 'pdf'
+    )
+      return;
+    matches.sort((left, right) => left - right);
+    const currentMatchIndex = matches.indexOf(current.content.currentPage);
     publish({
       ...current,
       pdfSearch: {
+        ...pagedSearch,
         query,
         matches,
-        currentMatchIndex: matches.length > 0 ? 0 : undefined,
+        currentMatchIndex:
+          matches.length === 0 ? undefined : currentMatchIndex === -1 ? 0 : currentMatchIndex,
         searching: false,
+        error: undefined,
       },
     });
-    if (matches.length > 0) {
-      publish({
-        ...(current as Extract<FileViewerState, { status: 'ready' }>),
-        content: { ...current.content, currentPage: matches[0] as number },
-      });
-    }
   }
 
   function setPdfSearchQuery(query: string): void {
     if (current.status !== 'ready' || current.content.kind !== 'pdf') return;
+    pdfSearchGeneration += 1;
+    const generation = pdfSearchGeneration;
     publish({
       ...current,
       pdfSearch: {
+        ...(current.pdfSearch ?? DEFAULT_PAGED_SEARCH_STATE),
         query,
         matches: current.pdfSearch?.matches ?? [],
         currentMatchIndex: current.pdfSearch?.currentMatchIndex,
         searching: false,
+        error: undefined,
       },
     });
     if (pdfSearchDebounceTimer !== undefined) clearTimeout(pdfSearchDebounceTimer);
     if (query.trim() === '') {
       publish({
         ...(current as Extract<FileViewerState, { status: 'ready' }>),
-        pdfSearch: { query: '', matches: [], currentMatchIndex: undefined, searching: false },
+        pdfSearch: {
+          ...(current.pdfSearch ?? DEFAULT_PAGED_SEARCH_STATE),
+          query: '',
+          matches: [],
+          currentMatchIndex: undefined,
+          searching: false,
+          error: undefined,
+        },
       });
       return;
     }
     pdfSearchDebounceTimer = setTimeout(() => {
       pdfSearchDebounceTimer = undefined;
-      void runPdfSearch();
+      void runPdfSearch(generation);
     }, SEARCH_DEBOUNCE_MS);
   }
 
@@ -2017,6 +2316,137 @@ export function createFileViewerController(
     goToPdfMatch(((current.pdfSearch.currentMatchIndex ?? 0) - 1 + count) % count);
   }
 
+  async function epubChapterText(chapterIndex: number, signal: AbortSignal): Promise<string> {
+    const cached = epubChapterTextCache.get(chapterIndex);
+    if (cached !== undefined) return cached;
+    const location = epubChapterLocations[chapterIndex];
+    if (location === undefined) return '';
+    const bytes = await readEntireFileBytes(client, { ...entry, location }, signal);
+    const text =
+      new DOMParser().parseFromString(new TextDecoder().decode(bytes), 'text/html').body
+        .textContent ?? '';
+    epubChapterTextCache.set(chapterIndex, text);
+    return text;
+  }
+
+  async function runEpubSearch(): Promise<void> {
+    if (current.status !== 'ready' || current.content.kind !== 'epub') return;
+    const pagedSearch = current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE;
+    const query = pagedSearch.query.trim();
+    if (query === '') return;
+    let expression: RegExp;
+    try {
+      expression = searchExpression({ ...pagedSearch, query });
+    } catch (error: unknown) {
+      publish({
+        ...current,
+        epubSearch: {
+          ...pagedSearch,
+          searching: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return;
+    }
+    publish({
+      ...current,
+      epubSearch: { ...pagedSearch, query, searching: true, error: undefined },
+    });
+    const controller = beginRequest();
+    const matches: number[] = [];
+    for (let chapterIndex = 0; chapterIndex < epubChapterLocations.length; chapterIndex += 1) {
+      const text = await epubChapterText(chapterIndex, controller.signal);
+      if (!isCurrent(controller)) return;
+      if (expression.test(text)) matches.push(chapterIndex + 1);
+    }
+    if (!isCurrent(controller) || current.status !== 'ready' || current.content.kind !== 'epub')
+      return;
+    publish({
+      ...current,
+      epubSearch: {
+        ...pagedSearch,
+        query,
+        matches,
+        currentMatchIndex: matches.length > 0 ? 0 : undefined,
+        searching: false,
+        error: undefined,
+      },
+    });
+    if (matches.length > 0) goToEpubMatch(0);
+  }
+
+  function setEpubSearchQuery(query: string): void {
+    if (current.status !== 'ready' || current.content.kind !== 'epub') return;
+    publish({
+      ...current,
+      epubSearch: {
+        ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE),
+        query,
+        matches: current.epubSearch?.matches ?? [],
+        currentMatchIndex: current.epubSearch?.currentMatchIndex,
+        searching: false,
+        error: undefined,
+      },
+    });
+    if (epubSearchDebounceTimer !== undefined) clearTimeout(epubSearchDebounceTimer);
+    if (query.trim() === '') {
+      publish({
+        ...current,
+        epubSearch: {
+          ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE),
+          query: '',
+          matches: [],
+          currentMatchIndex: undefined,
+          searching: false,
+          error: undefined,
+        },
+      });
+      return;
+    }
+    epubSearchDebounceTimer = setTimeout(() => {
+      epubSearchDebounceTimer = undefined;
+      void runEpubSearch();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  function goToEpubMatch(index: number): void {
+    if (
+      current.status !== 'ready' ||
+      current.content.kind !== 'epub' ||
+      current.epubSearch === undefined
+    )
+      return;
+    const chapterNumber = current.epubSearch.matches[index];
+    if (chapterNumber === undefined) return;
+    const chapterIndex = chapterNumber - 1;
+    const { targetFragment: _targetFragment, ...content } = current.content;
+    publish({
+      ...current,
+      content: {
+        ...content,
+        currentChapter: chapterIndex,
+        currentChapterHtml: undefined,
+        loadingChapter: true,
+      },
+      epubSearch: { ...current.epubSearch, currentMatchIndex: index },
+    });
+    void loadEpubChapter(beginRequest(), chapterIndex);
+  }
+
+  function goToNextEpubMatch(): void {
+    if (current.status !== 'ready' || current.epubSearch?.matches.length === 0) return;
+    goToEpubMatch(
+      ((current.epubSearch?.currentMatchIndex ?? -1) + 1) %
+        (current.epubSearch?.matches.length ?? 1),
+    );
+  }
+
+  function goToPreviousEpubMatch(): void {
+    if (current.status !== 'ready' || current.epubSearch?.matches.length === 0) return;
+    const count = current.epubSearch?.matches.length ?? 1;
+    goToEpubMatch(((current.epubSearch?.currentMatchIndex ?? 0) - 1 + count) % count);
+  }
+
   void load();
 
   return {
@@ -2036,6 +2466,7 @@ export function createFileViewerController(
     goToPreviousMatch,
     zoomIn,
     zoomOut,
+    setZoom,
     resetZoom,
     copyContent,
     toggleMetadataPanel,
@@ -2044,8 +2475,16 @@ export function createFileViewerController(
     setPdfSearchQuery,
     goToNextPdfMatch,
     goToPreviousPdfMatch,
+    setEpubSearchQuery,
+    goToNextEpubMatch,
+    goToPreviousEpubMatch,
+    goToEpubSection,
+    followEpubLink,
+    goToPdfPage,
+    goToTextOffset,
     dispose: () => {
       disposed = true;
+      pdfSearchGeneration += 1;
       activeController?.abort();
       if (searchDebounceTimer !== undefined) {
         clearTimeout(searchDebounceTimer);
@@ -2054,6 +2493,10 @@ export function createFileViewerController(
       if (pdfSearchDebounceTimer !== undefined) {
         clearTimeout(pdfSearchDebounceTimer);
         pdfSearchDebounceTimer = undefined;
+      }
+      if (epubSearchDebounceTimer !== undefined) {
+        clearTimeout(epubSearchDebounceTimer);
+        epubSearchDebounceTimer = undefined;
       }
       if (structuredStatusTimer !== undefined) {
         clearTimeout(structuredStatusTimer);

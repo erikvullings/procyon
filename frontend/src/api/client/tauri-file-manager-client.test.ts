@@ -49,6 +49,15 @@ afterEach(() => {
 });
 
 describe('TauriFileManagerClient', () => {
+  it('opens external URLs with the host opener', async () => {
+    openUrl.mockResolvedValue(undefined);
+    const client = new TauriFileManagerClient();
+
+    await client.openExternalUrl('https://example.com/read');
+
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/read');
+  });
+
   describe('operation transport', () => {
     it('maps the Tauri operation discriminator to the frontend kind', async () => {
       invoke.mockResolvedValue([

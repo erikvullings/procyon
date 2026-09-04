@@ -126,6 +126,9 @@ import { settingsFromDto, settingsToDto } from './settings-mapping';
  * that will add their command, mirroring `HttpFileManagerClient`.
  */
 export class TauriFileManagerClient implements FileManagerClient {
+  openExternalUrl(url: string): Promise<void> {
+    return openUrl(url);
+  }
   private readonly eventStream = new TauriEventStream();
   readonly connection = this.eventStream.status;
 

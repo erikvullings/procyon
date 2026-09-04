@@ -48,6 +48,7 @@ function baseAttrs(
     onPreviousMatch: vi.fn(),
     onZoomIn: vi.fn(),
     onZoomOut: vi.fn(),
+    onZoomChange: vi.fn(),
     onResetZoom: vi.fn(),
     onCopy: vi.fn().mockResolvedValue(undefined),
     onToggleMetadata: vi.fn(),
@@ -56,6 +57,14 @@ function baseAttrs(
     onPdfSearchQueryChange: vi.fn(),
     onNextPdfMatch: vi.fn(),
     onPreviousPdfMatch: vi.fn(),
+    onEpubSearchQueryChange: vi.fn(),
+    onNextEpubMatch: vi.fn(),
+    onPreviousEpubMatch: vi.fn(),
+    onSelectEpubSection: vi.fn(),
+    onFollowEpubLink: vi.fn(),
+    onOpenExternalLink: vi.fn(),
+    onSelectPdfPage: vi.fn(),
+    onNavigateTextOffset: vi.fn(),
     quickLookAvailable: false,
     onQuickLook: vi.fn(),
     onOpenExternally: vi.fn(),
@@ -66,6 +75,13 @@ function baseAttrs(
 
 function mount(attrs: FileViewerAttrs): void {
   m.mount(root, { view: () => m(FileViewer, attrs) });
+}
+
+function toggleSearch(): void {
+  root
+    .querySelector('.fm-file-viewer')
+    ?.dispatchEvent(new CustomEvent('fm-viewer-toggle-search', { bubbles: true }));
+  m.redraw.sync();
 }
 
 beforeEach(() => {
@@ -190,7 +206,7 @@ describe('FileViewer', () => {
     expect(onOpenExternally).toHaveBeenCalledOnce();
   });
 
-  it('renders text content and a search bar', () => {
+  it('renders text content with search closed by default', () => {
     mount(
       baseAttrs({
         status: 'ready',
@@ -207,7 +223,11 @@ describe('FileViewer', () => {
       }),
     );
     expect(root.querySelector('.cm-content')?.textContent).toBe('hello');
+    expect(root.querySelector('.fm-file-viewer-search-input')).toBeNull();
+    toggleSearch();
     expect(root.querySelector('.fm-file-viewer-search-input')).not.toBeNull();
+    toggleSearch();
+    expect(root.querySelector('.fm-file-viewer-search-input')).toBeNull();
     expect(root.querySelector('.fm-file-viewer-text-pagination')).toBeNull();
   });
 
@@ -231,6 +251,64 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-markdown h1')?.textContent).toBe('Title');
     expect(root.querySelector('.fm-file-viewer-markdown')?.classList).toContain('browser-default');
     expect(root.querySelector('.cm-editor')).toBeNull();
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-file-viewer-outline-item')?.textContent).toContain('Title');
+  });
+
+  it('builds a navigable outline for HTML source headings', () => {
+    const onNavigateTextOffset = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'guide.html', extension: 'html' }),
+          content: {
+            kind: 'text',
+            windowOffset: 0,
+            windowEnd: 34,
+            text: '<h1>Start</h1><p>Text</p><h2>Next</h2>',
+            atStart: true,
+            atEnd: true,
+            loadingMore: false,
+          },
+        },
+        { onNavigateTextOffset },
+      ),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    const items = root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-outline-item');
+    expect([...items].map((item) => item.textContent)).toEqual(['1Start', '2Next']);
+    items[1]?.click();
+    expect(onNavigateTextOffset).toHaveBeenCalledWith(25, 13);
+  });
+
+  it('builds a navigable outline for DOCX headings', () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'guide.docx', extension: 'docx' }),
+        content: {
+          kind: 'docx',
+          sessionId: 'docx-1',
+          sourceHtml: '<h1>Start</h1><p>Text</p><h2>Next</h2>',
+          html: '<h1>Start</h1><p>Text</p><h2>Next</h2>',
+          plainText: 'Start\nText\nNext',
+          omittedFeatures: [],
+        },
+      }),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    const items = root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-outline-item');
+    expect([...items].map((item) => item.textContent)).toEqual(['1Start', '2Next']);
+    items[1]?.click();
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', inline: 'nearest' });
   });
 
   it('selects and copies rendered Markdown without bubbling into file shortcuts', () => {
@@ -417,6 +495,8 @@ describe('FileViewer', () => {
       ),
     );
 
+    toggleSearch();
+
     const input = root.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
     if (input === null) throw new Error('search input missing');
     input.value = 'cat';
@@ -486,9 +566,10 @@ describe('FileViewer', () => {
     ).toBe('Copy image');
   });
 
-  it('renders PDF page navigation and forwards next/previousPage', () => {
+  it('renders PDF bookmarks and supports direct page entry', () => {
     const onNextPage = vi.fn();
     const onPreviousPage = vi.fn();
+    const onSelectPdfPage = vi.fn();
     mount(
       baseAttrs(
         {
@@ -499,9 +580,13 @@ describe('FileViewer', () => {
             document: {} as never,
             pageCount: 3,
             currentPage: 2,
+            outline: [
+              { label: 'Introduction', level: 1, page: 1 },
+              { label: 'Details', level: 2, page: 3 },
+            ],
           },
         },
-        { onNextPage, onPreviousPage },
+        { onNextPage, onPreviousPage, onSelectPdfPage },
       ),
     );
     expect(root.querySelector('.fm-file-viewer-page-count')?.textContent).toBe('2 / 3');
@@ -510,6 +595,26 @@ describe('FileViewer', () => {
     root.querySelector<HTMLButtonElement>('[data-tooltip="Previous page"] button')?.click();
     expect(onNextPage).toHaveBeenCalledTimes(1);
     expect(onPreviousPage).toHaveBeenCalledTimes(1);
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    const outlineItems = root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-outline-item');
+    expect(outlineItems).toHaveLength(2);
+    expect(outlineItems[0]?.textContent).toContain('Introduction');
+    outlineItems[1]?.click();
+    expect(onSelectPdfPage).toHaveBeenCalledWith(3);
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-page-count')?.click();
+    m.redraw.sync();
+    const pageInput = root.querySelector<HTMLInputElement>('.fm-file-viewer-page-input');
+    if (pageInput === null) throw new Error('page input missing');
+    expect(pageInput.type).toBe('text');
+    expect(pageInput.max).toBe('3');
+    pageInput.value = '3';
+    pageInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-file-viewer-page-input')?.value).toBe('3');
+    pageInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onSelectPdfPage).toHaveBeenCalledWith(3);
   });
 
   it('disables PDF page navigation at the first/last page', () => {
@@ -580,22 +685,38 @@ describe('FileViewer', () => {
     renderPdfPageToCanvas.mockResolvedValue(undefined);
   });
 
-  it('shows the PDF search bar and forwards query/navigation', () => {
+  it('opens the generic PDF search bar on request and forwards options, query, and navigation', () => {
     const onPdfSearchQueryChange = vi.fn();
     const onNextPdfMatch = vi.fn();
     const onPreviousPdfMatch = vi.fn();
+    const onSearchOptionChange = vi.fn();
     mount(
       baseAttrs(
         {
           status: 'ready',
           entry: entry({ name: 'report.pdf', extension: 'pdf' }),
           content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 1 },
-          pdfSearch: { query: 'foo', matches: [2, 3], currentMatchIndex: 0, searching: false },
+          pdfSearch: {
+            query: 'foo',
+            regex: false,
+            caseSensitive: false,
+            wholeWord: false,
+            matches: [2, 3],
+            currentMatchIndex: 0,
+            searching: false,
+            error: undefined,
+          },
         },
-        { onPdfSearchQueryChange, onNextPdfMatch, onPreviousPdfMatch },
+        {
+          onPdfSearchQueryChange,
+          onNextPdfMatch,
+          onPreviousPdfMatch,
+          onSearchOptionChange,
+        },
       ),
     );
-    const input = root.querySelector<HTMLInputElement>('input[placeholder="Search this PDF…"]');
+    expect(root.querySelector('.fm-file-viewer-search')).not.toBeNull();
+    const input = root.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
     expect(input?.value).toBe('foo');
     expect(root.querySelector('.fm-file-viewer-search-count')?.textContent).toBe('Page 2 · 1 of 2');
     input?.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -604,6 +725,11 @@ describe('FileViewer', () => {
     expect(onPdfSearchQueryChange).toHaveBeenCalled();
     expect(onNextPdfMatch).toHaveBeenCalledTimes(1);
     expect(onPreviousPdfMatch).toHaveBeenCalledTimes(1);
+    root.querySelector<HTMLButtonElement>('button[title="Match case"]')?.click();
+    expect(onSearchOptionChange).toHaveBeenCalledWith({ caseSensitive: true });
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-search-close')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-file-viewer-search')).toBeNull();
   });
 
   it('renders a comic page image with page navigation', () => {
@@ -642,25 +768,204 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-body')?.textContent).toContain('Loading page');
   });
 
-  it('renders an EPUB chapter with page navigation', () => {
+  it('renders an EPUB chapter with navigation, zoom, focus, and inline search', () => {
+    const onEpubSearchQueryChange = vi.fn();
+    const onNextEpubMatch = vi.fn();
+    const onSelectEpubSection = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'book.epub', extension: 'epub' }),
+          content: {
+            kind: 'epub',
+            title: 'My Book',
+            chapterCount: 3,
+            currentChapter: 1,
+            currentChapterHtml: '<p>Chapter two content</p>',
+            loadingChapter: false,
+            zoom: 1.25,
+            sectionLabels: [undefined, 'Chapter Two', 'Final thoughts'],
+          },
+          epubSearch: {
+            query: 'chapter',
+            matches: [2, 3],
+            currentMatchIndex: 0,
+            searching: false,
+          },
+        },
+        { onEpubSearchQueryChange, onNextEpubMatch, onSelectEpubSection },
+      ),
+    );
+    expect(root.querySelector('.fm-file-viewer-page-count')?.textContent).toBe('2 / 3');
+    const chapter = root.querySelector<HTMLElement>('.fm-file-viewer-epub-chapter');
+    expect(chapter?.textContent).toContain('Chapter two content');
+    expect(chapter?.style.fontSize).toBe('1.25em');
+    expect(root.querySelector('.fm-file-viewer-body-epub')?.getAttribute('tabindex')).toBe('0');
+    expect(root.querySelector('.fm-file-viewer-search-count')?.textContent).toBe(
+      'Chapter 2 · 1 of 2',
+    );
+    const input = root.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
+    input?.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    root.querySelector<HTMLButtonElement>('button[title="Next match"]')?.click();
+    expect(onEpubSearchQueryChange).toHaveBeenCalledOnce();
+    expect(onNextEpubMatch).toHaveBeenCalledOnce();
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-page-count')?.click();
+    m.redraw.sync();
+    const sectionInput = root.querySelector<HTMLInputElement>('.fm-file-viewer-page-input');
+    if (sectionInput === null) throw new Error('section input missing');
+    expect(sectionInput.min).toBe('1');
+    expect(sectionInput.max).toBe('3');
+    sectionInput.value = '3';
+    sectionInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onSelectEpubSection).toHaveBeenCalledWith(2);
+  });
+
+  it('highlights EPUB matches in rendered markup and reveals the active occurrence', () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     mount(
       baseAttrs({
         status: 'ready',
         entry: entry({ name: 'book.epub', extension: 'epub' }),
         content: {
           kind: 'epub',
-          title: 'My Book',
-          chapterCount: 3,
-          currentChapter: 1,
-          currentChapterHtml: '<p>Chapter two content</p>',
+          title: 'Book',
+          chapterCount: 1,
+          currentChapter: 0,
+          currentChapterHtml: '<p>Chapter <strong>chapter</strong></p>',
           loadingChapter: false,
+          zoom: 1,
+          sectionLabels: ['Chapter'],
+        },
+        epubSearch: {
+          query: 'chapter',
+          regex: false,
+          caseSensitive: false,
+          wholeWord: true,
+          matches: [1],
+          currentMatchIndex: 0,
+          searching: false,
         },
       }),
     );
-    expect(root.querySelector('.fm-file-viewer-page-count')?.textContent).toBe('2 / 3');
-    expect(root.querySelector('.fm-file-viewer-epub-chapter')?.innerHTML).toContain(
-      'Chapter two content',
+
+    const chapter = root.querySelector('.fm-file-viewer-epub-chapter');
+    expect(chapter?.querySelectorAll('.fm-document-search-match')).toHaveLength(1);
+    expect(chapter?.querySelectorAll('.fm-document-search-match-active')).toHaveLength(1);
+    expect(chapter?.querySelector('strong .fm-document-search-match')?.textContent).toBe('chapter');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest' });
+  });
+
+  it('edits zoom inline without changing toolbar height', () => {
+    const onZoomChange = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'book.epub', extension: 'epub' }),
+          content: {
+            kind: 'epub',
+            title: 'Book',
+            chapterCount: 1,
+            currentChapter: 0,
+            currentChapterHtml: '<p>Text</p>',
+            loadingChapter: false,
+            zoom: 1,
+            sectionLabels: ['Text'],
+          },
+        },
+        { onZoomChange },
+      ),
     );
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-zoom-level')?.click();
+    m.redraw.sync();
+    const zoomInput = root.querySelector<HTMLInputElement>('.fm-file-viewer-zoom-input');
+    if (zoomInput === null) throw new Error('zoom input missing');
+    zoomInput.value = '114';
+    zoomInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onZoomChange).toHaveBeenCalledWith(1.14);
+  });
+
+  it('opens the EPUB ToC and routes internal and confirmed external links', () => {
+    const onSelectEpubSection = vi.fn();
+    const onFollowEpubLink = vi.fn();
+    const onOpenExternalLink = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'book.epub', extension: 'epub' }),
+          content: {
+            kind: 'epub',
+            title: 'My Book',
+            chapterCount: 3,
+            currentChapter: 0,
+            currentChapterHtml:
+              '<p><a href="chapter2.xhtml#note">Next chapter</a> <a href="https://example.com/read">Publisher</a></p>',
+            loadingChapter: false,
+            zoom: 1,
+            sectionLabels: ['Introduction', 'Chapter Two', undefined],
+          },
+        },
+        { onSelectEpubSection, onFollowEpubLink, onOpenExternalLink },
+      ),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    const tocItems = root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-outline-item');
+    expect(tocItems).toHaveLength(3);
+    expect(tocItems[1]?.textContent).toContain('Chapter Two');
+    tocItems[1]?.click();
+    expect(onSelectEpubSection).toHaveBeenCalledWith(1);
+
+    root.querySelector<HTMLAnchorElement>('a[href^="chapter2"]')?.click();
+    expect(onFollowEpubLink).toHaveBeenCalledWith('chapter2.xhtml#note');
+
+    root.querySelector<HTMLAnchorElement>('a[href^="https"]')?.click();
+    m.redraw.sync();
+    expect(onOpenExternalLink).not.toHaveBeenCalled();
+    const confirm = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Open link',
+    );
+    confirm?.click();
+    expect(onOpenExternalLink).toHaveBeenCalledWith('https://example.com/read');
+  });
+
+  it('routes fragment-level EPUB ToC entries to the correct section anchor', () => {
+    const onSelectEpubSection = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ name: 'book.epub', extension: 'epub' }),
+          content: {
+            kind: 'epub',
+            title: 'My Book',
+            chapterCount: 2,
+            currentChapter: 0,
+            currentChapterHtml: '<h1 id="intro">Introduction</h1>',
+            loadingChapter: false,
+            zoom: 1,
+            sectionLabels: ['1 Introduction', '2 Next chapter'],
+            outline: [
+              { label: '1 Introduction', level: 1, chapterIndex: 0 },
+              { label: '1.4 Summary', level: 2, chapterIndex: 0, fragment: 'ch1.4' },
+            ],
+          },
+        },
+        { onSelectEpubSection },
+      ),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-outline-toggle')?.click();
+    m.redraw.sync();
+    const items = root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-outline-item');
+    expect(items).toHaveLength(2);
+    items[1]?.click();
+    expect(onSelectEpubSection).toHaveBeenCalledWith(0, 'ch1.4');
   });
 
   it('shows a loading state for an EPUB chapter still being fetched', () => {
@@ -675,6 +980,8 @@ describe('FileViewer', () => {
           currentChapter: 0,
           currentChapterHtml: undefined,
           loadingChapter: true,
+          zoom: 1,
+          sectionLabels: [undefined, undefined, undefined],
         },
       }),
     );

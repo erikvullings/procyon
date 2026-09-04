@@ -141,6 +141,9 @@ export interface FileManagerClient {
   /** Opens the native Services (macOS) or Send To (Windows) submenu for a local selection. */
   showPlatformContextMenu(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
 
+  /** Opens a user-confirmed external URL in the host's default browser. */
+  openExternalUrl(url: string): Promise<void>;
+
   /** Closes the desktop window (Alt+F4, task 0128). Only implemented on the Tauri host. */
   quit?(): Promise<void>;
 

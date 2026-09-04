@@ -205,6 +205,95 @@ function numberedNavigationEntries(
   return entries;
 }
 
+/** Maps navigation-document targets to their human-readable labels. Supports both EPUB 2 NCX
+ * `navPoint` entries and EPUB 3 XHTML navigation links. Paths are normalized to the same
+ * archive-root-relative form as `EpubPackage.chapterPaths`, so callers can align labels after any
+ * spine repair without relying on navigation order. */
+export function parseEpubSectionLabels(
+  navigationXml: string,
+  navigationPath: string,
+): ReadonlyMap<string, string> {
+  const doc = new DOMParser().parseFromString(navigationXml, 'application/xml');
+  const baseDir = dirnameWithTrailingSlash(navigationPath);
+  const labels = new Map<string, string>();
+  const addLabel = (href: string | null, label: string | null): void => {
+    const normalizedLabel = label?.replace(/\s+/g, ' ').trim();
+    if (href === null || normalizedLabel === undefined || normalizedLabel === '') return;
+    const path = resolveEpubPath(baseDir, pathWithoutQueryOrFragment(href));
+    if (!labels.has(path)) labels.set(path, normalizedLabel);
+  };
+
+  for (const point of Array.from(doc.querySelectorAll('navPoint'))) {
+    addLabel(
+      point.querySelector('content')?.getAttribute('src') ?? null,
+      point.querySelector('navLabel > text')?.textContent ?? null,
+    );
+  }
+  for (const navigation of Array.from(doc.getElementsByTagNameNS('*', 'nav'))) {
+    for (const link of Array.from(navigation.getElementsByTagNameNS('*', 'a'))) {
+      addLabel(link.getAttribute('href'), link.textContent);
+    }
+  }
+  return labels;
+}
+
+export interface EpubNavigationEntry {
+  readonly label: string;
+  readonly level: number;
+  readonly path: string;
+  readonly fragment?: string;
+}
+
+/** Preserves every EPUB navigation target, including multiple fragment links into one spine
+ * document. This is the source for the viewer outline; unlike `parseEpubSectionLabels`, entries
+ * must not be collapsed by path. */
+export function parseEpubNavigationEntries(
+  navigationXml: string,
+  navigationPath: string,
+): readonly EpubNavigationEntry[] {
+  const doc = new DOMParser().parseFromString(navigationXml, 'application/xml');
+  const baseDir = dirnameWithTrailingSlash(navigationPath);
+  const entries: EpubNavigationEntry[] = [];
+  const addEntry = (href: string | null, label: string | null, level: number): void => {
+    const normalizedLabel = label?.replace(/\s+/g, ' ').trim();
+    if (href === null || normalizedLabel === undefined || normalizedLabel === '') return;
+    const hashIndex = href.indexOf('#');
+    const fragment = hashIndex === -1 ? undefined : href.slice(hashIndex + 1);
+    entries.push({
+      label: normalizedLabel,
+      level,
+      path: resolveEpubPath(baseDir, pathWithoutQueryOrFragment(href)),
+      ...(fragment === undefined || fragment === '' ? {} : { fragment }),
+    });
+  };
+
+  for (const point of Array.from(doc.querySelectorAll('navPoint'))) {
+    let level = 1;
+    let parent = point.parentElement;
+    while (parent !== null) {
+      if (parent.localName === 'navPoint') level += 1;
+      parent = parent.parentElement;
+    }
+    addEntry(
+      point.querySelector(':scope > content')?.getAttribute('src') ?? null,
+      point.querySelector(':scope > navLabel > text')?.textContent ?? null,
+      level,
+    );
+  }
+  for (const navigation of Array.from(doc.getElementsByTagNameNS('*', 'nav'))) {
+    for (const link of Array.from(navigation.getElementsByTagNameNS('*', 'a'))) {
+      let level = 0;
+      let parent = link.parentElement;
+      while (parent !== null && parent !== navigation) {
+        if (parent.localName === 'li') level += 1;
+        parent = parent.parentElement;
+      }
+      addEntry(link.getAttribute('href'), link.textContent, Math.max(1, level));
+    }
+  }
+  return entries;
+}
+
 function commonPathPrefix(paths: readonly string[]): string {
   const first = paths[0];
   if (first === undefined) return '';

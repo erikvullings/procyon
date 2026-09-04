@@ -873,6 +873,7 @@ export function createPaneContentBuilder(
                     onPreviousMatch: () => void viewer.controller.goToPreviousMatch(),
                     onZoomIn: () => viewer.controller.zoomIn(),
                     onZoomOut: () => viewer.controller.zoomOut(),
+                    onZoomChange: (zoom) => viewer.controller.setZoom(zoom),
                     onResetZoom: () => viewer.controller.resetZoom(),
                     onCopy: () => viewer.controller.copyContent(),
                     onToggleMetadata: () => viewer.controller.toggleMetadataPanel(),
@@ -881,6 +882,16 @@ export function createPaneContentBuilder(
                     onPdfSearchQueryChange: (query) => viewer.controller.setPdfSearchQuery(query),
                     onNextPdfMatch: () => viewer.controller.goToNextPdfMatch(),
                     onPreviousPdfMatch: () => viewer.controller.goToPreviousPdfMatch(),
+                    onEpubSearchQueryChange: (query) => viewer.controller.setEpubSearchQuery(query),
+                    onNextEpubMatch: () => viewer.controller.goToNextEpubMatch(),
+                    onPreviousEpubMatch: () => viewer.controller.goToPreviousEpubMatch(),
+                    onSelectEpubSection: (sectionIndex, fragment) =>
+                      viewer.controller.goToEpubSection(sectionIndex, fragment),
+                    onFollowEpubLink: (href) => viewer.controller.followEpubLink(href),
+                    onSelectPdfPage: (pageNumber) => viewer.controller.goToPdfPage(pageNumber),
+                    onNavigateTextOffset: (offset, length) =>
+                      viewer.controller.goToTextOffset(offset, length),
+                    onOpenExternalLink: (url) => void client.openExternalUrl(url),
                     ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
                     quickLookAvailable,
                     onQuickLook: () =>

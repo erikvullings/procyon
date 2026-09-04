@@ -345,7 +345,7 @@ describe('file viewer controller', () => {
     controller.setSearchOptions({ query: 'report' });
     await controller.runSearch();
     expect(context.states.at(-1)).toMatchObject({
-      content: { kind: 'docx', html: expect.stringContaining('fm-docx-search-match-active') },
+      content: { kind: 'docx', html: expect.stringContaining('fm-document-search-match-active') },
       search: { currentMatchIndex: 0 },
     });
     expect(
@@ -356,7 +356,7 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({
       content: {
         kind: 'docx',
-        html: expect.stringMatching(/Another <mark class="fm-docx-search-match-active">report/),
+        html: expect.stringMatching(/Another <mark class="fm-document-search-match-active">report/),
       },
       search: { currentMatchIndex: 1 },
     });
@@ -1471,6 +1471,69 @@ describe('file viewer controller', () => {
     controller.nextPage();
     controller.nextPage();
     expect(context.states.at(-1)).toMatchObject({ content: { currentPage: 3 } });
+
+    controller.goToPdfPage(2);
+    expect(context.states.at(-1)).toMatchObject({ content: { currentPage: 2 } });
+  });
+
+  it('loads the real nested PDF outline and resolves bookmark destinations to pages', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1, 2, 3],
+      offset: 0,
+      length: 3,
+      eof: true,
+    });
+    vi.mocked(loadPdfDocument).mockResolvedValueOnce({
+      numPages: 400,
+      getOutline: vi.fn().mockResolvedValue([
+        {
+          title: 'Part one',
+          dest: [{ num: 10, gen: 0 }, { name: 'XYZ' }],
+          items: [{ title: 'Chapter one', dest: 'chapter-one', items: [] }],
+        },
+      ]),
+      getDestination: vi.fn().mockResolvedValue([{ num: 24, gen: 0 }, { name: 'XYZ' }]),
+      getPageIndex: vi.fn(async ({ num }: { num: number }) => num),
+    } as never);
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: {
+          kind: 'pdf',
+          outline: [
+            { label: 'Part one', level: 1, page: 11 },
+            { label: 'Chapter one', level: 2, page: 25 },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('uses 25 percentage-point zoom steps around an entered zoom', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1],
+      offset: 0,
+      length: 1,
+      eof: true,
+    });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'photo.png', extension: 'png' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+    controller.setZoom(1.14);
+    controller.zoomIn();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1.25 } });
+    controller.setZoom(1.14);
+    controller.zoomOut();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1 } });
   });
 
   it('finds matching PDF pages via simple text search and jumps between them', async () => {
@@ -1512,6 +1575,43 @@ describe('file viewer controller', () => {
     });
   });
 
+  it('publishes a current-page PDF match before scanning the remaining pages', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1],
+      offset: 0,
+      length: 1,
+      eof: true,
+    });
+    const stalledPage = new Promise<{ items: { str: string }[] }>(() => undefined);
+    const getPage = vi.fn((pageNumber: number) =>
+      Promise.resolve({
+        getTextContent: () =>
+          pageNumber === 2
+            ? Promise.resolve({ items: [{ str: 'needle on current page' }] })
+            : stalledPage,
+      }),
+    );
+    vi.mocked(loadPdfDocument).mockResolvedValueOnce({ numPages: 3, getPage } as never);
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+    controller.goToPdfPage(2);
+    controller.setPdfSearchQuery('needle');
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { currentPage: 2 },
+        pdfSearch: { matches: [2], currentMatchIndex: 0, searching: true },
+      }),
+    );
+    expect(getPage).toHaveBeenCalledWith(2);
+    controller.dispose();
+  });
+
   it('clears PDF search matches when the query is emptied', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({
@@ -1537,6 +1637,35 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({ pdfSearch: { query: '', matches: [] } });
   });
 
+  it('applies case-sensitive, whole-word, and regex options to PDF search', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1],
+      offset: 0,
+      length: 1,
+      eof: true,
+    });
+    vi.mocked(loadPdfDocument).mockResolvedValueOnce(
+      fakePdfDocument(['Apple pie', 'apple tart', 'PineApple']) as never,
+    );
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.setSearchOptions({ query: 'Apple', caseSensitive: true, wholeWord: true });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({ pdfSearch: { matches: [1] } }),
+    );
+
+    controller.setSearchOptions({ query: '^apple', regex: true, caseSensitive: false });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({ pdfSearch: { matches: [1, 2] } }),
+    );
+  });
+
   it('loads an EPUB, parsing container.xml/OPF and rendering the first chapter', async () => {
     const context = setup();
     const containerXml =
@@ -1546,14 +1675,16 @@ describe('file viewer controller', () => {
       '<manifest>' +
       '<item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>' +
       '<item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/>' +
+      '<item id="c3" href="c3.xhtml" media-type="application/xhtml+xml"/>' +
       '<item id="cover" href="images/cover.png" media-type="image/png"/>' +
       '</manifest>' +
-      '<spine><itemref idref="c1"/><itemref idref="c2"/></spine>' +
+      '<spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine>' +
       '</package>';
     const chapterHtml: Record<string, string> = {
       'archive:///tmp/report.txt!/OEBPS/c1.xhtml':
         '<p>Chapter one</p><img src="images/cover.png" alt="Cover">',
       'archive:///tmp/report.txt!/OEBPS/c2.xhtml': '<p>Chapter two</p>',
+      'archive:///tmp/report.txt!/OEBPS/c3.xhtml': '<p>Chapter three</p>',
     };
     vi.mocked(context.client.readFileRange).mockImplementation(async (request) => {
       const uri = request.location.uri;
@@ -1579,7 +1710,13 @@ describe('file viewer controller', () => {
       }),
     );
     expect(context.states.at(-1)).toMatchObject({
-      content: { title: 'Book', chapterCount: 2, currentChapter: 0, loadingChapter: false },
+      content: {
+        title: 'Book',
+        chapterCount: 3,
+        currentChapter: 0,
+        loadingChapter: false,
+        sectionLabels: [undefined, undefined, undefined],
+      },
     });
     expect(
       (context.states.at(-1) as { content: { currentChapterHtml: string } }).content
@@ -1609,6 +1746,44 @@ describe('file viewer controller', () => {
       ).toContain('Chapter two'),
     );
     expect(context.states.at(-1)).toMatchObject({ content: { currentChapter: 1 } });
+
+    controller.goToEpubSection(2);
+    await vi.waitFor(() =>
+      expect(
+        (context.states.at(-1) as { content: { currentChapterHtml?: string } }).content
+          .currentChapterHtml,
+      ).toContain('Chapter three'),
+    );
+    expect(context.states.at(-1)).toMatchObject({ content: { currentChapter: 2 } });
+
+    controller.setEpubSearchQuery('chapter one');
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { currentChapter: 0 },
+        epubSearch: { matches: [1], currentMatchIndex: 0, searching: false },
+      }),
+    );
+
+    controller.goToEpubSection(0, 'ch1.4');
+    expect(context.states.at(-1)).toMatchObject({
+      content: { currentChapter: 0, targetFragment: 'ch1.4' },
+    });
+
+    controller.zoomIn();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1.25 } });
+    controller.zoomOut();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1 } });
+
+    controller.followEpubLink('c2.xhtml#details');
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: {
+          currentChapter: 1,
+          currentChapterHtml: expect.stringContaining('Chapter two'),
+          targetFragment: 'details',
+        },
+      }),
+    );
   });
 
   it('repairs a malformed EPUB spine when numbered TOC labels confirm the order', async () => {
@@ -1659,6 +1834,7 @@ describe('file viewer controller', () => {
           chapterCount: 4,
           currentChapter: 0,
           currentChapterHtml: expect.stringContaining('Chapter Five'),
+          sectionLabels: ['Chapter Five', 'Chapter Ten', 'Chapter Eleven', 'Chapter Twelve'],
         },
       }),
     );

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   inlineEpubChapterImages,
   parseEpubContainer,
+  parseEpubNavigationEntries,
   parseEpubPackage,
+  parseEpubSectionLabels,
   repairEpubChapterOrder,
   resolveEpubPath,
   sanitizeEpubChapterHtml,
@@ -149,6 +151,56 @@ describe('repairEpubChapterOrder', () => {
       '<content src="ending.xhtml"/></navPoint></navMap></ncx>';
 
     expect(repairEpubChapterOrder(spine, toc, 'toc.ncx')).toEqual(spine);
+  });
+});
+
+describe('parseEpubSectionLabels', () => {
+  it('maps EPUB 2 NCX labels to resolved chapter paths', () => {
+    const toc = `<ncx><navMap>
+      <navPoint><navLabel><text>Introduction</text></navLabel><content src="text/intro.xhtml#start"/></navPoint>
+      <navPoint><navLabel><text>Chapter One</text></navLabel><content src="text/chapter1.xhtml"/></navPoint>
+    </navMap></ncx>`;
+
+    expect(parseEpubSectionLabels(toc, 'OEBPS/toc.ncx')).toEqual(
+      new Map([
+        ['OEBPS/text/intro.xhtml', 'Introduction'],
+        ['OEBPS/text/chapter1.xhtml', 'Chapter One'],
+      ]),
+    );
+  });
+
+  it('maps EPUB 3 navigation links and ignores empty labels', () => {
+    const navigation = `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+      <nav epub:type="toc"><ol>
+        <li><a href="intro.xhtml">Introduction</a></li>
+        <li><a href="chapter1.xhtml"><span>Chapter 1</span></a></li>
+        <li><a href="empty.xhtml"> </a></li>
+      </ol></nav>
+    </body></html>`;
+
+    expect(parseEpubSectionLabels(navigation, 'OEBPS/nav.xhtml')).toEqual(
+      new Map([
+        ['OEBPS/intro.xhtml', 'Introduction'],
+        ['OEBPS/chapter1.xhtml', 'Chapter 1'],
+      ]),
+    );
+  });
+});
+
+describe('parseEpubNavigationEntries', () => {
+  it('preserves nested labels and fragments that target one spine document', () => {
+    const toc = `<ncx><navMap>
+      <navPoint><navLabel><text>1 Introduction</text></navLabel><content src="text/part0005.html"/>
+        <navPoint><navLabel><text>1.1 Process</text></navLabel><content src="text/part0005.html#ch1.1"/></navPoint>
+        <navPoint><navLabel><text>1.4 Summary</text></navLabel><content src="text/part0005.html#ch1.4"/></navPoint>
+      </navPoint>
+    </navMap></ncx>`;
+
+    expect(parseEpubNavigationEntries(toc, 'toc.ncx')).toEqual([
+      { label: '1 Introduction', level: 1, path: 'text/part0005.html' },
+      { label: '1.1 Process', level: 2, path: 'text/part0005.html', fragment: 'ch1.1' },
+      { label: '1.4 Summary', level: 2, path: 'text/part0005.html', fragment: 'ch1.4' },
+    ]);
   });
 });
 

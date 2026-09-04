@@ -190,6 +190,69 @@
   height: var(--fm-header-height);
 }
 
+.fm-file-viewer-outline-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--fm-header-height);
+  height: var(--fm-header-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-outline {
+  position: absolute;
+  top: var(--fm-header-height);
+  left: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  width: min(32rem, calc(100% - 1rem));
+  max-height: calc(100% - var(--fm-header-height) - 1rem);
+  overflow: auto;
+  padding: 0.25rem 0;
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-file-viewer-outline-item {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+  min-height: var(--fm-row-height);
+  padding-block: 0.15rem;
+  padding-inline-end: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.fm-file-viewer-outline-item > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-file-viewer-outline-item:hover,
+.fm-file-viewer-outline-item:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-file-viewer-outline-index {
+  color: var(--fm-text-muted);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
 .fm-file-viewer-close {
   display: flex;
   align-items: center;
@@ -213,8 +276,10 @@
 }
 
 .fm-file-viewer-zoom-controls button {
-  border: 1px solid var(--fm-border);
-  background: var(--fm-surface);
+  height: var(--fm-header-height);
+  padding: 0 0.4rem;
+  border: 0;
+  background: transparent;
   color: inherit;
   cursor: pointer;
 }
@@ -227,8 +292,10 @@
 }
 
 .fm-file-viewer-page-controls button {
-  border: 1px solid var(--fm-border);
-  background: var(--fm-surface);
+  height: var(--fm-header-height);
+  padding: 0 0.4rem;
+  border: 0;
+  background: transparent;
   color: inherit;
   cursor: pointer;
 }
@@ -242,6 +309,33 @@
   min-width: 4rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-page-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 4rem;
+  height: var(--fm-header-height);
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-page-input,
+.fm-file-viewer-zoom-input {
+  box-sizing: border-box;
+  width: 2.25rem;
+  height: calc(var(--fm-header-height) - 4px);
+  margin: 2px 0;
+  padding: 0 0.25rem;
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.fm-file-viewer-zoom-input {
+  width: 2.75rem;
 }
 
 .fm-file-viewer-body-pdf {
@@ -307,11 +401,13 @@
   font-size: 0.85em;
 }
 
-.fm-file-viewer-docx-content .fm-docx-search-match {
+.fm-file-viewer-docx-content .fm-document-search-match,
+.fm-file-viewer-epub-chapter .fm-document-search-match {
   background: color-mix(in srgb, var(--fm-accent) 25%, transparent);
 }
 
-.fm-file-viewer-docx-content .fm-docx-search-match-active {
+.fm-file-viewer-docx-content .fm-document-search-match-active,
+.fm-file-viewer-epub-chapter .fm-document-search-match-active {
   background: var(--fm-accent);
   color: var(--fm-on-accent);
 }
@@ -369,7 +465,8 @@
 }
 
 .fm-file-viewer-search-nav,
-.fm-file-viewer-search-toggle {
+.fm-file-viewer-search-toggle,
+.fm-file-viewer-search-close {
   box-sizing: border-box;
   height: var(--fm-row-height);
   padding: 0 0.35rem;
@@ -381,6 +478,12 @@
   font: inherit;
   line-height: 1;
   cursor: pointer;
+}
+
+.fm-file-viewer-search-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .fm-file-viewer-search-toggle[aria-pressed="true"] {

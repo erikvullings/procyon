@@ -2020,9 +2020,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   /** Moves keyboard focus into `paneId`'s open F3 viewer - see `GlobalKeydownContext.focusViewer`. */
   function focusViewer(paneId: PaneId): void {
     const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
+    const readingSurface = root?.querySelector<HTMLElement>('[data-viewer-focus-target]');
     const searchInput = root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
     const section = root?.querySelector<HTMLElement>('.fm-pane-viewer');
-    (searchInput ?? section)?.focus();
+    (readingSurface ?? searchInput ?? section)?.focus();
+  }
+
+  function focusViewerSearch(paneId: PaneId): void {
+    const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
+    root
+      ?.querySelector<HTMLElement>('.fm-file-viewer')
+      ?.dispatchEvent(new CustomEvent('fm-viewer-toggle-search'));
+    root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input')?.focus();
   }
 
   /** One `scrollViewer('line', ...)` step, in CSS pixels - roughly a text line or a comfortable
@@ -2498,6 +2507,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       else void activatePane(attrsClient, paneId);
     },
     focusViewer,
+    focusViewerSearch,
     scrollViewer,
     toggleTerminal: () => {
       if (runtimeKind !== 'tauri') return;
