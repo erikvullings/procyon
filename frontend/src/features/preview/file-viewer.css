@@ -289,6 +289,18 @@
   align-items: center;
   gap: 0.25rem;
   margin-inline-start: auto;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.fm-workspace-pane[data-active="true"] .fm-file-viewer-page-controls {
+  color: var(--fm-viewer-active-control);
+}
+
+.fm-workspace-pane[data-active="false"] .fm-file-viewer-page-controls {
+  color: var(--fm-text-muted);
+  opacity: 0.6;
 }
 
 .fm-file-viewer-page-controls button {
@@ -345,9 +357,63 @@
   padding: 1rem;
 }
 
+.fm-file-viewer-pdf-page {
+  position: relative;
+  flex: none;
+  line-height: 0;
+}
+
 .fm-file-viewer-pdf-canvas {
-  max-width: 100%;
+  display: block;
   box-shadow: 0 0 0 1px var(--fm-border);
+}
+
+.fm-file-viewer-pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-align: initial;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.fm-file-viewer-pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.fm-file-viewer-pdf-text-layer > :not(.markedContent),
+.fm-file-viewer-pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+}
+
+.fm-file-viewer-pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.fm-file-viewer-pdf-highlight {
+  background: var(--fm-search-highlight);
+  color: var(--fm-search-highlight-text);
+}
+
+.fm-file-viewer-pdf-highlight-active {
+  background: var(--fm-search-highlight-active);
+  color: var(--fm-search-highlight-text);
 }
 
 .fm-file-viewer-pdf-page-error {

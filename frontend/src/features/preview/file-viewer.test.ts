@@ -6,8 +6,10 @@ import { FileViewer, type FileViewerAttrs } from './file-viewer';
 import type { FileViewerState } from './file-viewer-controller';
 
 const renderPdfPageToCanvas = vi.fn().mockResolvedValue(undefined);
+const renderPdfSearchHighlights = vi.fn().mockResolvedValue(undefined);
 vi.mock('./pdf-preview', () => ({
   renderPdfPageToCanvas: (...args: unknown[]) => renderPdfPageToCanvas(...args),
+  renderPdfSearchHighlights: (...args: unknown[]) => renderPdfSearchHighlights(...args),
 }));
 
 let root: HTMLElement;
@@ -207,20 +209,24 @@ describe('FileViewer', () => {
   });
 
   it('renders text content with search closed by default', () => {
+    const onSearchQueryChange = vi.fn();
     mount(
-      baseAttrs({
-        status: 'ready',
-        entry: entry(),
-        content: {
-          kind: 'text',
-          windowOffset: 0,
-          windowEnd: 5,
-          text: 'hello',
-          atStart: true,
-          atEnd: true,
-          loadingMore: false,
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry(),
+          content: {
+            kind: 'text',
+            windowOffset: 0,
+            windowEnd: 5,
+            text: 'hello',
+            atStart: true,
+            atEnd: true,
+            loadingMore: false,
+          },
         },
-      }),
+        { onSearchQueryChange },
+      ),
     );
     expect(root.querySelector('.cm-content')?.textContent).toBe('hello');
     expect(root.querySelector('.fm-file-viewer-search-input')).toBeNull();
@@ -228,6 +234,7 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-search-input')).not.toBeNull();
     toggleSearch();
     expect(root.querySelector('.fm-file-viewer-search-input')).toBeNull();
+    expect(onSearchQueryChange).toHaveBeenCalledWith('');
     expect(root.querySelector('.fm-file-viewer-text-pagination')).toBeNull();
   });
 
@@ -580,6 +587,7 @@ describe('FileViewer', () => {
             document: {} as never,
             pageCount: 3,
             currentPage: 2,
+            zoom: 1,
             outline: [
               { label: 'Introduction', level: 1, page: 1 },
               { label: 'Details', level: 2, page: 3 },
@@ -622,7 +630,7 @@ describe('FileViewer', () => {
       baseAttrs({
         status: 'ready',
         entry: entry({ name: 'report.pdf', extension: 'pdf' }),
-        content: { kind: 'pdf', document: {} as never, pageCount: 1, currentPage: 1 },
+        content: { kind: 'pdf', document: {} as never, pageCount: 1, currentPage: 1, zoom: 1 },
       }),
     );
     expect(
@@ -633,12 +641,59 @@ describe('FileViewer', () => {
     ).toBe(true);
   });
 
+  it('keeps the rendered PDF canvas mounted when search opens and disables suggestions', () => {
+    const displayDocument = {} as never;
+    let currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      content: { kind: 'pdf', document: displayDocument, pageCount: 1, currentPage: 1, zoom: 1 },
+    });
+    m.mount(root, { view: () => m(FileViewer, currentAttrs) });
+    const canvas = root.querySelector('.fm-file-viewer-pdf-canvas');
+
+    toggleSearch();
+
+    expect(root.querySelector('.fm-file-viewer-pdf-canvas')).toBe(canvas);
+    const input = root.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
+    expect(input?.autocomplete).toBe('new-password');
+    expect(input?.getAttribute('autocorrect')).toBe('off');
+    expect(input?.getAttribute('spellcheck')).toBe('false');
+    expect((input as HTMLInputElement & { autocorrect: boolean }).autocorrect).toBe(false);
+    expect(input?.spellcheck).toBe(false);
+
+    currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      content: {
+        kind: 'pdf',
+        document: displayDocument,
+        searchDocument: {} as never,
+        pageCount: 1,
+        currentPage: 1,
+        zoom: 1,
+      },
+      pdfSearch: {
+        query: 'process',
+        regex: false,
+        caseSensitive: false,
+        wholeWord: false,
+        matches: [],
+        currentMatchIndex: undefined,
+        searching: true,
+        error: undefined,
+      },
+    });
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-file-viewer-pdf-canvas')).toBe(canvas);
+  });
+
   it('re-renders the PDF canvas when the current page changes (regression: navigation used to only move the counter)', async () => {
     renderPdfPageToCanvas.mockClear();
     let currentAttrs = baseAttrs({
       status: 'ready',
       entry: entry({ name: 'report.pdf', extension: 'pdf' }),
-      content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 1 },
+      content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 1, zoom: 1 },
     });
     m.mount(root, { view: () => m(FileViewer, currentAttrs) });
     await vi.waitFor(() =>
@@ -648,13 +703,14 @@ describe('FileViewer', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        1,
       ),
     );
 
     currentAttrs = baseAttrs({
       status: 'ready',
       entry: entry({ name: 'report.pdf', extension: 'pdf' }),
-      content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 2 },
+      content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 2, zoom: 1 },
     });
     m.redraw.sync();
     await vi.waitFor(() =>
@@ -664,8 +720,76 @@ describe('FileViewer', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        1,
       ),
     );
+
+    currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 2, zoom: 1.25 },
+    });
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(renderPdfPageToCanvas).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        1.25,
+      ),
+    );
+    expect(root.querySelector('.fm-file-viewer-zoom-level')?.textContent).toBe('125%');
+  });
+
+  it('renders search highlights only after a search-driven page change finishes rendering', async () => {
+    const displayDocument = {} as never;
+    const searchDocument = {} as never;
+    let currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      content: { kind: 'pdf', document: displayDocument, pageCount: 2, currentPage: 1, zoom: 1 },
+    });
+    m.mount(root, { view: () => m(FileViewer, currentAttrs) });
+    await vi.waitFor(() => expect(renderPdfPageToCanvas).toHaveBeenCalled());
+    await vi.waitFor(() => expect(renderPdfSearchHighlights).toHaveBeenCalled());
+    renderPdfSearchHighlights.mockClear();
+    let finishPageRender: (() => void) | undefined;
+    renderPdfPageToCanvas.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPageRender = resolve;
+        }),
+    );
+
+    currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      content: {
+        kind: 'pdf',
+        document: displayDocument,
+        searchDocument,
+        pageCount: 2,
+        currentPage: 2,
+        zoom: 1,
+      },
+      pdfSearch: {
+        query: 'process',
+        regex: false,
+        caseSensitive: false,
+        wholeWord: false,
+        matches: [{ pageNumber: 2, occurrenceIndex: 0 }],
+        currentMatchIndex: 0,
+        searching: false,
+        error: undefined,
+      },
+    });
+    m.redraw.sync();
+
+    expect(renderPdfSearchHighlights).not.toHaveBeenCalled();
+    finishPageRender?.();
+    await vi.waitFor(() => expect(renderPdfSearchHighlights).toHaveBeenCalled());
   });
 
   it('shows an error instead of a silently blank canvas when a PDF page fails to render', async () => {
@@ -674,7 +798,7 @@ describe('FileViewer', () => {
       baseAttrs({
         status: 'ready',
         entry: entry({ name: 'report.pdf', extension: 'pdf' }),
-        content: { kind: 'pdf', document: {} as never, pageCount: 1, currentPage: 1 },
+        content: { kind: 'pdf', document: {} as never, pageCount: 1, currentPage: 1, zoom: 1 },
       }),
     );
     await vi.waitFor(() =>
@@ -683,6 +807,50 @@ describe('FileViewer', () => {
       ),
     );
     renderPdfPageToCanvas.mockResolvedValue(undefined);
+  });
+
+  it('renders PDF search highlights from the isolated search document', async () => {
+    renderPdfSearchHighlights.mockClear();
+    const displayDocument = {} as never;
+    const searchDocument = {} as never;
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+        content: {
+          kind: 'pdf',
+          document: displayDocument,
+          searchDocument,
+          pageCount: 1,
+          currentPage: 1,
+          zoom: 1,
+        },
+        pdfSearch: {
+          query: 'triz',
+          regex: false,
+          caseSensitive: false,
+          wholeWord: false,
+          matches: [
+            { pageNumber: 1, occurrenceIndex: 0 },
+            { pageNumber: 1, occurrenceIndex: 1 },
+          ],
+          currentMatchIndex: 0,
+          searching: false,
+          error: undefined,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(renderPdfSearchHighlights).toHaveBeenCalled());
+    const [document, pageNumber, container, , , expression, activeOccurrenceIndex, zoom] =
+      renderPdfSearchHighlights.mock.calls.at(-1) ?? [];
+    expect(document).toBe(searchDocument);
+    expect(pageNumber).toBe(1);
+    expect(container).toBeInstanceOf(HTMLElement);
+    expect(expression).toBeInstanceOf(RegExp);
+    expect((expression as RegExp).test('TRIZ')).toBe(true);
+    expect(activeOccurrenceIndex).toBe(0);
+    expect(zoom).toBe(1);
   });
 
   it('opens the generic PDF search bar on request and forwards options, query, and navigation', () => {
@@ -695,13 +863,16 @@ describe('FileViewer', () => {
         {
           status: 'ready',
           entry: entry({ name: 'report.pdf', extension: 'pdf' }),
-          content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 1 },
+          content: { kind: 'pdf', document: {} as never, pageCount: 3, currentPage: 1, zoom: 1 },
           pdfSearch: {
             query: 'foo',
             regex: false,
             caseSensitive: false,
             wholeWord: false,
-            matches: [2, 3],
+            matches: [
+              { pageNumber: 2, occurrenceIndex: 0 },
+              { pageNumber: 3, occurrenceIndex: 0 },
+            ],
             currentMatchIndex: 0,
             searching: false,
             error: undefined,
@@ -730,6 +901,7 @@ describe('FileViewer', () => {
     root.querySelector<HTMLButtonElement>('.fm-file-viewer-search-close')?.click();
     m.redraw.sync();
     expect(root.querySelector('.fm-file-viewer-search')).toBeNull();
+    expect(onPdfSearchQueryChange).toHaveBeenLastCalledWith('');
   });
 
   it('renders a comic page image with page navigation', () => {

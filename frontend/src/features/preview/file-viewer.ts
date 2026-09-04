@@ -27,10 +27,18 @@ import type {
   FileViewerSearchState,
   FileViewerState,
 } from './file-viewer-controller';
-import { STRUCTURED_SORT_MAX_BYTES, TEXT_WINDOW_BYTES } from './file-viewer-controller';
+import {
+  STRUCTURED_SORT_MAX_BYTES,
+  searchExpression,
+  TEXT_WINDOW_BYTES,
+} from './file-viewer-controller';
 import { searchHtml } from './html-search-highlight';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
-import { type PDFDocumentProxy, renderPdfPageToCanvas } from './pdf-preview';
+import {
+  type PDFDocumentProxy,
+  renderPdfPageToCanvas,
+  renderPdfSearchHighlights,
+} from './pdf-preview';
 import './file-viewer.css';
 
 /** Copies `value` to the clipboard and reports success/failure via toast - the same feedback
@@ -390,10 +398,17 @@ function renderSearchBar(
   return m('.fm-file-viewer-search', [
     m('input.fm-file-viewer-search-input', {
       type: 'text',
+      autocomplete: 'new-password',
+      autocapitalize: 'none',
       placeholder: t('viewer', 'searchPlaceholder'),
       value: query,
       'aria-label': t('viewer', 'searchThisFile'),
-      oncreate: ({ dom }) => onInputRef(dom as HTMLInputElement),
+      oncreate: ({ dom }) => {
+        const input = dom as HTMLInputElement;
+        disableSearchInputCorrections(input);
+        onInputRef(input);
+      },
+      onupdate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
       oninput: (event: InputEvent) =>
         attrs.onSearchQueryChange((event.currentTarget as HTMLInputElement).value),
       onkeydown: (event: KeyboardEvent) => {
@@ -481,6 +496,14 @@ function renderSearchBar(
       ),
     ),
   ]);
+}
+
+function disableSearchInputCorrections(input: HTMLInputElement): void {
+  const webkitInput = input as HTMLInputElement & { autocorrect: boolean };
+  webkitInput.autocorrect = false;
+  input.spellcheck = false;
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('spellcheck', 'false');
 }
 
 function renderTextBody(
@@ -938,61 +961,199 @@ function renderImageBody(
  * otherwise indistinguishable from "still loading". */
 const PdfPageCanvas: FactoryComponent<{
   readonly document: PDFDocumentProxy;
+  readonly searchDocument?: PDFDocumentProxy;
   readonly pageNumber: number;
+  readonly zoom: number;
+  readonly search?: FileViewerPdfSearchState;
 }> = () => {
+  let renderedDocument: PDFDocumentProxy | undefined;
   let renderedPage: number | undefined;
+  let renderedZoom: number | undefined;
+  let renderingDocument: PDFDocumentProxy | undefined;
+  let renderingPage: number | undefined;
+  let renderingZoom: number | undefined;
+  let canvasRenderGeneration = 0;
+  let renderedHighlightDocument: PDFDocumentProxy | undefined;
+  let renderedHighlightKey: string | undefined;
   let error: string | undefined;
   let resizeObserver: ResizeObserver | undefined;
   // The canvas element itself persists across page navigation (no key remount - see the class
   // doc comment), so `oncreate` only fires once; the resize observer it sets up there must read
   // the *current* attrs on every resize, not the ones captured when it was created.
-  let latestAttrs: { document: PDFDocumentProxy; pageNumber: number } | undefined;
-  function render(
-    canvas: HTMLCanvasElement,
-    attrs: { document: PDFDocumentProxy; pageNumber: number },
-  ): void {
-    renderedPage = attrs.pageNumber;
+  let latestAttrs:
+    | {
+        document: PDFDocumentProxy;
+        searchDocument?: PDFDocumentProxy;
+        pageNumber: number;
+        zoom: number;
+        search?: FileViewerPdfSearchState;
+      }
+    | undefined;
+  async function render(
+    root: HTMLElement,
+    attrs: {
+      document: PDFDocumentProxy;
+      searchDocument?: PDFDocumentProxy;
+      pageNumber: number;
+      zoom: number;
+      search?: FileViewerPdfSearchState;
+    },
+  ): Promise<boolean> {
+    const canvas = root.querySelector<HTMLCanvasElement>('.fm-file-viewer-pdf-canvas');
+    if (canvas === null) return false;
+    const generation = canvasRenderGeneration + 1;
+    canvasRenderGeneration = generation;
+    renderingDocument = attrs.document;
+    renderingPage = attrs.pageNumber;
+    renderingZoom = attrs.zoom;
     error = undefined;
-    const container = canvas.parentElement;
+    const container = root.parentElement;
     const width = container?.clientWidth ?? 800;
     const height = container?.clientHeight ?? 1000;
-    renderPdfPageToCanvas(attrs.document, attrs.pageNumber, canvas, width, height).catch(
-      (cause: unknown) => {
-        renderedPage = undefined;
-        error = cause instanceof Error ? cause.message : t('viewer', 'failedToRenderPage');
-        m.redraw();
-      },
-    );
+    try {
+      await renderPdfPageToCanvas(
+        attrs.document,
+        attrs.pageNumber,
+        canvas,
+        width,
+        height,
+        attrs.zoom,
+      );
+      if (canvasRenderGeneration !== generation) return false;
+      renderedDocument = attrs.document;
+      renderedPage = attrs.pageNumber;
+      renderedZoom = attrs.zoom;
+      renderingDocument = undefined;
+      renderingPage = undefined;
+      renderingZoom = undefined;
+      return true;
+    } catch (cause: unknown) {
+      if (canvasRenderGeneration !== generation) return false;
+      renderedPage = undefined;
+      error = cause instanceof Error ? cause.message : t('viewer', 'failedToRenderPage');
+      m.redraw();
+      return false;
+    }
   }
-  function renderIfPageChanged(
-    canvas: HTMLCanvasElement,
-    attrs: { document: PDFDocumentProxy; pageNumber: number },
+  function renderHighlights(
+    root: HTMLElement,
+    attrs: {
+      document: PDFDocumentProxy;
+      searchDocument?: PDFDocumentProxy;
+      pageNumber: number;
+      zoom: number;
+      search?: FileViewerPdfSearchState;
+    },
+    force = false,
   ): void {
+    const layer = root.querySelector<HTMLElement>('.fm-file-viewer-pdf-text-layer');
+    if (layer === null) return;
+    const search = attrs.search;
+    const activeMatch = search?.matches[search.currentMatchIndex ?? -1];
+    const activeOccurrenceIndex =
+      activeMatch?.pageNumber === attrs.pageNumber ? activeMatch.occurrenceIndex : undefined;
+    const highlightKey = `${attrs.pageNumber}:${attrs.zoom}:${search?.query ?? ''}:${search?.regex === true}:${search?.caseSensitive === true}:${search?.wholeWord === true}:${search?.searching === true}:${activeOccurrenceIndex ?? ''}`;
+    if (
+      !force &&
+      renderedHighlightDocument === attrs.searchDocument &&
+      renderedHighlightKey === highlightKey
+    )
+      return;
+    renderedHighlightDocument = attrs.searchDocument;
+    renderedHighlightKey = highlightKey;
+    let expression: RegExp | undefined;
+    if (
+      attrs.searchDocument !== undefined &&
+      search !== undefined &&
+      search.query.trim() !== '' &&
+      !search.searching &&
+      search.error === undefined &&
+      search.matches.some((match) => match.pageNumber === attrs.pageNumber)
+    ) {
+      try {
+        expression = searchExpression(search);
+      } catch {
+        expression = undefined;
+      }
+    }
+    const container = root.parentElement;
+    const width = container?.clientWidth ?? 800;
+    const height = container?.clientHeight ?? 1000;
+    renderPdfSearchHighlights(
+      attrs.searchDocument ?? attrs.document,
+      attrs.pageNumber,
+      layer,
+      width,
+      height,
+      expression,
+      activeOccurrenceIndex,
+      attrs.zoom,
+    ).catch(() => layer.replaceChildren());
+  }
+  function renderIfChanged(root: HTMLElement, attrs: NonNullable<typeof latestAttrs>): void {
     latestAttrs = attrs;
-    if (renderedPage === attrs.pageNumber) return;
-    render(canvas, attrs);
+    if (
+      renderedDocument === attrs.document &&
+      renderedPage === attrs.pageNumber &&
+      renderedZoom === attrs.zoom
+    ) {
+      renderHighlights(root, attrs);
+      return;
+    }
+    if (
+      renderingDocument === attrs.document &&
+      renderingPage === attrs.pageNumber &&
+      renderingZoom === attrs.zoom
+    )
+      return;
+    void render(root, attrs).then((rendered) => {
+      const latest = latestAttrs;
+      if (
+        rendered &&
+        latest !== undefined &&
+        latest.document === attrs.document &&
+        latest.pageNumber === attrs.pageNumber &&
+        latest.zoom === attrs.zoom
+      ) {
+        renderHighlights(root, latest, true);
+      }
+    });
   }
   return {
     view: ({ attrs }) =>
       error !== undefined
         ? m('.fm-file-viewer-pdf-page-error', `Couldn't render page ${attrs.pageNumber}: ${error}`)
-        : m('canvas.fm-file-viewer-pdf-canvas', {
-            oncreate: (vnode) => {
-              const canvas = vnode.dom as HTMLCanvasElement;
-              renderIfPageChanged(canvas, attrs);
-              if (typeof ResizeObserver === 'function' && canvas.parentElement !== null) {
-                resizeObserver = new ResizeObserver(() => {
-                  if (latestAttrs !== undefined) render(canvas, latestAttrs);
-                });
-                resizeObserver.observe(canvas.parentElement);
-              }
+        : m(
+            '.fm-file-viewer-pdf-page',
+            {
+              oncreate: (vnode) => {
+                const root = vnode.dom as HTMLElement;
+                renderIfChanged(root, attrs);
+                if (typeof ResizeObserver === 'function' && root.parentElement !== null) {
+                  resizeObserver = new ResizeObserver(() => {
+                    if (latestAttrs !== undefined) {
+                      const resizedAttrs = latestAttrs;
+                      void render(root, resizedAttrs).then((rendered) => {
+                        if (rendered && latestAttrs === resizedAttrs) {
+                          renderHighlights(root, resizedAttrs, true);
+                        }
+                      });
+                    }
+                  });
+                  resizeObserver.observe(root.parentElement);
+                }
+              },
+              onupdate: (vnode) => renderIfChanged(vnode.dom as HTMLElement, attrs),
+              onremove: () => {
+                resizeObserver?.disconnect();
+                resizeObserver = undefined;
+              },
             },
-            onupdate: (vnode) => renderIfPageChanged(vnode.dom as HTMLCanvasElement, attrs),
-            onremove: () => {
-              resizeObserver?.disconnect();
-              resizeObserver = undefined;
-            },
-          }),
+            [
+              m('canvas.fm-file-viewer-pdf-canvas'),
+              m('.fm-file-viewer-pdf-text-layer', { 'aria-hidden': 'true' }),
+            ],
+          ),
   };
 };
 
@@ -1011,13 +1172,21 @@ function renderPagedSearchBar(
   const currentMatchIndex = search?.currentMatchIndex;
   const currentMatch = matches[currentMatchIndex ?? 0];
   const matchPosition =
-    typeof currentMatch === 'number' ? currentMatch : currentMatch?.chapterNumber;
+    currentMatch === undefined
+      ? undefined
+      : 'pageNumber' in currentMatch
+        ? currentMatch.pageNumber
+        : currentMatch.chapterNumber;
   return m('.fm-file-viewer-search', [
     m('input.fm-file-viewer-search-input', {
       type: 'text',
+      autocomplete: 'new-password',
+      autocapitalize: 'none',
       placeholder,
       value: query,
       'aria-label': placeholder,
+      oncreate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
+      onupdate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
       oninput: (event: InputEvent) =>
         onQueryChange((event.currentTarget as HTMLInputElement).value),
       onkeydown: (event: KeyboardEvent) => {
@@ -1104,7 +1273,13 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
   if (content.kind !== 'pdf') return undefined;
   return m(
     '.fm-file-viewer-body.fm-file-viewer-body-pdf',
-    m(PdfPageCanvas, { document: content.document, pageNumber: content.currentPage }),
+    m(PdfPageCanvas, {
+      document: content.document,
+      pageNumber: content.currentPage,
+      zoom: content.zoom,
+      ...(content.searchDocument === undefined ? {} : { searchDocument: content.searchDocument }),
+      ...(state.pdfSearch === undefined ? {} : { search: state.pdfSearch }),
+    }),
   );
 }
 
@@ -1345,8 +1520,20 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
   let outlineOpen = false;
   let pendingExternalLink: string | undefined;
   let viewerElement: HTMLElement | undefined;
+  let currentAttrs: FileViewerAttrs | undefined;
+  const closeSearch = (attrs: FileViewerAttrs): void => {
+    searchOpen = false;
+    const state = attrs.state;
+    if (state.status !== 'ready') return;
+    if (state.content.kind === 'pdf') attrs.onPdfSearchQueryChange('');
+    else if (state.content.kind === 'epub') attrs.onEpubSearchQueryChange('');
+    else if (state.content.kind === 'text' || state.content.kind === 'docx') {
+      attrs.onSearchQueryChange('');
+    }
+  };
   const toggleSearch = (): void => {
-    searchOpen = !searchOpen;
+    if (searchOpen && currentAttrs !== undefined) closeSearch(currentAttrs);
+    else searchOpen = true;
     m.redraw.sync();
     if (searchOpen) {
       searchInput =
@@ -1356,6 +1543,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
   };
   return {
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       const state = attrs.state;
       if (!initialSearchVisibilitySet && state.status === 'ready') {
         initialSearchVisibilitySet = true;
@@ -1383,6 +1571,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
           onremove: () => {
             viewerElement?.removeEventListener('fm-viewer-toggle-search', toggleSearch);
             viewerElement = undefined;
+            currentAttrs = undefined;
           },
         },
         [
@@ -1406,7 +1595,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
               : undefined,
             m('strong.fm-file-viewer-title', state.entry.name),
             state.status === 'ready' &&
-            (state.content.kind === 'image' || state.content.kind === 'epub')
+            (state.content.kind === 'image' ||
+              state.content.kind === 'pdf' ||
+              state.content.kind === 'epub')
               ? m('.fm-file-viewer-zoom-controls', [
                   tooltip(
                     t('viewer', 'zoomOut'),
@@ -1444,7 +1635,12 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                           onclick: () => {
                             const content =
                               attrs.state.status === 'ready' ? attrs.state.content : undefined;
-                            if (content?.kind !== 'image' && content?.kind !== 'epub') return;
+                            if (
+                              content?.kind !== 'image' &&
+                              content?.kind !== 'pdf' &&
+                              content?.kind !== 'epub'
+                            )
+                              return;
                             zoomInputValue = String(Math.round(content.zoom * 100));
                             editingZoom = true;
                           },
@@ -1666,48 +1862,44 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                 ),
               )
             : undefined,
-          searchOpen &&
-          state.status === 'ready' &&
-          (state.content.kind === 'text' || state.content.kind === 'docx')
-            ? renderSearchBar(
-                attrs,
-                search,
-                (el) => {
-                  searchInput = el;
-                },
-                () => {
-                  searchOpen = false;
-                },
-              )
-            : undefined,
-          searchOpen && state.status === 'ready' && state.content.kind === 'pdf'
-            ? renderPagedSearchBar(
-                state.pdfSearch,
-                t('viewer', 'searchPdfPlaceholder'),
-                'Page',
-                attrs.onPdfSearchQueryChange,
-                attrs.onPreviousPdfMatch,
-                attrs.onNextPdfMatch,
-                attrs.onSearchOptionChange,
-                () => {
-                  searchOpen = false;
-                },
-              )
-            : undefined,
-          searchOpen && state.status === 'ready' && state.content.kind === 'epub'
-            ? renderPagedSearchBar(
-                state.epubSearch,
-                t('viewer', 'searchThisFile'),
-                t('viewer', 'chapter'),
-                attrs.onEpubSearchQueryChange,
-                attrs.onPreviousEpubMatch,
-                attrs.onNextEpubMatch,
-                attrs.onSearchOptionChange,
-                () => {
-                  searchOpen = false;
-                },
-              )
-            : undefined,
+          m('.fm-file-viewer-search-slot', [
+            searchOpen &&
+            state.status === 'ready' &&
+            (state.content.kind === 'text' || state.content.kind === 'docx')
+              ? renderSearchBar(
+                  attrs,
+                  search,
+                  (el) => {
+                    searchInput = el;
+                  },
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+            searchOpen && state.status === 'ready' && state.content.kind === 'pdf'
+              ? renderPagedSearchBar(
+                  state.pdfSearch,
+                  t('viewer', 'searchPdfPlaceholder'),
+                  'Page',
+                  attrs.onPdfSearchQueryChange,
+                  attrs.onPreviousPdfMatch,
+                  attrs.onNextPdfMatch,
+                  attrs.onSearchOptionChange,
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+            searchOpen && state.status === 'ready' && state.content.kind === 'epub'
+              ? renderPagedSearchBar(
+                  state.epubSearch,
+                  t('viewer', 'searchThisFile'),
+                  t('viewer', 'chapter'),
+                  attrs.onEpubSearchQueryChange,
+                  attrs.onPreviousEpubMatch,
+                  attrs.onNextEpubMatch,
+                  attrs.onSearchOptionChange,
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+          ]),
           state.status === 'loading'
             ? m('.fm-file-viewer-body', m('span', t('shell', 'loading')))
             : state.status === 'unsupported'

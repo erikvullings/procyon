@@ -190,8 +190,10 @@ export interface FileViewerExternalVideoContent {
 export interface FileViewerPdfContent {
   readonly kind: 'pdf';
   readonly document: PDFDocumentProxy;
+  readonly searchDocument?: PDFDocumentProxy;
   readonly pageCount: number;
   readonly currentPage: number;
+  readonly zoom: number;
   readonly outline?: readonly FileViewerPdfOutlineItem[];
 }
 
@@ -268,18 +270,22 @@ export interface FileViewerArchiveSummaryContent {
   readonly compressedSize: number | undefined;
 }
 
-/** Simple "does any page contain this text" PDF search (`page.getTextContent()`, no per-match
- * highlight - matching the pages a query appears on is the whole feature). */
+/** Occurrence-based PDF search state. Matching text fragments on the current page are highlighted
+ * by pdf.js's positioned text layer while previous/next navigation moves between individual hits. */
 export interface FileViewerPdfSearchState {
   readonly query: string;
   readonly regex?: boolean;
   readonly caseSensitive?: boolean;
   readonly wholeWord?: boolean;
-  /** 1-based page numbers containing `query`, in ascending order. */
-  readonly matches: readonly number[];
+  readonly matches: readonly FileViewerPdfSearchMatch[];
   readonly currentMatchIndex: number | undefined;
   readonly searching: boolean;
   readonly error?: string | undefined;
+}
+
+export interface FileViewerPdfSearchMatch {
+  readonly pageNumber: number;
+  readonly occurrenceIndex: number;
 }
 
 export interface FileViewerEpubSearchMatch {
@@ -460,7 +466,7 @@ function previousZoomStep(zoom: number): number {
   return clampZoom((Math.ceil((zoom * 100 - 0.001) / 25) * 25 - 25) / 100);
 }
 
-function searchExpression(
+export function searchExpression(
   search: Pick<FileViewerPdfSearchState, 'query' | 'regex' | 'caseSensitive' | 'wholeWord'>,
 ): RegExp {
   const source =
@@ -469,6 +475,18 @@ function searchExpression(
     search.wholeWord === true ? `\\b(?:${source})\\b` : source,
     search.caseSensitive === true ? 'u' : 'iu',
   );
+}
+
+function searchOccurrenceCount(text: string, expression: RegExp): number {
+  const globalExpression = new RegExp(
+    expression.source,
+    expression.flags.includes('g') ? expression.flags : `${expression.flags}g`,
+  );
+  let count = 0;
+  for (const match of text.matchAll(globalExpression)) {
+    if (match[0].length > 0) count += 1;
+  }
+  return count;
 }
 
 async function pdfOutline(
@@ -531,9 +549,13 @@ export function createFileViewerController(
   let epubImageResources: ReadonlyMap<string, EpubImageResource> = new Map();
   let epubArchiveRoot: Location | undefined;
   const epubChapterTextCache = new Map<number, string>();
-  /** Per-page extracted text, cached lazily by `runPdfSearch` (1-based page number -> lowercased
-   * text) so repeated searches on the same document don't re-extract every page each time. */
+  /** Per-page extracted text, cached lazily by `runPdfSearch` (1-based page number -> text) so
+   * repeated searches on the same document don't re-extract every page each time. */
   const pdfPageTextCache = new Map<number, string>();
+  let reloadPdfForSearch = false;
+  let pdfSearchDocument: PDFDocumentProxy | undefined;
+  let pdfSearchDocumentPromise: Promise<PDFDocumentProxy> | undefined;
+  let pdfSearchDocumentController: AbortController | undefined;
   let pdfSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let pdfSearchGeneration = 0;
   let epubSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -795,13 +817,21 @@ export function createFileViewerController(
     if (!isCurrent(controller)) return;
     const document = await loadPdfDocument(bytes);
     if (!isCurrent(controller)) return;
+    reloadPdfForSearch = true;
     const outline = await pdfOutline(document);
     if (!isCurrent(controller)) return;
     publish({
       status: 'ready',
       entry,
       metadataPanelOpen: initialMetadataOpen,
-      content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1, outline },
+      content: {
+        kind: 'pdf',
+        document,
+        pageCount: document.numPages,
+        currentPage: 1,
+        zoom: 1,
+        outline,
+      },
     });
   }
 
@@ -1086,6 +1116,7 @@ export function createFileViewerController(
           document: firstPageDocument,
           pageCount: firstPageDocument.numPages,
           currentPage: 1,
+          zoom: 1,
         },
       });
 
@@ -1120,7 +1151,7 @@ export function createFileViewerController(
         status: 'ready',
         entry,
         metadataPanelOpen: initialMetadataOpen,
-        content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1 },
+        content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1, zoom: 1 },
       });
       void firstPageDocument.cleanup();
     } catch (error: unknown) {
@@ -1861,7 +1892,10 @@ export function createFileViewerController(
   }
 
   function zoomIn(): void {
-    if (current.status === 'ready' && current.content.kind === 'epub') {
+    if (
+      current.status === 'ready' &&
+      (current.content.kind === 'pdf' || current.content.kind === 'epub')
+    ) {
       publish({
         ...current,
         content: { ...current.content, zoom: nextZoomStep(current.content.zoom) },
@@ -1878,7 +1912,10 @@ export function createFileViewerController(
   }
 
   function zoomOut(): void {
-    if (current.status === 'ready' && current.content.kind === 'epub') {
+    if (
+      current.status === 'ready' &&
+      (current.content.kind === 'pdf' || current.content.kind === 'epub')
+    ) {
       publish({
         ...current,
         content: { ...current.content, zoom: previousZoomStep(current.content.zoom) },
@@ -1896,7 +1933,10 @@ export function createFileViewerController(
 
   function setZoom(zoom: number): void {
     if (!Number.isFinite(zoom)) return;
-    if (current.status === 'ready' && current.content.kind === 'epub') {
+    if (
+      current.status === 'ready' &&
+      (current.content.kind === 'pdf' || current.content.kind === 'epub')
+    ) {
       publish({ ...current, content: { ...current.content, zoom: clampZoom(zoom) } });
       return;
     }
@@ -1909,7 +1949,10 @@ export function createFileViewerController(
   }
 
   function resetZoom(): void {
-    if (current.status === 'ready' && current.content.kind === 'epub') {
+    if (
+      current.status === 'ready' &&
+      (current.content.kind === 'pdf' || current.content.kind === 'epub')
+    ) {
       publish({ ...current, content: { ...current.content, zoom: 1 } });
       return;
     }
@@ -2169,15 +2212,60 @@ export function createFileViewerController(
     const cached = pdfPageTextCache.get(pageNumber);
     if (cached !== undefined) return cached;
     const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
+    const reader = page.streamTextContent().getReader();
+    const textParts: string[] = [];
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const item of value.items as readonly {
+          readonly str?: string;
+          readonly hasEOL?: boolean;
+        }[]) {
+          textParts.push(item.str ?? '');
+          if (item.hasEOL === true) textParts.push('\n');
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const text = textParts.join('');
     pdfPageTextCache.set(pageNumber, text);
     return text;
   }
 
+  function disposePdfSearchDocument(document: PDFDocumentProxy): void {
+    const destroy = (document as PDFDocumentProxy & { destroy?: () => Promise<void> }).destroy;
+    if (typeof destroy === 'function') {
+      void destroy.call(document);
+    } else if (typeof document.cleanup === 'function') {
+      void document.cleanup();
+    }
+  }
+
+  async function pdfDocumentForSearch(
+    displayDocument: PDFDocumentProxy,
+  ): Promise<PDFDocumentProxy> {
+    if (!reloadPdfForSearch) return displayDocument;
+    if (pdfSearchDocument !== undefined) return pdfSearchDocument;
+    pdfSearchDocumentController ??= new AbortController();
+    pdfSearchDocumentPromise ??= readEntireFileBytes(
+      client,
+      entry,
+      pdfSearchDocumentController.signal,
+    ).then((bytes) => loadPdfDocument(bytes));
+    const document = await pdfSearchDocumentPromise;
+    if (disposed) {
+      disposePdfSearchDocument(document);
+      throw new Error('PDF viewer closed');
+    }
+    pdfSearchDocument = document;
+    return document;
+  }
+
   async function runPdfSearch(generation: number): Promise<void> {
     if (current.status !== 'ready' || current.content.kind !== 'pdf') return;
-    const document = current.content.document;
+    const displayDocument = current.content.document;
     const initialPage = current.content.currentPage;
     const pagedSearch = current.pdfSearch ?? DEFAULT_PAGED_SEARCH_STATE;
     const query = pagedSearch.query.trim();
@@ -2200,61 +2288,102 @@ export function createFileViewerController(
       ...current,
       pdfSearch: { ...pagedSearch, query, searching: true, error: undefined },
     });
-    const matches: number[] = [];
-    const pageOrder = [
-      initialPage,
-      ...Array.from({ length: document.numPages }, (_, index) => index + 1).filter(
-        (pageNumber) => pageNumber !== initialPage,
-      ),
-    ];
-    for (const pageNumber of pageOrder) {
+    try {
+      const document = await pdfDocumentForSearch(displayDocument);
       if (
         generation !== pdfSearchGeneration ||
         current.status !== 'ready' ||
         current.content.kind !== 'pdf'
       )
         return;
-      const text = await pdfPageText(document, pageNumber);
-      if (generation !== pdfSearchGeneration) return;
-      if (expression.test(text)) {
-        matches.push(pageNumber);
+      if (current.content.searchDocument !== document) {
         publish({
           ...current,
-          content:
-            matches.length === 1
-              ? { ...current.content, currentPage: pageNumber }
-              : current.content,
-          pdfSearch: {
-            ...pagedSearch,
-            query,
-            matches: [...matches],
-            currentMatchIndex: 0,
-            searching: true,
-            error: undefined,
-          },
+          content: { ...current.content, searchDocument: document },
         });
       }
+      const matches: FileViewerPdfSearchMatch[] = [];
+      const pageOrder = [
+        initialPage,
+        ...Array.from({ length: document.numPages }, (_, index) => index + 1).filter(
+          (pageNumber) => pageNumber !== initialPage,
+        ),
+      ];
+      for (const pageNumber of pageOrder) {
+        if (
+          generation !== pdfSearchGeneration ||
+          current.status !== 'ready' ||
+          current.content.kind !== 'pdf'
+        )
+          return;
+        const text = await pdfPageText(document, pageNumber);
+        if (generation !== pdfSearchGeneration) return;
+        const occurrenceCount = searchOccurrenceCount(text, expression);
+        if (occurrenceCount > 0) {
+          const firstMatch = matches.length === 0;
+          matches.push(
+            ...Array.from({ length: occurrenceCount }, (_, occurrenceIndex) => ({
+              pageNumber,
+              occurrenceIndex,
+            })),
+          );
+          publish({
+            ...current,
+            content: firstMatch ? { ...current.content, currentPage: pageNumber } : current.content,
+            pdfSearch: {
+              ...pagedSearch,
+              query,
+              matches: [...matches],
+              currentMatchIndex: 0,
+              searching: true,
+              error: undefined,
+            },
+          });
+        }
+      }
+      if (
+        generation !== pdfSearchGeneration ||
+        current.status !== 'ready' ||
+        current.content.kind !== 'pdf'
+      )
+        return;
+      matches.sort(
+        (left, right) =>
+          left.pageNumber - right.pageNumber || left.occurrenceIndex - right.occurrenceIndex,
+      );
+      const currentPage = current.content.currentPage;
+      const currentMatchIndex = matches.findIndex((match) => match.pageNumber === currentPage);
+      publish({
+        ...current,
+        pdfSearch: {
+          ...pagedSearch,
+          query,
+          matches,
+          currentMatchIndex:
+            matches.length === 0 ? undefined : currentMatchIndex === -1 ? 0 : currentMatchIndex,
+          searching: false,
+          error: undefined,
+        },
+      });
+    } catch (error: unknown) {
+      if (
+        generation !== pdfSearchGeneration ||
+        current.status !== 'ready' ||
+        current.content.kind !== 'pdf'
+      )
+        return;
+      publish({
+        ...current,
+        pdfSearch: {
+          ...pagedSearch,
+          query,
+          matches: [],
+          currentMatchIndex: undefined,
+          searching: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
-    if (
-      generation !== pdfSearchGeneration ||
-      current.status !== 'ready' ||
-      current.content.kind !== 'pdf'
-    )
-      return;
-    matches.sort((left, right) => left - right);
-    const currentMatchIndex = matches.indexOf(current.content.currentPage);
-    publish({
-      ...current,
-      pdfSearch: {
-        ...pagedSearch,
-        query,
-        matches,
-        currentMatchIndex:
-          matches.length === 0 ? undefined : currentMatchIndex === -1 ? 0 : currentMatchIndex,
-        searching: false,
-        error: undefined,
-      },
-    });
   }
 
   function setPdfSearchQuery(query: string): void {
@@ -2300,11 +2429,11 @@ export function createFileViewerController(
       current.pdfSearch === undefined
     )
       return;
-    const page = current.pdfSearch.matches[index];
-    if (page === undefined) return;
+    const match = current.pdfSearch.matches[index];
+    if (match === undefined) return;
     publish({
       ...current,
-      content: { ...current.content, currentPage: page },
+      content: { ...current.content, currentPage: match.pageNumber },
       pdfSearch: { ...current.pdfSearch, currentMatchIndex: index },
     });
   }
@@ -2516,6 +2645,8 @@ export function createFileViewerController(
       disposed = true;
       pdfSearchGeneration += 1;
       activeController?.abort();
+      pdfSearchDocumentController?.abort();
+      if (pdfSearchDocument !== undefined) disposePdfSearchDocument(pdfSearchDocument);
       if (searchDebounceTimer !== undefined) {
         clearTimeout(searchDebounceTimer);
         searchDebounceTimer = undefined;

@@ -17,16 +17,37 @@ vi.mock('./pdf-preview', () => ({
 /** Builds a fake pdf.js document whose pages' text content is `pageText[pageNumber - 1]`. */
 function fakePdfDocument(pageText: readonly string[]): {
   readonly numPages: number;
-  readonly getPage: (
-    pageNumber: number,
-  ) => Promise<{ getTextContent: () => Promise<{ items: { str: string }[] }> }>;
+  readonly getPage: (pageNumber: number) => Promise<{
+    streamTextContent: () => {
+      getReader: () => {
+        read: () => Promise<
+          { done: false; value: { items: { str: string }[] } } | { done: true; value: undefined }
+        >;
+        releaseLock: () => void;
+      };
+    };
+  }>;
 } {
   return {
     numPages: pageText.length,
-    getPage: (pageNumber: number) =>
-      Promise.resolve({
-        getTextContent: () => Promise.resolve({ items: [{ str: pageText[pageNumber - 1] ?? '' }] }),
-      }),
+    getPage: (pageNumber: number) => {
+      let read = false;
+      return Promise.resolve({
+        streamTextContent: () => ({
+          getReader: () => ({
+            read: () => {
+              if (read) return Promise.resolve({ done: true as const, value: undefined });
+              read = true;
+              return Promise.resolve({
+                done: false as const,
+                value: { items: [{ str: pageText[pageNumber - 1] ?? '' }] },
+              });
+            },
+            releaseLock: () => undefined,
+          }),
+        }),
+      });
+    },
   };
 }
 
@@ -1458,8 +1479,17 @@ describe('file viewer controller', () => {
     });
     await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
     expect(context.states.at(-1)).toMatchObject({
-      content: { kind: 'pdf', pageCount: 3, currentPage: 1 },
+      content: { kind: 'pdf', pageCount: 3, currentPage: 1, zoom: 1 },
     });
+
+    controller.zoomIn();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1.25 } });
+    controller.setZoom(1.75);
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1.75 } });
+    controller.zoomOut();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1.5 } });
+    controller.resetZoom();
+    expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1 } });
 
     controller.nextPage();
     expect(context.states.at(-1)).toMatchObject({ content: { currentPage: 2 } });
@@ -1536,7 +1566,7 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({ content: { zoom: 1 } });
   });
 
-  it('finds matching PDF pages via simple text search and jumps between them', async () => {
+  it('finds every PDF occurrence and navigates repeated matches on the same page', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({
       data: [1, 2, 3],
@@ -1544,8 +1574,8 @@ describe('file viewer controller', () => {
       length: 3,
       eof: true,
     });
-    vi.mocked(loadPdfDocument).mockResolvedValueOnce(
-      fakePdfDocument(['apple pie', 'banana bread', 'apple crumble']) as never,
+    vi.mocked(loadPdfDocument).mockResolvedValue(
+      fakePdfDocument(['apple pie and apple tart', 'banana bread', 'apple crumble']) as never,
     );
     const controller = createFileViewerController({
       client: context.client,
@@ -1557,21 +1587,34 @@ describe('file viewer controller', () => {
     controller.setPdfSearchQuery('apple');
     await vi.waitFor(() =>
       expect(context.states.at(-1)).toMatchObject({
-        pdfSearch: { matches: [1, 3], currentMatchIndex: 0 },
+        pdfSearch: {
+          matches: [
+            { pageNumber: 1, occurrenceIndex: 0 },
+            { pageNumber: 1, occurrenceIndex: 1 },
+            { pageNumber: 3, occurrenceIndex: 0 },
+          ],
+          currentMatchIndex: 0,
+        },
         content: { currentPage: 1 },
       }),
     );
 
     controller.goToNextPdfMatch();
     expect(context.states.at(-1)).toMatchObject({
-      content: { currentPage: 3 },
+      content: { currentPage: 1 },
       pdfSearch: { currentMatchIndex: 1 },
+    });
+
+    controller.goToNextPdfMatch();
+    expect(context.states.at(-1)).toMatchObject({
+      content: { currentPage: 3 },
+      pdfSearch: { currentMatchIndex: 2 },
     });
 
     controller.goToPreviousPdfMatch();
     expect(context.states.at(-1)).toMatchObject({
       content: { currentPage: 1 },
-      pdfSearch: { currentMatchIndex: 0 },
+      pdfSearch: { currentMatchIndex: 1 },
     });
   });
 
@@ -1583,16 +1626,27 @@ describe('file viewer controller', () => {
       length: 1,
       eof: true,
     });
-    const stalledPage = new Promise<{ items: { str: string }[] }>(() => undefined);
-    const getPage = vi.fn((pageNumber: number) =>
-      Promise.resolve({
-        getTextContent: () =>
-          pageNumber === 2
-            ? Promise.resolve({ items: [{ str: 'needle on current page' }] })
-            : stalledPage,
-      }),
-    );
-    vi.mocked(loadPdfDocument).mockResolvedValueOnce({ numPages: 3, getPage } as never);
+    const stalledRead = new Promise<never>(() => undefined);
+    const getPage = vi.fn((pageNumber: number) => {
+      let read = false;
+      return Promise.resolve({
+        streamTextContent: () => ({
+          getReader: () => ({
+            read: () => {
+              if (pageNumber !== 2) return stalledRead;
+              if (read) return Promise.resolve({ done: true as const, value: undefined });
+              read = true;
+              return Promise.resolve({
+                done: false as const,
+                value: { items: [{ str: 'needle on current page' }] },
+              });
+            },
+            releaseLock: () => undefined,
+          }),
+        }),
+      });
+    });
+    vi.mocked(loadPdfDocument).mockResolvedValue({ numPages: 3, getPage } as never);
     const controller = createFileViewerController({
       client: context.client,
       entry: entry({ name: 'report.pdf', extension: 'pdf' }),
@@ -1605,10 +1659,147 @@ describe('file viewer controller', () => {
     await vi.waitFor(() =>
       expect(context.states.at(-1)).toMatchObject({
         content: { currentPage: 2 },
-        pdfSearch: { matches: [2], currentMatchIndex: 0, searching: true },
+        pdfSearch: {
+          matches: [{ pageNumber: 2, occurrenceIndex: 0 }],
+          currentMatchIndex: 0,
+          searching: true,
+        },
       }),
     );
     expect(getPage).toHaveBeenCalledWith(2);
+    controller.dispose();
+  });
+
+  it('searches with a dedicated PDF document when display-page extraction stalls', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1, 2, 3],
+      offset: 0,
+      length: 3,
+      eof: true,
+    });
+    const stalledText = new Promise<{ items: { str: string }[] }>(() => undefined);
+    const searchDocument = fakePdfDocument(['TRIZ principles', 'other']);
+    vi.mocked(loadPdfDocument)
+      .mockResolvedValue(searchDocument as never)
+      .mockResolvedValueOnce({
+        numPages: 2,
+        getPage: () => Promise.resolve({ getTextContent: () => stalledText }),
+      } as never);
+    const loadCountBefore = vi.mocked(loadPdfDocument).mock.calls.length;
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.setPdfSearchQuery('triz');
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { searchDocument },
+        pdfSearch: {
+          matches: [{ pageNumber: 1, occurrenceIndex: 0 }],
+          currentMatchIndex: 0,
+          searching: false,
+        },
+      }),
+    );
+    expect(loadPdfDocument).toHaveBeenCalledTimes(loadCountBefore + 2);
+    controller.dispose();
+  });
+
+  it('searches PDF text without requiring ReadableStream async iteration', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1, 2, 3],
+      offset: 0,
+      length: 3,
+      eof: true,
+    });
+    const chunks = [
+      { items: [{ str: 'TRIZ principles' }], styles: {}, lang: null },
+      { items: [{ str: 'continued' }], styles: {}, lang: null },
+    ];
+    const streamWithoutAsyncIterator = {
+      getReader: () => ({
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: chunks[0] })
+          .mockResolvedValueOnce({ done: false, value: chunks[1] })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: vi.fn(),
+      }),
+    };
+    vi.mocked(loadPdfDocument)
+      .mockResolvedValue({
+        numPages: 1,
+        getPage: () =>
+          Promise.resolve({
+            getTextContent: () =>
+              Promise.reject(
+                new TypeError("undefined is not a function (near '...value of readableStream...')"),
+              ),
+            streamTextContent: () => streamWithoutAsyncIterator,
+          }),
+      } as never)
+      .mockResolvedValueOnce(fakePdfDocument(['display page']) as never);
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.setPdfSearchQuery('triz');
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        pdfSearch: {
+          matches: [{ pageNumber: 1, occurrenceIndex: 0 }],
+          currentMatchIndex: 0,
+          searching: false,
+          error: undefined,
+        },
+      }),
+    );
+    controller.dispose();
+  });
+
+  it('ends PDF search when text extraction fails', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1, 2, 3],
+      offset: 0,
+      length: 3,
+      eof: true,
+    });
+    vi.mocked(loadPdfDocument)
+      .mockResolvedValue({
+        numPages: 1,
+        getPage: () => Promise.reject(new Error('text extraction failed')),
+      } as never)
+      .mockResolvedValueOnce(fakePdfDocument(['display page']) as never);
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.setPdfSearchQuery('triz');
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        pdfSearch: {
+          matches: [],
+          currentMatchIndex: undefined,
+          searching: false,
+          error: 'text extraction failed',
+        },
+      }),
+    );
     controller.dispose();
   });
 
@@ -1620,7 +1811,7 @@ describe('file viewer controller', () => {
       length: 3,
       eof: true,
     });
-    vi.mocked(loadPdfDocument).mockResolvedValueOnce(fakePdfDocument(['apple', 'banana']) as never);
+    vi.mocked(loadPdfDocument).mockResolvedValue(fakePdfDocument(['apple', 'banana']) as never);
     const controller = createFileViewerController({
       client: context.client,
       entry: entry({ name: 'report.pdf', extension: 'pdf' }),
@@ -1630,7 +1821,9 @@ describe('file viewer controller', () => {
 
     controller.setPdfSearchQuery('apple');
     await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ pdfSearch: { matches: [1] } }),
+      expect(context.states.at(-1)).toMatchObject({
+        pdfSearch: { matches: [{ pageNumber: 1, occurrenceIndex: 0 }] },
+      }),
     );
 
     controller.setPdfSearchQuery('');
@@ -1645,7 +1838,7 @@ describe('file viewer controller', () => {
       length: 1,
       eof: true,
     });
-    vi.mocked(loadPdfDocument).mockResolvedValueOnce(
+    vi.mocked(loadPdfDocument).mockResolvedValue(
       fakePdfDocument(['Apple pie', 'apple tart', 'PineApple']) as never,
     );
     const controller = createFileViewerController({
@@ -1657,12 +1850,21 @@ describe('file viewer controller', () => {
 
     controller.setSearchOptions({ query: 'Apple', caseSensitive: true, wholeWord: true });
     await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ pdfSearch: { matches: [1] } }),
+      expect(context.states.at(-1)).toMatchObject({
+        pdfSearch: { matches: [{ pageNumber: 1, occurrenceIndex: 0 }] },
+      }),
     );
 
     controller.setSearchOptions({ query: '^apple', regex: true, caseSensitive: false });
     await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ pdfSearch: { matches: [1, 2] } }),
+      expect(context.states.at(-1)).toMatchObject({
+        pdfSearch: {
+          matches: [
+            { pageNumber: 1, occurrenceIndex: 0 },
+            { pageNumber: 2, occurrenceIndex: 0 },
+          ],
+        },
+      }),
     );
   });
 
