@@ -27,8 +27,10 @@ use serde::Deserialize;
 /// sharing a layer are deliberately kept independent of one another, which is
 /// what allows them to be built and tested in isolation.
 const CRATE_LAYERS: &[(&str, u8)] = &[
-    // Layer 0 - the domain model, dependent on nothing in the workspace.
+    // Layer 0 - foundational models and wire contracts, dependent on nothing
+    // else in the workspace.
     ("fm-domain", 0),
+    ("fm-semantic-protocol", 0),
     // Layer 1 - contracts expressed in terms of the domain model.
     ("fm-auth-oauth", 1),
     ("fm-credentials", 1),
@@ -36,6 +38,7 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-platform", 1),
     ("fm-plugin-api", 1),
     ("fm-search-acceleration", 1),
+    ("fm-semantic-worker", 1),
     ("fm-ssh", 1),
     ("fm-transport-dto", 1),
     ("fm-vfs", 1),
@@ -398,6 +401,8 @@ mod tests {
     #[test]
     fn assigns_the_domain_crate_to_the_lowest_layer() {
         assert_eq!(layer_of("fm-domain"), Some(0));
+        assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
+        assert_eq!(layer_of("fm-semantic-worker"), Some(1));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));
         assert!(layer_of("fm-server") > layer_of("fm-application"));
         assert_eq!(layer_of("serde"), None);

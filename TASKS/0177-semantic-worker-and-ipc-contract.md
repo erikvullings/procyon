@@ -1,6 +1,6 @@
 # 0177 Semantic worker and versioned IPC contract
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, desktop, architecture
 Depends on: 0176
@@ -57,3 +57,13 @@ worker; the worker must not receive paths it can open independently.
 
 - 2026-09-04: Split from 0176. This task owns only the process and protocol boundary; component
   download belongs to 0178 and storage/retrieval belongs to 0181.
+- 2026-09-04 Copilot: Added generated `fm-semantic-protocol` protobuf types, the local-only
+  `fm-semantic-worker` binary/client/runtime, and the lazy `SemanticService` application capability
+  with deterministic fake and administrator-provisioned/on-demand IPC implementations. The worker
+  enforces owner-protected Unix sockets/Windows named pipes, authenticated expiring sessions,
+  immutable message/stream/concurrency/deadline ceilings, scoped ingestion/query/event streams,
+  prompt cancellation and disconnect cleanup, singleton startup/restart, multi-client-safe draining,
+  and idle exit. Verified 11 protocol tests, 45 worker tests (43 IPC and 2 Windows security), and 11
+  application semantic tests; the full `fm-application` suite passed 515 tests with 1 ignored.
+  A post-test affected-package typecheck and `pnpm run lint` passed. Windows named-pipe code and ACL
+  checks were cross-compiled with warnings denied but could not be runtime-tested on macOS.

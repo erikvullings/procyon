@@ -1,0 +1,19 @@
+[package]
+name = "fm-semantic-protocol"
+description = "Versioned protobuf contract for isolated semantic workers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+prost.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+protoc-bin-vendored.workspace = true
+
+[lints]
+workspace = true

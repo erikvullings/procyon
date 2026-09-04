@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use fm_archive::ArchiveFileSystemProvider;
 use fm_checksum::{ChecksumEngine, ChecksumResultsStore, DuplicateResultsStore};
@@ -66,6 +67,11 @@ use crate::plugin_manager::PluginManager;
 use crate::pptx_preview::PptxPreviewService;
 use crate::remote_terminal::RemoteTerminalService;
 use crate::search_comparison_coordinator::SearchComparisonCoordinator;
+use crate::semantic::{
+    DocumentIngestion, SemanticCapability, SemanticError, SemanticHealth, SemanticIngestionJob,
+    SemanticJobId, SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope,
+    SemanticSearchResult, SemanticService,
+};
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
@@ -106,6 +112,7 @@ pub struct FileManagerService {
     checksums: ChecksumCoordinator,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
+    semantic: SemanticService,
 }
 
 impl FileManagerService {
@@ -470,7 +477,66 @@ impl FileManagerService {
             checksums,
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
+            semantic: SemanticService::unavailable(),
         }
+    }
+
+    /// Reports the optional semantic capability's current health.
+    pub async fn semantic_health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.semantic.health().await
+    }
+
+    /// Replaces the unavailable default with a host-provided semantic capability.
+    #[must_use]
+    pub fn with_semantic_capability(mut self, capability: Arc<dyn SemanticCapability>) -> Self {
+        self.semantic = SemanticService::new(capability);
+        self
+    }
+
+    /// Streams a provider-neutral document into the semantic capability.
+    pub async fn semantic_ingest(
+        &self,
+        ingestion: DocumentIngestion,
+    ) -> Result<SemanticJobId, SemanticError> {
+        self.semantic.ingest(ingestion).await
+    }
+
+    /// Executes a scoped semantic query.
+    pub async fn semantic_query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.semantic.query(query).await
+    }
+
+    /// Reads one scoped semantic ingestion job.
+    pub async fn semantic_ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.semantic.ingestion_job(scope, job_id).await
+    }
+
+    /// Reads a scoped snapshot of semantic progress events.
+    pub async fn semantic_events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.semantic.events(scope).await
+    }
+
+    /// Requests cancellation of an opaque semantic operation.
+    pub async fn semantic_cancel(
+        &self,
+        operation_id: SemanticOperationId,
+    ) -> Result<bool, SemanticError> {
+        self.semantic.cancel(operation_id).await
+    }
+
+    /// Requests bounded graceful shutdown of the semantic capability.
+    pub async fn semantic_shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.semantic.shutdown(grace).await
     }
 
     /// Generates (or reuses a cached) downscaled preview for an image or

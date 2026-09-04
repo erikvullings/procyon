@@ -115,9 +115,21 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
 `PptxPreviewService` (bounded conversion to retained PDF),
-`ConnectionFacade`, and `PluginManager`. Extend the owning service when a feature fits one of these
-capabilities; add a new service only for a genuinely distinct responsibility. Do not move logic back
-into the facade or let capability services depend on `FileManagerService`.
+`ConnectionFacade`, `PluginManager`, and `SemanticService`. The semantic service is optional and
+lazy: its fake or local-IPC capability is injected explicitly, while ordinary
+`FileManagerService` construction never starts or connects to a worker. Extend the owning service
+when a feature fits one of these capabilities; add a new service only for a genuinely distinct
+responsibility. Do not move logic back into the facade or let capability services depend on
+`FileManagerService`.
+
+### Semantic worker boundary
+
+`fm-semantic-protocol` generates the versioned protobuf messages used by both sides of the boundary.
+`fm-semantic-worker` provides the pure-Rust worker binary and local IPC client: Unix-domain sockets
+on macOS/Linux and owner-only named pipes on Windows, with authenticated sessions and explicit
+message, stream, concurrency, and deadline limits. Procyon retains filesystem authority and sends
+only opaque tenant/library/document identifiers, structured metadata, and bounded byte streams.
+Keep model/runtime selection, Zvec storage, and document conversion out of this boundary crate.
 
 ### Runtime adapters (frontend)
 
@@ -155,9 +167,10 @@ unrestricted APIs, or native dynamic libraries as the plugin ABI (see
 
 ### Generated code — never hand-edit
 
-`frontend/openapi/openapi.json` (via `pnpm api:export`) and the Orval-generated Fetch client under
-`frontend/src/api/` (via `pnpm api:generate`) are checked into git and regenerated, not edited;
-`pnpm api:check` fails CI when either is stale relative to the backend.
+`frontend/openapi/openapi.json` (via `pnpm api:export`), the Orval-generated Fetch client under
+`frontend/src/api/` (via `pnpm api:generate`), and Rust semantic-worker DTOs generated from
+`crates/fm-semantic-protocol/proto/` are regenerated, not hand-edited. `pnpm api:check` fails CI
+when either checked-in HTTP artifact is stale relative to the backend.
 
 ## Conventions (spec §35)
 

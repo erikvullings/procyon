@@ -48,6 +48,13 @@ operations / providers / metadata / search → application services → Axum and
 `CRATE_LAYERS` table in `architecture.rs` linked above; see that file for the authoritative,
 per-crate layer assignment.
 
+The optional semantic subsystem sits beside this normal startup path. `fm-application` exposes a
+lazy `SemanticService` capability, `fm-semantic-protocol` owns its generated protobuf ABI, and
+`fm-semantic-worker` supplies a per-user process reached only through owner-protected Unix-domain
+sockets or Windows named pipes. The worker receives scoped opaque identifiers, metadata, and
+bounded byte streams, never filesystem paths or provider access. If it is absent or incompatible,
+the ordinary application-service path above remains available.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

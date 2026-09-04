@@ -1,0 +1,421 @@
+syntax = "proto3";
+
+package procyon.semantic.v1;
+
+// Requests a protocol version and capability negotiation.
+message NegotiateRequest {
+  // Oldest protocol version accepted by the caller.
+  uint32 minimum_version = 1;
+  // Newest protocol version accepted by the caller.
+  uint32 maximum_version = 2;
+  // Capabilities requested by the caller.
+  repeated Capability requested_capabilities = 3;
+}
+
+// Reports the selected protocol version and worker capabilities.
+message NegotiateResponse {
+  // Highest mutually supported protocol version.
+  uint32 selected_version = 1;
+  // Capabilities available at the selected version.
+  repeated Capability capabilities = 2;
+  // Resource limits enforced by the worker.
+  ProtocolLimits limits = 3;
+}
+
+// Opens a worker session using the launch-time authentication token.
+message OpenSessionRequest {
+  // Opaque authentication token provisioned when the worker was launched.
+  bytes authentication_token = 1;
+}
+
+// Identifies an authenticated, expiring worker session.
+message OpenSessionResponse {
+  // Opaque session identifier.
+  string session_id = 1;
+  // Opaque token authenticating subsequent requests.
+  bytes session_token = 2;
+  // Session expiry as Unix epoch milliseconds.
+  uint64 expires_at_unix_ms = 3;
+}
+
+// Authentication attached to a session-scoped request.
+message SessionContext {
+  // Opaque session identifier.
+  string session_id = 1;
+  // Opaque session authentication token.
+  bytes session_token = 2;
+}
+
+// Resource limits enforced for the negotiated session.
+message ProtocolLimits {
+  // Maximum encoded bytes in one message.
+  uint64 maximum_message_bytes = 1;
+  // Maximum cumulative bytes in one stream.
+  uint64 maximum_stream_bytes = 2;
+  // Maximum requests executing concurrently.
+  uint32 maximum_concurrent_requests = 3;
+  // Maximum duration of a unary request.
+  uint64 request_deadline_ms = 4;
+  // Maximum duration of a stream.
+  uint64 stream_deadline_ms = 5;
+  // Maximum graceful-shutdown duration.
+  uint64 shutdown_deadline_ms = 6;
+}
+
+// Tenant and library ownership of a request.
+message ResourceScope {
+  // Opaque tenant identifier.
+  string tenant_id = 1;
+  // Opaque library identifier within the tenant.
+  string library_id = 2;
+}
+
+// One structured metadata property.
+message MetadataEntry {
+  // Application-defined metadata key.
+  string key = 1;
+  // UTF-8 metadata value.
+  string value = 2;
+}
+
+// Requests current worker health.
+message HealthRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+}
+
+// Reports worker health and load.
+message HealthResponse {
+  // Current health state.
+  HealthStatus status = 1;
+  // Human-readable diagnostic suitable for logs.
+  string detail = 2;
+  // Protocol version served by this worker.
+  uint32 protocol_version = 3;
+  // Number of requests currently executing.
+  uint32 active_requests = 4;
+}
+
+// Worker health states.
+enum HealthStatus {
+  // No health state was supplied.
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  // Worker is ready to accept requests.
+  HEALTH_STATUS_SERVING = 1;
+  // Worker is alive but temporarily unable to accept work.
+  HEALTH_STATUS_DEGRADED = 2;
+  // Worker is draining before shutdown.
+  HEALTH_STATUS_DRAINING = 3;
+}
+
+// Begins ingestion of one scoped document.
+message IngestionStart {
+  // Opaque document identifier within the request scope.
+  string document_id = 1;
+  // Structured application metadata.
+  repeated MetadataEntry metadata = 2;
+  // IANA media type of the content.
+  string media_type = 3;
+  // Declared total content bytes.
+  uint64 expected_content_bytes = 4;
+}
+
+// One ordered segment of document content.
+message FileContentChunk {
+  // Zero-based chunk sequence number.
+  uint64 sequence = 1;
+  // Opaque file content, bounded by the negotiated message limit.
+  bytes content = 2;
+  // Whether this is the final content chunk.
+  bool end_of_stream = 3;
+}
+
+// One item in the client-streamed ingestion protocol.
+message IngestionRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Tenant and library owning this ingestion.
+  ResourceScope scope = 2;
+  // Opaque request identifier used for cancellation and correlation.
+  string request_id = 3;
+  // Start descriptor or content chunk.
+  oneof payload {
+    // Must be the first item in the stream.
+    IngestionStart start = 4;
+    // Bounded file-content chunk.
+    FileContentChunk chunk = 5;
+  }
+}
+
+// Acknowledges a durable ingestion job.
+message IngestionAccepted {
+  // Opaque ingestion job identifier.
+  string job_id = 1;
+}
+
+// Requests current state of one scoped ingestion job.
+message IngestionJobRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Tenant and library owning the job.
+  ResourceScope scope = 2;
+  // Opaque ingestion job identifier.
+  string job_id = 3;
+}
+
+// Current state of an ingestion job.
+message IngestionJob {
+  // Opaque ingestion job identifier.
+  string job_id = 1;
+  // Opaque document identifier.
+  string document_id = 2;
+  // Current lifecycle state.
+  JobState state = 3;
+  // Latest progress measurement.
+  Progress progress = 4;
+  // Typed failure, present only for a failed job.
+  ProtocolError error = 5;
+}
+
+// Ingestion job lifecycle states.
+enum JobState {
+  // No state was supplied.
+  JOB_STATE_UNSPECIFIED = 0;
+  // Job is queued.
+  JOB_STATE_PENDING = 1;
+  // Job is reading or indexing content.
+  JOB_STATE_RUNNING = 2;
+  // Job completed successfully.
+  JOB_STATE_COMPLETED = 3;
+  // Job failed.
+  JOB_STATE_FAILED = 4;
+  // Job was cancelled.
+  JOB_STATE_CANCELLED = 5;
+}
+
+// Scoped semantic query.
+message QueryRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Tenant and library searched by this query.
+  ResourceScope scope = 2;
+  // Opaque request identifier used for cancellation and correlation.
+  string request_id = 3;
+  // Semantic query text.
+  string query = 4;
+  // Maximum result count, additionally bounded by worker policy.
+  uint32 maximum_results = 5;
+}
+
+// One semantic query result.
+message QueryResult {
+  // Opaque document identifier within the query scope.
+  string document_id = 1;
+  // Relevance score assigned by the worker.
+  double score = 2;
+  // Structured document metadata.
+  repeated MetadataEntry metadata = 3;
+  // Bounded matching excerpt.
+  string excerpt = 4;
+}
+
+// Successful end of a query stream.
+message QueryCompleted {
+  // Number of results emitted.
+  uint32 result_count = 1;
+}
+
+// One item in the server-streamed query protocol.
+message QueryEvent {
+  // Result, progress, typed error, or successful completion.
+  oneof payload {
+    // One matching document.
+    QueryResult result = 1;
+    // Query execution progress.
+    Progress progress = 2;
+    // Actionable query failure.
+    ProtocolError error = 3;
+    // Successful terminal item.
+    QueryCompleted completed = 4;
+  }
+}
+
+// Progress for a request or ingestion job.
+message Progress {
+  // Opaque request or job identifier.
+  string operation_id = 1;
+  // Stable machine-readable phase name.
+  string phase = 2;
+  // Completed work units.
+  uint64 completed_units = 3;
+  // Total work units, or zero when unknown.
+  uint64 total_units = 4;
+}
+
+// Subscribes to scoped asynchronous worker events.
+message EventSubscription {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Tenant and library whose events may be emitted.
+  ResourceScope scope = 2;
+}
+
+// One item in the server-streamed worker event protocol.
+message WorkerEvent {
+  // Progress, job state, health, or actionable error.
+  oneof payload {
+    // Request or job progress.
+    Progress progress = 1;
+    // Ingestion lifecycle update.
+    IngestionJob ingestion_job = 2;
+    // Worker health transition.
+    HealthResponse health = 3;
+    // Asynchronous protocol failure.
+    ProtocolError error = 4;
+  }
+}
+
+// Requests cancellation of an in-flight operation.
+message CancelRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Opaque request or job identifier.
+  string request_id = 2;
+}
+
+// Reports whether cancellation was accepted.
+message CancelResponse {
+  // True when the target was found and cancellation was requested.
+  bool accepted = 1;
+}
+
+// Requests graceful worker shutdown.
+message ShutdownRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+  // Requested drain time, bounded by the negotiated shutdown deadline.
+  uint64 grace_period_ms = 2;
+}
+
+// Confirms that graceful shutdown has started.
+message ShutdownResponse {
+  // True after the worker has stopped accepting new work.
+  bool draining = 1;
+  // Other connected clients that must disconnect before shutdown can start.
+  uint32 remaining_clients = 2;
+}
+
+// Actionable error returned without terminating either process.
+message ProtocolError {
+  // Stable machine-readable error category.
+  ErrorCode code = 1;
+  // Human-readable diagnostic suitable for logs or UI.
+  string message = 2;
+  // Whether retrying without an update or request change can succeed.
+  bool retryable = 3;
+  // Minimum protocol version required, when an update is needed.
+  uint32 required_protocol_version = 4;
+}
+
+// Stable protocol error categories.
+enum ErrorCode {
+  // No error category was supplied.
+  ERROR_CODE_UNSPECIFIED = 0;
+  // Request authentication was absent or rejected.
+  ERROR_CODE_UNAUTHENTICATED = 1;
+  // Request or stream exceeded a negotiated resource limit.
+  ERROR_CODE_LIMIT_EXCEEDED = 2;
+  // Request exceeded its deadline.
+  ERROR_CODE_DEADLINE_EXCEEDED = 3;
+  // Request was malformed or omitted required scope.
+  ERROR_CODE_INVALID_REQUEST = 4;
+  // Caller must be updated to a supported protocol version.
+  ERROR_CODE_CLIENT_UPDATE_REQUIRED = 5;
+  // Worker must be updated to a supported protocol version.
+  ERROR_CODE_WORKER_UPDATE_REQUIRED = 6;
+  // Operation was cancelled.
+  ERROR_CODE_CANCELLED = 7;
+  // Worker is temporarily unavailable.
+  ERROR_CODE_UNAVAILABLE = 8;
+  // Worker failed internally while keeping the protocol session alive.
+  ERROR_CODE_INTERNAL = 9;
+}
+
+// Independently negotiable protocol features.
+enum Capability {
+  // No capability was specified.
+  CAPABILITY_UNSPECIFIED = 0;
+  // Bounded file-content ingestion is available.
+  CAPABILITY_INGESTION = 1;
+  // Semantic queries and streamed results are available.
+  CAPABILITY_QUERY = 2;
+  // Progress and lifecycle events are available.
+  CAPABILITY_EVENTS = 3;
+  // In-flight work can be cancelled.
+  CAPABILITY_CANCELLATION = 4;
+  // The worker supports graceful shutdown.
+  CAPABILITY_GRACEFUL_SHUTDOWN = 5;
+}
+
+// One multiplexed request frame on the local transport.
+message ClientFrame {
+  // Connection-local identifier shared by every item in one RPC stream.
+  uint64 correlation_id = 1;
+  // A request or client-streamed ingestion item.
+  oneof payload {
+    NegotiateRequest negotiate = 2;
+    OpenSessionRequest open_session = 3;
+    HealthRequest health = 4;
+    IngestionRequest ingestion = 5;
+    IngestionJobRequest get_ingestion_job = 6;
+    QueryRequest query = 7;
+    EventSubscription events = 8;
+    CancelRequest cancel = 9;
+    ShutdownRequest shutdown = 10;
+  }
+}
+
+// Marks the successful end of a multiplexed RPC stream.
+message StreamEnd {}
+
+// One multiplexed response frame on the local transport.
+message ServerFrame {
+  // Correlation identifier copied from the initiating client frame.
+  uint64 correlation_id = 1;
+  // A response, streamed event, error, or stream terminator.
+  oneof payload {
+    NegotiateResponse negotiated = 2;
+    OpenSessionResponse session_opened = 3;
+    HealthResponse health = 4;
+    IngestionAccepted ingestion_accepted = 5;
+    IngestionJob ingestion_job = 6;
+    QueryEvent query_event = 7;
+    WorkerEvent worker_event = 8;
+    CancelResponse cancelled = 9;
+    ShutdownResponse shutdown_started = 10;
+    ProtocolError error = 11;
+    StreamEnd stream_end = 12;
+  }
+}
+
+// Versioned semantic-worker protocol.
+service SemanticWorker {
+  // Negotiates compatibility before an authenticated session is opened.
+  rpc Negotiate(NegotiateRequest) returns (NegotiateResponse);
+  // Starts an authenticated session after negotiation.
+  rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse);
+  // Reports worker health.
+  rpc Health(HealthRequest) returns (HealthResponse);
+  // Streams bounded content into an ingestion job.
+  rpc Ingest(stream IngestionRequest) returns (IngestionAccepted);
+  // Reads current ingestion job state.
+  rpc GetIngestionJob(IngestionJobRequest) returns (IngestionJob);
+  // Streams bounded semantic results and progress.
+  rpc Query(QueryRequest) returns (stream QueryEvent);
+  // Streams scoped progress and lifecycle events.
+  rpc Events(EventSubscription) returns (stream WorkerEvent);
+  // Cancels an in-flight request or job.
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+  // Begins graceful shutdown.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}

@@ -33,6 +33,7 @@ mod pptx_preview;
 mod remote_terminal;
 mod s3;
 mod search_comparison_coordinator;
+pub mod semantic;
 mod service;
 mod settings_mapping;
 mod ssh;

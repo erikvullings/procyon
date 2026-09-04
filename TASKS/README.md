@@ -91,7 +91,7 @@ releasable dependency chain, with ordinary file-manager behaviour remaining full
 semantic components are not installed.
 
 - [x] 0176 Semantic intelligence architecture epic *(implementation redirected to 0177–0189)*
-- [ ] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
+- [x] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
 - [ ] 0178 Managed semantic components and model packs *(needs 0058, 0177)*
 - [ ] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
 - [ ] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*

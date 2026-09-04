@@ -128,6 +128,8 @@ crates/
   fm-platform-windows/  Windows implementation (Explorer reveal, Recycle Bin, drives, terminal)
   fm-plugin-api/        plugin manifest, permissions, contribution types
   fm-plugin-runtime/    restricted Lua sandbox and plugin lifecycle
+  fm-semantic-protocol/ generated, versioned protobuf contract for the optional semantic worker
+  fm-semantic-worker/   local-only semantic worker binary, IPC client, and lifecycle coordinator
   fm-transport-dto/     OpenAPI-serialisable DTOs shared by server and client
   fm-vfs/               VFS provider trait and capability flags
   fm-vfs-local/         local filesystem provider
