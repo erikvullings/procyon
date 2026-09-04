@@ -46,7 +46,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../../plugins": "plugins"
+      "../../../plugins": "plugins",
+      "resources/procyon": "procyon"
     }
   }
 }
