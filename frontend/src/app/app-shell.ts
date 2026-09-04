@@ -1183,7 +1183,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     void dispatchWorkspaceCommand(
       client,
       {
-        type: 'addTab',
+        type: 'addTransientTab',
         workspaceId: currentWorkspace.id,
         paneId,
         location: activeTab.location,

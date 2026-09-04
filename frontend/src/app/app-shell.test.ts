@@ -1435,6 +1435,7 @@ describe('AppShell', () => {
   it('opens the Lister viewer in the opposite pane with F3 (task 0088)', async () => {
     const client = new MockFileManagerClient();
     const invokeAction = vi.spyOn(client, 'invokeAction');
+    const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('.env'));
     const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
@@ -1452,6 +1453,10 @@ describe('AppShell', () => {
     expect(inactivePane?.classList.contains('fm-pane-viewer')).toBe(true);
     expect(inactivePane?.querySelectorAll('.fm-pane-tab')).toHaveLength(2);
     expect(inactivePane?.querySelector('.fm-file-viewer')?.textContent).toContain('.env');
+    expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'addTransientTab', paneId: 'right' }),
+      undefined,
+    );
     expect(invokeAction).not.toHaveBeenCalled();
   });
 
