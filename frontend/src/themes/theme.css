@@ -353,6 +353,12 @@ main.fm-workspace {
   height: 100%;
 }
 
+.fm-terminal-surface,
+.fm-terminal-surface * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .fm-terminal-unavailable {
   color: var(--fm-text-muted);
   padding: 1rem;

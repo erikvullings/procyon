@@ -156,7 +156,7 @@ import {
 } from '../features/sorting/sorting';
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
-import { isTerminalVisible } from '../features/terminal/terminal-state';
+import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import {
   createPaneContentBuilder,
@@ -2506,7 +2506,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         openTerminalTabKeys.delete(key);
       } else {
         openTerminalTabKeys.add(key);
-        requestAnimationFrame(() => focusTerminal?.());
+        focusOpenedTerminal(
+          () => m.redraw.sync(),
+          () => focusTerminal?.() ?? false,
+        );
       }
     },
     toggleDirectoryTree,
