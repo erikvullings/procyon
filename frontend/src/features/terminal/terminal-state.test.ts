@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTerminalVisible } from './terminal-state';
+import { focusOpenedTerminal, isTerminalVisible } from './terminal-state';
 
 describe('terminal tab scope', () => {
   it('keeps the drawer visible while the active tab is unchanged', () => {
@@ -19,5 +19,21 @@ describe('terminal tab scope', () => {
 
   it('is hidden when there is no active tab', () => {
     expect(isTerminalVisible(new Set(['pane-1:tab-1']), undefined)).toBe(false);
+  });
+});
+
+describe('terminal focus', () => {
+  it('renders the newly opened terminal before moving focus into it', () => {
+    const calls: string[] = [];
+
+    focusOpenedTerminal(
+      () => calls.push('redraw'),
+      () => {
+        calls.push('focus');
+        return true;
+      },
+    );
+
+    expect(calls).toEqual(['redraw', 'focus']);
   });
 });

@@ -88,3 +88,9 @@ Relevant areas:
   typecheck also has three pre-existing errors in the HTTP client, conflict-dialog test, and Vite
   config. Windows/Linux were compile-targeted by portable-pty's cross-platform API but not run on
   those operating systems in this macOS environment.
+- 2026-09-04 copilot: Fixed terminal command editing in the macOS Tauri host. WKWebView can report
+  `keyCode = 0` for non-character keys, which xterm.js 6 does not map from standard `event.key`
+  values; Procyon now supplies a narrow fallback for arrows, Backspace, Home, End, and Delete while
+  preserving xterm's normal handling when a key code is available. Opening the drawer redraws
+  before focusing xterm, pasted text is regression-tested through the PTY client boundary, and the
+  terminal surface opts back into WebKit text selection so selected output can be copied.
