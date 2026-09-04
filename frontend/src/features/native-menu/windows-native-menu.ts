@@ -21,6 +21,9 @@ function itemLabel(item: NativeMenuItem): string {
       minimize: t('menu', 'minimize'),
       zoom: t('menu', 'maximize'),
       bringAllToFront: t('menu', 'bringAllToFront'),
+      copy: t('action', 'copy'),
+      paste: t('action', 'paste'),
+      selectAll: t('action', 'selectAll'),
     };
     return labels[item.role];
   }

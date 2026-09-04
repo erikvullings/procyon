@@ -37,36 +37,6 @@ export interface TerminalKeyHandlers {
   readonly onSwitchPane?: () => void;
   readonly onCycleTab?: (direction: 1 | -1) => void;
   readonly onFocusFolder?: () => void;
-  readonly onInput?: (data: string) => void;
-  readonly usesApplicationCursorKeys?: () => boolean;
-}
-
-function webkitEditingKey(
-  event: KeyboardEvent,
-  applicationCursorKeys: boolean,
-): string | undefined {
-  if (event.keyCode !== 0 || event.altKey || event.ctrlKey || event.metaKey) return undefined;
-  const cursorPrefix = applicationCursorKeys ? '\x1bO' : '\x1b[';
-  switch (event.key) {
-    case 'ArrowUp':
-      return `${cursorPrefix}A`;
-    case 'ArrowDown':
-      return `${cursorPrefix}B`;
-    case 'ArrowRight':
-      return `${cursorPrefix}C`;
-    case 'ArrowLeft':
-      return `${cursorPrefix}D`;
-    case 'Backspace':
-      return '\x7f';
-    case 'Home':
-      return '\x1b[H';
-    case 'End':
-      return '\x1b[F';
-    case 'Delete':
-      return '\x1b[3~';
-    default:
-      return undefined;
-  }
 }
 
 /**
@@ -89,11 +59,7 @@ export function handleTerminalKeyEvent(
   const tabKey = event.key === 'Tab' || event.code === 'Tab';
   const navTabKey = tabKey && !event.metaKey && (event.ctrlKey || event.altKey);
   const handled = toggleKey || navTabKey;
-  const editingInput =
-    event.type === 'keydown'
-      ? webkitEditingKey(event, handlers.usesApplicationCursorKeys?.() === true)
-      : undefined;
-  if (!handled && editingInput === undefined) return true;
+  if (!handled) return true;
   event.preventDefault();
   event.stopPropagation();
   if (toggleKey) handlers.onToggle();
@@ -101,7 +67,7 @@ export function handleTerminalKeyEvent(
     if (event.ctrlKey) handlers.onCycleTab?.(event.shiftKey ? -1 : 1);
     else if (event.shiftKey) handlers.onFocusFolder?.();
     else handlers.onSwitchPane?.();
-  } else handlers.onInput?.(editingInput ?? '');
+  }
   return false;
 }
 
@@ -157,8 +123,6 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(attrs.onSwitchPane === undefined ? {} : { onSwitchPane: attrs.onSwitchPane }),
           ...(attrs.onCycleTab === undefined ? {} : { onCycleTab: attrs.onCycleTab }),
           ...(attrs.onFocusFolder === undefined ? {} : { onFocusFolder: attrs.onFocusFolder }),
-          usesApplicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
-          onInput: (data) => terminal.input(data, true),
         }),
       );
       terminal.onData((data) => {
