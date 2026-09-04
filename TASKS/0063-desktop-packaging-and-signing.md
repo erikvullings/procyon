@@ -69,3 +69,13 @@ and §37 (signed macOS and Windows installers).
   the newly purchased Developer Program membership becomes active and credentials are configured;
   Windows signing also remains unconfigured. Removed the stale dependency on 0062 because signing
   does not depend on drag-and-drop.
+- 2026-09-04 copilot: Completed and production-verified the macOS half of the signing criterion.
+  The protected release workflow imports the Developer ID Application certificate, signs a universal
+  app/DMG, submits the DMG to Apple with a bounded `notarytool` wait, staples it, and verifies the
+  signature, Gatekeeper acceptance, notarization, and both architectures. Release `v0.1.0-18` was
+  published to GitHub and the Homebrew tap; `brew upgrade --cask procyon` installed it successfully
+  and the app launched on Apple Silicon. The first signed release, `v0.1.0-17`, exposed a hardened
+  runtime failure because its ARM64 slice linked Homebrew's differently signed `liblzma`. Archive
+  support now links `liblzma` statically, and the workflow rejects any non-system absolute dependency
+  in every bundled Mach-O file before publication. Task remains `in_progress` solely because Windows
+  installers are still unsigned.
