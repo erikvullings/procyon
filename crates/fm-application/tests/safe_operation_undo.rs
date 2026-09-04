@@ -43,21 +43,33 @@ fn request(
 }
 
 async fn wait(service: &FileManagerService, id: uuid::Uuid) -> fm_transport_dto::OperationDto {
-    for _ in 0..1_000 {
-        let operation = service.get_operation(id.into()).unwrap();
-        if matches!(
-            operation.state,
-            OperationStateDto::Cancelled
-                | OperationStateDto::Completed
-                | OperationStateDto::CompletedWithWarnings
-                | OperationStateDto::Failed
-                | OperationStateDto::Interrupted
-        ) {
-            return operation;
+    let completed = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let operation = service.get_operation(id.into()).unwrap();
+            if matches!(
+                operation.state,
+                OperationStateDto::Cancelled
+                    | OperationStateDto::Completed
+                    | OperationStateDto::CompletedWithWarnings
+                    | OperationStateDto::Failed
+                    | OperationStateDto::Interrupted
+            ) {
+                return operation;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+    })
+    .await;
+    match completed {
+        Ok(operation) => operation,
+        Err(_) => {
+            let operation = service.get_operation(id.into()).unwrap();
+            panic!(
+                "operation {id} did not finish within 60 seconds; last state: {:?}",
+                operation.state
+            )
+        }
     }
-    panic!("operation did not finish")
 }
 
 #[tokio::test]

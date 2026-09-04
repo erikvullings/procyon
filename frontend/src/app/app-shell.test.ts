@@ -154,6 +154,9 @@ async function openOperationCentre(container: HTMLElement = root): Promise<void>
       container.querySelector<HTMLButtonElement>('.fm-operation-centre-button')?.disabled,
     ).toBe(false),
   );
+  // The three-second auto-open timer updates component state before Mithril's scheduled redraw.
+  // Synchronize first so a stale "closed" button cannot toggle the already-open centre closed.
+  m.redraw.sync();
   const button = container.querySelector<HTMLButtonElement>('.fm-operation-centre-button');
   if (button?.getAttribute('aria-pressed') !== 'true') {
     button?.click();
