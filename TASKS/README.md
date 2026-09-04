@@ -83,6 +83,28 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
   O(n^2) directory-listing round trips, per-entry async overhead, and the dominant one — watch
   registration blocking the response — see task notes)*
 
+## Semantic search, RAG & knowledge
+
+Optional local semantic indexing, document summaries, grounded question answering, and curated
+SKOS concepts. The architecture epic is complete; implementation proceeds through its independently
+releasable dependency chain, with ordinary file-manager behaviour remaining fully functional when
+semantic components are not installed.
+
+- [x] 0176 Semantic intelligence architecture epic *(implementation redirected to 0177–0189)*
+- [ ] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
+- [ ] 0178 Managed semantic components and model packs *(needs 0058, 0177)*
+- [ ] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
+- [ ] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
+- [ ] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180)*
+- [ ] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
+- [ ] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
+- [ ] 0184 OpenAI-compatible LLM connection profiles *(needs 0030, 0103)*
+- [ ] 0185 Representative document summaries *(needs 0182, 0184)*
+- [ ] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*
+- [ ] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
+- [ ] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
+- [ ] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
+
 ## File operations
 
 Copy, move, rename, delete, and everything that mutates the filesystem — plus the operation
