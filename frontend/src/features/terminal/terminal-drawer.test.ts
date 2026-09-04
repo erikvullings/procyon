@@ -73,6 +73,99 @@ describe('TerminalDrawer', () => {
     vi.unstubAllGlobals();
   });
 
+  it('forwards editing and history keys from the focused xterm textarea to the PTY', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await Promise.resolve();
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+    textarea.focus();
+
+    for (const [key, keyCode] of [
+      ['ArrowLeft', 37],
+      ['ArrowRight', 39],
+      ['ArrowUp', 38],
+      ['ArrowDown', 40],
+      ['Backspace', 8],
+    ] as const) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'keyCode', { value: keyCode });
+      textarea.dispatchEvent(event);
+    }
+
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(5));
+    expect(write.mock.calls.map(([, data]) => [...data])).toEqual([
+      [27, 91, 68],
+      [27, 91, 67],
+      [27, 91, 65],
+      [27, 91, 66],
+      [127],
+    ]);
+    vi.unstubAllGlobals();
+  });
+
+  it('forwards pasted text from xterm to the PTY', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await Promise.resolve();
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      value: { getData: (type: string) => (type === 'text/plain' ? 'git status' : '') },
+    });
+
+    textarea.dispatchEvent(event);
+
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    const writeCall = write.mock.calls[0];
+    if (writeCall === undefined) throw new Error('pasted text was not forwarded');
+    expect([...writeCall[1]]).toEqual([...new TextEncoder().encode('git status')]);
+    vi.unstubAllGlobals();
+  });
+
   it('returns F12 to the file manager while xterm has focus', () => {
     const toggle = vi.fn();
     const event = new KeyboardEvent('keydown', { key: 'F12', cancelable: true });

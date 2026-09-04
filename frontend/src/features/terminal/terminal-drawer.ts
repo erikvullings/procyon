@@ -63,9 +63,11 @@ export function handleTerminalKeyEvent(
   event.preventDefault();
   event.stopPropagation();
   if (toggleKey) handlers.onToggle();
-  else if (event.ctrlKey) handlers.onCycleTab?.(event.shiftKey ? -1 : 1);
-  else if (event.shiftKey) handlers.onFocusFolder?.();
-  else handlers.onSwitchPane?.();
+  else if (navTabKey) {
+    if (event.ctrlKey) handlers.onCycleTab?.(event.shiftKey ? -1 : 1);
+    else if (event.shiftKey) handlers.onFocusFolder?.();
+    else handlers.onSwitchPane?.();
+  }
   return false;
 }
 

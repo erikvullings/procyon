@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use fm_domain::{EntryId, Location, ProviderId};
 use fm_vfs::{
     ChangeTracking, CopyCommitOptions, FileSystemProvider, ListOptions, ProviderCapabilities,
-    ProviderChange, RemoveOptions, VfsError, WriteOptions,
+    ProviderChange, ProviderChangeStream, RemoveOptions, VfsError, WriteOptions,
 };
 use fm_vfs_onedrive::fixture::GraphFixture;
 use fm_vfs_onedrive::{
@@ -84,6 +84,29 @@ async fn provider(fixture: &GraphFixture) -> OneDriveFileSystemProvider {
         fixture,
         Arc::new(FixedResolver::single("fixture-bearer-token")),
     )
+}
+
+async fn wait_for_watch_seed(fixture: &GraphFixture, stream: &mut ProviderChangeStream) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            tokio::select! {
+                change = stream.next() => {
+                    panic!("the seed must not emit a provider change: {change:?}");
+                }
+                () = tokio::time::sleep(Duration::from_millis(1)) => {}
+            }
+            if fixture
+                .requests()
+                .await
+                .iter()
+                .any(|request| request.path.contains("/delta?cursor="))
+            {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the watch must complete its seed request and begin polling");
 }
 
 fn root(connection_id: &str) -> Location {
@@ -1174,8 +1197,7 @@ async fn watch_does_not_emit_on_the_seed_tick_and_reports_a_coalesced_change_aft
         .await
         .expect("watch must succeed");
 
-    let nothing_yet = tokio::time::timeout(Duration::from_millis(70), stream.next()).await;
-    assert!(nothing_yet.is_err(), "the seed tick alone must never emit");
+    wait_for_watch_seed(&fixture, &mut stream).await;
 
     fixture.create_file("", "new.txt", b"x").await;
 
@@ -1204,8 +1226,7 @@ async fn watch_follows_multiple_interleaved_delta_pages_within_one_round() {
         .await
         .expect("watch must succeed");
 
-    let nothing_yet = tokio::time::timeout(Duration::from_millis(70), stream.next()).await;
-    assert!(nothing_yet.is_err());
+    wait_for_watch_seed(&fixture, &mut stream).await;
 
     // Five changes, deliberately interleaved across two different
     // folders (not one flat, alphabetically-sortable sequence), forced
@@ -1255,11 +1276,7 @@ async fn watch_puts_top_on_the_seed_request_and_never_appends_or_duplicates_it_a
         .await
         .expect("watch must succeed");
 
-    // Let the seed tick actually happen before creating anything - files
-    // created before the seed would already be part of its own baseline
-    // snapshot and would never show up as a subsequent change.
-    let nothing_yet = tokio::time::timeout(Duration::from_millis(70), stream.next()).await;
-    assert!(nothing_yet.is_err());
+    wait_for_watch_seed(&fixture, &mut stream).await;
 
     // Five changes, forced into multiple pages by `delta_page_size: 2`, so
     // both the opening `@odata.nextLink` pagination *and* the final

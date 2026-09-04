@@ -54,6 +54,7 @@ function inputs(overrides: Partial<NativeMenuInputs> = {}): NativeMenuInputs {
     favouriteActions: [],
     tabs: [],
     canOpenNewWindow: false,
+    useNativeEditRoles: false,
     workspaces: [],
     currentWorkspaceId: undefined,
     volumes: [],
@@ -210,6 +211,21 @@ describe('buildNativeMenuSpec', () => {
       'core.copy',
       'core.paste',
       'core.selectAll',
+    ]);
+  });
+
+  it('uses native responder-chain Copy and Paste roles on macOS', () => {
+    const editMenu = buildNativeMenuSpec(
+      inputs({
+        actions: [action('core.copy', 'Copy'), action('core.paste', 'Paste')],
+        useNativeEditRoles: true,
+      }),
+    ).menus.find((menu) => menu.title === 'Edit');
+
+    expect(editMenu?.items).toEqual([
+      { kind: 'role', role: 'copy' },
+      { kind: 'role', role: 'paste' },
+      { kind: 'role', role: 'selectAll' },
     ]);
   });
 

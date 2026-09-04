@@ -5,3 +5,9 @@ export function isTerminalVisible(
 ): boolean {
   return activeTabKey !== undefined && openTabKeys.has(activeTabKey);
 }
+
+/** Makes xterm mount during the redraw before asking its registered callback to focus it. */
+export function focusOpenedTerminal(redraw: () => void, focus: () => boolean): boolean {
+  redraw();
+  return focus();
+}

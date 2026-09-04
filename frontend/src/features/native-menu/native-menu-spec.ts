@@ -49,6 +49,8 @@ export interface NativeMenuInputs {
    * with no window concept (browser/HTTP), in which case the File menu's "New Window" item and
    * the Window menu's "Open Workspace" submenu are omitted entirely rather than added disabled. */
   readonly canOpenNewWindow: boolean;
+  /** Whether Edit-menu text commands should use the OS responder chain (required by WKWebView). */
+  readonly useNativeEditRoles: boolean;
   /** Every stored workspace, in display order - backs the Window menu's "Open Workspace"
    * submenu (task 0143 follow-up), the native-menu equivalent of the workspace switcher's list. */
   readonly workspaces: readonly WorkspaceSummary[];
@@ -162,10 +164,16 @@ function fileMenu(actions: readonly ActionDescriptor[], canOpenNewWindow: boolea
 /** Only Copy/Paste/Select All: this app has no Undo/Redo feature and no Cut action anywhere in
  * the registry. Native AppKit already gives Cut/Copy/Paste/Undo inside text fields (e.g. the
  * Preferences dialog) for free via the standard responder chain - no menu wiring needed there. */
-function editMenu(actions: readonly ActionDescriptor[]): NativeMenu {
+function editMenu(actions: readonly ActionDescriptor[], useNativeEditRoles: boolean): NativeMenu {
   return {
     title: t('menu', 'edit'),
-    items: actionItems(actions, ['core.copy', 'core.paste', 'core.selectAll']),
+    items: useNativeEditRoles
+      ? [
+          { kind: 'role', role: 'copy' },
+          { kind: 'role', role: 'paste' },
+          { kind: 'role', role: 'selectAll' },
+        ]
+      : actionItems(actions, ['core.copy', 'core.paste', 'core.selectAll']),
   };
 }
 
@@ -392,7 +400,7 @@ export function buildNativeMenuSpec(inputs: NativeMenuInputs): NativeMenuSpec {
     menus: [
       appMenu(),
       fileMenu(inputs.actions, inputs.canOpenNewWindow),
-      editMenu(inputs.actions),
+      editMenu(inputs.actions, inputs.useNativeEditRoles),
       viewMenu(inputs.actions),
       toolsMenu(inputs.actions),
       goMenu(

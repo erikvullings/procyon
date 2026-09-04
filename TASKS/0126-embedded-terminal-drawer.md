@@ -88,3 +88,12 @@ Relevant areas:
   typecheck also has three pre-existing errors in the HTTP client, conflict-dialog test, and Vite
   config. Windows/Linux were compile-targeted by portable-pty's cross-platform API but not run on
   those operating systems in this macOS environment.
+- 2026-09-04 copilot: Release `v0.1.0-19` attempted to fix terminal command editing with a
+  WKWebView key-event fallback, but real-app testing showed that diagnosis was wrong: the keys
+  reached zsh, while the local PTY lacked `TERM`, so zsh erased text by printing spaces without the
+  cursor-motion capabilities needed to move back over them. Local shells now explicitly use
+  `TERM=xterm-256color` and `COLORTERM=truecolor`, matching remote shells. The macOS Edit menu now
+  provides native Copy/Paste/Select All responder-chain roles so Cmd+C/Cmd+V reach WKWebView;
+  opening the drawer still redraws before focus, and terminal output remains selectable. The
+  corrected Tauri build was manually verified with Backspace, ArrowUp/ArrowDown history navigation,
+  Cmd+C, and Cmd+V before release.

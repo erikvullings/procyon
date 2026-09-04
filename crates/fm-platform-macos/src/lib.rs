@@ -1427,9 +1427,7 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
     }
 
     // (title, selector, key equivalent, modifier mask): the same four standard AppKit
-    // accelerators every macOS app menu carries for these roles (Cmd+Q, Cmd+H, Cmd+Option+H,
-    // Cmd+M). `About`, `ShowAll`, `Zoom`, and `BringAllToFront` have no OS-standard shortcut in
-    // stock macOS apps either, so they stay blank like before.
+    // accelerators every macOS app menu carries for these roles.
     let (title, selector, key, mask) = match role {
         NativeMenuRole::About => ("About", sel!(orderFrontStandardAboutPanel:), "", 0),
         NativeMenuRole::Services => unreachable!("handled above"),
@@ -1450,6 +1448,9 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
         ),
         NativeMenuRole::Zoom => ("Zoom", sel!(performZoom:), "", 0),
         NativeMenuRole::BringAllToFront => ("Bring All to Front", sel!(arrangeInFront:), "", 0),
+        NativeMenuRole::Copy => ("Copy", sel!(copy:), "c", MODIFIER_COMMAND_BIT),
+        NativeMenuRole::Paste => ("Paste", sel!(paste:), "v", MODIFIER_COMMAND_BIT),
+        NativeMenuRole::SelectAll => ("Select All", sel!(selectAll:), "a", MODIFIER_COMMAND_BIT),
     };
     let item = unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
