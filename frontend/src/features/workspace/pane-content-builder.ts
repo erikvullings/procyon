@@ -706,22 +706,28 @@ export function createPaneContentBuilder(
       onContextMenu: (entries, x, y) => context.openContextMenu(paneId, entries, x, y),
       onDragStart: (draggedEntries, event) => {
         context.setDraggedLocations(draggedEntries.map((entry) => entry.location));
-        if (context.getNativeDragOutSupported()) {
-          event.preventDefault();
-          context.setNativeDragSourceInternal(true);
-          void client
-            .startNativeDrag(draggedEntries.map((entry) => entry.location))
-            .catch((error: unknown) => {
-              context.setClipboardMessage(
-                context.workspaceErrorMessage(error, 'Unable to start native drag'),
-              );
-              m.redraw();
-            });
-          return;
-        }
         event.dataTransfer?.setData('application/x-fm-locations', 'internal');
         if (event.dataTransfer != null) event.dataTransfer.effectAllowed = 'copyMove';
       },
+      ...(context.getNativeDragOutSupported()
+        ? {
+            onPointerDragStart: (draggedEntries) => {
+              context.setDraggedLocations(draggedEntries.map((entry) => entry.location));
+            },
+            pointerDragEffect: (event) => operationForDrop(context.getPlatform(), event),
+            onPointerDragOut: (draggedEntries) => {
+              const locations = draggedEntries.map((entry) => entry.location);
+              context.setDraggedLocations(locations);
+              context.setNativeDragSourceInternal(true);
+              void client.startNativeDrag(locations).catch((error: unknown) => {
+                context.setClipboardMessage(
+                  context.workspaceErrorMessage(error, 'Unable to start native drag'),
+                );
+                m.redraw();
+              });
+            },
+          }
+        : {}),
       onDragOver: (entry, event) => {
         const target = tab === undefined ? undefined : resolveDropTarget(tab.location, entry);
         const validation = validateDropTarget(

@@ -1,6 +1,12 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { t } from '../../i18n';
 import type { EntryId, EntrySummary, LoadingState } from '../../models';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
+import {
+  beginPointerFileDrag,
+  consumePointerFileDragClick,
+  registerPointerFileDropTarget,
+} from '../drag-drop/pointer-file-drag';
 import type { CursorClickModifiers, DirectoryEntrySource } from './directory-table';
 import { entryIcon } from './entry-icons';
 import type { NativeIconLoader } from './native-icon-loader';
@@ -48,8 +54,11 @@ export interface DirectoryGridAttrs {
   readonly onEndReached?: () => void;
   readonly onContextMenu?: (index: number | undefined, x: number, y: number) => void;
   readonly onDragStart?: (index: number, event: DragEvent) => void;
-  readonly onDragOver?: (index: number | undefined, event: DragEvent) => boolean;
-  readonly onDrop?: (index: number | undefined, event: DragEvent) => void;
+  readonly onDragOver?: (index: number | undefined, event: DropEventState) => boolean;
+  readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
+  readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
+  readonly onPointerDragOut?: (index: number) => void;
+  readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
 }
 
 function tileDimensions(element: HTMLElement | undefined): { width: number; height: number } {
@@ -101,6 +110,8 @@ function stateView(attrs: DirectoryGridAttrs): m.Children | undefined {
  * tiles fit across the measured viewport width. */
 export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
   let element: HTMLElement | undefined;
+  let currentAttrs: DirectoryGridAttrs | undefined;
+  let unregisterPointerDropTarget: (() => void) | undefined;
   let scrollTop = 0;
   let thumbnailLoader: ThumbnailLoader | undefined;
   let thumbnailViewport: ThumbnailViewport | undefined;
@@ -125,8 +136,26 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
         key: entry.id,
         role: 'gridcell',
         'aria-selected': selected ? 'true' : 'false',
-        draggable: attrs.onDragStart === undefined ? undefined : true,
+        'data-entry-index': index,
+        draggable:
+          attrs.onPointerDragStart !== undefined
+            ? false
+            : attrs.onDragStart === undefined
+              ? undefined
+              : true,
         ondragstart: (event: DragEvent) => attrs.onDragStart?.(index, event),
+        onpointerdown: (event: PointerEvent) => {
+          if (attrs.onPointerDragStart === undefined) return;
+          beginPointerFileDrag(event, {
+            index,
+            onStart: (sourceIndex, eventModifiers) =>
+              attrs.onPointerDragStart?.(sourceIndex, eventModifiers),
+            onNativeDragOut: (sourceIndex) => attrs.onPointerDragOut?.(sourceIndex),
+            ...(attrs.pointerDragEffect === undefined
+              ? {}
+              : { effectForModifiers: attrs.pointerDragEffect }),
+          });
+        },
         ondragover: (event: DragEvent) => {
           if (attrs.onDragOver?.(index, event) !== true) return;
           event.preventDefault();
@@ -135,11 +164,13 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
           event.preventDefault();
           attrs.onDrop?.(index, event);
         },
-        onclick: (event: MouseEvent) =>
+        onclick: (event: MouseEvent) => {
+          if (consumePointerFileDragClick()) return;
           attrs.onCursorChange?.(index, {
             shiftKey: event.shiftKey,
             ctrlKey: event.ctrlKey || event.metaKey,
-          }),
+          });
+        },
         oncontextmenu: (event: MouseEvent) => {
           event.preventDefault();
           attrs.onContextMenu?.(index, event.clientX, event.clientY);
@@ -177,8 +208,12 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
   }
 
   return {
-    onremove: () => thumbnailViewport?.dispose(),
+    onremove: () => {
+      thumbnailViewport?.dispose();
+      unregisterPointerDropTarget?.();
+    },
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       if (attrs.thumbnailLoader !== thumbnailLoader) {
         thumbnailViewport?.dispose();
         thumbnailLoader = attrs.thumbnailLoader;
@@ -306,6 +341,10 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
             tabindex: -1,
             oncreate: (vnode: VnodeDOM) => {
               element = vnode.dom as HTMLElement;
+              unregisterPointerDropTarget = registerPointerFileDropTarget(element, {
+                onDragOver: (index, event) => currentAttrs?.onDragOver?.(index, event) ?? false,
+                onDrop: (index, event) => currentAttrs?.onDrop?.(index, event),
+              });
             },
             onscroll: (event: UIEvent) => {
               const target = event.currentTarget as HTMLElement;

@@ -284,7 +284,10 @@ pub(crate) async fn start_native_drag<R: Runtime>(
                 drag::DragItem::Files(paths),
                 drag::Image::Raw(include_bytes!("../icons/32x32.png").to_vec()),
                 |_, _| {},
-                drag::Options::default(),
+                drag::Options {
+                    mode: drag::DragMode::Move,
+                    ..drag::Options::default()
+                },
             )
             .map_err(|error| NativeDragError::Start(error.to_string()));
             let _ = sender.send(result);

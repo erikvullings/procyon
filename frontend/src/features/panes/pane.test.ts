@@ -20,6 +20,7 @@ import type {
 import type { GridIconSize } from '../directory-table/directory-grid';
 import type { DirectoryColumnDescriptor } from '../directory-table/directory-table';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import type { SearchPresentation } from '../search/search-presentation';
 import type { SelectionPlatform } from '../selection/keybindings';
@@ -171,8 +172,8 @@ type FlatAttrsInput = Partial<{
     targetPaneId: PaneId,
     targetIndex: number,
   ) => void;
-  onTabDragOver: (tabId: TabId, event: DragEvent) => boolean;
-  onTabDrop: (tabId: TabId, event: DragEvent) => void;
+  onTabDragOver: (tabId: TabId, event: DropEventState) => boolean;
+  onTabDrop: (tabId: TabId, event: DropModifiers) => void;
   // Favourites props (flat for test convenience)
   location: Location;
   currentLocationIsSavedSearch: boolean;
@@ -245,8 +246,8 @@ type FlatAttrsInput = Partial<{
   onMultiRename: (entries: readonly EntrySummary[]) => void;
   onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
   onDragStart: (entries: readonly EntrySummary[], event: DragEvent) => void;
-  onDragOver: (entry: EntrySummary | undefined, event: DragEvent) => boolean;
-  onDrop: (entry: EntrySummary | undefined, event: DragEvent) => void;
+  onDragOver: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
+  onDrop: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   viewerContent: m.Children;
 }>;
 

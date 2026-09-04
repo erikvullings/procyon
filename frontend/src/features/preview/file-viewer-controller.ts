@@ -282,6 +282,15 @@ export interface FileViewerPdfSearchState {
   readonly error?: string | undefined;
 }
 
+export interface FileViewerEpubSearchMatch {
+  readonly chapterNumber: number;
+  readonly occurrenceIndex: number;
+}
+
+export interface FileViewerEpubSearchState extends Omit<FileViewerPdfSearchState, 'matches'> {
+  readonly matches: readonly FileViewerEpubSearchMatch[];
+}
+
 /** Search bar state for text-mode viewing (task 0088's VS-Code-like content search). */
 export interface FileViewerSearchState {
   readonly query: string;
@@ -321,8 +330,8 @@ export type FileViewerState =
       readonly search?: FileViewerSearchState;
       /** Simple PDF text search state (`pdf` content only). */
       readonly pdfSearch?: FileViewerPdfSearchState;
-      /** Simple section-level EPUB text search state (`epub` content only). */
-      readonly epubSearch?: FileViewerPdfSearchState;
+      /** Occurrence-level EPUB text search state (`epub` content only). */
+      readonly epubSearch?: FileViewerEpubSearchState;
       /** Alt+Space info sub-panel (image/text technical metadata - task 0071). Absent/`false`
        * means closed - optional so callers/tests that never touch the panel don't need to set it. */
       readonly metadataPanelOpen?: boolean;
@@ -438,6 +447,11 @@ const DEFAULT_PAGED_SEARCH_STATE: FileViewerPdfSearchState = {
   error: undefined,
 };
 
+const DEFAULT_EPUB_SEARCH_STATE: FileViewerEpubSearchState = {
+  ...DEFAULT_PAGED_SEARCH_STATE,
+  matches: [],
+};
+
 function nextZoomStep(zoom: number): number {
   return clampZoom((Math.floor((zoom * 100 + 0.001) / 25) * 25 + 25) / 100);
 }
@@ -446,7 +460,9 @@ function previousZoomStep(zoom: number): number {
   return clampZoom((Math.ceil((zoom * 100 - 0.001) / 25) * 25 - 25) / 100);
 }
 
-function searchExpression(search: FileViewerPdfSearchState): RegExp {
+function searchExpression(
+  search: Pick<FileViewerPdfSearchState, 'query' | 'regex' | 'caseSensitive' | 'wholeWord'>,
+): RegExp {
   const source =
     search.regex === true ? search.query : search.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(
@@ -1633,7 +1649,7 @@ export function createFileViewerController(
       return;
     }
     if (current.status === 'ready' && current.content.kind === 'epub') {
-      const next = { ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE), ...patch };
+      const next = { ...(current.epubSearch ?? DEFAULT_EPUB_SEARCH_STATE), ...patch };
       publish({ ...current, epubSearch: next });
       setEpubSearchQuery(next.query);
       return;
@@ -2331,7 +2347,7 @@ export function createFileViewerController(
 
   async function runEpubSearch(): Promise<void> {
     if (current.status !== 'ready' || current.content.kind !== 'epub') return;
-    const pagedSearch = current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE;
+    const pagedSearch = current.epubSearch ?? DEFAULT_EPUB_SEARCH_STATE;
     const query = pagedSearch.query.trim();
     if (query === '') return;
     let expression: RegExp;
@@ -2353,11 +2369,17 @@ export function createFileViewerController(
       epubSearch: { ...pagedSearch, query, searching: true, error: undefined },
     });
     const controller = beginRequest();
-    const matches: number[] = [];
+    const matches: FileViewerEpubSearchMatch[] = [];
+    const matchExpression = new RegExp(expression.source, `${expression.flags}g`);
     for (let chapterIndex = 0; chapterIndex < epubChapterLocations.length; chapterIndex += 1) {
       const text = await epubChapterText(chapterIndex, controller.signal);
       if (!isCurrent(controller)) return;
-      if (expression.test(text)) matches.push(chapterIndex + 1);
+      let occurrenceIndex = 0;
+      for (const match of text.matchAll(matchExpression)) {
+        if (match[0].length === 0) continue;
+        matches.push({ chapterNumber: chapterIndex + 1, occurrenceIndex });
+        occurrenceIndex += 1;
+      }
     }
     if (!isCurrent(controller) || current.status !== 'ready' || current.content.kind !== 'epub')
       return;
@@ -2380,7 +2402,7 @@ export function createFileViewerController(
     publish({
       ...current,
       epubSearch: {
-        ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE),
+        ...(current.epubSearch ?? DEFAULT_EPUB_SEARCH_STATE),
         query,
         matches: current.epubSearch?.matches ?? [],
         currentMatchIndex: current.epubSearch?.currentMatchIndex,
@@ -2393,7 +2415,7 @@ export function createFileViewerController(
       publish({
         ...current,
         epubSearch: {
-          ...(current.epubSearch ?? DEFAULT_PAGED_SEARCH_STATE),
+          ...(current.epubSearch ?? DEFAULT_EPUB_SEARCH_STATE),
           query: '',
           matches: [],
           currentMatchIndex: undefined,
@@ -2416,10 +2438,18 @@ export function createFileViewerController(
       current.epubSearch === undefined
     )
       return;
-    const chapterNumber = current.epubSearch.matches[index];
-    if (chapterNumber === undefined) return;
-    const chapterIndex = chapterNumber - 1;
+    const match = current.epubSearch.matches[index];
+    if (match === undefined) return;
+    const chapterIndex = match.chapterNumber - 1;
     const { targetFragment: _targetFragment, ...content } = current.content;
+    if (content.currentChapter === chapterIndex && content.currentChapterHtml !== undefined) {
+      publish({
+        ...current,
+        content,
+        epubSearch: { ...current.epubSearch, currentMatchIndex: index },
+      });
+      return;
+    }
     publish({
       ...current,
       content: {

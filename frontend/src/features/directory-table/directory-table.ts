@@ -9,6 +9,12 @@ import type {
   LoadingState,
   SortDescriptor,
 } from '../../models';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
+import {
+  beginPointerFileDrag,
+  consumePointerFileDragClick,
+  registerPointerFileDropTarget,
+} from '../drag-drop/pointer-file-drag';
 import {
   DEFAULT_ENTRY_FORMAT_SETTINGS,
   type EntryFormatSettings,
@@ -108,8 +114,11 @@ export interface DirectoryTableAttrs {
   readonly onRenameCommit?: () => void;
   readonly onContextMenu?: (index: number | undefined, x: number, y: number) => void;
   readonly onDragStart?: (index: number, event: DragEvent) => void;
-  readonly onDragOver?: (index: number | undefined, event: DragEvent) => boolean;
-  readonly onDrop?: (index: number | undefined, event: DragEvent) => void;
+  readonly onDragOver?: (index: number | undefined, event: DropEventState) => boolean;
+  readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
+  readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
+  readonly onPointerDragOut?: (index: number) => void;
+  readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** Persisted per-column widths; a column with no entry falls back to its default track. */
   readonly columnWidths?: readonly ColumnWidthEntry[];
   readonly onColumnWidthChange?: (columnId: string, width: number) => void;
@@ -623,6 +632,8 @@ function gridTemplate(
  */
 export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
   let element: HTMLElement | undefined;
+  let currentAttrs: DirectoryTableAttrs | undefined;
+  let unregisterPointerDropTarget: (() => void) | undefined;
   let rowHeight = DEFAULT_ROW_HEIGHT;
   let scrollTop = 0;
   let previousCursorIndex: number | undefined;
@@ -780,8 +791,10 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       if (refreshTimer !== undefined) clearInterval(refreshTimer);
       resizeObserver?.disconnect();
       stopColumnResize?.();
+      unregisterPointerDropTarget?.();
     },
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       syncCursor(attrs);
       if (!columnWidthsEqual(sourceColumnWidths, attrs.columnWidths)) {
         sourceColumnWidths = attrs.columnWidths;
@@ -836,9 +849,27 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 role: 'row',
                 'aria-rowindex': index + 2,
                 'aria-selected': selected ? 'true' : 'false',
+                'data-entry-index': index,
                 'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
-                draggable: attrs.onDragStart === undefined ? undefined : true,
+                draggable:
+                  attrs.onPointerDragStart !== undefined
+                    ? false
+                    : attrs.onDragStart === undefined
+                      ? undefined
+                      : true,
                 ondragstart: (event: DragEvent) => attrs.onDragStart?.(index, event),
+                onpointerdown: (event: PointerEvent) => {
+                  if (attrs.onPointerDragStart === undefined) return;
+                  beginPointerFileDrag(event, {
+                    index,
+                    onStart: (sourceIndex, eventModifiers) =>
+                      attrs.onPointerDragStart?.(sourceIndex, eventModifiers),
+                    onNativeDragOut: (sourceIndex) => attrs.onPointerDragOut?.(sourceIndex),
+                    ...(attrs.pointerDragEffect === undefined
+                      ? {}
+                      : { effectForModifiers: attrs.pointerDragEffect }),
+                  });
+                },
                 ondragover: (event: DragEvent) => {
                   if (attrs.onDragOver?.(index, event) !== true) return;
                   event.preventDefault();
@@ -852,11 +883,13 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   dragTargetIndex = undefined;
                   attrs.onDrop?.(index, event);
                 },
-                onclick: (event: MouseEvent) =>
+                onclick: (event: MouseEvent) => {
+                  if (consumePointerFileDragClick()) return;
                   attrs.onCursorChange?.(index, {
                     shiftKey: event.shiftKey,
                     ctrlKey: event.ctrlKey || event.metaKey,
-                  }),
+                  });
+                },
                 oncontextmenu: (event: MouseEvent) => {
                   event.preventDefault();
                   attrs.onContextMenu?.(index, event.clientX, event.clientY);
@@ -982,6 +1015,10 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               oncreate: (vnode: VnodeDOM) => {
                 const viewport = vnode.dom as HTMLElement;
                 element = viewport;
+                unregisterPointerDropTarget = registerPointerFileDropTarget(viewport, {
+                  onDragOver: (index, event) => currentAttrs?.onDragOver?.(index, event) ?? false,
+                  onDrop: (index, event) => currentAttrs?.onDrop?.(index, event),
+                });
                 rowHeight = readRowHeight(viewport);
                 syncScrollbarWidth(viewport);
                 if (

@@ -43,9 +43,28 @@ describe('drag and drop targets', () => {
     ).toEqual({ ok: false, message: 'Cannot drop a location into itself or its subtree.' });
   });
 
+  it('rejects dropping a source back into its current directory', () => {
+    expect(
+      validateDropTarget(
+        [{ providerId: 'file', uri: 'file:///home/user/Documents/report.pdf' }],
+        pane,
+        true,
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
   it('uses move by default and the platform copy modifier without inspecting every source', () => {
-    expect(operationForDrop('macos', { altKey: false, ctrlKey: false })).toBe('move');
-    expect(operationForDrop('macos', { altKey: true, ctrlKey: false })).toBe('copy');
-    expect(operationForDrop('windows', { altKey: false, ctrlKey: true })).toBe('copy');
+    expect(operationForDrop('macos', { altKey: false, ctrlKey: false, metaKey: false })).toBe(
+      'move',
+    );
+    expect(operationForDrop('macos', { altKey: true, ctrlKey: false, metaKey: false })).toBe(
+      'copy',
+    );
+    expect(operationForDrop('macos', { altKey: false, ctrlKey: false, metaKey: true })).toBe(
+      'copy',
+    );
+    expect(operationForDrop('windows', { altKey: false, ctrlKey: true, metaKey: false })).toBe(
+      'copy',
+    );
   });
 });

@@ -22,6 +22,7 @@ import {
 import { copyText } from './clipboard';
 import { type FileViewerMetadata, mapLinkFor } from './file-metadata';
 import type {
+  FileViewerEpubSearchState,
   FileViewerPdfSearchState,
   FileViewerSearchState,
   FileViewerState,
@@ -996,7 +997,7 @@ const PdfPageCanvas: FactoryComponent<{
 };
 
 function renderPagedSearchBar(
-  search: FileViewerPdfSearchState | undefined,
+  search: FileViewerPdfSearchState | FileViewerEpubSearchState | undefined,
   placeholder: string,
   matchLabel: string,
   onQueryChange: (query: string) => void,
@@ -1008,6 +1009,9 @@ function renderPagedSearchBar(
   const query = search?.query ?? '';
   const matches = search?.matches ?? [];
   const currentMatchIndex = search?.currentMatchIndex;
+  const currentMatch = matches[currentMatchIndex ?? 0];
+  const matchPosition =
+    typeof currentMatch === 'number' ? currentMatch : currentMatch?.chapterNumber;
   return m('.fm-file-viewer-search', [
     m('input.fm-file-viewer-search-input', {
       type: 'text',
@@ -1062,7 +1066,7 @@ function renderPagedSearchBar(
               ? query.trim() === ''
                 ? undefined
                 : t('viewer', 'noResults')
-              : `${matchLabel} ${matches[currentMatchIndex ?? 0]} · ${(currentMatchIndex ?? 0) + 1} of ${matches.length}${search.searching ? '+' : ''}`,
+              : `${matchLabel} ${matchPosition} · ${(currentMatchIndex ?? 0) + 1} of ${matches.length}${search.searching ? '+' : ''}`,
     ),
     m(
       'button.fm-file-viewer-search-nav',
@@ -1142,13 +1146,18 @@ function renderEpubBody(
   const search = state.epubSearch;
   if (chapterHtml !== undefined && search !== undefined && search.query !== '') {
     try {
+      const activeMatch =
+        search.currentMatchIndex === undefined ||
+        search.matches[search.currentMatchIndex]?.chapterNumber !== content.currentChapter + 1
+          ? undefined
+          : search.matches[search.currentMatchIndex]?.occurrenceIndex;
       chapterHtml = searchHtml(
         chapterHtml,
         search.query,
         search.regex === true,
         search.caseSensitive === true,
         search.wholeWord === true,
-        0,
+        activeMatch,
       ).html;
     } catch {
       // The controller reports malformed regexes; preserve readable chapter HTML meanwhile.

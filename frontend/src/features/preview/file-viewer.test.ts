@@ -789,7 +789,10 @@ describe('FileViewer', () => {
           },
           epubSearch: {
             query: 'chapter',
-            matches: [2, 3],
+            matches: [
+              { chapterNumber: 2, occurrenceIndex: 0 },
+              { chapterNumber: 3, occurrenceIndex: 0 },
+            ],
             currentMatchIndex: 0,
             searching: false,
           },
@@ -844,8 +847,11 @@ describe('FileViewer', () => {
           regex: false,
           caseSensitive: false,
           wholeWord: true,
-          matches: [1],
-          currentMatchIndex: 0,
+          matches: [
+            { chapterNumber: 1, occurrenceIndex: 0 },
+            { chapterNumber: 1, occurrenceIndex: 1 },
+          ],
+          currentMatchIndex: 1,
           searching: false,
         },
       }),
@@ -854,7 +860,9 @@ describe('FileViewer', () => {
     const chapter = root.querySelector('.fm-file-viewer-epub-chapter');
     expect(chapter?.querySelectorAll('.fm-document-search-match')).toHaveLength(1);
     expect(chapter?.querySelectorAll('.fm-document-search-match-active')).toHaveLength(1);
-    expect(chapter?.querySelector('strong .fm-document-search-match')?.textContent).toBe('chapter');
+    expect(chapter?.querySelector('strong .fm-document-search-match-active')?.textContent).toBe(
+      'chapter',
+    );
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest' });
   });
 

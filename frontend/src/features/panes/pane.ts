@@ -81,6 +81,7 @@ import {
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favourites/favourites';
 import { matchesGlobMask } from '../quick-filter/quick-filter';
@@ -206,8 +207,8 @@ export interface PaneAttrs {
     targetPaneId: PaneId,
     targetIndex: number,
   ) => void;
-  readonly onTabDragOver?: ((tabId: TabId, event: DragEvent) => boolean) | undefined;
-  readonly onTabDrop?: ((tabId: TabId, event: DragEvent) => void) | undefined;
+  readonly onTabDragOver?: ((tabId: TabId, event: DropEventState) => boolean) | undefined;
+  readonly onTabDrop?: ((tabId: TabId, event: DropModifiers) => void) | undefined;
   // Sub-objects (5)
   readonly favourites: FavouritesAttrs;
   readonly tableConfig: TableConfigAttrs;
@@ -237,8 +238,11 @@ export interface PaneAttrs {
   readonly onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
   // Drag/drop into the directory table (3)
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
-  readonly onDragOver?: (entry: EntrySummary | undefined, event: DragEvent) => boolean;
-  readonly onDrop?: (entry: EntrySummary | undefined, event: DragEvent) => void;
+  readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
+  readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
+  readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
+  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void;
+  readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** When set, replaces the entire directory-listing surface (task 0088). */
   readonly viewerContent?: m.Children;
 }
@@ -1636,10 +1640,43 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   : [dragged];
                 attrs.onDragStart?.(selection, event);
               },
-              onDragOver: (index: number | undefined, event: DragEvent) =>
+              ...(attrs.onPointerDragStart === undefined
+                ? {}
+                : {
+                    onPointerDragStart: (index: number, event: DropModifiers) => {
+                      const dragged = attrs.entries[index];
+                      if (dragged === undefined || isParentEntry(dragged.id)) return;
+                      const selection = attrs.selectedEntryIds.has(dragged.id)
+                        ? attrs.entries.filter(
+                            (entry) =>
+                              !isParentEntry(entry.id) && attrs.selectedEntryIds.has(entry.id),
+                          )
+                        : [dragged];
+                      attrs.onPointerDragStart?.(selection, event);
+                    },
+                  }),
+              ...(attrs.onPointerDragOut === undefined
+                ? {}
+                : {
+                    onPointerDragOut: (index: number) => {
+                      const dragged = attrs.entries[index];
+                      if (dragged === undefined || isParentEntry(dragged.id)) return;
+                      const selection = attrs.selectedEntryIds.has(dragged.id)
+                        ? attrs.entries.filter(
+                            (entry) =>
+                              !isParentEntry(entry.id) && attrs.selectedEntryIds.has(entry.id),
+                          )
+                        : [dragged];
+                      attrs.onPointerDragOut?.(selection);
+                    },
+                  }),
+              ...(attrs.pointerDragEffect === undefined
+                ? {}
+                : { pointerDragEffect: attrs.pointerDragEffect }),
+              onDragOver: (index: number | undefined, event: DropEventState) =>
                 attrs.onDragOver?.(index === undefined ? undefined : attrs.entries[index], event) ??
                 false,
-              onDrop: (index: number | undefined, event: DragEvent) =>
+              onDrop: (index: number | undefined, event: DropModifiers) =>
                 attrs.onDrop?.(index === undefined ? undefined : attrs.entries[index], event),
               ...(attrs.cursorIndex === undefined ? {} : { cursorIndex: attrs.cursorIndex }),
             };

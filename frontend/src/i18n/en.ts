@@ -281,6 +281,7 @@ export const en = {
     destinationReadOnly: 'The destination directory is read-only.',
     recursivePaste: 'Cannot paste a location into itself or its subtree.',
     nothingDragged: 'No files are being dragged.',
+    destinationUnchanged: 'The files are already in this directory.',
     recursiveDrop: 'Cannot drop a location into itself or its subtree.',
     pasteFailed: 'Unable to paste clipboard entries.',
     writeFailed: 'Unable to write to the system clipboard.',

@@ -31,6 +31,7 @@ import type {
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import type {
   DirectorySummaryAttrs,
@@ -128,10 +129,13 @@ export interface WorkspacePaneContent {
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
   readonly onContextMenu?: (entries: readonly EntrySummary[], x: number, y: number) => void;
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
-  readonly onDragOver?: (entry: EntrySummary | undefined, event: DragEvent) => boolean;
-  readonly onDrop?: (entry: EntrySummary | undefined, event: DragEvent) => void;
-  readonly onTabDragOver?: (tabId: TabId, event: DragEvent) => boolean;
-  readonly onTabDrop?: (tabId: TabId, event: DragEvent) => void;
+  readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
+  readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
+  readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
+  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void;
+  readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
+  readonly onTabDragOver?: (tabId: TabId, event: DropEventState) => boolean;
+  readonly onTabDrop?: (tabId: TabId, event: DropModifiers) => void;
   /** When set, replaces the pane's directory-listing surface with this content (task 0088). */
   readonly viewerContent?: m.Children;
   /** Filenames displayed for Lister-owned tabs. */
@@ -638,6 +642,15 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
         onContextMenu: content.onContextMenu ?? (() => undefined),
         ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
+        ...(content.onPointerDragStart === undefined
+          ? {}
+          : { onPointerDragStart: content.onPointerDragStart }),
+        ...(content.onPointerDragOut === undefined
+          ? {}
+          : { onPointerDragOut: content.onPointerDragOut }),
+        ...(content.pointerDragEffect === undefined
+          ? {}
+          : { pointerDragEffect: content.pointerDragEffect }),
         ...(content.onDragOver === undefined ? {} : { onDragOver: content.onDragOver }),
         ...(content.onDrop === undefined ? {} : { onDrop: content.onDrop }),
         ...(content.viewerContent === undefined ? {} : { viewerContent: content.viewerContent }),

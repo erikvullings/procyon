@@ -283,6 +283,7 @@ export const nl = {
     destinationReadOnly: 'De doelmap is alleen-lezen.',
     recursivePaste: 'Een locatie kan niet in zichzelf of een onderliggende map worden geplakt.',
     nothingDragged: 'Er worden geen bestanden versleept.',
+    destinationUnchanged: 'De bestanden staan al in deze map.',
     recursiveDrop: 'Een locatie kan niet in zichzelf of een onderliggende map worden neergezet.',
     pasteFailed: 'Klemborditems kunnen niet worden geplakt.',
     writeFailed: 'Kan niet naar het systeemklembord schrijven.',

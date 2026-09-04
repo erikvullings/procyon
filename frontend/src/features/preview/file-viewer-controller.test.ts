@@ -1682,7 +1682,7 @@ describe('file viewer controller', () => {
       '</package>';
     const chapterHtml: Record<string, string> = {
       'archive:///tmp/report.txt!/OEBPS/c1.xhtml':
-        '<p>Chapter one</p><img src="images/cover.png" alt="Cover">',
+        '<p>Chapter one repeats chapter</p><img src="images/cover.png" alt="Cover">',
       'archive:///tmp/report.txt!/OEBPS/c2.xhtml': '<p>Chapter two</p>',
       'archive:///tmp/report.txt!/OEBPS/c3.xhtml': '<p>Chapter three</p>',
     };
@@ -1756,11 +1756,36 @@ describe('file viewer controller', () => {
     );
     expect(context.states.at(-1)).toMatchObject({ content: { currentChapter: 2 } });
 
-    controller.setEpubSearchQuery('chapter one');
+    controller.setEpubSearchQuery('chapter');
     await vi.waitFor(() =>
       expect(context.states.at(-1)).toMatchObject({
         content: { currentChapter: 0 },
-        epubSearch: { matches: [1], currentMatchIndex: 0, searching: false },
+        epubSearch: {
+          matches: [
+            { chapterNumber: 1, occurrenceIndex: 0 },
+            { chapterNumber: 1, occurrenceIndex: 1 },
+            { chapterNumber: 2, occurrenceIndex: 0 },
+            { chapterNumber: 3, occurrenceIndex: 0 },
+          ],
+          currentMatchIndex: 0,
+          searching: false,
+        },
+      }),
+    );
+
+    controller.goToNextEpubMatch();
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { currentChapter: 0 },
+        epubSearch: { currentMatchIndex: 1 },
+      }),
+    );
+
+    controller.goToNextEpubMatch();
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { currentChapter: 1, currentChapterHtml: expect.stringContaining('Chapter two') },
+        epubSearch: { currentMatchIndex: 2 },
       }),
     );
 

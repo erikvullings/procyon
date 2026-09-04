@@ -1902,14 +1902,30 @@ describe('AppShell', () => {
       candidate.textContent?.includes('.env'),
     );
     source?.click();
-    const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
-    source?.dispatchEvent(dragStart);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 1 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointerout', { clientX: -1, clientY: 10, pointerId: 1 }),
+    );
 
-    expect(dragStart.defaultPrevented).toBe(true);
     expect(startNativeDrag).toHaveBeenCalledWith([{ providerId: 'file', uri: 'mock:///.env' }]);
   });
 
-  it('defaults an in-app drag to move even when routed through the native drag host', async () => {
+  it('moves an in-app pointer drag without routing it through the native drag host', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
       ...(await client.getRuntimeCapabilities()),
@@ -1917,36 +1933,34 @@ describe('AppShell', () => {
       platform: 'macos',
       runtime: 'tauri',
     });
-    let nativeDropListener:
-      | ((drop: {
-          locations: readonly Location[];
-          position: { readonly x: number; readonly y: number };
-        }) => void)
-      | undefined;
-    vi.spyOn(client, 'subscribeNativeFileDrops').mockImplementation(async (listener) => {
-      nativeDropListener = listener;
-      return () => undefined;
-    });
-    vi.spyOn(client, 'startNativeDrag').mockResolvedValue(undefined);
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag').mockResolvedValue(undefined);
     const startOperation = vi.spyOn(client, 'startOperation');
     m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
-    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).not.toBeUndefined());
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
 
     const source = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((candidate) =>
       candidate.textContent?.includes('.env'),
     );
-    const target = directoryRowNamed(root, 'report.pdf');
+    const target = directoryRowNamed(root, 'Documents');
     source?.click();
-    source?.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
 
     Object.defineProperty(document, 'elementFromPoint', {
       configurable: true,
       value: vi.fn(() => target ?? null),
     });
-    nativeDropListener?.({
-      locations: [{ providerId: 'file', uri: 'mock:///.env' }],
-      position: { x: 240, y: 120 },
-    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 1 }),
+    );
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 1 }));
 
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
@@ -1955,6 +1969,106 @@ describe('AppShell', () => {
       destination: { uri: 'mock:///Documents' },
       conflictPolicy: 'ask',
     });
+    expect(startNativeDrag).not.toHaveBeenCalled();
+  });
+
+  it('copies an in-app pointer drag when Command is held on macOS', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag').mockResolvedValue(undefined);
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+
+    const source = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((candidate) =>
+      candidate.textContent?.includes('.env'),
+    );
+    const target = directoryRowNamed(root, 'Documents');
+    source?.click();
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => target ?? null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 2,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', {
+        clientX: 30,
+        clientY: 10,
+        metaKey: true,
+        pointerId: 2,
+      }),
+    );
+    expect(document.documentElement.dataset.fileDragEffect).toBe('copy');
+    window.dispatchEvent(
+      new PointerEvent('pointerup', {
+        clientX: 30,
+        clientY: 10,
+        metaKey: true,
+        pointerId: 2,
+      }),
+    );
+
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'copy',
+      sources: [{ providerId: 'file', uri: 'mock:///.env' }],
+      destination: { uri: 'mock:///Documents' },
+      conflictPolicy: 'ask',
+    });
+    expect(startNativeDrag).not.toHaveBeenCalled();
+  });
+
+  it('rejects dropping an entry back into its current folder', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).not.toBeUndefined());
+
+    const source = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((candidate) =>
+      candidate.textContent?.includes('.env'),
+    );
+    const sourcePane = source?.closest<HTMLElement>('.fm-pane');
+    const target = sourcePane?.querySelector<HTMLElement>('.fm-directory-viewport');
+    source?.click();
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => target ?? null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 3,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 3 }),
+    );
+    expect(document.documentElement.dataset.fileDragEffect).toBe('none');
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
+
+    expect(startOperation).not.toHaveBeenCalled();
   });
 
   it('copies a native file drop through the operation engine', async () => {
