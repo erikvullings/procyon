@@ -130,6 +130,9 @@ fn role_label(role: fm_domain::NativeMenuRole) -> &'static str {
         NativeMenuRole::Minimize => "Minimize",
         NativeMenuRole::Zoom => "Maximize",
         NativeMenuRole::BringAllToFront => "Bring All to Front",
+        NativeMenuRole::Copy => "Copy",
+        NativeMenuRole::Paste => "Paste",
+        NativeMenuRole::SelectAll => "Select All",
     }
 }
 

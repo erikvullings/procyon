@@ -516,6 +516,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       favouriteActions: favouriteActions(),
       tabs: nativeMenuWindowTabs(),
       canOpenNewWindow: attrsClient.openWorkspaceWindow !== undefined,
+      useNativeEditRoles: platform === 'macos',
       workspaces: sortWorkspaceSummaries(workspaceSummaries),
       currentWorkspaceId: workspace?.id,
       volumes,

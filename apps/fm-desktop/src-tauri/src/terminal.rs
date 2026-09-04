@@ -15,6 +15,14 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use uuid::Uuid;
 
+fn local_shell_command(shell: &str, cwd: &Path) -> CommandBuilder {
+    let mut command = CommandBuilder::new(shell);
+    command.cwd(cwd);
+    command.env("TERM", "xterm-256color");
+    command.env("COLORTERM", "truecolor");
+    command
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type", content = "data")]
 pub(crate) enum TerminalEvent {
@@ -275,8 +283,7 @@ impl TerminalRegistry {
                     "/bin/sh".into()
                 }
             });
-        let mut command = CommandBuilder::new(shell);
-        command.cwd(cwd);
+        let command = local_shell_command(&shell, cwd);
         let child = pair.slave.spawn_command(command).map_err(backend)?;
         let writer = pair.master.take_writer().map_err(backend)?;
         let mut reader = pair.master.try_clone_reader().map_err(backend)?;
@@ -469,5 +476,19 @@ mod tests {
             TerminalLocation::parse("ftp://host/projects/foo"),
             Err(TerminalError::UnsupportedLocation)
         ));
+    }
+
+    #[test]
+    fn a_local_shell_uses_the_same_terminal_protocol_as_xterm() {
+        let command = local_shell_command("/bin/sh", Path::new("/tmp"));
+
+        assert_eq!(
+            command.get_env("TERM"),
+            Some(std::ffi::OsStr::new("xterm-256color"))
+        );
+        assert_eq!(
+            command.get_env("COLORTERM"),
+            Some(std::ffi::OsStr::new("truecolor"))
+        );
     }
 }

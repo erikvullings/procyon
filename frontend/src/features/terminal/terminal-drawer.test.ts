@@ -73,7 +73,7 @@ describe('TerminalDrawer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('forwards WebKit editing and history keys from the focused xterm textarea to the PTY', async () => {
+  it('forwards editing and history keys from the focused xterm textarea to the PTY', async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
@@ -102,10 +102,16 @@ describe('TerminalDrawer', () => {
     if (textarea === null) throw new Error('xterm textarea missing');
     textarea.focus();
 
-    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace']) {
-      textarea.dispatchEvent(
-        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
-      );
+    for (const [key, keyCode] of [
+      ['ArrowLeft', 37],
+      ['ArrowRight', 39],
+      ['ArrowUp', 38],
+      ['ArrowDown', 40],
+      ['Backspace', 8],
+    ] as const) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'keyCode', { value: keyCode });
+      textarea.dispatchEvent(event);
     }
 
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(5));

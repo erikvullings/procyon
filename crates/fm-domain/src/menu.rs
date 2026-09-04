@@ -116,6 +116,12 @@ pub enum NativeMenuRole {
     Zoom,
     /// "Bring All to Front" - `arrangeInFront:`.
     BringAllToFront,
+    /// Copy selected text through the native responder chain.
+    Copy,
+    /// Paste text through the native responder chain.
+    Paste,
+    /// Select all text through the native responder chain.
+    SelectAll,
 }
 
 #[cfg(test)]
