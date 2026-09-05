@@ -199,6 +199,7 @@ pub struct LlmProfileTestResult {
     pub category: Option<LlmTestErrorCategory>,
     pub duration_ms: u64,
     pub model_available: Option<bool>,
+    pub available_models: Option<Vec<String>>,
     pub capabilities: BTreeSet<LlmApiCapability>,
 }
 
@@ -721,11 +722,12 @@ impl LlmProfileService {
         let profile = self.profile(id)?;
         let endpoint = normalize_endpoint(&profile.base_url)?;
         let started = Instant::now();
+        let mut available_models = None;
         let outcome: Result<(Option<LlmTestErrorCategory>, Option<bool>), LlmProfileError> =
             async {
                 self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
                 let request = self.probe_request(&profile).await?;
-                let discovered = if profile
+                let discovered_models = if profile
                     .capabilities
                     .contains(&LlmApiCapability::ModelDiscovery)
                     && profile.preset != LlmPreset::AzureOpenAi
@@ -736,9 +738,10 @@ impl LlmProfileService {
                 } else {
                     None
                 };
-                let model_available = discovered
+                let model_available = discovered_models
                     .as_ref()
                     .map(|models| models.iter().any(|model| model == &profile.model));
+                available_models = discovered_models.map(bounded_model_ids);
                 if model_available == Some(false) {
                     return Ok((
                         Some(LlmTestErrorCategory::ModelUnavailable),
@@ -760,6 +763,7 @@ impl LlmProfileService {
             started,
             category,
             model_available,
+            available_models,
         );
         tracing::info!(
             profile_id = %result.profile_id,
@@ -1134,6 +1138,7 @@ fn test_result(
     started: Instant,
     category: Option<LlmTestErrorCategory>,
     model_available: Option<bool>,
+    available_models: Option<Vec<String>>,
 ) -> LlmProfileTestResult {
     LlmProfileTestResult {
         profile_id: profile.id,
@@ -1143,8 +1148,20 @@ fn test_result(
         category,
         duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         model_available,
+        available_models,
         capabilities: profile.capabilities.clone(),
     }
+}
+
+fn bounded_model_ids(models: Vec<String>) -> Vec<String> {
+    let mut models = models
+        .into_iter()
+        .filter(|model| !model.trim().is_empty() && model.len() <= 512)
+        .collect::<Vec<_>>();
+    models.sort();
+    models.dedup();
+    models.truncate(256);
+    models
 }
 
 /// Typed generation-profile failure with no response or secret content.
@@ -1294,6 +1311,33 @@ mod tests {
         assert_eq!(presets[4].base_url, "http://127.0.0.1:8080");
         assert!(presets[5].redact_filenames);
         assert_eq!(presets[6].api_version.as_deref(), Some("2024-10-21"));
+    }
+
+    #[test]
+    fn discovered_model_ids_are_bounded_sorted_and_deduplicated() {
+        let mut models = (0..300)
+            .rev()
+            .map(|index| format!("model-{index:03}"))
+            .collect::<Vec<_>>();
+        models.extend([
+            "model-100".to_owned(),
+            String::new(),
+            " ".to_owned(),
+            "x".repeat(513),
+        ]);
+
+        let bounded = bounded_model_ids(models);
+
+        assert_eq!(bounded.len(), 256);
+        assert_eq!(bounded.first().map(String::as_str), Some("model-000"));
+        assert_eq!(bounded.last().map(String::as_str), Some("model-255"));
+        assert_eq!(
+            bounded
+                .iter()
+                .filter(|model| model.as_str() == "model-100")
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -1462,12 +1506,33 @@ mod tests {
             .unwrap();
         assert!(result.success);
         assert_eq!(result.model_available, Some(true));
+        assert_eq!(result.available_models, Some(vec!["model-a".to_owned()]));
         let captured = transport.captured.lock().unwrap();
         assert!(
             captured
                 .iter()
                 .all(|request| !request.url.contains(TEST_PROMPT))
         );
+    }
+
+    #[tokio::test]
+    async fn test_returns_discovered_models_when_the_configured_model_is_unavailable() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let mut profile = draft(LlmPreset::Ollama, "http://localhost:11434");
+        profile.model = "missing-model".to_owned();
+        let profile = service.create(profile).await.unwrap();
+
+        let result = service
+            .test(profile.id, &CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result.category,
+            Some(LlmTestErrorCategory::ModelUnavailable)
+        );
+        assert_eq!(result.model_available, Some(false));
+        assert_eq!(result.available_models, Some(vec!["model-a".to_owned()]));
     }
 
     #[test]

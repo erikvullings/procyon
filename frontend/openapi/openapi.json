@@ -3893,6 +3893,15 @@
       "LlmProfileTestResultDto": {
         "description": "Content-free result of a bounded synthetic profile test.",
         "properties": {
+          "availableModels": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/LlmApiCapabilityDto"

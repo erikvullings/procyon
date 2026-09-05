@@ -94,4 +94,86 @@ describe('LlmProfileManagement', () => {
     expect(root.textContent).not.toContain('never-render-this');
     expect(profile.hasCredential).toBe(true);
   });
+
+  it('offers models discovered by a saved provider while keeping manual entry available', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions', 'modelDiscovery'],
+      redactFilenames: false,
+    });
+    const testProfile = vi.spyOn(client, 'testLlmProfile').mockResolvedValue({
+      profileId: profile.id,
+      provider: 'ollama',
+      locality: 'loopback',
+      success: true,
+      category: null,
+      durationMs: 1,
+      modelAvailable: true,
+      availableModels: ['model-a', 'model-b'],
+      capabilities: ['chatCompletions', 'modelDiscovery'],
+    });
+    await mountLoaded(client);
+
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Local Ollama'))
+      ?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Test')
+      ?.click();
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>('input')].some(
+        (input) => input.value === 'model-a' && !input.classList.contains('select-dropdown'),
+      ),
+    ).toBe(true);
+
+    testProfile.mockRejectedValueOnce(new Error('Provider unavailable'));
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Test')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Provider unavailable'));
+    expect(root.textContent).not.toContain('Available provider models');
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Test')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+
+    const discovered = [...root.querySelectorAll<HTMLInputElement>('input.select-dropdown')].find(
+      (input) => input.value === 'model-a',
+    );
+    discovered?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')]
+      .find((item) => item.textContent?.trim() === 'model-b')
+      ?.click();
+    m.redraw.sync();
+
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>('input')].some(
+        (input) => input.value === 'model-b' && !input.classList.contains('select-dropdown'),
+      ),
+    ).toBe(true);
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Test',
+      )?.disabled,
+    ).toBe(true);
+  });
 });

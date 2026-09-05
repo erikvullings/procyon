@@ -1191,6 +1191,7 @@ export const en = {
     name: 'Profile name',
     baseUrl: 'Base URL',
     model: 'Model',
+    availableModels: 'Available provider models',
     deployment: 'Azure deployment',
     apiVersion: 'Azure API version',
     apiKey: 'API key or token',

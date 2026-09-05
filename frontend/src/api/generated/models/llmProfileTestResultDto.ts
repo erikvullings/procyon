@@ -11,6 +11,8 @@ import type { LlmTestErrorCategoryDto } from './llmTestErrorCategoryDto.ts';
  * Content-free result of a bounded synthetic profile test.
  */
 export interface LlmProfileTestResultDto {
+  /** @nullable */
+  availableModels?: string[] | null;
   capabilities: LlmApiCapabilityDto[];
   category?: null | LlmTestErrorCategoryDto;
   /** @minimum 0 */

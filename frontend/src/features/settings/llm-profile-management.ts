@@ -90,6 +90,13 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   let message: string | undefined;
   let error: string | undefined;
   let dirty = false;
+  let availableModels: string[] = [];
+  let modelTestRevision = 0;
+
+  function clearAvailableModels(): void {
+    modelTestRevision += 1;
+    availableModels = [];
+  }
 
   async function load(client: FileManagerClient): Promise<void> {
     loading = true;
@@ -114,6 +121,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     selectedId = profile.id;
     editor = { profileId: profile.id, request: requestFromProfile(profile), apiKey: '' };
     dirty = false;
+    clearAvailableModels();
     consent = false;
     message = undefined;
     error = undefined;
@@ -125,18 +133,22 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     selectedId = undefined;
     editor = { request: requestFromPreset(preset), apiKey: '' };
     dirty = true;
+    clearAvailableModels();
     consent = false;
     message = undefined;
   }
 
-  async function run(action: () => Promise<void>): Promise<void> {
+  async function run(
+    action: () => Promise<void>,
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
     busy = true;
     error = undefined;
     message = undefined;
     try {
       await action();
     } catch (reason) {
-      error = errorMessage(reason);
+      if (isCurrent()) error = errorMessage(reason);
     } finally {
       busy = false;
       m.redraw();
@@ -174,12 +186,14 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
 
   function updateRequest(patch: Partial<SaveLlmProfileRequest>): void {
     if (editor === undefined) return;
+    modelTestRevision += 1;
     editor = { ...editor, request: { ...editor.request, ...patch } };
     dirty = true;
   }
 
   function updateApiKey(apiKey: string): void {
     if (editor === undefined) return;
+    modelTestRevision += 1;
     editor = { ...editor, apiKey };
     dirty = true;
   }
@@ -248,7 +262,10 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             className: 'col s12 m6',
             label: t('llmProfiles', 'baseUrl'),
             value: request.baseUrl,
-            oninput: (value: string) => updateRequest({ baseUrl: value }),
+            oninput: (value: string) => {
+              clearAvailableModels();
+              updateRequest({ baseUrl: value });
+            },
           }),
           m(TextInput, {
             className: 'col s12 m6',
@@ -257,6 +274,18 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             oninput: (value: string) => updateRequest({ model: value }),
           }),
         ]),
+        availableModels.length === 0
+          ? undefined
+          : m(
+              '.row',
+              m(Select<string>, {
+                className: 'col s12',
+                label: t('llmProfiles', 'availableModels'),
+                options: availableModels.map((model) => ({ id: model, label: model })),
+                ...(availableModels.includes(request.model) ? { checkedId: request.model } : {}),
+                onchange: ([value]) => value !== undefined && updateRequest({ model: value }),
+              }),
+            ),
         request.preset === 'azureOpenAi'
           ? m('.row', [
               m(TextInput, {
@@ -365,10 +394,12 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               m(Switch, {
                 label: t('llmProfiles', 'modelDiscovery'),
                 checked: request.capabilities.includes('modelDiscovery'),
-                onchange: (checked: boolean) =>
+                onchange: (checked: boolean) => {
+                  clearAvailableModels();
                   updateRequest({
                     capabilities: withCapability(request.capabilities, 'modelDiscovery', checked),
-                  }),
+                  });
+                },
               }),
               m(Switch, {
                 label: t('llmProfiles', 'responsesCapability'),
@@ -405,16 +436,24 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 'button.fm-semantic-action',
                 {
                   type: 'button',
-                  disabled: busy,
-                  onclick: () =>
+                  disabled: busy || dirty,
+                  onclick: () => {
+                    const testedProfileId = active.id;
+                    clearAvailableModels();
+                    const revision = modelTestRevision;
+                    const isCurrent = () =>
+                      revision === modelTestRevision && selectedId === testedProfileId;
                     void run(async () => {
-                      const result = await attrs.client.testLlmProfile(active.id);
+                      const result = await attrs.client.testLlmProfile(testedProfileId);
+                      if (!isCurrent()) return;
+                      availableModels = result.availableModels ?? [];
                       message = result.success
                         ? t('llmProfiles', 'testSucceeded')
                         : t('llmProfiles', 'testFailed', {
                             category: result.category ?? 'transport',
                           });
-                    }),
+                    }, isCurrent);
+                  },
                 },
                 t('llmProfiles', 'test'),
               ),

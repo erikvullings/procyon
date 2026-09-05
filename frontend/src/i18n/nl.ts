@@ -1202,6 +1202,7 @@ export const nl = {
     name: 'Profielnaam',
     baseUrl: 'Basis-URL',
     model: 'Model',
+    availableModels: 'Beschikbare providermodellen',
     deployment: 'Azure-implementatie',
     apiVersion: 'Azure API-versie',
     apiKey: 'API-sleutel of token',

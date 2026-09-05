@@ -73,3 +73,6 @@ service and never enter ordinary settings, exports, logs, or the semantic worker
   errors, cancellation, TLS/SSRF policy, credential deletion, HTTP parity, Tauri parity, and
   frontend accessibility. Affected Rust packages, all 1,769 frontend tests, generated-API
   stability, and full repository lint pass.
+- 2026-09-05: Profile tests now return a bounded, deduplicated list of discovered model IDs. The
+  generation-profile editor offers those models through a selector after Test while retaining
+  manual model entry for providers without discovery support.

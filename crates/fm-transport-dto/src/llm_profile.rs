@@ -184,6 +184,7 @@ pub struct LlmProfileTestResultDto {
     pub category: Option<LlmTestErrorCategoryDto>,
     pub duration_ms: u64,
     pub model_available: Option<bool>,
+    pub available_models: Option<Vec<String>>,
     pub capabilities: BTreeSet<LlmApiCapabilityDto>,
 }
 

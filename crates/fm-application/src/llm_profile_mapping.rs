@@ -99,6 +99,7 @@ pub(crate) fn test_result_to_dto(result: LlmProfileTestResult) -> LlmProfileTest
         category: result.category.map(test_category_to_dto),
         duration_ms: result.duration_ms,
         model_available: result.model_available,
+        available_models: result.available_models,
         capabilities: result
             .capabilities
             .into_iter()

@@ -4011,6 +4011,10 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('testLlmProfile', signal, () => {
       const profile = this.requireLlmProfile(profileId);
       const success = profile.model.trim().length > 0;
+      const availableModels =
+        profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
+          ? [profile.model, 'model-b']
+          : null;
       return {
         profileId,
         provider: profile.preset,
@@ -4019,6 +4023,7 @@ export class MockFileManagerClient implements FileManagerClient {
         category: success ? null : 'modelUnavailable',
         durationMs: 1,
         modelAvailable: success,
+        availableModels,
         capabilities: [...profile.capabilities],
       };
     });
