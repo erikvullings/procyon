@@ -527,6 +527,14 @@ passphrase or token directly - only an opaque reference into a `CredentialStore`
 macOS Keychain or Windows Credential Manager (an in-memory store is used on other hosts and in
 tests only).
 
+Optional generation services use separate named OpenAI-compatible profiles because they are not
+filesystems. Settings include presets for common local servers, generic compatible endpoints, and
+Azure OpenAI, but API keys remain in the same credential service and are omitted from profile
+exports. Cloud activation requires informed consent bound to the normalized endpoint host. The
+browser/server runtime denies loopback destinations and all cloud hosts by default; administrators
+must explicitly allow cloud endpoints with a comma-separated `PROCYON_LLM_ALLOWED_HOSTS` value
+(for example, `llm.example.com,tenant.openai.azure.com`).
+
 Native OneDrive access uses Microsoft Graph rather than an OS-mounted sync folder. The connection
 editor opens Authorization Code + PKCE sign-in in the system browser for an existing personal,
 work or school Microsoft account; Procyon never collects the Microsoft password and never embeds a

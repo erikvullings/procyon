@@ -7,6 +7,7 @@ import type {
   AcceptSshHostKeyRequestDto,
   ActionDescriptorDto,
   ActionResultDto,
+  ActivateLlmProfileRequestDto,
   ApplicationErrorDto,
   ApplySyncPlanRequestDto,
   ApplySyncPlanResponseDto,
@@ -30,6 +31,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequestDto,
   CreateSemanticInstallationOfferRequestDto,
   CreateWorkspaceRequestDto,
+  DeleteLlmProfileRequestDto,
   DeleteWorkspaceParams,
   DiagnosticsDto,
   DirectorySnapshotDto,
@@ -61,6 +63,10 @@ import type {
   ListDirectoryChildrenRequest,
   ListDirectoryRequest,
   ListOperationsParams,
+  LlmProfileDto,
+  LlmProfileExportDto,
+  LlmProfilePresetDto,
+  LlmProfileTestResultDto,
   LoadEditableFileRequestDto,
   LoadEditableFileResponseDto,
   MoveSemanticDataRequestDto,
@@ -99,6 +105,7 @@ import type {
   SaveChecksumFileResponseDto,
   SaveEditableFileRequestDto,
   SaveEditableFileResponseDto,
+  SaveLlmProfileRequestDto,
   ScanDiskUsageRequestDto,
   SearchInFileRequestDto,
   SearchInFileResponseDto,
@@ -3353,6 +3360,396 @@ export const getFileIcon = async (params: GetFileIconParams, options?: Parameter
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listLlmProfilesResponse200 = {
+  data: LlmProfileDto[]
+  status: 200
+}
+
+export type listLlmProfilesResponse500 = {
+  data: ApplicationErrorDto
+  status: 500
+}
+
+export type listLlmProfilesResponseSuccess = (listLlmProfilesResponse200) & {
+  headers: Headers;
+};
+export type listLlmProfilesResponseError = (listLlmProfilesResponse500) & {
+  headers: Headers;
+};
+
+export type listLlmProfilesResponse = (listLlmProfilesResponseSuccess | listLlmProfilesResponseError)
+
+export const getListLlmProfilesUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles`
+}
+
+export const listLlmProfiles = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listLlmProfilesResponse> => {
+
+  return fetchMutator<listLlmProfilesResponse>(getListLlmProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createLlmProfileResponse201 = {
+  data: LlmProfileDto
+  status: 201
+}
+
+export type createLlmProfileResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type createLlmProfileResponseSuccess = (createLlmProfileResponse201) & {
+  headers: Headers;
+};
+export type createLlmProfileResponseError = (createLlmProfileResponse400) & {
+  headers: Headers;
+};
+
+export type createLlmProfileResponse = (createLlmProfileResponseSuccess | createLlmProfileResponseError)
+
+export const getCreateLlmProfileUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles`
+}
+
+export const createLlmProfile = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createLlmProfileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type listLlmProfilePresetsResponse200 = {
+  data: LlmProfilePresetDto[]
+  status: 200
+}
+
+export type listLlmProfilePresetsResponseSuccess = (listLlmProfilePresetsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listLlmProfilePresetsResponse = (listLlmProfilePresetsResponseSuccess)
+
+export const getListLlmProfilePresetsUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles/presets`
+}
+
+export const listLlmProfilePresets = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listLlmProfilePresetsResponse> => {
+
+  return fetchMutator<listLlmProfilePresetsResponse>(getListLlmProfilePresetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteLlmProfileResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteLlmProfileResponseSuccess = (deleteLlmProfileResponse204) & {
+  headers: Headers;
+};
+export type deleteLlmProfileResponseError = (deleteLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type deleteLlmProfileResponse = (deleteLlmProfileResponseSuccess | deleteLlmProfileResponseError)
+
+export const getDeleteLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}`
+}
+
+export const deleteLlmProfile = async (profileId: string,
+    deleteLlmProfileRequestDto: DeleteLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteLlmProfileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<deleteLlmProfileResponse>(getDeleteLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type updateLlmProfileResponse200 = {
+  data: LlmProfileDto
+  status: 200
+}
+
+export type updateLlmProfileResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type updateLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type updateLlmProfileResponseSuccess = (updateLlmProfileResponse200) & {
+  headers: Headers;
+};
+export type updateLlmProfileResponseError = (updateLlmProfileResponse400 | updateLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type updateLlmProfileResponse = (updateLlmProfileResponseSuccess | updateLlmProfileResponseError)
+
+export const getUpdateLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}`
+}
+
+export const updateLlmProfile = async (profileId: string,
+    saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateLlmProfileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<updateLlmProfileResponse>(getUpdateLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type activateLlmProfileResponse200 = {
+  data: LlmProfileDto
+  status: 200
+}
+
+export type activateLlmProfileResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type activateLlmProfileResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type activateLlmProfileResponseSuccess = (activateLlmProfileResponse200) & {
+  headers: Headers;
+};
+export type activateLlmProfileResponseError = (activateLlmProfileResponse400 | activateLlmProfileResponse403) & {
+  headers: Headers;
+};
+
+export type activateLlmProfileResponse = (activateLlmProfileResponseSuccess | activateLlmProfileResponseError)
+
+export const getActivateLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/activate`
+}
+
+export const activateLlmProfile = async (profileId: string,
+    activateLlmProfileRequestDto: ActivateLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<activateLlmProfileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<activateLlmProfileResponse>(getActivateLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(activateLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type cloneLlmProfileResponse201 = {
+  data: LlmProfileDto
+  status: 201
+}
+
+export type cloneLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type cloneLlmProfileResponseSuccess = (cloneLlmProfileResponse201) & {
+  headers: Headers;
+};
+export type cloneLlmProfileResponseError = (cloneLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type cloneLlmProfileResponse = (cloneLlmProfileResponseSuccess | cloneLlmProfileResponseError)
+
+export const getCloneLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/clone`
+}
+
+export const cloneLlmProfile = async (profileId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<cloneLlmProfileResponse> => {
+
+  return fetchMutator<cloneLlmProfileResponse>(getCloneLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type exportLlmProfileResponse200 = {
+  data: LlmProfileExportDto
+  status: 200
+}
+
+export type exportLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type exportLlmProfileResponseSuccess = (exportLlmProfileResponse200) & {
+  headers: Headers;
+};
+export type exportLlmProfileResponseError = (exportLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type exportLlmProfileResponse = (exportLlmProfileResponseSuccess | exportLlmProfileResponseError)
+
+export const getExportLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/export`
+}
+
+export const exportLlmProfile = async (profileId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<exportLlmProfileResponse> => {
+
+  return fetchMutator<exportLlmProfileResponse>(getExportLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type testLlmProfileResponse200 = {
+  data: LlmProfileTestResultDto
+  status: 200
+}
+
+export type testLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type testLlmProfileResponseSuccess = (testLlmProfileResponse200) & {
+  headers: Headers;
+};
+export type testLlmProfileResponseError = (testLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type testLlmProfileResponse = (testLlmProfileResponseSuccess | testLlmProfileResponseError)
+
+export const getTestLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/test`
+}
+
+export const testLlmProfile = async (profileId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<testLlmProfileResponse> => {
+
+  return fetchMutator<testLlmProfileResponse>(getTestLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

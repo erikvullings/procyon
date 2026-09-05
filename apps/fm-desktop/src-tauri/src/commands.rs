@@ -22,14 +22,16 @@ use fm_transport_dto::{
     ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
     ConfirmSemanticIndexRemovalRequestDto, ConfirmSemanticModelMigrationRequestDto, ConnectionDto,
     ConnectionStateDto, CreateConnectionRequestDto, CreateSemanticIndexRemovalPlanRequestDto,
-    CreateSemanticInstallationOfferRequestDto, CreateWorkspaceRequestDto, DiagnosticErrorDto,
-    DiagnosticsDto, DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
+    CreateSemanticInstallationOfferRequestDto, CreateWorkspaceRequestDto,
+    DeleteLlmProfileRequestDto, DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
+    DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DocxPreviewSessionRequestDto,
     DuplicatePageDto, EntryMetadataDto, EntryMetadataRequest, EntrySummaryDto, FinderTagsDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     GetSemanticFolderStatusRequestDto, HostKeyProbeDto, ImportSemanticLocalModelRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, ListDirectoryChildrenRequest,
-    ListDirectoryRequest, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
+    ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
     OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
     OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
     OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
@@ -42,24 +44,24 @@ use fm_transport_dto::{
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
     ResolveOperationConflictRequestDto, ResumeSemanticCleanupRequestDto, RuntimeCapabilitiesDto,
-    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, ScanDiskUsageRequestDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
-    SearchStructuredRowsResponseDto, SemanticComponentCapabilitiesDto, SemanticComponentErrorDto,
-    SemanticComponentStatusDto, SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto,
-    SemanticExclusionPlanDto, SemanticFolderStatusDto, SemanticIndexRemovalPlanDto,
-    SemanticIndexRemovalReceiptDto, SemanticInstallReceiptDto, SemanticInstallationOfferDto,
-    SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
-    SemanticLibraryStatusDto, SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto,
-    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticUninstallReceiptDto,
-    SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
-    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
-    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
-    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto,
-    StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
-    UninstallSemanticComponentsRequestDto, UpdateConnectionRequestDto,
-    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
-    VerificationReportDto, VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto,
-    WorkspaceSummaryDto,
+    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, SaveLlmProfileRequestDto,
+    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
+    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SemanticComponentCapabilitiesDto, SemanticComponentErrorDto, SemanticComponentStatusDto,
+    SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto,
+    SemanticFolderStatusDto, SemanticIndexRemovalPlanDto, SemanticIndexRemovalReceiptDto,
+    SemanticInstallReceiptDto, SemanticInstallationOfferDto, SemanticLibraryCapabilitiesDto,
+    SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto,
+    SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto, SemanticModelProfileDto,
+    SemanticModelSelectionDto, SemanticUninstallReceiptDto, SemanticWorkerPatchResponseDto,
+    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
+    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
+    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
+    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
+    StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
+    UpdateConnectionRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
+    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -2043,6 +2045,114 @@ pub(crate) fn cancel_duplicate_scan(
     state
         .service
         .cancel_duplicate_scan(scan_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Returns safe generation-provider defaults, equivalent to the HTTP API.
+#[tauri::command]
+pub(crate) fn list_llm_profile_presets(state: State<'_, AppState>) -> Vec<LlmProfilePresetDto> {
+    state.service.list_llm_profile_presets()
+}
+
+/// Lists saved generation profiles without credential identifiers.
+#[tauri::command]
+pub(crate) fn list_llm_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<LlmProfileDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_llm_profiles()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Creates a named generation profile.
+#[tauri::command]
+pub(crate) async fn create_llm_profile(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .create_llm_profile(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Updates a named generation profile.
+#[tauri::command]
+pub(crate) async fn update_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .update_llm_profile(profile_id, request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Deletes a profile with explicit credential handling.
+#[tauri::command]
+pub(crate) async fn delete_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    request: DeleteLlmProfileRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_llm_profile(profile_id, request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Persists a credential-free profile clone.
+#[tauri::command]
+pub(crate) fn clone_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .clone_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Returns non-secret export configuration.
+#[tauri::command]
+pub(crate) fn export_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileExportDto, ApplicationErrorDto> {
+    state
+        .service
+        .export_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Activates a profile and records informed cloud consent when supplied.
+#[tauri::command]
+pub(crate) fn activate_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    consent: bool,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .activate_llm_profile(profile_id, consent)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Runs the bounded synthetic compatibility probe.
+#[tauri::command]
+pub(crate) async fn test_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileTestResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .test_llm_profile(profile_id)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

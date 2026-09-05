@@ -20,6 +20,7 @@ import type {
 } from '../../models';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
+import { LlmProfileManagement } from './llm-profile-management';
 import { SemanticComponentManagement } from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
 import {
@@ -464,6 +465,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
               ...(current.activeLocation === undefined ? {} : { location: current.activeLocation }),
             }),
           ),
+          m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title'))),
+          m('.row', m(LlmProfileManagement, { client: current.client })),
 
           m('.row', m('h4.fm-settings-section-heading.col.s12', t('settings', 'plugins'))),
           m(PluginManagement, {

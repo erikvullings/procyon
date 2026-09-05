@@ -35,6 +35,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -60,6 +61,10 @@ import type {
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -91,6 +96,7 @@ import type {
   SaveChecksumFileRequest,
   SavedChecksumFile,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
   ScanDiskUsageRequest,
   ScanDiskUsageResult,
   SearchInFileMatch,
@@ -294,6 +300,15 @@ export type MockClientMethod =
   | 'startDuplicateScan'
   | 'getDuplicateScan'
   | 'cancelDuplicateScan'
+  | 'listLlmProfilePresets'
+  | 'listLlmProfiles'
+  | 'createLlmProfile'
+  | 'updateLlmProfile'
+  | 'deleteLlmProfile'
+  | 'cloneLlmProfile'
+  | 'exportLlmProfile'
+  | 'activateLlmProfile'
+  | 'testLlmProfile'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -1167,6 +1182,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly navigationHistory = new Map<string, { back: Location[]; forward: Location[] }>();
   private readonly workspaces = new Map<WorkspaceId, WorkspaceProjection>();
   private readonly connections = new Map<ConnectionId, Connection>();
+  private readonly llmProfiles = new Map<string, LlmProfile>();
   private readonly oneDriveAuthorizations = new Map<
     string,
     { readonly connectionId: ConnectionId; attempt: OneDriveAuthorizationAttempt }
@@ -1203,6 +1219,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private tabSequence = 0;
   private workspaceSequence = 0;
   private connectionSequence = 0;
+  private llmProfileSequence = 0;
   private oneDriveAuthorizationSequence = 0;
   private searchSequence = 0;
   private eventSequence = 0;
@@ -3668,6 +3685,201 @@ export class MockFileManagerClient implements FileManagerClient {
     }
   }
 
+  listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    return this.perform('listLlmProfilePresets', signal, () => {
+      const defaults: Pick<LlmProfilePreset, 'model' | 'advanced' | 'capabilities'> = {
+        model: '',
+        advanced: {
+          contextWindow: 8192,
+          maximumAnswerTokens: 1024,
+          temperature: 0.2,
+          timeoutSeconds: 30,
+          tlsPolicy: 'requireValidCertificate' as const,
+          customHeaders: {},
+        },
+        capabilities: ['chatCompletions', 'modelDiscovery'],
+      };
+      return [
+        {
+          ...defaults,
+          name: 'Ollama',
+          preset: 'ollama',
+          baseUrl: 'http://127.0.0.1:11434',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'LM Studio',
+          preset: 'lmStudio',
+          baseUrl: 'http://127.0.0.1:1234',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'vLLM',
+          preset: 'vllm',
+          baseUrl: 'http://127.0.0.1:8000',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'SGLang',
+          preset: 'sglang',
+          baseUrl: 'http://127.0.0.1:30000',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'OMLX',
+          preset: 'omlx',
+          baseUrl: 'http://127.0.0.1:8080',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'OpenAI-compatible',
+          preset: 'openAiCompatible',
+          baseUrl: 'https://api.openai.com',
+          redactFilenames: true,
+        },
+        {
+          ...defaults,
+          name: 'Azure OpenAI',
+          preset: 'azureOpenAi',
+          baseUrl: 'https://example.openai.azure.com',
+          apiVersion: '2024-10-21',
+          redactFilenames: true,
+        },
+      ];
+    });
+  }
+
+  listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
+    return this.perform('listLlmProfiles', signal, () =>
+      [...this.llmProfiles.values()].map((profile) => structuredClone(profile)),
+    );
+  }
+
+  createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.perform('createLlmProfile', signal, () => {
+      this.llmProfileSequence += 1;
+      const host = new URL(request.baseUrl).hostname.toLowerCase();
+      const profile: LlmProfile = {
+        ...structuredClone(request),
+        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
+        hasCredential: request.credential != null,
+        locality:
+          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
+        consentedHost: null,
+      };
+      this.llmProfiles.set(profile.id, profile);
+      return structuredClone(profile);
+    });
+  }
+
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return this.perform('updateLlmProfile', signal, () => {
+      const current = this.requireLlmProfile(profileId);
+      const host = new URL(request.baseUrl).hostname.toLowerCase();
+      const oldHost = new URL(current.baseUrl).hostname.toLowerCase();
+      const profile: LlmProfile = {
+        ...structuredClone(request),
+        id: profileId,
+        hasCredential: request.credential != null || current.hasCredential,
+        locality:
+          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
+        consentedHost: host === oldHost ? (current.consentedHost ?? null) : null,
+      };
+      this.llmProfiles.set(profileId, profile);
+      return structuredClone(profile);
+    });
+  }
+
+  deleteLlmProfile(
+    profileId: string,
+    _request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('deleteLlmProfile', signal, () => {
+      this.requireLlmProfile(profileId);
+      this.llmProfiles.delete(profileId);
+    });
+  }
+
+  cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.perform('cloneLlmProfile', signal, () => {
+      const source = this.requireLlmProfile(profileId);
+      this.llmProfileSequence += 1;
+      const clone: LlmProfile = {
+        ...structuredClone(source),
+        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
+        name: `${source.name} copy`,
+        hasCredential: false,
+        consentedHost: null,
+      };
+      this.llmProfiles.set(clone.id, clone);
+      return structuredClone(clone);
+    });
+  }
+
+  exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport> {
+    return this.perform('exportLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      return structuredClone({
+        name: profile.name,
+        preset: profile.preset,
+        baseUrl: profile.baseUrl,
+        deployment: profile.deployment ?? null,
+        apiVersion: profile.apiVersion ?? null,
+        model: profile.model,
+        advanced: profile.advanced,
+        capabilities: profile.capabilities,
+        redactFilenames: profile.redactFilenames,
+      });
+    });
+  }
+
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return this.perform('activateLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      if (profile.locality === 'cloud' && !consent && profile.consentedHost == null) {
+        throw new MockClientError('invalidRequest', 'Cloud consent is required');
+      }
+      const activated: LlmProfile = {
+        ...profile,
+        consentedHost:
+          profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
+      };
+      this.llmProfiles.set(profileId, activated);
+      return structuredClone(activated);
+    });
+  }
+
+  testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    return this.perform('testLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      const success = profile.model.trim().length > 0;
+      return {
+        profileId,
+        provider: profile.preset,
+        locality: profile.locality,
+        success,
+        category: success ? null : 'modelUnavailable',
+        durationMs: 1,
+        modelAvailable: success,
+        capabilities: [...profile.capabilities],
+      };
+    });
+  }
+
   listConnections(signal?: AbortSignal): Promise<Connection[]> {
     return this.perform('listConnections', signal, () =>
       [...this.connections.values()].map((connection) => structuredClone(connection)),
@@ -3867,6 +4079,14 @@ export class MockFileManagerClient implements FileManagerClient {
       throw new MockClientError('notFound', `No mock connection with id ${connectionId}`);
     }
     return connection;
+  }
+
+  private requireLlmProfile(profileId: string): LlmProfile {
+    const profile = this.llmProfiles.get(profileId);
+    if (profile === undefined) {
+      throw new MockClientError('notFound', `No mock LLM profile with id ${profileId}`);
+    }
+    return profile;
   }
 
   /** Returns the current in-memory state for a mock operation. */

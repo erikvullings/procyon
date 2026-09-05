@@ -2450,6 +2450,7 @@ dependencies = [
  "mp4",
  "openh264",
  "parallel-disk-usage",
+ "percent-encoding",
  "quick-xml 0.41.0",
  "rayon",
  "reqwest",

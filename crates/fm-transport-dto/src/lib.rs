@@ -17,6 +17,7 @@ pub mod error;
 pub mod files;
 pub mod finder_tags;
 pub mod health;
+pub mod llm_profile;
 pub mod location;
 pub mod operation;
 pub mod plugin;
@@ -98,6 +99,13 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
+pub use llm_profile::{
+    ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
+    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmPresetDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
+    SaveLlmProfileRequestDto,
+};
 pub use location::LocationDto;
 pub use operation::{
     ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, OperationConflictPolicyDto, OperationDto,

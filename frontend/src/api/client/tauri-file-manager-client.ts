@@ -31,6 +31,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -55,6 +56,10 @@ import type {
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -86,6 +91,7 @@ import type {
   SaveChecksumFileRequest,
   SavedChecksumFile,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -953,6 +959,54 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  listLlmProfilePresets(_signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    return invoke<LlmProfilePreset[]>('list_llm_profile_presets');
+  }
+
+  listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
+    return invoke<LlmProfile[]>('list_llm_profiles');
+  }
+
+  createLlmProfile(request: SaveLlmProfileRequest, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('create_llm_profile', { request });
+  }
+
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return invoke<LlmProfile>('update_llm_profile', { profileId, request });
+  }
+
+  async deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    await invoke('delete_llm_profile', { profileId, request });
+  }
+
+  cloneLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('clone_llm_profile', { profileId });
+  }
+
+  exportLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfileExport> {
+    return invoke<LlmProfileExport>('export_llm_profile', { profileId });
+  }
+
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    _signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return invoke<LlmProfile>('activate_llm_profile', { profileId, consent });
+  }
+
+  testLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    return invoke<LlmProfileTestResult>('test_llm_profile', { profileId });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

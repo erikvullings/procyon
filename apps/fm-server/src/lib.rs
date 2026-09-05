@@ -253,6 +253,27 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::connection::accept_ssh_host_key
         ))
         .routes(utoipa_axum::routes!(
+            routes::llm_profile::list_llm_profile_presets
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::list_llm_profiles))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::create_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::update_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::delete_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::clone_llm_profile))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::export_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::activate_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::test_llm_profile))
+        .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))
         .routes(utoipa_axum::routes!(

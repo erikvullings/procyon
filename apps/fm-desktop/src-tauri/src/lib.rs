@@ -296,6 +296,15 @@ pub fn run() {
             commands::start_duplicate_scan,
             commands::get_duplicate_scan,
             commands::cancel_duplicate_scan,
+            commands::list_llm_profile_presets,
+            commands::list_llm_profiles,
+            commands::create_llm_profile,
+            commands::update_llm_profile,
+            commands::delete_llm_profile,
+            commands::clone_llm_profile,
+            commands::export_llm_profile,
+            commands::activate_llm_profile,
+            commands::test_llm_profile,
             commands::list_connections,
             commands::create_connection,
             commands::get_connection,
@@ -548,6 +557,15 @@ mod tests {
                 commands::start_duplicate_scan,
                 commands::get_duplicate_scan,
                 commands::cancel_duplicate_scan,
+                commands::list_llm_profile_presets,
+                commands::list_llm_profiles,
+                commands::create_llm_profile,
+                commands::update_llm_profile,
+                commands::delete_llm_profile,
+                commands::clone_llm_profile,
+                commands::export_llm_profile,
+                commands::activate_llm_profile,
+                commands::test_llm_profile,
                 commands::list_connections,
                 commands::create_connection,
                 commands::get_connection,
@@ -886,6 +904,110 @@ mod tests {
         .deserialize::<fm_transport_dto::OneDriveAuthorizationAttemptDto>()
         .expect("response must deserialize");
         assert_eq!(cancelled.id, begin.attempt_id);
+    }
+
+    #[tokio::test]
+    async fn llm_profile_commands_round_trip_through_the_shared_service() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        macro_rules! invoke {
+            ($command:literal, $body:expr) => {
+                get_ipc_response(
+                    &webview,
+                    InvokeRequest {
+                        cmd: $command.into(),
+                        callback: CallbackFn(0),
+                        error: CallbackFn(1),
+                        url: local_protocol_url(),
+                        body: InvokeBody::Json($body),
+                        headers: Default::default(),
+                        invoke_key: INVOKE_KEY.to_string(),
+                    },
+                )
+            };
+        }
+
+        let presets = invoke!("list_llm_profile_presets", serde_json::json!({}))
+            .expect("profile presets command must succeed")
+            .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
+            .expect("presets response must deserialize");
+        assert_eq!(presets.len(), 7);
+
+        let created = invoke!(
+            "create_llm_profile",
+            serde_json::json!({
+                "request": {
+                    "name": "Local generation",
+                    "preset": "ollama",
+                    "baseUrl": "http://127.0.0.1:1",
+                    "deployment": null,
+                    "apiVersion": null,
+                    "model": "model-a",
+                    "credential": null,
+                    "advanced": {
+                        "contextWindow": 8192,
+                        "maximumAnswerTokens": 1024,
+                        "temperature": 0.2,
+                        "timeoutSeconds": 1,
+                        "tlsPolicy": "requireValidCertificate",
+                        "customHeaders": {}
+                    },
+                    "capabilities": ["chatCompletions"],
+                    "redactFilenames": true
+                }
+            })
+        )
+        .expect("create profile command must succeed")
+        .deserialize::<fm_transport_dto::LlmProfileDto>()
+        .expect("profile response must deserialize");
+        assert!(!created.has_credential);
+
+        let listed = invoke!("list_llm_profiles", serde_json::json!({}))
+            .expect("list profiles command must succeed")
+            .deserialize::<Vec<fm_transport_dto::LlmProfileDto>>()
+            .expect("profiles response must deserialize");
+        assert_eq!(listed.len(), 1);
+
+        let tested = invoke!(
+            "test_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("test profile command must return a normalized result")
+        .deserialize::<fm_transport_dto::LlmProfileTestResultDto>()
+        .expect("test response must deserialize");
+        assert!(!tested.success);
+
+        let cloned = invoke!(
+            "clone_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("clone profile command must succeed")
+        .deserialize::<fm_transport_dto::LlmProfileDto>()
+        .expect("clone response must deserialize");
+        assert!(!cloned.has_credential);
+
+        let exported = invoke!(
+            "export_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("export profile command must succeed")
+        .deserialize::<serde_json::Value>()
+        .expect("export response must deserialize");
+        let exported = exported.to_string().to_ascii_lowercase();
+        assert!(!exported.contains("credential"));
+        assert!(!exported.contains("consent"));
+
+        invoke!(
+            "delete_llm_profile",
+            serde_json::json!({
+                "profileId": created.id,
+                "request": { "credentialDisposition": "retain" }
+            })
+        )
+        .expect("delete profile command must succeed");
     }
 
     #[tokio::test]

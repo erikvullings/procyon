@@ -23,6 +23,8 @@ mod error;
 mod file_editor;
 mod folder_size;
 mod ftp;
+mod llm_profile_mapping;
+pub mod llm_profiles;
 mod onedrive;
 mod operation_history;
 mod operation_planner;

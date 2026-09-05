@@ -7,6 +7,7 @@ use fm_transport_dto::{ApplicationErrorCode, ApplicationErrorDto};
 use fm_vfs::VfsError;
 use uuid::Uuid;
 
+use crate::llm_profiles::LlmProfileError;
 use crate::workspace::WorkspaceError;
 
 /// Failure modes the application service layer can report to a host.
@@ -218,6 +219,7 @@ impl From<ConnectionError> for ApplicationError {
             ConnectionError::Invalid(details) => {
                 Self::InvalidRequest(format!("connection failed validation: {details:?}"))
             }
+
             ConnectionError::Io(_)
             | ConnectionError::Serialization(_)
             | ConnectionError::Corrupt { .. } => Self::Internal,
@@ -242,6 +244,32 @@ impl From<ConnectionError> for ApplicationError {
             // `last_error` message rather than letting it propagate as an
             // `Err` - this arm exists only for match exhaustiveness.
             ConnectionError::DialFailed(message) => Self::PlatformOperationFailed(message),
+        }
+    }
+}
+
+impl From<LlmProfileError> for ApplicationError {
+    fn from(error: LlmProfileError) -> Self {
+        match error {
+            LlmProfileError::NotFound => Self::NotFound,
+            LlmProfileError::InvalidConfiguration => {
+                Self::InvalidRequest("LLM profile failed validation".to_owned())
+            }
+            LlmProfileError::PolicyDenied => Self::PermissionDenied,
+            LlmProfileError::ConsentRequired(host) => {
+                Self::InvalidRequest(format!("cloud consent is required before using {host}"))
+            }
+            LlmProfileError::Authentication => Self::InvalidCredential,
+            LlmProfileError::Cancelled => Self::OperationCancelled,
+            LlmProfileError::Credential => Self::CredentialRequired,
+            LlmProfileError::ModelUnavailable => {
+                Self::InvalidRequest("the configured LLM model is unavailable".to_owned())
+            }
+            LlmProfileError::Timeout
+            | LlmProfileError::Tls
+            | LlmProfileError::MalformedResponse
+            | LlmProfileError::Transport => Self::PlatformOperationFailed(error.to_string()),
+            LlmProfileError::Persistence => Self::Internal,
         }
     }
 }

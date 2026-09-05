@@ -25,21 +25,23 @@ use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, ChecksumFileDto, ChecksumPageDto, ComparisonPageDto,
-    ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DirectorySnapshotDto,
-    DiscoverApplicationUninstallCandidatesRequestDto,
+    ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DeleteLlmProfileRequestDto,
+    DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
     FinderTagsDto, GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, InvokeActionRequestDto, ListDirectoryRequest, NavigateRequest,
+    GetFileGitHistoryResponseDto, InvokeActionRequestDto, ListDirectoryRequest, LlmProfileDto,
+    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest,
     OperationDto, PluginDescriptorDto, PluginLogEntryDto, ReadFileRangeRequestDto,
     ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
     ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, RuntimeKindDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto,
-    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
-    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
-    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
-    StartSearchResponseDto, SyncPlanDto, UpdateConnectionRequestDto, VerificationReportDto,
-    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    SaveLlmProfileRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
+    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
+    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
+    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
+    StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto, UpdateConnectionRequestDto,
+    VerificationReportDto, VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto,
+    WorkspaceSummaryDto,
 };
 use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
@@ -56,6 +58,11 @@ use crate::document_conversion::DocumentConversionService;
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
+use crate::llm_profile_mapping::{
+    disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
+    profile_to_export_dto, test_result_to_dto,
+};
+use crate::llm_profiles::{LlmHostPolicy, LlmProfileService, ReqwestLlmProbeTransport};
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
 use crate::operation_requests::map_scheduler_error;
@@ -114,6 +121,7 @@ pub struct FileManagerService {
     platform: Arc<dyn PlatformAdapter>,
     workspaces: WorkspaceService<JsonFileWorkspaceRepository>,
     connections: ConnectionFacade,
+    llm_profiles: LlmProfileService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
@@ -352,6 +360,44 @@ impl FileManagerService {
             )),
         );
         let settings_store = SettingsStore::new(&settings_directory);
+        let llm_transport = Arc::new(ReqwestLlmProbeTransport::new());
+        let llm_policy = match runtime {
+            RuntimeKindDto::BrowserServer => LlmHostPolicy::server(
+                std::env::var("PROCYON_LLM_ALLOWED_HOSTS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|host| !host.is_empty())
+                    .map(str::to_owned),
+            ),
+            RuntimeKindDto::Tauri | RuntimeKindDto::Mock => LlmHostPolicy::desktop(),
+        };
+        let llm_profiles = LlmProfileService::new(
+            settings_store.clone(),
+            credential_store.clone(),
+            llm_transport.clone(),
+            llm_policy.clone(),
+        )
+        .unwrap_or_else(|_| {
+            events.publish(
+                EventAudience::Global,
+                BackendEventPayload::NotificationCreated {
+                    notification: NotificationPayload {
+                        id: Uuid::new_v4().to_string(),
+                        level: NotificationLevelPayload::Warning,
+                        message:
+                            "LLM profiles could not be read. No generation profiles were loaded."
+                                .to_owned(),
+                    },
+                },
+            );
+            LlmProfileService::empty(
+                settings_store.clone(),
+                credential_store.clone(),
+                llm_transport,
+                llm_policy,
+            )
+        });
         let loaded = settings_store
             .load()
             .unwrap_or_else(|_| fm_settings::LoadOutcome {
@@ -483,6 +529,7 @@ impl FileManagerService {
                 workspace_directory,
             )),
             connections: ConnectionFacade::new(connection_service, ssh_connections),
+            llm_profiles,
             onedrive,
             remote_terminals,
             directories,
@@ -2134,6 +2181,92 @@ impl FileManagerService {
     ) -> Result<WorkspaceDto, ApplicationError> {
         let workspace = self.workspaces.apply_command(command.into()).await?;
         Ok(workspace.into())
+    }
+
+    /// Returns safe defaults for every supported generation provider.
+    pub fn list_llm_profile_presets(&self) -> Vec<LlmProfilePresetDto> {
+        LlmProfileService::presets()
+            .into_iter()
+            .map(preset_to_profile_dto)
+            .collect()
+    }
+
+    /// Lists saved generation profiles without exposing credential IDs.
+    pub fn list_llm_profiles(&self) -> Result<Vec<LlmProfileDto>, ApplicationError> {
+        self.llm_profiles
+            .list()?
+            .into_iter()
+            .map(profile_to_dto)
+            .collect::<Result<_, _>>()
+            .map_err(Into::into)
+    }
+
+    /// Creates a named generation profile and stores its optional key in the
+    /// protected credential service.
+    pub async fn create_llm_profile(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.create(draft_from_dto(request)).await?).map_err(Into::into)
+    }
+
+    /// Updates a generation profile, preserving its credential when no new
+    /// write-only key is supplied.
+    pub async fn update_llm_profile(
+        &self,
+        id: Uuid,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(
+            self.llm_profiles
+                .update(id, draft_from_dto(request))
+                .await?,
+        )
+        .map_err(Into::into)
+    }
+
+    /// Deletes a profile with an explicit credential-retention choice.
+    pub async fn delete_llm_profile(
+        &self,
+        id: Uuid,
+        request: DeleteLlmProfileRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.llm_profiles
+            .delete(id, disposition_from_dto(request.credential_disposition))
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Persists a credential-free clone of a generation profile.
+    pub fn clone_llm_profile(&self, id: Uuid) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.clone_profile(id)?).map_err(Into::into)
+    }
+
+    /// Exports only non-secret reusable configuration.
+    pub fn export_llm_profile(&self, id: Uuid) -> Result<LlmProfileExportDto, ApplicationError> {
+        Ok(profile_to_export_dto(self.llm_profiles.export_profile(id)?))
+    }
+
+    /// Activates a profile, recording explicit consent for its normalized
+    /// cloud host when required.
+    pub fn activate_llm_profile(
+        &self,
+        id: Uuid,
+        consent: bool,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.activate(id, consent)?).map_err(Into::into)
+    }
+
+    /// Runs the bounded synthetic compatibility probe and returns only
+    /// normalized, content-free diagnostics.
+    pub async fn test_llm_profile(
+        &self,
+        id: Uuid,
+    ) -> Result<LlmProfileTestResultDto, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(test_result_to_dto(
+            self.llm_profiles.test(id, &cancellation).await?,
+        ))
     }
 
     /// Lists every stored connection profile with its current runtime status

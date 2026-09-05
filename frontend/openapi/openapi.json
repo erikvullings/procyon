@@ -232,6 +232,19 @@
           }
         ]
       },
+      "ActivateLlmProfileRequestDto": {
+        "description": "Activation request carrying explicit informed cloud consent.",
+        "properties": {
+          "consent": {
+            "description": "Whether the user consented to sending prompts and retrieved excerpts to\nthe profile's normalized cloud host.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consent"
+        ],
+        "type": "object"
+      },
       "ApplicationErrorCode": {
         "description": "A closed set of machine-readable error codes.\n\nCodes are stable and additive: existing variants are never renamed or\nremoved, only appended to.",
         "enum": [
@@ -1554,6 +1567,19 @@
           "single"
         ],
         "type": "string"
+      },
+      "DeleteLlmProfileRequestDto": {
+        "description": "Profile deletion request.",
+        "properties": {
+          "credentialDisposition": {
+            "$ref": "#/components/schemas/OrphanLlmCredentialDispositionDto",
+            "description": "Whether to delete or retain the credential after removing the profile."
+          }
+        },
+        "required": [
+          "credentialDisposition"
+        ],
+        "type": "object"
       },
       "DiagnosticErrorDto": {
         "description": "A single error entry from the recent errors buffer.",
@@ -3178,6 +3204,343 @@
         ],
         "type": "object"
       },
+      "LlmAdvancedSettingsDto": {
+        "description": "Conservative generation and transport settings.",
+        "properties": {
+          "contextWindow": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "customHeaders": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maximumAnswerTokens": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "temperature": {
+            "format": "float",
+            "type": "number"
+          },
+          "timeoutSeconds": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tlsPolicy": {
+            "$ref": "#/components/schemas/LlmTlsPolicyDto"
+          }
+        },
+        "required": [
+          "contextWindow",
+          "maximumAnswerTokens",
+          "temperature",
+          "timeoutSeconds",
+          "tlsPolicy",
+          "customHeaders"
+        ],
+        "type": "object"
+      },
+      "LlmApiCapabilityDto": {
+        "enum": [
+          "chatCompletions",
+          "responses",
+          "modelDiscovery"
+        ],
+        "type": "string"
+      },
+      "LlmCredentialInputDto": {
+        "description": "Write-only secret input. Its debug representation never includes the key.",
+        "properties": {
+          "apiKey": {
+            "description": "API key or token to place in protected credential storage.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ],
+        "type": "object"
+      },
+      "LlmEndpointLocalityDto": {
+        "enum": [
+          "loopback",
+          "cloud"
+        ],
+        "type": "string"
+      },
+      "LlmPresetDto": {
+        "enum": [
+          "ollama",
+          "lmStudio",
+          "vllm",
+          "sglang",
+          "omlx",
+          "openAiCompatible",
+          "azureOpenAi"
+        ],
+        "type": "string"
+      },
+      "LlmProfileDto": {
+        "description": "A saved generation profile. Secret material and its opaque store ID are\nstructurally absent.",
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/LlmAdvancedSettingsDto"
+          },
+          "apiVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/LlmApiCapabilityDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "consentedHost": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deployment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasCredential": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "locality": {
+            "$ref": "#/components/schemas/LlmEndpointLocalityDto"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/LlmPresetDto"
+          },
+          "redactFilenames": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "preset",
+          "baseUrl",
+          "model",
+          "hasCredential",
+          "advanced",
+          "capabilities",
+          "locality",
+          "redactFilenames"
+        ],
+        "type": "object"
+      },
+      "LlmProfileExportDto": {
+        "description": "Exportable non-secret profile configuration.",
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/LlmAdvancedSettingsDto"
+          },
+          "apiVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/LlmApiCapabilityDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "deployment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/LlmPresetDto"
+          },
+          "redactFilenames": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "preset",
+          "baseUrl",
+          "model",
+          "advanced",
+          "capabilities",
+          "redactFilenames"
+        ],
+        "type": "object"
+      },
+      "LlmProfilePresetDto": {
+        "description": "Safe preset defaults returned to profile editors.",
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/LlmAdvancedSettingsDto"
+          },
+          "apiVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/LlmApiCapabilityDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "deployment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/LlmPresetDto"
+          },
+          "redactFilenames": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "preset",
+          "baseUrl",
+          "model",
+          "advanced",
+          "capabilities",
+          "redactFilenames"
+        ],
+        "type": "object"
+      },
+      "LlmProfileTestResultDto": {
+        "description": "Content-free result of a bounded synthetic profile test.",
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/LlmApiCapabilityDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmTestErrorCategoryDto"
+              }
+            ]
+          },
+          "durationMs": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "locality": {
+            "$ref": "#/components/schemas/LlmEndpointLocalityDto"
+          },
+          "modelAvailable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "profileId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/LlmPresetDto"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profileId",
+          "provider",
+          "locality",
+          "success",
+          "durationMs",
+          "capabilities"
+        ],
+        "type": "object"
+      },
+      "LlmTestErrorCategoryDto": {
+        "enum": [
+          "invalidConfiguration",
+          "policyDenied",
+          "consentRequired",
+          "authentication",
+          "modelUnavailable",
+          "timeout",
+          "tls",
+          "malformedResponse",
+          "cancelled",
+          "transport"
+        ],
+        "type": "string"
+      },
+      "LlmTlsPolicyDto": {
+        "enum": [
+          "requireValidCertificate",
+          "requireHttps"
+        ],
+        "type": "string"
+      },
       "LoadEditableFileRequestDto": {
         "description": "Loads one complete, bounded text file for editing (task 0099).",
         "properties": {
@@ -4329,6 +4692,14 @@
           "available"
         ],
         "type": "object"
+      },
+      "OrphanLlmCredentialDispositionDto": {
+        "description": "Explicit treatment of a profile's credential during deletion.",
+        "enum": [
+          "delete",
+          "retain"
+        ],
+        "type": "string"
       },
       "OwnershipInfoDto": {
         "description": "Ownership information for an entry.",
@@ -5532,6 +5903,68 @@
           "revision",
           "size",
           "overwroteConflict"
+        ],
+        "type": "object"
+      },
+      "SaveLlmProfileRequestDto": {
+        "description": "Create/update payload. An omitted credential preserves the saved\ncredential during update and creates a credential-free profile on create.",
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/LlmAdvancedSettingsDto"
+          },
+          "apiVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/LlmApiCapabilityDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "credential": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmCredentialInputDto"
+              }
+            ]
+          },
+          "deployment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/LlmPresetDto"
+          },
+          "redactFilenames": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "preset",
+          "baseUrl",
+          "model",
+          "advanced",
+          "capabilities",
+          "redactFilenames"
         ],
         "type": "object"
       },
@@ -13404,6 +13837,366 @@
           }
         },
         "summary": "Returns PNG bytes from the active platform adapter, if supported."
+      }
+    },
+    "/api/v1/llm-profiles": {
+      "get": {
+        "operationId": "listLlmProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LlmProfileDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Saved generation profiles"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profiles could not be loaded"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createLlmProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            },
+            "description": "Created generation profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Invalid profile"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/presets": {
+      "get": {
+        "operationId": "listLlmProfilePresets",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LlmProfilePresetDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Safe defaults for supported providers"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/{profileId}": {
+      "delete": {
+        "operationId": "deleteLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to delete",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Profile deleted"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to update",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            },
+            "description": "Updated generation profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Invalid profile"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/{profileId}/activate": {
+      "post": {
+        "operationId": "activateLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to activate",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            },
+            "description": "Activated generation profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Cloud consent required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Host denied by administrator policy"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/{profileId}/clone": {
+      "post": {
+        "operationId": "cloneLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to clone",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            },
+            "description": "Credential-free cloned profile"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/{profileId}/export": {
+      "get": {
+        "operationId": "exportLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to export",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileExportDto"
+                }
+              }
+            },
+            "description": "Non-secret profile configuration"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/{profileId}/test": {
+      "post": {
+        "operationId": "testLlmProfile",
+        "parameters": [
+          {
+            "description": "Profile to test",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileTestResultDto"
+                }
+              }
+            },
+            "description": "Content-free normalized test result"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
       }
     },
     "/api/v1/navigation/open": {

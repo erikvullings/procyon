@@ -27,6 +27,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -52,6 +53,10 @@ import type {
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   MoveSemanticDataRequest,
   NavigateRequest,
@@ -83,6 +88,7 @@ import type {
   SaveChecksumFileRequest,
   SavedChecksumFile,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -191,6 +197,15 @@ import {
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
   getFileGitHistory as requestGitFileHistory,
+  activateLlmProfile as requestLlmProfileActivation,
+  cloneLlmProfile as requestLlmProfileClone,
+  createLlmProfile as requestLlmProfileCreation,
+  deleteLlmProfile as requestLlmProfileDeletion,
+  exportLlmProfile as requestLlmProfileExport,
+  listLlmProfilePresets as requestLlmProfilePresets,
+  listLlmProfiles as requestLlmProfiles,
+  testLlmProfile as requestLlmProfileTest,
+  updateLlmProfile as requestLlmProfileUpdate,
   loadEditableFile as requestLoadEditableFile,
   navigatePane as requestNavigation,
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
@@ -1809,6 +1824,107 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  async listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    const response = await requestLlmProfilePresets(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw new Error(`Unexpected listLlmProfilePresets response status: ${response.status}`);
+    return response.data;
+  }
+
+  async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
+    const response = await requestLlmProfiles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw new Error(`Unexpected listLlmProfiles response status: ${response.status}`);
+    return response.data;
+  }
+
+  async createLlmProfile(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected createLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileUpdate(
+      profileId,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected updateLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestLlmProfileDeletion(
+      profileId,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected deleteLlmProfile response status: ${response.status}`);
+  }
+
+  async cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    const response = await requestLlmProfileClone(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected cloneLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport> {
+    const response = await requestLlmProfileExport(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected exportLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileActivation(
+      profileId,
+      { consent },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected activateLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    const response = await requestLlmProfileTest(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected testLlmProfile response status: ${response.status}`);
+    return response.data;
   }
 
   async listConnections(signal?: AbortSignal): Promise<Connection[]> {

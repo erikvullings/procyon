@@ -115,6 +115,14 @@ bounded evidence, provenance, stale/availability state, and honest coverage. The
 that evidence beside the ordinary pane, opens its excerpt in the existing viewer, and stores
 explicit relevance judgements locally for user-triggered export only.
 
+Generation is an optional application capability independent from semantic indexing. Named
+OpenAI-compatible profiles are owned by `fm-application`, while `fm-credentials` retains their
+tokens and settings retain only opaque credential references. The capability supports local server
+presets and explicit cloud endpoints, normalizes bounded Chat Completions probes, and requires
+host-bound informed consent before activating a cloud profile. Axum, Tauri, and the mock adapter
+share the same transport-neutral client contract; server deployments deny loopback and all cloud
+hosts by default unless `PROCYON_LLM_ALLOWED_HOSTS` explicitly allow-lists them.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

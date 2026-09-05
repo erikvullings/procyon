@@ -27,6 +27,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -51,6 +52,10 @@ import type {
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -82,6 +87,7 @@ import type {
   SaveChecksumFileRequest,
   SavedChecksumFile,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -608,6 +614,28 @@ export interface FileManagerClient {
   onResynchronise(listener: () => void): Unsubscribe;
 
   disconnect(): void;
+
+  listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]>;
+  listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;
+  createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile>;
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile>;
+  deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile>;
+  exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport>;
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile>;
+  testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult>;
 
   /** Lists every stored connection profile with its current runtime status (task 0103). */
   listConnections(signal?: AbortSignal): Promise<Connection[]>;

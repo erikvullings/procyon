@@ -48,6 +48,7 @@ fm-vfs-webdav.workspace = true
 futures.workspace = true
 image.workspace = true
 parallel-disk-usage.workspace = true
+percent-encoding.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 quick-xml.workspace = true
