@@ -10,17 +10,29 @@ import {
   trashIcon,
 } from '../../components/tabler-icons';
 import { t } from '../../i18n';
-import type { SavedSearch, SearchEntryKind, SearchGitStatus } from '../../models';
+import type {
+  SavedSearch,
+  SearchEntryKind,
+  SearchGitStatus,
+  SearchMode,
+  SemanticSearchScope,
+} from '../../models';
 import type { SavedSearchOpenTarget } from './find-files-controller';
 
 /** Parameters passed to the search callback by the find-files dialog (task 0089). */
 export interface FindFilesSearchParams {
+  /** Explicit search interpretation; modes are never silently combined. */
+  readonly mode?: SearchMode;
   /** Filename/glob query. */
   readonly filenameQuery: string;
   /** Optional content-search query. */
   readonly contentQuery?: string | undefined;
   /** Treat content query as regex. */
   readonly contentRegex: boolean;
+  /** Dense-vector query text, present only in semantic mode. */
+  readonly semanticQuery?: string | undefined;
+  /** Visible semantic scope; search never changes enrolment. */
+  readonly semanticScope?: SemanticSearchScope | undefined;
   /** Search recursively into subdirectories. */
   readonly recurse: boolean;
   readonly entryKinds?: readonly SearchEntryKind[];
@@ -62,6 +74,9 @@ function blurActive(): void {
 export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
   let filenameQuery = '';
   let contentQuery = '';
+  let semanticQuery = '';
+  let mode: SearchMode = 'name';
+  let semanticScope: SemanticSearchScope = 'currentFolder';
   let contentRegex = false;
   let recurse = true;
   let mimeTypes = '';
@@ -78,6 +93,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
     return (
       searchParams.filenameQuery.length > 0 ||
       searchParams.contentQuery !== undefined ||
+      searchParams.semanticQuery !== undefined ||
       (searchParams.mimeTypes?.length ?? 0) > 0 ||
       searchParams.minSizeBytes !== undefined ||
       searchParams.maxSizeBytes !== undefined ||
@@ -113,9 +129,13 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
     const minimum = numberOrUndefined(minSizeBytes);
     const maximum = numberOrUndefined(maxSizeBytes);
     return {
-      filenameQuery: trimmedFilename,
-      contentQuery: trimmedContent.length > 0 ? trimmedContent : undefined,
+      mode,
+      filenameQuery: mode === 'name' ? trimmedFilename : '',
+      ...(mode === 'content' && trimmedContent.length > 0 ? { contentQuery: trimmedContent } : {}),
       contentRegex,
+      ...(mode === 'semantic' && semanticQuery.trim().length > 0
+        ? { semanticQuery: semanticQuery.trim(), semanticScope }
+        : {}),
       recurse,
       ...(parsedMimeTypes.length === 0 ? {} : { mimeTypes: parsedMimeTypes }),
       ...(minimum === undefined ? {} : { minSizeBytes: minimum }),
@@ -157,14 +177,44 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
         title: t('search', 'title'),
         className: 'fm-find-files-modal',
         description: m('.fm-find-files-body', [
+          m(
+            '.fm-find-files-modes',
+            (['name', 'content', 'semantic'] as const).map((candidate) =>
+              m(
+                FlatButton,
+                {
+                  type: 'button',
+                  'aria-pressed': mode === candidate ? 'true' : 'false',
+                  onclick: () => {
+                    mode = candidate;
+                    m.redraw();
+                  },
+                },
+                t('search', candidate),
+              ),
+            ),
+          ),
           // Filename query
           m('label.fm-create-directory-field', [
-            m('span', t('search', 'searchIn', { location: attrs.scopeLabel })),
+            m(
+              'span',
+              mode === 'name'
+                ? t('search', 'searchIn', { location: attrs.scopeLabel })
+                : mode === 'content'
+                  ? t('search', 'content')
+                  : t('search', 'semanticQuery'),
+            ),
             m('input#find-files-query', {
               class: 'browser-default',
               type: 'text',
-              value: filenameQuery,
-              placeholder: t('search', 'filenamePlaceholder'),
+              value:
+                mode === 'name' ? filenameQuery : mode === 'content' ? contentQuery : semanticQuery,
+              placeholder:
+                mode === 'name'
+                  ? t('search', 'filenamePlaceholder')
+                  : mode === 'content'
+                    ? t('search', 'contentPlaceholder')
+                    : t('search', 'semanticPlaceholder'),
               // No oncreate-focus here: ModalPanel keeps this input permanently mounted
               // and only toggles CSS visibility, so an oncreate-focus would only ever
               // fire once at app boot (before the dialog is ever shown) - and doing so
@@ -173,36 +223,22 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
               // dialog closes. The onupdate hook below focuses on the real open
               // transition instead.
               oninput: (event: InputEvent) => {
-                const previousQuery = filenameQuery.trim();
-                filenameQuery = (event.currentTarget as HTMLInputElement).value;
+                const value = (event.currentTarget as HTMLInputElement).value;
+                const previousQuery =
+                  mode === 'name'
+                    ? filenameQuery.trim()
+                    : mode === 'content'
+                      ? contentQuery.trim()
+                      : semanticQuery.trim();
+                if (mode === 'name') filenameQuery = value;
+                if (mode === 'content') contentQuery = value;
+                if (mode === 'semantic') semanticQuery = value;
                 if (
                   editingSavedId === undefined &&
                   (savedName.length === 0 || savedName === previousQuery)
                 ) {
-                  savedName = filenameQuery.trim();
+                  savedName = value.trim();
                 }
-              },
-              onkeydown: (event: KeyboardEvent) => {
-                event.stopPropagation();
-                if (event.key === 'Escape') {
-                  cancel(attrs);
-                } else if (event.key === 'Enter') {
-                  event.preventDefault();
-                  search(attrs);
-                }
-              },
-            }),
-          ]),
-          // Content query
-          m('label.fm-create-directory-field', [
-            m('span', t('search', 'content')),
-            m('input', {
-              class: 'browser-default',
-              type: 'text',
-              value: contentQuery,
-              placeholder: t('search', 'contentPlaceholder'),
-              oninput: (event: InputEvent) => {
-                contentQuery = (event.currentTarget as HTMLInputElement).value;
               },
               onkeydown: (event: KeyboardEvent) => {
                 event.stopPropagation();
@@ -217,18 +253,37 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
           ]),
           // Options row
           m('div.fm-find-files-options', [
-            m(
-              FlatButton,
-              {
-                type: 'checkbox',
-                checked: contentRegex,
-                onclick: () => {
-                  contentRegex = !contentRegex;
-                  m.redraw();
-                },
-              },
-              t('search', 'useRegex'),
-            ),
+            mode === 'content'
+              ? m(
+                  FlatButton,
+                  {
+                    type: 'checkbox',
+                    checked: contentRegex,
+                    onclick: () => {
+                      contentRegex = !contentRegex;
+                      m.redraw();
+                    },
+                  },
+                  t('search', 'useRegex'),
+                )
+              : undefined,
+            mode === 'semantic'
+              ? m(
+                  FlatButton,
+                  {
+                    type: 'checkbox',
+                    checked: semanticScope === 'entireLibrary',
+                    onclick: () => {
+                      semanticScope =
+                        semanticScope === 'entireLibrary' ? 'currentFolder' : 'entireLibrary';
+                      m.redraw();
+                    },
+                  },
+                  semanticScope === 'entireLibrary'
+                    ? t('search', 'entireLibrary')
+                    : t('search', 'currentFolderRecursive'),
+                )
+              : undefined,
             m(
               FlatButton,
               {
@@ -355,6 +410,11 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                             onclick: () => {
                               filenameQuery = saved.query.name?.pattern ?? '';
                               contentQuery = saved.query.content?.query ?? '';
+                              semanticQuery = saved.query.semantic?.query ?? '';
+                              mode =
+                                saved.query.mode ??
+                                (saved.query.content === undefined ? 'name' : 'content');
+                              semanticScope = saved.query.semantic?.scope ?? 'currentFolder';
                               contentRegex = saved.query.content?.regex ?? false;
                               recurse = saved.query.scope.recurse;
                               mimeTypes = saved.query.mimeTypes.join(', ');

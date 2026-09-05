@@ -1820,6 +1820,7 @@ pub(crate) async fn start_search(
     state
         .service
         .start_search(request)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

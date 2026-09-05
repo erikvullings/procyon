@@ -694,6 +694,7 @@ fn connection_is_unusable(error: &fm_semantic_worker::ClientError) -> bool {
 }
 
 /// Coordinates semantic operations without exposing worker transport details.
+#[derive(Clone)]
 pub struct SemanticService {
     capability: Arc<dyn SemanticCapability>,
 }

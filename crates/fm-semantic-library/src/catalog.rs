@@ -497,6 +497,40 @@ impl SemanticCatalog {
         self.occurrences.get(&id)
     }
 
+    /// Resolves one occurrence only when its retained scope is still
+    /// authorized for the requested workspace and consent policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a scope error when stored hierarchy evidence cannot be
+    /// revalidated against the current policy.
+    pub fn authorized_occurrence(
+        &self,
+        policy: &SemanticLibraryPolicy,
+        workspace_id: WorkspaceId,
+        occurrence_id: OccurrenceId,
+    ) -> Result<Option<&OccurrenceRecord>, CatalogError> {
+        let Some(occurrence) = self.occurrences.get(&occurrence_id) else {
+            return Ok(None);
+        };
+        if matches!(
+            policy.consent_state(&occurrence.location),
+            Ok(ConsentState::Excluded { .. } | ConsentState::NotIncluded) | Err(_)
+        ) {
+            return Ok(None);
+        }
+        for scope in occurrence
+            .scopes
+            .iter()
+            .filter(|scope| scope.workspace_id == workspace_id)
+        {
+            if scope_is_proven(policy, &occurrence.location, *scope)? {
+                return Ok(Some(occurrence));
+            }
+        }
+        Ok(None)
+    }
+
     /// Merges observations in arbitrary order, deduplicating by content while
     /// preserving every distinct occurrence and scope.
     ///

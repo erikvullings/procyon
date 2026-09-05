@@ -5627,7 +5627,8 @@
         "enum": [
           "indexed",
           "liveRecursive",
-          "mixed"
+          "mixed",
+          "semantic"
         ],
         "type": "string"
       },
@@ -5742,6 +5743,14 @@
           "truncated"
         ],
         "type": "object"
+      },
+      "SearchModeDto": {
+        "enum": [
+          "name",
+          "content",
+          "semantic"
+        ],
+        "type": "string"
       },
       "SearchNameModeDto": {
         "description": "How a filename pattern is interpreted.",
@@ -5861,6 +5870,9 @@
               "null"
             ]
           },
+          "mode": {
+            "$ref": "#/components/schemas/SearchModeDto"
+          },
           "modifiedAfter": {
             "format": "date-time",
             "type": [
@@ -5892,6 +5904,16 @@
           },
           "scope": {
             "$ref": "#/components/schemas/SearchScopeDto"
+          },
+          "semantic": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SearchSemanticPredicateDto"
+              }
+            ]
           },
           "tags": {
             "items": {
@@ -5926,6 +5948,31 @@
           "locations",
           "recurse",
           "showHidden"
+        ],
+        "type": "object"
+      },
+      "SearchSemanticPredicateDto": {
+        "properties": {
+          "enrolledRootIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "libraryId": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SemanticSearchScopeDto"
+          }
+        },
+        "required": [
+          "query",
+          "libraryId",
+          "scope"
         ],
         "type": "object"
       },
@@ -7009,6 +7056,68 @@
           "unavailable"
         ],
         "type": "string"
+      },
+      "SemanticEvidenceDto": {
+        "description": "One bounded semantic evidence section.",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "chunkKind": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "generated": {
+            "type": "boolean"
+          },
+          "generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "indexedContentHash": {
+            "type": "string"
+          },
+          "provenanceJson": {
+            "description": "Versioned JSON emitted by `fm-semantic-conversion`.",
+            "type": "string"
+          },
+          "recordId": {
+            "type": "string"
+          },
+          "score": {
+            "format": "float",
+            "type": "number"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourcePosition": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recordId",
+          "sourceId",
+          "score",
+          "chunkKind",
+          "excerpt",
+          "provenanceJson",
+          "indexedContentHash",
+          "generation",
+          "available",
+          "stale",
+          "generated",
+          "sourcePosition"
+        ],
+        "type": "object"
       },
       "SemanticExclusionPlanDto": {
         "description": "Authoritative destructive plan awaiting confirmation.",
@@ -8148,6 +8257,114 @@
         ],
         "type": "string"
       },
+      "SemanticSearchCoverageDto": {
+        "description": "Honest aggregate coverage for the requested semantic scope.",
+        "properties": {
+          "eligible": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "excluded": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failed": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "indexed": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "pending": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stale": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unavailable": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "eligible",
+          "indexed",
+          "stale",
+          "pending",
+          "excluded",
+          "skipped",
+          "failed",
+          "unavailable",
+          "partial"
+        ],
+        "type": "object"
+      },
+      "SemanticSearchResultDto": {
+        "description": "Evidence attached to one actionable file-primary search row.",
+        "properties": {
+          "additionalEvidence": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticEvidenceDto"
+            },
+            "type": "array"
+          },
+          "additionalSourceIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "bestEvidence": {
+            "$ref": "#/components/schemas/SemanticEvidenceDto"
+          },
+          "entryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto"
+          },
+          "score": {
+            "format": "float",
+            "type": "number"
+          }
+        },
+        "required": [
+          "entryId",
+          "location",
+          "score",
+          "bestEvidence",
+          "additionalEvidence",
+          "additionalSourceIds"
+        ],
+        "type": "object"
+      },
+      "SemanticSearchScopeDto": {
+        "enum": [
+          "currentFolder",
+          "entireLibrary",
+          "enrolledRoots"
+        ],
+        "type": "string"
+      },
       "SemanticUninstallReceiptDto": {
         "description": "Successful component uninstall.",
         "properties": {
@@ -8892,6 +9109,24 @@
             "description": "The started search's identifier, used to cancel it.",
             "format": "uuid",
             "type": "string"
+          },
+          "semanticCoverage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticSearchCoverageDto",
+                "description": "Scope coverage returned only for semantic mode."
+              }
+            ]
+          },
+          "semanticResults": {
+            "description": "File-primary evidence returned only for semantic mode.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticSearchResultDto"
+            },
+            "type": "array"
           }
         },
         "required": [

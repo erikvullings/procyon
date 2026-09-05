@@ -393,8 +393,14 @@ impl FileManagerService {
             events.clone(),
             providers.clone(),
         );
-        let search_comparison =
-            SearchComparisonCoordinator::new(search, comparison, comparison_store, events.clone());
+        let semantic = SemanticService::unavailable();
+        let search_comparison = SearchComparisonCoordinator::new(
+            search,
+            comparison,
+            comparison_store,
+            events.clone(),
+            semantic.clone(),
+        );
         let checksum_store = Arc::new(ChecksumResultsStore::new());
         let duplicate_store = Arc::new(DuplicateResultsStore::new());
         let checksum = ChecksumEngine::new(
@@ -502,7 +508,7 @@ impl FileManagerService {
             checksums,
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
-            semantic: SemanticService::unavailable(),
+            semantic,
             semantic_components: match runtime {
                 RuntimeKindDto::BrowserServer => SemanticComponentService::new(Arc::new(
                     AdministratorProvisionedSemanticComponentCapability::new(
@@ -1108,7 +1114,9 @@ impl FileManagerService {
     /// Replaces the unavailable default with a host-provided semantic capability.
     #[must_use]
     pub fn with_semantic_capability(mut self, capability: Arc<dyn SemanticCapability>) -> Self {
-        self.semantic = SemanticService::new(capability);
+        let semantic = SemanticService::new(capability);
+        self.search_comparison.set_semantic(semantic.clone());
+        self.semantic = semantic;
         self
     }
 
@@ -1769,11 +1777,14 @@ impl FileManagerService {
     /// Starts a cancellable recursive filename search over one or more
     /// roots, streaming matches to `request.workspace_id` over the event
     /// bus as they are found (spec §24, task 0068).
-    pub fn start_search(
+    pub async fn start_search(
         &self,
         request: StartSearchRequestDto,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
-        self.search_comparison.start_search(request)
+        let semantic_library = self.semantic_library().await;
+        self.search_comparison
+            .start_search(request, Some(&semantic_library))
+            .await
     }
 
     /// Cancels a running search, stopping its traversal promptly.

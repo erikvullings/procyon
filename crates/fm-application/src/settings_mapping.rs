@@ -11,8 +11,8 @@ use fm_transport_dto::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, LanguageDto,
     MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,
     SavedSearchDto, SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto,
-    SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto, SettingsDto,
-    SizeFormatDto, ThemeDto,
+    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
+    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto, ThemeDto,
 };
 
 pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
@@ -227,6 +227,11 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
 fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
     SearchQueryDto {
         schema_version: query.schema_version,
+        mode: match query.mode {
+            fm_domain::SearchMode::Name => SearchModeDto::Name,
+            fm_domain::SearchMode::Content => SearchModeDto::Content,
+            fm_domain::SearchMode::Semantic => SearchModeDto::Semantic,
+        },
         scope: SearchScopeDto {
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
             recurse: query.scope.recurse,
@@ -260,6 +265,22 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
             case_sensitive: content.case_sensitive,
             whole_word: content.whole_word,
         }),
+        semantic: query.semantic.map(|semantic| SearchSemanticPredicateDto {
+            query: semantic.query,
+            library_id: semantic.library_id,
+            scope: match semantic.scope {
+                fm_domain::SemanticSearchScope::CurrentFolder => {
+                    SemanticSearchScopeDto::CurrentFolder
+                }
+                fm_domain::SemanticSearchScope::EntireLibrary => {
+                    SemanticSearchScopeDto::EntireLibrary
+                }
+                fm_domain::SemanticSearchScope::EnrolledRoots => {
+                    SemanticSearchScopeDto::EnrolledRoots
+                }
+            },
+            enrolled_root_ids: semantic.enrolled_root_ids,
+        }),
         git_statuses: query
             .git_statuses
             .into_iter()
@@ -278,7 +299,15 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
 
 fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
     fm_domain::SearchQuery {
-        schema_version: query.schema_version,
+        schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
+        mode: match query.mode {
+            SearchModeDto::Name if query.schema_version == 1 && query.content.is_some() => {
+                fm_domain::SearchMode::Content
+            }
+            SearchModeDto::Name => fm_domain::SearchMode::Name,
+            SearchModeDto::Content => fm_domain::SearchMode::Content,
+            SearchModeDto::Semantic => fm_domain::SearchMode::Semantic,
+        },
         scope: fm_domain::SearchScope {
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
             recurse: query.scope.recurse,
@@ -313,6 +342,24 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
                 regex: content.regex,
                 case_sensitive: content.case_sensitive,
                 whole_word: content.whole_word,
+            }),
+        semantic: query
+            .semantic
+            .map(|semantic| fm_domain::SearchSemanticPredicate {
+                query: semantic.query,
+                library_id: semantic.library_id,
+                scope: match semantic.scope {
+                    SemanticSearchScopeDto::CurrentFolder => {
+                        fm_domain::SemanticSearchScope::CurrentFolder
+                    }
+                    SemanticSearchScopeDto::EntireLibrary => {
+                        fm_domain::SemanticSearchScope::EntireLibrary
+                    }
+                    SemanticSearchScopeDto::EnrolledRoots => {
+                        fm_domain::SemanticSearchScope::EnrolledRoots
+                    }
+                },
+                enrolled_root_ids: semantic.enrolled_root_ids,
             }),
         git_statuses: query
             .git_statuses

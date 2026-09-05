@@ -477,14 +477,22 @@ export function createPaneContentBuilder(
         tab?.location.uri.startsWith('search://')
           ? context.getNavigation().back(paneId)
           : context.getNavigation().parent(paneId),
-      onOpenEntry: (entry) => {
+      onOpenEntry: (entry, evidenceQuery) => {
         if (isParentEntry(entry.id)) {
           return tab?.location.uri.startsWith('search://')
             ? context.getNavigation().back(paneId)
             : context.getNavigation().parent(paneId);
         }
         if (tab?.location.uri.startsWith('search://')) {
-          const initialSearch = context.contentSearchInitialQuery(tab.location.uri, entry);
+          const initialSearch =
+            evidenceQuery === undefined
+              ? context.contentSearchInitialQuery(tab.location.uri, entry)
+              : {
+                  query: evidenceQuery,
+                  regex: false,
+                  caseSensitive: false,
+                  wholeWord: false,
+                };
           if (initialSearch !== undefined) {
             const otherPaneId = workspace?.paneOrder.find(
               (candidatePaneId) => candidatePaneId !== paneId,

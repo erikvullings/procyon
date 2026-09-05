@@ -25,6 +25,7 @@
 
 use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, Provenance, StructuralUnit};
 use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
+use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
 const CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 2);
@@ -79,7 +80,8 @@ pub enum InvalidChunkerOptions {
 }
 
 /// Where a chunk's content came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ChunkProvenance {
     /// The chunk covers exactly one unit's provenance.
     Exact(Provenance),
@@ -476,6 +478,42 @@ mod tests {
     use super::*;
     use crate::model::{TopLevelBoundary, UnitKind};
     use crate::text::SourceMap;
+
+    #[test]
+    fn exact_provenance_round_trips_for_evidence_navigation() {
+        let provenance = ChunkProvenance::Exact(Provenance::PdfBlock {
+            page_number: 3,
+            block_index: 7,
+        });
+
+        let json = serde_json::to_string(&provenance).expect("serialize provenance");
+        let decoded: ChunkProvenance = serde_json::from_str(&json).expect("deserialize provenance");
+
+        assert_eq!(decoded, provenance);
+        assert!(json.contains("\"kind\":\"exact\""));
+        assert!(json.contains("\"kind\":\"pdfBlock\""));
+    }
+
+    #[test]
+    fn span_provenance_round_trips_for_bounded_additional_evidence() {
+        let provenance = ChunkProvenance::Span {
+            first: Provenance::TextLines {
+                start_line: 10,
+                end_line: 14,
+            },
+            last: Provenance::CodeLines {
+                start_line: 20,
+                end_line: 25,
+                symbol: Some("retrieve".to_owned()),
+            },
+        };
+
+        let json = serde_json::to_string(&provenance).expect("serialize provenance");
+        let decoded: ChunkProvenance = serde_json::from_str(&json).expect("deserialize provenance");
+
+        assert_eq!(decoded, provenance);
+        assert!(json.contains("\"kind\":\"span\""));
+    }
 
     fn unit(order: u32, text: &str, boundary: TopLevelBoundary, path: &[&str]) -> StructuralUnit {
         StructuralUnit {

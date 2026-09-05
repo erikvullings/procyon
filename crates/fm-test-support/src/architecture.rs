@@ -413,7 +413,7 @@ mod tests {
     fn assigns_the_domain_crate_to_the_lowest_layer() {
         assert_eq!(layer_of("fm-domain"), Some(0));
         assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
-        assert_eq!(layer_of("fm-semantic-worker"), Some(1));
+        assert_eq!(layer_of("fm-semantic-worker"), Some(3));
         assert_eq!(layer_of("fm-semantic-components"), Some(2));
         assert_eq!(layer_of("fm-semantic-library"), Some(3));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));

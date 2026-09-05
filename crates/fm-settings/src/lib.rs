@@ -834,6 +834,7 @@ mod tests {
             pinned: true,
             query: fm_domain::SearchQuery {
                 schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
+                mode: fm_domain::SearchMode::Name,
                 scope: fm_domain::SearchScope {
                     locations: vec![Location::new(
                         fm_domain::ProviderId::new("sftp"),
@@ -850,6 +851,7 @@ mod tests {
                 modified_after: None,
                 modified_before: None,
                 content: None,
+                semantic: None,
                 git_statuses: Vec::new(),
                 tags: Vec::new(),
                 metadata: BTreeMap::new(),

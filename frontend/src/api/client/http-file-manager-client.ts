@@ -1436,6 +1436,14 @@ export class HttpFileManagerClient implements FileManagerClient {
                 gitStatuses: [...request.structuredQuery.gitStatuses],
                 tags: [...request.structuredQuery.tags],
                 metadata: { ...request.structuredQuery.metadata },
+                ...(request.structuredQuery.semantic === undefined
+                  ? {}
+                  : {
+                      semantic: {
+                        ...request.structuredQuery.semantic,
+                        enrolledRootIds: [...request.structuredQuery.semantic.enrolledRootIds],
+                      },
+                    }),
               },
             }),
         workspaceId: request.workspaceId,
@@ -1450,6 +1458,12 @@ export class HttpFileManagerClient implements FileManagerClient {
       location: response.data.location,
       limitations: response.data.limitations,
       executionMode: response.data.executionMode,
+      ...(response.data.semanticResults === undefined || response.data.semanticResults.length === 0
+        ? {}
+        : { semanticResults: response.data.semanticResults }),
+      ...(response.data.semanticCoverage == null
+        ? {}
+        : { semanticCoverage: response.data.semanticCoverage }),
     };
   }
 

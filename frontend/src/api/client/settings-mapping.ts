@@ -36,7 +36,8 @@ export function settingsFromDto(settings: SettingsDto): Settings {
 
 function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']): SearchQuery {
   return {
-    schemaVersion: 1,
+    schemaVersion: query.schemaVersion === 1 ? 1 : 2,
+    mode: query.schemaVersion === 1 && query.content != null ? 'content' : (query.mode ?? 'name'),
     scope: {
       ...query.scope,
       locations: query.scope.locations.map((location) => ({ ...location })),
@@ -49,6 +50,14 @@ function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']
     ...(query.modifiedAfter == null ? {} : { modifiedAfter: query.modifiedAfter }),
     ...(query.modifiedBefore == null ? {} : { modifiedBefore: query.modifiedBefore }),
     ...(query.content == null ? {} : { content: query.content }),
+    ...(query.semantic == null
+      ? {}
+      : {
+          semantic: {
+            ...query.semantic,
+            enrolledRootIds: [...(query.semantic.enrolledRootIds ?? [])],
+          },
+        }),
     gitStatuses: query.gitStatuses ?? [],
     tags: query.tags ?? [],
     metadata: { ...(query.metadata ?? {}) },
@@ -78,6 +87,14 @@ export function settingsToDto(settings: Settings): SettingsDto {
         gitStatuses: [...saved.query.gitStatuses],
         tags: [...saved.query.tags],
         metadata: { ...saved.query.metadata },
+        ...(saved.query.semantic === undefined
+          ? {}
+          : {
+              semantic: {
+                ...saved.query.semantic,
+                enrolledRootIds: [...saved.query.semantic.enrolledRootIds],
+              },
+            }),
       },
     })),
     favouriteLocations: settings.favouriteLocations.map((favourite) => ({

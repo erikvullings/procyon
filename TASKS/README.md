@@ -99,7 +99,7 @@ semantic components are not installed.
 - [x] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180; production model and
   FLAT/HNSW threshold remain measurement-gated by 0188; upstream v0.7.0 has no macOS x64 artifact)*
 - [x] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
-- [ ] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
+- [x] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
 - [ ] 0184 OpenAI-compatible LLM connection profiles *(needs 0030, 0103)*
 - [ ] 0185 Representative document summaries *(needs 0182, 0184)*
 - [ ] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*

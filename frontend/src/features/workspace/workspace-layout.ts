@@ -108,7 +108,7 @@ export interface WorkspacePaneContent {
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
-  readonly onOpenEntry: (entry: EntrySummary) => void | Promise<void>;
+  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;

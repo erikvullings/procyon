@@ -7,6 +7,7 @@
 
 use crate::budget::BudgetKind;
 use crate::text::SourceMap;
+use serde::{Deserialize, Serialize};
 
 /// Name and revision of a versioned component (a converter or the chunker).
 ///
@@ -235,7 +236,8 @@ pub enum UnitKind {
 /// There is no "page" variant for formats that have no pages: DOCX pagination
 /// depends on a layout engine Procyon does not run, so DOCX units report a
 /// block index rather than an invented page number.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Provenance {
     /// Inclusive 1-based line range of a plain-text, Markdown or HTML source.
     TextLines {

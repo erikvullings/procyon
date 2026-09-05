@@ -831,6 +831,8 @@ pub enum SearchExecutionModePayload {
     LiveRecursive,
     /// Different roots, or a native-index fallback, use both execution paths.
     Mixed,
+    /// Results come from the local dense-vector semantic index.
+    Semantic,
 }
 
 /// All backend-to-frontend event payloads named by specification §10.

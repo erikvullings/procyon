@@ -1551,15 +1551,16 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
     );
     m.redraw.sync();
-    const filenameInput = root.querySelector<HTMLInputElement>('#find-files-query');
-    const contentInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(
-      (input) => input.placeholder === 'Text or regex to find in files',
-    );
-    if (filenameInput === null || contentInput === undefined) {
-      throw new Error('find files inputs missing');
+    const contentMode = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button'),
+    ].find((button) => button.textContent === 'Content');
+    if (contentMode === undefined) {
+      throw new Error('content search mode missing');
     }
-    filenameInput.value = '';
-    filenameInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    contentMode.click();
+    m.redraw.sync();
+    const contentInput = root.querySelector<HTMLInputElement>('#find-files-query');
+    if (contentInput === null) throw new Error('find files input missing');
     contentInput.value = 'ERROR';
     contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
     contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

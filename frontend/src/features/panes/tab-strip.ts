@@ -105,7 +105,7 @@ export interface PaneTab {
   readonly isConnectionTab?: boolean;
   /** User-chosen saved connection name, shown before the remote folder name. */
   readonly connectionName?: string;
-  readonly searchKind?: 'filename' | 'content';
+  readonly searchKind?: 'filename' | 'content' | 'semantic';
 }
 
 const MAX_FULL_CONNECTION_NAME_LENGTH = 12;
@@ -280,7 +280,7 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
                   'span.fm-pane-tab-title',
                   tab.isSearchTab === true
                     ? [
-                        tab.searchKind === 'content'
+                        tab.searchKind === 'content' || tab.searchKind === 'semantic'
                           ? contentSearchIcon({
                               size: 12,
                               className: 'fm-pane-tab-content-search-icon',

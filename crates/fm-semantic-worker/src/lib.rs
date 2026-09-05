@@ -5,6 +5,7 @@
 
 pub mod embedding;
 pub mod ingestion;
+pub mod semantic_search;
 pub mod semantic_storage;
 #[cfg(feature = "zvec")]
 pub mod zvec_storage;
@@ -707,6 +708,29 @@ pub trait WorkerIngestionBackend: Send + Sync {
         library_id: &str,
         job_id: &str,
     ) -> Result<Option<WorkerIngestionJob>, String>;
+}
+
+/// One path-free semantic query handed to the worker retrieval backend.
+#[derive(Debug, Clone)]
+pub struct WorkerQueryInput {
+    /// Tenant boundary.
+    pub tenant_id: String,
+    /// Enrolled library.
+    pub library_id: String,
+    /// User query text.
+    pub query: String,
+    /// Maximum file-primary results.
+    pub maximum_results: u32,
+}
+
+/// Injectable dense retrieval implementation used by the local IPC server.
+pub trait WorkerQueryBackend: Send + Sync {
+    /// Executes one bounded, tenant-scoped query.
+    fn query(
+        &self,
+        input: WorkerQueryInput,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<SearchResult>, String>;
 }
 
 /// Host-facing ingestion lifecycle state.
@@ -1487,6 +1511,7 @@ struct RuntimeState {
     next_session: AtomicU64,
     next_job: AtomicU64,
     ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
+    query_backend: Option<Arc<dyn WorkerQueryBackend>>,
     documents: Mutex<Vec<Arc<Document>>>,
     jobs: Mutex<Arc<HashMap<String, Arc<Job>>>>,
     connections: watch::Sender<usize>,
@@ -1555,6 +1580,7 @@ enum StreamPreparationError {
     Cancelled,
     Deadline,
     Limit(LimitError),
+    Backend,
 }
 
 enum QueryRegistration {
@@ -1587,7 +1613,7 @@ impl WorkerServer {
     /// Creates a worker using the deterministic in-memory fake engine.
     #[must_use]
     pub fn new(config: WorkerConfig) -> Self {
-        Self::with_optional_ingestion_backend(config, None)
+        Self::with_optional_backends(config, None, None)
     }
 
     /// Creates a worker backed by the durable ingestion pipeline.
@@ -1596,12 +1622,33 @@ impl WorkerServer {
         config: WorkerConfig,
         ingestion_backend: Arc<dyn WorkerIngestionBackend>,
     ) -> Self {
-        Self::with_optional_ingestion_backend(config, Some(ingestion_backend))
+        Self::with_optional_backends(config, Some(ingestion_backend), None)
     }
 
-    fn with_optional_ingestion_backend(
+    /// Creates a worker backed by dense retrieval while retaining fake
+    /// ingestion, primarily for independently testing query deployments.
+    #[must_use]
+    pub fn with_query_backend(
+        config: WorkerConfig,
+        query_backend: Arc<dyn WorkerQueryBackend>,
+    ) -> Self {
+        Self::with_optional_backends(config, None, Some(query_backend))
+    }
+
+    /// Creates a worker backed by durable ingestion and dense retrieval.
+    #[must_use]
+    pub fn with_backends(
+        config: WorkerConfig,
+        ingestion_backend: Arc<dyn WorkerIngestionBackend>,
+        query_backend: Arc<dyn WorkerQueryBackend>,
+    ) -> Self {
+        Self::with_optional_backends(config, Some(ingestion_backend), Some(query_backend))
+    }
+
+    fn with_optional_backends(
         config: WorkerConfig,
         ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
+        query_backend: Option<Arc<dyn WorkerQueryBackend>>,
     ) -> Self {
         let concurrency = Arc::new(Semaphore::new(config.limits.max_concurrent_requests()));
         let (connections, _) = watch::channel(0);
@@ -1613,6 +1660,7 @@ impl WorkerServer {
                 next_session: AtomicU64::new(1),
                 next_job: AtomicU64::new(1),
                 ingestion_backend,
+                query_backend,
                 documents: Mutex::new(Vec::new()),
                 jobs: Mutex::new(Arc::new(HashMap::new())),
                 connections,
@@ -2338,13 +2386,36 @@ async fn handle_frame(
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone();
+            let query_backend = state.query_backend.clone();
             let query_text = request.query.clone();
             let maximum_results = request.maximum_results;
+            let backend_scope = scope.clone();
             let scan_cancellation = cancellation.clone();
             let scan_disconnected = connection.disconnected.clone();
             let limits = state.config.limits;
             let test_scan_delay = state.config.test_query_scan_delay;
             let prepared = tokio::task::spawn_blocking(move || {
+                if let Some(backend) = query_backend {
+                    let results = backend
+                        .query(
+                            WorkerQueryInput {
+                                tenant_id: backend_scope.tenant_id,
+                                library_id: backend_scope.library_id,
+                                query: query_text,
+                                maximum_results,
+                            },
+                            &scan_cancellation,
+                        )
+                        .map_err(|_| StreamPreparationError::Backend)?;
+                    return bounded_result_frames(
+                        correlation_id,
+                        results,
+                        &scan_cancellation,
+                        &scan_disconnected,
+                        limits,
+                        deadline,
+                    );
+                }
                 bounded_query_frames(QueryScan {
                     documents,
                     correlation_id,
@@ -2405,6 +2476,16 @@ async fn handle_frame(
                             v1::ErrorCode::LimitExceeded,
                             format!("query result {error}"),
                         ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                Err(StreamPreparationError::Backend) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::Internal, "semantic query failed"),
                         state.config.limits,
                     )
                     .await;
@@ -2610,6 +2691,16 @@ async fn handle_frame(
                         &writer,
                         correlation_id,
                         protocol_error(v1::ErrorCode::LimitExceeded, format!("event {error}")),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                Ok(Ok(Err(StreamPreparationError::Backend))) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::Internal, "event snapshot failed"),
                         state.config.limits,
                     )
                     .await;
@@ -3072,6 +3163,44 @@ struct QueryScan {
     limits: ProtocolLimits,
     deadline: tokio::time::Instant,
     test_scan_delay: Duration,
+}
+
+fn bounded_result_frames(
+    correlation_id: u64,
+    results: Vec<SearchResult>,
+    cancellation: &CancellationToken,
+    disconnected: &CancellationToken,
+    limits: ProtocolLimits,
+    deadline: tokio::time::Instant,
+) -> Result<Vec<v1::ServerFrame>, StreamPreparationError> {
+    let mut budget = StreamBudget::new(limits.max_stream_bytes());
+    let mut frames = Vec::with_capacity(results.len());
+    for result in results {
+        check_query_scan_state(cancellation, disconnected, deadline)?;
+        let frame = v1::ServerFrame {
+            correlation_id,
+            payload: Some(v1::server_frame::Payload::QueryEvent(v1::QueryEvent {
+                payload: Some(v1::query_event::Payload::Result(v1::QueryResult {
+                    document_id: result.document_id,
+                    score: result.score,
+                    metadata: result
+                        .metadata
+                        .into_iter()
+                        .map(|(key, value)| v1::MetadataEntry { key, value })
+                        .collect(),
+                    excerpt: result.excerpt,
+                })),
+            })),
+        };
+        limits
+            .check_message_bytes(frame.encoded_len())
+            .map_err(StreamPreparationError::Limit)?;
+        budget
+            .consume(u64::try_from(frame.encoded_len()).unwrap_or(u64::MAX))
+            .map_err(StreamPreparationError::Limit)?;
+        frames.push(frame);
+    }
+    Ok(frames)
 }
 
 fn bounded_query_frames(scan: QueryScan) -> Result<Vec<v1::ServerFrame>, StreamPreparationError> {

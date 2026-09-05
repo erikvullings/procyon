@@ -104,6 +104,17 @@ deterministic no-component worker used by tests and unavailable configurations. 
 coverage use the shared `fm-events` model, so browser SSE and Tauri carry the same path-free,
 excerpt-free payloads.
 
+Semantic retrieval extends the ordinary search lifecycle rather than creating an AI-specific
+navigation stack. An explicit dense-only semantic predicate is embedded locally with the enrolled
+library model, queried against Zvec, and re-authorized against the worker's SQLite snapshot.
+Deterministic file-primary ranking selects the strongest extracted chunk and adds bounded section
+diversity; generated summaries remain secondary evidence. The application materializes authorized
+occurrences in the existing paged `search://` store and resolves opaque source IDs back through the
+host-only semantic catalog, so filesystem locations never enter the worker. Search responses carry
+bounded evidence, provenance, stale/availability state, and honest coverage. The frontend exposes
+that evidence beside the ordinary pane, opens its excerpt in the existing viewer, and stores
+explicit relevance judgements locally for user-triggered export only.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

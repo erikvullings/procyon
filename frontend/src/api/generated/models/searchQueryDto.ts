@@ -5,9 +5,11 @@
 import type { SearchContentPredicateDto } from './searchContentPredicateDto.ts';
 import type { SearchEntryKindDto } from './searchEntryKindDto.ts';
 import type { SearchGitStatusDto } from './searchGitStatusDto.ts';
+import type { SearchModeDto } from './searchModeDto.ts';
 import type { SearchNamePredicateDto } from './searchNamePredicateDto.ts';
 import type { SearchQueryDtoMetadata } from './searchQueryDtoMetadata.ts';
 import type { SearchScopeDto } from './searchScopeDto.ts';
+import type { SearchSemanticPredicateDto } from './searchSemanticPredicateDto.ts';
 
 /**
  * Structured, versioned search query suitable for durable persistence.
@@ -28,6 +30,7 @@ export interface SearchQueryDto {
      * @nullable
      */
   minSizeBytes?: number | null;
+  mode?: SearchModeDto;
   /** @nullable */
   modifiedAfter?: string | null;
   /** @nullable */
@@ -36,5 +39,6 @@ export interface SearchQueryDto {
   /** @minimum 0 */
   schemaVersion: number;
   scope: SearchScopeDto;
+  semantic?: null | SearchSemanticPredicateDto;
   tags?: string[];
 }

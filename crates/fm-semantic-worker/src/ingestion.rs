@@ -622,12 +622,18 @@ impl IngestionCoordinator {
         for (position, ((chunk, key), vector)) in chunks.iter().zip(keys).zip(vectors).enumerate() {
             let vector = vector.ok_or(IngestionError::EmbeddingOutputMissing)?;
             let record_id = record_id(document, generation, position);
+            let provenance = serde_json::to_string(&chunk.provenance)
+                .map_err(|error| self.fail(document, attempts, error.to_string()))?;
             staged_records.push(StagedRecord {
                 record_id: record_id.clone(),
                 occurrence_id: document.occurrence_id.clone(),
                 cache_key: key,
                 vector: vector.clone(),
                 record_kind: "chunk".into(),
+                excerpt: chunk.display_excerpt.clone(),
+                provenance,
+                source_position: chunk.source_order,
+                generated: false,
                 concept_id: None,
             });
             derived_records.push(DerivedRecord {

@@ -12,7 +12,35 @@ use uuid::Uuid;
 use crate::location::LocationDto;
 
 /// Current structured search-query schema.
-pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 1;
+pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchModeDto {
+    #[default]
+    Name,
+    Content,
+    Semantic,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SemanticSearchScopeDto {
+    #[default]
+    CurrentFolder,
+    EntireLibrary,
+    EnrolledRoots,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSemanticPredicateDto {
+    pub query: String,
+    pub library_id: String,
+    pub scope: SemanticSearchScopeDto,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enrolled_root_ids: Vec<String>,
+}
 
 /// How a filename pattern is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -92,6 +120,8 @@ pub struct SearchScopeDto {
 #[serde(rename_all = "camelCase")]
 pub struct SearchQueryDto {
     pub schema_version: u32,
+    #[serde(default)]
+    pub mode: SearchModeDto,
     pub scope: SearchScopeDto,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<SearchNamePredicateDto>,
@@ -109,6 +139,8 @@ pub struct SearchQueryDto {
     pub modified_before: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<SearchContentPredicateDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic: Option<SearchSemanticPredicateDto>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub git_statuses: Vec<SearchGitStatusDto>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -175,6 +207,52 @@ pub struct SearchProviderLimitationDto {
     pub unevaluated_predicates: Vec<SearchPredicateKindDto>,
 }
 
+/// Honest aggregate coverage for the requested semantic scope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticSearchCoverageDto {
+    pub eligible: u64,
+    pub indexed: u64,
+    pub stale: u64,
+    pub pending: u64,
+    pub excluded: u64,
+    pub skipped: u64,
+    pub failed: u64,
+    pub unavailable: u64,
+    pub partial: bool,
+}
+
+/// One bounded semantic evidence section.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticEvidenceDto {
+    pub record_id: String,
+    pub source_id: String,
+    pub score: f32,
+    pub chunk_kind: String,
+    pub excerpt: String,
+    /// Versioned JSON emitted by `fm-semantic-conversion`.
+    pub provenance_json: String,
+    pub indexed_content_hash: String,
+    pub generation: u64,
+    pub available: bool,
+    pub stale: bool,
+    pub generated: bool,
+    pub source_position: u32,
+}
+
+/// Evidence attached to one actionable file-primary search row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticSearchResultDto {
+    pub entry_id: Uuid,
+    pub location: LocationDto,
+    pub score: f32,
+    pub best_evidence: SemanticEvidenceDto,
+    pub additional_evidence: Vec<SemanticEvidenceDto>,
+    pub additional_source_ids: Vec<String>,
+}
+
 /// How a search result set is being populated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -185,6 +263,8 @@ pub enum SearchExecutionModeDto {
     LiveRecursive,
     /// Different roots, or an index fallback, use both paths.
     Mixed,
+    /// Results are supplied by the local dense-vector semantic index.
+    Semantic,
 }
 
 fn default_recurse() -> bool {
@@ -217,6 +297,12 @@ pub struct StartSearchResponseDto {
     /// Planned execution path for this search. Result-batch events report the
     /// final mode if a native index becomes unavailable and falls back.
     pub execution_mode: SearchExecutionModeDto,
+    /// File-primary evidence returned only for semantic mode.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_results: Vec<SemanticSearchResultDto>,
+    /// Scope coverage returned only for semantic mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_coverage: Option<SemanticSearchCoverageDto>,
 }
 
 #[cfg(test)]
@@ -302,6 +388,8 @@ mod tests {
             },
             limitations: Vec::new(),
             execution_mode: SearchExecutionModeDto::LiveRecursive,
+            semantic_results: Vec::new(),
+            semantic_coverage: None,
         };
         let json = serde_json::to_string(&response).expect("serialization must succeed");
         assert!(json.contains("\"searchId\""));
@@ -315,6 +403,7 @@ mod tests {
     fn structured_query_round_trips_combined_predicates() {
         let query = SearchQueryDto {
             schema_version: SEARCH_QUERY_SCHEMA_VERSION,
+            mode: SearchModeDto::Name,
             scope: SearchScopeDto {
                 locations: vec![sample_location()],
                 recurse: true,
@@ -332,6 +421,7 @@ mod tests {
             modified_after: Some("2026-08-01T00:00:00Z".parse().unwrap()),
             modified_before: None,
             content: None,
+            semantic: None,
             git_statuses: vec![SearchGitStatusDto::Modified, SearchGitStatusDto::Untracked],
             tags: vec!["review".to_owned()],
             metadata: [("project".to_owned(), "procyon".to_owned())].into(),

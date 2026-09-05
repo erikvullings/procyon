@@ -14,6 +14,7 @@ use zvec_rust::{
 };
 
 use crate::ingestion::{DerivedIndex, DerivedRecord};
+use crate::semantic_search::{ScoredRecord, SemanticCandidateIndex};
 use crate::semantic_storage::{QueryFilters, VectorIndexKind};
 
 /// Official Rust SDK version pinned by Procyon.
@@ -321,6 +322,22 @@ impl ZvecStorage {
         top_k: usize,
         filters: &QueryFilters,
     ) -> Result<Vec<String>, ZvecStorageError> {
+        self.query_scored_records(vector, top_k, filters)
+            .map(|records| records.into_iter().map(|record| record.record_id).collect())
+    }
+
+    /// Executes bounded vector retrieval and preserves similarity scores.
+    ///
+    /// # Errors
+    ///
+    /// Applies the same validation and coarse filters as
+    /// [`Self::query_record_ids`].
+    pub fn query_scored_records(
+        &self,
+        vector: &[f32],
+        top_k: usize,
+        filters: &QueryFilters,
+    ) -> Result<Vec<ScoredRecord>, ZvecStorageError> {
         if top_k == 0 || top_k > MAX_TOP_K {
             return Err(ZvecStorageError::InvalidTopK {
                 requested: top_k,
@@ -352,10 +369,14 @@ impl ZvecStorage {
             .query(&query)?
             .into_iter()
             .map(|document| {
-                document
+                let record_id = document
                     .get_pk()
                     .map(str::to_owned)
-                    .ok_or(ZvecStorageError::MissingPrimaryKey)
+                    .ok_or(ZvecStorageError::MissingPrimaryKey)?;
+                Ok(ScoredRecord {
+                    record_id,
+                    score: document.get_score(),
+                })
             })
             .collect()
     }
@@ -484,6 +505,18 @@ impl DerivedIndex for ZvecStorage {
     fn delete(&self, record_ids: &[String]) -> Result<(), String> {
         let record_ids = record_ids.iter().map(String::as_str).collect::<Vec<_>>();
         self.delete(&record_ids).map_err(|error| error.to_string())
+    }
+}
+
+impl SemanticCandidateIndex for ZvecStorage {
+    fn query(
+        &self,
+        vector: &[f32],
+        limit: usize,
+        filters: &QueryFilters,
+    ) -> Result<Vec<ScoredRecord>, String> {
+        self.query_scored_records(vector, limit, filters)
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -697,6 +730,26 @@ mod tests {
         for reader in readers {
             assert_eq!(reader.join().expect("reader thread"), vec!["a"]);
         }
+    }
+
+    #[test]
+    fn cosine_scores_are_larger_for_closer_vectors() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 3, VectorIndexKind::Flat)
+            .expect("create collection");
+        storage
+            .insert(&[
+                record("near", "tenant-a", "text-plain", vec![1.0, 0.0, 0.0]),
+                record("far", "tenant-a", "text-plain", vec![0.0, 1.0, 0.0]),
+            ])
+            .expect("insert");
+
+        let results = storage
+            .query_scored_records(&[1.0, 0.0, 0.0], 2, &tenant_filters("tenant-a"))
+            .expect("query");
+
+        assert_eq!(results[0].record_id, "near");
+        assert!(results[0].score > results[1].score);
     }
 
     #[test]

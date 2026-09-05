@@ -117,8 +117,10 @@ pub use requests::{
 pub use runtime::{PlatformKindDto, RuntimeCapabilitiesDto, RuntimeKindDto};
 pub use search::{
     SearchContentPredicateDto, SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto,
-    SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
-    SearchQueryDto, SearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
+    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto,
+    SearchProviderLimitationDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
+    SemanticEvidenceDto, SemanticSearchCoverageDto, SemanticSearchResultDto,
+    SemanticSearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
 };
 pub use semantic_components::*;
 pub use semantic_library::*;

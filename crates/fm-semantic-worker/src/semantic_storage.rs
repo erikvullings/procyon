@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 2;
+const CATALOG_SCHEMA_VERSION: i64 = 3;
 
 /// Distance metric bound into one library's immutable index manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +151,14 @@ pub struct StagedRecord {
     pub vector: Vec<f32>,
     /// Structured record kind, such as `chunk` or `summary`.
     pub record_kind: String,
+    /// Bounded display excerpt.
+    pub excerpt: String,
+    /// Serialized strongest available provenance.
+    pub provenance: String,
+    /// Document-order position used for deterministic evidence ordering.
+    pub source_position: u32,
+    /// Whether this is generated evidence such as a summary.
+    pub generated: bool,
     /// Optional SKOS concept identity.
     pub concept_id: Option<String>,
 }
@@ -216,6 +224,22 @@ pub struct QueryEvidence {
     pub provenance: String,
     /// Published generation.
     pub generation: u64,
+    /// Semantic record kind (`chunk`, `summary`, or a future versioned kind).
+    pub record_kind: String,
+    /// Bounded display excerpt.
+    pub excerpt: String,
+    /// Position in source order.
+    pub source_position: u32,
+    /// Whether this evidence was generated rather than extracted.
+    pub generated: bool,
+    /// Hash of the indexed source bytes.
+    pub content_hash: String,
+    /// Current source availability recorded by reconciliation.
+    pub available: bool,
+    /// Source media type.
+    pub media_type: String,
+    /// Source modification time in Unix milliseconds.
+    pub modified_at_ms: i64,
 }
 
 /// Authoritative worker-side semantic catalog.
@@ -743,7 +767,9 @@ impl CatalogReader {
         let transaction = connection.transaction()?;
         let mut statement = transaction.prepare(
             "SELECT r.record_id, r.library_id, r.document_id, o.occurrence_id,
-                    o.source_id, o.provenance, r.generation
+                    o.source_id, r.provenance, r.generation, r.record_kind,
+                    r.excerpt, r.source_position, r.generated, d.content_hash,
+                    o.available, o.media_type, o.modified_at_ms
              FROM records r
              JOIN generations g
                ON g.tenant_id = r.tenant_id
@@ -753,6 +779,7 @@ impl CatalogReader {
              JOIN occurrences o
                ON o.occurrence_id = r.occurrence_id
               AND o.generation = r.generation
+             JOIN documents d ON d.document_id = r.document_id
              WHERE r.record_id = ?1
                AND r.tenant_id = ?2
                AND g.state = 'complete'
@@ -795,6 +822,14 @@ impl CatalogReader {
                             row.get::<_, String>(4)?,
                             row.get::<_, String>(5)?,
                             generation,
+                            row.get::<_, String>(7)?,
+                            row.get::<_, String>(8)?,
+                            row.get::<_, i64>(9)?,
+                            row.get::<_, i64>(10)?,
+                            row.get::<_, String>(11)?,
+                            row.get::<_, i64>(12)?,
+                            row.get::<_, String>(13)?,
+                            row.get::<_, i64>(14)?,
                         ))
                     },
                 )
@@ -807,6 +842,14 @@ impl CatalogReader {
                 source_id,
                 provenance,
                 generation,
+                record_kind,
+                excerpt,
+                source_position,
+                generated,
+                content_hash,
+                available,
+                media_type,
+                modified_at_ms,
             )) = result
             {
                 evidence.push(QueryEvidence {
@@ -818,6 +861,15 @@ impl CatalogReader {
                     provenance,
                     generation: u64::try_from(generation)
                         .map_err(|_| StorageError::CorruptCatalog)?,
+                    record_kind,
+                    excerpt,
+                    source_position: u32::try_from(source_position)
+                        .map_err(|_| StorageError::CorruptCatalog)?,
+                    generated: generated != 0,
+                    content_hash,
+                    available: available != 0,
+                    media_type,
+                    modified_at_ms,
                 });
             }
         }
@@ -935,7 +987,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            schema_version INTEGER NOT NULL
          );
          INSERT INTO catalog_meta (schema_version)
-           SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
+           SELECT 3 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
          CREATE TABLE IF NOT EXISTS libraries (
            tenant_id TEXT NOT NULL,
            library_id TEXT NOT NULL,
@@ -991,6 +1043,10 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            generation INTEGER NOT NULL,
            cache_key BLOB NOT NULL,
            record_kind TEXT NOT NULL,
+           excerpt TEXT NOT NULL,
+           provenance TEXT NOT NULL,
+           source_position INTEGER NOT NULL,
+           generated INTEGER NOT NULL,
            concept_id TEXT,
            FOREIGN KEY (occurrence_id, generation)
              REFERENCES occurrences (occurrence_id, generation),
@@ -1151,8 +1207,9 @@ fn insert_record(
     let inserted = transaction.execute(
         "INSERT INTO records
          (record_id, tenant_id, library_id, document_id, occurrence_id,
-          generation, cache_key, record_kind, concept_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+          generation, cache_key, record_kind, excerpt, provenance, source_position,
+          generated, concept_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT(record_id) DO NOTHING",
         params![
             record.record_id,
@@ -1163,6 +1220,10 @@ fn insert_record(
             i64_generation(staged.generation)?,
             record.cache_key.as_bytes().as_slice(),
             record.record_kind,
+            record.excerpt,
+            record.provenance,
+            i64::from(record.source_position),
+            i64::from(record.generated),
             record.concept_id,
         ],
     )?;
@@ -1297,6 +1358,10 @@ mod tests {
                 cache_key,
                 vector: vec![0.6, 0.8, 0.0],
                 record_kind: "chunk".into(),
+                excerpt: "bounded evidence".into(),
+                provenance: r#"{"kind":"textLines","start_line":1,"end_line":2}"#.into(),
+                source_position: 0,
+                generated: false,
                 concept_id: Some("concept-a".into()),
             })
             .collect();

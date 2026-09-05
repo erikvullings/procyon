@@ -1863,6 +1863,39 @@ impl SemanticLibraryService {
         })
     }
 
+    /// Resolves one path-free worker source against the current host catalog.
+    ///
+    /// Authorization and consent are rechecked at activation time so a stale
+    /// derived index cannot disclose or open a revoked occurrence.
+    pub(crate) fn resolve_occurrence(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: WorkspaceId,
+        source_id: &str,
+    ) -> Result<Option<ResolvedSemanticOccurrence>, SemanticLibraryError> {
+        let occurrence_id = match core::OccurrenceId::from_str(source_id) {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let data = locked.data()?;
+        let Some(occurrence) = data
+            .catalog
+            .authorized_occurrence(&data.policy, workspace_id, occurrence_id)
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(ResolvedSemanticOccurrence {
+            entry_id: occurrence.entry_id(),
+            location: occurrence.location().clone(),
+            available: data.catalog.source_availability(occurrence_id)
+                == Some(core::SourceAvailability::Available),
+        }))
+    }
+
     fn unresolved_authority(&self) -> SemanticLibraryAuthority {
         match &self.backend {
             SemanticLibraryBackend::Unavailable { authority } => *authority,
@@ -1910,6 +1943,14 @@ pub struct SemanticWorkerFeedPlan {
     pub eligible_locations: Vec<Location>,
     /// Visible skip reasons and their counts.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
+}
+
+/// Host-only location resolved from an opaque worker evidence source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedSemanticOccurrence {
+    pub(crate) entry_id: fm_domain::EntryId,
+    pub(crate) location: Location,
+    pub(crate) available: bool,
 }
 
 fn build_managed(

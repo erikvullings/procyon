@@ -3163,7 +3163,10 @@ export class MockFileManagerClient implements FileManagerClient {
       const location: Location = { providerId: 'local', uri: `search://local/${searchId}` };
       const roots = request.structuredQuery?.scope.locations ?? request.roots;
       const filenameQuery = request.structuredQuery?.name?.pattern ?? request.query;
-      const contentQuery = request.structuredQuery?.content?.query ?? request.contentQuery;
+      const semanticQuery = request.structuredQuery?.semantic?.query;
+      const contentQuery =
+        request.structuredQuery?.content?.query ?? semanticQuery ?? request.contentQuery;
+      const semanticMode = request.structuredQuery?.mode === 'semantic';
       const entries = roots.flatMap((root) =>
         collectMatches(
           root.uri,
@@ -3192,7 +3195,7 @@ export class MockFileManagerClient implements FileManagerClient {
             entries,
             isComplete: true,
             warningsCount: 0,
-            executionMode: 'liveRecursive',
+            executionMode: semanticMode ? 'semantic' : 'liveRecursive',
           },
         });
       }, 0);
@@ -3210,7 +3213,50 @@ export class MockFileManagerClient implements FileManagerClient {
           unsupported.length === 0
             ? []
             : [{ providerId: 'local', unevaluatedPredicates: unsupported }],
-        executionMode: 'liveRecursive',
+        executionMode: semanticMode ? 'semantic' : 'liveRecursive',
+        ...(semanticMode
+          ? {
+              semanticResults: entries.map((entry, index) => ({
+                entryId: entry.id,
+                location: entry.location,
+                score: 1 - index * 0.05,
+                bestEvidence: {
+                  recordId: `mock-record-${index}`,
+                  sourceId: entry.id,
+                  score: 1 - index * 0.05,
+                  chunkKind: 'chunk',
+                  excerpt: contentQuery ?? '',
+                  provenanceJson: JSON.stringify({
+                    kind: 'exact',
+                    value: { kind: 'textLines', startLine: 1, endLine: 3 },
+                  }),
+                  indexedContentHash: `mock-hash-${entry.id}`,
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 0,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              })),
+            }
+          : {}),
+        ...(semanticMode
+          ? {
+              semanticCoverage: {
+                eligible: entries.length,
+                indexed: entries.length,
+                stale: 0,
+                pending: 0,
+                excluded: 0,
+                skipped: 0,
+                failed: 0,
+                unavailable: 0,
+                partial: false,
+              },
+            }
+          : {}),
       };
     });
   }

@@ -79,6 +79,7 @@ export function searchQueryFromParams(
   showHidden: boolean,
   existing?: SearchQuery,
 ): SearchQuery {
+  const mode = params.mode ?? (params.contentQuery === undefined ? 'name' : 'content');
   const name =
     params.filenameQuery.length === 0
       ? undefined
@@ -93,7 +94,7 @@ export function searchQueryFromParams(
             caseSensitive: false,
           };
   const content =
-    params.contentQuery === undefined
+    mode !== 'content' || params.contentQuery === undefined
       ? undefined
       : {
           ...(existing?.content ?? { caseSensitive: false, wholeWord: false }),
@@ -102,7 +103,8 @@ export function searchQueryFromParams(
         };
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    mode,
     scope:
       existing === undefined
         ? { locations: [root], recurse: params.recurse, showHidden }
@@ -115,6 +117,16 @@ export function searchQueryFromParams(
     ...(params.modifiedAfter === undefined ? {} : { modifiedAfter: params.modifiedAfter }),
     ...(params.modifiedBefore === undefined ? {} : { modifiedBefore: params.modifiedBefore }),
     ...(content === undefined ? {} : { content }),
+    ...(mode !== 'semantic' || params.semanticQuery === undefined
+      ? {}
+      : {
+          semantic: {
+            query: params.semanticQuery,
+            libraryId: existing?.semantic?.libraryId ?? 'active',
+            scope: params.semanticScope ?? 'currentFolder',
+            enrolledRootIds: existing?.semantic?.enrolledRootIds ?? [],
+          },
+        }),
     gitStatuses: params.gitStatuses ?? existing?.gitStatuses ?? [],
     tags: params.tags ?? [],
     metadata: params.metadata ?? existing?.metadata ?? {},
@@ -203,7 +215,16 @@ export function createFindFilesController(
           context.getSearchExecutionMode?.(result.searchId) ?? result.executionMode;
         context
           .getFindFilesPresentationsByLocationUri()
-          .set(result.location.uri, searchPresentation(params, executionMode, presentationLabel));
+          .set(
+            result.location.uri,
+            searchPresentation(
+              params,
+              executionMode,
+              presentationLabel,
+              result.semanticResults,
+              result.semanticCoverage,
+            ),
+          );
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
         context.getFindFilesQueriesByLocationUri().set(result.location.uri, query);
         if (result.limitations.length > 0) {
@@ -292,6 +313,7 @@ export function createFindFilesController(
       runSearch(
         saved.query,
         {
+          mode: saved.query.mode ?? (saved.query.content === undefined ? 'name' : 'content'),
           filenameQuery: name,
           contentRegex: saved.query.content?.regex ?? false,
           recurse: saved.query.scope.recurse,
@@ -301,6 +323,12 @@ export function createFindFilesController(
           tags: saved.query.tags,
           metadata: saved.query.metadata,
           ...(saved.query.content === undefined ? {} : { contentQuery: saved.query.content.query }),
+          ...(saved.query.semantic === undefined
+            ? {}
+            : {
+                semanticQuery: saved.query.semantic.query,
+                semanticScope: saved.query.semantic.scope,
+              }),
           ...(saved.query.minSizeBytes === undefined
             ? {}
             : { minSizeBytes: saved.query.minSizeBytes }),

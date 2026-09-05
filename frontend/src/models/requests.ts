@@ -30,6 +30,8 @@ import type { SearchInFileMatchDto } from '../api/generated/models/searchInFileM
 import type { SearchInFileResponseDto } from '../api/generated/models/searchInFileResponseDto';
 import type { SearchStructuredRowsRequestDto } from '../api/generated/models/searchStructuredRowsRequestDto';
 import type { SearchStructuredRowsResponseDto } from '../api/generated/models/searchStructuredRowsResponseDto';
+import type { SemanticSearchCoverageDto } from '../api/generated/models/semanticSearchCoverageDto';
+import type { SemanticSearchResultDto } from '../api/generated/models/semanticSearchResultDto';
 import type { SortDescriptorDto } from '../api/generated/models/sortDescriptorDto';
 import type { StructuredRowDto } from '../api/generated/models/structuredRowDto';
 import type { StructuredViewSessionRequestDto } from '../api/generated/models/structuredViewSessionRequestDto';
@@ -179,6 +181,8 @@ export interface StartSearchResult {
   location: Location;
   limitations: readonly SearchProviderLimitation[];
   executionMode: SearchExecutionMode;
+  semanticResults?: readonly SemanticSearchResultDto[];
+  semanticCoverage?: SemanticSearchCoverageDto;
 }
 
 /**

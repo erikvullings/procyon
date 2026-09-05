@@ -13,4 +13,5 @@ export const SearchExecutionModeDto = {
   indexed: 'indexed',
   liveRecursive: 'liveRecursive',
   mixed: 'mixed',
+  semantic: 'semantic',
 } as const;
