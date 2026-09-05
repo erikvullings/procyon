@@ -5,6 +5,11 @@ content search, and baseline document viewing available.
 
 ## Installation and enrolment
 
+- `pnpm dev:tauri` enables the deterministic semantic lifecycle simulator. It exercises consent,
+  install, pause, migration, removal, and gating UI, but does not install a real worker, model, or
+  index. The Settings screen labels this state as a development simulation.
+- Production desktop builds remain unavailable until the host injects a
+  `ManagedSemanticComponentCapability`. This is an optional component pack, not a Lua plugin.
 - Desktop-managed builds install only packages from the signed catalog. The preview reports exact
   package/model identity, download bytes, disk/RAM estimates, and the filesystem authority used.
 - Before enrolment, estimate eligible files, extracted text, vectors, and any missing model bytes.
@@ -13,6 +18,29 @@ content search, and baseline document viewing available.
   default, and hard tenant quotas. A tenant quota failure does not alter another tenant's catalog.
 - Enrolment never occurs from a search. Roots require explicit recursive consent and remain
   independently excludable.
+
+### Publishing a production component pack
+
+1. Build worker/runtime artifacts for each supported target and publish immutable payloads through
+   a catalog-ID-only artifact source. Do not accept user-supplied download URLs.
+2. Evaluate the exact model revision and package set against the task-0188 baseline, then record
+   license, tokenizer, dimensions, normalization, language coverage, download/disk/RAM estimates,
+   protocol compatibility, and checksums in the catalog.
+3. Canonicalize and sign the catalog with the release signing key. Ship only the trusted verifying
+   key and catalog revision with Procyon; host adapters verify the signature and every artifact
+   checksum before activation.
+4. Construct `ComponentManager` with the platform app-data root and inject
+   `ManagedSemanticComponentAdapters` for artifact reads, free-space checks, activation probing,
+   indexing pause, worker quiescence, and authoritative index removal. Pass the resulting
+   `ManagedSemanticComponentCapability` to `FileManagerService::with_semantic_component_capability`
+   in the desktop host.
+5. Publish the platform payloads alongside a direct-distribution release and run installed/absent,
+   rollback, tamper, low-disk, and hardware smoke tests. Mac App Store builds must bundle executable
+   capabilities or keep them unavailable; they may not download executable packs at runtime.
+
+No production model pack or release catalog is currently selected or shipped. Sharing the current
+development build shares only the simulator; a real semantic distribution requires the signed
+artifacts and host wiring above.
 
 ## Diagnostics and privacy
 

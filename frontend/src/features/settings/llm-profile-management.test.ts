@@ -40,6 +40,24 @@ describe('LlmProfileManagement', () => {
     expect(root.textContent).toContain('API key or token');
   });
 
+  it('does not repeat the advanced disclosure label inside a fieldset', async () => {
+    const client = new MockFileManagerClient();
+    await mountLoaded(client);
+
+    const advanced = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Advanced settings',
+    );
+    advanced?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-llm-advanced-settings')).not.toBeNull();
+    expect(
+      [...root.querySelectorAll('legend')].some(
+        (legend) => legend.textContent?.trim() === 'Advanced settings',
+      ),
+    ).toBe(false);
+  });
+
   it('keeps local/cloud and informed-consent status visible for saved profiles', async () => {
     const client = new MockFileManagerClient();
     const profile = await client.createLlmProfile({

@@ -357,7 +357,6 @@ main.fm-workspace {
   display: grid;
   gap: 0.75rem;
   min-width: 0;
-  padding: 0 0.75rem;
   width: 100%;
 }
 
@@ -738,7 +737,8 @@ main.fm-workspace {
 }
 
 .fm-settings-editor-panel {
-  width: min(48rem, calc(100vw - 2rem));
+  width: min(64rem, calc(100vw - 2rem));
+  height: min(42rem, calc(100vh - 4rem));
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
   border: 1px solid var(--fm-border);
@@ -757,16 +757,73 @@ main.fm-workspace {
   overflow: hidden;
 }
 
-.fm-settings-editor-body {
+.fm-settings-editor-layout {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
   flex: 1 1 auto;
   min-height: 0;
+  border-top: 1px solid var(--fm-border);
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-settings-section-nav {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.75rem 0.75rem 0.75rem 0;
+  border-right: 1px solid var(--fm-border);
+}
+
+.fm-settings-editor .fm-settings-section-button {
+  box-sizing: border-box;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.35rem 0.6rem;
+  color: var(--fm-text-muted);
+  text-align: left;
+}
+
+.fm-settings-editor .fm-settings-section-button[aria-current="page"] {
+  background: var(--fm-selection-inactive);
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-settings-editor-body {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 1rem 1.25rem;
   overflow-y: auto;
 }
 
-.fm-settings-section-heading {
+.fm-settings-editor-body[data-section="plugins"] {
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-settings-editor-body[data-section="plugins"] > .row {
+  width: 100%;
+}
+
+.fm-settings-editor-body[data-section="plugins"] > .row .fm-settings-section-heading,
+.fm-settings-section-content > .row:first-child .fm-settings-section-heading {
+  margin-top: 0.1rem;
+}
+
+.fm-settings-semantic-gate {
+  max-width: 64ch;
+  margin: 0.75rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-settings-editor .fm-settings-section-heading.col {
   font-size: 1rem;
   font-weight: 600;
   margin: 0.75rem 0 0.35rem 0;
+  padding-inline: 0;
 }
 
 .fm-settings-disclosure {
@@ -824,9 +881,33 @@ main.fm-workspace {
   flex: 0 0 auto;
   justify-content: flex-end;
   gap: 0.5rem;
-  margin-top: 1rem;
   padding-top: 0.75rem;
-  border-top: 1px solid var(--fm-border);
+}
+
+@media (max-width: 44rem) {
+  .fm-settings-editor-panel {
+    width: calc(100vw - 1rem);
+    height: calc(100vh - 1rem);
+    max-height: calc(100vh - 1rem);
+  }
+
+  .fm-settings-editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .fm-settings-section-nav {
+    flex-direction: row;
+    padding: 0.5rem 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--fm-border);
+    overflow-x: auto;
+  }
+
+  .fm-settings-editor .fm-settings-section-button {
+    width: auto;
+    flex: 0 0 auto;
+  }
 }
 
 /* `.row .col.s12` (mm's grid CSS) sets `width: 100%`, sizing this to the full row like the other
@@ -874,7 +955,6 @@ main.fm-workspace {
 .fm-semantic-management {
   width: 100%;
   min-width: 0;
-  padding: 0 0.75rem;
   color: var(--fm-text);
 }
 
@@ -1015,6 +1095,19 @@ main.fm-workspace {
 .fm-semantic-uninstall-options label > span {
   display: grid;
   gap: 0.1rem;
+}
+
+.fm-app-shell .fm-semantic-profile-option > .fm-semantic-profile-copy {
+  display: grid;
+  height: auto;
+  line-height: 1.35;
+}
+
+.fm-app-shell .fm-semantic-uninstall-options > label > span {
+  display: grid;
+  height: auto;
+  gap: 0.2rem;
+  line-height: 1.35;
 }
 
 .fm-semantic-profile-copy > span:last-child,
@@ -1838,6 +1931,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.35rem;
   max-height: 16rem;
   overflow-y: auto;
+}
+
+.fm-settings-editor-body[data-section="plugins"] > .fm-plugin-list {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
 }
 
 .fm-plugin-empty {

@@ -13,6 +13,7 @@ import type {
 
 export interface LlmProfileManagementAttrs {
   readonly client: FileManagerClient;
+  readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
 }
 
 interface EditorState {
@@ -88,6 +89,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   let deleteDisposition: OrphanLlmCredentialDisposition = 'delete';
   let message: string | undefined;
   let error: string | undefined;
+  let dirty = false;
 
   async function load(client: FileManagerClient): Promise<void> {
     loading = true;
@@ -111,6 +113,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   function selectProfile(profile: LlmProfile): void {
     selectedId = profile.id;
     editor = { profileId: profile.id, request: requestFromProfile(profile), apiKey: '' };
+    dirty = false;
     consent = false;
     message = undefined;
     error = undefined;
@@ -121,6 +124,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     if (preset === undefined) return;
     selectedId = undefined;
     editor = { request: requestFromPreset(preset), apiKey: '' };
+    dirty = true;
     consent = false;
     message = undefined;
   }
@@ -139,13 +143,16 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
   }
 
-  function save(client: FileManagerClient): Promise<void> {
-    if (editor === undefined) return Promise.resolve();
+  async function save(client: FileManagerClient): Promise<boolean> {
+    if (editor === undefined || !dirty) return true;
     const payload: SaveLlmProfileRequest = {
       ...editor.request,
       credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
     };
-    return run(async () => {
+    busy = true;
+    error = undefined;
+    message = undefined;
+    try {
       const saved =
         editor?.profileId === undefined
           ? await client.createLlmProfile(payload)
@@ -155,21 +162,34 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
       selectProfile(saved);
       message = t('llmProfiles', 'saved');
-    });
+      return true;
+    } catch (reason) {
+      error = errorMessage(reason);
+      return false;
+    } finally {
+      busy = false;
+      m.redraw();
+    }
   }
 
   function updateRequest(patch: Partial<SaveLlmProfileRequest>): void {
     if (editor === undefined) return;
     editor = { ...editor, request: { ...editor.request, ...patch } };
+    dirty = true;
   }
 
   function updateApiKey(apiKey: string): void {
     if (editor === undefined) return;
     editor = { ...editor, apiKey };
+    dirty = true;
   }
 
   return {
-    oninit: ({ attrs }) => void load(attrs.client),
+    oninit: ({ attrs }) => {
+      attrs.onSaveHandlerChange?.(() => save(attrs.client));
+      void load(attrs.client);
+    },
+    onremove: ({ attrs }) => attrs.onSaveHandlerChange?.(undefined),
     view: ({ attrs }) => {
       if (loading) return m('p', t('llmProfiles', 'loading'));
       if (editor === undefined) return m('p', t('llmProfiles', 'unavailable'));
@@ -271,8 +291,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
           t('llmProfiles', 'advanced'),
         ),
         advanced
-          ? m('fieldset', [
-              m('legend', t('llmProfiles', 'advanced')),
+          ? m('.fm-llm-advanced-settings', [
               m('.row', [
                 m(NumberInput, {
                   className: 'col s6 m3',
@@ -380,11 +399,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             ])
           : undefined,
         m('.fm-llm-profile-actions', [
-          m(
-            'button.fm-semantic-action',
-            { type: 'button', disabled: busy, onclick: () => void save(attrs.client) },
-            t('button', 'save'),
-          ),
           active === undefined
             ? undefined
             : m(

@@ -239,6 +239,7 @@ export const en = {
     iconThemeGeneric: 'Generic',
     iconThemeNative: 'Native',
     pluginDisabled: '{name} (plugin disabled)',
+    filesAndOperations: 'Files & operations',
     fileBehavior: 'File behavior',
     showHiddenFiles: 'Show hidden files',
     hidden: 'Hidden',
@@ -268,6 +269,10 @@ export const en = {
     keybindingConflict: '"{shortcut}" is bound to more than one action: {actions}',
     unavailableInBrowser: 'Unavailable in the browser',
     plugins: 'Plugins',
+    semantic: 'Semantic',
+    settingsSections: 'Settings sections',
+    semanticEnableHint:
+      'Install and enable semantic components before configuring libraries, vocabularies, and generation profiles.',
     saving: 'Saving…',
     saveError: 'Failed to save settings.',
     settingsEditor: 'Settings editor',
@@ -903,6 +908,8 @@ export const en = {
     administratorTitle: 'Administrator-managed components',
     administratorExplanation:
       'Semantic components are managed by your administrator. Status is read-only here.',
+    developmentSimulation:
+      'Development simulation: lifecycle controls are test doubles and do not install a real model or index files.',
     executableDownloadProhibited:
       'This distribution cannot download executable semantic components. Existing administrator-provisioned components remain available read-only.',
     statusHeading: 'Status',

@@ -88,6 +88,12 @@ pub fn run() {
                 credentials::build_credential_store(),
                 platform::build_search_accelerator(),
             );
+            #[cfg(debug_assertions)]
+            if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
+                service = service.with_semantic_component_capability(Arc::new(
+                    fm_application::semantic_components::FakeSemanticComponentCapability::new(),
+                ));
+            }
             if let Ok(resource_dir) = app.path().resource_dir() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }

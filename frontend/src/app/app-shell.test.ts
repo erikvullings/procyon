@@ -141,6 +141,15 @@ async function openAppearanceSettings(container: HTMLElement = root): Promise<vo
   await vi.waitFor(() => expect(container.querySelector('.theme-switcher')).not.toBeNull());
 }
 
+function openSettingsSection(label: string, container: HTMLElement = root): void {
+  const button = [
+    ...container.querySelectorAll<HTMLButtonElement>('.fm-settings-section-button'),
+  ].find((candidate) => candidate.textContent?.trim() === label);
+  if (!button) throw new Error(`no settings section labelled "${label}"`);
+  button.click();
+  m.redraw.sync();
+}
+
 /** Opens the workspace switcher disclosure in the toolbar (task 0084). */
 async function openWorkspaceSwitcher(container: HTMLElement = root): Promise<void> {
   container.querySelector<HTMLElement>('.fm-workspace-switcher-button')?.click();
@@ -2515,6 +2524,10 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
+    expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
+    expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
+    openSettingsSection('Semantic');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
@@ -2522,9 +2535,6 @@ describe('AppShell', () => {
     expect(status).toHaveBeenCalledOnce();
     expect(createOffer).not.toHaveBeenCalled();
     expect(acceptOffer).not.toHaveBeenCalled();
-    expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
-    expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
-    expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
   });
 
   it('renders settings content when the native disclosure state opens', async () => {
@@ -2568,6 +2578,7 @@ describe('AppShell', () => {
     const listDirectory = vi.spyOn(client, 'listDirectory');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openAppearanceSettings();
+    openSettingsSection('Files & operations');
     listDirectory.mockClear();
 
     const hiddenFilesLabel = [...root.querySelectorAll<HTMLElement>('label.switch-label')].find(
@@ -2643,6 +2654,7 @@ describe('AppShell', () => {
     const listDirectory = vi.spyOn(client, 'listDirectory');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openAppearanceSettings();
+    openSettingsSection('Files & operations');
 
     const hiddenFilesLabel = [...root.querySelectorAll<HTMLElement>('label.switch-label')].find(
       (label) => label.textContent?.includes('Show hidden files'),
@@ -2719,6 +2731,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
     expect(root.querySelector('.fm-plugin-row strong')?.textContent).toBe('Mock Archive');
@@ -2729,6 +2742,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
 
     client.emit({
@@ -2751,6 +2765,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
     const callsBeforeEvent = listPlugins.mock.calls.length;
 

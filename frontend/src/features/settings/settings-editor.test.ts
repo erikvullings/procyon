@@ -109,14 +109,83 @@ function fireChange(input: HTMLInputElement, value: string): void {
   m.redraw.sync();
 }
 
+function openSection(label: string): void {
+  const button = [...root.querySelectorAll<HTMLButtonElement>('.fm-settings-section-button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  if (button === undefined) throw new Error(`no settings section labelled ${label}`);
+  button.click();
+  m.redraw.sync();
+}
+
 describe('SettingsEditor', () => {
-  it('embeds semantic component management with the selected runtime client', async () => {
+  it('splits the editor into keyboard-accessible sections', () => {
+    mountEditor();
+
+    expect(
+      root.querySelector('.fm-settings-section-button[aria-current="page"]')?.textContent,
+    ).toBe('Appearance');
+    expect(numberInput('Font size (px)')).toBeInstanceOf(HTMLInputElement);
+    expect(root.querySelector('.fm-settings-editor-body')?.textContent).not.toContain(
+      'Keybindings',
+    );
+
+    openSection('Keybindings');
+
+    expect(root.querySelectorAll('.fm-settings-keybinding-row')).toHaveLength(2);
+    expect(root.querySelector('input[type="number"]')).toBeNull();
+  });
+
+  it('shows only semantic activation until components are installed', async () => {
     const { client } = mountEditor();
     const status = vi.spyOn(client, 'getSemanticComponentStatus');
+    const library = vi.spyOn(client, 'getSemanticLibraryStatus');
+
+    expect(status).not.toHaveBeenCalled();
+    openSection('Semantic');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
     expect(root.textContent).toContain('Semantic components');
     expect(status).toHaveBeenCalledOnce();
+    expect(root.textContent).not.toContain('Semantic libraries');
+    expect(root.textContent).not.toContain('Vocabularies');
+    expect(library).not.toHaveBeenCalled();
+  });
+
+  it('reveals semantic configuration after components are enabled', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    mountEditor({ client });
+    openSection('Semantic');
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
+    expect(root.textContent).toContain('Concept vocabularies');
+    expect(root.textContent).toContain('Generation profiles');
+  });
+
+  it('saves a changed generation profile through the main settings action', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const createProfile = vi.spyOn(client, 'createLlmProfile');
+    const { onSave } = mountEditor({ client });
+    openSection('Semantic');
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
+    const nameInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(
+      (input) => input.value === 'Ollama' && !input.classList.contains('select-dropdown'),
+    );
+    if (nameInput === undefined) throw new Error('generation profile name input was not rendered');
+    fireChange(nameInput, 'Local assistant');
+    openSection('Appearance');
+
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-llm-profile-actions button')].some(
+        (button) => button.textContent?.trim() === 'Save',
+      ),
+    ).toBe(false);
+    root.querySelector<HTMLButtonElement>('.fm-settings-save')?.click();
+
+    await vi.waitFor(() => expect(createProfile).toHaveBeenCalledOnce());
+    expect(createProfile.mock.calls[0]?.[0].name).toBe('Local assistant');
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   });
 
   it('renders initial appearance values from the loaded settings', () => {
@@ -185,6 +254,7 @@ describe('SettingsEditor', () => {
     };
     const { onSave } = mountEditor({ plugins: [plugin], onTogglePlugin });
 
+    openSection('Plugins');
     root.querySelector<HTMLInputElement>('.fm-plugin-toggle input')?.click();
     await Promise.resolve();
     await Promise.resolve();
@@ -230,6 +300,7 @@ describe('SettingsEditor', () => {
     mountEditor({
       settings: fixtureSettings({ keybindings: { 'core.copy': 'F2' } }),
     });
+    openSection('Keybindings');
 
     const rows = [...root.querySelectorAll('.fm-settings-keybinding-row')];
     expect(rows).toHaveLength(2);
@@ -253,6 +324,7 @@ describe('SettingsEditor', () => {
         },
       ],
     });
+    openSection('Plugins');
 
     expect(root.querySelector('.fm-plugin-row strong')?.textContent).toBe('Example plugin');
   });

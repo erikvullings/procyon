@@ -19,6 +19,7 @@ import type {
 
 export interface SemanticComponentManagementAttrs {
   readonly client: FileManagerClient;
+  readonly onStatusChange?: (status: SemanticComponentStatus) => void;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
@@ -559,6 +560,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   attrs,
 }) => {
   const client = attrs.client;
+  const onStatusChange = attrs.onStatusChange;
   const loadController = new AbortController();
   let loadState: LoadState = 'loading';
   let loaded: LoadedState | undefined;
@@ -624,6 +626,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       }
       syncMigrationForm(status);
       loaded = { capabilities, status, profiles };
+      onStatusChange?.(status);
       loadState = 'loaded';
     } catch (error: unknown) {
       if (loadController.signal.aborted) return;
@@ -638,6 +641,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     const status = await client.getSemanticComponentStatus();
     syncMigrationForm(status);
     loaded = { ...loaded, status };
+    onStatusChange?.(status);
   }
 
   async function runAction(
@@ -934,6 +938,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       status.migration ??
       (status.lifecycle.state === 'migrating' ? status.lifecycle.progress : undefined);
     return [
+      capabilities.authority === 'deterministicMock'
+        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
+        : undefined,
       canOffer && installableLifecycle
         ? m('fieldset.fm-semantic-install', [
             m('legend', t('semanticComponents', 'installEnableLegend')),
@@ -999,8 +1006,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         can('removeIndex')
           ? m('details.fm-semantic-action-details.fm-semantic-remove-details', [
               m('summary', t('semanticComponents', 'removeIndexSummary')),
-              m('fieldset.fm-semantic-form-grid', [
-                m('legend', t('semanticComponents', 'removeIndexSummary')),
+              m('.fm-semantic-form-grid', [
                 textField(
                   'fm-semantic-enrolment-id',
                   t('semanticComponents', 'enrolmentId'),
@@ -1041,8 +1047,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         can('moveData')
           ? m('details.fm-semantic-action-details.fm-semantic-move-details', [
               m('summary', t('semanticComponents', 'moveDataSummary')),
-              m('fieldset.fm-semantic-inline-form', [
-                m('legend', t('semanticComponents', 'moveDataSummary')),
+              m('.fm-semantic-inline-form', [
                 textField(
                   'fm-semantic-move-destination',
                   t('semanticComponents', 'moveDestination'),
@@ -1187,8 +1192,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         ? m('details.fm-semantic-action-details.fm-semantic-local-model-details', [
             m('summary', t('semanticComponents', 'localModelSummary')),
             m('p', t('semanticComponents', 'localModelExplanation')),
-            m('fieldset.fm-semantic-form-grid', [
-              m('legend', t('semanticComponents', 'localModelSummary')),
+            m('.fm-semantic-form-grid', [
               profileChoices(
                 'fm-semantic-local-profile',
                 profiles,

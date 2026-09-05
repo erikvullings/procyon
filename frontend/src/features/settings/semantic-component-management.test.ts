@@ -436,6 +436,26 @@ describe('SemanticComponentManagement', () => {
     );
   });
 
+  it('does not repeat disclosure titles as inner fieldset legends', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    mountComponent(client);
+    await waitForLoaded();
+
+    for (const selector of [
+      '.fm-semantic-remove-details',
+      '.fm-semantic-move-details',
+      '.fm-semantic-local-model-details',
+    ]) {
+      const details = root.querySelector<HTMLDetailsElement>(selector);
+      expect(details).not.toBeNull();
+      const summary = details?.querySelector('summary')?.textContent?.trim();
+      const legends = [...(details?.querySelectorAll('legend') ?? [])].map((legend) =>
+        legend.textContent?.trim(),
+      );
+      expect(legends).not.toContain(summary);
+    }
+  });
+
   it('uses the Dutch catalogue for all static semantic management copy', async () => {
     setLocale('nl');
     mountComponent(new MockFileManagerClient());

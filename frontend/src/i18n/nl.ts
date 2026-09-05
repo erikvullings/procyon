@@ -240,6 +240,7 @@ export const nl = {
     iconThemeGeneric: 'Algemeen',
     iconThemeNative: 'Systeem',
     pluginDisabled: '{name} (plug-in uitgeschakeld)',
+    filesAndOperations: 'Bestanden en bewerkingen',
     fileBehavior: 'Bestands gedrag',
     showHiddenFiles: 'Verborgen bestanden tonen',
     hidden: 'Verborgen',
@@ -269,6 +270,10 @@ export const nl = {
     keybindingConflict: '"{shortcut}" is toegewezen aan meerdere acties: {actions}',
     unavailableInBrowser: 'Niet beschikbaar in de browser',
     plugins: 'Plug-ins',
+    semantic: 'Semantiek',
+    settingsSections: 'Instellingencategorieën',
+    semanticEnableHint:
+      'Installeer en activeer semantische onderdelen voordat u bibliotheken, woordenlijsten en generatieprofielen configureert.',
     saving: 'Opslaan…',
     saveError: 'Instellingen konden niet worden opgeslagen.',
     settingsEditor: 'Instellingenbewerker',
@@ -913,6 +918,8 @@ export const nl = {
     administratorTitle: 'Door beheerder beheerde onderdelen',
     administratorExplanation:
       'Semantische onderdelen worden beheerd door uw beheerder. De status is hier alleen-lezen.',
+    developmentSimulation:
+      'Ontwikkelsimulatie: de levenscyclusbediening gebruikt testdubbels en installeert geen echt model of indexbestanden.',
     executableDownloadProhibited:
       'Deze distributie kan geen uitvoerbare semantische onderdelen downloaden. Bestaande, door de beheerder geleverde onderdelen blijven alleen-lezen beschikbaar.',
     statusHeading: 'Status',
