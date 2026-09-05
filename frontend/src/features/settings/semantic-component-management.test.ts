@@ -65,6 +65,31 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).toContain('Not installed');
   });
 
+  it('labels an installed developer catalog as non-production', async () => {
+    const client = new MockFileManagerClient();
+    const profiles = await client.listSemanticComponentProfiles();
+    vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
+      authority: 'desktopManaged',
+      runtimeExecutableDownload: 'directDistribution',
+      operations: ['viewStatus', 'viewCatalog', 'createInstallationOffer', 'installOrEnable'],
+    });
+    vi.spyOn(client, 'listSemanticComponentProfiles').mockResolvedValue(
+      profiles.map((profile) => ({
+        ...profile,
+        resolvedModel: {
+          ...profile.resolvedModel,
+          modelId: 'procyon.dev.hashing-embedding',
+        },
+      })),
+    );
+
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.textContent).toContain('Development-only bundle');
+    expect(root.textContent).toContain('must not be used in production');
+  });
+
   it('shows administrator-provisioned status read-only without forbidden controls', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({

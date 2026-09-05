@@ -9,6 +9,8 @@ mod credentials;
 mod event_stream;
 mod native_menu;
 mod platform;
+#[cfg(debug_assertions)]
+mod semantic_developer;
 mod terminal;
 
 use std::sync::Arc;
@@ -26,6 +28,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// service).
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
+    pub(crate) semantic_developer_bundle: bool,
 }
 
 /// True once the whole app has started quitting (`RunEvent::ExitRequested`/`Exit`), checked by
@@ -75,21 +78,55 @@ pub fn run() {
             // bundle; only plausible for an unbundled `cargo tauri dev`/test run) leaves the
             // compile-time-default bundled directory in place rather than panicking - one
             // missing plugin source is not worth aborting startup over.
+            let workspace_directory =
+                fm_application::workspace::JsonFileWorkspaceRepository::default_directory();
+            let app_data_directory = workspace_directory
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
+                .to_path_buf();
+            #[cfg(not(debug_assertions))]
+            if std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE").is_some() {
+                return Err(std::io::Error::other(
+                    "semantic developer bundles are rejected by release builds",
+                )
+                .into());
+            }
             let mut service =
                 FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
                 RuntimeKindDto::Tauri,
-                fm_application::workspace::JsonFileWorkspaceRepository::default_directory(),
-                fm_application::workspace::JsonFileWorkspaceRepository::default_directory()
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
-                    .to_path_buf(),
+                workspace_directory,
+                app_data_directory.clone(),
                 EventBus::default(),
                 platform::build_platform_adapter(),
                 credentials::build_credential_store(),
                 platform::build_search_accelerator(),
             );
             #[cfg(debug_assertions)]
-            if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
+            let mut semantic_developer_bundle = false;
+            #[cfg(not(debug_assertions))]
+            let semantic_developer_bundle = false;
+            #[cfg(debug_assertions)]
+            if let Some(bundle_directory) =
+                std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE")
+            {
+                semantic_developer_bundle = true;
+                let bundle = semantic_developer::DeveloperSemanticBundle::load(
+                    std::path::Path::new(&bundle_directory),
+                    &app_data_directory,
+                    &app_data_directory,
+                )
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+                let semantic =
+                    fm_application::semantic::IpcSemanticCapability::desktop_developer_bundle(
+                    &bundle.runtime_directory,
+                    &bundle.installed_worker,
+                    &bundle.worker_data_directory,
+                    &bundle.native_library_directory,
+                );
+                service = service
+                    .with_semantic_component_capability(bundle.components)
+                    .with_semantic_capability(Arc::new(semantic));
+            } else if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
                 service = service.with_semantic_component_capability(Arc::new(
                     fm_application::semantic_components::FakeSemanticComponentCapability::new(),
                 ));
@@ -99,6 +136,7 @@ pub fn run() {
             }
             app.manage(AppState {
                 service: Arc::new(service),
+                semantic_developer_bundle,
             });
 
             // Dock icon right/long-click "New Window" item, mirroring the File menu's own item
@@ -437,6 +475,13 @@ mod tests {
     use super::*;
 
     fn create_app<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::App<R> {
+        create_app_with_semantic_developer_bundle(builder, false)
+    }
+
+    fn create_app_with_semantic_developer_bundle<R: tauri::Runtime>(
+        builder: tauri::Builder<R>,
+        semantic_developer_bundle: bool,
+    ) -> tauri::App<R> {
         let workspace_directory =
             tempfile::tempdir().expect("must create a temp workspace directory");
         let settings_directory = workspace_directory.path().join("settings");
@@ -460,6 +505,7 @@ mod tests {
                         fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
                     ),
                 ),
+                semantic_developer_bundle,
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
             .manage(native_menu::NativeMenuActionChannel::default())
@@ -1269,7 +1315,7 @@ mod tests {
 
     #[tokio::test]
     async fn semantic_library_commands_round_trip_through_the_shared_service() {
-        let app = create_app(mock_builder());
+        let app = create_app_with_semantic_developer_bundle(mock_builder(), true);
         let workspace = app
             .state::<AppState>()
             .service

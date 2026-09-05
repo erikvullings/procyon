@@ -248,13 +248,33 @@ impl SearchComparisonCoordinator {
             ));
         }
         let search_id = Uuid::new_v4();
+        let (tenant_id, library_id) = match semantic_library {
+            Some(library) => {
+                match library.worker_scope(&crate::semantic_library::SemanticAccessContext::Host) {
+                    Ok(scope) => {
+                        if scope.1 != semantic.library_id {
+                            return Err(ApplicationError::InvalidRequest(
+                                "semantic search library is not active".to_owned(),
+                            ));
+                        }
+                        scope
+                    }
+                    Err(
+                        crate::semantic_library::SemanticLibraryError::Unavailable
+                        | crate::semantic_library::SemanticLibraryError::AccessDenied
+                        | crate::semantic_library::SemanticLibraryError::AuthorityDenied { .. },
+                    ) => (workspace_id.to_string(), semantic.library_id.clone()),
+                    Err(error) => {
+                        return Err(ApplicationError::InvalidRequest(error.to_string()));
+                    }
+                }
+            }
+            None => (workspace_id.to_string(), semantic.library_id.clone()),
+        };
         let results = self
             .semantic
             .query(SemanticQuery {
-                scope: SemanticScope::new(
-                    TenantId::new(workspace_id.to_string()),
-                    LibraryId::new(semantic.library_id.clone()),
-                ),
+                scope: SemanticScope::new(TenantId::new(tenant_id), LibraryId::new(library_id)),
                 request_id: SemanticOperationId::new(search_id.to_string()),
                 text: semantic.query.clone(),
                 concept: None,

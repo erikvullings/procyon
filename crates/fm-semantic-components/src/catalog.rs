@@ -1119,6 +1119,12 @@ impl TrustedCatalog {
             .find(|artifact| artifact.id() == id)
     }
 
+    /// Returns every verified artifact in deterministic catalog order.
+    #[must_use]
+    pub fn artifacts(&self) -> &[CatalogArtifact] {
+        &self.manifest.artifacts
+    }
+
     /// Returns complete model metadata for one exact identity.
     #[must_use]
     pub fn model(&self, identity: &ModelIdentity) -> Option<&ModelManifest> {

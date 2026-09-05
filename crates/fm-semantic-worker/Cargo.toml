@@ -11,6 +11,8 @@ default = []
 # The official SDK dynamically links Zvec and downloads a native artifact at
 # build time unless ZVEC_LIB_DIR is supplied. Keep it out of normal builds.
 zvec = ["dep:zvec-rust"]
+# Explicitly non-production local bundle used only for end-to-end development.
+developer-bundle = ["zvec"]
 
 [dependencies]
 fm-semantic-conversion.workspace = true

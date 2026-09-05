@@ -113,6 +113,9 @@ use crate::semantic_components::{
     SemanticModelMigrationProgress, SemanticModelProfile, SemanticModelSelection, SemanticProfile,
     SemanticReindexEstimate, SemanticUninstallReceipt, SemanticWorkerPatchRequest,
 };
+use crate::semantic_indexing::{
+    SemanticIndexingError, SemanticIndexingReport, SemanticIndexingService,
+};
 use crate::semantic_library::SemanticLibraryComposition;
 use crate::semantic_library::{
     RagScopeSelection, SemanticAccessContext, SemanticEnrolmentPreview, SemanticExclusionPlan,
@@ -168,6 +171,7 @@ pub struct FileManagerService {
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
+    semantic_indexing: SemanticIndexingService,
     semantic_components: SemanticComponentService,
     semantic_library: SemanticLibraryComposition,
 }
@@ -467,6 +471,7 @@ impl FileManagerService {
             providers.clone(),
         );
         let semantic = SemanticService::unavailable();
+        let semantic_indexing = SemanticIndexingService::new(providers.clone());
         let search_comparison = SearchComparisonCoordinator::new(
             search,
             comparison,
@@ -590,6 +595,7 @@ impl FileManagerService {
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
+            semantic_indexing,
             semantic_components: match runtime {
                 RuntimeKindDto::BrowserServer => SemanticComponentService::new(Arc::new(
                     AdministratorProvisionedSemanticComponentCapability::new(
@@ -1361,8 +1367,24 @@ impl FileManagerService {
     pub fn with_semantic_capability(mut self, capability: Arc<dyn SemanticCapability>) -> Self {
         let semantic = SemanticService::new(capability);
         self.search_comparison.set_semantic(semantic.clone());
+        self.semantic_indexing.set_semantic(semantic.clone());
         self.semantic = semantic;
         self
+    }
+
+    /// Reconciles one explicitly enrolled root into the active semantic worker.
+    ///
+    /// This is opt-in application orchestration for a trusted host command. It
+    /// is never triggered by ordinary HTTP or library-enrolment methods.
+    pub async fn semantic_reconcile_enrolled_root(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
+        self.semantic_indexing
+            .reconcile(self.semantic_library().await, access, root_id, cancellation)
+            .await
     }
 
     /// Replaces the unavailable default with a worker-backed summary capability.

@@ -910,6 +910,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     const { capabilities, profiles, status } = current;
     const managed =
       capabilities.authority === 'desktopManaged' || capabilities.authority === 'deterministicMock';
+    const developerBundle = profiles.some((profile) =>
+      profile.resolvedModel.modelId.startsWith('procyon.dev.'),
+    );
     if (!managed) {
       return [
         capabilities.authority === 'unavailable'
@@ -940,6 +943,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     return [
       capabilities.authority === 'deterministicMock'
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
+        : undefined,
+      developerBundle
+        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
         : undefined,
       canOffer && installableLifecycle
         ? m('fieldset.fm-semantic-install', [

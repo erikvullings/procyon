@@ -375,7 +375,7 @@ impl ZvecStorage {
                     .ok_or(ZvecStorageError::MissingPrimaryKey)?;
                 Ok(ScoredRecord {
                     record_id,
-                    score: document.get_score(),
+                    score: 1.0 - document.get_score(),
                 })
             })
             .collect()

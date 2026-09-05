@@ -920,6 +920,8 @@ export const nl = {
       'Semantische onderdelen worden beheerd door uw beheerder. De status is hier alleen-lezen.',
     developmentSimulation:
       'Ontwikkelsimulatie: de levenscyclusbediening gebruikt testdubbels en installeert geen echt model of indexbestanden.',
+    developmentBundle:
+      'Alleen voor ontwikkeling: deze bundel installeert een echte lokale worker en index met een deterministische test-embedder. Hiermee test u de keten, niet de kwaliteit van semantisch zoeken; gebruik de bundel niet in productie.',
     executableDownloadProhibited:
       'Deze distributie kan geen uitvoerbare semantische onderdelen downloaden. Bestaande, door de beheerder geleverde onderdelen blijven alleen-lezen beschikbaar.',
     statusHeading: 'Status',

@@ -8,6 +8,22 @@ content search, and baseline document viewing available.
 - `pnpm dev:tauri` enables the deterministic semantic lifecycle simulator. It exercises consent,
   install, pause, migration, removal, and gating UI, but does not install a real worker, model, or
   index. The Settings screen labels this state as a development simulation.
+- `pnpm semantic:bundle:dev` builds a host-platform developer bundle under
+  `target/semantic-developer-bundle/<platform>-<architecture>`. The bundle contains the real worker,
+  native Zvec runtime, development model metadata, SHA-256 checksums, and a catalog signed by the
+  repository's public development key. It is supported where Zvec 0.7 publishes a native runtime:
+  Apple-silicon macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable.
+- `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
+  **Settings > Semantic**, review the development-only disclosure, and install the offered
+  components. Enrolment and indexing still require explicit consent for each local root.
+- The developer bundle uses a deterministic 384-dimensional token-hashing embedder. It exercises
+  managed installation, authenticated IPC, conversion, ingestion, persistent vector storage,
+  restart recovery, and retrieval plumbing. It is not a trained semantic model and says nothing
+  about production retrieval quality.
+- The debug host performs one bounded indexing pass immediately after enrolment. If worker or
+  provider indexing fails, consent remains enrolled and its reconciliation generation stays
+  unchanged; inspect the development log, correct the reported problem, then repeat **Include
+  folder** to retry without removing the root.
 - Production desktop builds remain unavailable until the host injects a
   `ManagedSemanticComponentCapability`. This is an optional component pack, not a Lua plugin.
 - Desktop-managed builds install only packages from the signed catalog. The preview reports exact
@@ -38,9 +54,13 @@ content search, and baseline document viewing available.
    rollback, tamper, low-disk, and hardware smoke tests. Mac App Store builds must bundle executable
    capabilities or keep them unavailable; they may not download executable packs at runtime.
 
-No production model pack or release catalog is currently selected or shipped. Sharing the current
-development build shares only the simulator; a real semantic distribution requires the signed
-artifacts and host wiring above.
+No production model pack or release catalog is currently selected or shipped. The developer bundle
+is platform-specific and may be copied as a complete directory to another developer using the same
+OS and architecture. The recipient must use a debug build and point
+`PROCYON_SEMANTIC_DEVELOPER_BUNDLE` at that directory. Its signing key is public, so the signature
+only tests catalog verification; it establishes no publisher trust. Never redistribute it as a
+production component pack. Remove it by uninstalling the semantic components in Settings and
+deleting the copied bundle directory after the app exits.
 
 ## Diagnostics and privacy
 

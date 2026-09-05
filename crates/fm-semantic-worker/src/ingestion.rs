@@ -14,7 +14,7 @@ use crate::embedding::{
     EmbeddingCacheKey, EmbeddingError, EmbeddingModelIdentity, LocalEmbeddingRuntime,
 };
 use crate::semantic_storage::{
-    Occurrence, SemanticCatalog, StagedGeneration, StagedRecord, StorageError,
+    LibraryIndexManifest, Occurrence, SemanticCatalog, StagedGeneration, StagedRecord, StorageError,
 };
 use crate::{IngestionState, WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob};
 
@@ -257,13 +257,30 @@ pub struct IngestionCoordinator {
 /// Queue adapter connecting the versioned IPC feed to the durable pipeline.
 pub struct PipelineIngestionBackend {
     coordinator: Arc<IngestionCoordinator>,
+    library_manifest: Option<LibraryIndexManifest>,
 }
 
 impl PipelineIngestionBackend {
     /// Creates an IPC-facing queue around one configured pipeline.
     #[must_use]
     pub const fn new(coordinator: Arc<IngestionCoordinator>) -> Self {
-        Self { coordinator }
+        Self {
+            coordinator,
+            library_manifest: None,
+        }
+    }
+
+    /// Creates a pipeline that registers each host-approved library against
+    /// one immutable manifest before accepting its first document.
+    #[must_use]
+    pub const fn with_library_manifest(
+        coordinator: Arc<IngestionCoordinator>,
+        library_manifest: LibraryIndexManifest,
+    ) -> Self {
+        Self {
+            coordinator,
+            library_manifest: Some(library_manifest),
+        }
     }
 }
 
@@ -284,6 +301,12 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                 .ok_or_else(|| format!("ingestion metadata `{key}` is required"))
         }
 
+        if let Some(manifest) = &self.library_manifest {
+            self.coordinator
+                .catalog
+                .register_library(&input.tenant_id, &input.library_id, manifest)
+                .map_err(|error| error.to_string())?;
+        }
         let occurrence_id = required(&input.metadata, "occurrence_id")?;
         let source_id = required(&input.metadata, "source_id")?;
         let root_id = required(&input.metadata, "root_id")?;

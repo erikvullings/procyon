@@ -853,9 +853,45 @@ pub(crate) async fn confirm_semantic_enrolment(
     state: State<'_, AppState>,
     request: ConfirmSemanticEnrolmentRequestDto,
 ) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
-    state
+    let location = request.location.clone();
+    let status = state
         .service
         .confirm_semantic_enrolment(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)?;
+    if !state.semantic_developer_bundle {
+        return Ok(status);
+    }
+    let Some(root_id) = status
+        .roots
+        .iter()
+        .find(|root| root.location == location)
+        .and_then(|root| root.id.parse().ok())
+    else {
+        tracing::error!(
+            "semantic developer indexing could not resolve the newly enrolled root identity"
+        );
+        return Ok(status);
+    };
+    if let Err(error) = state
+        .service
+        .semantic_reconcile_enrolled_root(
+            &desktop_semantic_access(),
+            root_id,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    {
+        tracing::error!(
+            root_id = %root_id,
+            error = %error,
+            "semantic developer indexing failed after enrolment"
+        );
+        return Ok(status);
+    }
+    state
+        .service
+        .semantic_library_status_dto(&desktop_semantic_access())
         .await
         .map_err(semantic_library_error)
 }

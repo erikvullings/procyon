@@ -1875,6 +1875,80 @@ impl SemanticLibraryService {
         })
     }
 
+    /// Returns the backend-authoritative worker tenant/library scope.
+    pub(crate) fn worker_scope(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> Result<(String, String), SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let tenant_id = managed.tenant_for(access)?.to_string();
+        let mut locked = managed.lock()?;
+        let library_id = locked.data()?.policy.library().id().to_string();
+        Ok((tenant_id, library_id))
+    }
+
+    /// Records one host-read file in the authoritative catalog.
+    ///
+    /// The caller supplies every workspace attached to the enrolled root so
+    /// the physical occurrence retains all authorization scopes. Content and
+    /// locations remain host-side; only a later worker feed decision may
+    /// authorize streaming the bytes.
+    pub(crate) fn record_indexing_observation(
+        &self,
+        access: &SemanticAccessContext,
+        observation: SemanticIndexingObservation,
+    ) -> Result<core::OccurrenceId, SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        if observation.workspace_ids.is_empty() {
+            return Err(SemanticLibraryError::WorkspaceRequired);
+        }
+        let mut locked = managed.lock()?;
+        let mut next = locked.data()?.clone();
+        let observations = observation
+            .workspace_ids
+            .iter()
+            .copied()
+            .map(|workspace_id| {
+                core::CatalogObservation::new(
+                    observation.entry_id,
+                    observation.location.clone(),
+                    observation.content_fingerprint.clone(),
+                    core::OccurrenceScope::new(workspace_id, observation.root_id),
+                    core::DocumentArtifacts::default(),
+                    core::DocumentMeasurement::new(observation.source_bytes, 0, 0),
+                )
+            });
+        let result = match (&managed.server_access, access) {
+            (Some(server), SemanticAccessContext::Server(identity)) => {
+                let server_access = core::AccessContext::new(
+                    identity.tenant_id.clone(),
+                    server.library_id,
+                    identity.user_id.clone(),
+                );
+                next.catalog.ingest_for_tenant(
+                    &next.policy,
+                    &next.state,
+                    &server.policy,
+                    &server_access,
+                    observations,
+                )
+            }
+            _ => next
+                .catalog
+                .upsert_observations(&next.policy, &next.state, observations),
+        };
+        result.map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        let occurrence_id = next
+            .catalog
+            .occurrence_at(observation.entry_id, &observation.location)
+            .map(core::OccurrenceRecord::id)
+            .ok_or(SemanticLibraryError::InvalidRequest)?;
+        locked.commit(next, core::LibraryOperation::Reconciliation)?;
+        Ok(occurrence_id)
+    }
+
     /// Resolves one path-free worker source against the current host catalog.
     ///
     /// Authorization and consent are rechecked at activation time so a stale
@@ -2120,6 +2194,16 @@ pub struct SemanticFeedCandidate {
     pub root_id: core::RootId,
     /// Provider-neutral metadata gathered through VFS capabilities.
     pub candidate: core::EligibilityCandidate,
+}
+
+/// Complete host-side input for one catalog occurrence.
+pub(crate) struct SemanticIndexingObservation {
+    pub(crate) entry_id: fm_domain::EntryId,
+    pub(crate) location: Location,
+    pub(crate) content_fingerprint: core::ContentFingerprint,
+    pub(crate) root_id: core::RootId,
+    pub(crate) workspace_ids: Vec<WorkspaceId>,
+    pub(crate) source_bytes: u64,
 }
 
 /// Provider-neutral feed plan produced from durable consent.

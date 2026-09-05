@@ -465,6 +465,40 @@ impl SemanticCatalog {
         Ok(())
     }
 
+    /// Verifies that every registered library uses one exact manifest.
+    ///
+    /// This is used by fixed-manifest worker assemblies before reopening their
+    /// shared derived index. Ordinary production registration remains
+    /// library-specific and unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns a migration requirement before the derived index is opened
+    /// when any registered library has an incompatible manifest.
+    pub fn validate_registered_library_manifests(
+        &self,
+        expected: &LibraryIndexManifest,
+    ) -> Result<(), StorageError> {
+        expected.validate()?;
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare("SELECT manifest_json FROM libraries ORDER BY tenant_id, library_id")?;
+        let manifests = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for manifest in manifests {
+            let manifest: LibraryIndexManifest = serde_json::from_str(&manifest)?;
+            manifest.validate()?;
+            let incompatible_fields = manifest.incompatible_fields(expected);
+            if !incompatible_fields.is_empty() {
+                return Err(StorageError::MigrationRequired {
+                    incompatible_fields,
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Stages one complete generation while leaving the published generation visible.
     ///
     /// # Errors

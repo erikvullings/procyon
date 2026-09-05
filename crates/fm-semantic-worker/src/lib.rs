@@ -4,6 +4,8 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod advanced;
+#[cfg(feature = "developer-bundle")]
+pub mod developer_bundle;
 pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;
@@ -369,6 +371,8 @@ enum ConnectorSource {
         runtime_directory: PathBuf,
         executable: PathBuf,
         idle_timeout: Duration,
+        developer_data_directory: Option<PathBuf>,
+        developer_native_library_directory: Option<PathBuf>,
     },
 }
 
@@ -397,7 +401,30 @@ impl WorkerConnector {
                 runtime_directory: runtime_directory.to_owned(),
                 executable: executable.to_owned(),
                 idle_timeout: Duration::from_secs(30),
+                developer_data_directory: None,
+                developer_native_library_directory: None,
             },
+        }
+    }
+
+    /// Creates an on-demand developer worker launcher with host-owned data and
+    /// optional catalog-installed native-library directories.
+    ///
+    /// The native directory is prepended to `DYLD_LIBRARY_PATH` on macOS,
+    /// `LD_LIBRARY_PATH` on Linux, or `PATH` on Windows for the child only.
+    #[must_use]
+    pub fn desktop_developer(
+        runtime_directory: &Path,
+        executable: &Path,
+        data_directory: &Path,
+        native_library_directory: Option<&Path>,
+    ) -> Self {
+        let connector = Self::desktop(runtime_directory, executable)
+            .with_developer_data_directory(data_directory);
+        if let Some(directory) = native_library_directory {
+            connector.with_developer_native_library_directory(directory)
+        } else {
+            connector
         }
     }
 
@@ -406,6 +433,36 @@ impl WorkerConnector {
     pub fn with_idle_timeout(mut self, timeout: Duration) -> Self {
         if let ConnectorSource::Desktop { idle_timeout, .. } = &mut self.source {
             *idle_timeout = timeout;
+        }
+        self
+    }
+
+    /// Passes an explicit local data root to a developer-bundle worker.
+    ///
+    /// The external worker rejects this argument unless it was compiled with
+    /// the opt-in `developer-bundle` feature.
+    #[must_use]
+    pub fn with_developer_data_directory(mut self, directory: &Path) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_data_directory,
+            ..
+        } = &mut self.source
+        {
+            *developer_data_directory = Some(directory.to_owned());
+        }
+        self
+    }
+
+    /// Configures the host-verified native-library directory inherited by an
+    /// explicitly launched developer worker.
+    #[must_use]
+    pub fn with_developer_native_library_directory(mut self, directory: &Path) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_native_library_directory,
+            ..
+        } = &mut self.source
+        {
+            *developer_native_library_directory = Some(directory.to_owned());
         }
         self
     }
@@ -427,6 +484,8 @@ impl WorkerConnector {
                 runtime_directory,
                 executable,
                 idle_timeout,
+                developer_data_directory,
+                developer_native_library_directory,
             } => {
                 ensure_runtime_directory(runtime_directory)?;
                 let secret_path = runtime_directory.join("launch.secret");
@@ -456,11 +515,19 @@ impl WorkerConnector {
 
                 let secret = LaunchSecret::generate();
                 write_secret_file(&secret_path, &secret)?;
-                let child = std::process::Command::new(executable)
+                let mut command = std::process::Command::new(executable);
+                command
                     .arg("--runtime-dir")
                     .arg(runtime_directory)
                     .arg("--idle-timeout-ms")
-                    .arg(idle_timeout.as_millis().to_string())
+                    .arg(idle_timeout.as_millis().to_string());
+                if let Some(directory) = developer_data_directory {
+                    command.arg("--developer-data-dir").arg(directory);
+                }
+                if let Some(directory) = developer_native_library_directory {
+                    configure_developer_native_library(&mut command, directory)?;
+                }
+                let child = command
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -488,6 +555,65 @@ impl WorkerConnector {
                 Err(last_error.unwrap_or(ClientError::Disconnected))
             }
         }
+    }
+}
+
+fn configure_developer_native_library(
+    command: &mut std::process::Command,
+    directory: &Path,
+) -> Result<(), io::Error> {
+    let Some(variable) = developer_library_path_variable() else {
+        return Ok(());
+    };
+    let mut paths = vec![directory.to_owned()];
+    if let Some(inherited) = std::env::var_os(variable) {
+        paths.extend(std::env::split_paths(&inherited));
+    }
+    let value = std::env::join_paths(paths).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid developer native-library directory: {error}"),
+        )
+    })?;
+    command.env(variable, value);
+    Ok(())
+}
+
+const fn developer_library_path_variable() -> Option<&'static str> {
+    if cfg!(target_os = "macos") {
+        Some("DYLD_LIBRARY_PATH")
+    } else if cfg!(target_os = "linux") {
+        Some("LD_LIBRARY_PATH")
+    } else if cfg!(windows) {
+        Some("PATH")
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod developer_connector_tests {
+    use super::*;
+
+    #[test]
+    fn developer_native_library_directory_is_first_in_the_child_search_path() {
+        let Some(variable) = developer_library_path_variable() else {
+            return;
+        };
+        let directory = Path::new("catalog-native-library");
+        let mut command = std::process::Command::new("worker");
+        configure_developer_native_library(&mut command, directory).expect("child environment");
+        let value = command
+            .get_envs()
+            .find_map(|(key, value)| {
+                (key == variable).then(|| value.expect("configured environment value").to_owned())
+            })
+            .expect("native-library environment");
+
+        assert_eq!(
+            std::env::split_paths(&value).next().as_deref(),
+            Some(directory)
+        );
     }
 }
 
@@ -3801,6 +3927,20 @@ pub async fn run_desktop_worker(
     runtime_directory: &Path,
     idle_timeout: Duration,
 ) -> Result<(), ServerError> {
+    run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
+        Ok(WorkerServer::new(config))
+    })
+    .await
+}
+
+pub(crate) async fn run_desktop_worker_with_factory<F>(
+    runtime_directory: &Path,
+    idle_timeout: Duration,
+    factory: F,
+) -> Result<(), ServerError>
+where
+    F: FnOnce(WorkerConfig) -> Result<WorkerServer, ServerError>,
+{
     ensure_runtime_directory(runtime_directory)?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
@@ -3835,10 +3975,11 @@ pub async fn run_desktop_worker(
         ))
     })?;
     let endpoint = Endpoint::for_runtime_directory(runtime_directory);
-    let result =
-        WorkerServer::new(WorkerConfig::new(endpoint, secret).with_idle_timeout(idle_timeout))
-            .run()
-            .await;
+    let result = match factory(WorkerConfig::new(endpoint, secret).with_idle_timeout(idle_timeout))
+    {
+        Ok(server) => server.run().await,
+        Err(error) => Err(error),
+    };
     let _ = std::fs::remove_file(pid_path);
     drop(lock);
     result

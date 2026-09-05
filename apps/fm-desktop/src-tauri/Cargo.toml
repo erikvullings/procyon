@@ -40,8 +40,12 @@ fm-domain.workspace = true
 fm-events.workspace = true
 fm-platform.workspace = true
 fm-search-acceleration.workspace = true
+fm-semantic-components.workspace = true
+fm-semantic-worker.workspace = true
 fm-transport-dto.workspace = true
 dirs.workspace = true
+ed25519-dalek.workspace = true
+fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # `devtools` keeps right-click "Inspect Element" available in release builds too (Tauri
@@ -52,11 +56,13 @@ tauri-plugin-single-instance.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-window-state.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
+semver.workspace = true
 portable-pty = "0.9.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]

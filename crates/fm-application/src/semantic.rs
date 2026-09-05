@@ -544,6 +544,28 @@ impl IpcSemanticCapability {
         }
     }
 
+    /// Configures an explicitly non-production desktop worker bundle.
+    ///
+    /// All paths are resolved by the trusted desktop host from verified,
+    /// catalog-installed artifacts; none originate in frontend requests.
+    #[must_use]
+    pub fn desktop_developer_bundle(
+        runtime_directory: &Path,
+        executable: &Path,
+        data_directory: &Path,
+        native_library_directory: &Path,
+    ) -> Self {
+        Self {
+            connector: WorkerConnector::desktop_developer(
+                runtime_directory,
+                executable,
+                data_directory,
+                Some(native_library_directory),
+            ),
+            client: AsyncMutex::new(None),
+        }
+    }
+
     async fn worker_client(&self) -> Result<WorkerClient, SemanticError> {
         let mut client = self.client.lock().await;
         if let Some(client) = client.as_ref() {

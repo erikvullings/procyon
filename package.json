@@ -11,6 +11,8 @@
     "dev:server": "cross-env FM_SERVER_PORT=8787 cargo watch -w apps/fm-server -w crates -w Cargo.toml -w Cargo.lock -x 'run -p fm-server -- --dev-mode-auth-disabled'",
     "dev:server:no-watch": "cross-env FM_SERVER_PORT=8787 cargo run -p fm-server -- --dev-mode-auth-disabled",
     "dev:tauri": "cd apps/fm-desktop/src-tauri && pnpm exec cross-env PROCYON_SEMANTIC_COMPONENTS=mock pnpm exec tauri dev",
+    "dev:tauri:semantic": "node scripts/dev-tauri-semantic.mjs",
+    "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
     "test": "pnpm run test:rust && pnpm run test:frontend && pnpm run test:scripts",
     "test:rust": "cargo nextest run --workspace && cargo test --doc --workspace",
     "test:frontend": "pnpm --dir frontend test",
