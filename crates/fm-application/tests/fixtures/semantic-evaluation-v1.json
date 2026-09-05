@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "multilingual-recall",
+      "query": "kunstmatige intelligentie",
+      "relevantFileIds": ["fixture-multilingual"],
+      "relevantChunkIds": ["fixture-multilingual-nl"]
+    },
+    {
+      "id": "near-duplicate-grouping",
+      "query": "quarterly revenue",
+      "relevantFileIds": ["fixture-quarterly-original"],
+      "relevantChunkIds": ["fixture-quarterly-table"]
+    },
+    {
+      "id": "boilerplate-diversity",
+      "query": "contract termination",
+      "relevantFileIds": ["fixture-contract-a", "fixture-contract-b"],
+      "relevantChunkIds": ["fixture-contract-a-termination", "fixture-contract-b-termination"]
+    },
+    {
+      "id": "structural-citation",
+      "query": "presentation risk register",
+      "relevantFileIds": ["fixture-slides"],
+      "relevantChunkIds": ["fixture-slides-page-7"]
+    },
+    {
+      "id": "incremental-edit",
+      "query": "revised retention period",
+      "relevantFileIds": ["fixture-policy-v2"],
+      "relevantChunkIds": ["fixture-policy-v2-retention"]
+    },
+    {
+      "id": "summary-discovery",
+      "query": "overview of field research",
+      "relevantFileIds": ["fixture-field-research"],
+      "relevantChunkIds": ["fixture-field-research-summary"]
+    },
+    {
+      "id": "scope-isolation",
+      "query": "workspace-only planning notes",
+      "relevantFileIds": ["fixture-workspace-a-plan"],
+      "relevantChunkIds": ["fixture-workspace-a-plan-body"]
+    },
+    {
+      "id": "unavailable-source",
+      "query": "offline expedition notes",
+      "relevantFileIds": ["fixture-offline-notes"],
+      "relevantChunkIds": ["fixture-offline-notes-body"]
+    },
+    {
+      "id": "concept-label",
+      "query": "machine learning concept",
+      "relevantFileIds": ["fixture-ml-paper"],
+      "relevantChunkIds": ["fixture-ml-paper-method"]
+    }
+  ]
+}

@@ -105,7 +105,7 @@ semantic components are not installed.
   remains measurement-gated by 0188)*
 - [x] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*
 - [x] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
-- [ ] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
+- [x] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
 - [ ] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
 
 ## File operations

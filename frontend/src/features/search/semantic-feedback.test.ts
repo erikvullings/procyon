@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { StartSearchResult } from '../../models';
-import { exportSemanticEvaluationCases, recordSemanticFeedback } from './semantic-feedback';
+import {
+  exportSemanticEvaluationCases,
+  recordSemanticFeedback,
+  type SemanticEvaluationCase,
+} from './semantic-feedback';
 
 const result: NonNullable<StartSearchResult['semanticResults']>[number] = {
   entryId: 'entry-1',
@@ -42,7 +46,37 @@ describe('semantic feedback', () => {
       query: 'report',
       entryId: 'entry-1',
       relevant: false,
+      relevantFileIds: [],
+      relevantChunkIds: [],
       evidenceHash: 'sha256:fixture',
+    });
+  });
+
+  it('migrates legacy local judgments and exports expected files and chunks', () => {
+    localStorage.setItem(
+      'procyon.semanticEvaluation.v1',
+      JSON.stringify([
+        {
+          query: 'legacy',
+          entryId: 'entry-old',
+          relevant: true,
+          recordedAt: '2026-01-01T00:00:00.000Z',
+          evidenceHash: 'sha256:old',
+        },
+      ]),
+    );
+
+    recordSemanticFeedback('report', result, true);
+    const stored = JSON.parse(
+      localStorage.getItem('procyon.semanticEvaluation.v1') ?? '[]',
+    ) as SemanticEvaluationCase[];
+    expect(stored[0]).toMatchObject({
+      relevantFileIds: ['entry-old'],
+      relevantChunkIds: [],
+    });
+    expect(stored[1]).toMatchObject({
+      relevantFileIds: ['entry-1'],
+      relevantChunkIds: ['record-1'],
     });
   });
 

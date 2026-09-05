@@ -43,6 +43,8 @@ mod search_comparison_coordinator;
 pub mod semantic;
 pub mod semantic_component_mapping;
 pub mod semantic_components;
+pub mod semantic_evaluation;
+pub mod semantic_hardening;
 pub mod semantic_ingestion;
 pub mod semantic_library;
 pub mod semantic_library_mapping;

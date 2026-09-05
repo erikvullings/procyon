@@ -6,6 +6,8 @@ export interface SemanticEvaluationCase {
   readonly query: string;
   readonly entryId: string;
   readonly relevant: boolean;
+  readonly relevantFileIds: readonly string[];
+  readonly relevantChunkIds: readonly string[];
   readonly recordedAt: string;
   readonly evidenceHash: string;
 }
@@ -17,10 +19,19 @@ function readCases(): SemanticEvaluationCase[] {
   if (!Array.isArray(value) || !value.every(isEvaluationCase)) {
     throw new Error('Invalid local semantic evaluation data');
   }
-  return value;
+  return value.map((item) => ({
+    ...item,
+    relevantFileIds: item.relevantFileIds ?? (item.relevant ? [item.entryId] : []),
+    relevantChunkIds: item.relevantChunkIds ?? [],
+  }));
 }
 
-function isEvaluationCase(value: unknown): value is SemanticEvaluationCase {
+type StoredEvaluationCase = Omit<SemanticEvaluationCase, 'relevantFileIds' | 'relevantChunkIds'> & {
+  readonly relevantFileIds?: readonly string[];
+  readonly relevantChunkIds?: readonly string[];
+};
+
+function isEvaluationCase(value: unknown): value is StoredEvaluationCase {
   if (typeof value !== 'object' || value === null) return false;
   const record = Object.fromEntries(Object.entries(value));
   return (
@@ -28,7 +39,13 @@ function isEvaluationCase(value: unknown): value is SemanticEvaluationCase {
     typeof record.entryId === 'string' &&
     typeof record.relevant === 'boolean' &&
     typeof record.recordedAt === 'string' &&
-    typeof record.evidenceHash === 'string'
+    typeof record.evidenceHash === 'string' &&
+    (record.relevantFileIds === undefined ||
+      (Array.isArray(record.relevantFileIds) &&
+        record.relevantFileIds.every((id) => typeof id === 'string'))) &&
+    (record.relevantChunkIds === undefined ||
+      (Array.isArray(record.relevantChunkIds) &&
+        record.relevantChunkIds.every((id) => typeof id === 'string')))
   );
 }
 
@@ -45,6 +62,8 @@ export function recordSemanticFeedback(
     query,
     entryId: result.entryId,
     relevant,
+    relevantFileIds: relevant ? [result.entryId] : [],
+    relevantChunkIds: relevant ? [result.bestEvidence.recordId] : [],
     recordedAt: new Date().toISOString(),
     evidenceHash: result.bestEvidence.indexedContentHash,
   });

@@ -165,6 +165,10 @@ plugins/                Bundled sample plugins (Lua)
 TASKS/                  Per-task implementation files (task tracker)
 ```
 
+Semantic deployment, privacy, recovery, backup, deletion, and evaluation requirements are recorded
+in [`docs/semantic-operations.md`](docs/semantic-operations.md), with the subsystem trust boundaries
+and mitigations in [`docs/semantic-threat-model.md`](docs/semantic-threat-model.md).
+
 ## Development
 
 See [AGENTS.md](AGENTS.md) for repository conventions, and run `pnpm run <script>` at the repo
