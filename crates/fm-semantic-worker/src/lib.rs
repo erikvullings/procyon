@@ -3,6 +3,11 @@
 //! Only opaque identifiers, metadata, and caller-provided bytes cross this
 //! boundary. The worker has no file-provider or network-facing dependency.
 
+pub mod embedding;
+pub mod semantic_storage;
+#[cfg(feature = "zvec")]
+pub mod zvec_storage;
+
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io;

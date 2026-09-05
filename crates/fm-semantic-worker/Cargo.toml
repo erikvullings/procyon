@@ -6,14 +6,28 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+# The official SDK dynamically links Zvec and downloads a native artifact at
+# build time unless ZVEC_LIB_DIR is supplied. Keep it out of normal builds.
+zvec = ["dep:zvec-rust"]
+
 [dependencies]
 fm-semantic-protocol.workspace = true
 fs2.workspace = true
 prost.workspace = true
 rand.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+zvec-rust = {workspace = true, optional = true}
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

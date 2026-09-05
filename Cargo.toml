@@ -135,6 +135,7 @@ reqwest = {version = "0.13.4", default-features = false, features = [
   "stream",
 ]}
 rustix = {version = "1.1.4", features = ["process"]}
+rusqlite = {version = "0.37.0", features = ["bundled"]}
 russh = "0.62"
 russh-sftp = "2.4"
 rusty-s3 = "0.10.2"
@@ -199,6 +200,7 @@ zip = {version = "8.6.0", default-features = false, features = [
   "deflate64",
   "time",
 ]}
+zvec-rust = "=0.7.0"
 
 # `anyhow` is reserved for executables in `apps/`; libraries use `thiserror`.
 # This is enforced by the architecture fitness test in `fm-test-support`.

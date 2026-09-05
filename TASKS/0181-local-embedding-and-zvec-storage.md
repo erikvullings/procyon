@@ -1,6 +1,6 @@
 # 0181 Local embedding runtime and Zvec storage
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, search, storage
 Depends on: 0177, 0180
@@ -62,3 +62,20 @@ provenance are document-specific, while identical normalized embedding inputs sh
 
 - 2026-09-04: Split from 0176. Zvec is fixed as the store, but concrete SDK/API assumptions and the
   default embedding model remain evidence-driven decisions for this task.
+- 2026-09-05: Implemented the worker-local CPU embedding contract with immutable model/tokenizer
+  identity, bounded profile-aware tokenization and batching, cancellation, deterministic L2
+  normalization, dimension validation, and cache keys binding all embedding-affecting versions.
+  No production model was selected ahead of task 0188; model packages and local CPU loaders remain
+  explicitly injected.
+- 2026-09-05: Added the authoritative SQLite semantic index catalog for exact library manifests,
+  documents, occurrences, staging/complete/superseded generations, jobs, component revisions, and
+  globally shared vector reference counts. Queries re-authorize derived candidate IDs against a
+  single SQLite snapshot with structured tenant/library/root/workspace/type/date/concept/generation
+  filters. Publication is atomic, occurrence deletion is immediately authoritative, and
+  superseded records wait for active readers before reclamation.
+- 2026-09-05: Pinned `zvec-rust`/native Zvec 0.7.0 behind the worker's explicit `zvec` feature so
+  normal builds do not download or link optional native code. The real-SDK suite covers FP32 cosine
+  FLAT/HNSW collections, inverted filters, insert/update/upsert/delete, limits, iteration,
+  concurrent readers, the Procyon single-writer lock, optimize, forced worker termination, WAL
+  recovery, and reopen. Documented dynamic packaging, notices, cross-compilation, measured artifact
+  sizes, and the unresolved absence of an official macOS x64 v0.7.0 artifact.

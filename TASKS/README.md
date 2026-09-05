@@ -96,7 +96,8 @@ semantic components are not installed.
   activation remains measurement-gated by 0188)*
 - [x] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
 - [x] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
-- [ ] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180)*
+- [x] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180; production model and
+  FLAT/HNSW threshold remain measurement-gated by 0188; upstream v0.7.0 has no macOS x64 artifact)*
 - [ ] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
 - [ ] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
 - [ ] 0184 OpenAI-compatible LLM connection profiles *(needs 0030, 0103)*

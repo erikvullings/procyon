@@ -81,6 +81,18 @@ structural chunker includes only bounded section hierarchy and source content in
 so moves and renames preserve reusable content fingerprints. `fm-application` supplies the narrow
 provider-neutral VFS bridge; task 0182 owns ingestion scheduling and persistence.
 
+The worker's semantic index has two deliberately separate authorities. The host-side
+`fm-semantic-library` catalog above decides consent and which opaque records may enter the worker.
+Inside the worker, SQLite is authoritative for index lifecycle: exact library manifests,
+documents, occurrences, jobs, component revisions, cached-vector references, and complete versus
+staging generations. Zvec contains only derived occurrence-level vectors and structured filter
+fields. Queries use Zvec for candidates, then re-authorize those IDs against one SQLite read
+snapshot, so publication is old-complete or new-complete and cached vectors never cross tenant
+boundaries. Superseded records are reclaimed only after active readers drain. The official
+`zvec-rust` dependency is optional and feature-gated because its build script downloads and
+dynamically links a native library; see
+[Zvec Rust SDK qualification](zvec-rust-sdk.md) for the pinned versions and packaging matrix.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are
