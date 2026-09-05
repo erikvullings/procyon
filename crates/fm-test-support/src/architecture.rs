@@ -61,6 +61,10 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-pptx-renderer", 2),
     ("fm-search", 2),
     ("fm-semantic-components", 2),
+    // `fm-semantic-conversion` is a self-contained parsing engine: it accepts
+    // bounded bytes plus trusted metadata and never touches the VFS, transport
+    // DTOs or a host runtime, so it sits with the other primitive engines.
+    ("fm-semantic-conversion", 2),
     ("fm-settings", 2),
     ("fm-vcs-status", 2),
     ("fm-vfs-local", 2),

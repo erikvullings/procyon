@@ -129,6 +129,7 @@ crates/
   fm-plugin-api/        plugin manifest, permissions, contribution types
   fm-plugin-runtime/    restricted Lua sandbox and plugin lifecycle
   fm-semantic-components/ signed catalogs, optional component/model lifecycle, and data-root moves
+  fm-semantic-conversion/ bounded document conversion and deterministic structural chunking
   fm-semantic-library/  durable enrolment consent, scoped catalog policy, and cleanup coordination
   fm-semantic-protocol/ generated, versioned protobuf contract for the optional semantic worker
   fm-semantic-worker/   local-only semantic worker binary, IPC client, and lifecycle coordinator

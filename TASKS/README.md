@@ -95,7 +95,7 @@ semantic components are not installed.
 - [x] 0178 Managed semantic components and model packs *(needs 0058, 0177; production catalog/model
   activation remains measurement-gated by 0188)*
 - [x] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
-- [ ] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
+- [x] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
 - [ ] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180)*
 - [ ] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
 - [ ] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*

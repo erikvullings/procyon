@@ -73,6 +73,14 @@ occurrences, excerpts, summaries, labels, orphan vectors, and conversation pins 
 idempotent plans. Procyon enumerates VFS providers and supplies verified stable filesystem
 identities; the semantic worker receives only approved opaque feed records and never follows paths.
 
+`fm-semantic-conversion` is a pure parsing and chunking engine below the application layer. It
+accepts bounded content streams and path-free trusted metadata, emits normalized structural units
+with best-available provenance and explicit partial-result omissions, and returns typed outcomes for
+unsupported, malformed, encrypted, scanned, cancelled, and over-budget input. Its versioned
+structural chunker includes only bounded section hierarchy and source content in embedding input,
+so moves and renames preserve reusable content fingerprints. `fm-application` supplies the narrow
+provider-neutral VFS bridge; task 0182 owns ingestion scheduling and persistence.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

@@ -141,6 +141,10 @@ the semantic-data root and is coordinated with cross-process locking and a write
 Folder exclusions revoke query/feed scope immediately and clean derived data through resumable,
 idempotent plans. Application code enumerates providers and supplies verified stable identities;
 the worker never crawls paths or decides consent.
+`fm-semantic-conversion` is the path-free, runtime-free document conversion engine. It accepts
+bounded bytes plus trusted metadata, emits typed outcomes and structural provenance, and produces
+versioned chunks whose fingerprints exclude file names and paths. `fm-application` owns the narrow
+VFS bridge; ingestion and storage orchestration belong to higher semantic capability services.
 
 ### Runtime adapters (frontend)
 

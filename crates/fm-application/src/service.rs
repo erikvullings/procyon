@@ -52,6 +52,7 @@ use crate::checksum_coordinator::ChecksumCoordinator;
 use crate::connection_facade::ConnectionFacade;
 use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
+use crate::document_conversion::DocumentConversionService;
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
@@ -118,6 +119,7 @@ pub struct FileManagerService {
     directories: DirectoryService,
     editor: FileEditorService,
     docx_preview: DocxPreviewService,
+    document_conversion: DocumentConversionService,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
@@ -480,6 +482,7 @@ impl FileManagerService {
             directories,
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
             docx_preview: DocxPreviewService::new(providers.clone()),
+            document_conversion: DocumentConversionService::new(providers.clone()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
@@ -516,6 +519,22 @@ impl FileManagerService {
             },
             semantic_library: SemanticLibraryComposition::new(runtime, settings_directory),
         }
+    }
+
+    /// Converts one document into normalized structural units for semantic
+    /// retrieval (task 0180).
+    ///
+    /// Thin delegation to the conversion service: there is deliberately no
+    /// HTTP route or Tauri command behind this yet. Ingestion decides what to
+    /// convert and what to do with the result (task 0182).
+    pub async fn convert_document_for_semantics(
+        &self,
+        location: fm_domain::Location,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<fm_semantic_conversion::ConversionOutcome, ApplicationError> {
+        self.document_conversion
+            .convert(location, cancellation)
+            .await
     }
 
     /// Reports semantic-library authority and the operations this caller may
