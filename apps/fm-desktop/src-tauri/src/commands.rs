@@ -1,6 +1,7 @@
 //! Tauri commands: thin wrappers over `FileManagerService`, mirroring the
 //! semantic REST API rather than reproducing HTTP concepts (spec §11).
 //!
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -705,11 +706,101 @@ pub(crate) async fn complete_semantic_component_model_migration(
     state: State<'_, AppState>,
     request: CompleteSemanticModelMigrationRequestDto,
 ) -> Result<SemanticModelSelectionDto, SemanticComponentErrorDto> {
-    state
+    if let Some(marker) = state.semantic_reindex_pending_marker.as_deref() {
+        persist_semantic_reindex_pending(marker)?;
+    }
+    let selection = state
         .service
         .complete_semantic_component_model_migration(request)
         .await
-        .map_err(semantic_component_error)
+        .map_err(semantic_component_error)?;
+    if state.semantic_developer_bundle {
+        reindex_enrolled_roots_for_the_new_model(
+            Arc::clone(&state.service),
+            state.semantic_reindex_pending_marker.as_deref(),
+        )
+        .await;
+    }
+    Ok(selection)
+}
+
+/// Feeds every enrolled root to the model that was just activated.
+///
+/// The newly activated model owns its own empty index, so without this the
+/// library would report enrolled roots that no longer answer any query.
+/// Activation is already durable here: failures are logged with the same
+/// visibility as post-enrolment indexing rather than undone.
+async fn reindex_enrolled_roots_for_the_new_model(
+    service: Arc<fm_application::FileManagerService>,
+    pending_marker: Option<&Path>,
+) {
+    let report = service
+        .semantic_reindex_after_model_change(
+            &desktop_semantic_access(),
+            MODEL_CHANGE_WORKER_SHUTDOWN_GRACE,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+    if let Some(failure) = &report.restart_failure {
+        tracing::error!(
+            error = %failure,
+            "semantic developer worker holding the previous model could not be stopped"
+        );
+    }
+    for root in &report.unavailable_roots {
+        tracing::warn!(
+            root_id = %root,
+            "semantic developer reindex skipped an unreachable enrolled root after the model change"
+        );
+    }
+    for failure in &report.failures {
+        tracing::error!(
+            root_id = %failure.root_id,
+            error = %failure.reason,
+            "semantic developer reindex failed after the model change"
+        );
+    }
+    if report.is_complete() {
+        if let Some(marker) = pending_marker
+            && let Err(error) = std::fs::remove_file(marker)
+        {
+            tracing::error!(
+                path = %marker.display(),
+                error = %error,
+                "semantic model reindex completed but its pending marker could not be cleared"
+            );
+            return;
+        }
+        tracing::info!(
+            roots = report.reindexed_roots.len(),
+            occurrences = report.ingested_occurrences,
+            "semantic developer reindex rebuilt enrolled roots for the newly active model"
+        );
+    }
+}
+
+pub(crate) async fn resume_pending_semantic_model_reindex(
+    service: Arc<fm_application::FileManagerService>,
+    marker: PathBuf,
+) {
+    reindex_enrolled_roots_for_the_new_model(service, Some(&marker)).await;
+}
+
+fn persist_semantic_reindex_pending(marker: &Path) -> Result<(), SemanticComponentErrorDto> {
+    if let Some(parent) = marker.parent() {
+        std::fs::create_dir_all(parent).map_err(semantic_reindex_marker_error)?;
+    }
+    let generation = format!("{}\n", Uuid::new_v4());
+    std::fs::write(marker, generation).map_err(semantic_reindex_marker_error)
+}
+
+fn semantic_reindex_marker_error(error: std::io::Error) -> SemanticComponentErrorDto {
+    SemanticComponentErrorDto {
+        code: fm_transport_dto::SemanticComponentErrorCodeDto::Filesystem,
+        message: format!("semantic model reindex state could not be persisted: {error}"),
+        request_id: Uuid::new_v4(),
+        details: None,
+    }
 }
 
 fn semantic_library_error(
@@ -723,6 +814,9 @@ fn semantic_library_error(
 /// A Tauri command already runs as the signed-in local user of this device, so
 /// the host itself is the principal. Nothing in the invoke payload contributes
 /// to it.
+/// Bounded grace given to the previously active worker before reindexing.
+const MODEL_CHANGE_WORKER_SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
 const fn desktop_semantic_access() -> fm_application::semantic_library::SemanticAccessContext {
     fm_application::semantic_library::SemanticAccessContext::Host
 }

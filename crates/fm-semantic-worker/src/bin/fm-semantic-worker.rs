@@ -12,6 +12,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
         return fm_semantic_worker::developer_bundle::run_developer_worker(
             &arguments.runtime_directory,
             &developer_data_directory,
+            arguments.developer_model_pack.as_deref(),
             arguments.idle_timeout,
         )
         .await;
@@ -25,6 +26,8 @@ struct Arguments {
     idle_timeout: Duration,
     #[cfg(feature = "developer-bundle")]
     developer_data_directory: Option<PathBuf>,
+    #[cfg(feature = "developer-bundle")]
+    developer_model_pack: Option<PathBuf>,
 }
 
 fn arguments_from(
@@ -35,6 +38,8 @@ fn arguments_from(
     let mut idle_timeout = Duration::from_secs(30);
     #[cfg(feature = "developer-bundle")]
     let mut developer_data_directory = None;
+    #[cfg(feature = "developer-bundle")]
+    let mut developer_model_pack = None;
     while let Some(argument) = arguments.next() {
         if argument == "--runtime-dir" {
             runtime_directory = arguments.next().map(PathBuf::from);
@@ -70,6 +75,23 @@ fn arguments_from(
                     "--developer-data-dir requires the opt-in developer-bundle feature",
                 ));
             }
+        } else if argument == "--developer-model-pack" {
+            #[cfg(feature = "developer-bundle")]
+            {
+                developer_model_pack = Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "developer model pack value is required",
+                    )
+                })?));
+            }
+            #[cfg(not(feature = "developer-bundle"))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--developer-model-pack requires the opt-in developer-bundle feature",
+                ));
+            }
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -84,6 +106,8 @@ fn arguments_from(
         idle_timeout,
         #[cfg(feature = "developer-bundle")]
         developer_data_directory,
+        #[cfg(feature = "developer-bundle")]
+        developer_model_pack,
     })
 }
 
@@ -93,27 +117,31 @@ mod tests {
 
     #[cfg(not(feature = "developer-bundle"))]
     #[test]
-    fn developer_data_argument_requires_the_feature() {
-        let error = arguments_from([
-            "--runtime-dir".into(),
-            "runtime".into(),
-            "--developer-data-dir".into(),
-            "data".into(),
-        ])
-        .err()
-        .expect("argument must be rejected");
+    fn developer_arguments_require_the_feature() {
+        for argument in ["--developer-data-dir", "--developer-model-pack"] {
+            let error = arguments_from([
+                "--runtime-dir".into(),
+                "runtime".into(),
+                argument.into(),
+                "value".into(),
+            ])
+            .err()
+            .expect("argument must be rejected");
 
-        assert!(error.to_string().contains("developer-bundle feature"));
+            assert!(error.to_string().contains("developer-bundle feature"));
+        }
     }
 
     #[cfg(feature = "developer-bundle")]
     #[test]
-    fn developer_data_argument_is_explicitly_parsed() {
+    fn developer_data_and_model_arguments_are_explicitly_parsed() {
         let arguments = arguments_from([
             "--runtime-dir".into(),
             "runtime".into(),
             "--developer-data-dir".into(),
             "data".into(),
+            "--developer-model-pack".into(),
+            "pack".into(),
         ])
         .expect("arguments");
 
@@ -121,5 +149,20 @@ mod tests {
             arguments.developer_data_directory,
             Some(PathBuf::from("data"))
         );
+        assert_eq!(arguments.developer_model_pack, Some(PathBuf::from("pack")));
+    }
+
+    #[test]
+    fn unknown_arguments_are_rejected() {
+        let error = arguments_from([
+            "--runtime-dir".into(),
+            "runtime".into(),
+            "--load-model-from".into(),
+            "https://example.invalid/model".into(),
+        ])
+        .err()
+        .expect("unknown argument must be rejected");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 }

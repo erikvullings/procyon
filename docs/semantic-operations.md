@@ -10,16 +10,74 @@ content search, and baseline document viewing available.
   index. The Settings screen labels this state as a development simulation.
 - `pnpm semantic:bundle:dev` builds a host-platform developer bundle under
   `target/semantic-developer-bundle/<platform>-<architecture>`. The bundle contains the real worker,
-  native Zvec runtime, development model metadata, SHA-256 checksums, and a catalog signed by the
-  repository's public development key. It is supported where Zvec 0.7 publishes a native runtime:
-  Apple-silicon macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable.
+  native Zvec runtime, two model packs, SHA-256 checksums, and a catalog signed by the repository's
+  public development key. It is supported where Zvec 0.7 publishes a native runtime: Apple-silicon
+  macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable.
 - `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.
-- The developer bundle uses a deterministic 384-dimensional token-hashing embedder. It exercises
+
+#### Developer-bundle models
+
+The bundle offers a different model per profile, and the worker loads whichever model the host
+installed and activated rather than a fixed one.
+
+| Profile | Model | Download | Disk | Peak RAM |
+| --- | --- | --- | --- | --- |
+| Compact multilingual, Compact English | Deterministic token-hashing fixture | none | < 1 KiB | 8 MiB |
+| Multilingual quality | `intfloat/multilingual-e5-small` | ~465 MiB | ~465 MiB installed (plus the same again in the build cache) | up to 1,600 MiB while the graph is loaded |
+
+- The compact profiles keep a deterministic 384-dimensional token-hashing embedder. It exercises
   managed installation, authenticated IPC, conversion, ingestion, persistent vector storage,
-  restart recovery, and retrieval plumbing. It is not a trained semantic model and says nothing
-  about production retrieval quality.
+  restart recovery, and retrieval plumbing without any download. It is not a trained model and says
+  nothing about retrieval quality.
+- **Multilingual quality** installs a real model: `intfloat/multilingual-e5-small`, MIT licensed,
+  pinned to the immutable Hugging Face revision `614241f622f53c4eeff9890bdc4f31cfecc418b3`. It
+  produces 384-dimensional unit-length vectors, accepts 512 tokens per input, and covers roughly a
+  hundred languages, so a query in one language retrieves documents written in another.
+- The figures above are the ones the signed catalog declares, so the installation preview, the
+  free-space admission check, and this table always agree. The memory figure is the conservative
+  rounded-up peak while the graph is resident, not a steady-state average.
+- Selecting that profile downloads and installs the packed model through the ordinary consent,
+  checksum, and activation lifecycle. Ingestion and search then run real transformer inference
+  locally on the CPU. Expect indexing to be markedly slower than the fixture, and the first query
+  after a worker launch to pay a few seconds of model-load cost. Developer worker startup allows a
+  bounded 30 seconds for that cold load before reporting failure.
+- The model is applied the way E5 requires: indexed passages are embedded with the `passage: `
+  prefix and search queries with the `query: ` prefix. Both prefixes are data in the installed
+  model pack, so a model needing none is used unchanged. Inputs longer than the 512-token window
+  are truncated rather than rejected.
+- Each model owns its own catalog and vector index under the worker data root, so switching
+  profiles never mixes incompatible embedding spaces. Completing a model migration in the debug
+  host stops the worker still holding the previous model, drops its connection, deletes any
+  earlier index for the newly activated model, and then reconciles every available enrolled root
+  into a clean index. Clearing an index when switching back prevents deleted documents or revoked
+  roots from reappearing from stale vectors. Model activation is already durable at that point, so
+  a failed restart or a failed root is logged with the same visibility as post-enrolment indexing
+  rather than rolled back — check the development log and repeat **Include folder** for any root
+  the log names. Unreachable roots are skipped and logged, and are picked up the next time they are
+  reconciled.
+- Indexes written by the earlier task-0190 layout lived directly beneath the worker data root
+  (`catalog.sqlite` and `zvec/`) and were implicitly owned by the only model that existed then.
+  On first launch after this change the worker moves them to `superseded-flat-index/` under the
+  same data root and logs that it did. They belong to a superseded embedding space and are never
+  queried again; delete that directory once you no longer want to inspect it.
+- `pnpm semantic:model:fetch` downloads and verifies the pinned files on their own into
+  `target/semantic-model-cache/intfloat--multilingual-e5-small/<revision>/`, reporting progress as
+  it goes. `pnpm semantic:bundle:dev` calls it first and reuses that cache, so only the first build
+  pays the download. Every file is checked against a pinned exact byte length and SHA-256 before it
+  is accepted, and the completed pack is streamed and checked against those same pins immediately
+  before its catalog checksum is signed. A mismatch fails the build rather than producing a bundle.
+- Downloading happens only in that repository build script. The worker never contacts Hugging Face
+  or any other network service: it reads the graph and tokenizer from the installed pack, and ONNX
+  Runtime is linked into the worker executable rather than resolved from an ambient shared library.
+- `pnpm semantic:model:verify` runs the real-model checks against the built bundle: offline load,
+  384-dimensional unit-length output, cross-language ranking, truncation, cancellation, and an
+  end-to-end ingest-and-query pass. Those tests are `#[ignore]` so an ordinary
+  `cargo nextest run`/`cargo test` never depends on the download; the script sets
+  `PROCYON_SEMANTIC_MODEL_PACK` from the built bundle and passes `--ignored`, and the tests fail
+  loudly rather than pass silently if that variable is missing. Run `pnpm semantic:bundle:dev`
+  first.
 - The debug host performs one bounded indexing pass immediately after enrolment. If worker or
   provider indexing fails, consent remains enrolled and its reconciliation generation stays
   unchanged; inspect the development log, correct the reported problem, then repeat **Include
@@ -55,6 +113,8 @@ content search, and baseline document viewing available.
    capabilities or keep them unavailable; they may not download executable packs at runtime.
 
 No production model pack or release catalog is currently selected or shipped. The developer bundle
+packs a real multilingual model for local testing, but that model has not been evaluated against
+the task-0188 baseline and the bundle remains development-only. The developer bundle
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point
 `PROCYON_SEMANTIC_DEVELOPER_BUNDLE` at that directory. Its signing key is public, so the signature

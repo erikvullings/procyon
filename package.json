@@ -13,6 +13,8 @@
     "dev:tauri": "cd apps/fm-desktop/src-tauri && pnpm exec cross-env PROCYON_SEMANTIC_COMPONENTS=mock pnpm exec tauri dev",
     "dev:tauri:semantic": "node scripts/dev-tauri-semantic.mjs",
     "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
+    "semantic:model:fetch": "node scripts/fetch-semantic-model.mjs",
+    "semantic:model:verify": "node scripts/verify-semantic-model.mjs",
     "test": "pnpm run test:rust && pnpm run test:frontend && pnpm run test:scripts",
     "test:rust": "cargo nextest run --workspace && cargo test --doc --workspace",
     "test:frontend": "pnpm --dir frontend test",

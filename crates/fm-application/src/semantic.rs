@@ -99,6 +99,12 @@ impl From<fm_semantic_worker::ClientError> for SemanticError {
             fm_semantic_worker::ClientError::InvalidNegotiatedLimits(_) => Self::ProtocolViolation,
             fm_semantic_worker::ClientError::InvalidNegotiatedVersion => Self::ProtocolViolation,
             fm_semantic_worker::ClientError::InvalidSecretFile => Self::AuthenticationConfiguration,
+            fm_semantic_worker::ClientError::InvalidDeveloperModelPack(message) => {
+                Self::WorkerFailure(message)
+            }
+            fm_semantic_worker::ClientError::ShutdownTimedOut => {
+                Self::WorkerFailure("worker did not stop within the shutdown deadline".to_owned())
+            }
         }
     }
 }
@@ -320,6 +326,22 @@ pub trait SemanticCapability: Send + Sync {
 
     /// Requests a bounded graceful shutdown.
     async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError>;
+
+    /// Stops any worker that is currently serving and drops the cached
+    /// connection so the next operation starts a freshly configured one.
+    ///
+    /// Hosts call this after the backend-authoritative active model changed:
+    /// the running worker still holds the previous model and its index. A
+    /// capability with no separate worker process is unaffected.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport or protocol failure. A capability that is
+    /// simply not running reports success.
+    async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
+        let _ = grace;
+        Ok(())
+    }
 }
 
 struct UnavailableSemanticCapability;
@@ -554,14 +576,19 @@ impl IpcSemanticCapability {
         executable: &Path,
         data_directory: &Path,
         native_library_directory: &Path,
+        model_pack: Option<fm_semantic_worker::DeveloperModelPackResolver>,
     ) -> Self {
+        let connector = WorkerConnector::desktop_developer(
+            runtime_directory,
+            executable,
+            data_directory,
+            Some(native_library_directory),
+        );
         Self {
-            connector: WorkerConnector::desktop_developer(
-                runtime_directory,
-                executable,
-                data_directory,
-                Some(native_library_directory),
-            ),
+            connector: match model_pack {
+                Some(resolver) => connector.with_developer_model_pack_resolver(resolver),
+                None => connector,
+            },
             client: AsyncMutex::new(None),
         }
     }
@@ -748,6 +775,33 @@ impl SemanticCapability for IpcSemanticCapability {
         let result = client.shutdown(grace).await;
         self.adapt_result(result).await
     }
+
+    async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
+        let mut cached = self.client.lock().await;
+        // Taken before the shutdown round trip so the connection is dropped
+        // even if the worker refuses or the transport fails: a stale client
+        // pointing at the previous model must never be reused.
+        let client = match cached.take() {
+            Some(client) => Some(client),
+            None => self
+                .connector
+                .connect_existing()
+                .await
+                .map_err(SemanticError::from)?,
+        };
+        let Some(client) = client else {
+            return Ok(());
+        };
+        // A cached connection can outlive a worker that exited while the host
+        // was idle. Confirm the process state even when its shutdown
+        // round-trip fails; an already-absent worker is a successful restart.
+        let _shutdown_result = client.shutdown(grace).await;
+        drop(client);
+        self.connector
+            .wait_until_stopped(grace.saturating_add(Duration::from_secs(2)))
+            .await
+            .map_err(SemanticError::from)
+    }
 }
 
 fn connection_is_unusable(error: &fm_semantic_worker::ClientError) -> bool {
@@ -820,5 +874,9 @@ impl SemanticService {
 
     pub(crate) async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
         self.capability.shutdown(grace).await
+    }
+
+    pub(crate) async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.capability.restart(grace).await
     }
 }

@@ -14,18 +14,26 @@ use fm_semantic_components::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactKind, ArtifactRequest, ArtifactSource,
     ArtifactSourceError, CatalogArtifact, CatalogManifest, ComponentManager, ComponentQuiescer,
     DataCategory, FreeSpaceError, FreeSpaceProbe, IndexingController, IndexingPauseGuard,
-    InstallEnvironment, PauseError, QuiesceError, SemanticDataRoot, SemanticStateStore,
+    InstallEnvironment, ModelPack, PauseError, QuiesceError, SemanticDataRoot, SemanticStateStore,
     SignedCatalogManifest, TargetTriple, TrustedCatalog,
 };
 
 const DEVELOPMENT_SIGNING_KEY: [u8; 32] = [0x19; 32];
+/// Largest model pack member re-hashed during activation.
+const SMALL_MEMBER_VERIFICATION_BYTES: u64 = 32 * 1024 * 1024;
+/// Bytes returned per development artifact read.
+const ARTIFACT_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 
 pub(crate) struct DeveloperSemanticBundle {
     pub(crate) components: Arc<ManagedSemanticComponentCapability>,
     pub(crate) installed_worker: PathBuf,
     pub(crate) runtime_directory: PathBuf,
     pub(crate) worker_data_directory: PathBuf,
+    /// Durable marker used to resume an interrupted model-change reindex.
+    pub(crate) reindex_pending_marker: PathBuf,
     pub(crate) native_library_directory: PathBuf,
+    /// Resolves the currently activated model pack when the worker is launched.
+    pub(crate) active_model_pack: fm_semantic_worker::DeveloperModelPackResolver,
 }
 
 impl DeveloperSemanticBundle {
@@ -107,11 +115,13 @@ impl DeveloperSemanticBundle {
             .join(runtime.id().as_str())
             .join("payload");
 
+        let manager = ComponentManager::new(
+            SemanticStateStore::new(configuration_directory.join("semantic-components")),
+            app_data_directory,
+        );
+        let active_model_pack = active_model_pack_resolver(manager.clone());
         let components = Arc::new(ManagedSemanticComponentCapability::new(
-            ComponentManager::new(
-                SemanticStateStore::new(configuration_directory.join("semantic-components")),
-                app_data_directory,
-            ),
+            manager,
             catalog,
             ManagedSemanticComponentConfiguration {
                 runtime_and_worker_artifacts: runtime_artifacts,
@@ -144,12 +154,54 @@ impl DeveloperSemanticBundle {
             installed_worker,
             runtime_directory: data_root.path().join("worker-runtime"),
             worker_data_directory: data_root.path().join("developer-worker-data"),
+            reindex_pending_marker: data_root
+                .path()
+                .join("developer-worker-data/model-reindex-pending"),
             native_library_directory: installed_runtime
                 .parent()
                 .expect("an installed artifact payload always has a parent")
                 .to_path_buf(),
+            active_model_pack,
         })
     }
+}
+
+/// Resolves the installed payload of the model the durable component state
+/// currently marks active.
+///
+/// Installation happens after startup and behind explicit consent, so this is
+/// evaluated each time the worker is launched. It reads only host-owned durable
+/// state; no frontend request contributes a path.
+fn active_model_pack_resolver(
+    manager: ComponentManager,
+) -> fm_semantic_worker::DeveloperModelPackResolver {
+    Arc::new(move || {
+        let state = manager.state().map_err(|error| {
+            format!("durable semantic component state could not be read: {error}")
+        })?;
+        let Some(active) = state.active_model().map(|model| model.identity().clone()) else {
+            return Ok(None);
+        };
+        let component = state.installed_components().iter().find(|component| {
+            matches!(component.kind(), ArtifactKind::Model(identity) if *identity == active)
+        }).ok_or_else(|| {
+            format!(
+                "active model {}@{} has no installed component",
+                active.model_id().as_str(),
+                active.revision().as_str()
+            )
+        })?;
+        let path = component.installed_path();
+        if !path.is_file() {
+            return Err(format!(
+                "active model {}@{} is missing its installed artifact at {}",
+                active.model_id().as_str(),
+                active.revision().as_str(),
+                path.display()
+            ));
+        }
+        Ok(Some(path.to_owned()))
+    })
 }
 
 struct BundleArtifactSource {
@@ -176,10 +228,22 @@ impl ArtifactSource for BundleArtifactSource {
         }
         file.seek(SeekFrom::Start(request.offset()))
             .map_err(|error| ArtifactSourceError::Unavailable(error.to_string()))?;
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
+        // Bounded chunks keep installing a multi-hundred-megabyte model pack
+        // from costing its full size in resident memory, and give the installer
+        // real resume points.
+        let remaining = length - request.offset();
+        let wanted = remaining.min(ARTIFACT_CHUNK_BYTES);
+        let mut bytes =
+            vec![
+                0_u8;
+                usize::try_from(wanted).map_err(|_| ArtifactSourceError::Unavailable(
+                    "development artifact chunk exceeds this platform's addressable size"
+                        .to_owned()
+                ))?
+            ];
+        file.read_exact(&mut bytes)
             .map_err(|error| ArtifactSourceError::Unavailable(error.to_string()))?;
-        Ok(ArtifactChunk::new(bytes, true))
+        Ok(ArtifactChunk::new(bytes, wanted == remaining))
     }
 }
 
@@ -230,16 +294,33 @@ impl ActivationProbe for DeveloperActivation {
                 )
                 .map_err(|error| ActivationError::new(error.to_string()))?;
             }
-            ArtifactKind::Model(_) => {
-                let value: serde_json::Value = serde_json::from_slice(
-                    &fs::read(installed_path)
-                        .map_err(|error| ActivationError::new(error.to_string()))?,
-                )
-                .map_err(|error| ActivationError::new(error.to_string()))?;
-                if value.get("production").and_then(serde_json::Value::as_bool) != Some(false) {
+            ArtifactKind::Model(identity) => {
+                let pack = ModelPack::open(installed_path)
+                    .map_err(|error| ActivationError::new(error.to_string()))?;
+                let index = pack.index();
+                if index.production {
                     return Err(ActivationError::new(
-                        "development model metadata is not explicitly non-production",
+                        "development model pack is not explicitly non-production",
                     ));
+                }
+                if index.model_id != identity.model_id().as_str()
+                    || index.model_revision != identity.revision().as_str()
+                {
+                    return Err(ActivationError::new(
+                        "development model pack identity does not match the signed catalog",
+                    ));
+                }
+                // `ModelPack::open` already validated the layout, and the
+                // installer already verified the whole payload against the
+                // signed catalog checksum. Re-hash only the small members so
+                // activation stays fast for a multi-hundred-megabyte graph.
+                for member in index
+                    .files
+                    .iter()
+                    .filter(|member| member.length <= SMALL_MEMBER_VERIFICATION_BYTES)
+                {
+                    pack.read(&member.name)
+                        .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
         }
@@ -315,4 +396,150 @@ pub(crate) enum DeveloperBundleError {
     Catalog(fm_semantic_components::CatalogError),
     #[error("semantic developer artifact layout is invalid: {0}")]
     ArtifactLayout(&'static str),
+}
+
+#[cfg(test)]
+mod tests {
+    use fm_semantic_components::{
+        ArtifactCompatibility, ArtifactId, ComponentResources, LicenseInfo, ModelId, ModelIdentity,
+        ModelPackKind, ModelPackSpec, ModelRevision, Sha256Digest, write_model_pack,
+    };
+
+    use super::*;
+
+    fn model_artifact(model_id: &str, revision: &str) -> CatalogArtifact {
+        CatalogArtifact::new(
+            ArtifactId::new("procyon.dev.model.test.v1").expect("artifact id"),
+            fm_semantic_components::ComponentId::new("procyon.dev.model.test")
+                .expect("component id"),
+            ArtifactKind::Model(ModelIdentity::new(
+                ModelId::new(model_id).expect("model id"),
+                ModelRevision::new(revision).expect("revision"),
+            )),
+            semver::Version::new(1, 0, 0),
+            fm_semantic_components::ArtifactLocation::new("https://developer.invalid/artifact")
+                .expect("location"),
+            LicenseInfo::new("MIT", "test fixture").expect("license"),
+            Sha256Digest::calculate(b"unused"),
+            ComponentResources::new(1, 1, 1).expect("resources"),
+            ArtifactCompatibility::new(None, None, Vec::new(), 1),
+        )
+        .expect("artifact")
+    }
+
+    fn write_pack(path: &Path, model_id: &str, revision: &str, production: bool) {
+        let members = path.with_extension("members");
+        fs::create_dir_all(&members).expect("members");
+        fs::write(members.join("config.json"), b"{}").expect("member");
+        write_model_pack(
+            path,
+            &ModelPackSpec {
+                kind: ModelPackKind::OnnxTransformerMeanPool,
+                model_id: model_id.to_owned(),
+                model_revision: revision.to_owned(),
+                tokenizer: "test-tokenizer".into(),
+                dimensions: 384,
+                max_input_tokens: 512,
+                query_prefix: "query: ".into(),
+                passage_prefix: "passage: ".into(),
+                production,
+                source: "test fixture".into(),
+                files: vec![("config.json".into(), members.join("config.json"))],
+            },
+        )
+        .expect("pack");
+    }
+
+    #[test]
+    fn activation_accepts_a_matching_non_production_model_pack() {
+        let directory = tempfile::tempdir().expect("directory");
+        let pack = directory.path().join("payload");
+        write_pack(&pack, "example.model", "revision-one", false);
+
+        DeveloperActivation
+            .validate(&model_artifact("example.model", "revision-one"), &pack)
+            .expect("activation");
+    }
+
+    #[test]
+    fn activation_rejects_production_foreign_and_mismatched_model_packs() {
+        let directory = tempfile::tempdir().expect("directory");
+        let artifact = model_artifact("example.model", "revision-one");
+
+        let production = directory.path().join("production");
+        write_pack(&production, "example.model", "revision-one", true);
+        assert!(
+            DeveloperActivation
+                .validate(&artifact, &production)
+                .unwrap_err()
+                .to_string()
+                .contains("non-production")
+        );
+
+        let mismatched = directory.path().join("mismatched");
+        write_pack(&mismatched, "example.model", "revision-two", false);
+        assert!(
+            DeveloperActivation
+                .validate(&artifact, &mismatched)
+                .unwrap_err()
+                .to_string()
+                .contains("does not match the signed catalog")
+        );
+
+        let foreign = directory.path().join("foreign");
+        fs::write(&foreign, br#"{"production": false}"#).expect("foreign");
+        assert!(DeveloperActivation.validate(&artifact, &foreign).is_err());
+    }
+
+    #[test]
+    fn large_artifacts_are_streamed_in_bounded_resumable_chunks() {
+        let directory = tempfile::tempdir().expect("directory");
+        let artifacts = directory.path().join("artifacts");
+        fs::create_dir_all(&artifacts).expect("artifacts");
+        let id = ArtifactId::new("procyon.dev.model.test.v1").expect("artifact id");
+        let payload = (0..(ARTIFACT_CHUNK_BYTES * 2 + 1024))
+            .map(|index| u8::try_from(index % 251).unwrap_or(0))
+            .collect::<Vec<_>>();
+        fs::write(artifacts.join(id.as_str()), &payload).expect("payload");
+        let source = BundleArtifactSource {
+            directory: artifacts,
+        };
+
+        let mut assembled = Vec::new();
+        loop {
+            let offset = u64::try_from(assembled.len()).expect("offset");
+            let chunk = source
+                .read(&ArtifactRequest::new(id.clone(), offset))
+                .expect("chunk");
+            assert!(u64::try_from(chunk.bytes().len()).expect("length") <= ARTIFACT_CHUNK_BYTES);
+            assembled.extend_from_slice(chunk.bytes());
+            if chunk.is_complete() {
+                break;
+            }
+        }
+
+        assert_eq!(assembled, payload);
+        assert!(matches!(
+            source.read(&ArtifactRequest::new(
+                id,
+                u64::try_from(payload.len()).expect("length") + 1
+            )),
+            Err(ArtifactSourceError::InvalidOffset { .. })
+        ));
+    }
+
+    #[test]
+    fn no_model_pack_is_resolved_before_anything_is_installed() {
+        let parent =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/semantic-developer-tests");
+        fs::create_dir_all(&parent).expect("test parent");
+        let parent = fs::canonicalize(parent).expect("canonical test parent");
+        let directory = tempfile::tempdir_in(parent).expect("directory");
+        let resolver = active_model_pack_resolver(ComponentManager::new(
+            SemanticStateStore::new(directory.path().join("state")),
+            directory.path(),
+        ));
+
+        assert_eq!(resolver(), Ok(None));
+    }
 }

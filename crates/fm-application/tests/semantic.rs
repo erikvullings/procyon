@@ -369,6 +369,65 @@ async fn semantic_ipc_capability_adapts_worker_operations_to_application_types()
 
 #[cfg(unix)]
 #[tokio::test]
+async fn semantic_ipc_restart_waits_until_the_previous_worker_has_stopped() {
+    let directory = TestDirectory::new("ipc-restart");
+    let endpoint = SemanticWorkerEndpoint::for_runtime_directory(&directory);
+    let secret = SemanticWorkerSecret::from_bytes([21; 32]);
+    let worker =
+        tokio::spawn(WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone())).run());
+    for _ in 0..100 {
+        if endpoint.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(endpoint.exists(), "worker endpoint did not start");
+
+    let capability = IpcSemanticCapability::administrator_provisioned(endpoint, secret);
+    capability.health().await.expect("worker health");
+    capability
+        .restart(Duration::from_millis(100))
+        .await
+        .expect("worker restart");
+
+    tokio::time::timeout(Duration::from_millis(100), worker)
+        .await
+        .expect("restart returned before the old worker stopped")
+        .expect("worker task")
+        .expect("worker shutdown");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn semantic_ipc_restart_accepts_an_already_stopped_cached_worker() {
+    let directory = TestDirectory::new("ipc-stale-restart");
+    let endpoint = SemanticWorkerEndpoint::for_runtime_directory(&directory);
+    let secret = SemanticWorkerSecret::from_bytes([22; 32]);
+    let worker =
+        tokio::spawn(WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone())).run());
+    for _ in 0..100 {
+        if endpoint.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(endpoint.exists(), "worker endpoint did not start");
+
+    let capability = IpcSemanticCapability::administrator_provisioned(endpoint.clone(), secret);
+    capability.health().await.expect("worker health");
+    worker.abort();
+    assert!(worker.await.expect_err("worker was aborted").is_cancelled());
+    let SemanticWorkerEndpoint::Unix(endpoint_path) = &endpoint;
+    std::fs::remove_file(endpoint_path).expect("remove the aborted worker endpoint");
+
+    capability
+        .restart(Duration::from_millis(100))
+        .await
+        .expect("an already stopped worker completes restart");
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn semantic_ipc_capability_reconnects_after_a_typed_session_expiry_rejection() {
     let directory = TestDirectory::new("ipc-session-expiry");
     let endpoint = SemanticWorkerEndpoint::for_runtime_directory(&directory);

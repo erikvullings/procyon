@@ -1387,6 +1387,29 @@ impl FileManagerService {
             .await
     }
 
+    /// Rebuilds every enrolled root's index after the active model changed.
+    ///
+    /// This is opt-in application orchestration for a trusted host command,
+    /// invoked once model activation is already durable. It is never triggered
+    /// by ordinary HTTP or library-enrolment methods. A failed pass is
+    /// reported, never rolled back into consent or model state.
+    pub async fn semantic_reindex_after_model_change(
+        &self,
+        access: &SemanticAccessContext,
+        grace: Duration,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        crate::semantic_model_change::reindex_after_model_change(
+            &self.semantic,
+            &self.semantic_indexing,
+            self.semantic_library().await,
+            access,
+            grace,
+            cancellation,
+        )
+        .await
+    }
+
     /// Replaces the unavailable default with a worker-backed summary capability.
     #[must_use]
     pub fn with_document_summary_capability(

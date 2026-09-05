@@ -6,6 +6,8 @@
 pub mod advanced;
 #[cfg(feature = "developer-bundle")]
 pub mod developer_bundle;
+#[cfg(feature = "developer-bundle")]
+mod developer_onnx;
 pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;
@@ -363,6 +365,12 @@ pub enum ClientError {
     /// The configured secret file was malformed or unsafe.
     #[error("invalid worker secret file")]
     InvalidSecretFile,
+    /// The host selected a developer model whose installed artifact is unusable.
+    #[error("active developer model pack is invalid: {0}")]
+    InvalidDeveloperModelPack(String),
+    /// A worker acknowledged shutdown but did not release its endpoint in time.
+    #[error("semantic worker did not stop within the shutdown deadline")]
+    ShutdownTimedOut,
 }
 
 enum ConnectorSource {
@@ -371,10 +379,20 @@ enum ConnectorSource {
         runtime_directory: PathBuf,
         executable: PathBuf,
         idle_timeout: Duration,
+        startup_timeout: Duration,
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
+        developer_model_pack: Option<DeveloperModelPackResolver>,
     },
 }
+
+/// Resolves the host-owned path of the currently activated developer model pack.
+///
+/// Installation happens long after the connector is built, so the path is
+/// resolved at launch time rather than captured at startup. Only the host may
+/// supply this: nothing reachable from a frontend request contributes to it.
+pub type DeveloperModelPackResolver =
+    Arc<dyn Fn() -> Result<Option<PathBuf>, String> + Send + Sync>;
 
 /// Discovers or starts the one per-user worker on demand.
 pub struct WorkerConnector {
@@ -401,8 +419,10 @@ impl WorkerConnector {
                 runtime_directory: runtime_directory.to_owned(),
                 executable: executable.to_owned(),
                 idle_timeout: Duration::from_secs(30),
+                startup_timeout: Duration::from_secs(2),
                 developer_data_directory: None,
                 developer_native_library_directory: None,
+                developer_model_pack: None,
             },
         }
     }
@@ -420,7 +440,8 @@ impl WorkerConnector {
         native_library_directory: Option<&Path>,
     ) -> Self {
         let connector = Self::desktop(runtime_directory, executable)
-            .with_developer_data_directory(data_directory);
+            .with_developer_data_directory(data_directory)
+            .with_startup_timeout(Duration::from_secs(30));
         if let Some(directory) = native_library_directory {
             connector.with_developer_native_library_directory(directory)
         } else {
@@ -433,6 +454,18 @@ impl WorkerConnector {
     pub fn with_idle_timeout(mut self, timeout: Duration) -> Self {
         if let ConnectorSource::Desktop { idle_timeout, .. } = &mut self.source {
             *idle_timeout = timeout;
+        }
+        self
+    }
+
+    /// Overrides how long a launched worker may take to bind its endpoint.
+    #[must_use]
+    pub fn with_startup_timeout(mut self, timeout: Duration) -> Self {
+        if let ConnectorSource::Desktop {
+            startup_timeout, ..
+        } = &mut self.source
+        {
+            *startup_timeout = timeout;
         }
         self
     }
@@ -467,6 +500,109 @@ impl WorkerConnector {
         self
     }
 
+    /// Configures how the host resolves the activated developer model pack at
+    /// launch time.
+    ///
+    /// The resolver runs in the host process immediately before spawning the
+    /// worker, so a model installed after startup is picked up without
+    /// rebuilding the connector.
+    #[must_use]
+    pub fn with_developer_model_pack_resolver(
+        mut self,
+        resolver: DeveloperModelPackResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_model_pack,
+            ..
+        } = &mut self.source
+        {
+            *developer_model_pack = Some(resolver);
+        }
+        self
+    }
+
+    /// Connects only to an already-running worker, never starting one.
+    ///
+    /// Hosts use this to act on a worker that is currently serving — for
+    /// example to stop it after the active model changed — without launching a
+    /// process merely to shut it down again.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, or protocol error. An absent
+    /// or stale endpoint is reported as `Ok(None)` rather than an error.
+    pub async fn connect_existing(&self) -> Result<Option<WorkerClient>, ClientError> {
+        match &self.source {
+            ConnectorSource::Provisioned(secret) => {
+                match WorkerClient::connect(&self.endpoint, secret.clone()).await {
+                    Ok(client) => Ok(Some(client)),
+                    Err(error) if endpoint_is_absent_or_stale(&error) => Ok(None),
+                    Err(error) => Err(error),
+                }
+            }
+            ConnectorSource::Desktop {
+                runtime_directory, ..
+            } => {
+                if !runtime_directory.is_dir() {
+                    return Ok(None);
+                }
+                discover_desktop_worker(&self.endpoint, &runtime_directory.join("launch.secret"))
+                    .await
+            }
+        }
+    }
+
+    /// Waits until an acknowledged worker shutdown has released its endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed discovery failure or [`ClientError::ShutdownTimedOut`]
+    /// when the endpoint remains live for the whole deadline.
+    pub async fn wait_until_stopped(&self, timeout: Duration) -> Result<(), ClientError> {
+        tokio::time::timeout(timeout, async {
+            loop {
+                if self.connect_existing().await?.is_none()
+                    && !self.endpoint.exists()
+                    && self.worker_process_marker_is_released()
+                {
+                    return Ok(());
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .map_err(|_| ClientError::ShutdownTimedOut)?
+    }
+
+    fn worker_process_marker_is_released(&self) -> bool {
+        match &self.source {
+            ConnectorSource::Provisioned(_) => true,
+            ConnectorSource::Desktop {
+                runtime_directory, ..
+            } => !runtime_directory.join("worker.pid").exists(),
+        }
+    }
+
+    async fn reuse_existing_client(
+        &self,
+        client: WorkerClient,
+    ) -> Result<Option<WorkerClient>, ClientError> {
+        let is_developer = matches!(
+            &self.source,
+            ConnectorSource::Desktop {
+                developer_model_pack: Some(_),
+                ..
+            }
+        );
+        if !is_developer {
+            return Ok(Some(client));
+        }
+        client.shutdown(Duration::from_secs(10)).await?;
+        drop(client);
+        self.wait_until_stopped(Duration::from_secs(12)).await?;
+        Ok(None)
+    }
+
     /// Connects to a provisioned worker or discovers/starts the desktop worker.
     ///
     /// Concurrent callers serialize launch through an owner-only filesystem
@@ -484,13 +620,19 @@ impl WorkerConnector {
                 runtime_directory,
                 executable,
                 idle_timeout,
+                startup_timeout,
                 developer_data_directory,
                 developer_native_library_directory,
+                developer_model_pack,
             } => {
                 ensure_runtime_directory(runtime_directory)?;
                 let secret_path = runtime_directory.join("launch.secret");
+                let mut retired_existing_developer_worker = false;
                 if let Some(client) = discover_desktop_worker(&self.endpoint, &secret_path).await? {
-                    return Ok(client);
+                    if let Some(client) = self.reuse_existing_client(client).await? {
+                        return Ok(client);
+                    }
+                    retired_existing_developer_worker = true;
                 }
 
                 let lock_path = runtime_directory.join("launch.lock");
@@ -508,7 +650,11 @@ impl WorkerConnector {
                 .await
                 .map_err(|error| io::Error::other(error.to_string()))??;
 
-                if let Some(client) = discover_desktop_worker(&self.endpoint, &secret_path).await? {
+                if !retired_existing_developer_worker
+                    && let Some(client) =
+                        discover_desktop_worker(&self.endpoint, &secret_path).await?
+                    && let Some(client) = self.reuse_existing_client(client).await?
+                {
                     drop(lock);
                     return Ok(client);
                 }
@@ -523,6 +669,10 @@ impl WorkerConnector {
                     .arg(idle_timeout.as_millis().to_string());
                 if let Some(directory) = developer_data_directory {
                     command.arg("--developer-data-dir").arg(directory);
+                    if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
+                    {
+                        command.arg("--developer-model-pack").arg(pack);
+                    }
                 }
                 if let Some(directory) = developer_native_library_directory {
                     configure_developer_native_library(&mut command, directory)?;
@@ -534,15 +684,20 @@ impl WorkerConnector {
                     .spawn()?;
                 spawn_child_reaper(child);
 
-                let mut last_error = None;
-                for _ in 0..200 {
+                let deadline = tokio::time::Instant::now() + *startup_timeout;
+                let last_error = loop {
                     match WorkerClient::connect(&self.endpoint, secret.clone()).await {
                         Ok(client) => {
                             drop(lock);
                             return Ok(client);
                         }
-                        Err(error) if endpoint_is_absent_or_stale(&error) => {
-                            last_error = Some(error);
+                        Err(error)
+                            if endpoint_is_absent_or_stale(&error)
+                                || matches!(error, ClientError::InsecureEndpoint) =>
+                        {
+                            if tokio::time::Instant::now() >= deadline {
+                                break error;
+                            }
                         }
                         Err(error) => {
                             drop(lock);
@@ -550,9 +705,9 @@ impl WorkerConnector {
                         }
                     }
                     tokio::time::sleep(Duration::from_millis(10)).await;
-                }
+                };
                 drop(lock);
-                Err(last_error.unwrap_or(ClientError::Disconnected))
+                Err(last_error)
             }
         }
     }
@@ -591,9 +746,97 @@ const fn developer_library_path_variable() -> Option<&'static str> {
     }
 }
 
+/// Accepts only an absolute host-resolved path to an existing regular file.
+///
+/// A resolver that has nothing installed yet, or that returns a relative or
+/// missing path, launches the worker without a model rather than handing it an
+/// unusable argument.
+fn resolve_developer_model_pack(
+    resolver: Option<&DeveloperModelPackResolver>,
+) -> Result<Option<PathBuf>, ClientError> {
+    let Some(resolver) = resolver else {
+        return Ok(None);
+    };
+    let Some(pack) = resolver().map_err(ClientError::InvalidDeveloperModelPack)? else {
+        return Ok(None);
+    };
+    if !pack.is_absolute() {
+        return Err(ClientError::InvalidDeveloperModelPack(format!(
+            "resolved path is not absolute: {}",
+            pack.display()
+        )));
+    }
+    let metadata = std::fs::metadata(&pack).map_err(|error| {
+        ClientError::InvalidDeveloperModelPack(format!(
+            "cannot inspect {}: {error}",
+            pack.display()
+        ))
+    })?;
+    if !metadata.is_file() {
+        return Err(ClientError::InvalidDeveloperModelPack(format!(
+            "resolved path is not a regular file: {}",
+            pack.display()
+        )));
+    }
+    Ok(Some(pack))
+}
+
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
+
+    #[test]
+    fn only_absolute_existing_host_resolved_model_packs_reach_the_worker() {
+        let directory = tempfile::tempdir().expect("directory");
+        let pack = directory.path().join("model-pack");
+        std::fs::write(&pack, b"pack").expect("pack");
+
+        let installed = pack.clone();
+        assert_eq!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(move || Ok(Some(installed.clone()))) as DeveloperModelPackResolver)
+            ))
+            .unwrap(),
+            Some(pack)
+        );
+        assert!(resolve_developer_model_pack(None).unwrap().is_none());
+        assert!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(|| Ok(None)) as DeveloperModelPackResolver)
+            ))
+            .unwrap()
+            .is_none()
+        );
+        assert!(matches!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(|| Ok(Some(PathBuf::from("relative/model-pack"))))
+                    as DeveloperModelPackResolver)
+            )),
+            Err(ClientError::InvalidDeveloperModelPack(_))
+        ));
+        let absent = directory.path().join("absent");
+        assert!(matches!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(move || Ok(Some(absent.clone()))) as DeveloperModelPackResolver)
+            )),
+            Err(ClientError::InvalidDeveloperModelPack(_))
+        ));
+        let as_directory = directory.path().to_owned();
+        assert!(matches!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(move || Ok(Some(as_directory.clone()))) as DeveloperModelPackResolver)
+            )),
+            Err(ClientError::InvalidDeveloperModelPack(_))
+        ));
+        assert!(matches!(
+            resolve_developer_model_pack(Some(
+                &(Arc::new(|| Err("durable state is unreadable".to_owned()))
+                    as DeveloperModelPackResolver)
+            )),
+            Err(ClientError::InvalidDeveloperModelPack(message))
+                if message == "durable state is unreadable"
+        ));
+    }
 
     #[test]
     fn developer_native_library_directory_is_first_in_the_child_search_path() {
@@ -655,6 +898,7 @@ fn endpoint_is_absent_or_stale(error: &ClientError) -> bool {
         ClientError::Io(error) | ClientError::Frame(FrameError::Io(error)) => {
             io_error_is_absent_or_stale(error)
         }
+        ClientError::Disconnected => true,
         _ => false,
     }
 }

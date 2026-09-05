@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { buildSemanticDeveloperBundle } from './build-semantic-developer-bundle.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const bundle = buildSemanticDeveloperBundle();
+const bundle = await buildSemanticDeveloperBundle();
 const result = spawnSync('pnpm', ['exec', 'tauri', 'dev'], {
   cwd: path.join(repositoryRoot, 'apps/fm-desktop/src-tauri'),
   env: {

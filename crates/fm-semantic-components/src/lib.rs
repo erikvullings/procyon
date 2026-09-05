@@ -5,6 +5,7 @@ mod data_root;
 mod deletion;
 mod installer;
 mod model_migration;
+mod model_pack;
 mod optional_pack;
 mod report;
 mod state;
@@ -35,6 +36,10 @@ pub use installer::{
 };
 pub use model_migration::{
     LocalModelImport, LocalModelImportRequest, ModelImportError, ModelImportField,
+};
+pub use model_pack::{
+    MODEL_PACK_MAGIC, ModelPack, ModelPackError, ModelPackFile, ModelPackIndex, ModelPackKind,
+    ModelPackSpec, write_model_pack,
 };
 pub use optional_pack::{
     AdvancedCapabilityKind, AdvancedEvaluationReport, AdvancedFixture, AdvancedFixtureResult,

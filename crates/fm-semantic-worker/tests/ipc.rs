@@ -1637,7 +1637,8 @@ async fn concurrent_connectors_elect_one_worker_and_share_it() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = test_directory("concurrent-launch");
-    let executable = PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let executable =
+        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
     let first =
         WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let second =
@@ -1668,7 +1669,8 @@ async fn concurrent_connectors_elect_one_worker_and_share_it() {
 #[tokio::test]
 async fn desktop_connector_reaps_the_worker_process_after_it_exits() {
     let directory = test_directory("child-reaping");
-    let executable = PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let executable =
+        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
     let connector =
         WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let client = connector.connect().await.unwrap();
@@ -1692,6 +1694,159 @@ async fn desktop_connector_reaps_the_worker_process_after_it_exits() {
         rustix::process::waitpid(Some(pid), rustix::process::WaitOptions::NOHANG).is_err(),
         "worker child remained waitable after exit"
     );
+}
+
+#[tokio::test]
+async fn desktop_connector_waits_for_process_exit_and_endpoint_removal_after_shutdown() {
+    let directory = test_directory("confirmed-shutdown");
+    let executable = PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let connector =
+        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let client = connector.connect().await.unwrap();
+
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    drop(client);
+    connector
+        .wait_until_stopped(Duration::from_secs(2))
+        .await
+        .unwrap();
+
+    assert!(
+        !endpoint.exists(),
+        "restart returned before endpoint removal"
+    );
+    assert!(
+        !directory.join("worker.pid").exists(),
+        "restart returned before process cleanup"
+    );
+}
+
+#[cfg(all(unix, feature = "developer-bundle"))]
+fn native_zvec_library_directory(executable: &std::path::Path) -> PathBuf {
+    let build_directory = executable.parent().expect("target directory").join("build");
+    std::fs::read_dir(build_directory)
+        .expect("build directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("out/zvec-prebuilt"))
+        .find(|candidate| {
+            std::fs::read_dir(candidate).is_ok_and(|entries| {
+                entries.filter_map(Result::ok).any(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("libzvec_c_api")
+                })
+            })
+        })
+        .expect("Zvec native library directory")
+}
+
+#[cfg(all(unix, feature = "developer-bundle"))]
+#[tokio::test]
+async fn developer_connector_allows_real_model_cold_start_time_before_binding() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = test_directory("delayed-developer-launch");
+    let runtime_directory = std::fs::canonicalize(&directory).expect("runtime directory");
+    let executable =
+        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
+    let native_library_directory = native_zvec_library_directory(&executable);
+    let wrapper = directory.join("delayed-worker");
+    let log = runtime_directory.join("delayed-worker.log");
+    let quoted = executable.display().to_string().replace('\'', "'\\''");
+    let quoted_log = log.display().to_string().replace('\'', "'\\''");
+    let quoted_native = native_library_directory
+        .display()
+        .to_string()
+        .replace('\'', "'\\''");
+    let library_path_variable = if cfg!(target_os = "macos") {
+        "DYLD_LIBRARY_PATH"
+    } else {
+        "LD_LIBRARY_PATH"
+    };
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\n/bin/sleep 3\nexport {library_path_variable}='{quoted_native}'\n\
+             exec '{quoted}' \"$@\" 2>'{quoted_log}'\n"
+        ),
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&wrapper).unwrap().permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&wrapper, permissions).unwrap();
+    let wrapper = std::fs::canonicalize(wrapper).expect("wrapper");
+    let connector = WorkerConnector::desktop(&directory, &wrapper)
+        .with_developer_native_library_directory(&native_library_directory)
+        .with_startup_timeout(Duration::from_secs(30))
+        .with_idle_timeout(Duration::from_secs(2));
+
+    let client = connector.connect().await.unwrap_or_else(|error| {
+        panic!(
+            "delayed developer worker: {error}; log: {}",
+            std::fs::read_to_string(log).unwrap_or_else(|read_error| read_error.to_string())
+        )
+    });
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    drop(client);
+    connector
+        .wait_until_stopped(Duration::from_secs(2))
+        .await
+        .unwrap();
+}
+
+#[cfg(all(unix, feature = "developer-bundle"))]
+#[tokio::test]
+async fn a_new_developer_host_replaces_a_worker_from_the_previous_host() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = test_directory("developer-host-restart");
+    let executable =
+        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
+    let native_library_directory = native_zvec_library_directory(&executable);
+    let data_directory = std::fs::canonicalize(&directory)
+        .unwrap()
+        .join("developer-data");
+    let resolver: fm_semantic_worker::DeveloperModelPackResolver = Arc::new(|| Ok(None));
+    let first_connector = WorkerConnector::desktop_developer(
+        &directory,
+        &executable,
+        &data_directory,
+        Some(&native_library_directory),
+    )
+    .with_developer_model_pack_resolver(resolver.clone());
+    let first = first_connector.connect().await.expect("first worker");
+    let first_pid = std::fs::read_to_string(directory.join("worker.pid")).unwrap();
+    drop(first);
+
+    let second_connector = WorkerConnector::desktop_developer(
+        &directory,
+        &executable,
+        &data_directory,
+        Some(&native_library_directory),
+    )
+    .with_developer_model_pack_resolver(resolver);
+    let second = second_connector.connect().await.unwrap_or_else(|error| {
+        let socket = directory.join("semantic-worker.sock");
+        let metadata = std::fs::symlink_metadata(&socket).ok();
+        panic!(
+            "replacement worker: {error}; socket_exists={}; socket_mode={:?}; socket_uid={:?}; current_uid={}",
+            socket.exists(),
+            metadata.as_ref().map(|value| value.permissions().mode() & 0o777),
+            metadata.as_ref().map(std::os::unix::fs::MetadataExt::uid),
+            rustix::process::geteuid().as_raw(),
+        )
+    });
+    let second_pid = std::fs::read_to_string(directory.join("worker.pid")).unwrap();
+    assert_ne!(first_pid, second_pid);
+
+    second.shutdown(Duration::from_millis(100)).await.unwrap();
+    drop(second);
+    second_connector
+        .wait_until_stopped(Duration::from_secs(2))
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -27,6 +27,15 @@ pub struct ArtifactRequest {
 }
 
 impl ArtifactRequest {
+    /// Creates a resume request for one signed-catalog artifact.
+    #[must_use]
+    pub const fn new(artifact_id: ArtifactId, offset: u64) -> Self {
+        Self {
+            artifact_id,
+            offset,
+        }
+    }
+
     /// Returns the opaque signed-catalog artifact identifier.
     #[must_use]
     pub const fn artifact_id(&self) -> &ArtifactId {
@@ -52,6 +61,18 @@ impl ArtifactChunk {
     #[must_use]
     pub fn new(bytes: Vec<u8>, complete: bool) -> Self {
         Self { bytes, complete }
+    }
+
+    /// Returns the chunk's bytes.
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Returns whether this chunk finishes the artifact.
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        self.complete
     }
 }
 

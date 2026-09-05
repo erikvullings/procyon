@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { fetchMultilingualModel } from './fetch-semantic-model.mjs';
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function run(command, args, options = {}) {
@@ -42,7 +44,7 @@ function findZvecNativeLibrary(targetDirectory, profile) {
   return candidates[0];
 }
 
-export function buildSemanticDeveloperBundle() {
+export async function buildSemanticDeveloperBundle() {
   const supported =
     (process.platform === 'darwin' && process.arch === 'arm64') ||
     (process.platform === 'win32' && process.arch === 'x64') ||
@@ -60,6 +62,11 @@ export function buildSemanticDeveloperBundle() {
     }),
   );
   const profile = process.argv.includes('--release') ? 'release' : 'debug';
+  // Fetched and verified before the long compile so a bad or missing download
+  // fails in seconds rather than after a full ONNX Runtime build.
+  const modelCache = await fetchMultilingualModel(
+    path.join(metadata.target_directory, 'semantic-model-cache'),
+  );
   const buildArgs = [
     'build',
     '-p',
@@ -92,12 +99,13 @@ export function buildSemanticDeveloperBundle() {
     '--',
     executable,
     nativeRuntime,
+    modelCache,
     output,
   ]);
   return output;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const output = buildSemanticDeveloperBundle();
+  const output = await buildSemanticDeveloperBundle();
   console.log(`Semantic developer bundle: ${output}`);
 }

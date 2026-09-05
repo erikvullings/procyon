@@ -29,6 +29,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
     pub(crate) semantic_developer_bundle: bool,
+    pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
 }
 
 /// True once the whole app has started quitting (`RunEvent::ExitRequested`/`Exit`), checked by
@@ -103,8 +104,12 @@ pub fn run() {
             );
             #[cfg(debug_assertions)]
             let mut semantic_developer_bundle = false;
+            #[cfg(debug_assertions)]
+            let mut semantic_reindex_pending_marker = None;
             #[cfg(not(debug_assertions))]
             let semantic_developer_bundle = false;
+            #[cfg(not(debug_assertions))]
+            let semantic_reindex_pending_marker = None;
             #[cfg(debug_assertions)]
             if let Some(bundle_directory) =
                 std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE")
@@ -122,10 +127,12 @@ pub fn run() {
                     &bundle.installed_worker,
                     &bundle.worker_data_directory,
                     &bundle.native_library_directory,
+                    Some(Arc::clone(&bundle.active_model_pack)),
                 );
                 service = service
                     .with_semantic_component_capability(bundle.components)
                     .with_semantic_capability(Arc::new(semantic));
+                semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
             } else if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
                 service = service.with_semantic_component_capability(Arc::new(
                     fm_application::semantic_components::FakeSemanticComponentCapability::new(),
@@ -134,10 +141,19 @@ pub fn run() {
             if let Ok(resource_dir) = app.path().resource_dir() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
+            let service = Arc::new(service);
             app.manage(AppState {
-                service: Arc::new(service),
+                service: Arc::clone(&service),
                 semantic_developer_bundle,
+                semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
             });
+            if let Some(marker) =
+                semantic_reindex_pending_marker.filter(|marker| marker.is_file())
+            {
+                tauri::async_runtime::spawn(commands::resume_pending_semantic_model_reindex(
+                    service, marker,
+                ));
+            }
 
             // Dock icon right/long-click "New Window" item, mirroring the File menu's own item
             // (task 0133) - sends the frontend's `NEW_WORKSPACE_WINDOW_MENU_ID` through the same
@@ -507,6 +523,7 @@ mod tests {
                     ),
                 ),
                 semantic_developer_bundle,
+                semantic_reindex_pending_marker: None,
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
             .manage(native_menu::NativeMenuActionChannel::default())

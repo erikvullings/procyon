@@ -49,6 +49,7 @@ pub mod semantic_indexing;
 pub mod semantic_ingestion;
 pub mod semantic_library;
 pub mod semantic_library_mapping;
+pub mod semantic_model_change;
 pub mod semantic_vocabulary;
 mod semantic_vocabulary_mapping;
 mod service;
