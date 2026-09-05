@@ -42,8 +42,11 @@ const INGESTION_TIMEOUT: Duration = Duration::from_secs(120);
 /// Outcome of one complete root enumeration and worker feed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticIndexingReport {
-    /// Worker tenant derived from the authorized access context.
-    pub tenant_id: String,
+    /// Worker tenants populated by the reconciliation.
+    ///
+    /// Desktop search uses each attached workspace UUID as its tenant. A
+    /// server library retains its authenticated tenant across workspaces.
+    pub tenant_ids: Vec<String>,
     /// Active immutable semantic library identity.
     pub library_id: String,
     /// Reconciled enrolled root.
@@ -146,7 +149,6 @@ impl SemanticIndexingService {
             .budgets
             .max_source_bytes_per_document
             .min(MAX_SOURCE_BYTES);
-        let tenant_id = access.tenant_id()?;
         let workspace_ids = root
             .workspace_references
             .iter()
@@ -265,11 +267,29 @@ impl SemanticIndexingService {
                                 .into_iter()
                                 .find(|decision| decision.occurrence_id() == occurrence_id)
                                 .ok_or(SemanticLibraryError::InvalidRequest)?;
+                            if decision.library_id().to_string() != library_id {
+                                return Err(
+                                    SemanticLibraryError::IncompatibleLibraryIdentity.into()
+                                );
+                            }
                             for workspace_id in &workspace_ids {
+                                let tenant_id = match access {
+                                    SemanticAccessContext::Host => workspace_id.to_string(),
+                                    SemanticAccessContext::Server(_) => access.tenant_id()?,
+                                    SemanticAccessContext::Anonymous => {
+                                        return Err(SemanticLibraryError::AccessDenied.into());
+                                    }
+                                };
+                                if matches!(access, SemanticAccessContext::Server(_))
+                                    && decision.tenant_id().as_str() != tenant_id
+                                {
+                                    return Err(SemanticLibraryError::AccessDenied.into());
+                                }
                                 ingest_and_wait(
                                     &semantic,
                                     &decision,
                                     FeedDocument {
+                                        tenant_id,
                                         root_id,
                                         workspace_id: *workspace_id,
                                         media_type: media_type(&entry)
@@ -303,8 +323,15 @@ impl SemanticIndexingService {
         check_cancelled(&cancellation)?;
         let reconciliation_generation =
             library.complete_reconciliation(access, root_id, &observed)?;
+        let tenant_ids = match access {
+            SemanticAccessContext::Host => workspace_ids.iter().map(ToString::to_string).collect(),
+            SemanticAccessContext::Server(_) => vec![access.tenant_id()?],
+            SemanticAccessContext::Anonymous => {
+                return Err(SemanticLibraryError::AccessDenied.into());
+            }
+        };
         Ok(SemanticIndexingReport {
-            tenant_id,
+            tenant_ids,
             library_id,
             root_id,
             observed_files,
@@ -433,6 +460,7 @@ async fn read_bounded(
 }
 
 struct FeedDocument<'content> {
+    tenant_id: String,
     root_id: RootId,
     workspace_id: WorkspaceId,
     media_type: &'content str,
@@ -451,7 +479,7 @@ async fn ingest_and_wait(
     let workspace = document.workspace_id.to_string();
     let scoped_occurrence_id = format!("{occurrence_id}@{workspace}");
     let scope = SemanticScope::new(
-        TenantId::new(decision.tenant_id().as_str()),
+        TenantId::new(document.tenant_id),
         LibraryId::new(decision.library_id().to_string()),
     );
     let metadata = BTreeMap::from([

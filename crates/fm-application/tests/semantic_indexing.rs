@@ -137,6 +137,10 @@ async fn recursive_indexing_filters_entries_and_resolves_search_evidence() {
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 4);
     assert_eq!(report.reconciliation_generation, 1);
+    assert_eq!(
+        report.tenant_ids,
+        vec![workspace_id.to_string(), second_workspace_id.to_string()]
+    );
     assert!(
         report
             .skipped_reason_counts
@@ -156,52 +160,44 @@ async fn recursive_indexing_filters_entries_and_resolves_search_evidence() {
         count.reason == EligibilityReason::SymlinkOutsideRoot && count.count >= 1
     }));
 
-    let results = service
-        .semantic_query(SemanticQuery {
-            scope: SemanticScope::new(
-                TenantId::new(report.tenant_id),
-                WorkerLibraryId::new(report.library_id),
-            ),
-            request_id: SemanticOperationId::new("integration-query"),
-            text: "semantic".to_owned(),
-            concept: None,
-            maximum_results: 10,
-        })
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 2);
-    for result in results {
-        assert!(!result.metadata.contains_key("uri"));
-        assert!(
-            !result
-                .metadata
-                .values()
-                .any(|value| value.contains("welcome.txt"))
-        );
-        let source_id = result.metadata.get("source_id").unwrap().clone();
-        let resolved = service
-            .resolve_rag_citation(
-                &HOST,
-                ResolveRagCitationRequestDto {
-                    workspace_id: workspace_id.into_inner(),
-                    source_id: source_id.clone(),
-                },
-            )
+    for workspace_id in [workspace_id, second_workspace_id] {
+        let results = service
+            .semantic_query(SemanticQuery {
+                scope: SemanticScope::new(
+                    TenantId::new(workspace_id.to_string()),
+                    WorkerLibraryId::new(report.library_id.clone()),
+                ),
+                request_id: SemanticOperationId::new(format!("integration-query-{workspace_id}")),
+                text: "semantic".to_owned(),
+                concept: None,
+                maximum_results: 10,
+            })
             .await
             .unwrap();
-        let location: Location = resolved.location.into();
-        assert!(location.uri.ends_with("/welcome.txt") || location.uri.ends_with("/notes.md"));
-        assert!(resolved.available);
-        service
-            .resolve_rag_citation(
-                &HOST,
-                ResolveRagCitationRequestDto {
-                    workspace_id: second_workspace_id.into_inner(),
-                    source_id,
-                },
-            )
-            .await
-            .unwrap();
+        assert_eq!(results.len(), 2);
+        for result in results {
+            assert!(!result.metadata.contains_key("uri"));
+            assert!(
+                !result
+                    .metadata
+                    .values()
+                    .any(|value| value.contains("welcome.txt"))
+            );
+            let source_id = result.metadata.get("source_id").unwrap().clone();
+            let resolved = service
+                .resolve_rag_citation(
+                    &HOST,
+                    ResolveRagCitationRequestDto {
+                        workspace_id: workspace_id.into_inner(),
+                        source_id,
+                    },
+                )
+                .await
+                .unwrap();
+            let location: Location = resolved.location.into();
+            assert!(location.uri.ends_with("/welcome.txt") || location.uri.ends_with("/notes.md"));
+            assert!(resolved.available);
+        }
     }
 }
 

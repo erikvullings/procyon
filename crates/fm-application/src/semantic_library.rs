@@ -1875,19 +1875,6 @@ impl SemanticLibraryService {
         })
     }
 
-    /// Returns the backend-authoritative worker tenant/library scope.
-    pub(crate) fn worker_scope(
-        &self,
-        access: &SemanticAccessContext,
-    ) -> Result<(String, String), SemanticLibraryError> {
-        let managed = self.managed_backend()?;
-        managed.authorize(access)?;
-        let tenant_id = managed.tenant_for(access)?.to_string();
-        let mut locked = managed.lock()?;
-        let library_id = locked.data()?.policy.library().id().to_string();
-        Ok((tenant_id, library_id))
-    }
-
     /// Records one host-read file in the authoritative catalog.
     ///
     /// The caller supplies every workspace attached to the enrolled root so
