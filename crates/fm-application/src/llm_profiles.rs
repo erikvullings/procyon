@@ -776,6 +776,31 @@ impl LlmProfileService {
         Ok(result)
     }
 
+    /// Discovers bounded provider model identifiers without sending a chat prompt.
+    pub async fn discover_models(
+        &self,
+        id: Uuid,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<String>, LlmProfileError> {
+        let profile = self.profile(id)?;
+        if !profile
+            .capabilities
+            .contains(&LlmApiCapability::ModelDiscovery)
+            || profile.preset == LlmPreset::AzureOpenAi
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        let request = self.probe_request(&profile).await?;
+        Ok(bounded_model_ids(
+            self.transport
+                .discover_models(&request, cancellation)
+                .await?
+                .unwrap_or_default(),
+        ))
+    }
+
     /// Generates bounded text through a saved profile after policy and consent checks.
     pub async fn generate(
         &self,
@@ -1533,6 +1558,25 @@ mod tests {
         );
         assert_eq!(result.model_available, Some(false));
         assert_eq!(result.available_models, Some(vec!["model-a".to_owned()]));
+    }
+
+    #[tokio::test]
+    async fn model_discovery_does_not_send_a_chat_probe() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::Ollama, "http://localhost:11434"))
+            .await
+            .unwrap();
+
+        let models = service
+            .discover_models(profile.id, &CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(models, vec!["model-a".to_owned()]);
+        let captured = transport.captured.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].url.ends_with("/v1/chat/completions"));
     }
 
     #[test]

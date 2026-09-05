@@ -18,8 +18,14 @@ afterEach(() => {
   root.remove();
 });
 
-async function mountLoaded(client: MockFileManagerClient): Promise<void> {
-  m.mount(root, { view: () => m(LlmProfileManagement, { client }) });
+async function mountLoaded(
+  client: MockFileManagerClient,
+  onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void,
+): Promise<void> {
+  const attrs = onSaveHandlerChange === undefined ? { client } : { client, onSaveHandlerChange };
+  m.mount(root, {
+    view: () => m(LlmProfileManagement, attrs),
+  });
   await vi.waitFor(() => expect(root.textContent).not.toContain('Loading generation profiles'));
   m.redraw.sync();
 }
@@ -175,5 +181,32 @@ describe('LlmProfileManagement', () => {
         (button) => button.textContent?.trim() === 'Test',
       )?.disabled,
     ).toBe(true);
+  });
+
+  it('discovers local provider models immediately after saving a profile', async () => {
+    const client = new MockFileManagerClient();
+    const discover = vi
+      .spyOn(client, 'discoverLlmProfileModels')
+      .mockResolvedValue(['llama3.2:3b', 'qwen3:14b']);
+    let save: (() => Promise<boolean>) | undefined;
+    await mountLoaded(client, (handler) => {
+      save = handler;
+    });
+
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'New profile')
+      ?.click();
+    m.redraw.sync();
+    if (save === undefined) throw new Error('Save handler was not registered');
+    await save();
+
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+    const discoveredModels = [...root.querySelectorAll<HTMLElement>('.row')]
+      .find((row) => row.textContent?.includes('Available provider models'))
+      ?.querySelector<HTMLInputElement>('input.select-dropdown');
+    discoveredModels?.click();
+    m.redraw.sync();
+    expect(root.textContent).toContain('qwen3:14b');
   });
 });

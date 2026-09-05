@@ -15448,6 +15448,48 @@
         }
       }
     },
+    "/api/v1/llm-profiles/{profileId}/models": {
+      "get": {
+        "operationId": "discoverLlmProfileModels",
+        "parameters": [
+          {
+            "description": "Profile whose provider models are discovered",
+            "in": "path",
+            "name": "profileId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Bounded provider model identifiers"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Profile not found"
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/{profileId}/test": {
       "post": {
         "operationId": "testLlmProfile",

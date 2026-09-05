@@ -223,6 +223,7 @@ import {
   createLlmProfile as requestLlmProfileCreation,
   deleteLlmProfile as requestLlmProfileDeletion,
   exportLlmProfile as requestLlmProfileExport,
+  discoverLlmProfileModels as requestLlmProfileModelDiscovery,
   listLlmProfilePresets as requestLlmProfilePresets,
   listLlmProfiles as requestLlmProfiles,
   testLlmProfile as requestLlmProfileTest,
@@ -2037,6 +2038,16 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw new Error(`Unexpected testLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]> {
+    const response = await requestLlmProfileModelDiscovery(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected discoverLlmProfileModels response status: ${response.status}`);
     return response.data;
   }
 

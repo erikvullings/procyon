@@ -2915,6 +2915,15 @@ impl FileManagerService {
         ))
     }
 
+    /// Discovers bounded provider model identifiers without running generation.
+    pub async fn discover_llm_profile_models(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(self.llm_profiles.discover_models(id, &cancellation).await?)
+    }
+
     /// Lists every stored connection profile with its current runtime status
     /// (spec §16 `GET /api/v1/connections`, task 0103).
     pub async fn list_connections(&self) -> Result<Vec<ConnectionDto>, ApplicationError> {

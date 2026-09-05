@@ -3740,6 +3740,46 @@ export const exportLlmProfile = async (profileId: string, options?: Parameters<t
 
 
 
+export type discoverLlmProfileModelsResponse200 = {
+  data: string[]
+  status: 200
+}
+
+export type discoverLlmProfileModelsResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type discoverLlmProfileModelsResponseSuccess = (discoverLlmProfileModelsResponse200) & {
+  headers: Headers;
+};
+export type discoverLlmProfileModelsResponseError = (discoverLlmProfileModelsResponse404) & {
+  headers: Headers;
+};
+
+export type discoverLlmProfileModelsResponse = (discoverLlmProfileModelsResponseSuccess | discoverLlmProfileModelsResponseError)
+
+export const getDiscoverLlmProfileModelsUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/models`
+}
+
+export const discoverLlmProfileModels = async (profileId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileModelsResponse> => {
+
+  return fetchMutator<discoverLlmProfileModelsResponse>(getDiscoverLlmProfileModelsUrl(profileId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type testLlmProfileResponse200 = {
   data: LlmProfileTestResultDto
   status: 200

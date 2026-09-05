@@ -223,3 +223,28 @@ pub(crate) async fn test_llm_profile(
             .map_err(|error| ApiError::new(error, request_id))?,
     ))
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/llm-profiles/{profileId}/models",
+    operation_id = "discoverLlmProfileModels",
+    params(("profileId" = Uuid, Path, description = "Profile whose provider models are discovered")),
+    responses(
+        (status = 200, description = "Bounded provider model identifiers", body = Vec<String>),
+        (status = 404, description = "Profile not found", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn discover_llm_profile_models(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(profile_id): Path<Uuid>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .discover_llm_profile_models(profile_id)
+            .await
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}

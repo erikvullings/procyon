@@ -127,6 +127,22 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     error = undefined;
   }
 
+  function discoverModels(client: FileManagerClient, profile: LlmProfile): void {
+    if (
+      profile.locality !== 'loopback' ||
+      !profile.capabilities.includes('modelDiscovery') ||
+      profile.preset === 'azureOpenAi'
+    ) {
+      return;
+    }
+    const revision = modelTestRevision;
+    const isCurrent = () => revision === modelTestRevision && selectedId === profile.id && !dirty;
+    void run(async () => {
+      const models = await client.discoverLlmProfileModels(profile.id);
+      if (isCurrent()) availableModels = models;
+    }, isCurrent);
+  }
+
   function choosePreset(presetId: string): void {
     const preset = presets.find((candidate) => candidate.preset === presetId);
     if (preset === undefined) return;
@@ -173,6 +189,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       if (index < 0) profiles = [...profiles, saved];
       else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
       selectProfile(saved);
+      discoverModels(client, saved);
       message = t('llmProfiles', 'saved');
       return true;
     } catch (reason) {
@@ -221,7 +238,10 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   {
                     type: 'button',
                     'aria-pressed': selectedId === profile.id,
-                    onclick: () => selectProfile(profile),
+                    onclick: () => {
+                      selectProfile(profile);
+                      discoverModels(attrs.client, profile);
+                    },
                   },
                   `${profile.name} · ${
                     profile.locality === 'loopback'

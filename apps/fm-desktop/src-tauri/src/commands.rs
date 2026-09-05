@@ -2268,6 +2268,19 @@ pub(crate) async fn test_llm_profile(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Discovers provider model identifiers without sending a generation prompt.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_models(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<Vec<String>, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_models(profile_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Prepares representative key passages without contacting a generation endpoint.
 #[tauri::command]
 pub(crate) async fn preview_document_summary(

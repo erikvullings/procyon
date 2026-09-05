@@ -334,6 +334,7 @@ export type MockClientMethod =
   | 'exportLlmProfile'
   | 'activateLlmProfile'
   | 'testLlmProfile'
+  | 'discoverLlmProfileModels'
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
@@ -4026,6 +4027,15 @@ export class MockFileManagerClient implements FileManagerClient {
         availableModels,
         capabilities: [...profile.capabilities],
       };
+    });
+  }
+
+  discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]> {
+    return this.perform('discoverLlmProfileModels', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      return profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
+        ? [profile.model, 'model-b']
+        : [];
     });
   }
 

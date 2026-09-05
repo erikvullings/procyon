@@ -1071,6 +1071,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<LlmProfileTestResult>('test_llm_profile', { profileId });
   }
 
+  discoverLlmProfileModels(profileId: string, _signal?: AbortSignal): Promise<string[]> {
+    return invoke<string[]>('discover_llm_profile_models', { profileId });
+  }
+
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     _signal?: AbortSignal,
