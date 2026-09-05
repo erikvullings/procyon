@@ -13,6 +13,7 @@ default = []
 zvec = ["dep:zvec-rust"]
 
 [dependencies]
+fm-semantic-conversion.workspace = true
 fm-semantic-protocol.workspace = true
 fs2.workspace = true
 prost.workspace = true

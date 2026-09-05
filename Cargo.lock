@@ -2869,6 +2869,7 @@ dependencies = [
 name = "fm-semantic-worker"
 version = "0.1.0-20"
 dependencies = [
+ "fm-semantic-conversion",
  "fm-semantic-protocol",
  "fs2",
  "interprocess",

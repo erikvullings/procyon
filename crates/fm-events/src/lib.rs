@@ -1064,6 +1064,36 @@ pub enum BackendEventPayload {
         /// Safe user-readable error message.
         message: String,
     },
+    /// Semantic ingestion or reconciliation progress changed.
+    #[serde(rename = "semantic.ingestionProgress")]
+    SemanticIngestionProgress {
+        /// Stable ingestion job identity.
+        job_id: String,
+        /// Stable machine-readable pipeline stage.
+        stage: String,
+        /// Completed work units.
+        completed: u64,
+        /// Total known work units.
+        total: u64,
+        /// Isolated failures observed by this job.
+        errors: u64,
+    },
+    /// Indexed coverage for an enrolled root changed.
+    #[serde(rename = "semantic.coverageChanged")]
+    SemanticCoverageChanged {
+        /// Enrolled semantic library.
+        library_id: String,
+        /// Enrolled root identity.
+        root_id: String,
+        /// Eligible source count.
+        eligible: u64,
+        /// Sources represented by complete generations.
+        indexed: u64,
+        /// Sources with an older complete generation still visible.
+        stale: u64,
+        /// Whether the source root is currently reachable.
+        available: bool,
+    },
     /// A batch of streamed recursive-search results is available (spec §24,
     /// §28, task 0068).
     ///
@@ -1194,6 +1224,8 @@ impl BackendEventPayload {
             Self::DiskUsageProgress { .. } => "diskUsage.progress",
             Self::DiskUsageFinalizing { .. } => "diskUsage.finalizing",
             Self::DiskUsageFailed { .. } => "diskUsage.failed",
+            Self::SemanticIngestionProgress { .. } => "semantic.ingestionProgress",
+            Self::SemanticCoverageChanged { .. } => "semantic.coverageChanged",
             Self::SearchResultsBatch { .. } => "search.resultsBatch",
             Self::ComparisonResultsBatch { .. } => "comparison.resultsBatch",
             Self::ChecksumResultsBatch { .. } => "checksum.resultsBatch",
@@ -1214,6 +1246,8 @@ impl BackendEventPayload {
             Self::DirectoryDelta { .. }
                 | Self::OperationProgress { .. }
                 | Self::DiskUsageProgress { .. }
+                | Self::SemanticIngestionProgress { .. }
+                | Self::SemanticCoverageChanged { .. }
         )
     }
 }
@@ -1479,6 +1513,8 @@ mod tests {
                 "diskUsage.progress",
                 "diskUsage.finalizing",
                 "diskUsage.failed",
+                "semantic.ingestionProgress",
+                "semantic.coverageChanged",
                 "search.resultsBatch",
                 "comparison.resultsBatch",
                 "connection.created",
@@ -1792,6 +1828,21 @@ mod tests {
                     scan_id: Uuid::from_str(OPERATION_ID).expect("fixture scan id must be valid"),
                     code: "internal".to_owned(),
                     message: "Disk-usage scan failed".to_owned(),
+                },
+                Self::SemanticIngestionProgress {
+                    job_id: "semantic-job-1".to_owned(),
+                    stage: "embedding".to_owned(),
+                    completed: 4,
+                    total: 10,
+                    errors: 0,
+                },
+                Self::SemanticCoverageChanged {
+                    library_id: "library-1".to_owned(),
+                    root_id: "root-1".to_owned(),
+                    eligible: 12,
+                    indexed: 10,
+                    stale: 1,
+                    available: true,
                 },
                 Self::SearchResultsBatch {
                     search_id: Uuid::from_str(OPERATION_ID)

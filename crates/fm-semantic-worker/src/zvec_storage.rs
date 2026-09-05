@@ -13,6 +13,7 @@ use zvec_rust::{
     MetricType, SearchQuery,
 };
 
+use crate::ingestion::{DerivedIndex, DerivedRecord};
 use crate::semantic_storage::{QueryFilters, VectorIndexKind};
 
 /// Official Rust SDK version pinned by Procyon.
@@ -130,6 +131,7 @@ impl ZvecStorage {
         if dimensions == 0 {
             return Err(ZvecStorageError::InvalidDimensions);
         }
+
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -457,6 +459,32 @@ pub enum ZvecStorageError {
     /// SDK global initialization failed previously.
     #[error("Zvec initialization failed: {0}")]
     Initialization(String),
+}
+
+impl DerivedIndex for ZvecStorage {
+    fn upsert(&self, records: &[DerivedRecord]) -> Result<(), String> {
+        let records = records
+            .iter()
+            .map(|record| ZvecRecord {
+                record_id: record.record_id.clone(),
+                tenant_id: record.tenant_id.clone(),
+                library_id: record.library_id.clone(),
+                root_id: record.root_id.clone(),
+                workspace_id: record.workspace_id.clone(),
+                media_type: record.media_type.clone(),
+                modified_at_ms: record.modified_at_ms,
+                concept_id: None,
+                generation: record.generation,
+                embedding: record.embedding.clone(),
+            })
+            .collect::<Vec<_>>();
+        self.upsert(&records).map_err(|error| error.to_string())
+    }
+
+    fn delete(&self, record_ids: &[String]) -> Result<(), String> {
+        let record_ids = record_ids.iter().map(String::as_str).collect::<Vec<_>>();
+        self.delete(&record_ids).map_err(|error| error.to_string())
+    }
 }
 
 fn ensure_initialized() -> Result<(), ZvecStorageError> {

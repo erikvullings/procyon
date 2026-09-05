@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 1;
+const CATALOG_SCHEMA_VERSION: i64 = 2;
 
 /// Distance metric bound into one library's immutable index manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -554,6 +554,140 @@ impl SemanticCatalog {
         Ok(())
     }
 
+    /// Registers the stable scope and document identity of a durable job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn register_job(
+        &self,
+        job_id: &str,
+        tenant_id: &str,
+        library_id: &str,
+        document_id: &str,
+    ) -> Result<(), StorageError> {
+        validate_identifier(job_id, "job_id")?;
+        validate_identifier(tenant_id, "tenant_id")?;
+        validate_identifier(library_id, "library_id")?;
+        validate_identifier(document_id, "document_id")?;
+        self.connection()?.execute(
+            "INSERT INTO jobs (
+               job_id, tenant_id, library_id, document_id, stage, attempts, detail
+             ) VALUES (?1, ?2, ?3, ?4, 'discovered', 0, NULL)
+             ON CONFLICT(job_id) DO NOTHING",
+            params![job_id, tenant_id, library_id, document_id],
+        )?;
+        Ok(())
+    }
+
+    /// Reads one persisted ingestion/reconciliation job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn job(&self, job_id: &str) -> Result<Option<StoredJob>, StorageError> {
+        validate_identifier(job_id, "job_id")?;
+        self.connection()?
+            .query_row(
+                "SELECT tenant_id, library_id, document_id, stage, attempts, detail
+                 FROM jobs WHERE job_id = ?1",
+                [job_id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                    ))
+                },
+            )
+            .optional()?
+            .map(
+                |(tenant_id, library_id, document_id, stage, attempts, detail)| {
+                    Ok(StoredJob {
+                        job_id: job_id.to_owned(),
+                        tenant_id,
+                        library_id,
+                        document_id,
+                        stage,
+                        attempts: u32::try_from(attempts)
+                            .map_err(|_| StorageError::CorruptCatalog)?,
+                        detail,
+                    })
+                },
+            )
+            .transpose()
+    }
+
+    /// Returns the next generation for one logical document.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed database or persisted-data error.
+    pub fn next_generation(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+        document_id: &str,
+    ) -> Result<u64, StorageError> {
+        let maximum = self.connection()?.query_row(
+            "SELECT COALESCE(MAX(generation), 0) FROM generations
+             WHERE tenant_id = ?1 AND library_id = ?2 AND document_id = ?3",
+            params![tenant_id, library_id, document_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        u64::try_from(maximum)
+            .map_err(|_| StorageError::CorruptCatalog)?
+            .checked_add(1)
+            .ok_or(StorageError::CorruptCatalog)
+    }
+
+    /// Reuses an interrupted staging generation or allocates the next one.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed database or persisted-data error.
+    pub fn resume_or_next_generation(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+        document_id: &str,
+    ) -> Result<u64, StorageError> {
+        let staging = self.connection()?.query_row(
+            "SELECT MAX(generation) FROM generations
+                 WHERE tenant_id = ?1 AND library_id = ?2
+                   AND document_id = ?3 AND state = 'staging'",
+            params![tenant_id, library_id, document_id],
+            |row| row.get::<_, Option<i64>>(0),
+        )?;
+        if let Some(staging) = staging {
+            return u64::try_from(staging).map_err(|_| StorageError::CorruptCatalog);
+        }
+        self.next_generation(tenant_id, library_id, document_id)
+    }
+
+    /// Reads a globally cached normalized vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed database or persisted-data error.
+    pub fn cached_vector(
+        &self,
+        cache_key: EmbeddingCacheKey,
+    ) -> Result<Option<Vec<f32>>, StorageError> {
+        let bytes = self
+            .connection()?
+            .query_row(
+                "SELECT vector FROM vectors WHERE cache_key = ?1",
+                [cache_key.as_bytes().as_slice()],
+                |row| row.get::<_, Vec<u8>>(0),
+            )
+            .optional()?;
+        bytes.map(|bytes| decode_vector(&bytes)).transpose()
+    }
+
     /// Persists the exact installed worker/runtime/model component revision.
     ///
     /// # Errors
@@ -713,6 +847,25 @@ pub struct DeletedOccurrence {
     pub record_ids: Vec<String>,
 }
 
+/// Durable ingestion/reconciliation job snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredJob {
+    /// Stable job identity.
+    pub job_id: String,
+    /// Tenant boundary, present for protocol-queued jobs.
+    pub tenant_id: Option<String>,
+    /// Library boundary, present for protocol-queued jobs.
+    pub library_id: Option<String>,
+    /// Opaque document identity, present for protocol-queued jobs.
+    pub document_id: Option<String>,
+    /// Current state-machine stage.
+    pub stage: String,
+    /// Number of bounded attempts.
+    pub attempts: u32,
+    /// Sanitized failure, pause, or resume detail.
+    pub detail: Option<String>,
+}
+
 /// Persistent semantic-storage failure.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -782,7 +935,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            schema_version INTEGER NOT NULL
          );
          INSERT INTO catalog_meta (schema_version)
-           SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
+           SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
          CREATE TABLE IF NOT EXISTS libraries (
            tenant_id TEXT NOT NULL,
            library_id TEXT NOT NULL,
@@ -847,6 +1000,9 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            ON records (tenant_id, library_id, document_id, generation);
          CREATE TABLE IF NOT EXISTS jobs (
            job_id TEXT PRIMARY KEY,
+           tenant_id TEXT,
+           library_id TEXT,
+           document_id TEXT,
            stage TEXT NOT NULL,
            attempts INTEGER NOT NULL,
            detail TEXT
@@ -1057,6 +1213,20 @@ fn encode_vector(vector: &[f32]) -> Vec<u8> {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
     bytes
+}
+
+fn decode_vector(bytes: &[u8]) -> Result<Vec<f32>, StorageError> {
+    if !bytes.len().is_multiple_of(std::mem::size_of::<f32>()) {
+        return Err(StorageError::CorruptCatalog);
+    }
+    Ok(bytes
+        .chunks_exact(std::mem::size_of::<f32>())
+        .map(|chunk| {
+            let mut encoded = [0_u8; std::mem::size_of::<f32>()];
+            encoded.copy_from_slice(chunk);
+            f32::from_le_bytes(encoded)
+        })
+        .collect())
 }
 
 #[cfg(test)]

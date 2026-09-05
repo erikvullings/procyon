@@ -4,6 +4,7 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod embedding;
+pub mod ingestion;
 pub mod semantic_storage;
 #[cfg(feature = "zvec")]
 pub mod zvec_storage;
@@ -652,6 +653,60 @@ pub struct IngestionJobStatus {
     pub document_id: String,
     /// Current lifecycle state.
     pub state: IngestionState,
+}
+
+/// One validated, path-free ingestion request handed to a worker backend.
+#[derive(Debug, Clone)]
+pub struct WorkerIngestionInput {
+    /// Stable request/job identity.
+    pub job_id: String,
+    /// Tenant boundary.
+    pub tenant_id: String,
+    /// Enrolled library.
+    pub library_id: String,
+    /// Opaque document identity.
+    pub document_id: String,
+    /// Trusted media type.
+    pub media_type: String,
+    /// Structured host metadata.
+    pub metadata: BTreeMap<String, String>,
+    /// Bounded source bytes.
+    pub content: Vec<u8>,
+}
+
+/// Durable worker-job snapshot returned through the protocol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerIngestionJob {
+    /// Opaque document identity.
+    pub document_id: String,
+    /// Current lifecycle state.
+    pub state: IngestionState,
+    /// Stable detailed phase.
+    pub phase: String,
+    /// Completed work units.
+    pub completed: u64,
+    /// Total known work units.
+    pub total: u64,
+    /// Sanitized failure, if any.
+    pub error: Option<String>,
+}
+
+/// Injectable durable ingestion implementation used by the local IPC server.
+pub trait WorkerIngestionBackend: Send + Sync {
+    /// Durably queues path-free content and returns its stable job identity.
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        cancellation: CancellationToken,
+    ) -> Result<String, String>;
+
+    /// Reads a job only within its authenticated tenant/library scope.
+    fn job(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+        job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String>;
 }
 
 /// Host-facing ingestion lifecycle state.
@@ -1431,6 +1486,7 @@ struct RuntimeState {
     shutdown: CancellationToken,
     next_session: AtomicU64,
     next_job: AtomicU64,
+    ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
     documents: Mutex<Vec<Arc<Document>>>,
     jobs: Mutex<Arc<HashMap<String, Arc<Job>>>>,
     connections: watch::Sender<usize>,
@@ -1531,6 +1587,22 @@ impl WorkerServer {
     /// Creates a worker using the deterministic in-memory fake engine.
     #[must_use]
     pub fn new(config: WorkerConfig) -> Self {
+        Self::with_optional_ingestion_backend(config, None)
+    }
+
+    /// Creates a worker backed by the durable ingestion pipeline.
+    #[must_use]
+    pub fn with_ingestion_backend(
+        config: WorkerConfig,
+        ingestion_backend: Arc<dyn WorkerIngestionBackend>,
+    ) -> Self {
+        Self::with_optional_ingestion_backend(config, Some(ingestion_backend))
+    }
+
+    fn with_optional_ingestion_backend(
+        config: WorkerConfig,
+        ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
+    ) -> Self {
         let concurrency = Arc::new(Semaphore::new(config.limits.max_concurrent_requests()));
         let (connections, _) = watch::channel(0);
         Self {
@@ -1540,6 +1612,7 @@ impl WorkerServer {
                 shutdown: CancellationToken::new(),
                 next_session: AtomicU64::new(1),
                 next_job: AtomicU64::new(1),
+                ingestion_backend,
                 documents: Mutex::new(Vec::new()),
                 jobs: Mutex::new(Arc::new(HashMap::new())),
                 connections,
@@ -2372,6 +2445,70 @@ async fn handle_frame(
                 .await;
                 return;
             };
+            if let Some(backend) = &state.ingestion_backend {
+                let job = match backend.job(&scope.tenant_id, &scope.library_id, &request.job_id) {
+                    Ok(Some(job)) => job,
+                    Ok(None) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::InvalidRequest,
+                                "ingestion job was not found",
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                    Err(error) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(v1::ErrorCode::Internal, error),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                };
+                let state_value = match job.state {
+                    IngestionState::Pending => v1::JobState::Pending,
+                    IngestionState::Running => v1::JobState::Running,
+                    IngestionState::Completed => v1::JobState::Completed,
+                    IngestionState::Failed => v1::JobState::Failed,
+                    IngestionState::Cancelled => v1::JobState::Cancelled,
+                };
+                let payload = v1::server_frame::Payload::IngestionJob(v1::IngestionJob {
+                    job_id: request.job_id.clone(),
+                    document_id: job.document_id,
+                    state: state_value.into(),
+                    progress: Some(v1::Progress {
+                        operation_id: request.job_id,
+                        phase: job.phase,
+                        completed_units: job.completed,
+                        total_units: job.total,
+                    }),
+                    error: job
+                        .error
+                        .map(|error| protocol_error(v1::ErrorCode::Internal, error)),
+                });
+                send_payload_until(
+                    &writer,
+                    correlation_id,
+                    payload,
+                    state.config.limits,
+                    deadline_after(
+                        state
+                            .config
+                            .limits
+                            .deadline(fm_semantic_protocol::DeadlineKind::Request),
+                    ),
+                    None,
+                )
+                .await;
+                return;
+            }
             let job = state
                 .jobs
                 .lock()
@@ -2713,6 +2850,46 @@ async fn complete_ingestion(
         () = tokio::time::sleep(state.config.atomic_ingestion_delay) => {}
     }
     let document_id = pending.start.document_id;
+    let metadata = pending
+        .start
+        .metadata
+        .into_iter()
+        .map(|entry| (entry.key, entry.value))
+        .collect::<BTreeMap<_, _>>();
+    if let Some(backend) = &state.ingestion_backend {
+        let input = WorkerIngestionInput {
+            job_id: pending.request_id,
+            tenant_id: pending.scope.tenant_id,
+            library_id: pending.scope.library_id,
+            document_id,
+            media_type: pending.start.media_type,
+            metadata,
+            content: pending.content,
+        };
+        let job_id = match backend.enqueue(input, pending.cancellation) {
+            Ok(job_id) => job_id,
+            Err(error) => {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Internal, &error),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+        };
+        send_payload_until(
+            &writer,
+            correlation_id,
+            v1::server_frame::Payload::IngestionAccepted(v1::IngestionAccepted { job_id }),
+            state.config.limits,
+            response_deadline,
+            Some(&response_cancellation),
+        )
+        .await;
+        return;
+    }
     state
         .documents
         .lock()
@@ -2721,12 +2898,7 @@ async fn complete_ingestion(
             tenant_id: pending.scope.tenant_id.clone(),
             library_id: pending.scope.library_id.clone(),
             document_id: document_id.clone(),
-            metadata: pending
-                .start
-                .metadata
-                .into_iter()
-                .map(|entry| (entry.key, entry.value))
-                .collect(),
+            metadata,
             content: pending.content,
         }));
     let job_id = format!("job-{}", state.next_job.fetch_add(1, Ordering::Relaxed));

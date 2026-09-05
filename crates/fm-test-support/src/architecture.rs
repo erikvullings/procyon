@@ -38,7 +38,6 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-platform", 1),
     ("fm-plugin-api", 1),
     ("fm-search-acceleration", 1),
-    ("fm-semantic-worker", 1),
     ("fm-ssh", 1),
     ("fm-transport-dto", 1),
     ("fm-vfs", 1),
@@ -79,6 +78,9 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     // `fm-settings` migration machinery (task 0179), so it must sit strictly
     // above it rather than beside it.
     ("fm-semantic-library", 3),
+    // The semantic worker composes conversion, embedding and durable storage
+    // engines behind the IPC boundary.
+    ("fm-semantic-worker", 3),
     // Layer 4 - application services, plus the test-support crate which may
     // build fixtures out of anything below it.
     ("fm-application", 4),

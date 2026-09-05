@@ -93,6 +93,17 @@ boundaries. Superseded records are reclaimed only after active readers drain. Th
 dynamically links a native library; see
 [Zvec Rust SDK qualification](zvec-rust-sdk.md) for the pinned versions and packaging matrix.
 
+Incremental ingestion preserves the same authority split. The host coalesces provider events and
+performs startup, periodic (30-minute by default), or manual reconciliation; only a complete
+listing can prove deletion, while partial and unavailable roots retain evidence. Streamed content
+hashes, not provider timestamps, establish change. The worker persists each job stage in SQLite,
+converts and structurally chunks bounded bytes, embeds only global-cache misses, stages a complete
+generation, writes the derived index idempotently, and atomically changes SQLite visibility.
+`WorkerServer::with_ingestion_backend` injects that durable pipeline without changing the
+deterministic no-component worker used by tests and unavailable configurations. Progress and
+coverage use the shared `fm-events` model, so browser SSE and Tauri carry the same path-free,
+excerpt-free payloads.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are
