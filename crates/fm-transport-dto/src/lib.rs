@@ -24,6 +24,7 @@ pub mod redaction;
 pub mod requests;
 pub mod runtime;
 pub mod search;
+pub mod semantic_components;
 pub mod settings;
 pub mod snapshot;
 pub mod system_location;
@@ -118,6 +119,7 @@ pub use search::{
     SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
     SearchQueryDto, SearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
 };
+pub use semantic_components::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, LanguageDto,
     MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,

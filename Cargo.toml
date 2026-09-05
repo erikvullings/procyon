@@ -48,6 +48,7 @@ fm-plugin-runtime = {path = "crates/fm-plugin-runtime"}
 fm-pptx-renderer = {path = "crates/fm-pptx-renderer"}
 fm-search = {path = "crates/fm-search"}
 fm-search-acceleration = {path = "crates/fm-search-acceleration"}
+fm-semantic-components = {path = "crates/fm-semantic-components"}
 fm-semantic-protocol = {path = "crates/fm-semantic-protocol"}
 fm-semantic-worker = {path = "crates/fm-semantic-worker"}
 fm-settings = {path = "crates/fm-settings"}
@@ -81,6 +82,7 @@ criterion = {version = "0.5.1", features = ["html_reports"]}
 dirs = "6.0.0"
 drag = "2.1.1"
 dunce = "1.0.5"
+ed25519-dalek = "3.0.0"
 flate2 = "1"
 ferrodoc = { version = "0.7.0", default-features = false, features = ["docx", "html"] }
 fs2 = "0.4.3"
@@ -95,6 +97,7 @@ image = {version = "0.25.10", default-features = false, features = [
   "webp",
   "ico",
 ]}
+libc = "0.2.189"
 interprocess = {version = "2.4.4", features = ["tokio"]}
 lopdf = {version = "0.44.0", default-features = false}
 md-5 = "0.11.0"
@@ -133,8 +136,10 @@ russh-sftp = "2.4"
 rusty-s3 = "0.10.2"
 rustls-platform-verifier = "0.7.0"
 security-framework = "3.7.0"
+semver = {version = "1.0.28", features = ["serde"]}
 serde = {version = "1.0.229", features = ["derive"]}
 serde_json = "1.0.151"
+serde_json_canonicalizer = "0.3.2"
 sevenz-rust2 = {version = "0.21.3", default-features = false, features = [
   "aes256",
   "compress",

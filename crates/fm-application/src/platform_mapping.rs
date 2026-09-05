@@ -15,8 +15,8 @@ use fm_domain::{ActionId, Location};
 use fm_platform::{FinderTag, FinderTagColor, PlatformAdapter, PlatformCapabilities};
 use fm_transport_dto::{
     FinderTagColorDto, FinderTagDto, FinderTagsDto, PlatformKindDto, RuntimeCapabilitiesDto,
-    RuntimeKindDto, SpotlightCommentDto, SystemLocationDto, SystemLocationKindDto,
-    VolumeCapacityDto, VolumeDto,
+    RuntimeKindDto, SemanticComponentAuthorityDto, SemanticRuntimeExecutableDownloadDto,
+    SpotlightCommentDto, SystemLocationDto, SystemLocationKindDto, VolumeCapacityDto, VolumeDto,
 };
 
 use crate::error::ApplicationError;
@@ -249,6 +249,36 @@ pub(crate) fn runtime_capabilities_dto(
     runtime: RuntimeKindDto,
     capabilities: PlatformCapabilities,
 ) -> RuntimeCapabilitiesDto {
+    let (semantic_authority, semantic_download) = match runtime {
+        RuntimeKindDto::BrowserServer => (
+            SemanticComponentAuthorityDto::AdministratorProvisioned,
+            SemanticRuntimeExecutableDownloadDto::AdministratorProvisioned,
+        ),
+        RuntimeKindDto::Mock => (
+            SemanticComponentAuthorityDto::DeterministicMock,
+            SemanticRuntimeExecutableDownloadDto::Simulated,
+        ),
+        RuntimeKindDto::Tauri => (
+            SemanticComponentAuthorityDto::Unavailable,
+            SemanticRuntimeExecutableDownloadDto::Unavailable,
+        ),
+    };
+    runtime_capabilities_dto_with_semantic(
+        runtime,
+        capabilities,
+        semantic_authority,
+        semantic_download,
+    )
+}
+
+/// Derives runtime capabilities while preserving the active semantic
+/// capability's authority and executable-download policy.
+pub(crate) fn runtime_capabilities_dto_with_semantic(
+    runtime: RuntimeKindDto,
+    capabilities: PlatformCapabilities,
+    semantic_component_authority: SemanticComponentAuthorityDto,
+    semantic_runtime_executable_download: SemanticRuntimeExecutableDownloadDto,
+) -> RuntimeCapabilitiesDto {
     RuntimeCapabilitiesDto {
         runtime,
         platform: detect_platform(),
@@ -276,6 +306,8 @@ pub(crate) fn runtime_capabilities_dto(
         extended_attributes: capabilities.contains(PlatformCapabilities::EXTENDED_ATTRIBUTES),
         finder_tags: capabilities.contains(PlatformCapabilities::FINDER_TAGS),
         finder_aliases: capabilities.contains(PlatformCapabilities::FINDER_ALIASES),
+        semantic_component_authority,
+        semantic_runtime_executable_download,
     }
 }
 

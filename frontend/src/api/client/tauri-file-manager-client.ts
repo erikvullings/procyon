@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -14,13 +15,19 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DiagnosticsResult,
   DirectorySnapshot,
@@ -41,10 +48,13 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -52,6 +62,7 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
@@ -73,6 +84,19 @@ import type {
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -93,6 +117,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
   UpdateStructuredViewRequest,
@@ -135,6 +160,130 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async getRuntimeCapabilities(_signal?: AbortSignal): Promise<RuntimeCapabilities> {
     return invoke<RuntimeCapabilities>('get_runtime_capabilities');
+  }
+
+  async getSemanticComponentCapabilities(
+    _signal?: AbortSignal,
+  ): Promise<SemanticComponentCapabilities> {
+    return invoke<SemanticComponentCapabilities>('get_semantic_component_capabilities');
+  }
+
+  async getSemanticComponentStatus(_signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    return invoke<SemanticComponentStatus>('get_semantic_component_status');
+  }
+
+  async listSemanticComponentProfiles(_signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    return invoke<SemanticModelProfile[]>('list_semantic_component_profiles');
+  }
+
+  async createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    return invoke<SemanticInstallationOffer>('create_semantic_component_installation_offer', {
+      request,
+    });
+  }
+
+  async acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    return invoke<SemanticInstallReceipt>('accept_semantic_component_installation_offer', {
+      request,
+    });
+  }
+
+  async pauseSemanticComponentIndexing(_signal?: AbortSignal): Promise<void> {
+    return invoke<void>('pause_semantic_component_indexing');
+  }
+
+  async resumeSemanticComponentIndexing(_signal?: AbortSignal): Promise<void> {
+    return invoke<void>('resume_semantic_component_indexing');
+  }
+
+  async createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    return invoke<SemanticIndexRemovalPlan>('create_semantic_component_index_removal_plan', {
+      request,
+    });
+  }
+
+  async confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    return invoke<SemanticIndexRemovalReceipt>('confirm_semantic_component_index_removal', {
+      request,
+    });
+  }
+
+  async moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    return invoke<SemanticDataMoveReceipt>('move_semantic_component_data', { request });
+  }
+
+  async uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    return invoke<SemanticUninstallReceipt>('uninstall_semantic_components', { request });
+  }
+
+  async installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    return invoke<SemanticWorkerPatchResponse>('install_semantic_component_worker_patch', {
+      request,
+    });
+  }
+
+  async importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return invoke<SemanticModelMigrationPlan>('import_semantic_component_local_model', { request });
+  }
+
+  async planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return invoke<SemanticModelMigrationPlan>('plan_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return invoke<SemanticModelMigrationProgress>('confirm_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return invoke<SemanticModelMigrationProgress>('checkpoint_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    return invoke<SemanticModelSelection>('complete_semantic_component_model_migration', {
+      request,
+    });
   }
 
   async getDiagnostics(_signal?: AbortSignal): Promise<DiagnosticsResult> {

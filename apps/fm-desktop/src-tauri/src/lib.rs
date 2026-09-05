@@ -183,6 +183,23 @@ pub fn run() {
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
+            commands::get_semantic_component_capabilities,
+            commands::get_semantic_component_status,
+            commands::list_semantic_component_profiles,
+            commands::create_semantic_component_installation_offer,
+            commands::accept_semantic_component_installation_offer,
+            commands::pause_semantic_component_indexing,
+            commands::resume_semantic_component_indexing,
+            commands::create_semantic_component_index_removal_plan,
+            commands::confirm_semantic_component_index_removal,
+            commands::move_semantic_component_data,
+            commands::uninstall_semantic_components,
+            commands::install_semantic_component_worker_patch,
+            commands::import_semantic_component_local_model,
+            commands::plan_semantic_component_model_migration,
+            commands::confirm_semantic_component_model_migration,
+            commands::checkpoint_semantic_component_model_migration,
+            commands::complete_semantic_component_model_migration,
             commands::get_system_locations,
             commands::get_volumes,
             commands::get_home_directory,
@@ -394,7 +411,10 @@ mod tests {
                         platform::build_platform_adapter(),
                         credentials::build_credential_store(),
                         platform::build_search_accelerator(),
-                    ),
+                    )
+                    .with_semantic_component_capability(Arc::new(
+                        fm_application::semantic_components::FakeSemanticComponentCapability::new(),
+                    )),
                 ),
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
@@ -403,6 +423,23 @@ mod tests {
                 commands::subscribe_events,
                 commands::unsubscribe_events,
                 commands::get_runtime_capabilities,
+                commands::get_semantic_component_capabilities,
+                commands::get_semantic_component_status,
+                commands::list_semantic_component_profiles,
+                commands::create_semantic_component_installation_offer,
+                commands::accept_semantic_component_installation_offer,
+                commands::pause_semantic_component_indexing,
+                commands::resume_semantic_component_indexing,
+                commands::create_semantic_component_index_removal_plan,
+                commands::confirm_semantic_component_index_removal,
+                commands::move_semantic_component_data,
+                commands::uninstall_semantic_components,
+                commands::install_semantic_component_worker_patch,
+                commands::import_semantic_component_local_model,
+                commands::plan_semantic_component_model_migration,
+                commands::confirm_semantic_component_model_migration,
+                commands::checkpoint_semantic_component_model_migration,
+                commands::complete_semantic_component_model_migration,
                 commands::get_system_locations,
                 commands::get_volumes,
                 commands::get_home_directory,
@@ -824,5 +861,253 @@ mod tests {
         .deserialize::<fm_transport_dto::OneDriveAuthorizationAttemptDto>()
         .expect("response must deserialize");
         assert_eq!(cancelled.id, begin.attempt_id);
+    }
+
+    #[tokio::test]
+    async fn semantic_component_commands_round_trip_through_the_shared_service() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        macro_rules! invoke {
+            ($command:literal, $body:expr) => {
+                get_ipc_response(
+                    &webview,
+                    InvokeRequest {
+                        cmd: $command.into(),
+                        callback: CallbackFn(0),
+                        error: CallbackFn(1),
+                        url: local_protocol_url(),
+                        body: InvokeBody::Json($body),
+                        headers: Default::default(),
+                        invoke_key: INVOKE_KEY.to_string(),
+                    },
+                )
+            };
+        }
+
+        let capabilities = invoke!("get_semantic_component_capabilities", serde_json::json!({}))
+            .expect("semantic capabilities command must succeed")
+            .deserialize::<fm_transport_dto::SemanticComponentCapabilitiesDto>()
+            .expect("capabilities response must deserialize");
+        assert_eq!(
+            capabilities.authority,
+            fm_transport_dto::SemanticComponentAuthorityDto::DeterministicMock
+        );
+        assert_eq!(capabilities.operations.len(), 15);
+
+        let status = invoke!("get_semantic_component_status", serde_json::json!({}))
+            .expect("semantic status command must succeed")
+            .deserialize::<fm_transport_dto::SemanticComponentStatusDto>()
+            .expect("status response must deserialize");
+        assert_eq!(
+            status.lifecycle,
+            fm_transport_dto::SemanticComponentLifecycleDto::Absent
+        );
+
+        let profiles = invoke!("list_semantic_component_profiles", serde_json::json!({}))
+            .expect("semantic profiles command must succeed")
+            .deserialize::<Vec<fm_transport_dto::SemanticModelProfileDto>>()
+            .expect("profiles response must deserialize");
+        assert_eq!(profiles.len(), 3);
+
+        let offer = invoke!(
+            "create_semantic_component_installation_offer",
+            serde_json::json!({
+                "request": { "profile": "compactMultilingual" }
+            })
+        )
+        .expect("semantic installation offer command must succeed")
+        .deserialize::<fm_transport_dto::SemanticInstallationOfferDto>()
+        .expect("installation offer response must deserialize");
+        assert!(offer.embeddings_stay_local);
+
+        let install = invoke!(
+            "accept_semantic_component_installation_offer",
+            serde_json::json!({
+                "request": { "offerId": offer.offer_id }
+            })
+        )
+        .expect("semantic installation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticInstallReceiptDto>()
+        .expect("installation response must deserialize");
+        assert_eq!(install.installed_artifact_ids.len(), 3);
+
+        invoke!("pause_semantic_component_indexing", serde_json::json!({}))
+            .expect("pause semantic indexing command must succeed");
+        invoke!("resume_semantic_component_indexing", serde_json::json!({}))
+            .expect("resume semantic indexing command must succeed");
+
+        let removal_plan = invoke!(
+            "create_semantic_component_index_removal_plan",
+            serde_json::json!({
+                "request": {
+                    "enrolmentId": "enrolment-1"
+                }
+            })
+        )
+        .expect("semantic index removal plan command must succeed")
+        .deserialize::<fm_transport_dto::SemanticIndexRemovalPlanDto>()
+        .expect("index removal plan response must deserialize");
+        assert_eq!(removal_plan.expected.conversation_evidence, 2);
+
+        let removed = invoke!(
+            "confirm_semantic_component_index_removal",
+            serde_json::json!({
+                "request": {
+                    "planId": removal_plan.plan_id
+                }
+            })
+        )
+        .expect("semantic index removal confirmation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticIndexRemovalReceiptDto>()
+        .expect("index removal response must deserialize");
+        assert!(removed.conversation_evidence_deleted);
+
+        let moved = invoke!(
+            "move_semantic_component_data",
+            serde_json::json!({
+                "request": { "destination": "mock/moved-semantic" }
+            })
+        )
+        .expect("semantic data move command must succeed")
+        .deserialize::<fm_transport_dto::SemanticDataMoveReceiptDto>()
+        .expect("data move response must deserialize");
+        assert_eq!(moved.destination, "mock/moved-semantic");
+
+        let patch = invoke!(
+            "install_semantic_component_worker_patch",
+            serde_json::json!({
+                "request": {
+                    "componentId": "fake-worker"
+                }
+            })
+        )
+        .expect("semantic worker patch command must succeed")
+        .deserialize::<fm_transport_dto::SemanticWorkerPatchResponseDto>()
+        .expect("worker patch response must deserialize");
+        assert!(patch.receipt.is_none());
+
+        let imported = invoke!(
+            "import_semantic_component_local_model",
+            serde_json::json!({
+                "request": {
+                    "sourcePath": "mock/local-model",
+                    "modelId": "expert.local",
+                    "upstreamRevision": "revision-1",
+                    "licenseSpdx": "Apache-2.0",
+                    "licenseNotice": "Local model",
+                    "tokenizer": "tokenizer-1",
+                    "dimensions": 384,
+                    "normalization": "unitLength",
+                    "runtimeComponentId": "fake-runtime",
+                    "runtimeVersionRequirement": "^1.0",
+                    "languageCoverage": ["en"],
+                    "estimatedDiskBytes": 100,
+                    "estimatedRamBytes": 200,
+                    "profile": "compactEnglish",
+                    "estimate": { "documents": 1, "sourceBytes": 10 }
+                }
+            })
+        )
+        .expect("local semantic model import command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationPlanDto>()
+        .expect("local model import response must deserialize");
+        assert!(imported.requires_confirmation);
+
+        let plan = invoke!(
+            "plan_semantic_component_model_migration",
+            serde_json::json!({
+                "request": {
+                    "profile": "multilingualQuality",
+                    "estimate": { "documents": 2, "sourceBytes": 20 }
+                }
+            })
+        )
+        .expect("semantic model migration plan command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationPlanDto>()
+        .expect("model migration plan response must deserialize");
+
+        let progress = invoke!(
+            "confirm_semantic_component_model_migration",
+            serde_json::json!({
+                "request": { "migrationId": plan.migration_id }
+            })
+        )
+        .expect("semantic model migration confirmation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationProgressDto>()
+        .expect("model migration confirmation response must deserialize");
+        assert_eq!(progress.completed_documents, 0);
+
+        let progress = invoke!(
+            "checkpoint_semantic_component_model_migration",
+            serde_json::json!({
+                "request": {
+                    "migrationId": progress.migration_id,
+                    "completedDocuments": 2,
+                    "resumeCursor": "cursor-2"
+                }
+            })
+        )
+        .expect("semantic model migration checkpoint command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationProgressDto>()
+        .expect("model migration checkpoint response must deserialize");
+        assert_eq!(progress.completed_documents, 2);
+
+        let selection = invoke!(
+            "complete_semantic_component_model_migration",
+            serde_json::json!({
+                "request": { "migrationId": progress.migration_id }
+            })
+        )
+        .expect("semantic model migration completion command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelSelectionDto>()
+        .expect("model migration completion response must deserialize");
+        assert_eq!(
+            selection.profile,
+            fm_transport_dto::SemanticProfileDto::MultilingualQuality
+        );
+
+        let uninstall = invoke!(
+            "uninstall_semantic_components",
+            serde_json::json!({
+                "request": { "indexDecision": "delete" }
+            })
+        )
+        .expect("semantic component uninstall command must succeed")
+        .deserialize::<fm_transport_dto::SemanticUninstallReceiptDto>()
+        .expect("semantic component uninstall response must deserialize");
+        assert_eq!(
+            uninstall.index_decision,
+            fm_transport_dto::SemanticIndexRetentionDecisionDto::Delete
+        );
+    }
+
+    #[test]
+    fn semantic_component_commands_return_the_shared_typed_error() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "accept_semantic_component_installation_offer".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "offerId": "unknown-offer" }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("unknown offer must reject the command");
+
+        assert!(error.to_string().contains("consentRequired"));
+        assert!(error.to_string().contains("requestId"));
     }
 }

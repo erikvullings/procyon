@@ -61,7 +61,8 @@ use crate::operation_requests::map_scheduler_error;
 use crate::operations_coordinator::OperationsCoordinator;
 use crate::platform_mapping::{
     self, action_capabilities_for_runtime, discover_system_locations, discover_volumes,
-    map_platform_error, runtime_capabilities_dto, volume_capacity,
+    map_platform_error, runtime_capabilities_dto, runtime_capabilities_dto_with_semantic,
+    volume_capacity,
 };
 use crate::plugin_manager::PluginManager;
 use crate::pptx_preview::PptxPreviewService;
@@ -71,6 +72,18 @@ use crate::semantic::{
     DocumentIngestion, SemanticCapability, SemanticError, SemanticHealth, SemanticIngestionJob,
     SemanticJobId, SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope,
     SemanticSearchResult, SemanticService,
+};
+use crate::semantic_components::{
+    AdministratorProvisionedSemanticComponentCapability, FakeSemanticComponentCapability,
+    RemoveSemanticIndexRequest, SemanticComponentCapabilities, SemanticComponentCapability,
+    SemanticComponentError, SemanticComponentOperation, SemanticComponentService,
+    SemanticComponentStatus, SemanticDataMoveReceipt, SemanticIndexRemovalConfirmation,
+    SemanticIndexRemovalPlan, SemanticIndexRemovalReceipt, SemanticIndexRetentionDecision,
+    SemanticInstallReceipt, SemanticInstallationConsent, SemanticInstallationOffer,
+    SemanticLocalModelImportRequest, SemanticModelMigrationCheckpoint,
+    SemanticModelMigrationConfirmation, SemanticModelMigrationId, SemanticModelMigrationPlan,
+    SemanticModelMigrationProgress, SemanticModelProfile, SemanticModelSelection, SemanticProfile,
+    SemanticReindexEstimate, SemanticUninstallReceipt, SemanticWorkerPatchRequest,
 };
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
@@ -113,6 +126,7 @@ pub struct FileManagerService {
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
+    semantic_components: SemanticComponentService,
 }
 
 impl FileManagerService {
@@ -478,7 +492,223 @@ impl FileManagerService {
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic: SemanticService::unavailable(),
+            semantic_components: match runtime {
+                RuntimeKindDto::BrowserServer => SemanticComponentService::new(Arc::new(
+                    AdministratorProvisionedSemanticComponentCapability::new(
+                        SemanticComponentStatus::absent(None),
+                        Vec::new(),
+                    ),
+                )),
+                RuntimeKindDto::Mock => {
+                    SemanticComponentService::new(Arc::new(FakeSemanticComponentCapability::new()))
+                }
+                // Desktop management is injection-ready, but remains unavailable
+                // until the host supplies an evaluated signed catalog and real adapters.
+                RuntimeKindDto::Tauri => SemanticComponentService::unavailable(),
+            },
         }
+    }
+
+    /// Reports semantic component authority and lifecycle operations.
+    pub async fn semantic_component_capabilities(&self) -> SemanticComponentCapabilities {
+        if self.runtime == RuntimeKindDto::BrowserServer {
+            return SemanticComponentCapabilities::administrator_provisioned();
+        }
+        self.semantic_components.capabilities().await
+    }
+
+    /// Reports semantic component lifecycle and disk-use state.
+    pub async fn semantic_component_status(
+        &self,
+    ) -> Result<SemanticComponentStatus, SemanticComponentError> {
+        self.semantic_components.status().await
+    }
+
+    /// Replaces the inert default with a host-provided component capability.
+    #[must_use]
+    pub fn with_semantic_component_capability(
+        mut self,
+        capability: Arc<dyn SemanticComponentCapability>,
+    ) -> Self {
+        self.semantic_components = SemanticComponentService::new(capability);
+        self
+    }
+
+    /// Returns catalog-backed profiles and exact model revisions.
+    pub async fn semantic_component_catalog_profiles(
+        &self,
+    ) -> Result<Vec<SemanticModelProfile>, SemanticComponentError> {
+        self.semantic_components.catalog_profiles().await
+    }
+
+    /// Creates a complete component installation disclosure.
+    pub async fn semantic_component_installation_offer(
+        &self,
+        profile: SemanticProfile,
+    ) -> Result<SemanticInstallationOffer, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CreateInstallationOffer,
+        )?;
+        self.semantic_components.installation_offer(profile).await
+    }
+
+    /// Installs or enables exactly one explicitly accepted offer.
+    pub async fn semantic_component_install_or_enable(
+        &self,
+        consent: SemanticInstallationConsent,
+    ) -> Result<SemanticInstallReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::InstallOrEnable)?;
+        self.semantic_components.install_or_enable(consent).await
+    }
+
+    /// Applies the newest compatible signed worker patch, if available.
+    pub async fn semantic_component_install_compatible_worker_patch(
+        &self,
+        request: SemanticWorkerPatchRequest,
+    ) -> Result<Option<SemanticInstallReceipt>, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::InstallWorkerPatch)?;
+        self.semantic_components
+            .install_compatible_worker_patch(request)
+            .await
+    }
+
+    /// Pauses semantic indexing without uninstalling components.
+    pub async fn semantic_component_pause_indexing(&self) -> Result<(), SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::PauseIndexing)?;
+        self.semantic_components.pause_indexing().await
+    }
+
+    /// Resumes explicitly paused semantic indexing.
+    pub async fn semantic_component_resume_indexing(&self) -> Result<(), SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ResumeIndexing)?;
+        self.semantic_components.resume_indexing().await
+    }
+
+    /// Removes every record derived from one semantic enrolment.
+    pub async fn semantic_component_remove_index(
+        &self,
+        request: RemoveSemanticIndexRequest,
+    ) -> Result<SemanticIndexRemovalReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components.remove_index(request).await
+    }
+
+    /// Inventories enrolment-derived data and returns an opaque confirmation plan.
+    pub async fn semantic_component_plan_index_removal(
+        &self,
+        enrolment_id: String,
+    ) -> Result<SemanticIndexRemovalPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components
+            .plan_index_removal(enrolment_id)
+            .await
+    }
+
+    /// Confirms one live authoritative enrolment-removal plan.
+    pub async fn semantic_component_confirm_index_removal(
+        &self,
+        confirmation: SemanticIndexRemovalConfirmation,
+    ) -> Result<SemanticIndexRemovalReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components
+            .confirm_index_removal(confirmation)
+            .await
+    }
+
+    /// Moves semantic data through pause-copy-verify-switch.
+    pub async fn semantic_component_move_data(
+        &self,
+        destination: PathBuf,
+    ) -> Result<SemanticDataMoveReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::MoveData)?;
+        self.semantic_components.move_data(destination).await
+    }
+
+    /// Uninstalls semantic components using an explicit index decision.
+    pub async fn semantic_component_uninstall(
+        &self,
+        index_decision: SemanticIndexRetentionDecision,
+    ) -> Result<SemanticUninstallReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::UninstallComponents)?;
+        self.semantic_components
+            .uninstall_components(index_decision)
+            .await
+    }
+
+    /// Validates an expert local model and returns a confirmation-gated migration.
+    pub async fn semantic_component_import_local_model(
+        &self,
+        request: SemanticLocalModelImportRequest,
+        profile: SemanticProfile,
+        estimate: SemanticReindexEstimate,
+    ) -> Result<SemanticModelMigrationPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ImportLocalModel)?;
+        self.semantic_components
+            .import_local_model(request, profile, estimate)
+            .await
+    }
+
+    /// Plans migration to a signed catalog model resolution.
+    pub async fn semantic_component_plan_model_migration(
+        &self,
+        profile: SemanticProfile,
+        estimate: SemanticReindexEstimate,
+    ) -> Result<SemanticModelMigrationPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::PlanModelMigration)?;
+        self.semantic_components
+            .plan_model_migration(profile, estimate)
+            .await
+    }
+
+    /// Confirms and begins a model migration.
+    pub async fn semantic_component_confirm_model_migration(
+        &self,
+        confirmation: SemanticModelMigrationConfirmation,
+    ) -> Result<SemanticModelMigrationProgress, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ConfirmModelMigration)?;
+        self.semantic_components
+            .confirm_model_migration(confirmation)
+            .await
+    }
+
+    /// Persists a resumable model migration checkpoint.
+    pub async fn semantic_component_checkpoint_model_migration(
+        &self,
+        checkpoint: SemanticModelMigrationCheckpoint,
+    ) -> Result<SemanticModelMigrationProgress, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CheckpointModelMigration,
+        )?;
+        self.semantic_components
+            .checkpoint_model_migration(checkpoint)
+            .await
+    }
+
+    /// Activates a fully reindexed model migration target.
+    pub async fn semantic_component_complete_model_migration(
+        &self,
+        migration_id: SemanticModelMigrationId,
+    ) -> Result<SemanticModelSelection, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CompleteModelMigration,
+        )?;
+        self.semantic_components
+            .complete_model_migration(migration_id)
+            .await
+    }
+
+    fn ensure_semantic_component_mutation(
+        &self,
+        operation: SemanticComponentOperation,
+    ) -> Result<(), SemanticComponentError> {
+        if self.runtime == RuntimeKindDto::BrowserServer {
+            return Err(SemanticComponentError::AuthorityDenied {
+                authority:
+                    crate::semantic_components::SemanticComponentAuthority::AdministratorProvisioned,
+                operation,
+            });
+        }
+        Ok(())
     }
 
     /// Reports the optional semantic capability's current health.
@@ -1310,6 +1540,18 @@ impl FileManagerService {
     /// detecting operating systems itself (spec §21).
     pub fn runtime_capabilities(&self) -> RuntimeCapabilitiesDto {
         runtime_capabilities_dto(self.runtime, self.platform.capabilities())
+    }
+
+    /// Reports runtime capabilities including the active semantic component
+    /// authority and executable-download policy.
+    pub async fn runtime_capabilities_with_semantic_components(&self) -> RuntimeCapabilitiesDto {
+        let semantic = self.semantic_component_capabilities_dto().await;
+        runtime_capabilities_dto_with_semantic(
+            self.runtime,
+            self.platform.capabilities(),
+            semantic.authority,
+            semantic.runtime_executable_download,
+        )
     }
 
     /// Returns the active platform adapter's PNG icon for one sample entry.

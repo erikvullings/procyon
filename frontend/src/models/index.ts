@@ -15,6 +15,7 @@ export * from './plugin';
 export * from './requests';
 export * from './runtime-capabilities';
 export * from './search';
+export * from './semantic-components';
 export * from './settings';
 export * from './snapshot';
 export * from './workspace';

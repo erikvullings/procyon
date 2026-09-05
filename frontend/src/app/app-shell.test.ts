@@ -2504,6 +2504,23 @@ describe('AppShell', () => {
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
     expect(root.querySelector('.fm-settings-editor')?.getAttribute('role')).toBe('dialog');
     expect(root.querySelector('.theme-switcher')).not.toBeNull();
+  });
+
+  it('wires the runtime client into semantic settings without starting an action', async () => {
+    const client = new MockFileManagerClient();
+    const status = vi.spyOn(client, 'getSemanticComponentStatus');
+    const createOffer = vi.spyOn(client, 'createSemanticComponentInstallationOffer');
+    const acceptOffer = vi.spyOn(client, 'acceptSemanticComponentInstallationOffer');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await openAppearanceSettings();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
+    );
+
+    expect(status).toHaveBeenCalledOnce();
+    expect(createOffer).not.toHaveBeenCalled();
+    expect(acceptOffer).not.toHaveBeenCalled();
     expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
@@ -3330,6 +3347,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'tauri',
+      semanticComponentAuthority: 'desktopManaged',
+      semanticRuntimeExecutableDownload: 'directDistribution',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -3387,6 +3406,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -4130,6 +4151,8 @@ describe('tabs per pane (task 0069)', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });

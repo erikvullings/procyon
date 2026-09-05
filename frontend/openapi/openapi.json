@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "AcceptSemanticInstallationOfferRequestDto": {
+        "additionalProperties": false,
+        "description": "Explicitly accepts one previously returned installation offer.",
+        "properties": {
+          "offerId": {
+            "description": "Opaque offer identity; no artifact location is accepted.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offerId"
+        ],
+        "type": "object"
+      },
       "AcceptSshHostKeyRequestDto": {
         "description": "Request body for `POST /api/v1/connections/{connectionId}/hostKey/accept`.",
         "properties": {
@@ -525,6 +539,34 @@
         ],
         "type": "object"
       },
+      "CheckpointSemanticModelMigrationRequestDto": {
+        "additionalProperties": false,
+        "description": "Persists a resumable model migration checkpoint.",
+        "properties": {
+          "completedDocuments": {
+            "description": "Completely reindexed documents.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "migrationId": {
+            "description": "Migration being advanced.",
+            "type": "string"
+          },
+          "resumeCursor": {
+            "description": "Opaque resume cursor.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "migrationId",
+          "completedDocuments"
+        ],
+        "type": "object"
+      },
       "ChecksumAlgorithmDto": {
         "description": "A checksum algorithm the backend can compute.",
         "enum": [
@@ -862,6 +904,48 @@
           "typeMismatch"
         ],
         "type": "string"
+      },
+      "CompleteSemanticModelMigrationRequestDto": {
+        "additionalProperties": false,
+        "description": "Activates a fully reindexed model migration target.",
+        "properties": {
+          "migrationId": {
+            "description": "Migration to complete.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "ConfirmSemanticIndexRemovalRequestDto": {
+        "additionalProperties": false,
+        "description": "Confirms one live authoritative semantic-index removal plan.",
+        "properties": {
+          "planId": {
+            "description": "Opaque identity returned by the planning request.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "type": "object"
+      },
+      "ConfirmSemanticModelMigrationRequestDto": {
+        "additionalProperties": false,
+        "description": "Explicitly confirms and starts one returned model migration plan.",
+        "properties": {
+          "migrationId": {
+            "description": "Opaque migration plan identity.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
       },
       "ConflictPolicyDto": {
         "description": "Default operation conflict choice.",
@@ -1343,6 +1427,34 @@
           "name",
           "kind",
           "configuration"
+        ],
+        "type": "object"
+      },
+      "CreateSemanticIndexRemovalPlanRequestDto": {
+        "additionalProperties": false,
+        "description": "Creates an authoritative semantic-index removal plan.",
+        "properties": {
+          "enrolmentId": {
+            "description": "Opaque enrolment identity to inventory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrolmentId"
+        ],
+        "type": "object"
+      },
+      "CreateSemanticInstallationOfferRequestDto": {
+        "additionalProperties": false,
+        "description": "Creates a complete installation disclosure for one curated profile.",
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Abstract profile to resolve through the signed catalog."
+          }
+        },
+        "required": [
+          "profile"
         ],
         "type": "object"
       },
@@ -2627,6 +2739,167 @@
         ],
         "type": "object"
       },
+      "ImportSemanticLocalModelRequestDto": {
+        "additionalProperties": false,
+        "description": "Expert-mode local model import plus its mandatory migration disclosure.",
+        "properties": {
+          "dimensions": {
+            "description": "Embedding dimensions.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/SemanticReindexEstimateDto",
+            "description": "Full-reindex work disclosed before confirmation."
+          },
+          "estimatedDiskBytes": {
+            "description": "Estimated installed disk bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimatedRamBytes": {
+            "description": "Estimated peak RAM bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "languageCoverage": {
+            "description": "Declared language coverage.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "licenseNotice": {
+            "description": "Human-readable license notice.",
+            "type": "string"
+          },
+          "licenseSpdx": {
+            "description": "SPDX license expression.",
+            "type": "string"
+          },
+          "modelId": {
+            "description": "Opaque model identifier.",
+            "type": "string"
+          },
+          "normalization": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticEmbeddingNormalizationDto",
+                "description": "Required normalization metadata."
+              }
+            ]
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Abstract profile assigned to the imported model."
+          },
+          "runtimeComponentId": {
+            "description": "Required logical runtime component.",
+            "type": "string"
+          },
+          "runtimeVersionRequirement": {
+            "description": "Accepted runtime semantic versions.",
+            "type": "string"
+          },
+          "sourcePath": {
+            "description": "Existing local model package path. Browser/server runtimes reject it.",
+            "type": "string"
+          },
+          "tokenizer": {
+            "description": "Exact tokenizer identifier.",
+            "type": "string"
+          },
+          "upstreamRevision": {
+            "description": "Exact immutable upstream revision.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourcePath",
+          "modelId",
+          "upstreamRevision",
+          "licenseSpdx",
+          "licenseNotice",
+          "tokenizer",
+          "dimensions",
+          "runtimeComponentId",
+          "runtimeVersionRequirement",
+          "languageCoverage",
+          "estimatedDiskBytes",
+          "estimatedRamBytes",
+          "profile",
+          "estimate"
+        ],
+        "type": "object"
+      },
+      "InstallSemanticWorkerPatchRequestDto": {
+        "additionalProperties": false,
+        "description": "Requests the newest compatible signed worker patch.",
+        "properties": {
+          "componentId": {
+            "description": "Logical installed worker component.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "componentId"
+        ],
+        "type": "object"
+      },
+      "InstalledSemanticComponentDto": {
+        "description": "One installed semantic component.",
+        "properties": {
+          "artifactId": {
+            "description": "Signed artifact identifier.",
+            "type": "string"
+          },
+          "componentId": {
+            "description": "Logical component identifier.",
+            "type": "string"
+          },
+          "installedBytes": {
+            "description": "Actual installed bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SemanticComponentKindDto",
+            "description": "Component role."
+          },
+          "state": {
+            "$ref": "#/components/schemas/InstalledSemanticComponentStateDto",
+            "description": "Active or rollback state."
+          },
+          "version": {
+            "description": "Exact installed version.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "componentId",
+          "kind",
+          "version",
+          "state",
+          "installedBytes"
+        ],
+        "type": "object"
+      },
+      "InstalledSemanticComponentStateDto": {
+        "description": "Whether an installed component is active or retained for rollback.",
+        "enum": [
+          "active",
+          "rollback"
+        ],
+        "type": "string"
+      },
       "InvokeActionRequestDto": {
         "description": "Requests invocation of a registered action, identified by the\n`actionId` path parameter (spec §18).",
         "properties": {
@@ -2979,6 +3252,20 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "MoveSemanticDataRequestDto": {
+        "additionalProperties": false,
+        "description": "Moves the semantic-data root through pause-copy-verify-switch.",
+        "properties": {
+          "destination": {
+            "description": "Native desktop path. Browser/server runtimes reject this request.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "destination"
+        ],
         "type": "object"
       },
       "MultiRenameCaseTransformDto": {
@@ -4064,6 +4351,25 @@
         ],
         "type": "object"
       },
+      "PlanSemanticModelMigrationRequestDto": {
+        "additionalProperties": false,
+        "description": "Plans migration to a signed-catalog model resolution.",
+        "properties": {
+          "estimate": {
+            "$ref": "#/components/schemas/SemanticReindexEstimateDto",
+            "description": "Full-reindex work disclosed before confirmation."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Target abstract profile."
+          }
+        },
+        "required": [
+          "profile",
+          "estimate"
+        ],
+        "type": "object"
+      },
       "PlatformKindDto": {
         "description": "The host operating system, when known.",
         "enum": [
@@ -4810,6 +5116,8 @@
           "plugins": false,
           "revealInSystemFileManager": false,
           "runtime": "browserServer",
+          "semanticComponentAuthority": "administratorProvisioned",
+          "semanticRuntimeExecutableDownload": "administratorProvisioned",
           "serverAdministration": false,
           "systemTrash": false
         },
@@ -4870,6 +5178,14 @@
             "$ref": "#/components/schemas/RuntimeKindDto",
             "description": "Which host is serving the application."
           },
+          "semanticComponentAuthority": {
+            "$ref": "#/components/schemas/SemanticComponentAuthorityDto",
+            "description": "Principal that owns semantic component lifecycle changes."
+          },
+          "semanticRuntimeExecutableDownload": {
+            "$ref": "#/components/schemas/SemanticRuntimeExecutableDownloadDto",
+            "description": "Executable semantic component download policy for this distribution."
+          },
           "serverAdministration": {
             "description": "Whether server administration endpoints are available.",
             "type": "boolean"
@@ -4895,7 +5211,9 @@
           "serverAdministration",
           "extendedAttributes",
           "finderTags",
-          "finderAliases"
+          "finderAliases",
+          "semanticComponentAuthority",
+          "semanticRuntimeExecutableDownload"
         ],
         "type": "object"
       },
@@ -5514,6 +5832,1289 @@
           "matches",
           "indexingComplete"
         ],
+        "type": "object"
+      },
+      "SemanticCategoryDiskUseDto": {
+        "description": "Actual disk use for one semantic-data category.",
+        "properties": {
+          "bytes": {
+            "description": "Actual occupied bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SemanticDataCategoryDto",
+            "description": "Measured category."
+          }
+        },
+        "required": [
+          "category",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "SemanticComponentAuthorityDto": {
+        "description": "Principal that owns semantic component lifecycle changes.",
+        "enum": [
+          "unavailable",
+          "desktopManaged",
+          "administratorProvisioned",
+          "deterministicMock"
+        ],
+        "type": "string"
+      },
+      "SemanticComponentCapabilitiesDto": {
+        "description": "Authority and operations available for semantic component management.",
+        "properties": {
+          "authority": {
+            "$ref": "#/components/schemas/SemanticComponentAuthorityDto",
+            "description": "Principal that owns component lifecycle changes."
+          },
+          "operations": {
+            "description": "Explicit operations supported by this capability.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticComponentOperationDto"
+            },
+            "type": "array"
+          },
+          "runtimeExecutableDownload": {
+            "$ref": "#/components/schemas/SemanticRuntimeExecutableDownloadDto",
+            "description": "Executable-download policy for the current distribution."
+          }
+        },
+        "required": [
+          "authority",
+          "operations",
+          "runtimeExecutableDownload"
+        ],
+        "type": "object"
+      },
+      "SemanticComponentDisclosureDto": {
+        "description": "One component disclosed before installation consent.",
+        "properties": {
+          "artifactId": {
+            "description": "Signed artifact identifier.",
+            "type": "string"
+          },
+          "componentId": {
+            "description": "Logical component identifier.",
+            "type": "string"
+          },
+          "downloadBytes": {
+            "description": "Compressed download bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimatedInstalledBytes": {
+            "description": "Estimated installed bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimatedRamBytes": {
+            "description": "Estimated peak RAM bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SemanticComponentKindDto",
+            "description": "Component role."
+          },
+          "license": {
+            "$ref": "#/components/schemas/SemanticLicenseDto",
+            "description": "License displayed before consent."
+          },
+          "model": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticModelIdentityDto",
+                "description": "Exact model identity for a model package."
+              }
+            ]
+          },
+          "version": {
+            "description": "Exact signed component version.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "componentId",
+          "kind",
+          "version",
+          "license",
+          "downloadBytes",
+          "estimatedInstalledBytes",
+          "estimatedRamBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticComponentErrorCodeDto": {
+        "description": "Stable machine-readable semantic component failure.",
+        "enum": [
+          "unavailable",
+          "authorityDenied",
+          "consentRequired",
+          "invalidLocalModelMetadata",
+          "invalidLifecycle",
+          "invalidEnrolment",
+          "invalidMigrationPlan",
+          "invalidMigrationProgress",
+          "executableDownloadProhibited",
+          "catalog",
+          "insufficientSpace",
+          "downloadInterrupted",
+          "artifactVerificationFailed",
+          "activationFailed",
+          "freeSpaceProbe",
+          "state",
+          "filesystem",
+          "indexing",
+          "indexRemoval",
+          "dataMigration",
+          "blockingTaskFailed",
+          "diskUseOverflow"
+        ],
+        "type": "string"
+      },
+      "SemanticComponentErrorDetailsDto": {
+        "description": "Typed context attached to an actionable semantic component failure.",
+        "oneOf": [
+          {
+            "description": "A read-only authority rejected a mutation.",
+            "properties": {
+              "authority": {
+                "$ref": "#/components/schemas/SemanticComponentAuthorityDto",
+                "description": "Active authority."
+              },
+              "kind": {
+                "enum": [
+                  "authorityDenied"
+                ],
+                "type": "string"
+              },
+              "operation": {
+                "$ref": "#/components/schemas/SemanticComponentOperationDto",
+                "description": "Rejected operation."
+              }
+            },
+            "required": [
+              "authority",
+              "operation",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Expert local-model metadata was invalid.",
+            "properties": {
+              "field": {
+                "$ref": "#/components/schemas/SemanticModelImportFieldDto",
+                "description": "Invalid required field."
+              },
+              "kind": {
+                "enum": [
+                  "invalidLocalModelMetadata"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An action was invalid for the current lifecycle state.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "invalidLifecycle"
+                ],
+                "type": "string"
+              },
+              "lifecycle": {
+                "description": "Human-readable current lifecycle.",
+                "type": "string"
+              },
+              "operation": {
+                "$ref": "#/components/schemas/SemanticComponentOperationDto",
+                "description": "Rejected operation."
+              }
+            },
+            "required": [
+              "operation",
+              "lifecycle",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A checkpoint regressed or exceeded the disclosed estimate.",
+            "properties": {
+              "completedDocuments": {
+                "description": "Rejected completed document count.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "invalidMigrationProgress"
+                ],
+                "type": "string"
+              },
+              "totalDocuments": {
+                "description": "Disclosed total document estimate.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "completedDocuments",
+              "totalDocuments",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Available storage cannot satisfy the estimate and reserve.",
+            "properties": {
+              "availableBytes": {
+                "description": "Bytes currently available.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "insufficientSpace"
+                ],
+                "type": "string"
+              },
+              "requiredBytes": {
+                "description": "Required installed bytes including the reserve.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reserveBytes": {
+                "description": "Explicit reserve included in the requirement.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "availableBytes",
+              "requiredBytes",
+              "reserveBytes",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A signed artifact-specific failure.",
+            "properties": {
+              "artifactId": {
+                "description": "Signed artifact identity.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "artifact"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifactId",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SemanticComponentErrorDto": {
+        "description": "Structured semantic component error shared by HTTP and Tauri.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SemanticComponentErrorCodeDto",
+            "description": "Stable machine-readable failure code."
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticComponentErrorDetailsDto",
+                "description": "Typed actionable context, when applicable."
+              }
+            ]
+          },
+          "message": {
+            "description": "Sanitized user-readable explanation.",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "Correlates the failure with one HTTP or Tauri request.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "SemanticComponentKindDto": {
+        "description": "Installed semantic component role.",
+        "enum": [
+          "worker",
+          "runtime",
+          "model"
+        ],
+        "type": "string"
+      },
+      "SemanticComponentLifecycleDto": {
+        "description": "Observable lifecycle of optional semantic components.",
+        "oneOf": [
+          {
+            "description": "No component implementation is configured.",
+            "properties": {
+              "state": {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Components are not installed.",
+            "properties": {
+              "state": {
+                "enum": [
+                  "absent"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A complete installation disclosure awaits explicit consent.",
+            "properties": {
+              "offerId": {
+                "description": "Opaque offer identity.",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "offered"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "offerId",
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A resumable component download is in progress or interrupted.",
+            "properties": {
+              "downloadedBytes": {
+                "description": "Durable bytes already downloaded.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resumable": {
+                "description": "Whether the retained partial download can be resumed.",
+                "type": "boolean"
+              },
+              "state": {
+                "enum": [
+                  "downloading"
+                ],
+                "type": "string"
+              },
+              "totalBytes": {
+                "description": "Total signed download size.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "downloadedBytes",
+              "totalBytes",
+              "resumable",
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Components are installed and indexing is enabled.",
+            "properties": {
+              "state": {
+                "enum": [
+                  "installedEnabled"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Indexing is explicitly paused.",
+            "properties": {
+              "state": {
+                "enum": [
+                  "paused"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A confirmed full reindex is in progress.",
+            "properties": {
+              "progress": {
+                "$ref": "#/components/schemas/SemanticModelMigrationProgressDto",
+                "description": "Durable migration state."
+              },
+              "state": {
+                "enum": [
+                  "migrating"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "progress",
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A failed worker update retained or restored the last working version.",
+            "properties": {
+              "activeVersion": {
+                "description": "Last known working active version.",
+                "type": "string"
+              },
+              "failedVersion": {
+                "description": "Version whose activation failed.",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "updateFailedRolledBack"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "failedVersion",
+              "activeVersion",
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Installation cannot proceed until disk space is freed.",
+            "properties": {
+              "availableBytes": {
+                "description": "Bytes currently available.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "requiredBytes": {
+                "description": "Bytes required including the configured reserve.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "state": {
+                "enum": [
+                  "lowDisk"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "availableBytes",
+              "requiredBytes",
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Components were removed with an explicit index-data decision.",
+            "properties": {
+              "indexDecision": {
+                "$ref": "#/components/schemas/SemanticIndexRetentionDecisionDto",
+                "description": "Decision applied to remaining index data."
+              },
+              "state": {
+                "enum": [
+                  "uninstalled"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "indexDecision",
+              "state"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SemanticComponentOperationDto": {
+        "description": "Explicit semantic component operation advertised by the active capability.",
+        "enum": [
+          "viewStatus",
+          "viewCatalog",
+          "createInstallationOffer",
+          "installOrEnable",
+          "installWorkerPatch",
+          "pauseIndexing",
+          "resumeIndexing",
+          "removeIndex",
+          "moveData",
+          "uninstallComponents",
+          "importLocalModel",
+          "planModelMigration",
+          "confirmModelMigration",
+          "checkpointModelMigration",
+          "completeModelMigration"
+        ],
+        "type": "string"
+      },
+      "SemanticComponentStatusDto": {
+        "description": "Complete observable semantic component state.",
+        "properties": {
+          "activeModel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticModelSelectionDto",
+                "description": "Active profile and exact model revision."
+              }
+            ]
+          },
+          "components": {
+            "description": "Installed active and rollback components.",
+            "items": {
+              "$ref": "#/components/schemas/InstalledSemanticComponentDto"
+            },
+            "type": "array"
+          },
+          "dataRoot": {
+            "description": "Configured semantic-data root, when reportable.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diskUse": {
+            "$ref": "#/components/schemas/SemanticDiskUseDto",
+            "description": "Stable per-category disk usage."
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/SemanticComponentLifecycleDto",
+            "description": "Current explicit lifecycle state."
+          },
+          "migration": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticModelMigrationProgressDto",
+                "description": "Resumable migration state, when a full reindex is pending."
+              }
+            ]
+          }
+        },
+        "required": [
+          "lifecycle",
+          "components",
+          "diskUse"
+        ],
+        "type": "object"
+      },
+      "SemanticDataCategoryDto": {
+        "description": "Stable semantic-data disk-use category.",
+        "enum": [
+          "catalog",
+          "extracted",
+          "zvec",
+          "embeddingCache",
+          "models",
+          "workers"
+        ],
+        "type": "string"
+      },
+      "SemanticDataMoveReceiptDto": {
+        "description": "Successful verified semantic-data root move.",
+        "properties": {
+          "destination": {
+            "description": "New active root.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Retained source root.",
+            "type": "string"
+          },
+          "verifiedBytes": {
+            "description": "Bytes independently verified.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "verifiedFileCount": {
+            "description": "Files independently verified.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "destination",
+          "verifiedFileCount",
+          "verifiedBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticDiskUseDto": {
+        "description": "Stable per-category and aggregate semantic disk use.",
+        "properties": {
+          "categories": {
+            "description": "Every known category in stable presentation order.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticCategoryDiskUseDto"
+            },
+            "type": "array"
+          },
+          "totalBytes": {
+            "description": "Aggregate occupied bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "categories",
+          "totalBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticEmbeddingNormalizationDto": {
+        "description": "Embedding normalization contract.",
+        "enum": [
+          "unitLength",
+          "none"
+        ],
+        "type": "string"
+      },
+      "SemanticIndexRecordCountsDto": {
+        "description": "Expected or removed enrolment-derived records.",
+        "properties": {
+          "cacheEntries": {
+            "description": "Embedding-cache records.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversationEvidence": {
+            "description": "Saved-conversation evidence records.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "extractedFiles": {
+            "description": "Extracted content files.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "indexRecords": {
+            "description": "Index records and enrolment metadata.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "zvecVectors": {
+            "description": "Zvec vectors.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "indexRecords",
+          "extractedFiles",
+          "zvecVectors",
+          "cacheEntries",
+          "conversationEvidence"
+        ],
+        "type": "object"
+      },
+      "SemanticIndexRemovalPlanDto": {
+        "description": "Authoritative deletion inventory awaiting explicit confirmation.",
+        "properties": {
+          "enrolmentId": {
+            "description": "Opaque enrolment identity.",
+            "type": "string"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/SemanticIndexRecordCountsDto",
+            "description": "Authoritative records that confirmation will delete."
+          },
+          "planId": {
+            "description": "Opaque identity of the live removal plan.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId",
+          "enrolmentId",
+          "expected"
+        ],
+        "type": "object"
+      },
+      "SemanticIndexRemovalReceiptDto": {
+        "description": "Verified enrolment-derived data removal.",
+        "properties": {
+          "conversationEvidenceDeleted": {
+            "description": "Whether saved-conversation evidence was also deleted.",
+            "type": "boolean"
+          },
+          "deleted": {
+            "$ref": "#/components/schemas/SemanticIndexRecordCountsDto",
+            "description": "Actual records removed by category."
+          },
+          "enrolmentId": {
+            "description": "Opaque removed enrolment identity.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrolmentId",
+          "deleted",
+          "conversationEvidenceDeleted"
+        ],
+        "type": "object"
+      },
+      "SemanticIndexRetentionDecisionDto": {
+        "description": "Required handling of index data during component uninstall.",
+        "enum": [
+          "retain",
+          "delete"
+        ],
+        "type": "string"
+      },
+      "SemanticInstallReceiptDto": {
+        "description": "Successful install-or-enable result.",
+        "properties": {
+          "installedArtifactIds": {
+            "description": "Signed artifacts installed or verified as already installed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "installedArtifactIds"
+        ],
+        "type": "object"
+      },
+      "SemanticInstallationOfferDto": {
+        "description": "Complete signed first-install disclosure awaiting explicit consent.",
+        "properties": {
+          "catalogRevision": {
+            "description": "Immutable signed catalog revision.",
+            "type": "string"
+          },
+          "components": {
+            "description": "Worker, runtime, and model disclosures.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticComponentDisclosureDto"
+            },
+            "type": "array"
+          },
+          "dataRoot": {
+            "description": "Proposed semantic-data root.",
+            "type": "string"
+          },
+          "embeddingsStayLocal": {
+            "description": "Whether inference and semantic data remain on this device.",
+            "type": "boolean"
+          },
+          "localOnlyDisclosure": {
+            "description": "Stable local-only privacy disclosure.",
+            "type": "string"
+          },
+          "minimumFreeSpaceReserveBytes": {
+            "description": "Free bytes reserved beyond installed-size estimates.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "offerId": {
+            "description": "Opaque identity accepted by the installation action.",
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Selected abstract profile."
+          },
+          "resolvedModel": {
+            "$ref": "#/components/schemas/SemanticModelIdentityDto",
+            "description": "Exact model revision resolved by the catalog."
+          }
+        },
+        "required": [
+          "offerId",
+          "catalogRevision",
+          "profile",
+          "resolvedModel",
+          "components",
+          "embeddingsStayLocal",
+          "localOnlyDisclosure",
+          "dataRoot",
+          "minimumFreeSpaceReserveBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticLicenseDto": {
+        "description": "Model license disclosed before installation.",
+        "properties": {
+          "notice": {
+            "description": "Human-readable attribution or notice.",
+            "type": "string"
+          },
+          "spdx": {
+            "description": "SPDX license expression.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spdx",
+          "notice"
+        ],
+        "type": "object"
+      },
+      "SemanticModelIdentityDto": {
+        "description": "Exact immutable identity of a model revision.",
+        "properties": {
+          "modelId": {
+            "description": "Stable model identifier.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Immutable upstream revision.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "modelId",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "SemanticModelImportFieldDto": {
+        "description": "Required expert local-model metadata field.",
+        "enum": [
+          "sourcePath",
+          "modelId",
+          "upstreamRevision",
+          "license",
+          "tokenizer",
+          "dimensions",
+          "normalization",
+          "runtimeCompatibility",
+          "languageCoverage",
+          "estimatedDiskBytes",
+          "estimatedRamBytes"
+        ],
+        "type": "string"
+      },
+      "SemanticModelMetadataDto": {
+        "description": "Complete immutable metadata for one model revision.",
+        "properties": {
+          "dimensions": {
+            "description": "Embedding vector dimensions.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimatedDiskBytes": {
+            "description": "Estimated installed model bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimatedRamBytes": {
+            "description": "Estimated peak RAM bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/SemanticModelIdentityDto",
+            "description": "Exact model identity."
+          },
+          "languageCoverage": {
+            "description": "Declared language coverage.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "license": {
+            "$ref": "#/components/schemas/SemanticLicenseDto",
+            "description": "Model license."
+          },
+          "normalization": {
+            "$ref": "#/components/schemas/SemanticEmbeddingNormalizationDto",
+            "description": "Stored embedding normalization."
+          },
+          "runtimeComponentId": {
+            "description": "Required logical runtime component.",
+            "type": "string"
+          },
+          "runtimeVersionRequirement": {
+            "description": "Accepted runtime versions.",
+            "type": "string"
+          },
+          "tokenizer": {
+            "description": "Exact tokenizer identity.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "license",
+          "tokenizer",
+          "dimensions",
+          "normalization",
+          "runtimeComponentId",
+          "runtimeVersionRequirement",
+          "languageCoverage",
+          "estimatedDiskBytes",
+          "estimatedRamBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticModelMigrationPlanDto": {
+        "description": "Confirmation-gated model migration plan.",
+        "properties": {
+          "estimate": {
+            "$ref": "#/components/schemas/SemanticReindexEstimateDto",
+            "description": "Estimated full-reindex work."
+          },
+          "from": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticModelSelectionDto",
+                "description": "Current selection captured by the plan."
+              }
+            ]
+          },
+          "fullReindex": {
+            "description": "Always true: all embeddings must be rebuilt.",
+            "type": "boolean"
+          },
+          "migrationId": {
+            "description": "Opaque plan identity.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SemanticModelMigrationReasonDto",
+            "description": "Why full reindexing is mandatory."
+          },
+          "requiresConfirmation": {
+            "description": "Always true: activation requires explicit confirmation.",
+            "type": "boolean"
+          },
+          "resumable": {
+            "description": "Always true: durable checkpoints can resume the work.",
+            "type": "boolean"
+          },
+          "target": {
+            "$ref": "#/components/schemas/SemanticModelSelectionDto",
+            "description": "Exact target selection."
+          }
+        },
+        "required": [
+          "migrationId",
+          "target",
+          "estimate",
+          "reason",
+          "requiresConfirmation",
+          "fullReindex",
+          "resumable"
+        ],
+        "type": "object"
+      },
+      "SemanticModelMigrationProgressDto": {
+        "description": "Durable, resumable model migration progress.",
+        "properties": {
+          "completedDocuments": {
+            "description": "Documents durably reindexed.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/SemanticReindexEstimateDto",
+            "description": "Total work estimate disclosed before confirmation."
+          },
+          "migrationId": {
+            "description": "Opaque migration identity.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SemanticModelMigrationReasonDto",
+            "description": "Reason a full reindex is required."
+          },
+          "resumeCursor": {
+            "description": "Opaque resume cursor, when one has been persisted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/SemanticModelSelectionDto",
+            "description": "Exact target model selection."
+          }
+        },
+        "required": [
+          "migrationId",
+          "completedDocuments",
+          "estimate",
+          "target",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "SemanticModelMigrationReasonDto": {
+        "description": "Reason a model migration requires a full reindex.",
+        "oneOf": [
+          {
+            "description": "The model identity or embedding contract changes.",
+            "properties": {
+              "reason": {
+                "enum": [
+                  "modelChanged"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The persisted index schema changes.",
+            "properties": {
+              "fromVersion": {
+                "description": "Existing schema version.",
+                "format": "int32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reason": {
+                "enum": [
+                  "schemaChanged"
+                ],
+                "type": "string"
+              },
+              "toVersion": {
+                "description": "Replacement schema version.",
+                "format": "int32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "fromVersion",
+              "toVersion",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SemanticModelProfileDto": {
+        "description": "Curated model profile and its exact signed-catalog resolution.",
+        "properties": {
+          "explanation": {
+            "description": "Stable explanation of the profile trade-off.",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/SemanticModelMetadataDto",
+            "description": "Complete immutable model metadata."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Abstract user-facing profile."
+          },
+          "recommended": {
+            "description": "Whether setup recommends this profile.",
+            "type": "boolean"
+          },
+          "resolvedModel": {
+            "$ref": "#/components/schemas/SemanticModelIdentityDto",
+            "description": "Exact model identity resolved by the signed catalog."
+          }
+        },
+        "required": [
+          "profile",
+          "recommended",
+          "explanation",
+          "resolvedModel",
+          "metadata"
+        ],
+        "type": "object"
+      },
+      "SemanticModelSelectionDto": {
+        "description": "Abstract profile plus the exact model revision used by an index.",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/SemanticModelIdentityDto",
+            "description": "Exact immutable model identity."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SemanticProfileDto",
+            "description": "Persisted abstract profile."
+          }
+        },
+        "required": [
+          "profile",
+          "identity"
+        ],
+        "type": "object"
+      },
+      "SemanticProfileDto": {
+        "description": "Abstract model profile selected independently of a concrete model revision.",
+        "enum": [
+          "compactMultilingual",
+          "compactEnglish",
+          "multilingualQuality"
+        ],
+        "type": "string"
+      },
+      "SemanticReindexEstimateDto": {
+        "description": "Estimated work disclosed before a full reindex.",
+        "properties": {
+          "documents": {
+            "description": "Estimated document count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceBytes": {
+            "description": "Estimated source bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documents",
+          "sourceBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticRuntimeExecutableDownloadDto": {
+        "description": "Policy governing executable semantic component downloads.",
+        "enum": [
+          "unavailable",
+          "directDistribution",
+          "prohibitedByMacAppStore",
+          "administratorProvisioned",
+          "simulated"
+        ],
+        "type": "string"
+      },
+      "SemanticUninstallReceiptDto": {
+        "description": "Successful component uninstall.",
+        "properties": {
+          "indexDecision": {
+            "$ref": "#/components/schemas/SemanticIndexRetentionDecisionDto",
+            "description": "Explicit decision applied to remaining index data."
+          },
+          "removedComponentCount": {
+            "description": "Active and rollback component records removed.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "indexDecision",
+          "removedComponentCount"
+        ],
+        "type": "object"
+      },
+      "SemanticWorkerPatchResponseDto": {
+        "description": "Result of checking for and applying a compatible worker patch.",
+        "properties": {
+          "receipt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticInstallReceiptDto",
+                "description": "Installation receipt, or `None` when no compatible patch is available."
+              }
+            ]
+          }
+        },
         "type": "object"
       },
       "SetPaneActivityRequest": {
@@ -6634,6 +8235,20 @@
           "dark"
         ],
         "type": "string"
+      },
+      "UninstallSemanticComponentsRequestDto": {
+        "additionalProperties": false,
+        "description": "Uninstalls components with an explicit index-data decision.",
+        "properties": {
+          "indexDecision": {
+            "$ref": "#/components/schemas/SemanticIndexRetentionDecisionDto",
+            "description": "Required handling of remaining index data."
+          }
+        },
+        "required": [
+          "indexDecision"
+        ],
+        "type": "object"
       },
       "UpdateConnectionRequestDto": {
         "description": "Request body for `PUT /api/v1/connections/{connectionId}`.",
@@ -11178,6 +12793,801 @@
             "description": ""
           }
         }
+      }
+    },
+    "/api/v1/semantic/components/capabilities": {
+      "get": {
+        "operationId": "getSemanticComponentCapabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentCapabilitiesDto"
+                }
+              }
+            },
+            "description": "Current semantic component capabilities"
+          }
+        },
+        "summary": "Reports semantic component authority and supported operations."
+      }
+    },
+    "/api/v1/semantic/components/data/move": {
+      "post": {
+        "operationId": "moveSemanticComponentData",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveSemanticDataRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticDataMoveReceiptDto"
+                }
+              }
+            },
+            "description": "Verified semantic-data root move"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot change the semantic-data root"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Data cannot be moved in the current lifecycle"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Data migration failed before switching roots"
+          }
+        },
+        "summary": "Moves the semantic-data root through pause-copy-verify-switch."
+      }
+    },
+    "/api/v1/semantic/components/index-removal-plans": {
+      "post": {
+        "operationId": "createSemanticComponentIndexRemovalPlan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSemanticIndexRemovalPlanRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticIndexRemovalPlanDto"
+                }
+              }
+            },
+            "description": "Authoritative semantic index removal plan"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The enrolment request is invalid"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot remove semantic indexes"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Index inventory failed"
+          }
+        },
+        "summary": "Inventories every index record derived from one semantic enrolment."
+      }
+    },
+    "/api/v1/semantic/components/index-removal-plans/confirm": {
+      "post": {
+        "operationId": "confirmSemanticComponentIndexRemoval",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSemanticIndexRemovalRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticIndexRemovalReceiptDto"
+                }
+              }
+            },
+            "description": "Verified semantic index removal"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot remove semantic indexes"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The removal plan is stale or index removal failed"
+          }
+        },
+        "summary": "Confirms one live authoritative semantic-index removal plan."
+      }
+    },
+    "/api/v1/semantic/components/indexing/pause": {
+      "post": {
+        "operationId": "pauseSemanticComponentIndexing",
+        "responses": {
+          "204": {
+            "description": "Semantic indexing paused"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot manage indexing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Indexing cannot be paused in the current lifecycle"
+          }
+        },
+        "summary": "Pauses semantic indexing without uninstalling components."
+      }
+    },
+    "/api/v1/semantic/components/indexing/resume": {
+      "post": {
+        "operationId": "resumeSemanticComponentIndexing",
+        "responses": {
+          "204": {
+            "description": "Semantic indexing resumed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot manage indexing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Indexing cannot be resumed in the current lifecycle"
+          }
+        },
+        "summary": "Resumes explicitly paused semantic indexing."
+      }
+    },
+    "/api/v1/semantic/components/installation-offers": {
+      "post": {
+        "operationId": "createSemanticComponentInstallationOffer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSemanticInstallationOfferRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticInstallationOfferDto"
+                }
+              }
+            },
+            "description": "Installation disclosure awaiting consent"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The profile cannot be resolved"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot manage component installation"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Semantic components are unavailable"
+          }
+        },
+        "summary": "Creates a complete signed installation disclosure before consent."
+      }
+    },
+    "/api/v1/semantic/components/installation-offers/accept": {
+      "post": {
+        "operationId": "acceptSemanticComponentInstallationOffer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptSemanticInstallationOfferRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticInstallReceiptDto"
+                }
+              }
+            },
+            "description": "Installed or enabled signed components"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot manage component installation"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Explicit consent is missing or stale"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Component installation failed"
+          }
+        },
+        "summary": "Explicitly accepts and installs one previously disclosed offer."
+      }
+    },
+    "/api/v1/semantic/components/model-migrations/checkpoint": {
+      "post": {
+        "operationId": "checkpointSemanticComponentModelMigration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckpointSemanticModelMigrationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelMigrationProgressDto"
+                }
+              }
+            },
+            "description": "Updated durable migration progress"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot checkpoint model migrations"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Migration progress is stale or invalid"
+          }
+        },
+        "summary": "Persists a resumable model migration checkpoint."
+      }
+    },
+    "/api/v1/semantic/components/model-migrations/complete": {
+      "post": {
+        "operationId": "completeSemanticComponentModelMigration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteSemanticModelMigrationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelSelectionDto"
+                }
+              }
+            },
+            "description": "Activated model selection"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot complete model migrations"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Migration progress is incomplete or invalid"
+          }
+        },
+        "summary": "Completes and activates one fully reindexed model migration."
+      }
+    },
+    "/api/v1/semantic/components/model-migrations/confirm": {
+      "post": {
+        "operationId": "confirmSemanticComponentModelMigration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSemanticModelMigrationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelMigrationProgressDto"
+                }
+              }
+            },
+            "description": "Initial resumable model migration progress"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot confirm model migrations"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The migration plan is stale or unknown"
+          }
+        },
+        "summary": "Confirms and begins one previously returned model migration plan."
+      }
+    },
+    "/api/v1/semantic/components/model-migrations/plan": {
+      "post": {
+        "operationId": "planSemanticComponentModelMigration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanSemanticModelMigrationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelMigrationPlanDto"
+                }
+              }
+            },
+            "description": "Confirmation-gated model migration plan"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The requested profile cannot be resolved"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot plan model migrations"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "A model migration cannot be planned now"
+          }
+        },
+        "summary": "Plans migration to a signed-catalog model resolution."
+      }
+    },
+    "/api/v1/semantic/components/models/import-local": {
+      "post": {
+        "operationId": "importSemanticComponentLocalModel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSemanticLocalModelRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelMigrationPlanDto"
+                }
+              }
+            },
+            "description": "Confirmation-gated local model migration plan"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Required local model metadata is invalid"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Local model import is desktop-only"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "A model migration cannot be planned now"
+          }
+        },
+        "summary": "Validates an expert local model and creates a confirmation-gated migration."
+      }
+    },
+    "/api/v1/semantic/components/profiles": {
+      "get": {
+        "operationId": "listSemanticComponentProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SemanticModelProfileDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Curated semantic model profiles"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Semantic components are unavailable"
+          }
+        },
+        "summary": "Lists curated semantic model profiles and their exact catalog revisions."
+      }
+    },
+    "/api/v1/semantic/components/status": {
+      "get": {
+        "operationId": "getSemanticComponentStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentStatusDto"
+                }
+              }
+            },
+            "description": "Current semantic component status"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Semantic components are unavailable"
+          }
+        },
+        "summary": "Reports semantic component lifecycle, installed versions, and disk use."
+      }
+    },
+    "/api/v1/semantic/components/uninstall": {
+      "post": {
+        "operationId": "uninstallSemanticComponents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UninstallSemanticComponentsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticUninstallReceiptDto"
+                }
+              }
+            },
+            "description": "Components uninstalled with the requested index decision"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot uninstall semantic components"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Components cannot be uninstalled in the current lifecycle"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Component uninstall failed"
+          }
+        },
+        "summary": "Uninstalls semantic components with an explicit index-data decision."
+      }
+    },
+    "/api/v1/semantic/components/worker-patches/install": {
+      "post": {
+        "operationId": "installSemanticComponentWorkerPatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallSemanticWorkerPatchRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticWorkerPatchResponseDto"
+                }
+              }
+            },
+            "description": "Worker patch result"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "The runtime cannot install worker patches"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "A worker patch is invalid for the active index"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticComponentErrorDto"
+                }
+              }
+            },
+            "description": "Worker patch activation failed and was rolled back"
+          }
+        },
+        "summary": "Installs the newest compatible signed worker patch, when available."
       }
     },
     "/api/v1/settings": {

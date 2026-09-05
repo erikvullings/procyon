@@ -3808,6 +3808,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         ? m('p', t('shell', 'loading'))
                         : settingsDialogOpen
                           ? m(SettingsEditor, {
+                              client: attrs.client,
                               settings: currentSettings,
                               actions: localisedRegisteredActions(),
                               platform,

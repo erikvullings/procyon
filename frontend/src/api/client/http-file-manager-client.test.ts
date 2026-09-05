@@ -3,6 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../fetch-mutator';
 
 const getRuntimeCapabilities = vi.fn();
+const getSemanticComponentCapabilities = vi.fn();
+const getSemanticComponentStatus = vi.fn();
+const listSemanticComponentProfiles = vi.fn();
+const createSemanticComponentInstallationOffer = vi.fn();
+const acceptSemanticComponentInstallationOffer = vi.fn();
+const pauseSemanticComponentIndexing = vi.fn();
+const resumeSemanticComponentIndexing = vi.fn();
+const createSemanticComponentIndexRemovalPlan = vi.fn();
+const confirmSemanticComponentIndexRemoval = vi.fn();
+const moveSemanticComponentData = vi.fn();
+const uninstallSemanticComponents = vi.fn();
+const installSemanticComponentWorkerPatch = vi.fn();
+const importSemanticComponentLocalModel = vi.fn();
+const planSemanticComponentModelMigration = vi.fn();
+const confirmSemanticComponentModelMigration = vi.fn();
+const checkpointSemanticComponentModelMigration = vi.fn();
+const completeSemanticComponentModelMigration = vi.fn();
 const getSystemLocations = vi.fn();
 const getVolumes = vi.fn();
 const listDirectory = vi.fn();
@@ -57,6 +74,34 @@ const requestCancelOneDriveAuthorization = vi.fn();
 
 vi.mock('../generated/file-manager-api', () => ({
   getRuntimeCapabilities: (...args: unknown[]) => getRuntimeCapabilities(...args),
+  getSemanticComponentCapabilities: (...args: unknown[]) =>
+    getSemanticComponentCapabilities(...args),
+  getSemanticComponentStatus: (...args: unknown[]) => getSemanticComponentStatus(...args),
+  listSemanticComponentProfiles: (...args: unknown[]) => listSemanticComponentProfiles(...args),
+  createSemanticComponentInstallationOffer: (...args: unknown[]) =>
+    createSemanticComponentInstallationOffer(...args),
+  acceptSemanticComponentInstallationOffer: (...args: unknown[]) =>
+    acceptSemanticComponentInstallationOffer(...args),
+  pauseSemanticComponentIndexing: (...args: unknown[]) => pauseSemanticComponentIndexing(...args),
+  resumeSemanticComponentIndexing: (...args: unknown[]) => resumeSemanticComponentIndexing(...args),
+  createSemanticComponentIndexRemovalPlan: (...args: unknown[]) =>
+    createSemanticComponentIndexRemovalPlan(...args),
+  confirmSemanticComponentIndexRemoval: (...args: unknown[]) =>
+    confirmSemanticComponentIndexRemoval(...args),
+  moveSemanticComponentData: (...args: unknown[]) => moveSemanticComponentData(...args),
+  uninstallSemanticComponents: (...args: unknown[]) => uninstallSemanticComponents(...args),
+  installSemanticComponentWorkerPatch: (...args: unknown[]) =>
+    installSemanticComponentWorkerPatch(...args),
+  importSemanticComponentLocalModel: (...args: unknown[]) =>
+    importSemanticComponentLocalModel(...args),
+  planSemanticComponentModelMigration: (...args: unknown[]) =>
+    planSemanticComponentModelMigration(...args),
+  confirmSemanticComponentModelMigration: (...args: unknown[]) =>
+    confirmSemanticComponentModelMigration(...args),
+  checkpointSemanticComponentModelMigration: (...args: unknown[]) =>
+    checkpointSemanticComponentModelMigration(...args),
+  completeSemanticComponentModelMigration: (...args: unknown[]) =>
+    completeSemanticComponentModelMigration(...args),
   getSystemLocations: (...args: unknown[]) => getSystemLocations(...args),
   getVolumes: (...args: unknown[]) => getVolumes(...args),
   listDirectory: (...args: unknown[]) => listDirectory(...args),
@@ -138,6 +183,8 @@ function fixtureCapabilities() {
     plugins: false,
     revealInSystemFileManager: true,
     runtime: 'browserServer',
+    semanticComponentAuthority: 'administratorProvisioned',
+    semanticRuntimeExecutableDownload: 'administratorProvisioned',
     serverAdministration: false,
     systemTrash: true,
   };
@@ -146,6 +193,23 @@ function fixtureCapabilities() {
 afterEach(() => {
   vi.unstubAllGlobals();
   getRuntimeCapabilities.mockReset();
+  getSemanticComponentCapabilities.mockReset();
+  getSemanticComponentStatus.mockReset();
+  listSemanticComponentProfiles.mockReset();
+  createSemanticComponentInstallationOffer.mockReset();
+  acceptSemanticComponentInstallationOffer.mockReset();
+  pauseSemanticComponentIndexing.mockReset();
+  resumeSemanticComponentIndexing.mockReset();
+  createSemanticComponentIndexRemovalPlan.mockReset();
+  confirmSemanticComponentIndexRemoval.mockReset();
+  moveSemanticComponentData.mockReset();
+  uninstallSemanticComponents.mockReset();
+  installSemanticComponentWorkerPatch.mockReset();
+  importSemanticComponentLocalModel.mockReset();
+  planSemanticComponentModelMigration.mockReset();
+  confirmSemanticComponentModelMigration.mockReset();
+  checkpointSemanticComponentModelMigration.mockReset();
+  completeSemanticComponentModelMigration.mockReset();
   listDirectory.mockReset();
   listDirectoryChildren.mockReset();
   navigatePane.mockReset();
@@ -341,6 +405,233 @@ describe('HttpFileManagerClient', () => {
       const controller = new AbortController();
 
       await expect(client.getRuntimeCapabilities(controller.signal)).rejects.toBe(abortError);
+    });
+  });
+
+  describe('semantic component transport', () => {
+    it('uses generated read endpoints and forwards cancellation', async () => {
+      const controller = new AbortController();
+      const capabilities = {
+        authority: 'deterministicMock',
+        runtimeExecutableDownload: 'simulated',
+        operations: ['viewStatus', 'viewCatalog'],
+      };
+      const status = {
+        lifecycle: { state: 'absent' },
+        components: [],
+        diskUse: { categories: [], totalBytes: 0 },
+      };
+      const profiles = [
+        {
+          profile: 'compactMultilingual',
+          recommended: true,
+          explanation: 'fixture',
+          resolvedModel: { modelId: 'model', revision: 'revision' },
+          metadata: {
+            identity: { modelId: 'model', revision: 'revision' },
+            license: { spdx: 'MIT', notice: 'fixture' },
+            tokenizer: 'tokenizer',
+            dimensions: 384,
+            normalization: 'unitLength',
+            runtimeComponentId: 'runtime',
+            runtimeVersionRequirement: '^1',
+            languageCoverage: ['en', 'nl'],
+            estimatedDiskBytes: 300,
+            estimatedRamBytes: 400,
+          },
+        },
+      ];
+      getSemanticComponentCapabilities.mockResolvedValue({
+        status: 200,
+        data: capabilities,
+        headers: new Headers(),
+      });
+      getSemanticComponentStatus.mockResolvedValue({
+        status: 200,
+        data: status,
+        headers: new Headers(),
+      });
+      listSemanticComponentProfiles.mockResolvedValue({
+        status: 200,
+        data: profiles,
+        headers: new Headers(),
+      });
+      const client = new HttpFileManagerClient();
+
+      await expect(client.getSemanticComponentCapabilities(controller.signal)).resolves.toEqual(
+        capabilities,
+      );
+      await expect(client.getSemanticComponentStatus(controller.signal)).resolves.toEqual(status);
+      await expect(client.listSemanticComponentProfiles(controller.signal)).resolves.toEqual(
+        profiles,
+      );
+      expect(getSemanticComponentCapabilities).toHaveBeenCalledWith({
+        signal: controller.signal,
+      });
+      expect(getSemanticComponentStatus).toHaveBeenCalledWith({ signal: controller.signal });
+      expect(listSemanticComponentProfiles).toHaveBeenCalledWith({ signal: controller.signal });
+    });
+
+    it('passes every semantic lifecycle request to its generated endpoint', async () => {
+      const controller = new AbortController();
+      const options = { signal: controller.signal };
+      const response = (data: unknown, status = 200) => ({
+        status,
+        data,
+        headers: new Headers(),
+      });
+      const offerRequest = { profile: 'compactMultilingual' as const };
+      const acceptRequest = { offerId: 'offer-1' };
+      const removalPlanRequest = { enrolmentId: 'library-1' };
+      const removalConfirmation = { planId: 'removal-plan-1' };
+      const removalPlan = {
+        planId: removalConfirmation.planId,
+        enrolmentId: 'library-1',
+        expected: {
+          indexRecords: 1,
+          extractedFiles: 2,
+          zvecVectors: 3,
+          cacheEntries: 4,
+          conversationEvidence: 5,
+        },
+      };
+      const moveRequest = { destination: '/semantic-data' };
+      const uninstallRequest = { indexDecision: 'retain' as const };
+      const patchRequest = { componentId: 'worker' };
+      const estimate = { documents: 12, sourceBytes: 34 };
+      const importRequest = {
+        sourcePath: '/models/local',
+        modelId: 'local-model',
+        upstreamRevision: 'revision-1',
+        licenseSpdx: 'Apache-2.0',
+        licenseNotice: 'Local fixture',
+        tokenizer: 'tokenizer',
+        dimensions: 384,
+        normalization: 'unitLength' as const,
+        runtimeComponentId: 'runtime',
+        runtimeVersionRequirement: '^1',
+        languageCoverage: ['en'],
+        estimatedDiskBytes: 100,
+        estimatedRamBytes: 200,
+        profile: 'compactEnglish' as const,
+        estimate,
+      };
+      const planRequest = { profile: 'multilingualQuality' as const, estimate };
+      const confirmRequest = { migrationId: 'migration-1' };
+      const checkpointRequest = {
+        migrationId: 'migration-1',
+        completedDocuments: 12,
+        resumeCursor: 'cursor-12',
+      };
+      const completeRequest = { migrationId: 'migration-1' };
+      const offer = {
+        offerId: 'offer-1',
+        catalogRevision: 'catalog-1',
+        profile: 'compactMultilingual',
+        resolvedModel: { modelId: 'model', revision: 'revision' },
+        components: [],
+        embeddingsStayLocal: true,
+        localOnlyDisclosure: 'fixture',
+        dataRoot: '/semantic-data',
+        minimumFreeSpaceReserveBytes: 1,
+      };
+      const plan = {
+        migrationId: 'migration-1',
+        from: null,
+        target: {
+          profile: 'multilingualQuality',
+          identity: { modelId: 'model', revision: 'revision-2' },
+        },
+        estimate,
+        reason: { reason: 'modelChanged' },
+        fullReindex: true,
+        requiresConfirmation: true,
+        resumable: true,
+      };
+      const progress = {
+        migrationId: 'migration-1',
+        completedDocuments: 0,
+        estimate,
+        target: plan.target,
+        reason: plan.reason,
+        resumeCursor: null,
+      };
+      createSemanticComponentInstallationOffer.mockResolvedValue(response(offer));
+      acceptSemanticComponentInstallationOffer.mockResolvedValue(
+        response({ installedArtifactIds: ['worker'] }),
+      );
+      pauseSemanticComponentIndexing.mockResolvedValue(response(undefined, 204));
+      resumeSemanticComponentIndexing.mockResolvedValue(response(undefined, 204));
+      createSemanticComponentIndexRemovalPlan.mockResolvedValue(response(removalPlan));
+      confirmSemanticComponentIndexRemoval.mockResolvedValue(
+        response({
+          enrolmentId: 'library-1',
+          deleted: removalPlan.expected,
+          conversationEvidenceDeleted: true,
+        }),
+      );
+      moveSemanticComponentData.mockResolvedValue(
+        response({
+          source: '/old',
+          destination: '/semantic-data',
+          verifiedBytes: 10,
+          verifiedFileCount: 2,
+        }),
+      );
+      uninstallSemanticComponents.mockResolvedValue(
+        response({ indexDecision: 'retain', removedComponentCount: 3 }),
+      );
+      installSemanticComponentWorkerPatch.mockResolvedValue(response({ receipt: null }));
+      importSemanticComponentLocalModel.mockResolvedValue(response(plan));
+      planSemanticComponentModelMigration.mockResolvedValue(response(plan));
+      confirmSemanticComponentModelMigration.mockResolvedValue(response(progress));
+      checkpointSemanticComponentModelMigration.mockResolvedValue(
+        response({ ...progress, completedDocuments: 12, resumeCursor: 'cursor-12' }),
+      );
+      completeSemanticComponentModelMigration.mockResolvedValue(response(plan.target));
+      const client = new HttpFileManagerClient();
+
+      await client.createSemanticComponentInstallationOffer(offerRequest, controller.signal);
+      await client.acceptSemanticComponentInstallationOffer(acceptRequest, controller.signal);
+      await client.pauseSemanticComponentIndexing(controller.signal);
+      await client.resumeSemanticComponentIndexing(controller.signal);
+      await client.createSemanticComponentIndexRemovalPlan(removalPlanRequest, controller.signal);
+      await client.confirmSemanticComponentIndexRemoval(removalConfirmation, controller.signal);
+      await client.moveSemanticComponentData(moveRequest, controller.signal);
+      await client.uninstallSemanticComponents(uninstallRequest, controller.signal);
+      await client.installSemanticComponentWorkerPatch(patchRequest, controller.signal);
+      await client.importSemanticComponentLocalModel(importRequest, controller.signal);
+      await client.planSemanticComponentModelMigration(planRequest, controller.signal);
+      await client.confirmSemanticComponentModelMigration(confirmRequest, controller.signal);
+      await client.checkpointSemanticComponentModelMigration(checkpointRequest, controller.signal);
+      await client.completeSemanticComponentModelMigration(completeRequest, controller.signal);
+
+      expect(createSemanticComponentInstallationOffer).toHaveBeenCalledWith(offerRequest, options);
+      expect(acceptSemanticComponentInstallationOffer).toHaveBeenCalledWith(acceptRequest, options);
+      expect(pauseSemanticComponentIndexing).toHaveBeenCalledWith(options);
+      expect(resumeSemanticComponentIndexing).toHaveBeenCalledWith(options);
+      expect(createSemanticComponentIndexRemovalPlan).toHaveBeenCalledWith(
+        removalPlanRequest,
+        options,
+      );
+      expect(confirmSemanticComponentIndexRemoval).toHaveBeenCalledWith(
+        removalConfirmation,
+        options,
+      );
+      expect(moveSemanticComponentData).toHaveBeenCalledWith(moveRequest, options);
+      expect(uninstallSemanticComponents).toHaveBeenCalledWith(uninstallRequest, options);
+      expect(installSemanticComponentWorkerPatch).toHaveBeenCalledWith(patchRequest, options);
+      expect(importSemanticComponentLocalModel).toHaveBeenCalledWith(importRequest, options);
+      expect(planSemanticComponentModelMigration).toHaveBeenCalledWith(planRequest, options);
+      expect(confirmSemanticComponentModelMigration).toHaveBeenCalledWith(confirmRequest, options);
+      expect(checkpointSemanticComponentModelMigration).toHaveBeenCalledWith(
+        checkpointRequest,
+        options,
+      );
+      expect(completeSemanticComponentModelMigration).toHaveBeenCalledWith(
+        completeRequest,
+        options,
+      );
     });
   });
 

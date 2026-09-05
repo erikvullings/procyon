@@ -92,7 +92,8 @@ semantic components are not installed.
 
 - [x] 0176 Semantic intelligence architecture epic *(implementation redirected to 0177–0189)*
 - [x] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
-- [ ] 0178 Managed semantic components and model packs *(needs 0058, 0177)*
+- [x] 0178 Managed semantic components and model packs *(needs 0058, 0177; production catalog/model
+  activation remains measurement-gated by 0188)*
 - [ ] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
 - [ ] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
 - [ ] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180)*

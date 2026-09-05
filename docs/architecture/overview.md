@@ -55,6 +55,15 @@ sockets or Windows named pipes. The worker receives scoped opaque identifiers, m
 bounded byte streams, never filesystem paths or provider access. If it is absent or incompatible,
 the ordinary application-service path above remains available.
 
+Optional worker, runtime, and model packages are managed separately by
+`fm-semantic-components`. It verifies a signed catalog and artifact checksums, serializes lifecycle
+mutations across processes, performs resumable atomic installs, retains one working worker for
+rollback, and moves the semantic-data root through pause-copy-verify-switch. The application layer
+owns authority and consent: desktop builds may receive an explicitly injected managed capability,
+browser/server builds only report administrator-provisioned status, and normal construction remains
+inert. A production catalog and concrete default model stay disabled until the evaluation task has
+recorded retrieval quality, latency, licensing, package-size, and index-size measurements.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { NumberInput, Select, Switch, TextInput, ThemeSwitcher } from 'mithril-materialized';
+import type { FileManagerClient } from '../../api/client/file-manager-client';
 import type { Locale } from '../../i18n';
 import { LOCALES, t } from '../../i18n';
 import type { en } from '../../i18n/en';
@@ -17,6 +18,7 @@ import type {
 } from '../../models';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
+import { SemanticComponentManagement } from './semantic-component-management';
 import {
   cloneSettings,
   formatListInput,
@@ -35,6 +37,7 @@ const AVAILABLE_DEFAULT_COLUMNS = [
 ] as const satisfies readonly { readonly id: string; readonly labelKey: keyof typeof en.table }[];
 
 export interface SettingsEditorAttrs {
+  readonly client: FileManagerClient;
   readonly settings: Settings;
   readonly actions: readonly ActionDescriptor[];
   readonly platform: SelectionPlatform;
@@ -442,6 +445,9 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
               );
             }),
           ),
+
+          m('.row', m('h4.fm-settings-section-heading.col.s12', t('semanticComponents', 'title'))),
+          m('.row', m(SemanticComponentManagement, { client: current.client })),
 
           m('.row', m('h4.fm-settings-section-heading.col.s12', t('settings', 'plugins'))),
           m(PluginManagement, {

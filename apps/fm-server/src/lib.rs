@@ -47,6 +47,57 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::runtime::get_runtime_capabilities
         ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::get_semantic_component_capabilities
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::get_semantic_component_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::list_semantic_component_profiles
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::create_semantic_component_installation_offer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::accept_semantic_component_installation_offer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::pause_semantic_component_indexing
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::resume_semantic_component_indexing
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::create_semantic_component_index_removal_plan
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::confirm_semantic_component_index_removal
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::move_semantic_component_data
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::uninstall_semantic_components
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::install_semantic_component_worker_patch
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::import_semantic_component_local_model
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::plan_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::confirm_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::checkpoint_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::complete_semantic_component_model_migration
+        ))
         .routes(utoipa_axum::routes!(routes::settings::get_settings))
         .routes(utoipa_axum::routes!(
             routes::system_location::get_system_locations

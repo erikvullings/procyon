@@ -115,8 +115,9 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
 `PptxPreviewService` (bounded conversion to retained PDF),
-`ConnectionFacade`, `PluginManager`, and `SemanticService`. The semantic service is optional and
-lazy: its fake or local-IPC capability is injected explicitly, while ordinary
+`ConnectionFacade`, `PluginManager`, `SemanticService`, and `SemanticComponentService`. Both
+semantic services are optional and lazy: their fake, local-IPC, or managed capabilities are injected
+explicitly, while ordinary
 `FileManagerService` construction never starts or connects to a worker. Extend the owning service
 when a feature fits one of these capabilities; add a new service only for a genuinely distinct
 responsibility. Do not move logic back into the facade or let capability services depend on
@@ -130,6 +131,10 @@ on macOS/Linux and owner-only named pipes on Windows, with authenticated session
 message, stream, concurrency, and deadline limits. Procyon retains filesystem authority and sends
 only opaque tenant/library/document identifiers, structured metadata, and bounded byte streams.
 Keep model/runtime selection, Zvec storage, and document conversion out of this boundary crate.
+`fm-semantic-components` owns signed catalogs and the optional worker/runtime/model package
+lifecycle. Its managed capability must receive a trusted catalog and host adapters explicitly;
+normal construction remains inert, browser/server authority is read-only, and no concrete default
+model is selected before task 0188's measurements.
 
 ### Runtime adapters (frontend)
 

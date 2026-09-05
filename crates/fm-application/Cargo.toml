@@ -29,6 +29,7 @@ fm-plugin-runtime.workspace = true
 fm-pptx-renderer.workspace = true
 fm-search.workspace = true
 fm-search-acceleration.workspace = true
+fm-semantic-components.workspace = true
 fm-semantic-protocol.workspace = true
 fm-semantic-worker.workspace = true
 fm-settings.workspace = true
@@ -65,6 +66,7 @@ workspace = true
 
 [dev-dependencies]
 base64.workspace = true
+ed25519-dalek.workspace = true
 fm-ssh.workspace = true
 git2.workspace = true
 lopdf.workspace = true

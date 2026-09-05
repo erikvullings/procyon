@@ -60,6 +60,7 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-plugin-runtime", 2),
     ("fm-pptx-renderer", 2),
     ("fm-search", 2),
+    ("fm-semantic-components", 2),
     ("fm-settings", 2),
     ("fm-vcs-status", 2),
     ("fm-vfs-local", 2),
@@ -403,6 +404,7 @@ mod tests {
         assert_eq!(layer_of("fm-domain"), Some(0));
         assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
         assert_eq!(layer_of("fm-semantic-worker"), Some(1));
+        assert_eq!(layer_of("fm-semantic-components"), Some(2));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));
         assert!(layer_of("fm-server") > layer_of("fm-application"));
         assert_eq!(layer_of("serde"), None);

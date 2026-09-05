@@ -18,6 +18,7 @@ pub(crate) mod operation;
 pub(crate) mod plugin;
 pub(crate) mod runtime;
 pub(crate) mod search;
+pub(crate) mod semantic_components;
 pub(crate) mod settings;
 pub(crate) mod system_location;
 pub(crate) mod thumbnails;

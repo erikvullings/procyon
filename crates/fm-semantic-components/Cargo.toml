@@ -1,0 +1,26 @@
+[package]
+name = "fm-semantic-components"
+description = "Managed semantic component catalog, installation, and data lifecycle engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+ed25519-dalek.workspace = true
+fs2.workspace = true
+libc.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

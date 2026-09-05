@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { ActionDescriptor, PluginDescriptor, Settings } from '../../models';
 import { SettingsEditor } from './settings-editor';
 
@@ -72,6 +73,7 @@ function mountEditor(overrides: Partial<Parameters<typeof SettingsEditor>[0]['at
   const onCancel = vi.fn();
   const onTogglePlugin = vi.fn();
   const onRequestPluginLogs = vi.fn();
+  const client = new MockFileManagerClient();
   m.mount(root, {
     view: () =>
       m(SettingsEditor, {
@@ -79,6 +81,7 @@ function mountEditor(overrides: Partial<Parameters<typeof SettingsEditor>[0]['at
         actions,
         platform: 'windows',
         runtime: 'desktop',
+        client,
         plugins: [],
         onPreview,
         onSave,
@@ -89,7 +92,7 @@ function mountEditor(overrides: Partial<Parameters<typeof SettingsEditor>[0]['at
       }),
   });
   m.redraw.sync();
-  return { onPreview, onSave, onCancel, onTogglePlugin, onRequestPluginLogs };
+  return { client, onPreview, onSave, onCancel, onTogglePlugin, onRequestPluginLogs };
 }
 
 function numberInput(label: string): HTMLInputElement {
@@ -107,6 +110,15 @@ function fireChange(input: HTMLInputElement, value: string): void {
 }
 
 describe('SettingsEditor', () => {
+  it('embeds semantic component management with the selected runtime client', async () => {
+    const { client } = mountEditor();
+    const status = vi.spyOn(client, 'getSemanticComponentStatus');
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
+    expect(root.textContent).toContain('Semantic components');
+    expect(status).toHaveBeenCalledOnce();
+  });
+
   it('renders initial appearance values from the loaded settings', () => {
     mountEditor({ settings: fixtureSettings({ fontSize: 17, rowHeight: 30 }) });
 

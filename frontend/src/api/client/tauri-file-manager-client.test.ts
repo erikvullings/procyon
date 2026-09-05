@@ -37,6 +37,8 @@ function fixtureCapabilities() {
     plugins: false,
     revealInSystemFileManager: true,
     runtime: 'tauri',
+    semanticComponentAuthority: 'desktopManaged',
+    semanticRuntimeExecutableDownload: 'directDistribution',
     serverAdministration: false,
     systemTrash: true,
   };
@@ -263,6 +265,102 @@ describe('TauriFileManagerClient', () => {
       const client = new TauriFileManagerClient();
 
       await expect(client.getRuntimeCapabilities()).rejects.toBe(commandError);
+    });
+  });
+
+  describe('semantic component transport', () => {
+    it('invokes all read commands using their exact registered names', async () => {
+      const client = new TauriFileManagerClient();
+      invoke
+        .mockResolvedValueOnce({
+          authority: 'deterministicMock',
+          runtimeExecutableDownload: 'simulated',
+          operations: ['viewStatus'],
+        })
+        .mockResolvedValueOnce({
+          lifecycle: { state: 'absent' },
+          components: [],
+          diskUse: { categories: [], totalBytes: 0 },
+        })
+        .mockResolvedValueOnce([]);
+
+      await client.getSemanticComponentCapabilities();
+      await client.getSemanticComponentStatus();
+      await client.listSemanticComponentProfiles();
+
+      expect(invoke).toHaveBeenNthCalledWith(1, 'get_semantic_component_capabilities');
+      expect(invoke).toHaveBeenNthCalledWith(2, 'get_semantic_component_status');
+      expect(invoke).toHaveBeenNthCalledWith(3, 'list_semantic_component_profiles');
+    });
+
+    it('invokes every lifecycle command with the request wrapper expected by Rust', async () => {
+      invoke.mockResolvedValue(undefined);
+      const client = new TauriFileManagerClient();
+      const offerRequest = { profile: 'compactMultilingual' as const };
+      const acceptRequest = { offerId: 'offer-1' };
+      const removalPlanRequest = { enrolmentId: 'library-1' };
+      const removalConfirmation = { planId: 'removal-plan-1' };
+      const moveRequest = { destination: '/semantic-data' };
+      const uninstallRequest = { indexDecision: 'delete' as const };
+      const patchRequest = { componentId: 'worker' };
+      const estimate = { documents: 12, sourceBytes: 34 };
+      const importRequest = {
+        sourcePath: '/models/local',
+        modelId: 'local-model',
+        upstreamRevision: 'revision-1',
+        licenseSpdx: 'Apache-2.0',
+        licenseNotice: 'Local fixture',
+        tokenizer: 'tokenizer',
+        dimensions: 384,
+        normalization: 'unitLength' as const,
+        runtimeComponentId: 'runtime',
+        runtimeVersionRequirement: '^1',
+        languageCoverage: ['en'],
+        estimatedDiskBytes: 100,
+        estimatedRamBytes: 200,
+        profile: 'compactEnglish' as const,
+        estimate,
+      };
+      const planRequest = { profile: 'multilingualQuality' as const, estimate };
+      const confirmRequest = { migrationId: 'migration-1' };
+      const checkpointRequest = {
+        migrationId: 'migration-1',
+        completedDocuments: 12,
+        resumeCursor: 'cursor-12',
+      };
+      const completeRequest = { migrationId: 'migration-1' };
+
+      await client.createSemanticComponentInstallationOffer(offerRequest);
+      await client.acceptSemanticComponentInstallationOffer(acceptRequest);
+      await client.pauseSemanticComponentIndexing();
+      await client.resumeSemanticComponentIndexing();
+      await client.createSemanticComponentIndexRemovalPlan(removalPlanRequest);
+      await client.confirmSemanticComponentIndexRemoval(removalConfirmation);
+      await client.moveSemanticComponentData(moveRequest);
+      await client.uninstallSemanticComponents(uninstallRequest);
+      await client.installSemanticComponentWorkerPatch(patchRequest);
+      await client.importSemanticComponentLocalModel(importRequest);
+      await client.planSemanticComponentModelMigration(planRequest);
+      await client.confirmSemanticComponentModelMigration(confirmRequest);
+      await client.checkpointSemanticComponentModelMigration(checkpointRequest);
+      await client.completeSemanticComponentModelMigration(completeRequest);
+
+      expect(invoke.mock.calls).toEqual([
+        ['create_semantic_component_installation_offer', { request: offerRequest }],
+        ['accept_semantic_component_installation_offer', { request: acceptRequest }],
+        ['pause_semantic_component_indexing'],
+        ['resume_semantic_component_indexing'],
+        ['create_semantic_component_index_removal_plan', { request: removalPlanRequest }],
+        ['confirm_semantic_component_index_removal', { request: removalConfirmation }],
+        ['move_semantic_component_data', { request: moveRequest }],
+        ['uninstall_semantic_components', { request: uninstallRequest }],
+        ['install_semantic_component_worker_patch', { request: patchRequest }],
+        ['import_semantic_component_local_model', { request: importRequest }],
+        ['plan_semantic_component_model_migration', { request: planRequest }],
+        ['confirm_semantic_component_model_migration', { request: confirmRequest }],
+        ['checkpoint_semantic_component_model_migration', { request: checkpointRequest }],
+        ['complete_semantic_component_model_migration', { request: completeRequest }],
+      ]);
     });
   });
 

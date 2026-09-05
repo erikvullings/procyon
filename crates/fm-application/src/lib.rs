@@ -34,6 +34,8 @@ mod remote_terminal;
 mod s3;
 mod search_comparison_coordinator;
 pub mod semantic;
+pub mod semantic_component_mapping;
+pub mod semantic_components;
 mod service;
 mod settings_mapping;
 mod ssh;

@@ -1,4 +1,5 @@
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -10,13 +11,19 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DiagnosticsResult,
   DirectorySnapshot,
@@ -38,9 +45,12 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
   LoadEditableFileRequest,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -48,6 +58,7 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginIconTheme,
   PluginId,
@@ -70,6 +81,19 @@ import type {
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -90,6 +114,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
   UpdateStructuredViewRequest,
@@ -180,6 +205,23 @@ import {
   cancelSearch as requestSearchCancel,
   searchInFile as requestSearchInFile,
   startSearch as requestSearchStart,
+  getSemanticComponentCapabilities as requestSemanticComponentCapabilities,
+  moveSemanticComponentData as requestSemanticComponentDataMove,
+  pauseSemanticComponentIndexing as requestSemanticComponentIndexingPause,
+  resumeSemanticComponentIndexing as requestSemanticComponentIndexingResume,
+  confirmSemanticComponentIndexRemoval as requestSemanticComponentIndexRemovalConfirmation,
+  createSemanticComponentIndexRemovalPlan as requestSemanticComponentIndexRemovalPlanCreation,
+  getSemanticComponentStatus as requestSemanticComponentStatus,
+  installSemanticComponentWorkerPatch as requestSemanticComponentWorkerPatch,
+  acceptSemanticComponentInstallationOffer as requestSemanticInstallationOfferAcceptance,
+  createSemanticComponentInstallationOffer as requestSemanticInstallationOfferCreation,
+  importSemanticComponentLocalModel as requestSemanticLocalModelImport,
+  checkpointSemanticComponentModelMigration as requestSemanticModelMigrationCheckpoint,
+  completeSemanticComponentModelMigration as requestSemanticModelMigrationCompletion,
+  confirmSemanticComponentModelMigration as requestSemanticModelMigrationConfirmation,
+  planSemanticComponentModelMigration as requestSemanticModelMigrationPlan,
+  listSemanticComponentProfiles as requestSemanticProfiles,
+  uninstallSemanticComponents as requestSemanticUninstall,
   getSettings as requestSettings,
   updateSettings as requestSettingsUpdate,
   getSpotlightComment as requestSpotlightComment,
@@ -261,6 +303,245 @@ export class HttpFileManagerClient implements FileManagerClient {
     const response = await requestRuntimeCapabilities(
       signal !== undefined ? { signal } : undefined,
     );
+    return response.data;
+  }
+
+  async getSemanticComponentCapabilities(
+    signal?: AbortSignal,
+  ): Promise<SemanticComponentCapabilities> {
+    const response = await requestSemanticComponentCapabilities(
+      signal === undefined ? undefined : { signal },
+    );
+    return response.data;
+  }
+
+  async getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    const response = await requestSemanticComponentStatus(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getSemanticComponentStatus response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    const response = await requestSemanticProfiles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected listSemanticComponentProfiles response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    const response = await requestSemanticInstallationOfferCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected createSemanticComponentInstallationOffer response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    const response = await requestSemanticInstallationOfferAcceptance(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected acceptSemanticComponentInstallationOffer response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    const response = await requestSemanticComponentIndexingPause(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(
+        `Unexpected pauseSemanticComponentIndexing response status: ${response.status}`,
+      );
+    }
+  }
+
+  async resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    const response = await requestSemanticComponentIndexingResume(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(
+        `Unexpected resumeSemanticComponentIndexing response status: ${response.status}`,
+      );
+    }
+  }
+
+  async createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    const response = await requestSemanticComponentIndexRemovalPlanCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected createSemanticComponentIndexRemovalPlan response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    const response = await requestSemanticComponentIndexRemovalConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected confirmSemanticComponentIndexRemoval response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    const response = await requestSemanticComponentDataMove(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected moveSemanticComponentData response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    const response = await requestSemanticUninstall(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected uninstallSemanticComponents response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    const response = await requestSemanticComponentWorkerPatch(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected installSemanticComponentWorkerPatch response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    const response = await requestSemanticLocalModelImport(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected importSemanticComponentLocalModel response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    const response = await requestSemanticModelMigrationPlan(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected planSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    const response = await requestSemanticModelMigrationConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected confirmSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    const response = await requestSemanticModelMigrationCheckpoint(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected checkpointSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    const response = await requestSemanticModelMigrationCompletion(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected completeSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
     return response.data;
   }
 

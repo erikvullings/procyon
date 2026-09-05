@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::{SemanticComponentAuthorityDto, SemanticRuntimeExecutableDownloadDto};
+
 /// Which host is serving the application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +52,9 @@ pub enum PlatformKindDto {
     "serverAdministration": false,
     "extendedAttributes": false,
     "finderTags": false,
-    "finderAliases": false
+    "finderAliases": false,
+    "semanticComponentAuthority": "administratorProvisioned",
+    "semanticRuntimeExecutableDownload": "administratorProvisioned"
 }))]
 pub struct RuntimeCapabilitiesDto {
     /// Which host is serving the application.
@@ -86,6 +90,10 @@ pub struct RuntimeCapabilitiesDto {
     pub finder_tags: bool,
     /// Whether macOS Finder alias files can be resolved to their targets.
     pub finder_aliases: bool,
+    /// Principal that owns semantic component lifecycle changes.
+    pub semantic_component_authority: SemanticComponentAuthorityDto,
+    /// Executable semantic component download policy for this distribution.
+    pub semantic_runtime_executable_download: SemanticRuntimeExecutableDownloadDto,
 }
 
 #[cfg(test)]
@@ -110,6 +118,9 @@ mod tests {
             extended_attributes: false,
             finder_tags: false,
             finder_aliases: false,
+            semantic_component_authority: SemanticComponentAuthorityDto::AdministratorProvisioned,
+            semantic_runtime_executable_download:
+                SemanticRuntimeExecutableDownloadDto::AdministratorProvisioned,
         }
     }
 
@@ -138,6 +149,8 @@ mod tests {
             "\"extendedAttributes\"",
             "\"finderTags\"",
             "\"finderAliases\"",
+            "\"semanticComponentAuthority\"",
+            "\"semanticRuntimeExecutableDownload\"",
         ] {
             assert!(json.contains(field), "expected {json} to contain {field}");
         }
@@ -156,6 +169,20 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&RuntimeKindDto::Mock).unwrap(),
             "\"mock\""
+        );
+    }
+
+    #[test]
+    fn runtime_capabilities_report_semantic_authority_and_download_policy() {
+        let capabilities = sample();
+
+        assert_eq!(
+            capabilities.semantic_component_authority,
+            crate::SemanticComponentAuthorityDto::AdministratorProvisioned
+        );
+        assert_eq!(
+            capabilities.semantic_runtime_executable_download,
+            crate::SemanticRuntimeExecutableDownloadDto::AdministratorProvisioned
         );
     }
 

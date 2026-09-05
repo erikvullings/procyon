@@ -1,4 +1,5 @@
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -10,13 +11,19 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DiagnosticsResult,
   DirectorySnapshot,
@@ -37,10 +44,13 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -48,6 +58,7 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
@@ -69,6 +80,19 @@ import type {
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -89,6 +113,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
   UpdateStructuredViewRequest,
@@ -128,6 +153,59 @@ export interface NativeFileDrop {
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities>;
+  getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities>;
+  getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus>;
+  listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]>;
+  createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer>;
+  acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt>;
+  pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void>;
+  resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void>;
+  createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan>;
+  confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt>;
+  moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt>;
+  uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt>;
+  installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse>;
+  importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan>;
+  planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan>;
+  confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress>;
+  checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress>;
+  completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection>;
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]>;
   getVolumes(signal?: AbortSignal): Promise<Volume[]>;
   /** The current user's home directory as a native path, for expanding a leading `~` typed

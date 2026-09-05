@@ -19,7 +19,10 @@ pub(crate) async fn get_diagnostics(
     State(state): State<crate::state::AppState>,
 ) -> Json<DiagnosticsDto> {
     // Get runtime capabilities from the service
-    let runtime_capabilities = state.service.runtime_capabilities();
+    let runtime_capabilities = state
+        .service
+        .runtime_capabilities_with_semantic_components()
+        .await;
 
     // Build plugin status
     let plugins = state.service.list_plugins();

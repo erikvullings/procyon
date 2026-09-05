@@ -774,6 +774,310 @@ main.fm-workspace {
   cursor: pointer;
 }
 
+.fm-semantic-management {
+  width: 100%;
+  min-width: 0;
+  padding: 0 0.75rem;
+  color: var(--fm-text);
+}
+
+.fm-semantic-management h6 {
+  margin: 0.65rem 0 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.fm-semantic-loading {
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-loading-line {
+  width: min(18rem, 70%);
+  height: 0.45rem;
+  border-radius: var(--fm-radius);
+  margin-top: 0.5rem;
+  background: var(--fm-selection-inactive);
+}
+
+.fm-semantic-load-error,
+.fm-semantic-action-error {
+  color: var(--fm-error);
+}
+
+.fm-semantic-action-message {
+  color: var(--fm-success);
+}
+
+.fm-semantic-authority-note,
+.fm-semantic-lifecycle {
+  margin: 0.35rem 0 0.65rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-lifecycle {
+  font-weight: 600;
+  color: var(--fm-text);
+}
+
+.fm-semantic-lifecycle[role="alert"] {
+  color: var(--fm-warning);
+}
+
+.fm-semantic-status-detail {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.fm-semantic-status-section {
+  border-top: 1px solid var(--fm-border);
+  margin-top: 0.65rem;
+  padding-top: 0.35rem;
+}
+
+.fm-semantic-definition-list,
+.fm-semantic-disk-use {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.45fr) minmax(0, 1fr);
+  gap: 0.2rem 0.75rem;
+  margin: 0.35rem 0;
+}
+
+.fm-semantic-definition-list dt,
+.fm-semantic-disk-use dt {
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-definition-list dd,
+.fm-semantic-disk-use dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-semantic-installed-components,
+.fm-semantic-plan-properties {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-semantic-installed-component {
+  display: grid;
+  grid-template-columns: minmax(5rem, 0.35fr) minmax(8rem, 1fr) auto;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-semantic-installed-component:last-child {
+  border-bottom: 0;
+}
+
+.fm-semantic-disk-total {
+  margin: 0.35rem 0;
+}
+
+.fm-semantic-install,
+.fm-semantic-profile-choices,
+.fm-semantic-form-grid,
+.fm-semantic-inline-form,
+.fm-semantic-uninstall-options {
+  min-width: 0;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.55rem 0.65rem;
+  margin: 0.65rem 0 0;
+}
+
+.fm-semantic-install > legend,
+.fm-semantic-profile-choices > legend,
+.fm-semantic-form-grid > legend,
+.fm-semantic-inline-form > legend,
+.fm-semantic-uninstall-options > legend {
+  padding: 0 0.3rem;
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-semantic-profile-choices {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fm-semantic-profile-option,
+.fm-semantic-uninstall-options > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+.fm-semantic-profile-copy,
+.fm-semantic-uninstall-options label > span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.fm-semantic-profile-copy > span:last-child,
+.fm-semantic-uninstall-options small,
+.fm-semantic-empty,
+.fm-semantic-consent-copy {
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-recommended {
+  width: fit-content;
+  color: var(--fm-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.fm-semantic-offer,
+.fm-semantic-actions,
+.fm-semantic-migration-progress-section,
+.fm-semantic-migration-plan {
+  border-top: 1px solid var(--fm-border);
+  margin-top: 0.75rem;
+  padding-top: 0.4rem;
+}
+
+.fm-semantic-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.fm-semantic-component-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.fm-semantic-component-table th,
+.fm-semantic-component-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--fm-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.fm-semantic-component-table th {
+  color: var(--fm-text-muted);
+  font-weight: 600;
+}
+
+.fm-semantic-component-table small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fm-semantic-action-details {
+  border-top: 1px solid var(--fm-border);
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+}
+
+.fm-semantic-action-details > summary {
+  width: fit-content;
+  color: var(--fm-accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fm-semantic-action-details > summary:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
+.fm-semantic-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.75rem;
+}
+
+.fm-semantic-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-form-grid > .fm-semantic-profile-choices,
+.fm-semantic-form-grid > .fm-semantic-confirmation,
+.fm-semantic-form-grid > button {
+  grid-column: 1 / -1;
+}
+
+.fm-semantic-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.fm-semantic-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+  color: var(--fm-text-muted);
+  font-size: 0.82rem;
+}
+
+.fm-semantic-field input,
+.fm-semantic-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1.9rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  padding: 0.25rem 0.4rem;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-semantic-field input:focus,
+.fm-semantic-field select:focus {
+  border-color: var(--fm-accent);
+  outline: 1px solid var(--fm-accent);
+}
+
+.fm-semantic-uninstall-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fm-semantic-uninstall-confirm {
+  width: fit-content;
+}
+
+.fm-semantic-migration-progress {
+  width: min(24rem, 100%);
+  accent-color: var(--fm-accent);
+}
+
+@media (max-width: 640px) {
+  .fm-semantic-definition-list,
+  .fm-semantic-disk-use,
+  .fm-semantic-installed-component,
+  .fm-semantic-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fm-semantic-definition-list dd,
+  .fm-semantic-disk-use dd {
+    margin-bottom: 0.25rem;
+  }
+}
+
 .fm-workspace-disclosure {
   display: contents;
 }

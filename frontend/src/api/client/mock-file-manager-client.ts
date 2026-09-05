@@ -2,6 +2,7 @@ import actionFixtures from '../../../../fixtures/mock-responses/actions.json';
 import directoryFixtures from '../../../../fixtures/mock-responses/directories.json';
 import pluginFixtures from '../../../../fixtures/mock-responses/plugins.json';
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -13,6 +14,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumEntry,
   ChecksumFile,
@@ -22,9 +24,14 @@ import type {
   ComparisonEntrySide,
   ComparisonPage,
   ComparisonStatus,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DiagnosticsResult,
   DirectorySnapshot,
@@ -46,10 +53,13 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -57,6 +67,7 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
@@ -81,6 +92,25 @@ import type {
   SearchInFileResult,
   SearchQuery,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentLifecycle,
+  SemanticComponentOperation,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticDiskUse,
+  SemanticIndexRecordCounts,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticModelIdentity,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticProfile,
+  SemanticUninstallReceipt,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -101,6 +131,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
   UpdateStructuredViewRequest,
@@ -150,6 +181,23 @@ const THUMBNAILABLE_MOCK_EXTENSIONS = new Set([
 
 export type MockClientMethod =
   | 'getRuntimeCapabilities'
+  | 'getSemanticComponentCapabilities'
+  | 'getSemanticComponentStatus'
+  | 'listSemanticComponentProfiles'
+  | 'createSemanticComponentInstallationOffer'
+  | 'acceptSemanticComponentInstallationOffer'
+  | 'pauseSemanticComponentIndexing'
+  | 'resumeSemanticComponentIndexing'
+  | 'createSemanticComponentIndexRemovalPlan'
+  | 'confirmSemanticComponentIndexRemoval'
+  | 'moveSemanticComponentData'
+  | 'uninstallSemanticComponents'
+  | 'installSemanticComponentWorkerPatch'
+  | 'importSemanticComponentLocalModel'
+  | 'planSemanticComponentModelMigration'
+  | 'confirmSemanticComponentModelMigration'
+  | 'checkpointSemanticComponentModelMigration'
+  | 'completeSemanticComponentModelMigration'
   | 'getDiagnostics'
   | 'getSystemLocations'
   | 'getVolumes'
@@ -236,6 +284,19 @@ export type MockClientMethod =
   | 'getOneDriveAuthorizationAttempt'
   | 'cancelOneDriveAuthorization';
 
+export type MockSemanticLifecycle =
+  | 'unavailable'
+  | 'absent'
+  | 'offered'
+  | 'downloadingResumable'
+  | 'installedEnabled'
+  | 'paused'
+  | 'migrating'
+  | 'updateFailedRolledBack'
+  | 'lowDisk'
+  | 'uninstalledRetain'
+  | 'uninstalledDelete';
+
 export interface MockFileManagerClientOptions {
   pageSize?: number;
   seed?: number;
@@ -243,6 +304,7 @@ export interface MockFileManagerClientOptions {
   latencyMs?: number;
   failures?: Partial<Record<MockClientMethod, Error>>;
   nativeIconExtensions?: readonly string[];
+  semanticLifecycle?: MockSemanticLifecycle;
 }
 
 function fixtureEntry(
@@ -684,6 +746,300 @@ function evaluateMockConnectionStatus(connection: Connection): Connection['statu
   return 'connected';
 }
 
+const SEMANTIC_OPERATIONS: readonly SemanticComponentOperation[] = [
+  'viewStatus',
+  'viewCatalog',
+  'createInstallationOffer',
+  'installOrEnable',
+  'installWorkerPatch',
+  'pauseIndexing',
+  'resumeIndexing',
+  'removeIndex',
+  'moveData',
+  'uninstallComponents',
+  'importLocalModel',
+  'planModelMigration',
+  'confirmModelMigration',
+  'checkpointModelMigration',
+  'completeModelMigration',
+];
+
+const MOCK_SEMANTIC_ENROLMENT_INVENTORY: Readonly<Record<string, SemanticIndexRecordCounts>> = {
+  'enrolment-1': {
+    indexRecords: 3,
+    extractedFiles: 2,
+    zvecVectors: 3,
+    cacheEntries: 1,
+    conversationEvidence: 2,
+  },
+  'library-1': {
+    indexRecords: 7,
+    extractedFiles: 6,
+    zvecVectors: 5,
+    cacheEntries: 4,
+    conversationEvidence: 3,
+  },
+};
+
+function sameSemanticIndexCounts(
+  left: SemanticIndexRecordCounts,
+  right: SemanticIndexRecordCounts,
+): boolean {
+  return (
+    left.indexRecords === right.indexRecords &&
+    left.extractedFiles === right.extractedFiles &&
+    left.zvecVectors === right.zvecVectors &&
+    left.cacheEntries === right.cacheEntries &&
+    left.conversationEvidence === right.conversationEvidence
+  );
+}
+
+function mockSemanticIdentity(profile: SemanticProfile): SemanticModelIdentity {
+  const suffix = {
+    compactMultilingual: 'compact-multilingual',
+    compactEnglish: 'compact-english',
+    multilingualQuality: 'multilingual-quality',
+  }[profile];
+  return {
+    modelId: `mock-${suffix}`,
+    revision: `mock-${suffix}-revision`,
+  };
+}
+
+function mockSemanticSelection(profile: SemanticProfile): SemanticModelSelection {
+  return { profile, identity: mockSemanticIdentity(profile) };
+}
+
+function mockSemanticProfiles(): SemanticModelProfile[] {
+  const profiles: readonly SemanticProfile[] = [
+    'compactMultilingual',
+    'compactEnglish',
+    'multilingualQuality',
+  ];
+  return profiles.map((profile) => {
+    const identity = mockSemanticIdentity(profile);
+    return {
+      profile,
+      recommended: profile === 'compactMultilingual',
+      explanation: `Deterministic ${profile} mock profile.`,
+      resolvedModel: identity,
+      metadata: {
+        identity,
+        license: {
+          spdx: 'MIT',
+          notice: 'Deterministic mock model; no package is downloaded.',
+        },
+        tokenizer: `mock-${profile}-tokenizer`,
+        dimensions: profile === 'multilingualQuality' ? 768 : 384,
+        normalization: 'unitLength',
+        runtimeComponentId: 'mock-runtime',
+        runtimeVersionRequirement: '^1.0',
+        languageCoverage: profile === 'compactEnglish' ? ['en'] : ['en', 'nl'],
+        estimatedDiskBytes: profile === 'multilingualQuality' ? 600 : 300,
+        estimatedRamBytes: profile === 'multilingualQuality' ? 800 : 400,
+      },
+    };
+  });
+}
+
+function mockSemanticInstalledComponents(): SemanticComponentStatus['components'] {
+  return [
+    {
+      artifactId: 'mock-worker-artifact',
+      componentId: 'mock-worker',
+      kind: 'worker',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 60,
+    },
+    {
+      artifactId: 'mock-runtime-artifact',
+      componentId: 'mock-runtime',
+      kind: 'runtime',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 70,
+    },
+    {
+      artifactId: 'mock-model-artifact',
+      componentId: 'mock-model',
+      kind: 'model',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 300,
+    },
+  ];
+}
+
+function emptySemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 0 },
+      { category: 'extracted', bytes: 0 },
+      { category: 'zvec', bytes: 0 },
+      { category: 'embeddingCache', bytes: 0 },
+      { category: 'models', bytes: 0 },
+      { category: 'workers', bytes: 0 },
+    ],
+    totalBytes: 0,
+  };
+}
+
+function installedSemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 1 },
+      { category: 'extracted', bytes: 0 },
+      { category: 'zvec', bytes: 0 },
+      { category: 'embeddingCache', bytes: 0 },
+      { category: 'models', bytes: 300 },
+      { category: 'workers', bytes: 130 },
+    ],
+    totalBytes: 431,
+  };
+}
+
+function retainedSemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 1 },
+      { category: 'extracted', bytes: 10 },
+      { category: 'zvec', bytes: 30 },
+      { category: 'embeddingCache', bytes: 10 },
+      { category: 'models', bytes: 0 },
+      { category: 'workers', bytes: 0 },
+    ],
+    totalBytes: 51,
+  };
+}
+
+function mockSemanticMigrationProgress(
+  migrationId = 'mock-scenario-migration',
+  completedDocuments = 4,
+  estimate = { documents: 10, sourceBytes: 100 },
+  target = mockSemanticSelection('multilingualQuality'),
+  resumeCursor: string | null = 'mock-resume-cursor',
+): SemanticModelMigrationProgress {
+  return {
+    migrationId,
+    completedDocuments,
+    estimate,
+    target,
+    reason: { reason: 'modelChanged' },
+    resumeCursor,
+  };
+}
+
+function mockSemanticStatus(lifecycleName: MockSemanticLifecycle): SemanticComponentStatus {
+  const installed =
+    lifecycleName === 'installedEnabled' ||
+    lifecycleName === 'paused' ||
+    lifecycleName === 'migrating' ||
+    lifecycleName === 'updateFailedRolledBack';
+  const progress = lifecycleName === 'migrating' ? mockSemanticMigrationProgress() : undefined;
+  const lifecycle: SemanticComponentLifecycle = (() => {
+    switch (lifecycleName) {
+      case 'unavailable':
+        return { state: 'unavailable' };
+      case 'absent':
+        return { state: 'absent' };
+      case 'offered':
+        return { state: 'offered', offerId: 'mock-scenario-offer' };
+      case 'downloadingResumable':
+        return {
+          state: 'downloading',
+          downloadedBytes: 160,
+          totalBytes: 400,
+          resumable: true,
+        };
+      case 'installedEnabled':
+        return { state: 'installedEnabled' };
+      case 'paused':
+        return { state: 'paused' };
+      case 'migrating':
+        return { state: 'migrating', progress: progress as SemanticModelMigrationProgress };
+      case 'updateFailedRolledBack':
+        return {
+          state: 'updateFailedRolledBack',
+          failedVersion: '1.0.1',
+          activeVersion: '1.0.0',
+        };
+      case 'lowDisk':
+        return { state: 'lowDisk', availableBytes: 512, requiredBytes: 1_024 };
+      case 'uninstalledRetain':
+        return { state: 'uninstalled', indexDecision: 'retain' };
+      case 'uninstalledDelete':
+        return { state: 'uninstalled', indexDecision: 'delete' };
+    }
+  })();
+  const retainsIndex = lifecycleName === 'uninstalledRetain';
+  return {
+    lifecycle,
+    dataRoot: lifecycleName === 'unavailable' ? null : 'mock/semantic',
+    activeModel: installed || retainsIndex ? mockSemanticSelection('compactMultilingual') : null,
+    migration: progress ?? null,
+    components: installed ? mockSemanticInstalledComponents() : [],
+    diskUse: installed
+      ? installedSemanticDiskUse()
+      : retainsIndex
+        ? retainedSemanticDiskUse()
+        : emptySemanticDiskUse(),
+  };
+}
+
+function mockSemanticOffer(offerId: string, profile: SemanticProfile): SemanticInstallationOffer {
+  const resolvedModel = mockSemanticIdentity(profile);
+  const license = {
+    spdx: 'MIT',
+    notice: 'Deterministic mock component; no package is downloaded.',
+  };
+  return {
+    offerId,
+    catalogRevision: 'mock-signed-catalog-revision',
+    profile,
+    resolvedModel,
+    components: [
+      {
+        artifactId: 'mock-worker-artifact',
+        componentId: 'mock-worker',
+        kind: 'worker',
+        model: null,
+        version: '1.0.0',
+        license,
+        downloadBytes: 100,
+        estimatedInstalledBytes: 200,
+        estimatedRamBytes: 50,
+      },
+      {
+        artifactId: 'mock-runtime-artifact',
+        componentId: 'mock-runtime',
+        kind: 'runtime',
+        model: null,
+        version: '1.0.0',
+        license,
+        downloadBytes: 100,
+        estimatedInstalledBytes: 200,
+        estimatedRamBytes: 100,
+      },
+      {
+        artifactId: 'mock-model-artifact',
+        componentId: 'mock-model',
+        kind: 'model',
+        model: resolvedModel,
+        version: '1.0.0',
+        license,
+        downloadBytes: 200,
+        estimatedInstalledBytes: 300,
+        estimatedRamBytes: 400,
+      },
+    ],
+    embeddingsStayLocal: true,
+    localOnlyDisclosure: 'Embedding inference and semantic index data stay on this device.',
+    dataRoot: 'mock/semantic',
+    minimumFreeSpaceReserveBytes: 1_024,
+  };
+}
+
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
@@ -698,6 +1054,19 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly latencyMs: number;
   private readonly failures: Partial<Record<MockClientMethod, Error>>;
   private readonly nativeIconExtensions: ReadonlySet<string>;
+  private semanticStatus: SemanticComponentStatus;
+  private semanticOfferSequence = 0;
+  private semanticIndexRemovalSequence = 0;
+  private semanticMigrationSequence = 0;
+  private readonly semanticOffers = new Map<string, SemanticInstallationOffer>();
+  private readonly semanticEnrolmentInventory = new Map(
+    Object.entries(MOCK_SEMANTIC_ENROLMENT_INVENTORY).map(([enrolmentId, counts]) => [
+      enrolmentId,
+      structuredClone(counts),
+    ]),
+  );
+  private readonly semanticIndexRemovalPlans = new Map<string, SemanticIndexRemovalPlan>();
+  private readonly semanticMigrationPlans = new Map<string, SemanticModelMigrationPlan>();
   private readonly finderTagsByUri = new Map<string, FinderTags>();
   private readonly spotlightCommentsByUri = new Map<string, SpotlightComment>();
   private readonly listeners = new Set<(event: BackendEvent) => void>();
@@ -804,6 +1173,29 @@ export class MockFileManagerClient implements FileManagerClient {
     this.nativeIconExtensions = new Set(
       options.nativeIconExtensions?.map((extension) => extension.toLowerCase()),
     );
+    const semanticLifecycle = options.semanticLifecycle ?? 'absent';
+    this.semanticStatus = mockSemanticStatus(semanticLifecycle);
+    if (semanticLifecycle === 'offered') {
+      this.semanticOffers.set(
+        'mock-scenario-offer',
+        mockSemanticOffer('mock-scenario-offer', 'compactMultilingual'),
+      );
+    }
+    if (semanticLifecycle === 'migrating') {
+      const progress = this.semanticStatus.migration;
+      if (progress !== null && progress !== undefined) {
+        this.semanticMigrationPlans.set(progress.migrationId, {
+          migrationId: progress.migrationId,
+          from: mockSemanticSelection('compactMultilingual'),
+          target: progress.target,
+          estimate: progress.estimate,
+          reason: progress.reason,
+          fullReindex: true,
+          requiresConfirmation: true,
+          resumable: true,
+        });
+      }
+    }
   }
 
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {
@@ -822,9 +1214,337 @@ export class MockFileManagerClient implements FileManagerClient {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority:
+        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'deterministicMock',
+      semanticRuntimeExecutableDownload:
+        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
       serverAdministration: false,
       systemTrash: false,
     }));
+  }
+
+  getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities> {
+    return this.perform('getSemanticComponentCapabilities', signal, () =>
+      this.semanticStatus.lifecycle.state === 'unavailable'
+        ? {
+            authority: 'unavailable',
+            operations: [],
+            runtimeExecutableDownload: 'unavailable',
+          }
+        : {
+            authority: 'deterministicMock',
+            operations: [...SEMANTIC_OPERATIONS],
+            runtimeExecutableDownload: 'simulated',
+          },
+    );
+  }
+
+  getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    return this.perform('getSemanticComponentStatus', signal, () =>
+      structuredClone(this.semanticStatus),
+    );
+  }
+
+  listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    return this.perform('listSemanticComponentProfiles', signal, () => {
+      this.requireSemanticAvailable();
+      return mockSemanticProfiles();
+    });
+  }
+
+  createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    return this.perform('createSemanticComponentInstallationOffer', signal, () => {
+      this.requireSemanticAvailable();
+      this.semanticOfferSequence += 1;
+      const offerId = `mock-offer-${this.semanticOfferSequence}`;
+      const offer = mockSemanticOffer(offerId, request.profile);
+      this.semanticOffers.set(offerId, offer);
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'offered', offerId },
+      };
+      return structuredClone(offer);
+    });
+  }
+
+  acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    return this.perform('acceptSemanticComponentInstallationOffer', signal, () => {
+      this.requireSemanticAvailable();
+      const offer = this.semanticOffers.get(request.offerId);
+      if (offer === undefined) {
+        throw new MockClientError('consentRequired', 'A reviewed installation offer is required');
+      }
+      this.semanticOffers.delete(request.offerId);
+      this.semanticStatus = {
+        lifecycle: { state: 'installedEnabled' },
+        dataRoot: offer.dataRoot,
+        activeModel: { profile: offer.profile, identity: offer.resolvedModel },
+        migration: null,
+        components: mockSemanticInstalledComponents(),
+        diskUse: installedSemanticDiskUse(),
+      };
+      return {
+        installedArtifactIds: offer.components.map(({ artifactId }) => artifactId),
+      };
+    });
+  }
+
+  pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    return this.perform('pauseSemanticComponentIndexing', signal, () => {
+      this.requireSemanticLifecycle('installedEnabled');
+      this.semanticStatus = { ...this.semanticStatus, lifecycle: { state: 'paused' } };
+    });
+  }
+
+  resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    return this.perform('resumeSemanticComponentIndexing', signal, () => {
+      this.requireSemanticLifecycle('paused');
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'installedEnabled' },
+      };
+    });
+  }
+
+  createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    return this.perform('createSemanticComponentIndexRemovalPlan', signal, () => {
+      this.requireSemanticAvailable();
+      if (!/^[A-Za-z0-9._-]+$/u.test(request.enrolmentId)) {
+        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is invalid');
+      }
+      const expected = this.semanticEnrolmentInventory.get(request.enrolmentId);
+      if (expected === undefined) {
+        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is unknown');
+      }
+      this.semanticIndexRemovalSequence += 1;
+      const plan: SemanticIndexRemovalPlan = {
+        planId: `mock-index-removal-${this.semanticIndexRemovalSequence}`,
+        enrolmentId: request.enrolmentId,
+        expected: structuredClone(expected),
+      };
+      this.semanticIndexRemovalPlans.set(plan.planId, plan);
+      return structuredClone(plan);
+    });
+  }
+
+  confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    return this.perform('confirmSemanticComponentIndexRemoval', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticIndexRemovalPlans.get(request.planId);
+      if (plan === undefined) {
+        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
+      }
+      this.semanticIndexRemovalPlans.delete(request.planId);
+      const inventory = this.semanticEnrolmentInventory.get(plan.enrolmentId);
+      if (inventory === undefined || !sameSemanticIndexCounts(inventory, plan.expected)) {
+        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
+      }
+      this.semanticEnrolmentInventory.delete(plan.enrolmentId);
+      for (const [planId, candidate] of this.semanticIndexRemovalPlans) {
+        if (candidate.enrolmentId === plan.enrolmentId) {
+          this.semanticIndexRemovalPlans.delete(planId);
+        }
+      }
+      return {
+        enrolmentId: plan.enrolmentId,
+        deleted: structuredClone(inventory),
+        conversationEvidenceDeleted: true,
+      };
+    });
+  }
+
+  moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    return this.perform('moveSemanticComponentData', signal, () => {
+      this.requireSemanticAvailable();
+      if (request.destination.trim().length === 0) {
+        throw new MockClientError('dataMigration', 'A destination is required');
+      }
+      const source = this.semanticStatus.dataRoot ?? 'mock/semantic';
+      this.semanticStatus = { ...this.semanticStatus, dataRoot: request.destination };
+      return {
+        source,
+        destination: request.destination,
+        verifiedBytes: this.semanticStatus.diskUse.totalBytes,
+        verifiedFileCount: this.semanticStatus.components.length,
+      };
+    });
+  }
+
+  uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    return this.perform('uninstallSemanticComponents', signal, () => {
+      this.requireSemanticAvailable();
+      const removedComponentCount = this.semanticStatus.components.length;
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'uninstalled', indexDecision: request.indexDecision },
+        components: [],
+        migration: null,
+        ...(request.indexDecision === 'delete'
+          ? { activeModel: null, diskUse: emptySemanticDiskUse() }
+          : { diskUse: retainedSemanticDiskUse() }),
+      };
+      return { indexDecision: request.indexDecision, removedComponentCount };
+    });
+  }
+
+  installSemanticComponentWorkerPatch(
+    _request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    return this.perform('installSemanticComponentWorkerPatch', signal, () => {
+      this.requireSemanticAvailable();
+      return { receipt: null };
+    });
+  }
+
+  importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return this.perform('importSemanticComponentLocalModel', signal, () => {
+      this.requireSemanticAvailable();
+      if (
+        request.sourcePath.trim().length === 0 ||
+        /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(request.sourcePath.trim()) ||
+        request.modelId.trim().length === 0 ||
+        request.upstreamRevision.trim().length === 0 ||
+        request.licenseSpdx.trim().length === 0 ||
+        request.licenseNotice.trim().length === 0 ||
+        request.tokenizer.trim().length === 0 ||
+        request.dimensions <= 0 ||
+        request.normalization == null ||
+        request.runtimeComponentId.trim().length === 0 ||
+        request.runtimeVersionRequirement.trim().length === 0 ||
+        request.languageCoverage.length === 0 ||
+        request.languageCoverage.some((language) => language.trim().length === 0) ||
+        request.estimatedDiskBytes <= 0 ||
+        request.estimatedRamBytes <= 0
+      ) {
+        throw new MockClientError(
+          'invalidLocalModelMetadata',
+          'Complete local model metadata is required',
+        );
+      }
+      return this.createSemanticMigrationPlan(
+        request.profile,
+        {
+          modelId: request.modelId,
+          revision: request.upstreamRevision,
+        },
+        request.estimate,
+      );
+    });
+  }
+
+  planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return this.perform('planSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      return this.createSemanticMigrationPlan(
+        request.profile,
+        mockSemanticIdentity(request.profile),
+        request.estimate,
+      );
+    });
+  }
+
+  confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return this.perform('confirmSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      const progress = mockSemanticMigrationProgress(
+        plan.migrationId,
+        0,
+        plan.estimate,
+        plan.target,
+        null,
+      );
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'migrating', progress },
+        migration: progress,
+      };
+      return structuredClone(progress);
+    });
+  }
+
+  checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return this.perform('checkpointSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      const previous = this.semanticStatus.migration;
+      if (
+        previous == null ||
+        previous.migrationId !== request.migrationId ||
+        request.completedDocuments < previous.completedDocuments ||
+        request.completedDocuments > plan.estimate.documents
+      ) {
+        throw new MockClientError('invalidMigrationProgress', 'Migration progress is invalid');
+      }
+      const progress = mockSemanticMigrationProgress(
+        plan.migrationId,
+        request.completedDocuments,
+        plan.estimate,
+        plan.target,
+        request.resumeCursor ?? null,
+      );
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'migrating', progress },
+        migration: progress,
+      };
+      return structuredClone(progress);
+    });
+  }
+
+  completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    return this.perform('completeSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      if (
+        this.semanticStatus.migration?.migrationId !== request.migrationId ||
+        this.semanticStatus.migration.completedDocuments < plan.estimate.documents
+      ) {
+        throw new MockClientError('invalidMigrationProgress', 'Migration is not complete');
+      }
+      this.semanticMigrationPlans.delete(request.migrationId);
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'installedEnabled' },
+        activeModel: plan.target,
+        migration: null,
+      };
+      return structuredClone(plan.target);
+    });
   }
 
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
@@ -851,6 +1571,12 @@ export class MockFileManagerClient implements FileManagerClient {
         plugins: true,
         revealInSystemFileManager: false,
         runtime: 'mock',
+        semanticComponentAuthority:
+          this.semanticStatus.lifecycle.state === 'unavailable'
+            ? 'unavailable'
+            : 'deterministicMock',
+        semanticRuntimeExecutableDownload:
+          this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
         serverAdministration: false,
         systemTrash: false,
       },
@@ -2967,6 +3693,50 @@ export class MockFileManagerClient implements FileManagerClient {
       }
       return found;
     };
+  }
+
+  private requireSemanticAvailable(): void {
+    if (this.semanticStatus.lifecycle.state === 'unavailable') {
+      throw new MockClientError('unavailable', 'Semantic components are unavailable');
+    }
+  }
+
+  private requireSemanticLifecycle(expected: SemanticComponentLifecycle['state']): void {
+    this.requireSemanticAvailable();
+    if (this.semanticStatus.lifecycle.state !== expected) {
+      throw new MockClientError(
+        'invalidLifecycle',
+        `Expected semantic lifecycle ${expected}, got ${this.semanticStatus.lifecycle.state}`,
+      );
+    }
+  }
+
+  private createSemanticMigrationPlan(
+    profile: SemanticProfile,
+    identity: SemanticModelIdentity,
+    estimate: SemanticModelMigrationPlan['estimate'],
+  ): SemanticModelMigrationPlan {
+    this.semanticMigrationSequence += 1;
+    const plan: SemanticModelMigrationPlan = {
+      migrationId: `mock-migration-${this.semanticMigrationSequence}`,
+      from: this.semanticStatus.activeModel ?? null,
+      target: { profile, identity },
+      estimate: structuredClone(estimate),
+      reason: { reason: 'modelChanged' },
+      fullReindex: true,
+      requiresConfirmation: true,
+      resumable: true,
+    };
+    this.semanticMigrationPlans.set(plan.migrationId, plan);
+    return structuredClone(plan);
+  }
+
+  private semanticMigrationPlan(migrationId: string): SemanticModelMigrationPlan {
+    const plan = this.semanticMigrationPlans.get(migrationId);
+    if (plan === undefined) {
+      throw new MockClientError('invalidMigrationPlan', 'The migration plan is no longer valid');
+    }
+    return plan;
   }
 
   private async perform<T>(

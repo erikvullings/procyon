@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type {
+  AcceptSemanticInstallationOfferRequestDto,
   AcceptSshHostKeyRequestDto,
   ActionDescriptorDto,
   ActionResultDto,
@@ -15,11 +16,17 @@ import type {
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
+  CheckpointSemanticModelMigrationRequestDto,
   ChecksumFileDto,
   ChecksumPageDto,
   ComparisonPageDto,
+  CompleteSemanticModelMigrationRequestDto,
+  ConfirmSemanticIndexRemovalRequestDto,
+  ConfirmSemanticModelMigrationRequestDto,
   ConnectionDto,
   CreateConnectionRequestDto,
+  CreateSemanticIndexRemovalPlanRequestDto,
+  CreateSemanticInstallationOfferRequestDto,
   CreateWorkspaceRequestDto,
   DeleteWorkspaceParams,
   DiagnosticsDto,
@@ -45,12 +52,15 @@ import type {
   GetThumbnailParams,
   HealthDto,
   HostKeyProbeDto,
+  ImportSemanticLocalModelRequestDto,
+  InstallSemanticWorkerPatchRequestDto,
   InvokeActionRequestDto,
   ListDirectoryChildrenRequest,
   ListDirectoryRequest,
   ListOperationsParams,
   LoadEditableFileRequestDto,
   LoadEditableFileResponseDto,
+  MoveSemanticDataRequestDto,
   NavigateRequest,
   OneDriveAuthorizationAttemptDto,
   OpenDocxPreviewRequestDto,
@@ -61,6 +71,7 @@ import type {
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
+  PlanSemanticModelMigrationRequestDto,
   PluginDescriptorDto,
   PluginLogEntryDto,
   PptxPreviewSessionRequestDto,
@@ -87,6 +98,20 @@ import type {
   SearchInFileResponseDto,
   SearchStructuredRowsRequestDto,
   SearchStructuredRowsResponseDto,
+  SemanticComponentCapabilitiesDto,
+  SemanticComponentErrorDto,
+  SemanticComponentStatusDto,
+  SemanticDataMoveReceiptDto,
+  SemanticIndexRemovalPlanDto,
+  SemanticIndexRemovalReceiptDto,
+  SemanticInstallReceiptDto,
+  SemanticInstallationOfferDto,
+  SemanticModelMigrationPlanDto,
+  SemanticModelMigrationProgressDto,
+  SemanticModelProfileDto,
+  SemanticModelSelectionDto,
+  SemanticUninstallReceiptDto,
+  SemanticWorkerPatchResponseDto,
   SetFinderTagsParams,
   SetPaneActivityRequest,
   SetSpotlightCommentParams,
@@ -106,6 +131,7 @@ import type {
   StructuredViewStatusDto,
   SyncPlanDto,
   SystemLocationDto,
+  UninstallSemanticComponentsRequestDto,
   UpdateConnectionRequestDto,
   UpdateStructuredViewRequestDto,
   VerificationReportDto,
@@ -4151,6 +4177,912 @@ export const cancelSearch = async (searchId: string, options?: Parameters<typeof
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type getSemanticComponentCapabilitiesResponse200 = {
+  data: SemanticComponentCapabilitiesDto
+  status: 200
+}
+
+export type getSemanticComponentCapabilitiesResponseSuccess = (getSemanticComponentCapabilitiesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getSemanticComponentCapabilitiesResponse = (getSemanticComponentCapabilitiesResponseSuccess)
+
+export const getGetSemanticComponentCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/capabilities`
+}
+
+/**
+ * @summary Reports semantic component authority and supported operations.
+ */
+export const getSemanticComponentCapabilities = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<getSemanticComponentCapabilitiesResponse> => {
+
+  return fetchMutator<getSemanticComponentCapabilitiesResponse>(getGetSemanticComponentCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type moveSemanticComponentDataResponse200 = {
+  data: SemanticDataMoveReceiptDto
+  status: 200
+}
+
+export type moveSemanticComponentDataResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type moveSemanticComponentDataResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type moveSemanticComponentDataResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type moveSemanticComponentDataResponseSuccess = (moveSemanticComponentDataResponse200) & {
+  headers: Headers;
+};
+export type moveSemanticComponentDataResponseError = (moveSemanticComponentDataResponse403 | moveSemanticComponentDataResponse409 | moveSemanticComponentDataResponse500) & {
+  headers: Headers;
+};
+
+export type moveSemanticComponentDataResponse = (moveSemanticComponentDataResponseSuccess | moveSemanticComponentDataResponseError)
+
+export const getMoveSemanticComponentDataUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/data/move`
+}
+
+/**
+ * @summary Moves the semantic-data root through pause-copy-verify-switch.
+ */
+export const moveSemanticComponentData = async (moveSemanticDataRequestDto: MoveSemanticDataRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<moveSemanticComponentDataResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<moveSemanticComponentDataResponse>(getMoveSemanticComponentDataUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(moveSemanticDataRequestDto)
+  }
+);}
+
+
+
+export type createSemanticComponentIndexRemovalPlanResponse200 = {
+  data: SemanticIndexRemovalPlanDto
+  status: 200
+}
+
+export type createSemanticComponentIndexRemovalPlanResponse400 = {
+  data: SemanticComponentErrorDto
+  status: 400
+}
+
+export type createSemanticComponentIndexRemovalPlanResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type createSemanticComponentIndexRemovalPlanResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type createSemanticComponentIndexRemovalPlanResponseSuccess = (createSemanticComponentIndexRemovalPlanResponse200) & {
+  headers: Headers;
+};
+export type createSemanticComponentIndexRemovalPlanResponseError = (createSemanticComponentIndexRemovalPlanResponse400 | createSemanticComponentIndexRemovalPlanResponse403 | createSemanticComponentIndexRemovalPlanResponse500) & {
+  headers: Headers;
+};
+
+export type createSemanticComponentIndexRemovalPlanResponse = (createSemanticComponentIndexRemovalPlanResponseSuccess | createSemanticComponentIndexRemovalPlanResponseError)
+
+export const getCreateSemanticComponentIndexRemovalPlanUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/index-removal-plans`
+}
+
+/**
+ * @summary Inventories every index record derived from one semantic enrolment.
+ */
+export const createSemanticComponentIndexRemovalPlan = async (createSemanticIndexRemovalPlanRequestDto: CreateSemanticIndexRemovalPlanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createSemanticComponentIndexRemovalPlanResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<createSemanticComponentIndexRemovalPlanResponse>(getCreateSemanticComponentIndexRemovalPlanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSemanticIndexRemovalPlanRequestDto)
+  }
+);}
+
+
+
+export type confirmSemanticComponentIndexRemovalResponse200 = {
+  data: SemanticIndexRemovalReceiptDto
+  status: 200
+}
+
+export type confirmSemanticComponentIndexRemovalResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type confirmSemanticComponentIndexRemovalResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type confirmSemanticComponentIndexRemovalResponseSuccess = (confirmSemanticComponentIndexRemovalResponse200) & {
+  headers: Headers;
+};
+export type confirmSemanticComponentIndexRemovalResponseError = (confirmSemanticComponentIndexRemovalResponse403 | confirmSemanticComponentIndexRemovalResponse500) & {
+  headers: Headers;
+};
+
+export type confirmSemanticComponentIndexRemovalResponse = (confirmSemanticComponentIndexRemovalResponseSuccess | confirmSemanticComponentIndexRemovalResponseError)
+
+export const getConfirmSemanticComponentIndexRemovalUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/index-removal-plans/confirm`
+}
+
+/**
+ * @summary Confirms one live authoritative semantic-index removal plan.
+ */
+export const confirmSemanticComponentIndexRemoval = async (confirmSemanticIndexRemovalRequestDto: ConfirmSemanticIndexRemovalRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticComponentIndexRemovalResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<confirmSemanticComponentIndexRemovalResponse>(getConfirmSemanticComponentIndexRemovalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(confirmSemanticIndexRemovalRequestDto)
+  }
+);}
+
+
+
+export type pauseSemanticComponentIndexingResponse204 = {
+  data: void
+  status: 204
+}
+
+export type pauseSemanticComponentIndexingResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type pauseSemanticComponentIndexingResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type pauseSemanticComponentIndexingResponseSuccess = (pauseSemanticComponentIndexingResponse204) & {
+  headers: Headers;
+};
+export type pauseSemanticComponentIndexingResponseError = (pauseSemanticComponentIndexingResponse403 | pauseSemanticComponentIndexingResponse409) & {
+  headers: Headers;
+};
+
+export type pauseSemanticComponentIndexingResponse = (pauseSemanticComponentIndexingResponseSuccess | pauseSemanticComponentIndexingResponseError)
+
+export const getPauseSemanticComponentIndexingUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/indexing/pause`
+}
+
+/**
+ * @summary Pauses semantic indexing without uninstalling components.
+ */
+export const pauseSemanticComponentIndexing = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<pauseSemanticComponentIndexingResponse> => {
+
+  return fetchMutator<pauseSemanticComponentIndexingResponse>(getPauseSemanticComponentIndexingUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type resumeSemanticComponentIndexingResponse204 = {
+  data: void
+  status: 204
+}
+
+export type resumeSemanticComponentIndexingResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type resumeSemanticComponentIndexingResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type resumeSemanticComponentIndexingResponseSuccess = (resumeSemanticComponentIndexingResponse204) & {
+  headers: Headers;
+};
+export type resumeSemanticComponentIndexingResponseError = (resumeSemanticComponentIndexingResponse403 | resumeSemanticComponentIndexingResponse409) & {
+  headers: Headers;
+};
+
+export type resumeSemanticComponentIndexingResponse = (resumeSemanticComponentIndexingResponseSuccess | resumeSemanticComponentIndexingResponseError)
+
+export const getResumeSemanticComponentIndexingUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/indexing/resume`
+}
+
+/**
+ * @summary Resumes explicitly paused semantic indexing.
+ */
+export const resumeSemanticComponentIndexing = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<resumeSemanticComponentIndexingResponse> => {
+
+  return fetchMutator<resumeSemanticComponentIndexingResponse>(getResumeSemanticComponentIndexingUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type createSemanticComponentInstallationOfferResponse200 = {
+  data: SemanticInstallationOfferDto
+  status: 200
+}
+
+export type createSemanticComponentInstallationOfferResponse400 = {
+  data: SemanticComponentErrorDto
+  status: 400
+}
+
+export type createSemanticComponentInstallationOfferResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type createSemanticComponentInstallationOfferResponse503 = {
+  data: SemanticComponentErrorDto
+  status: 503
+}
+
+export type createSemanticComponentInstallationOfferResponseSuccess = (createSemanticComponentInstallationOfferResponse200) & {
+  headers: Headers;
+};
+export type createSemanticComponentInstallationOfferResponseError = (createSemanticComponentInstallationOfferResponse400 | createSemanticComponentInstallationOfferResponse403 | createSemanticComponentInstallationOfferResponse503) & {
+  headers: Headers;
+};
+
+export type createSemanticComponentInstallationOfferResponse = (createSemanticComponentInstallationOfferResponseSuccess | createSemanticComponentInstallationOfferResponseError)
+
+export const getCreateSemanticComponentInstallationOfferUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/installation-offers`
+}
+
+/**
+ * @summary Creates a complete signed installation disclosure before consent.
+ */
+export const createSemanticComponentInstallationOffer = async (createSemanticInstallationOfferRequestDto: CreateSemanticInstallationOfferRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createSemanticComponentInstallationOfferResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<createSemanticComponentInstallationOfferResponse>(getCreateSemanticComponentInstallationOfferUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSemanticInstallationOfferRequestDto)
+  }
+);}
+
+
+
+export type acceptSemanticComponentInstallationOfferResponse200 = {
+  data: SemanticInstallReceiptDto
+  status: 200
+}
+
+export type acceptSemanticComponentInstallationOfferResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type acceptSemanticComponentInstallationOfferResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type acceptSemanticComponentInstallationOfferResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type acceptSemanticComponentInstallationOfferResponseSuccess = (acceptSemanticComponentInstallationOfferResponse200) & {
+  headers: Headers;
+};
+export type acceptSemanticComponentInstallationOfferResponseError = (acceptSemanticComponentInstallationOfferResponse403 | acceptSemanticComponentInstallationOfferResponse409 | acceptSemanticComponentInstallationOfferResponse500) & {
+  headers: Headers;
+};
+
+export type acceptSemanticComponentInstallationOfferResponse = (acceptSemanticComponentInstallationOfferResponseSuccess | acceptSemanticComponentInstallationOfferResponseError)
+
+export const getAcceptSemanticComponentInstallationOfferUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/installation-offers/accept`
+}
+
+/**
+ * @summary Explicitly accepts and installs one previously disclosed offer.
+ */
+export const acceptSemanticComponentInstallationOffer = async (acceptSemanticInstallationOfferRequestDto: AcceptSemanticInstallationOfferRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<acceptSemanticComponentInstallationOfferResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<acceptSemanticComponentInstallationOfferResponse>(getAcceptSemanticComponentInstallationOfferUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(acceptSemanticInstallationOfferRequestDto)
+  }
+);}
+
+
+
+export type checkpointSemanticComponentModelMigrationResponse200 = {
+  data: SemanticModelMigrationProgressDto
+  status: 200
+}
+
+export type checkpointSemanticComponentModelMigrationResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type checkpointSemanticComponentModelMigrationResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type checkpointSemanticComponentModelMigrationResponseSuccess = (checkpointSemanticComponentModelMigrationResponse200) & {
+  headers: Headers;
+};
+export type checkpointSemanticComponentModelMigrationResponseError = (checkpointSemanticComponentModelMigrationResponse403 | checkpointSemanticComponentModelMigrationResponse409) & {
+  headers: Headers;
+};
+
+export type checkpointSemanticComponentModelMigrationResponse = (checkpointSemanticComponentModelMigrationResponseSuccess | checkpointSemanticComponentModelMigrationResponseError)
+
+export const getCheckpointSemanticComponentModelMigrationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/model-migrations/checkpoint`
+}
+
+/**
+ * @summary Persists a resumable model migration checkpoint.
+ */
+export const checkpointSemanticComponentModelMigration = async (checkpointSemanticModelMigrationRequestDto: CheckpointSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<checkpointSemanticComponentModelMigrationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<checkpointSemanticComponentModelMigrationResponse>(getCheckpointSemanticComponentModelMigrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(checkpointSemanticModelMigrationRequestDto)
+  }
+);}
+
+
+
+export type completeSemanticComponentModelMigrationResponse200 = {
+  data: SemanticModelSelectionDto
+  status: 200
+}
+
+export type completeSemanticComponentModelMigrationResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type completeSemanticComponentModelMigrationResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type completeSemanticComponentModelMigrationResponseSuccess = (completeSemanticComponentModelMigrationResponse200) & {
+  headers: Headers;
+};
+export type completeSemanticComponentModelMigrationResponseError = (completeSemanticComponentModelMigrationResponse403 | completeSemanticComponentModelMigrationResponse409) & {
+  headers: Headers;
+};
+
+export type completeSemanticComponentModelMigrationResponse = (completeSemanticComponentModelMigrationResponseSuccess | completeSemanticComponentModelMigrationResponseError)
+
+export const getCompleteSemanticComponentModelMigrationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/model-migrations/complete`
+}
+
+/**
+ * @summary Completes and activates one fully reindexed model migration.
+ */
+export const completeSemanticComponentModelMigration = async (completeSemanticModelMigrationRequestDto: CompleteSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<completeSemanticComponentModelMigrationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<completeSemanticComponentModelMigrationResponse>(getCompleteSemanticComponentModelMigrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(completeSemanticModelMigrationRequestDto)
+  }
+);}
+
+
+
+export type confirmSemanticComponentModelMigrationResponse200 = {
+  data: SemanticModelMigrationProgressDto
+  status: 200
+}
+
+export type confirmSemanticComponentModelMigrationResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type confirmSemanticComponentModelMigrationResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type confirmSemanticComponentModelMigrationResponseSuccess = (confirmSemanticComponentModelMigrationResponse200) & {
+  headers: Headers;
+};
+export type confirmSemanticComponentModelMigrationResponseError = (confirmSemanticComponentModelMigrationResponse403 | confirmSemanticComponentModelMigrationResponse409) & {
+  headers: Headers;
+};
+
+export type confirmSemanticComponentModelMigrationResponse = (confirmSemanticComponentModelMigrationResponseSuccess | confirmSemanticComponentModelMigrationResponseError)
+
+export const getConfirmSemanticComponentModelMigrationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/model-migrations/confirm`
+}
+
+/**
+ * @summary Confirms and begins one previously returned model migration plan.
+ */
+export const confirmSemanticComponentModelMigration = async (confirmSemanticModelMigrationRequestDto: ConfirmSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticComponentModelMigrationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<confirmSemanticComponentModelMigrationResponse>(getConfirmSemanticComponentModelMigrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(confirmSemanticModelMigrationRequestDto)
+  }
+);}
+
+
+
+export type planSemanticComponentModelMigrationResponse200 = {
+  data: SemanticModelMigrationPlanDto
+  status: 200
+}
+
+export type planSemanticComponentModelMigrationResponse400 = {
+  data: SemanticComponentErrorDto
+  status: 400
+}
+
+export type planSemanticComponentModelMigrationResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type planSemanticComponentModelMigrationResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type planSemanticComponentModelMigrationResponseSuccess = (planSemanticComponentModelMigrationResponse200) & {
+  headers: Headers;
+};
+export type planSemanticComponentModelMigrationResponseError = (planSemanticComponentModelMigrationResponse400 | planSemanticComponentModelMigrationResponse403 | planSemanticComponentModelMigrationResponse409) & {
+  headers: Headers;
+};
+
+export type planSemanticComponentModelMigrationResponse = (planSemanticComponentModelMigrationResponseSuccess | planSemanticComponentModelMigrationResponseError)
+
+export const getPlanSemanticComponentModelMigrationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/model-migrations/plan`
+}
+
+/**
+ * @summary Plans migration to a signed-catalog model resolution.
+ */
+export const planSemanticComponentModelMigration = async (planSemanticModelMigrationRequestDto: PlanSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<planSemanticComponentModelMigrationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<planSemanticComponentModelMigrationResponse>(getPlanSemanticComponentModelMigrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(planSemanticModelMigrationRequestDto)
+  }
+);}
+
+
+
+export type importSemanticComponentLocalModelResponse200 = {
+  data: SemanticModelMigrationPlanDto
+  status: 200
+}
+
+export type importSemanticComponentLocalModelResponse400 = {
+  data: SemanticComponentErrorDto
+  status: 400
+}
+
+export type importSemanticComponentLocalModelResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type importSemanticComponentLocalModelResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type importSemanticComponentLocalModelResponseSuccess = (importSemanticComponentLocalModelResponse200) & {
+  headers: Headers;
+};
+export type importSemanticComponentLocalModelResponseError = (importSemanticComponentLocalModelResponse400 | importSemanticComponentLocalModelResponse403 | importSemanticComponentLocalModelResponse409) & {
+  headers: Headers;
+};
+
+export type importSemanticComponentLocalModelResponse = (importSemanticComponentLocalModelResponseSuccess | importSemanticComponentLocalModelResponseError)
+
+export const getImportSemanticComponentLocalModelUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/models/import-local`
+}
+
+/**
+ * @summary Validates an expert local model and creates a confirmation-gated migration.
+ */
+export const importSemanticComponentLocalModel = async (importSemanticLocalModelRequestDto: ImportSemanticLocalModelRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<importSemanticComponentLocalModelResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<importSemanticComponentLocalModelResponse>(getImportSemanticComponentLocalModelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(importSemanticLocalModelRequestDto)
+  }
+);}
+
+
+
+export type listSemanticComponentProfilesResponse200 = {
+  data: SemanticModelProfileDto[]
+  status: 200
+}
+
+export type listSemanticComponentProfilesResponse503 = {
+  data: SemanticComponentErrorDto
+  status: 503
+}
+
+export type listSemanticComponentProfilesResponseSuccess = (listSemanticComponentProfilesResponse200) & {
+  headers: Headers;
+};
+export type listSemanticComponentProfilesResponseError = (listSemanticComponentProfilesResponse503) & {
+  headers: Headers;
+};
+
+export type listSemanticComponentProfilesResponse = (listSemanticComponentProfilesResponseSuccess | listSemanticComponentProfilesResponseError)
+
+export const getListSemanticComponentProfilesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/profiles`
+}
+
+/**
+ * @summary Lists curated semantic model profiles and their exact catalog revisions.
+ */
+export const listSemanticComponentProfiles = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listSemanticComponentProfilesResponse> => {
+
+  return fetchMutator<listSemanticComponentProfilesResponse>(getListSemanticComponentProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getSemanticComponentStatusResponse200 = {
+  data: SemanticComponentStatusDto
+  status: 200
+}
+
+export type getSemanticComponentStatusResponse503 = {
+  data: SemanticComponentErrorDto
+  status: 503
+}
+
+export type getSemanticComponentStatusResponseSuccess = (getSemanticComponentStatusResponse200) & {
+  headers: Headers;
+};
+export type getSemanticComponentStatusResponseError = (getSemanticComponentStatusResponse503) & {
+  headers: Headers;
+};
+
+export type getSemanticComponentStatusResponse = (getSemanticComponentStatusResponseSuccess | getSemanticComponentStatusResponseError)
+
+export const getGetSemanticComponentStatusUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/status`
+}
+
+/**
+ * @summary Reports semantic component lifecycle, installed versions, and disk use.
+ */
+export const getSemanticComponentStatus = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<getSemanticComponentStatusResponse> => {
+
+  return fetchMutator<getSemanticComponentStatusResponse>(getGetSemanticComponentStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type uninstallSemanticComponentsResponse200 = {
+  data: SemanticUninstallReceiptDto
+  status: 200
+}
+
+export type uninstallSemanticComponentsResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type uninstallSemanticComponentsResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type uninstallSemanticComponentsResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type uninstallSemanticComponentsResponseSuccess = (uninstallSemanticComponentsResponse200) & {
+  headers: Headers;
+};
+export type uninstallSemanticComponentsResponseError = (uninstallSemanticComponentsResponse403 | uninstallSemanticComponentsResponse409 | uninstallSemanticComponentsResponse500) & {
+  headers: Headers;
+};
+
+export type uninstallSemanticComponentsResponse = (uninstallSemanticComponentsResponseSuccess | uninstallSemanticComponentsResponseError)
+
+export const getUninstallSemanticComponentsUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/uninstall`
+}
+
+/**
+ * @summary Uninstalls semantic components with an explicit index-data decision.
+ */
+export const uninstallSemanticComponents = async (uninstallSemanticComponentsRequestDto: UninstallSemanticComponentsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<uninstallSemanticComponentsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<uninstallSemanticComponentsResponse>(getUninstallSemanticComponentsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(uninstallSemanticComponentsRequestDto)
+  }
+);}
+
+
+
+export type installSemanticComponentWorkerPatchResponse200 = {
+  data: SemanticWorkerPatchResponseDto
+  status: 200
+}
+
+export type installSemanticComponentWorkerPatchResponse403 = {
+  data: SemanticComponentErrorDto
+  status: 403
+}
+
+export type installSemanticComponentWorkerPatchResponse409 = {
+  data: SemanticComponentErrorDto
+  status: 409
+}
+
+export type installSemanticComponentWorkerPatchResponse500 = {
+  data: SemanticComponentErrorDto
+  status: 500
+}
+
+export type installSemanticComponentWorkerPatchResponseSuccess = (installSemanticComponentWorkerPatchResponse200) & {
+  headers: Headers;
+};
+export type installSemanticComponentWorkerPatchResponseError = (installSemanticComponentWorkerPatchResponse403 | installSemanticComponentWorkerPatchResponse409 | installSemanticComponentWorkerPatchResponse500) & {
+  headers: Headers;
+};
+
+export type installSemanticComponentWorkerPatchResponse = (installSemanticComponentWorkerPatchResponseSuccess | installSemanticComponentWorkerPatchResponseError)
+
+export const getInstallSemanticComponentWorkerPatchUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/components/worker-patches/install`
+}
+
+/**
+ * @summary Installs the newest compatible signed worker patch, when available.
+ */
+export const installSemanticComponentWorkerPatch = async (installSemanticWorkerPatchRequestDto: InstallSemanticWorkerPatchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<installSemanticComponentWorkerPatchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<installSemanticComponentWorkerPatchResponse>(getInstallSemanticComponentWorkerPatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(installSemanticWorkerPatchRequestDto)
   }
 );}
 
