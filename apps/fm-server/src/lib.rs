@@ -98,6 +98,39 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::semantic_components::complete_semantic_component_model_migration
         ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_library_capabilities
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_library_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_folder_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::preview_semantic_enrolment
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::confirm_semantic_enrolment
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::plan_semantic_exclusion
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::confirm_semantic_exclusion
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::resume_semantic_cleanup
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::pause_semantic_library
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::resume_semantic_library
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::update_semantic_eligibility_overrides
+        ))
         .routes(utoipa_axum::routes!(routes::settings::get_settings))
         .routes(utoipa_axum::routes!(
             routes::system_location::get_system_locations
@@ -315,6 +348,13 @@ pub fn build_router_with_service_and_session(
         )),
         accessible_roots: Arc::from(config.roots.clone()),
         mutation_limiter: rate_limit::build_limiter(config.max_mutations_per_second),
+        semantic_access: Arc::new(
+            fm_application::semantic_library::SemanticAccessContext::server(
+                config.semantic_library_tenant_id.clone(),
+                config.semantic_library_user_id.clone(),
+            )
+            .unwrap_or(fm_application::semantic_library::SemanticAccessContext::Anonymous),
+        ),
     };
 
     let (router, api) = api_router().split_for_parts();

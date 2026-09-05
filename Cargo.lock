@@ -2416,6 +2416,7 @@ dependencies = [
  "fm-search",
  "fm-search-acceleration",
  "fm-semantic-components",
+ "fm-semantic-library",
  "fm-semantic-protocol",
  "fm-semantic-worker",
  "fm-settings",
@@ -2808,6 +2809,21 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "fm-semantic-library"
+version = "0.1.0-20"
+dependencies = [
+ "fm-domain",
+ "fm-settings",
+ "fs2",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
  "uuid",
 ]
 

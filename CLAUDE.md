@@ -115,9 +115,9 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
 `PptxPreviewService` (bounded conversion to retained PDF),
-`ConnectionFacade`, `PluginManager`, `SemanticService`, and `SemanticComponentService`. Both
-semantic services are optional and lazy: their fake, local-IPC, or managed capabilities are injected
-explicitly, while ordinary
+`ConnectionFacade`, `PluginManager`, `SemanticService`, `SemanticComponentService`, and
+`SemanticLibraryService`. Semantic capabilities are optional and lazy: their fake, local-IPC, or
+managed capabilities are injected explicitly, while ordinary
 `FileManagerService` construction never starts or connects to a worker. Extend the owning service
 when a feature fits one of these capabilities; add a new service only for a genuinely distinct
 responsibility. Do not move logic back into the facade or let capability services depend on
@@ -135,6 +135,12 @@ Keep model/runtime selection, Zvec storage, and document conversion out of this 
 lifecycle. Its managed capability must receive a trusted catalog and host adapters explicitly;
 normal construction remains inert, browser/server authority is read-only, and no concrete default
 model is selected before task 0188's measurements.
+`fm-semantic-library` owns durable device-library consent and its provider-neutral catalog policy.
+Low-volume policy metadata uses the settings migration machinery; catalog/runtime state stays under
+the semantic-data root and is coordinated with cross-process locking and a write-ahead journal.
+Folder exclusions revoke query/feed scope immediately and clean derived data through resumable,
+idempotent plans. Application code enumerates providers and supplies verified stable identities;
+the worker never crawls paths or decides consent.
 
 ### Runtime adapters (frontend)
 

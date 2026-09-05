@@ -11,14 +11,17 @@ import {
 } from '../../keybindings/dispatcher';
 import type {
   ActionDescriptor,
+  Location,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   Settings,
+  WorkspaceId,
 } from '../../models';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { SemanticComponentManagement } from './semantic-component-management';
+import { SemanticLibraryManagement } from './semantic-library-management';
 import {
   cloneSettings,
   formatListInput,
@@ -43,6 +46,8 @@ export interface SettingsEditorAttrs {
   readonly platform: SelectionPlatform;
   readonly runtime: KeybindingRuntime;
   readonly plugins: readonly PluginDescriptor[];
+  readonly activeWorkspaceId?: WorkspaceId;
+  readonly activeLocation?: Location | undefined;
   /** Called on every draft change so appearance fields can preview live without persisting. */
   readonly onPreview: (draft: Settings) => void;
   readonly onSave: (draft: Settings) => Promise<void>;
@@ -103,11 +108,11 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   }
 
   /**
-   * Plugin Management's enable/disable toggle persists directly to the backend (unlike every
-   * other field here, which only writes on Save), so it doesn't go through `update()`. Without
-   * this, `draft.enabledPlugins` stays whatever it was when the dialog opened, and Save would
-   * send that stale snapshot back to the backend, silently re-disabling a plugin the user just
-   * enabled (and reverting any icon theme install still in flight for it).
+   * Plugin Management's enable/disable toggle persists directly to the backend (as does the
+   * independently versioned semantic-library panel), so it doesn't go through `update()`.
+   * Without this, `draft.enabledPlugins` stays whatever it was when the dialog opened, and Save
+   * would send that stale snapshot back to the backend, silently re-disabling a plugin the user
+   * just enabled (and reverting any icon theme install still in flight for it).
    */
   function handleTogglePlugin(
     current: SettingsEditorAttrs,
@@ -448,6 +453,17 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
 
           m('.row', m('h4.fm-settings-section-heading.col.s12', t('semanticComponents', 'title'))),
           m('.row', m(SemanticComponentManagement, { client: current.client })),
+          m('.row', m('h4.fm-settings-section-heading.col.s12', t('semanticLibrary', 'title'))),
+          m(
+            '.row',
+            m(SemanticLibraryManagement, {
+              client: current.client,
+              ...(current.activeWorkspaceId === undefined
+                ? {}
+                : { workspaceId: current.activeWorkspaceId }),
+              ...(current.activeLocation === undefined ? {} : { location: current.activeLocation }),
+            }),
+          ),
 
           m('.row', m('h4.fm-settings-section-heading.col.s12', t('settings', 'plugins'))),
           m(PluginManagement, {

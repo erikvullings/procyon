@@ -364,6 +364,56 @@ describe('TauriFileManagerClient', () => {
     });
   });
 
+  describe('semantic library transport', () => {
+    it('uses the exact registered command names and request wrappers', async () => {
+      invoke.mockResolvedValue({});
+      const client = new TauriFileManagerClient();
+      const location = { providerId: 'local', uri: 'file:///docs' };
+      const context = { workspaceId: 'workspace-1', location };
+      const previewRequest = { ...context, recursive: true };
+      const confirmation = {
+        confirmationId: 'confirmation-1',
+        policyRevision: 1,
+        ...context,
+      };
+      const planRequest = { policyRevision: 1, ...context };
+      const cleanupRequest = { planId: 'plan-1', policyRevision: 1 };
+      const revisionRequest = { policyRevision: 1 };
+      const overridesRequest = {
+        rootId: 'root-1',
+        workspaceId: context.workspaceId,
+        policyRevision: 1,
+        overrides: [{ reason: 'hidden' as const, action: 'include' as const }],
+      };
+
+      await client.getSemanticLibraryCapabilities();
+      await client.getSemanticLibraryStatus();
+      await client.getSemanticFolderStatus(context);
+      await client.previewSemanticEnrolment(previewRequest);
+      await client.confirmSemanticEnrolment(confirmation);
+      await client.planSemanticExclusion(planRequest);
+      await client.confirmSemanticExclusion(confirmation);
+      await client.resumeSemanticCleanup(cleanupRequest);
+      await client.pauseSemanticLibrary(revisionRequest);
+      await client.resumeSemanticLibrary(revisionRequest);
+      await client.updateSemanticEligibilityOverrides(overridesRequest);
+
+      expect(invoke.mock.calls).toEqual([
+        ['get_semantic_library_capabilities'],
+        ['get_semantic_library_status'],
+        ['get_semantic_folder_status', { request: context }],
+        ['preview_semantic_enrolment', { request: previewRequest }],
+        ['confirm_semantic_enrolment', { request: confirmation }],
+        ['plan_semantic_exclusion', { request: planRequest }],
+        ['confirm_semantic_exclusion', { request: confirmation }],
+        ['resume_semantic_cleanup', { request: cleanupRequest }],
+        ['pause_semantic_library', { request: revisionRequest }],
+        ['resume_semantic_library', { request: revisionRequest }],
+        ['update_semantic_eligibility_overrides', { request: overridesRequest }],
+      ]);
+    });
+  });
+
   describe('cancelDiskUsage', () => {
     it('invokes the matching cancellation command', async () => {
       invoke.mockResolvedValue(undefined);

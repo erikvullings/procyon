@@ -85,6 +85,13 @@ use crate::semantic_components::{
     SemanticModelMigrationProgress, SemanticModelProfile, SemanticModelSelection, SemanticProfile,
     SemanticReindexEstimate, SemanticUninstallReceipt, SemanticWorkerPatchRequest,
 };
+use crate::semantic_library::SemanticLibraryComposition;
+use crate::semantic_library::{
+    SemanticAccessContext, SemanticEnrolmentPreview, SemanticExclusionPlan, SemanticFeedCandidate,
+    SemanticFolderContext, SemanticFolderStatus, SemanticLibraryCapabilities, SemanticLibraryError,
+    SemanticLibraryOperation, SemanticLibraryService, SemanticLibraryStatus,
+    SemanticWorkerFeedPlan,
+};
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
@@ -127,6 +134,7 @@ pub struct FileManagerService {
     thumbnails: ThumbnailService,
     semantic: SemanticService,
     semantic_components: SemanticComponentService,
+    semantic_library: SemanticLibraryComposition,
 }
 
 impl FileManagerService {
@@ -506,6 +514,368 @@ impl FileManagerService {
                 // until the host supplies an evaluated signed catalog and real adapters.
                 RuntimeKindDto::Tauri => SemanticComponentService::unavailable(),
             },
+            semantic_library: SemanticLibraryComposition::new(runtime, settings_directory),
+        }
+    }
+
+    /// Reports semantic-library authority and the operations this caller may
+    /// perform, without touching storage.
+    pub async fn semantic_library_capabilities(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> SemanticLibraryCapabilities {
+        self.semantic_library().await.capabilities(access)
+    }
+
+    pub(crate) async fn ensure_semantic_library_operation(
+        &self,
+        access: &SemanticAccessContext,
+        operation: SemanticLibraryOperation,
+    ) -> Result<(), SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .ensure_operation_allowed(access, operation)
+    }
+
+    /// Reports the safe semantic-library policy/catalog/state projection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, lock, or persistence failure.
+    pub async fn semantic_library_status(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library().await.status(access)
+    }
+
+    /// Replaces the composed default with an explicitly configured library
+    /// service.
+    #[must_use]
+    pub fn with_semantic_library_service(
+        mut self,
+        semantic_library: SemanticLibraryService,
+    ) -> Self {
+        self.semantic_library = SemanticLibraryComposition::fixed(semantic_library);
+        self
+    }
+
+    /// Resolves the composed semantic-library capability.
+    ///
+    /// Desktop composition is deferred: a device-local library only exists once
+    /// managed components (task 0178) report an installed data root and an
+    /// active model, because only then are its roots and immutable embedding
+    /// identity known backend-authoritatively. Until then the capability is
+    /// explicitly unavailable rather than rooted at an invented path.
+    async fn semantic_library(&self) -> Arc<SemanticLibraryService> {
+        self.semantic_library
+            .resolve(&self.semantic_components)
+            .await
+    }
+
+    /// Reports effective consent for the verified active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_folder_status(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticFolderStatus, SemanticLibraryError> {
+        let status = self
+            .semantic_library()
+            .await
+            .folder_status(access, &context)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        Ok(status)
+    }
+
+    /// Creates an enrolment disclosure for the verified active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_preview_enrolment(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.preview_enrolment(access, context, recursive)
+    }
+
+    /// Confirms one live enrolment disclosure for the still-active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, stale-revision,
+    /// stale-confirmation, lock, or persistence failure.
+    pub async fn semantic_library_confirm_enrolment(
+        &self,
+        access: &SemanticAccessContext,
+        confirmation_id: &str,
+        expected_revision: u64,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::Enrol)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.confirm_enrolment(access, confirmation_id, expected_revision, &context)
+    }
+
+    /// Creates an authoritative destructive exclusion plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, consent-state,
+    /// stale-revision, lock, or persistence failure.
+    pub async fn semantic_library_plan_exclusion(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        expected_revision: u64,
+    ) -> Result<SemanticExclusionPlan, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::PlanExclusion)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.plan_exclusion(access, context, expected_revision)
+    }
+
+    /// Confirms one exclusion plan for the still-active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, stale-revision,
+    /// stale-confirmation, lock, or persistence failure.
+    pub async fn semantic_library_confirm_exclusion(
+        &self,
+        access: &SemanticAccessContext,
+        confirmation_id: &str,
+        expected_revision: u64,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::ConfirmExclusion)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.confirm_exclusion(access, confirmation_id, expected_revision, &context)
+    }
+
+    /// Resumes one authoritative cleanup plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, not-found, stale-revision, lock,
+    /// or persistence failure.
+    pub async fn semantic_library_resume_cleanup(
+        &self,
+        access: &SemanticAccessContext,
+        plan_id: fm_semantic_library::DeletionPlanId,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .resume_cleanup(access, plan_id, expected_revision)
+    }
+
+    /// Pauses ingestion while preserving consent and indexed data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, stale-revision, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_pause(
+        &self,
+        access: &SemanticAccessContext,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .pause(access, expected_revision)
+    }
+
+    /// Resumes semantic ingestion.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, stale-revision, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_resume(
+        &self,
+        access: &SemanticAccessContext,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .resume(access, expected_revision)
+    }
+
+    /// Replaces fixed, safe eligibility overrides for an attached root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, unsafe-override,
+    /// not-found, stale-revision, lock, or persistence failure.
+    pub async fn semantic_library_update_eligibility_overrides(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        workspace_id: fm_domain::WorkspaceId,
+        expected_revision: u64,
+        overrides: std::collections::BTreeMap<
+            fm_semantic_library::EligibilityReason,
+            fm_semantic_library::EligibilityOverride,
+        >,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(
+            access,
+            SemanticLibraryOperation::UpdateEligibilityOverrides,
+        )?;
+        self.workspaces
+            .load(workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        library.update_eligibility_overrides(
+            access,
+            root_id,
+            workspace_id,
+            expected_revision,
+            overrides,
+        )
+    }
+
+    /// Records that an enrolled semantic root is temporarily unreachable.
+    ///
+    /// This is an internal reconciliation capability for watchers and the
+    /// incremental ingestion scheduler of task 0182, not a user mutation:
+    /// consent and every indexed generation survive untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, not-found, lock, or persistence failure.
+    pub async fn semantic_library_mark_root_unavailable(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        reason: fm_semantic_library::RootUnavailabilityReason,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .mark_root_unavailable(access, root_id, reason)
+    }
+
+    /// Applies provider observations to an enrolled semantic root, following a
+    /// move and restoring availability only when stable identity proves it.
+    ///
+    /// This is the only way a quarantined root becomes available again. The
+    /// observations must come from a provider capability that exposes a
+    /// verified stable entry and volume identity; an observation without one
+    /// leaves the root exactly as unavailable as it was.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, lock, or persistence failure.
+    pub async fn semantic_library_observe_root_identity(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        observations: &[fm_semantic_library::ObservedRootIdentity],
+    ) -> Result<fm_semantic_library::RootMoveResolution, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .observe_root_identity(access, root_id, observations)
+    }
+
+    /// Commits one complete successful reconciliation of a semantic root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, lock, or persistence failure.
+    pub async fn semantic_library_complete_reconciliation(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        observed_occurrences: &std::collections::BTreeSet<fm_semantic_library::OccurrenceId>,
+    ) -> Result<u64, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .complete_reconciliation(access, root_id, observed_occurrences)
+    }
+
+    /// Returns provider-neutral worker feed decisions and curated eligibility
+    /// verdicts for host-enumerated candidates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, not-found, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_worker_feed_plan(
+        &self,
+        access: &SemanticAccessContext,
+        candidates: &[SemanticFeedCandidate],
+    ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .worker_feed_plan(access, candidates)
+    }
+
+    /// Records that an enrolled semantic root could not be reached at its own
+    /// location.
+    ///
+    /// This direction is safe without identity proof because it only ever
+    /// *reduces* what the library will do: consent, evidence, and generations
+    /// survive, ingestion stops, and source links show as unavailable. The
+    /// opposite direction is not symmetric and is deliberately absent —
+    /// restoring availability requires
+    /// [`semantic_library_observe_root_identity`](Self::semantic_library_observe_root_identity)
+    /// and a provider-verified stable identity, because a readable path is not
+    /// proof that it is still the same directory.
+    ///
+    /// Absence is never deletion — only
+    /// [`semantic_library_complete_reconciliation`](Self::semantic_library_complete_reconciliation)
+    /// may remove missing documents. Scheduling a periodic identity-proving
+    /// crawl at the policy cadence remains task 0182's responsibility.
+    pub async fn semantic_library_quarantine_unreachable_root(
+        &self,
+        location: &fm_domain::Location,
+    ) {
+        let library = self.semantic_library().await;
+        let access = SemanticAccessContext::Host;
+        let Ok(Some(root_id)) = library.enrolled_root_at(&access, location) else {
+            return;
+        };
+        let _ = library.mark_root_unavailable(
+            &access,
+            root_id,
+            fm_semantic_library::RootUnavailabilityReason::Missing,
+        );
+    }
+
+    async fn ensure_active_semantic_folder(
+        &self,
+        context: &SemanticFolderContext,
+    ) -> Result<(), SemanticLibraryError> {
+        let workspace = self
+            .workspaces
+            .load(context.workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        let active = workspace
+            .panes
+            .iter()
+            .find(|pane| pane.id == workspace.active_pane_id)
+            .and_then(|pane| pane.tabs.iter().find(|tab| tab.id == pane.active_tab_id))
+            .map(|tab| &tab.location);
+        if active == Some(&context.location) {
+            Ok(())
+        } else {
+            Err(SemanticLibraryError::WorkspaceRequired)
         }
     }
 
@@ -1005,6 +1375,17 @@ impl FileManagerService {
     }
 
     /// Lists one page of a directory.
+    ///
+    /// Listing deliberately reports *nothing* to the semantic library. A
+    /// successful listing proves only that a path can be read, and a path is
+    /// not an identity: after a directory is deleted and another one is
+    /// created at the same place, listing it succeeds exactly as before. A
+    /// quarantined root must therefore stay quarantined until a provider
+    /// capability supplies a verified stable entry and volume identity, which
+    /// the directory APIs do not yet expose. Task 0182 owns that scheduled
+    /// reconciliation and calls
+    /// [`semantic_library_observe_root_identity`](Self::semantic_library_observe_root_identity)
+    /// with real observations.
     pub async fn list_directory(
         &self,
         request: ListDirectoryRequest,
@@ -1646,12 +2027,38 @@ impl FileManagerService {
     }
 
     /// Deletes a workspace (spec §5.3.12 `deleteWorkspace`).
+    ///
+    /// Semantic detachment runs *before* the repository delete and must
+    /// succeed. The ordering is deliberate: detaching only removes a
+    /// workspace's authorization references from globally enrolled roots, so if
+    /// the repository delete then fails the workspace survives with a strictly
+    /// narrower semantic scope — never with dangling scopes naming a workspace
+    /// that no longer exists. Narrowing can only deny access, and re-enrolling
+    /// the folder from the surviving workspace restores it; the reverse
+    /// ordering would leave revoked-workspace scopes behind whenever
+    /// detachment failed. Detachment is idempotent, so a retried delete is
+    /// safe. When no semantic capability is configured, or the library is a
+    /// read-only administrator-provisioned server library, detachment is a
+    /// no-op and workspace deletion is unaffected.
+    /// Deletes a workspace and then drops the semantic references that named
+    /// it (spec §5.3.12 `deleteWorkspace`).
+    ///
+    /// The order is deliberate. The workspace repository is authoritative, and
+    /// it and the semantic library are two independent stores that cannot
+    /// commit atomically; sequencing the semantic mutation first would revoke
+    /// the references of a workspace that a stale revision, a missing
+    /// workspace, or a repository I/O failure then left alive. Deleting first
+    /// means a semantic failure can only leave *extra* references behind, and
+    /// those are unreachable because every semantic call validates that the
+    /// workspace still exists. The detachment is idempotent and stays queued,
+    /// so the next semantic operation completes it.
     pub async fn delete_workspace(
         &self,
         id: Uuid,
         expected_revision: Option<u64>,
     ) -> Result<(), ApplicationError> {
         self.workspaces.delete(id.into(), expected_revision).await?;
+        let _ = self.semantic_library().await.detach_workspace(id.into());
         Ok(())
     }
 

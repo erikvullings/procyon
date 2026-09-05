@@ -146,6 +146,15 @@ fn resolve_config(cli: &Cli, file: Option<&ServerFileConfig>) -> (ServerConfig, 
         _ => panic!("--tls-cert and --tls-key must both be set to enable direct TLS termination"),
     };
 
+    // Operator-owned server state, never request data: this is the single
+    // principal every semantic-library request is served as (task 0179).
+    let semantic_library_tenant_id = file
+        .and_then(|f| f.semantic_library_tenant_id.clone())
+        .unwrap_or_else(|| defaults.semantic_library_tenant_id.clone());
+    let semantic_library_user_id = file
+        .and_then(|f| f.semantic_library_user_id.clone())
+        .unwrap_or_else(|| defaults.semantic_library_user_id.clone());
+
     let config = ServerConfig {
         bind_address,
         port,
@@ -154,6 +163,8 @@ fn resolve_config(cli: &Cli, file: Option<&ServerFileConfig>) -> (ServerConfig, 
         max_mutations_per_second,
         roots,
         dev_mode_auth_disabled,
+        semantic_library_tenant_id,
+        semantic_library_user_id,
         ..defaults
     };
     (config, tls)

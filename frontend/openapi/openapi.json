@@ -919,6 +919,70 @@
         ],
         "type": "object"
       },
+      "ConfirmSemanticEnrolmentRequestDto": {
+        "additionalProperties": false,
+        "description": "Confirms one live enrolment preview.",
+        "properties": {
+          "confirmationId": {
+            "description": "Opaque preview confirmation.",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Still-active folder; must match the preview."
+          },
+          "policyRevision": {
+            "description": "Optimistic policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "description": "Still-active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmationId",
+          "policyRevision",
+          "workspaceId",
+          "location"
+        ],
+        "type": "object"
+      },
+      "ConfirmSemanticExclusionRequestDto": {
+        "additionalProperties": false,
+        "description": "Confirms one live exclusion plan.",
+        "properties": {
+          "confirmationId": {
+            "description": "Opaque confirmation identity.",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Still-active folder; must match the plan."
+          },
+          "policyRevision": {
+            "description": "Optimistic policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "description": "Still-active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmationId",
+          "policyRevision",
+          "workspaceId",
+          "location"
+        ],
+        "type": "object"
+      },
       "ConfirmSemanticIndexRemovalRequestDto": {
         "additionalProperties": false,
         "description": "Confirms one live authoritative semantic-index removal plan.",
@@ -2516,6 +2580,26 @@
         },
         "required": [
           "commits"
+        ],
+        "type": "object"
+      },
+      "GetSemanticFolderStatusRequestDto": {
+        "additionalProperties": false,
+        "description": "Requests consent status for the active workspace folder.",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Active folder."
+          },
+          "workspaceId": {
+            "description": "Active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "location"
         ],
         "type": "object"
       },
@@ -4351,6 +4435,33 @@
         ],
         "type": "object"
       },
+      "PlanSemanticExclusionRequestDto": {
+        "additionalProperties": false,
+        "description": "Creates an authoritative exclusion plan.",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Root or descendant to exclude."
+          },
+          "policyRevision": {
+            "description": "Optimistic policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "description": "Active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policyRevision",
+          "workspaceId",
+          "location"
+        ],
+        "type": "object"
+      },
       "PlanSemanticModelMigrationRequestDto": {
         "additionalProperties": false,
         "description": "Plans migration to a signed-catalog model resolution.",
@@ -4696,6 +4807,31 @@
         },
         "required": [
           "sessionId"
+        ],
+        "type": "object"
+      },
+      "PreviewSemanticEnrolmentRequestDto": {
+        "additionalProperties": false,
+        "description": "Requests a pre-consent enrolment disclosure.",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Active folder."
+          },
+          "recursive": {
+            "description": "Whether descendants inherit consent.",
+            "type": "boolean"
+          },
+          "workspaceId": {
+            "description": "Active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "location",
+          "recursive"
         ],
         "type": "object"
       },
@@ -5096,6 +5232,27 @@
         "required": [
           "resolution",
           "applyToAllSimilar"
+        ],
+        "type": "object"
+      },
+      "ResumeSemanticCleanupRequestDto": {
+        "additionalProperties": false,
+        "description": "Resumes an incomplete cleanup.",
+        "properties": {
+          "planId": {
+            "description": "Opaque durable cleanup plan.",
+            "type": "string"
+          },
+          "policyRevision": {
+            "description": "Current policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "planId",
+          "policyRevision"
         ],
         "type": "object"
       },
@@ -5834,6 +5991,16 @@
         ],
         "type": "object"
       },
+      "SemanticBudgetKindDto": {
+        "description": "Hard budget apparently exceeded by an estimate.",
+        "enum": [
+          "documents",
+          "sourceBytes",
+          "extractedBytes",
+          "vectorBytes"
+        ],
+        "type": "string"
+      },
       "SemanticCategoryDiskUseDto": {
         "description": "Actual disk use for one semantic-data category.",
         "properties": {
@@ -5851,6 +6018,44 @@
         "required": [
           "category",
           "bytes"
+        ],
+        "type": "object"
+      },
+      "SemanticCleanupStateDto": {
+        "description": "Destructive cleanup lifecycle.",
+        "enum": [
+          "pending",
+          "running",
+          "failed",
+          "complete"
+        ],
+        "type": "string"
+      },
+      "SemanticCleanupStatusDto": {
+        "description": "Complete cleanup status.",
+        "properties": {
+          "categories": {
+            "description": "Every mandatory category.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticDeletionCategoryStatusDto"
+            },
+            "type": "array"
+          },
+          "planId": {
+            "description": "Opaque durable plan identity.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/SemanticCleanupStateDto",
+            "description": "Overall state."
+          }
+        },
+        "required": [
+          "status",
+          "categories"
         ],
         "type": "object"
       },
@@ -6520,6 +6725,57 @@
         ],
         "type": "object"
       },
+      "SemanticDeletionCategoryDto": {
+        "description": "Mandatory deletion category.",
+        "enum": [
+          "occurrences",
+          "extractedContent",
+          "summaries",
+          "labels",
+          "orphanVectors",
+          "conversationEvidencePins"
+        ],
+        "type": "string"
+      },
+      "SemanticDeletionCategoryStatusDto": {
+        "description": "Progress for one mandatory cleanup category.",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/SemanticDeletionCategoryDto",
+            "description": "Stable category."
+          },
+          "complete": {
+            "description": "Whether this category completed.",
+            "type": "boolean"
+          },
+          "completedItems": {
+            "description": "Durably completed items.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lastError": {
+            "description": "Sanitized last failure.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalItems": {
+            "description": "Authoritatively derived total.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "totalItems",
+          "completedItems",
+          "complete"
+        ],
+        "type": "object"
+      },
       "SemanticDiskUseDto": {
         "description": "Stable per-category and aggregate semantic disk use.",
         "properties": {
@@ -6543,6 +6799,70 @@
         ],
         "type": "object"
       },
+      "SemanticEligibilityOverrideDto": {
+        "description": "Fixed eligibility override action.",
+        "enum": [
+          "include",
+          "exclude"
+        ],
+        "type": "string"
+      },
+      "SemanticEligibilityOverrideStatusDto": {
+        "description": "One root eligibility override.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SemanticEligibilityOverrideDto",
+            "description": "Include or exclude."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SemanticEligibilityReasonDto",
+            "description": "Fixed curated reason."
+          }
+        },
+        "required": [
+          "reason",
+          "action"
+        ],
+        "type": "object"
+      },
+      "SemanticEligibilityReasonCountDto": {
+        "description": "One skip reason and its estimate/observation count.",
+        "properties": {
+          "count": {
+            "description": "Number of entries.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SemanticEligibilityReasonDto",
+            "description": "Stable reason."
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SemanticEligibilityReasonDto": {
+        "description": "Curated reason why content is skipped.",
+        "enum": [
+          "hidden",
+          "system",
+          "applicationOrPackageBundle",
+          "dependencyDirectory",
+          "buildDirectory",
+          "cacheDirectory",
+          "gitIgnored",
+          "unsupportedMime",
+          "oversized",
+          "overBudget",
+          "symlinkOutsideRoot",
+          "explicitlyExcluded"
+        ],
+        "type": "string"
+      },
       "SemanticEmbeddingNormalizationDto": {
         "description": "Embedding normalization contract.",
         "enum": [
@@ -6550,6 +6870,260 @@
           "none"
         ],
         "type": "string"
+      },
+      "SemanticEnrolmentEstimateDto": {
+        "description": "Bounded estimate shown before consent.",
+        "properties": {
+          "completeness": {
+            "$ref": "#/components/schemas/SemanticEstimateCompletenessDto",
+            "description": "Estimate completeness."
+          },
+          "estimatedAdditionalLocalBytes": {
+            "description": "Estimated additional local storage, including a missing model.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estimatedExtractedBytes": {
+            "description": "Estimated normalized excerpt bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estimatedFiles": {
+            "description": "Estimated eligible file count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estimatedSourceBytes": {
+            "description": "Estimated source bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estimatedVectorBytes": {
+            "description": "Estimated vector storage.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exceededBudgets": {
+            "description": "Hard budgets the estimate appears to exceed.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticBudgetKindDto"
+            },
+            "type": "array"
+          },
+          "missingModelDownloadBytes": {
+            "description": "Estimated missing model download bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "skippedReasonCounts": {
+            "description": "Unsupported/skipped entries by fixed reason.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticEligibilityReasonCountDto"
+            },
+            "type": "array"
+          },
+          "unavailableReason": {
+            "description": "Sanitized reason no estimate is available.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "completeness",
+          "skippedReasonCounts",
+          "exceededBudgets"
+        ],
+        "type": "object"
+      },
+      "SemanticEnrolmentPreviewDto": {
+        "description": "Confirmation-gated enrolment disclosure.",
+        "properties": {
+          "confirmationId": {
+            "description": "Opaque confirmation identity.",
+            "type": "string"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/SemanticEnrolmentEstimateDto",
+            "description": "Bounded estimate; values are never represented as exact promises."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Reviewed provider-neutral location."
+          },
+          "normalizedExcerptsRetainedLocally": {
+            "description": "Explicit local normalized-excerpt retention disclosure.",
+            "type": "boolean"
+          },
+          "policyRevision": {
+            "description": "Optimistic policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recursive": {
+            "description": "Whether descendants will inherit consent.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirmationId",
+          "policyRevision",
+          "location",
+          "recursive",
+          "estimate",
+          "normalizedExcerptsRetainedLocally"
+        ],
+        "type": "object"
+      },
+      "SemanticEstimateCompletenessDto": {
+        "description": "Whether a folder preview is complete, partial, or unavailable.",
+        "enum": [
+          "estimated",
+          "partial",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "SemanticExclusionPlanDto": {
+        "description": "Authoritative destructive plan awaiting confirmation.",
+        "properties": {
+          "categories": {
+            "description": "Every mandatory category and authoritative count.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticDeletionCategoryStatusDto"
+            },
+            "type": "array"
+          },
+          "confirmationId": {
+            "description": "Opaque confirmation identity.",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral excluded scope."
+          },
+          "policyRevision": {
+            "description": "Revision the plan was derived from.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rootId": {
+            "description": "Stable owning root.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmationId",
+          "policyRevision",
+          "rootId",
+          "location",
+          "categories"
+        ],
+        "type": "object"
+      },
+      "SemanticExclusionStatusDto": {
+        "description": "One explicit descendant/root exclusion.",
+        "properties": {
+          "cleanup": {
+            "$ref": "#/components/schemas/SemanticCleanupStatusDto",
+            "description": "Destructive cleanup state."
+          },
+          "id": {
+            "description": "Stable exclusion identity.",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral scope."
+          }
+        },
+        "required": [
+          "id",
+          "location",
+          "cleanup"
+        ],
+        "type": "object"
+      },
+      "SemanticFolderConsentDto": {
+        "description": "Effective consent at one active folder.",
+        "enum": [
+          "includedHere",
+          "inheritedFromParent",
+          "excluded",
+          "notIncluded"
+        ],
+        "type": "string"
+      },
+      "SemanticFolderStatusDto": {
+        "description": "Safe active-folder consent status.",
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/SemanticFolderConsentDto",
+            "description": "Effective consent."
+          },
+          "exclusionId": {
+            "description": "Most-specific exclusion, when excluded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rootId": {
+            "description": "Root granting or formerly granting consent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceAvailable": {
+            "description": "Whether source links can currently open.",
+            "type": "boolean"
+          },
+          "unavailableReason": {
+            "description": "Sanitized source-unavailable reason.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workspaceReferenced": {
+            "description": "Whether the active workspace is attached to the granting root.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consent",
+          "workspaceReferenced",
+          "sourceAvailable"
+        ],
+        "type": "object"
       },
       "SemanticIndexRecordCountsDto": {
         "description": "Expected or removed enrolment-derived records.",
@@ -6719,6 +7293,372 @@
           "localOnlyDisclosure",
           "dataRoot",
           "minimumFreeSpaceReserveBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryAuthorityDto": {
+        "description": "Principal controlling semantic-library policy in this host.",
+        "enum": [
+          "unavailable",
+          "desktopManaged",
+          "administratorProvisioned",
+          "deterministicMock"
+        ],
+        "type": "string"
+      },
+      "SemanticLibraryCapabilitiesDto": {
+        "description": "Semantic-library authority and supported operations.",
+        "properties": {
+          "authority": {
+            "$ref": "#/components/schemas/SemanticLibraryAuthorityDto",
+            "description": "Active authority."
+          },
+          "operations": {
+            "description": "Explicit supported operations.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticLibraryOperationDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "authority",
+          "operations"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryErrorCodeDto": {
+        "description": "Stable semantic-library error code.",
+        "enum": [
+          "unavailable",
+          "authorityDenied",
+          "accessDenied",
+          "incompatibleLibraryIdentity",
+          "invalidRequest",
+          "workspaceRequired",
+          "notEnrolled",
+          "alreadyExcluded",
+          "unsafeEligibilityOverride",
+          "staleRevision",
+          "staleConfirmation",
+          "notFound",
+          "persistence",
+          "cleanup",
+          "stateUnavailable",
+          "revisionOverflow"
+        ],
+        "type": "string"
+      },
+      "SemanticLibraryErrorDetailsDto": {
+        "description": "Structured semantic-library error details.",
+        "oneOf": [
+          {
+            "description": "Rejected host operation.",
+            "properties": {
+              "authority": {
+                "$ref": "#/components/schemas/SemanticLibraryAuthorityDto",
+                "description": "Active authority."
+              },
+              "kind": {
+                "enum": [
+                  "authorityDenied"
+                ],
+                "type": "string"
+              },
+              "operation": {
+                "$ref": "#/components/schemas/SemanticLibraryOperationDto",
+                "description": "Rejected operation."
+              }
+            },
+            "required": [
+              "authority",
+              "operation",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Optimistic revision mismatch.",
+            "properties": {
+              "actual": {
+                "description": "Current revision.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expected": {
+                "description": "Submitted revision.",
+                "format": "int64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "staleRevision"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected",
+              "actual",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SemanticLibraryErrorDto": {
+        "description": "Shared HTTP/Tauri semantic-library failure.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SemanticLibraryErrorCodeDto",
+            "description": "Stable machine-readable code."
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticLibraryErrorDetailsDto",
+                "description": "Structured details when useful."
+              }
+            ]
+          },
+          "message": {
+            "description": "Safe human-readable message.",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "Request correlation identity.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryIdentityDto": {
+        "description": "Stable library and exact model identity.",
+        "properties": {
+          "libraryId": {
+            "description": "Stable library UUID.",
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/components/schemas/SemanticLibraryModelIdentityDto",
+            "description": "Exact model identity."
+          }
+        },
+        "required": [
+          "libraryId",
+          "model"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryModelIdentityDto": {
+        "description": "Exact embedding identity for a library.",
+        "properties": {
+          "dimensions": {
+            "description": "Embedding dimensions.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "embeddingSpace": {
+            "description": "Embedding-space identity.",
+            "type": "string"
+          },
+          "modelId": {
+            "description": "Model identifier.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Immutable upstream revision.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "modelId",
+          "revision",
+          "dimensions",
+          "embeddingSpace"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryOperationDto": {
+        "description": "Explicit operation supported by the active semantic-library capability.",
+        "enum": [
+          "viewStatus",
+          "viewFolderStatus",
+          "previewEnrolment",
+          "enrol",
+          "planExclusion",
+          "confirmExclusion",
+          "resumeCleanup",
+          "pause",
+          "resume",
+          "updateEligibilityOverrides"
+        ],
+        "type": "string"
+      },
+      "SemanticLibraryResourceBudgetsDto": {
+        "description": "Enforced semantic resource ceilings.",
+        "properties": {
+          "maxDocuments": {
+            "description": "Maximum documents.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxSourceBytesPerDocument": {
+            "description": "Maximum source bytes for one document.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalExtractedBytes": {
+            "description": "Maximum normalized excerpt bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalSourceBytes": {
+            "description": "Maximum cumulative source bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalVectorBytes": {
+            "description": "Maximum vector bytes.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxDocuments",
+          "maxSourceBytesPerDocument",
+          "maxTotalSourceBytes",
+          "maxTotalExtractedBytes",
+          "maxTotalVectorBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryResourceProfileDto": {
+        "description": "Selected resource profile and hard ceilings.",
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/SemanticLibraryResourceBudgetsDto",
+            "description": "Enforced ceilings."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SemanticLibraryResourceProfileKindDto",
+            "description": "Named profile."
+          }
+        },
+        "required": [
+          "kind",
+          "budgets"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryResourceProfileKindDto": {
+        "description": "Named semantic resource profile.",
+        "enum": [
+          "compact",
+          "balanced",
+          "quality"
+        ],
+        "type": "string"
+      },
+      "SemanticLibraryRevisionRequestDto": {
+        "additionalProperties": false,
+        "description": "Optimistically guarded pause/resume request.",
+        "properties": {
+          "policyRevision": {
+            "description": "Current policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policyRevision"
+        ],
+        "type": "object"
+      },
+      "SemanticLibraryStatusDto": {
+        "description": "Complete safe policy/catalog/state projection.",
+        "properties": {
+          "available": {
+            "description": "Whether a library is configured.",
+            "type": "boolean"
+          },
+          "library": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticLibraryIdentityDto",
+                "description": "Stable library/model identity."
+              }
+            ]
+          },
+          "normalizedExcerptsRetainedLocally": {
+            "description": "Explicit retention disclosure.",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Whether ingestion is paused.",
+            "type": "boolean"
+          },
+          "reconciliationIntervalSeconds": {
+            "description": "Reconciliation cadence.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resourceProfile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticLibraryResourceProfileDto",
+                "description": "Selected resource policy."
+              }
+            ]
+          },
+          "revision": {
+            "description": "Optimistic mutation revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "roots": {
+            "description": "Globally enrolled roots.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticRootStatusDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "revision",
+          "paused",
+          "roots",
+          "normalizedExcerptsRetainedLocally"
         ],
         "type": "object"
       },
@@ -7066,6 +8006,134 @@
         "required": [
           "documents",
           "sourceBytes"
+        ],
+        "type": "object"
+      },
+      "SemanticRootAvailabilityDto": {
+        "description": "Current source-root reachability.",
+        "oneOf": [
+          {
+            "description": "Source can be opened.",
+            "properties": {
+              "state": {
+                "enum": [
+                  "available"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Indexed evidence remains usable but source links cannot open.",
+            "properties": {
+              "reason": {
+                "description": "Sanitized provider diagnostic.",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "temporarilyUnavailable"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "state"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SemanticRootStatusDto": {
+        "description": "Safe status for one globally enrolled root.",
+        "properties": {
+          "attachedVocabularyIds": {
+            "description": "Persisted vocabulary identifiers.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/SemanticRootAvailabilityDto",
+            "description": "Current source reachability."
+          },
+          "eligibilityOverrides": {
+            "description": "Fixed reason-based eligibility overrides.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticEligibilityOverrideStatusDto"
+            },
+            "type": "array"
+          },
+          "eligibilityReasonCounts": {
+            "description": "Last available skip-reason counts.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticEligibilityReasonCountDto"
+            },
+            "type": "array"
+          },
+          "exclusions": {
+            "description": "Explicit exclusions.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticExclusionStatusDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "Stable path-independent root identity.",
+            "type": "string"
+          },
+          "indexedGeneration": {
+            "description": "Last indexed generation.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral location already visible to the user."
+          },
+          "reconciliationGeneration": {
+            "description": "Last complete catalog reconciliation generation.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recursive": {
+            "description": "Whether descendants inherit consent.",
+            "type": "boolean"
+          },
+          "stableIdentityVerified": {
+            "description": "Whether a provider supplied stable identity.",
+            "type": "boolean"
+          },
+          "workspaceReferences": {
+            "description": "Workspaces attached to this global consent.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "location",
+          "recursive",
+          "stableIdentityVerified",
+          "workspaceReferences",
+          "eligibilityOverrides",
+          "attachedVocabularyIds",
+          "eligibilityReasonCounts",
+          "availability",
+          "reconciliationGeneration",
+          "indexedGeneration",
+          "exclusions"
         ],
         "type": "object"
       },
@@ -8281,6 +9349,41 @@
           "name",
           "kind",
           "configuration"
+        ],
+        "type": "object"
+      },
+      "UpdateSemanticEligibilityOverridesRequestDto": {
+        "additionalProperties": false,
+        "description": "Replaces safe reason-based eligibility overrides.",
+        "properties": {
+          "overrides": {
+            "description": "Complete replacement override set.",
+            "items": {
+              "$ref": "#/components/schemas/SemanticEligibilityOverrideStatusDto"
+            },
+            "type": "array"
+          },
+          "policyRevision": {
+            "description": "Current policy revision.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rootId": {
+            "description": "Stable root identity.",
+            "type": "string"
+          },
+          "workspaceId": {
+            "description": "Attached active workspace.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rootId",
+          "workspaceId",
+          "policyRevision",
+          "overrides"
         ],
         "type": "object"
       },
@@ -13588,6 +14691,533 @@
           }
         },
         "summary": "Installs the newest compatible signed worker patch, when available."
+      }
+    },
+    "/api/v1/semantic/library/capabilities": {
+      "get": {
+        "operationId": "getSemanticLibraryCapabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryCapabilitiesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/cleanup/resume": {
+      "post": {
+        "operationId": "resumeSemanticCleanup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeSemanticCleanupRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/eligibility-overrides": {
+      "post": {
+        "operationId": "updateSemanticEligibilityOverrides",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSemanticEligibilityOverridesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/enrolment/confirm": {
+      "post": {
+        "operationId": "confirmSemanticEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSemanticEnrolmentRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/enrolment/preview": {
+      "post": {
+        "operationId": "previewSemanticEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewSemanticEnrolmentRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticEnrolmentPreviewDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/exclusions/confirm": {
+      "post": {
+        "operationId": "confirmSemanticExclusion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSemanticExclusionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/exclusions/plan": {
+      "post": {
+        "operationId": "planSemanticExclusion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanSemanticExclusionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticExclusionPlanDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/folder-status": {
+      "post": {
+        "operationId": "getSemanticFolderStatus",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetSemanticFolderStatusRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticFolderStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/pause": {
+      "post": {
+        "operationId": "pauseSemanticLibrary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticLibraryRevisionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/resume": {
+      "post": {
+        "operationId": "resumeSemanticLibrary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticLibraryRevisionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/status": {
+      "get": {
+        "operationId": "getSemanticLibraryStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
       }
     },
     "/api/v1/settings": {

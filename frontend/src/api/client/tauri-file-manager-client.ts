@@ -21,6 +21,8 @@ import type {
   ChecksumPage,
   ComparisonPage,
   CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
   ConfirmSemanticIndexRemovalRequest,
   ConfirmSemanticModelMigrationRequest,
   Connection,
@@ -45,6 +47,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateSyncPlanRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
@@ -62,12 +65,14 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -76,6 +81,7 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -87,10 +93,16 @@ import type {
   SemanticComponentCapabilities,
   SemanticComponentStatus,
   SemanticDataMoveReceipt,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
   SemanticIndexRemovalPlan,
   SemanticIndexRemovalReceipt,
   SemanticInstallationOffer,
   SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
   SemanticModelMigrationPlan,
   SemanticModelMigrationProgress,
   SemanticModelProfile,
@@ -120,6 +132,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -284,6 +297,79 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<SemanticModelSelection>('complete_semantic_component_model_migration', {
       request,
     });
+  }
+
+  async getSemanticLibraryCapabilities(
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryCapabilities> {
+    return invoke<SemanticLibraryCapabilities>('get_semantic_library_capabilities');
+  }
+
+  async getSemanticLibraryStatus(_signal?: AbortSignal): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('get_semantic_library_status');
+  }
+
+  async getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus> {
+    return invoke<SemanticFolderStatus>('get_semantic_folder_status', { request });
+  }
+
+  async previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview> {
+    return invoke<SemanticEnrolmentPreview>('preview_semantic_enrolment', { request });
+  }
+
+  async confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('confirm_semantic_enrolment', { request });
+  }
+
+  async planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan> {
+    return invoke<SemanticExclusionPlan>('plan_semantic_exclusion', { request });
+  }
+
+  async confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('confirm_semantic_exclusion', { request });
+  }
+
+  async resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('resume_semantic_cleanup', { request });
+  }
+
+  async pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('pause_semantic_library', { request });
+  }
+
+  async resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('resume_semantic_library', { request });
+  }
+
+  async updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('update_semantic_eligibility_overrides', { request });
   }
 
   async getDiagnostics(_signal?: AbortSignal): Promise<DiagnosticsResult> {

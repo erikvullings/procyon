@@ -49,6 +49,7 @@ fm-pptx-renderer = {path = "crates/fm-pptx-renderer"}
 fm-search = {path = "crates/fm-search"}
 fm-search-acceleration = {path = "crates/fm-search-acceleration"}
 fm-semantic-components = {path = "crates/fm-semantic-components"}
+fm-semantic-library = {path = "crates/fm-semantic-library"}
 fm-semantic-protocol = {path = "crates/fm-semantic-protocol"}
 fm-semantic-worker = {path = "crates/fm-semantic-worker"}
 fm-settings = {path = "crates/fm-settings"}

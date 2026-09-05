@@ -8,7 +8,9 @@ use axum::response::IntoResponse;
 use fm_application::ApplicationError;
 use fm_application::semantic_component_mapping::semantic_component_error_to_dto;
 use fm_application::semantic_components::SemanticComponentError;
-use fm_transport_dto::{LocationDto, SemanticComponentErrorCodeDto};
+use fm_application::semantic_library::SemanticLibraryError;
+use fm_application::semantic_library_mapping::semantic_library_error_to_dto;
+use fm_transport_dto::{LocationDto, SemanticComponentErrorCodeDto, SemanticLibraryErrorCodeDto};
 use std::path::PathBuf;
 use tower_http::request_id::RequestId;
 use uuid::Uuid;
@@ -134,6 +136,43 @@ impl IntoResponse for SemanticApiError {
             | SemanticComponentErrorCodeDto::DataMigration
             | SemanticComponentErrorCodeDto::BlockingTaskFailed
             | SemanticComponentErrorCodeDto::DiskUseOverflow => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, Json(dto)).into_response()
+    }
+}
+
+/// Wraps a semantic-library failure with the request correlation id.
+pub(crate) struct SemanticLibraryApiError {
+    error: SemanticLibraryError,
+    request_id: Uuid,
+}
+
+impl SemanticLibraryApiError {
+    pub(crate) fn new(error: SemanticLibraryError, request_id: Uuid) -> Self {
+        Self { error, request_id }
+    }
+}
+
+impl IntoResponse for SemanticLibraryApiError {
+    fn into_response(self) -> axum::response::Response {
+        let dto = semantic_library_error_to_dto(self.error, self.request_id);
+        let status = match dto.code {
+            SemanticLibraryErrorCodeDto::AuthorityDenied
+            | SemanticLibraryErrorCodeDto::AccessDenied => StatusCode::FORBIDDEN,
+            SemanticLibraryErrorCodeDto::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+            SemanticLibraryErrorCodeDto::WorkspaceRequired
+            | SemanticLibraryErrorCodeDto::AlreadyExcluded
+            | SemanticLibraryErrorCodeDto::StaleRevision
+            | SemanticLibraryErrorCodeDto::StaleConfirmation => StatusCode::CONFLICT,
+            SemanticLibraryErrorCodeDto::NotFound => StatusCode::NOT_FOUND,
+            SemanticLibraryErrorCodeDto::InvalidRequest
+            | SemanticLibraryErrorCodeDto::NotEnrolled
+            | SemanticLibraryErrorCodeDto::UnsafeEligibilityOverride => StatusCode::BAD_REQUEST,
+            SemanticLibraryErrorCodeDto::IncompatibleLibraryIdentity
+            | SemanticLibraryErrorCodeDto::Persistence
+            | SemanticLibraryErrorCodeDto::Cleanup
+            | SemanticLibraryErrorCodeDto::StateUnavailable
+            | SemanticLibraryErrorCodeDto::RevisionOverflow => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, Json(dto)).into_response()
     }

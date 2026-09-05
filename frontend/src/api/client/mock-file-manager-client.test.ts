@@ -576,6 +576,97 @@ describe('MockFileManagerClient semantic component lifecycle', () => {
   });
 });
 
+describe('MockFileManagerClient semantic library lifecycle', () => {
+  it('previews, enrols, pauses, excludes, and keeps counts backend-owned', async () => {
+    const client = new MockFileManagerClient();
+    const workspace = await client.startWorkspace();
+    const pane = workspace.panesById[workspace.activePaneId];
+    const location = pane?.tabsById[pane.activeTabId]?.location;
+    expect(location).toBeDefined();
+    if (location === undefined) return;
+
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    expect(preview).toMatchObject({
+      policyRevision: 1,
+      normalizedExcerptsRetainedLocally: true,
+      estimate: {
+        completeness: 'partial',
+        estimatedFiles: 42,
+        missingModelDownloadBytes: 500,
+      },
+    });
+    const enrolled = await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(enrolled.roots).toHaveLength(1);
+    await expect(
+      client.getSemanticFolderStatus({ workspaceId: workspace.id, location }),
+    ).resolves.toMatchObject({ consent: 'includedHere' });
+
+    await expect(
+      client.pauseSemanticLibrary({ policyRevision: preview.policyRevision }),
+    ).rejects.toMatchObject({ code: 'staleRevision' });
+    const paused = await client.pauseSemanticLibrary({ policyRevision: enrolled.revision });
+    expect(paused.paused).toBe(true);
+    const resumed = await client.resumeSemanticLibrary({ policyRevision: paused.revision });
+    expect(resumed.paused).toBe(false);
+
+    const plan = await client.planSemanticExclusion({
+      policyRevision: resumed.revision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(plan.categories.map(({ category }) => category)).toEqual([
+      'occurrences',
+      'extractedContent',
+      'summaries',
+      'labels',
+      'orphanVectors',
+      'conversationEvidencePins',
+    ]);
+    const excluded = await client.confirmSemanticExclusion({
+      confirmationId: plan.confirmationId,
+      policyRevision: plan.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(excluded.roots[0]?.exclusions[0]?.cleanup.status).toBe('complete');
+  });
+
+  it('detaches a deleted workspace without revoking global root consent', async () => {
+    const client = new MockFileManagerClient();
+    const workspace = await client.startWorkspace();
+    const pane = workspace.panesById[workspace.activePaneId];
+    const location = pane?.tabsById[pane.activeTabId]?.location;
+    expect(location).toBeDefined();
+    if (location === undefined) return;
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+
+    await client.deleteWorkspace(workspace.id, workspace.revision);
+
+    const status = await client.getSemanticLibraryStatus();
+    expect(status.roots).toHaveLength(1);
+    expect(status.roots[0]?.workspaceReferences).toEqual([]);
+  });
+});
+
 describe('MockFileManagerClient controls', () => {
   it('delivers scripted directory-delta and operation-progress events on demand', async () => {
     const client = new MockFileManagerClient();

@@ -1,6 +1,6 @@
 # 0179 Semantic library enrolment and consent policy
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, frontend, settings
 Depends on: 0020, 0030, 0177
@@ -63,3 +63,21 @@ query still applies its active workspace/root/tenant scope.
 - 2026-09-04: Split from 0176. Agreed semantics are recursive roots with descendant exclusions,
   destructive exclusion, non-destructive pause, and retained evidence for temporarily unavailable
   sources.
+- 2026-09-05 Copilot: Added `fm-semantic-library`, a provider-neutral, versioned consent policy and
+  authoritative catalog core with stable root identities, recursive inheritance and exclusions,
+  curated eligibility rules, shared occurrence records, hard quotas, tenant authorization, paused
+  ingestion, unavailable-source retention, migration, and scoped worker-feed decisions.
+- 2026-09-05 Copilot: Policy metadata uses the settings migration machinery while catalog and
+  runtime state remain under the semantic-data root. Cross-process locking, durable revisions, and
+  a write-ahead journal coordinate policy, catalog, and state; committed recovery, model/library
+  identity checks, and resumable idempotent exclusion cleanup prevent stale writers from restoring
+  revoked consent.
+- 2026-09-05 Copilot: Added the `SemanticLibraryService` capability, desktop component composition,
+  administrator-provisioned server isolation, matching HTTP/Tauri/mock clients, generated OpenAPI
+  bindings, and a Settings surface for folder consent, estimates, pause, exclusions, cleanup
+  progress, source availability, and eligibility overrides. Reconciliation and provider-neutral
+  feed seams are ready for task 0182; this task deliberately does not crawl or convert files.
+- 2026-09-05 Copilot: Verified 71 semantic-library core tests, 37 application integration tests,
+  6 server route tests, and 9 Settings UI tests, plus the affected HTTP/mock/Tauri client suites and
+  frontend typecheck. Full Rust formatting/Clippy and Biome checks passed; OpenAPI and Orval
+  artifacts were regenerated from the backend.

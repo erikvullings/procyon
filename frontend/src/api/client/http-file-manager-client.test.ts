@@ -20,6 +20,17 @@ const planSemanticComponentModelMigration = vi.fn();
 const confirmSemanticComponentModelMigration = vi.fn();
 const checkpointSemanticComponentModelMigration = vi.fn();
 const completeSemanticComponentModelMigration = vi.fn();
+const getSemanticLibraryCapabilities = vi.fn();
+const getSemanticLibraryStatus = vi.fn();
+const getSemanticFolderStatus = vi.fn();
+const previewSemanticEnrolment = vi.fn();
+const confirmSemanticEnrolment = vi.fn();
+const planSemanticExclusion = vi.fn();
+const confirmSemanticExclusion = vi.fn();
+const resumeSemanticCleanup = vi.fn();
+const pauseSemanticLibrary = vi.fn();
+const resumeSemanticLibrary = vi.fn();
+const updateSemanticEligibilityOverrides = vi.fn();
 const getSystemLocations = vi.fn();
 const getVolumes = vi.fn();
 const listDirectory = vi.fn();
@@ -102,6 +113,18 @@ vi.mock('../generated/file-manager-api', () => ({
     checkpointSemanticComponentModelMigration(...args),
   completeSemanticComponentModelMigration: (...args: unknown[]) =>
     completeSemanticComponentModelMigration(...args),
+  getSemanticLibraryCapabilities: (...args: unknown[]) => getSemanticLibraryCapabilities(...args),
+  getSemanticLibraryStatus: (...args: unknown[]) => getSemanticLibraryStatus(...args),
+  getSemanticFolderStatus: (...args: unknown[]) => getSemanticFolderStatus(...args),
+  previewSemanticEnrolment: (...args: unknown[]) => previewSemanticEnrolment(...args),
+  confirmSemanticEnrolment: (...args: unknown[]) => confirmSemanticEnrolment(...args),
+  planSemanticExclusion: (...args: unknown[]) => planSemanticExclusion(...args),
+  confirmSemanticExclusion: (...args: unknown[]) => confirmSemanticExclusion(...args),
+  resumeSemanticCleanup: (...args: unknown[]) => resumeSemanticCleanup(...args),
+  pauseSemanticLibrary: (...args: unknown[]) => pauseSemanticLibrary(...args),
+  resumeSemanticLibrary: (...args: unknown[]) => resumeSemanticLibrary(...args),
+  updateSemanticEligibilityOverrides: (...args: unknown[]) =>
+    updateSemanticEligibilityOverrides(...args),
   getSystemLocations: (...args: unknown[]) => getSystemLocations(...args),
   getVolumes: (...args: unknown[]) => getVolumes(...args),
   listDirectory: (...args: unknown[]) => listDirectory(...args),
@@ -210,6 +233,17 @@ afterEach(() => {
   confirmSemanticComponentModelMigration.mockReset();
   checkpointSemanticComponentModelMigration.mockReset();
   completeSemanticComponentModelMigration.mockReset();
+  getSemanticLibraryCapabilities.mockReset();
+  getSemanticLibraryStatus.mockReset();
+  getSemanticFolderStatus.mockReset();
+  previewSemanticEnrolment.mockReset();
+  confirmSemanticEnrolment.mockReset();
+  planSemanticExclusion.mockReset();
+  confirmSemanticExclusion.mockReset();
+  resumeSemanticCleanup.mockReset();
+  pauseSemanticLibrary.mockReset();
+  resumeSemanticLibrary.mockReset();
+  updateSemanticEligibilityOverrides.mockReset();
   listDirectory.mockReset();
   listDirectoryChildren.mockReset();
   navigatePane.mockReset();
@@ -632,6 +666,117 @@ describe('HttpFileManagerClient', () => {
         completeRequest,
         options,
       );
+    });
+  });
+
+  describe('semantic library transport', () => {
+    it('uses every generated endpoint and forwards the request and abort signal', async () => {
+      const controller = new AbortController();
+      const options = { signal: controller.signal };
+      const response = (data: unknown) => ({ status: 200, data, headers: new Headers() });
+      const location = { providerId: 'local', uri: 'file:///docs' };
+      const context = { workspaceId: '00000000-0000-0000-0000-000000000010', location };
+      const status = {
+        available: true,
+        revision: 1,
+        paused: false,
+        roots: [],
+        normalizedExcerptsRetainedLocally: true,
+      };
+      const folder = {
+        consent: 'notIncluded',
+        rootId: null,
+        exclusionId: null,
+        workspaceReferenced: false,
+        sourceAvailable: true,
+        unavailableReason: null,
+      };
+      const preview = {
+        confirmationId: 'preview-1',
+        policyRevision: 1,
+        location,
+        recursive: true,
+        normalizedExcerptsRetainedLocally: true,
+        estimate: {
+          completeness: 'unavailable',
+          estimatedFiles: null,
+          estimatedSourceBytes: null,
+          estimatedExtractedBytes: null,
+          estimatedVectorBytes: null,
+          estimatedAdditionalLocalBytes: null,
+          missingModelDownloadBytes: null,
+          skippedReasonCounts: [],
+          exceededBudgets: [],
+          unavailableReason: 'not available',
+        },
+      };
+      const enrolRequest = {
+        confirmationId: preview.confirmationId,
+        policyRevision: 1,
+        ...context,
+      };
+      const exclusionRequest = { policyRevision: 1, ...context };
+      const exclusionPlan = {
+        confirmationId: 'exclude-1',
+        policyRevision: 1,
+        rootId: 'root-1',
+        location,
+        categories: [],
+      };
+      const exclusionConfirmation = {
+        confirmationId: exclusionPlan.confirmationId,
+        policyRevision: 1,
+        ...context,
+      };
+      const cleanupRequest = { planId: 'plan-1', policyRevision: 1 };
+      const revisionRequest = { policyRevision: 1 };
+      const overridesRequest = {
+        rootId: 'root-1',
+        workspaceId: context.workspaceId,
+        policyRevision: 1,
+        overrides: [{ reason: 'hidden' as const, action: 'include' as const }],
+      };
+      getSemanticLibraryCapabilities.mockResolvedValue(
+        response({ authority: 'deterministicMock', operations: ['viewStatus'] }),
+      );
+      getSemanticLibraryStatus.mockResolvedValue(response(status));
+      getSemanticFolderStatus.mockResolvedValue(response(folder));
+      previewSemanticEnrolment.mockResolvedValue(response(preview));
+      confirmSemanticEnrolment.mockResolvedValue(response(status));
+      planSemanticExclusion.mockResolvedValue(response(exclusionPlan));
+      confirmSemanticExclusion.mockResolvedValue(response(status));
+      resumeSemanticCleanup.mockResolvedValue(response(status));
+      pauseSemanticLibrary.mockResolvedValue(response({ ...status, paused: true }));
+      resumeSemanticLibrary.mockResolvedValue(response(status));
+      updateSemanticEligibilityOverrides.mockResolvedValue(response(status));
+      const client = new HttpFileManagerClient();
+
+      await client.getSemanticLibraryCapabilities(controller.signal);
+      await client.getSemanticLibraryStatus(controller.signal);
+      await client.getSemanticFolderStatus(context, controller.signal);
+      await client.previewSemanticEnrolment({ ...context, recursive: true }, controller.signal);
+      await client.confirmSemanticEnrolment(enrolRequest, controller.signal);
+      await client.planSemanticExclusion(exclusionRequest, controller.signal);
+      await client.confirmSemanticExclusion(exclusionConfirmation, controller.signal);
+      await client.resumeSemanticCleanup(cleanupRequest, controller.signal);
+      await client.pauseSemanticLibrary(revisionRequest, controller.signal);
+      await client.resumeSemanticLibrary(revisionRequest, controller.signal);
+      await client.updateSemanticEligibilityOverrides(overridesRequest, controller.signal);
+
+      expect(getSemanticLibraryCapabilities).toHaveBeenCalledWith(options);
+      expect(getSemanticLibraryStatus).toHaveBeenCalledWith(options);
+      expect(getSemanticFolderStatus).toHaveBeenCalledWith(context, options);
+      expect(previewSemanticEnrolment).toHaveBeenCalledWith(
+        { ...context, recursive: true },
+        options,
+      );
+      expect(confirmSemanticEnrolment).toHaveBeenCalledWith(enrolRequest, options);
+      expect(planSemanticExclusion).toHaveBeenCalledWith(exclusionRequest, options);
+      expect(confirmSemanticExclusion).toHaveBeenCalledWith(exclusionConfirmation, options);
+      expect(resumeSemanticCleanup).toHaveBeenCalledWith(cleanupRequest, options);
+      expect(pauseSemanticLibrary).toHaveBeenCalledWith(revisionRequest, options);
+      expect(resumeSemanticLibrary).toHaveBeenCalledWith(revisionRequest, options);
+      expect(updateSemanticEligibilityOverrides).toHaveBeenCalledWith(overridesRequest, options);
     });
   });
 

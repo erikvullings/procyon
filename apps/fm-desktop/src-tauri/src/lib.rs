@@ -200,6 +200,17 @@ pub fn run() {
             commands::confirm_semantic_component_model_migration,
             commands::checkpoint_semantic_component_model_migration,
             commands::complete_semantic_component_model_migration,
+            commands::get_semantic_library_capabilities,
+            commands::get_semantic_library_status,
+            commands::get_semantic_folder_status,
+            commands::preview_semantic_enrolment,
+            commands::confirm_semantic_enrolment,
+            commands::plan_semantic_exclusion,
+            commands::confirm_semantic_exclusion,
+            commands::resume_semantic_cleanup,
+            commands::pause_semantic_library,
+            commands::resume_semantic_library,
+            commands::update_semantic_eligibility_overrides,
             commands::get_system_locations,
             commands::get_volumes,
             commands::get_home_directory,
@@ -414,7 +425,10 @@ mod tests {
                     )
                     .with_semantic_component_capability(Arc::new(
                         fm_application::semantic_components::FakeSemanticComponentCapability::new(),
-                    )),
+                    ))
+                    .with_semantic_library_service(
+                        fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
+                    ),
                 ),
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
@@ -440,6 +454,17 @@ mod tests {
                 commands::confirm_semantic_component_model_migration,
                 commands::checkpoint_semantic_component_model_migration,
                 commands::complete_semantic_component_model_migration,
+                commands::get_semantic_library_capabilities,
+                commands::get_semantic_library_status,
+                commands::get_semantic_folder_status,
+                commands::preview_semantic_enrolment,
+                commands::confirm_semantic_enrolment,
+                commands::plan_semantic_exclusion,
+                commands::confirm_semantic_exclusion,
+                commands::resume_semantic_cleanup,
+                commands::pause_semantic_library,
+                commands::resume_semantic_library,
+                commands::update_semantic_eligibility_overrides,
                 commands::get_system_locations,
                 commands::get_volumes,
                 commands::get_home_directory,
@@ -1082,6 +1107,85 @@ mod tests {
             uninstall.index_decision,
             fm_transport_dto::SemanticIndexRetentionDecisionDto::Delete
         );
+    }
+
+    #[tokio::test]
+    async fn semantic_library_commands_round_trip_through_the_shared_service() {
+        let app = create_app(mock_builder());
+        let workspace = app
+            .state::<AppState>()
+            .service
+            .start_workspace(None)
+            .await
+            .expect("start workspace");
+        let pane = workspace
+            .panes
+            .iter()
+            .find(|pane| pane.id == workspace.active_pane_id)
+            .expect("active pane");
+        let tab = pane
+            .tabs
+            .iter()
+            .find(|tab| tab.id == pane.active_tab_id)
+            .expect("active tab");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let invoke = |command: &'static str, request: serde_json::Value| {
+            get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: local_protocol_url(),
+                    body: InvokeBody::Json(request),
+                    headers: Default::default(),
+                    invoke_key: INVOKE_KEY.to_string(),
+                },
+            )
+        };
+
+        let capabilities = invoke("get_semantic_library_capabilities", serde_json::json!({}))
+            .expect("library capabilities")
+            .deserialize::<fm_transport_dto::SemanticLibraryCapabilitiesDto>()
+            .expect("capabilities DTO");
+        assert_eq!(
+            capabilities.authority,
+            fm_transport_dto::SemanticLibraryAuthorityDto::DeterministicMock
+        );
+
+        let preview = invoke(
+            "preview_semantic_enrolment",
+            serde_json::json!({
+                "request": {
+                    "workspaceId": workspace.id,
+                    "location": tab.location,
+                    "recursive": true
+                }
+            }),
+        )
+        .expect("enrolment preview")
+        .deserialize::<fm_transport_dto::SemanticEnrolmentPreviewDto>()
+        .expect("preview DTO");
+        assert!(preview.normalized_excerpts_retained_locally);
+
+        let status = invoke(
+            "confirm_semantic_enrolment",
+            serde_json::json!({
+                "request": {
+                    "confirmationId": preview.confirmation_id,
+                    "policyRevision": preview.policy_revision,
+                    "workspaceId": workspace.id,
+                    "location": tab.location
+                }
+            }),
+        )
+        .expect("confirm enrolment")
+        .deserialize::<fm_transport_dto::SemanticLibraryStatusDto>()
+        .expect("status DTO");
+        assert_eq!(status.roots.len(), 1);
     }
 
     #[test]

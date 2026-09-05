@@ -64,6 +64,15 @@ browser/server builds only report administrator-provisioned status, and normal c
 inert. A production catalog and concrete default model stay disabled until the evaluation task has
 recorded retrieval quality, latency, licensing, package-size, and index-size measurements.
 
+`fm-semantic-library` owns the provider-neutral enrolment policy and authoritative occurrence
+catalog. Its settings-side policy stores stable root, library, and model identities without
+credentials; catalog and runtime state remain beneath the configurable semantic-data root. Reads
+and mutations share a cross-process lock, durable revision, and write-ahead journal spanning policy,
+catalog, and pause state. Exclusions deny query and worker-feed scope immediately, then delete
+occurrences, excerpts, summaries, labels, orphan vectors, and conversation pins through resumable
+idempotent plans. Procyon enumerates VFS providers and supplies verified stable filesystem
+identities; the semantic worker receives only approved opaque feed records and never follows paths.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

@@ -25,6 +25,8 @@ import type {
   ComparisonPage,
   ComparisonStatus,
   CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
   ConfirmSemanticIndexRemovalRequest,
   ConfirmSemanticModelMigrationRequest,
   Connection,
@@ -50,6 +52,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateSyncPlanRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
@@ -67,12 +70,14 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -81,6 +86,7 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -97,18 +103,26 @@ import type {
   SemanticComponentOperation,
   SemanticComponentStatus,
   SemanticDataMoveReceipt,
+  SemanticDeletionCategoryStatus,
   SemanticDiskUse,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
   SemanticIndexRecordCounts,
   SemanticIndexRemovalPlan,
   SemanticIndexRemovalReceipt,
   SemanticInstallationOffer,
   SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
   SemanticModelIdentity,
   SemanticModelMigrationPlan,
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticProfile,
+  SemanticRootStatus,
   SemanticUninstallReceipt,
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
@@ -134,6 +148,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   VerificationResult,
@@ -198,6 +213,17 @@ export type MockClientMethod =
   | 'confirmSemanticComponentModelMigration'
   | 'checkpointSemanticComponentModelMigration'
   | 'completeSemanticComponentModelMigration'
+  | 'getSemanticLibraryCapabilities'
+  | 'getSemanticLibraryStatus'
+  | 'getSemanticFolderStatus'
+  | 'previewSemanticEnrolment'
+  | 'confirmSemanticEnrolment'
+  | 'planSemanticExclusion'
+  | 'confirmSemanticExclusion'
+  | 'resumeSemanticCleanup'
+  | 'pauseSemanticLibrary'
+  | 'resumeSemanticLibrary'
+  | 'updateSemanticEligibilityOverrides'
   | 'getDiagnostics'
   | 'getSystemLocations'
   | 'getVolumes'
@@ -1040,6 +1066,62 @@ function mockSemanticOffer(offerId: string, profile: SemanticProfile): SemanticI
   };
 }
 
+const MOCK_SEMANTIC_DELETION_CATEGORIES = [
+  'occurrences',
+  'extractedContent',
+  'summaries',
+  'labels',
+  'orphanVectors',
+  'conversationEvidencePins',
+] as const;
+
+function mockSemanticLibraryStatus(): SemanticLibraryStatus {
+  return {
+    available: true,
+    revision: 1,
+    paused: false,
+    library: {
+      libraryId: '00000000-0000-0000-0000-000000000179',
+      model: {
+        modelId: 'mock-semantic-model',
+        revision: 'mock-revision-1',
+        dimensions: 384,
+        embeddingSpace: 'mock-embedding-space',
+      },
+    },
+    resourceProfile: {
+      kind: 'balanced',
+      budgets: {
+        maxDocuments: 1_000_000,
+        maxSourceBytesPerDocument: 512 * 1_024 * 1_024,
+        maxTotalSourceBytes: 4 * 1_024 * 1_024 * 1_024 * 1_024,
+        maxTotalExtractedBytes: 1_024 * 1_024 * 1_024 * 1_024,
+        maxTotalVectorBytes: 1_024 * 1_024 * 1_024 * 1_024,
+      },
+    },
+    reconciliationIntervalSeconds: 1_800,
+    roots: [],
+    normalizedExcerptsRetainedLocally: true,
+  };
+}
+
+function semanticLocationContains(root: Location, candidate: Location): boolean {
+  if (root.providerId !== candidate.providerId) return false;
+  if (root.uri === candidate.uri) return true;
+  const prefix = root.uri.endsWith('/') ? root.uri : `${root.uri}/`;
+  return candidate.uri.startsWith(prefix);
+}
+
+function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatus[] {
+  return MOCK_SEMANTIC_DELETION_CATEGORIES.map((category, index) => ({
+    category,
+    totalItems: index + 1,
+    completedItems: complete ? index + 1 : 0,
+    complete,
+    lastError: null,
+  }));
+}
+
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
@@ -1067,6 +1149,16 @@ export class MockFileManagerClient implements FileManagerClient {
   );
   private readonly semanticIndexRemovalPlans = new Map<string, SemanticIndexRemovalPlan>();
   private readonly semanticMigrationPlans = new Map<string, SemanticModelMigrationPlan>();
+  private semanticLibrary = mockSemanticLibraryStatus();
+  private semanticLibrarySequence = 0;
+  private readonly semanticEnrolmentPreviews = new Map<
+    string,
+    PreviewSemanticEnrolmentRequest & { readonly policyRevision: number }
+  >();
+  private readonly semanticExclusionPlans = new Map<
+    string,
+    PlanSemanticExclusionRequest & { readonly rootId: string }
+  >();
   private readonly finderTagsByUri = new Map<string, FinderTags>();
   private readonly spotlightCommentsByUri = new Map<string, SpotlightComment>();
   private readonly listeners = new Set<(event: BackendEvent) => void>();
@@ -1547,6 +1639,327 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
+  getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {
+    return this.perform('getSemanticLibraryCapabilities', signal, () => ({
+      authority: 'deterministicMock',
+      operations: [
+        'viewStatus',
+        'viewFolderStatus',
+        'previewEnrolment',
+        'enrol',
+        'planExclusion',
+        'confirmExclusion',
+        'resumeCleanup',
+        'pause',
+        'resume',
+        'updateEligibilityOverrides',
+      ],
+    }));
+  }
+
+  getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus> {
+    return this.perform('getSemanticLibraryStatus', signal, () =>
+      structuredClone(this.semanticLibrary),
+    );
+  }
+
+  getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus> {
+    return this.perform('getSemanticFolderStatus', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      const matchingExclusions = this.semanticLibrary.roots
+        .flatMap((root) =>
+          root.exclusions
+            .filter((exclusion) => semanticLocationContains(exclusion.location, request.location))
+            .map((exclusion) => ({ root, exclusion })),
+        )
+        .sort(
+          (left, right) => left.exclusion.location.uri.length - right.exclusion.location.uri.length,
+        );
+      const excluded = matchingExclusions.at(-1);
+      if (excluded !== undefined) {
+        return {
+          consent: 'excluded',
+          rootId: excluded.root.id,
+          exclusionId: excluded.exclusion.id,
+          workspaceReferenced: excluded.root.workspaceReferences.includes(request.workspaceId),
+          sourceAvailable: excluded.root.availability.state === 'available',
+          unavailableReason:
+            excluded.root.availability.state === 'temporarilyUnavailable'
+              ? excluded.root.availability.reason
+              : null,
+        };
+      }
+      const matchingRoots = this.semanticLibrary.roots
+        .filter(
+          (root) =>
+            root.location.providerId === request.location.providerId &&
+            (root.location.uri === request.location.uri ||
+              (root.recursive && semanticLocationContains(root.location, request.location))),
+        )
+        .sort((left, right) => left.location.uri.length - right.location.uri.length);
+      const root = matchingRoots.at(-1);
+      if (root === undefined) {
+        return {
+          consent: 'notIncluded',
+          rootId: null,
+          exclusionId: null,
+          workspaceReferenced: false,
+          sourceAvailable: true,
+          unavailableReason: null,
+        };
+      }
+      return {
+        consent:
+          root.location.uri === request.location.uri ? 'includedHere' : 'inheritedFromParent',
+        rootId: root.id,
+        exclusionId: null,
+        workspaceReferenced: root.workspaceReferences.includes(request.workspaceId),
+        sourceAvailable: root.availability.state === 'available',
+        unavailableReason:
+          root.availability.state === 'temporarilyUnavailable' ? root.availability.reason : null,
+      };
+    });
+  }
+
+  previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview> {
+    return this.perform('previewSemanticEnrolment', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.semanticLibrarySequence += 1;
+      const confirmationId = `mock-enrol-confirmation-${this.semanticLibrarySequence}`;
+      this.semanticEnrolmentPreviews.set(confirmationId, {
+        ...structuredClone(request),
+        policyRevision: this.semanticLibrary.revision,
+      });
+      return {
+        confirmationId,
+        policyRevision: this.semanticLibrary.revision,
+        location: structuredClone(request.location),
+        recursive: request.recursive,
+        normalizedExcerptsRetainedLocally: true,
+        estimate: {
+          completeness: 'partial',
+          estimatedFiles: 42,
+          estimatedSourceBytes: 4_200,
+          estimatedExtractedBytes: 1_200,
+          estimatedVectorBytes: 800,
+          estimatedAdditionalLocalBytes: 2_500,
+          missingModelDownloadBytes: 500,
+          skippedReasonCounts: [
+            { reason: 'hidden', count: 1 },
+            { reason: 'unsupportedMime', count: 1 },
+          ],
+          exceededBudgets: [],
+          unavailableReason: null,
+        },
+      };
+    });
+  }
+
+  confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('confirmSemanticEnrolment', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const preview = this.semanticEnrolmentPreviews.get(request.confirmationId);
+      if (
+        preview === undefined ||
+        preview.policyRevision !== request.policyRevision ||
+        preview.workspaceId !== request.workspaceId ||
+        preview.location.providerId !== request.location.providerId ||
+        preview.location.uri !== request.location.uri
+      ) {
+        throw new MockClientError(
+          'staleConfirmation',
+          'Semantic library confirmation is stale or invalid',
+        );
+      }
+      this.semanticEnrolmentPreviews.delete(request.confirmationId);
+      const existing = this.semanticLibrary.roots.find(
+        (root) =>
+          root.location.providerId === request.location.providerId &&
+          root.location.uri === request.location.uri,
+      );
+      if (existing === undefined) {
+        this.semanticLibrarySequence += 1;
+        this.semanticLibrary.roots.push({
+          id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+          location: structuredClone(request.location),
+          recursive: preview.recursive,
+          stableIdentityVerified: true,
+          workspaceReferences: [request.workspaceId],
+          eligibilityOverrides: [],
+          attachedVocabularyIds: [],
+          eligibilityReasonCounts: [
+            { reason: 'hidden', count: 1 },
+            { reason: 'unsupportedMime', count: 1 },
+          ],
+          availability: { state: 'available' },
+          reconciliationGeneration: 0,
+          indexedGeneration: 0,
+          exclusions: [],
+        });
+      } else if (!existing.workspaceReferences.includes(request.workspaceId)) {
+        existing.workspaceReferences.push(request.workspaceId);
+      }
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan> {
+    return this.perform('planSemanticExclusion', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const root = this.semanticRootFor(request.location);
+      if (root === undefined) {
+        throw new MockClientError('notEnrolled', 'The folder is not included');
+      }
+      if (!root.workspaceReferences.includes(request.workspaceId)) {
+        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+      }
+      this.semanticLibrarySequence += 1;
+      const confirmationId = `mock-exclusion-confirmation-${this.semanticLibrarySequence}`;
+      this.semanticExclusionPlans.set(confirmationId, {
+        ...structuredClone(request),
+        rootId: root.id,
+      });
+      return {
+        confirmationId,
+        policyRevision: request.policyRevision,
+        rootId: root.id,
+        location: structuredClone(request.location),
+        categories: mockCleanupCategories(false),
+      };
+    });
+  }
+
+  confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('confirmSemanticExclusion', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const plan = this.semanticExclusionPlans.get(request.confirmationId);
+      if (
+        plan === undefined ||
+        plan.policyRevision !== request.policyRevision ||
+        plan.workspaceId !== request.workspaceId ||
+        plan.location.providerId !== request.location.providerId ||
+        plan.location.uri !== request.location.uri
+      ) {
+        throw new MockClientError(
+          'staleConfirmation',
+          'Semantic library confirmation is stale or invalid',
+        );
+      }
+      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === plan.rootId);
+      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
+      this.semanticLibrarySequence += 1;
+      root.exclusions.push({
+        id: `00000000-0000-0000-0001-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+        location: structuredClone(request.location),
+        cleanup: {
+          planId: `00000000-0000-0000-0002-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+          status: 'complete',
+          categories: mockCleanupCategories(true),
+        },
+      });
+      this.semanticExclusionPlans.delete(request.confirmationId);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('resumeSemanticCleanup', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const cleanup = this.semanticLibrary.roots
+        .flatMap((root) => root.exclusions)
+        .map((exclusion) => exclusion.cleanup)
+        .find((candidate) => candidate.planId === request.planId);
+      if (cleanup === undefined) throw new MockClientError('notFound', 'Cleanup plan not found');
+      cleanup.status = 'complete';
+      cleanup.categories = mockCleanupCategories(true);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('pauseSemanticLibrary', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      this.semanticLibrary.paused = true;
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('resumeSemanticLibrary', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      this.semanticLibrary.paused = false;
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('updateSemanticEligibilityOverrides', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === request.rootId);
+      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
+      if (!root.workspaceReferences.includes(request.workspaceId)) {
+        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+      }
+      const safeReasons = new Set([
+        'hidden',
+        'system',
+        'applicationOrPackageBundle',
+        'dependencyDirectory',
+        'buildDirectory',
+        'cacheDirectory',
+        'gitIgnored',
+      ]);
+      if (
+        request.overrides.some(
+          (override) => override.action === 'include' && !safeReasons.has(override.reason),
+        )
+      ) {
+        throw new MockClientError(
+          'unsafeEligibilityOverride',
+          'This eligibility reason cannot be overridden',
+        );
+      }
+      root.eligibilityOverrides = structuredClone(request.overrides);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
     return this.perform('getSystemLocations', signal, () => []);
   }
@@ -1771,6 +2184,15 @@ export class MockFileManagerClient implements FileManagerClient {
         this.requireWorkspaceRevision(workspace, expectedRevision);
       }
       this.workspaces.delete(workspaceId);
+      let changed = false;
+      for (const root of this.semanticLibrary.roots) {
+        const remaining = root.workspaceReferences.filter((id) => id !== workspaceId);
+        if (remaining.length !== root.workspaceReferences.length) {
+          root.workspaceReferences = remaining;
+          changed = true;
+        }
+      }
+      if (changed) this.advanceSemanticLibraryRevision();
     });
   }
 
@@ -3693,6 +4115,54 @@ export class MockFileManagerClient implements FileManagerClient {
       }
       return found;
     };
+  }
+
+  private requireActiveSemanticFolder(workspaceId: WorkspaceId, location: Location): void {
+    const workspace = this.workspaces.get(workspaceId);
+    const pane = workspace === undefined ? undefined : workspace.panesById[workspace.activePaneId];
+    const tab = pane === undefined ? undefined : pane.tabsById[pane.activeTabId];
+    if (
+      tab === undefined ||
+      tab.location.providerId !== location.providerId ||
+      tab.location.uri !== location.uri
+    ) {
+      throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+    }
+  }
+
+  private requireSemanticLibraryRevision(expected: number): void {
+    if (this.semanticLibrary.revision !== expected) {
+      throw new MockClientError(
+        'staleRevision',
+        `Semantic policy changed from revision ${expected} to ${this.semanticLibrary.revision}`,
+      );
+    }
+  }
+
+  private semanticRootFor(location: Location): SemanticRootStatus | undefined {
+    const matching = this.semanticLibrary.roots
+      .filter(
+        (root) =>
+          root.location.providerId === location.providerId &&
+          (root.location.uri === location.uri ||
+            (root.recursive && semanticLocationContains(root.location, location))),
+      )
+      .sort((left, right) => left.location.uri.length - right.location.uri.length);
+    const root = matching.at(-1);
+    if (
+      root?.exclusions.some((exclusion) =>
+        semanticLocationContains(exclusion.location, location),
+      ) === true
+    ) {
+      throw new MockClientError('alreadyExcluded', 'The folder is already excluded');
+    }
+    return root;
+  }
+
+  private advanceSemanticLibraryRevision(): void {
+    this.semanticLibrary.revision += 1;
+    this.semanticEnrolmentPreviews.clear();
+    this.semanticExclusionPlans.clear();
   }
 
   private requireSemanticAvailable(): void {

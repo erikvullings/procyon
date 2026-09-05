@@ -17,6 +17,8 @@ import type {
   ChecksumPage,
   ComparisonPage,
   CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
   ConfirmSemanticIndexRemovalRequest,
   ConfirmSemanticModelMigrationRequest,
   Connection,
@@ -41,6 +43,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateSyncPlanRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
@@ -58,12 +61,14 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -72,6 +77,7 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -83,10 +89,16 @@ import type {
   SemanticComponentCapabilities,
   SemanticComponentStatus,
   SemanticDataMoveReceipt,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
   SemanticIndexRemovalPlan,
   SemanticIndexRemovalReceipt,
   SemanticInstallationOffer,
   SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
   SemanticModelMigrationPlan,
   SemanticModelMigrationProgress,
   SemanticModelProfile,
@@ -116,6 +128,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -206,6 +219,44 @@ export interface FileManagerClient {
     request: CompleteSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelSelection>;
+  getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
+  getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
+  getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus>;
+  previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview>;
+  confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan>;
+  confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]>;
   getVolumes(signal?: AbortSignal): Promise<Volume[]>;
   /** The current user's home directory as a native path, for expanding a leading `~` typed

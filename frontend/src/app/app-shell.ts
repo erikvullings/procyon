@@ -3810,6 +3810,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                           ? m(SettingsEditor, {
                               client: attrs.client,
                               settings: currentSettings,
+                              ...(workspace === undefined
+                                ? {}
+                                : { activeWorkspaceId: workspace.id }),
+                              ...(activeDirectory()?.location === undefined
+                                ? {}
+                                : { activeLocation: activeDirectory()?.location }),
                               actions: localisedRegisteredActions(),
                               platform,
                               runtime: keybindingRuntime,

@@ -71,6 +71,10 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-vfs-webdav", 2),
     // Layer 3 - composite engines built from the layer-2 primitives.
     ("fm-comparison", 3),
+    // `fm-semantic-library` persists low-volume consent policy through the
+    // `fm-settings` migration machinery (task 0179), so it must sit strictly
+    // above it rather than beside it.
+    ("fm-semantic-library", 3),
     // Layer 4 - application services, plus the test-support crate which may
     // build fixtures out of anything below it.
     ("fm-application", 4),
@@ -405,6 +409,7 @@ mod tests {
         assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
         assert_eq!(layer_of("fm-semantic-worker"), Some(1));
         assert_eq!(layer_of("fm-semantic-components"), Some(2));
+        assert_eq!(layer_of("fm-semantic-library"), Some(3));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));
         assert!(layer_of("fm-server") > layer_of("fm-application"));
         assert_eq!(layer_of("serde"), None);
