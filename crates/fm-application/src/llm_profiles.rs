@@ -225,6 +225,19 @@ pub struct LlmProbeResponse {
     pub body: Vec<u8>,
 }
 
+/// Bounded host-owned generation request using a saved profile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlmChatGeneration {
+    /// Trusted system instruction.
+    pub system_prompt: String,
+    /// User-role evidence payload.
+    pub user_prompt: String,
+    /// Maximum generated tokens, further bounded by the saved profile.
+    pub maximum_tokens: u32,
+    /// Sampling temperature, further bounded by the saved profile.
+    pub temperature: f32,
+}
+
 #[async_trait]
 pub trait LlmProbeTransport: Send + Sync {
     async fn discover_models(
@@ -238,6 +251,14 @@ pub trait LlmProbeTransport: Send + Sync {
         request: &LlmProbeRequest,
         cancellation: &CancellationToken,
     ) -> Result<LlmProbeResponse, LlmProfileError>;
+
+    /// Streams a bounded generation request and returns only validated content.
+    async fn generate_chat(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<String, LlmProfileError>;
 }
 
 /// Reqwest implementation used by real hosts.
@@ -334,6 +355,33 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
             status,
             body: bytes,
         })
+    }
+
+    async fn generate_chat(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<String, LlmProfileError> {
+        let body = json!({
+            "model": request.model,
+            "messages": [
+                {"role": "system", "content": generation.system_prompt},
+                {"role": "user", "content": generation.user_prompt}
+            ],
+            "stream": true,
+            "max_tokens": generation.maximum_tokens,
+            "temperature": generation.temperature,
+        });
+        let response = tokio::select! {
+            () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
+            response = self.request(reqwest::Method::POST, request, &request.url).json(&body).send() => {
+                response.map_err(map_reqwest)?
+            }
+        };
+        classify_http_status(response.status().as_u16())?;
+        let bytes = read_bounded_body(response, cancellation).await?;
+        parse_streaming_chat(&bytes)
     }
 }
 
@@ -724,6 +772,43 @@ impl LlmProfileService {
         Ok(result)
     }
 
+    /// Generates bounded text through a saved profile after policy and consent checks.
+    pub async fn generate(
+        &self,
+        id: Uuid,
+        generation: LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<String, LlmProfileError> {
+        let profile = self.profile(id)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        if endpoint.locality == EndpointLocality::Cloud
+            && profile.consented_host.as_deref() != Some(endpoint.host.as_str())
+        {
+            return Err(LlmProfileError::ConsentRequired(endpoint.host));
+        }
+        if generation.system_prompt.is_empty()
+            || generation.user_prompt.is_empty()
+            || generation.system_prompt.len() > 64 * 1024
+            || generation.user_prompt.len() > 1024 * 1024
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let request = self.probe_request(&profile).await?;
+        let bounded = LlmChatGeneration {
+            maximum_tokens: generation
+                .maximum_tokens
+                .min(profile.advanced.maximum_answer_tokens),
+            temperature: generation
+                .temperature
+                .clamp(0.0, profile.advanced.temperature),
+            ..generation
+        };
+        self.transport
+            .generate_chat(&request, &bounded, cancellation)
+            .await
+    }
+
     fn profile(&self, id: Uuid) -> Result<LlmProfile, LlmProfileError> {
         self.lock()?
             .profiles
@@ -731,6 +816,10 @@ impl LlmProfileService {
             .find(|profile| profile.id == id)
             .cloned()
             .ok_or(LlmProfileError::NotFound)
+    }
+
+    pub(crate) fn generation_profile(&self, id: Uuid) -> Result<LlmProfile, LlmProfileError> {
+        self.profile(id)
     }
 
     async fn store_api_key(
@@ -967,9 +1056,14 @@ fn models_url(chat_url: &str) -> Option<String> {
 }
 
 fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
+    parse_streaming_chat(bytes).map(|_| ())
+}
+
+fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
     let text = std::str::from_utf8(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
     let mut valid_event = false;
     let mut terminated = false;
+    let mut content = String::new();
     for line in text.lines() {
         let Some(data) = line.strip_prefix("data:") else {
             continue;
@@ -986,6 +1080,18 @@ fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
             .and_then(Value::as_array)
             .ok_or(LlmProfileError::MalformedResponse)?;
         valid_event = true;
+        for choice in choices {
+            if let Some(delta) = choice
+                .get("delta")
+                .and_then(|delta| delta.get("content"))
+                .and_then(Value::as_str)
+            {
+                content.push_str(delta);
+                if content.len() > MAX_STREAM_BYTES {
+                    return Err(LlmProfileError::MalformedResponse);
+                }
+            }
+        }
         terminated |= choices.iter().any(|choice| {
             choice
                 .get("finish_reason")
@@ -993,7 +1099,7 @@ fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
         });
     }
     if valid_event && terminated {
-        Ok(())
+        Ok(content)
     } else {
         Err(LlmProfileError::MalformedResponse)
     }
@@ -1125,6 +1231,19 @@ mod tests {
             }
             self.captured.lock().unwrap().push(request.clone());
             Ok(self.response.clone())
+        }
+
+        async fn generate_chat(
+            &self,
+            request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            cancellation: &CancellationToken,
+        ) -> Result<String, LlmProfileError> {
+            if cancellation.is_cancelled() {
+                return Err(LlmProfileError::Cancelled);
+            }
+            self.captured.lock().unwrap().push(request.clone());
+            parse_streaming_chat(&self.response.body)
         }
     }
 
@@ -1403,5 +1522,42 @@ mod tests {
             .await
             .unwrap();
         assert!(credentials.resolve(&reference).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn generation_requires_cloud_consent_and_returns_only_stream_content() {
+        let (service, _, _) = service(LlmHostPolicy::server(["allowed.example".to_owned()]));
+        let profile = service
+            .create(draft(
+                LlmPreset::OpenAiCompatible,
+                "https://allowed.example",
+            ))
+            .await
+            .unwrap();
+        let generation = LlmChatGeneration {
+            system_prompt: "Summarize grounded evidence.".into(),
+            user_prompt: "Evidence".into(),
+            maximum_tokens: 512,
+            temperature: 0.1,
+        };
+        assert!(matches!(
+            service
+                .generate(
+                    profile.id,
+                    generation.clone(),
+                    &CancellationToken::new()
+                )
+                .await,
+            Err(LlmProfileError::ConsentRequired(host)) if host == "allowed.example"
+        ));
+        service.activate(profile.id, true).unwrap();
+
+        assert_eq!(
+            service
+                .generate(profile.id, generation, &CancellationToken::new())
+                .await
+                .unwrap(),
+            "OK"
+        );
     }
 }

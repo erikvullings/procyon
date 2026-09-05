@@ -229,6 +229,7 @@ export interface PaneAttrs {
   readonly keybindingOverrides?: Readonly<Record<string, string>>;
   // Entry operations (8)
   readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onDocumentSummary?: (entry: EntrySummary) => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;
@@ -459,6 +460,17 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
             },
           },
           t('search', 'openEvidence'),
+        ),
+        m(
+          'button',
+          {
+            type: 'button',
+            disabled: entry === undefined,
+            onclick: () => {
+              if (entry !== undefined) attrs.onDocumentSummary?.(entry);
+            },
+          },
+          t('documentSummary', 'generate'),
         ),
         m(
           'button',

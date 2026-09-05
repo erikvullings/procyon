@@ -12,6 +12,7 @@ pub mod comparison;
 pub mod connection;
 pub mod diagnostics;
 pub mod disk_usage;
+pub mod document_summary;
 pub mod entry;
 pub mod error;
 pub mod files;
@@ -73,6 +74,11 @@ pub use diagnostics::{
 pub use disk_usage::{
     DiskUsageNodeDto, DiskUsageNodeKindDto, DiskUsageUnreadableEntryDto,
     DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto, ScanDiskUsageResponseDto,
+};
+pub use document_summary::{
+    DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummaryTargetDto,
+    GenerateDocumentSummaryRequestDto, GetDocumentSummaryRequestDto,
+    PreviewDocumentSummaryRequestDto, SummaryKeyPassageDto, SummaryProfileDisclosureDto,
 };
 pub use entry::{
     ArchiveInfoDto, EntryKindDto, EntryMetadataDto, EntrySummaryDto, ImageDimensionsDto,

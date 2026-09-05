@@ -27,6 +27,11 @@ export interface SpotlightCommentDialogRequest {
   readonly comment: string;
 }
 
+export interface DocumentSummaryDialogRequest {
+  readonly workspaceId: string;
+  readonly entry: EntrySummary;
+}
+
 /** Backs the uninstall review checklist (task 0148): the `.app` bundle being uninstalled plus
  * what discovery found for it, held until the user confirms or cancels. */
 export interface ApplicationUninstallDialogRequest {
@@ -52,6 +57,7 @@ export interface DialogUIState {
   pendingCreatedLocation: string | undefined;
   finderTagsDialog: FinderTagsDialogRequest | undefined;
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
+  documentSummaryDialog: DocumentSummaryDialogRequest | undefined;
   applicationUninstallDialog: ApplicationUninstallDialogRequest | undefined;
 }
 
@@ -94,6 +100,8 @@ export interface DialogUIController {
   cancelFinderTagsDialog(): void;
   openSpotlightCommentDialog(request: SpotlightCommentDialogRequest): void;
   cancelSpotlightCommentDialog(): void;
+  openDocumentSummaryDialog(request: DocumentSummaryDialogRequest): void;
+  cancelDocumentSummaryDialog(): void;
   openApplicationUninstallDialog(request: ApplicationUninstallDialogRequest): void;
   cancelApplicationUninstallDialog(): void;
 }
@@ -116,6 +124,7 @@ export function createDialogUIController(): DialogUIController {
     pendingCreatedLocation: undefined,
     finderTagsDialog: undefined,
     spotlightCommentDialog: undefined,
+    documentSummaryDialog: undefined,
     applicationUninstallDialog: undefined,
   };
 
@@ -235,6 +244,14 @@ export function createDialogUIController(): DialogUIController {
 
     cancelSpotlightCommentDialog(): void {
       state.spotlightCommentDialog = undefined;
+    },
+
+    openDocumentSummaryDialog(request): void {
+      state.documentSummaryDialog = request;
+    },
+
+    cancelDocumentSummaryDialog(): void {
+      state.documentSummaryDialog = undefined;
     },
 
     openApplicationUninstallDialog(request): void {

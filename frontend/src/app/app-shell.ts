@@ -2774,6 +2774,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
+    openDocumentSummary: (_paneId, entry) => {
+      if (workspace === undefined) return;
+      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      m.redraw();
+    },
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     toggleDirectoryTree,
@@ -2873,6 +2878,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
     closeViewer,
+    openDocumentSummary: (_paneId, entry) => {
+      if (workspace === undefined) return;
+      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      m.redraw();
+    },
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>

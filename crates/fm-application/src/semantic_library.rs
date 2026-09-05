@@ -1896,6 +1896,45 @@ impl SemanticLibraryService {
         }))
     }
 
+    /// Resolves one exact host-authorized entry to its opaque worker scope.
+    pub(crate) fn resolve_summary_document(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: WorkspaceId,
+        entry_id: fm_domain::EntryId,
+        location: &Location,
+    ) -> Result<Option<ResolvedSummaryDocument>, SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let data = locked.data()?;
+        let Some(candidate) = data.catalog.occurrence_at(entry_id, location) else {
+            return Ok(None);
+        };
+        let Some(occurrence) = data
+            .catalog
+            .authorized_occurrence(&data.policy, workspace_id, candidate.id())
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?
+        else {
+            return Ok(None);
+        };
+        if data.catalog.source_availability(occurrence.id())
+            != Some(core::SourceAvailability::Available)
+        {
+            return Ok(None);
+        }
+        let tenant_id = match access {
+            SemanticAccessContext::Host => DEVICE_LOCAL_TENANT_ID.to_owned(),
+            SemanticAccessContext::Server(identity) => identity.tenant_id.to_string(),
+            SemanticAccessContext::Anonymous => return Err(SemanticLibraryError::InvalidRequest),
+        };
+        Ok(Some(ResolvedSummaryDocument {
+            tenant_id,
+            library_id: data.policy.library().id().to_string(),
+            document_id: occurrence.document_id().to_string(),
+        }))
+    }
+
     fn unresolved_authority(&self) -> SemanticLibraryAuthority {
         match &self.backend {
             SemanticLibraryBackend::Unavailable { authority } => *authority,
@@ -1951,6 +1990,14 @@ pub(crate) struct ResolvedSemanticOccurrence {
     pub(crate) entry_id: fm_domain::EntryId,
     pub(crate) location: Location,
     pub(crate) available: bool,
+}
+
+/// Opaque worker identity resolved from an exact authorized host occurrence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedSummaryDocument {
+    pub(crate) tenant_id: String,
+    pub(crate) library_id: String,
+    pub(crate) document_id: String,
 }
 
 fn build_managed(

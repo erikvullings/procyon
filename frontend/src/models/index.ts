@@ -4,6 +4,7 @@ export * from './clipboard';
 export * from './comparison';
 export * from './connection';
 export * from './disk-usage';
+export * from './document-summary';
 export * from './entry';
 export * from './events';
 export * from './finder-tags';

@@ -37,15 +37,19 @@ import type {
   DirectorySnapshotDto,
   DiscoverApplicationUninstallCandidatesRequestDto,
   DiscoverApplicationUninstallCandidatesResponseDto,
+  DocumentSummaryDto,
+  DocumentSummaryPreviewDto,
   DocxPreviewSessionRequestDto,
   DuplicatePageDto,
   EntryMetadataDto,
   EntryMetadataRequest,
   EntrySummaryDto,
   FinderTagsDto,
+  GenerateDocumentSummaryRequestDto,
   GenerateSyncPlanRequestDto,
   GetChecksumsParams,
   GetComparisonParams,
+  GetDocumentSummaryRequestDto,
   GetDuplicateScanParams,
   GetFileGitHistoryRequestDto,
   GetFileGitHistoryResponseDto,
@@ -85,6 +89,7 @@ import type {
   PluginDescriptorDto,
   PluginLogEntryDto,
   PptxPreviewSessionRequestDto,
+  PreviewDocumentSummaryRequestDto,
   PreviewSemanticEnrolmentRequestDto,
   ReadDocxPreviewResourceRequestDto,
   ReadDocxPreviewResourceResponseDto,
@@ -5494,6 +5499,184 @@ return fetchMutator<installSemanticComponentWorkerPatchResponse>(getInstallSeman
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(installSemanticWorkerPatchRequestDto)
+  }
+);}
+
+
+
+export type getDocumentSummaryResponse200 = {
+  data: null | DocumentSummaryDto
+  status: 200
+}
+
+export type getDocumentSummaryResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type getDocumentSummaryResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getDocumentSummaryResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type getDocumentSummaryResponseSuccess = (getDocumentSummaryResponse200) & {
+  headers: Headers;
+};
+export type getDocumentSummaryResponseError = (getDocumentSummaryResponse403 | getDocumentSummaryResponse404 | getDocumentSummaryResponse503) & {
+  headers: Headers;
+};
+
+export type getDocumentSummaryResponse = (getDocumentSummaryResponseSuccess | getDocumentSummaryResponseError)
+
+export const getGetDocumentSummaryUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/document-summary`
+}
+
+export const getDocumentSummary = async (getDocumentSummaryRequestDto: GetDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getDocumentSummaryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<getDocumentSummaryResponse>(getGetDocumentSummaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(getDocumentSummaryRequestDto)
+  }
+);}
+
+
+
+export type generateDocumentSummaryResponse200 = {
+  data: DocumentSummaryDto
+  status: 200
+}
+
+export type generateDocumentSummaryResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type generateDocumentSummaryResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type generateDocumentSummaryResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type generateDocumentSummaryResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type generateDocumentSummaryResponseSuccess = (generateDocumentSummaryResponse200) & {
+  headers: Headers;
+};
+export type generateDocumentSummaryResponseError = (generateDocumentSummaryResponse400 | generateDocumentSummaryResponse403 | generateDocumentSummaryResponse404 | generateDocumentSummaryResponse503) & {
+  headers: Headers;
+};
+
+export type generateDocumentSummaryResponse = (generateDocumentSummaryResponseSuccess | generateDocumentSummaryResponseError)
+
+export const getGenerateDocumentSummaryUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/document-summary/generate`
+}
+
+export const generateDocumentSummary = async (generateDocumentSummaryRequestDto: GenerateDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateDocumentSummaryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<generateDocumentSummaryResponse>(getGenerateDocumentSummaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(generateDocumentSummaryRequestDto)
+  }
+);}
+
+
+
+export type previewDocumentSummaryResponse200 = {
+  data: DocumentSummaryPreviewDto
+  status: 200
+}
+
+export type previewDocumentSummaryResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type previewDocumentSummaryResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type previewDocumentSummaryResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type previewDocumentSummaryResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type previewDocumentSummaryResponseSuccess = (previewDocumentSummaryResponse200) & {
+  headers: Headers;
+};
+export type previewDocumentSummaryResponseError = (previewDocumentSummaryResponse400 | previewDocumentSummaryResponse403 | previewDocumentSummaryResponse404 | previewDocumentSummaryResponse503) & {
+  headers: Headers;
+};
+
+export type previewDocumentSummaryResponse = (previewDocumentSummaryResponseSuccess | previewDocumentSummaryResponseError)
+
+export const getPreviewDocumentSummaryUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/document-summary/preview`
+}
+
+export const previewDocumentSummary = async (previewDocumentSummaryRequestDto: PreviewDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewDocumentSummaryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<previewDocumentSummaryResponse>(getPreviewDocumentSummaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewDocumentSummaryRequestDto)
   }
 );}
 

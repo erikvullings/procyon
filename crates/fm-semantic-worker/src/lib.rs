@@ -3,8 +3,10 @@
 //! Only opaque identifiers, metadata, and caller-provided bytes cross this
 //! boundary. The worker has no file-provider or network-facing dependency.
 
+pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;
+pub mod representative_selection;
 pub mod semantic_search;
 pub mod semantic_storage;
 #[cfg(feature = "zvec")]

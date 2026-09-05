@@ -55,6 +55,13 @@ use crate::connection_facade::ConnectionFacade;
 use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
 use crate::document_conversion::DocumentConversionService;
+use crate::document_summary::{
+    DocumentSummaryCapability, DocumentSummaryCoordinator, GenerateDocumentSummary,
+    UnavailableDocumentSummaryCapability,
+};
+use crate::document_summary_mapping::{
+    preview_to_dto, summary_error_to_application, summary_to_dto,
+};
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
@@ -128,6 +135,7 @@ pub struct FileManagerService {
     editor: FileEditorService,
     docx_preview: DocxPreviewService,
     document_conversion: DocumentConversionService,
+    document_summaries: DocumentSummaryCoordinator,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
@@ -536,6 +544,9 @@ impl FileManagerService {
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
             docx_preview: DocxPreviewService::new(providers.clone()),
             document_conversion: DocumentConversionService::new(providers.clone()),
+            document_summaries: DocumentSummaryCoordinator::new(Arc::new(
+                UnavailableDocumentSummaryCapability,
+            )),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
@@ -1165,6 +1176,120 @@ impl FileManagerService {
         self.search_comparison.set_semantic(semantic.clone());
         self.semantic = semantic;
         self
+    }
+
+    /// Replaces the unavailable default with a worker-backed summary capability.
+    #[must_use]
+    pub fn with_document_summary_capability(
+        mut self,
+        capability: Arc<dyn DocumentSummaryCapability>,
+    ) -> Self {
+        self.document_summaries = DocumentSummaryCoordinator::new(capability);
+        self
+    }
+
+    /// Prepares bounded key passages and the disclosure required before generation.
+    pub async fn preview_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::PreviewDocumentSummaryRequestDto,
+    ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, request.input_token_budget)
+            .await?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        self.document_summaries
+            .preview(
+                worker_request,
+                request.profile_id,
+                &self.llm_profiles,
+                &cancellation,
+            )
+            .await
+            .map(preview_to_dto)
+            .map_err(summary_error_to_application)
+    }
+
+    /// Generates and publishes a summary after revalidating the preview fingerprint.
+    pub async fn generate_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GenerateDocumentSummaryRequestDto,
+    ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, request.input_token_budget)
+            .await?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        self.document_summaries
+            .generate(
+                GenerateDocumentSummary {
+                    request: worker_request,
+                    expected_selection_fingerprint: request.expected_selection_fingerprint,
+                    profile_id: request.profile_id,
+                },
+                &self.llm_profiles,
+                &cancellation,
+            )
+            .await
+            .map(|summary| summary_to_dto(summary, false))
+            .map_err(summary_error_to_application)
+    }
+
+    /// Returns the current generated summary, including stale-source state.
+    pub async fn get_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GetDocumentSummaryRequestDto,
+    ) -> Result<Option<fm_transport_dto::DocumentSummaryDto>, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, 1)
+            .await?;
+        self.document_summaries
+            .current(&worker_request)
+            .await
+            .map(|summary| summary.map(|(stored, stale)| summary_to_dto(stored, stale)))
+            .map_err(summary_error_to_application)
+    }
+
+    async fn resolve_document_summary_request(
+        &self,
+        access: &SemanticAccessContext,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+    ) -> Result<fm_semantic_worker::document_summary::PrepareDocumentSummary, ApplicationError>
+    {
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
+            return Err(ApplicationError::InvalidRequest(
+                "summary input token budget is outside the supported range".into(),
+            ));
+        }
+        let library = self.semantic_library().await;
+        let resolved = library
+            .resolve_summary_document(
+                access,
+                target.workspace_id.into(),
+                target.entry_id.into(),
+                &target.location.into(),
+            )
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                SemanticLibraryError::NotFound | SemanticLibraryError::NotEnrolled => {
+                    ApplicationError::NotFound
+                }
+                _ => ApplicationError::Internal,
+            })?
+            .ok_or(ApplicationError::NotFound)?;
+        Ok(
+            fm_semantic_worker::document_summary::PrepareDocumentSummary {
+                tenant_id: resolved.tenant_id,
+                library_id: resolved.library_id,
+                document_id: resolved.document_id,
+                input_token_budget: usize::try_from(input_token_budget)
+                    .map_err(|_| ApplicationError::InvalidRequest("invalid token budget".into()))?,
+            },
+        )
     }
 
     /// Streams a provider-neutral document into the semantic capability.

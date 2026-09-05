@@ -128,6 +128,31 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-body')?.textContent).toBe('Loading…');
   });
 
+  it('offers document summary from the Lister toolbar', () => {
+    const onDocumentSummary = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry(),
+          content: {
+            kind: 'text',
+            windowOffset: 0,
+            windowEnd: 5,
+            text: 'hello',
+            atStart: true,
+            atEnd: true,
+            loadingMore: false,
+          },
+        },
+        { onDocumentSummary },
+      ),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-file-viewer-summary')?.click();
+    expect(onDocumentSummary).toHaveBeenCalledOnce();
+  });
+
   it('shows an unsupported message for binary content', () => {
     mount(baseAttrs({ status: 'unsupported', entry: entry() }));
     expect(root.querySelector('.fm-file-viewer-body')?.textContent).toContain(

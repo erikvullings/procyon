@@ -1973,6 +1973,143 @@
         ],
         "type": "object"
       },
+      "DocumentSummaryDto": {
+        "description": "Persisted generated summary with source-evidence identities.",
+        "properties": {
+          "brief": {
+            "description": "Concise overview.",
+            "type": "string"
+          },
+          "createdAtMs": {
+            "description": "Creation time in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "full": {
+            "description": "Full representative summary.",
+            "type": "string"
+          },
+          "modelId": {
+            "description": "Exact generation model identity.",
+            "type": "string"
+          },
+          "profileId": {
+            "description": "Profile used to generate the prose.",
+            "type": "string"
+          },
+          "recordId": {
+            "description": "Stable generated semantic-record identity.",
+            "type": "string"
+          },
+          "sourceGeneration": {
+            "description": "Source generation represented by the prose.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stale": {
+            "description": "Whether the indexed source changed after generation.",
+            "type": "boolean"
+          },
+          "supportingChunkIds": {
+            "description": "Extracted source chunks supporting this summary.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "supportingWeights": {
+            "description": "Population weights aligned with supporting chunks.",
+            "items": {
+              "format": "float",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "recordId",
+          "sourceGeneration",
+          "profileId",
+          "modelId",
+          "supportingChunkIds",
+          "supportingWeights",
+          "createdAtMs",
+          "brief",
+          "full",
+          "stale"
+        ],
+        "type": "object"
+      },
+      "DocumentSummaryPreviewDto": {
+        "description": "Confirmation preview. Without a profile, passages remain local and are\ndeliberately labelled as key passages rather than a generated summary.",
+        "properties": {
+          "keyPassages": {
+            "description": "Selected complete source passages.",
+            "items": {
+              "$ref": "#/components/schemas/SummaryKeyPassageDto"
+            },
+            "type": "array"
+          },
+          "profile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryProfileDisclosureDto",
+                "description": "Generation disclosure, absent in key-passages-only mode."
+              }
+            ]
+          },
+          "representativeTokens": {
+            "description": "Conservative selected-input token estimate.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reusedSelection": {
+            "description": "Whether persisted support metadata was reused.",
+            "type": "boolean"
+          },
+          "selectionFingerprint": {
+            "description": "Stable confirmation fingerprint.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selectionFingerprint",
+          "representativeTokens",
+          "keyPassages",
+          "reusedSelection"
+        ],
+        "type": "object"
+      },
+      "DocumentSummaryTargetDto": {
+        "description": "Exact file occurrence selected for summary operations.",
+        "properties": {
+          "entryId": {
+            "description": "Stable provider entry identity.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Exact provider-owned occurrence location."
+          },
+          "workspaceId": {
+            "description": "Workspace through which the occurrence is authorized.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "entryId",
+          "location"
+        ],
+        "type": "object"
+      },
       "DocxPreviewResourceDto": {
         "description": "One embedded image retained by a bounded DOCX preview session.",
         "properties": {
@@ -2558,6 +2695,37 @@
         ],
         "type": "object"
       },
+      "GenerateDocumentSummaryRequestDto": {
+        "description": "Confirms generation against the exact representative-selection preview.",
+        "properties": {
+          "expectedSelectionFingerprint": {
+            "description": "Fingerprint returned by the confirmed preview.",
+            "type": "string"
+          },
+          "inputTokenBudget": {
+            "description": "Maximum representative source tokens.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profileId": {
+            "description": "Saved profile used for generation.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/DocumentSummaryTargetDto",
+            "description": "File occurrence to summarize."
+          }
+        },
+        "required": [
+          "target",
+          "inputTokenBudget",
+          "expectedSelectionFingerprint",
+          "profileId"
+        ],
+        "type": "object"
+      },
       "GenerateSyncPlanRequestDto": {
         "description": "Proposes a sync plan from a comparison's current results\n(`POST /api/v1/comparisons/{comparisonId}/sync-plan`).\n\nGenerating a plan never touches a filesystem (spec §35): it only reads\nthe comparison's already-computed results.",
         "properties": {
@@ -2568,6 +2736,19 @@
         },
         "required": [
           "mode"
+        ],
+        "type": "object"
+      },
+      "GetDocumentSummaryRequestDto": {
+        "description": "Reads the current summary for an authorized file occurrence.",
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/DocumentSummaryTargetDto",
+            "description": "Authorized file occurrence whose current summary is requested."
+          }
+        },
+        "required": [
+          "target"
         ],
         "type": "object"
       },
@@ -5178,6 +5359,34 @@
         },
         "required": [
           "sessionId"
+        ],
+        "type": "object"
+      },
+      "PreviewDocumentSummaryRequestDto": {
+        "description": "Requests bounded representative key passages and generation disclosure.",
+        "properties": {
+          "inputTokenBudget": {
+            "description": "Maximum representative source tokens.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profileId": {
+            "description": "Optional generation profile; omit to inspect key passages only.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/DocumentSummaryTargetDto",
+            "description": "File occurrence to summarize."
+          }
+        },
+        "required": [
+          "target",
+          "inputTokenBudget"
         ],
         "type": "object"
       },
@@ -9754,6 +9963,89 @@
           "indexedBytes",
           "indexedRows",
           "indexingComplete"
+        ],
+        "type": "object"
+      },
+      "SummaryKeyPassageDto": {
+        "description": "One complete, unmodified source passage selected by the semantic worker.",
+        "properties": {
+          "chunkId": {
+            "description": "Stable extracted chunk identity.",
+            "type": "string"
+          },
+          "clusterPopulation": {
+            "description": "Number of chunks represented by this passage.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "content": {
+            "description": "Complete selected structural chunk.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Opaque prompt/citation label.",
+            "type": "string"
+          },
+          "provenance": {
+            "description": "Structured source position without host path metadata.",
+            "type": "string"
+          },
+          "sectionPath": {
+            "description": "Structural heading hierarchy.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "structuralAnchor": {
+            "description": "Whether structural coverage forced retention.",
+            "type": "boolean"
+          },
+          "weight": {
+            "description": "Relative population weight.",
+            "format": "float",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "chunkId",
+          "content",
+          "sectionPath",
+          "provenance",
+          "clusterPopulation",
+          "weight",
+          "structuralAnchor"
+        ],
+        "type": "object"
+      },
+      "SummaryProfileDisclosureDto": {
+        "description": "Content-free disclosure for the generation endpoint selected by the user.",
+        "properties": {
+          "locality": {
+            "$ref": "#/components/schemas/LlmEndpointLocalityDto",
+            "description": "Whether representative text remains local or leaves the device."
+          },
+          "modelId": {
+            "description": "Exact generation model configured by the profile.",
+            "type": "string"
+          },
+          "profileId": {
+            "description": "Selected saved profile.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "profileName": {
+            "description": "User-visible profile name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profileId",
+          "profileName",
+          "modelId",
+          "locality"
         ],
         "type": "object"
       },
@@ -15719,6 +16011,204 @@
           }
         },
         "summary": "Installs the newest compatible signed worker patch, when available."
+      }
+    },
+    "/api/v1/semantic/document-summary": {
+      "post": {
+        "operationId": "getDocumentSummary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetDocumentSummaryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DocumentSummaryDto"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/document-summary/generate": {
+      "post": {
+        "operationId": "generateDocumentSummary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateDocumentSummaryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSummaryDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/document-summary/preview": {
+      "post": {
+        "operationId": "previewDocumentSummary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewDocumentSummaryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSummaryPreviewDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
       }
     },
     "/api/v1/semantic/library/capabilities": {

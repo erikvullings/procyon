@@ -36,6 +36,8 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -47,7 +49,9 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
@@ -77,6 +81,7 @@ import type {
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
   PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -1007,6 +1012,27 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   testLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfileTestResult> {
     return invoke<LlmProfileTestResult>('test_llm_profile', { profileId });
+  }
+
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    return invoke<DocumentSummaryPreview>('preview_document_summary', { request });
+  }
+
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    return invoke<DocumentSummary>('generate_document_summary', { request });
+  }
+
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    return invoke<DocumentSummary | null>('get_document_summary', { request });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

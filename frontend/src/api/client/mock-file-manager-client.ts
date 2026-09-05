@@ -40,6 +40,8 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -52,7 +54,9 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
@@ -82,6 +86,7 @@ import type {
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
   PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -309,6 +314,9 @@ export type MockClientMethod =
   | 'exportLlmProfile'
   | 'activateLlmProfile'
   | 'testLlmProfile'
+  | 'previewDocumentSummary'
+  | 'generateDocumentSummary'
+  | 'getDocumentSummary'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -1183,6 +1191,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly workspaces = new Map<WorkspaceId, WorkspaceProjection>();
   private readonly connections = new Map<ConnectionId, Connection>();
   private readonly llmProfiles = new Map<string, LlmProfile>();
+  private readonly documentSummaries = new Map<string, DocumentSummary>();
   private readonly oneDriveAuthorizations = new Map<
     string,
     { readonly connectionId: ConnectionId; attempt: OneDriveAuthorizationAttempt }
@@ -3877,6 +3886,79 @@ export class MockFileManagerClient implements FileManagerClient {
         modelAvailable: success,
         capabilities: [...profile.capabilities],
       };
+    });
+  }
+
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    return this.perform('previewDocumentSummary', signal, () => {
+      const profile =
+        request.profileId == null ? undefined : this.requireLlmProfile(request.profileId);
+      return {
+        selectionFingerprint: `mock-summary-${request.target.entryId}`,
+        representativeTokens: Math.min(request.inputTokenBudget, 72),
+        keyPassages: [
+          {
+            label: 'S1',
+            chunkId: `mock-chunk-${request.target.entryId}`,
+            content: 'A representative passage from the selected document.',
+            sectionPath: ['Overview'],
+            provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
+            clusterPopulation: 1,
+            weight: 1,
+            structuralAnchor: true,
+          },
+        ],
+        profile:
+          profile === undefined
+            ? null
+            : {
+                profileId: profile.id,
+                profileName: profile.name,
+                modelId: profile.model,
+                locality: profile.locality,
+              },
+        reusedSelection: this.documentSummaries.has(request.target.entryId),
+      };
+    });
+  }
+
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    return this.perform('generateDocumentSummary', signal, () => {
+      const profile = this.requireLlmProfile(request.profileId);
+      const expected = `mock-summary-${request.target.entryId}`;
+      if (request.expectedSelectionFingerprint !== expected) {
+        throw new MockClientError('invalidRequest', 'Document summary confirmation is stale');
+      }
+      const summary: DocumentSummary = {
+        recordId: `mock-generated-${request.target.entryId}`,
+        sourceGeneration: 1,
+        profileId: profile.id,
+        modelId: profile.model,
+        supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
+        supportingWeights: [1],
+        createdAtMs: Date.now(),
+        brief: 'A concise representative summary.',
+        full: 'A fuller representative summary grounded in the selected key passage.',
+        stale: false,
+      };
+      this.documentSummaries.set(request.target.entryId, summary);
+      return structuredClone(summary);
+    });
+  }
+
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    return this.perform('getDocumentSummary', signal, () => {
+      const summary = this.documentSummaries.get(request.target.entryId);
+      return summary === undefined ? null : structuredClone(summary);
     });
   }
 

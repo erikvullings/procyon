@@ -32,6 +32,8 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -44,7 +46,9 @@ import type {
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
@@ -74,6 +78,7 @@ import type {
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
   PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -185,6 +190,9 @@ import {
   listDirectoryChildren as requestDirectoryChildren,
   cancelDiskUsage as requestDiskUsageCancel,
   scanDiskUsage as requestDiskUsageScan,
+  generateDocumentSummary as requestDocumentSummaryGeneration,
+  getDocumentSummary as requestDocumentSummaryGet,
+  previewDocumentSummary as requestDocumentSummaryPreview,
   closeDocxPreview as requestDocxPreviewClose,
   openDocxPreview as requestDocxPreviewOpen,
   readDocxPreviewResource as requestDocxPreviewResource,
@@ -1924,6 +1932,45 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw new Error(`Unexpected testLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    const response = await requestDocumentSummaryPreview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected previewDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    const response = await requestDocumentSummaryGeneration(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected generateDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    const response = await requestDocumentSummaryGet(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected getDocumentSummary response status: ${response.status}`);
     return response.data;
   }
 

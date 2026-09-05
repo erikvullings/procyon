@@ -18,6 +18,8 @@ mod directory;
 mod disk_usage;
 mod disk_usage_coordinator;
 mod document_conversion;
+pub mod document_summary;
+mod document_summary_mapping;
 mod docx_preview;
 mod error;
 mod file_editor;

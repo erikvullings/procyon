@@ -8,6 +8,7 @@ pub(crate) mod comparison;
 pub(crate) mod connection;
 pub(crate) mod diagnostics;
 pub(crate) mod directory;
+pub(crate) mod document_summary;
 pub(crate) mod events;
 pub(crate) mod extended_attributes;
 pub(crate) mod files;

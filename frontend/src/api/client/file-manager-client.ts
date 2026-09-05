@@ -32,6 +32,8 @@ import type {
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -43,7 +45,9 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
@@ -73,6 +77,7 @@ import type {
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
   PreviewSemanticEnrolmentRequest,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -636,6 +641,18 @@ export interface FileManagerClient {
     signal?: AbortSignal,
   ): Promise<LlmProfile>;
   testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult>;
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview>;
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary>;
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null>;
 
   /** Lists every stored connection profile with its current runtime status (task 0103). */
   listConnections(signal?: AbortSignal): Promise<Connection[]>;

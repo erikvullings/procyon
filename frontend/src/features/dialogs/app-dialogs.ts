@@ -61,6 +61,7 @@ import {
 import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
+import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
@@ -486,6 +487,13 @@ export function renderAppDialogs(
         }
       },
       onCancel: () => ctx.setCloseTabConfirmation(undefined),
+    }),
+    m(DocumentSummaryDialog, {
+      open: ds.documentSummaryDialog !== undefined,
+      workspaceId: ds.documentSummaryDialog?.workspaceId ?? '',
+      entry: ds.documentSummaryDialog?.entry,
+      client,
+      onClose: () => dialogs.cancelDocumentSummaryDialog(),
     }),
     m(FinderTagsDialog, {
       open: ds.finderTagsDialog !== undefined,

@@ -184,7 +184,7 @@ fn advanced_to_dto(value: LlmAdvancedSettings) -> LlmAdvancedSettingsDto {
     }
 }
 
-fn locality_to_dto(value: EndpointLocality) -> LlmEndpointLocalityDto {
+pub(crate) fn locality_to_dto(value: EndpointLocality) -> LlmEndpointLocalityDto {
     match value {
         EndpointLocality::Loopback => LlmEndpointLocalityDto::Loopback,
         EndpointLocality::Cloud => LlmEndpointLocalityDto::Cloud,

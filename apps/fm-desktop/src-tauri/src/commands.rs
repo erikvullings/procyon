@@ -25,18 +25,20 @@ use fm_transport_dto::{
     CreateSemanticInstallationOfferRequestDto, CreateWorkspaceRequestDto,
     DeleteLlmProfileRequestDto, DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
     DiscoverApplicationUninstallCandidatesRequestDto,
-    DiscoverApplicationUninstallCandidatesResponseDto, DocxPreviewSessionRequestDto,
-    DuplicatePageDto, EntryMetadataDto, EntryMetadataRequest, EntrySummaryDto, FinderTagsDto,
-    GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    GetSemanticFolderStatusRequestDto, HostKeyProbeDto, ImportSemanticLocalModelRequestDto,
-    InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, ListDirectoryChildrenRequest,
-    ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
-    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
-    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
-    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
-    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
+    DiscoverApplicationUninstallCandidatesResponseDto, DocumentSummaryDto,
+    DocumentSummaryPreviewDto, DocxPreviewSessionRequestDto, DuplicatePageDto, EntryMetadataDto,
+    EntryMetadataRequest, EntrySummaryDto, FinderTagsDto, GenerateDocumentSummaryRequestDto,
+    GenerateSyncPlanRequestDto, GetDocumentSummaryRequestDto, GetFileGitHistoryRequestDto,
+    GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto, HostKeyProbeDto,
+    ImportSemanticLocalModelRequestDto, InstallSemanticWorkerPatchRequestDto,
+    InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
+    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
+    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
+    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
+    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
+    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
+    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
     PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
@@ -2152,6 +2154,45 @@ pub(crate) async fn test_llm_profile(
     state
         .service
         .test_llm_profile(profile_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Prepares representative key passages without contacting a generation endpoint.
+#[tauri::command]
+pub(crate) async fn preview_document_summary(
+    state: State<'_, AppState>,
+    request: PreviewDocumentSummaryRequestDto,
+) -> Result<DocumentSummaryPreviewDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_document_summary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Generates and publishes a confirmed representative summary.
+#[tauri::command]
+pub(crate) async fn generate_document_summary(
+    state: State<'_, AppState>,
+    request: GenerateDocumentSummaryRequestDto,
+) -> Result<DocumentSummaryDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_document_summary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads the current generated summary for one authorized occurrence.
+#[tauri::command]
+pub(crate) async fn get_document_summary(
+    state: State<'_, AppState>,
+    request: GetDocumentSummaryRequestDto,
+) -> Result<Option<DocumentSummaryDto>, ApplicationErrorDto> {
+    state
+        .service
+        .get_document_summary(&desktop_semantic_access(), request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

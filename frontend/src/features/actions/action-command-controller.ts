@@ -85,6 +85,8 @@ export interface ActionCommandControllerContext {
   openDiskUsage(): void;
   /** Opens the Properties dialog for the active pane's selection (task 0140). */
   openPropertiesForActivePane(): void;
+  /** Opens representative key passages and generation controls for one file. */
+  openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Scans `entry`'s well-known related-file locations and opens the review checklist before
    * anything is deleted (task 0148's macOS application uninstaller). */
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
@@ -329,6 +331,11 @@ export function createActionCommandController(
       directory === undefined || contextParam.selectedEntryIds === undefined
         ? []
         : directory.entries.filter((entry) => new Set(contextParam.selectedEntryIds).has(entry.id));
+    if (action.id === 'core.documentSummary') {
+      const entry = selectedEntries[0];
+      if (paneId !== undefined && entry !== undefined) context.openDocumentSummary?.(paneId, entry);
+      return;
+    }
     if (openEntryMetadataDialog(action.id, selectedEntries[0])) return;
     // Discovery-then-review-dialog flow (task 0148), like calculateChecksum/findDuplicates above:
     // the generic `invokeActionById` fallthrough only hits the backend's synchronous action-invoke

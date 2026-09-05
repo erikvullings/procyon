@@ -274,6 +274,15 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(routes::llm_profile::test_llm_profile))
         .routes(utoipa_axum::routes!(
+            routes::document_summary::preview_document_summary
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::document_summary::generate_document_summary
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::document_summary::get_document_summary
+        ))
+        .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))
         .routes(utoipa_axum::routes!(

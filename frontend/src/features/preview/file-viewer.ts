@@ -76,6 +76,7 @@ export interface FileViewerAttrs {
   readonly quickLookAvailable: boolean;
   readonly onQuickLook: () => void;
   readonly onOpenExternally: () => void;
+  readonly onDocumentSummary?: () => void;
   readonly onClose: () => void;
 }
 
@@ -1208,6 +1209,16 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
+            attrs.onDocumentSummary === undefined
+              ? undefined
+              : m(
+                  'button.fm-file-viewer-summary',
+                  {
+                    type: 'button',
+                    onclick: attrs.onDocumentSummary,
+                  },
+                  t('documentSummary', 'generate'),
+                ),
             tooltip(
               t('viewer', 'closeViewer'),
               m(

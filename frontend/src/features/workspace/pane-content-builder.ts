@@ -186,6 +186,7 @@ export interface PaneContentContext {
     openMetadata?: boolean,
   ): void;
   closeViewer(paneId: PaneId): void;
+  openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -522,6 +523,7 @@ export function createPaneContentBuilder(
           { paneId, selectedEntryIds: [entry.id], cursorEntryId: entry.id },
         );
       },
+      onDocumentSummary: (entry) => context.openDocumentSummary?.(paneId, entry),
       onSelectionAction: (action: SelectionAction) => {
         if (key === undefined) return;
         if (action.type === 'moveCursorTo' && action.edge === 'last' && directory.hasMore) {
@@ -911,6 +913,8 @@ export function createPaneContentBuilder(
                           cursorEntryId: viewer.state.entry.id,
                         },
                       ),
+                    onDocumentSummary: () =>
+                      context.openDocumentSummary?.(paneId, viewer.state.entry),
                     onClose: () => context.closeViewer(paneId),
                   });
                 })(),

@@ -1,6 +1,6 @@
 # 0185 Representative document summaries
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend, rag
 Depends on: 0182, 0184
@@ -76,3 +76,8 @@ not replace the original chunks as the basis for grounded claims.
 - 2026-09-04: Added from the proposed representative-summary pipeline. The central safeguards are
   deterministic selection, structural coverage, cluster weighting, source-order prompts, summary
   provenance, and citations that resolve back to original chunks.
+- 2026-09-05: Implemented deterministic, cancellation-aware representative selection over persisted
+  local embeddings; durable summary metadata and derived-index publication; stale rollover,
+  replacement, and enrolment deletion; strict untrusted-evidence prompting through consented LLM
+  profiles; authorized HTTP/Tauri/mock APIs; and file-action, Lister, and semantic-result entry
+  points. Production worker/model activation remains deliberately measurement-gated by task 0188.

@@ -665,6 +665,24 @@ export const nl = {
     removeFromFavourites: 'Verwijderen uit favorieten',
     deleteSavedSearch: 'Opgeslagen zoekopdracht verwijderen',
   },
+  documentSummary: {
+    title: 'Samenvatting · {name}',
+    working: 'Representatieve passages voorbereiden…',
+    loadFailed: 'De samenvatting kon niet worden geladen.',
+    generationFailed: 'De samenvatting kon niet worden gegenereerd.',
+    keyPassagesOnly: 'Er is geen generatieprofiel ingesteld. Alleen kernpassages worden getoond.',
+    profile: 'Generatieprofiel',
+    cloudDisclosure:
+      '{tokens} geschatte tokens met representatieve documenttekst worden naar deze cloudendpoint verzonden.',
+    localDisclosure:
+      '{tokens} geschatte tokens met representatieve documenttekst worden naar deze lokale endpoint verzonden.',
+    stale: 'De bron is gewijzigd sinds deze samenvatting is gegenereerd.',
+    brief: 'Kort',
+    full: 'Volledige samenvatting',
+    keyPassages: 'Kernpassages',
+    generate: 'Samenvatting genereren',
+    regenerate: 'Samenvatting opnieuw genereren',
+  },
   connections: {
     enterName: 'Voer een verbindingsnaam in.',
     enterHost: 'Voer een host in.',

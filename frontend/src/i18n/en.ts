@@ -658,6 +658,24 @@ export const en = {
     removeFromFavourites: 'Remove from favourites',
     deleteSavedSearch: 'Delete saved search',
   },
+  documentSummary: {
+    title: 'Summary · {name}',
+    working: 'Preparing representative passages…',
+    loadFailed: 'The summary could not be loaded.',
+    generationFailed: 'The summary could not be generated.',
+    keyPassagesOnly: 'No generation profile is configured. Showing key passages only.',
+    profile: 'Generation profile',
+    cloudDisclosure:
+      '{tokens} estimated tokens of representative document text will be sent to this cloud endpoint.',
+    localDisclosure:
+      '{tokens} estimated tokens of representative document text will be sent to this local endpoint.',
+    stale: 'The source has changed since this summary was generated.',
+    brief: 'Brief',
+    full: 'Full summary',
+    keyPassages: 'Key passages',
+    generate: 'Generate summary',
+    regenerate: 'Regenerate summary',
+  },
   connections: {
     enterName: 'Enter a connection name.',
     enterHost: 'Enter a host.',

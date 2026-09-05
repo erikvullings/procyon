@@ -52,6 +52,7 @@ const SELECTION_ACTION_IDS = new Set([
   'core.editFinderTags',
   'core.editSpotlightComment',
   'core.uninstallApplication',
+  'core.documentSummary',
 ]);
 
 const CONTEXT_MENU_SELECTION_ORDER = new Map([
@@ -124,6 +125,9 @@ export function evaluateActionAvailability(
     action.id === 'core.calculateChecksum' &&
     !context.selectedEntries.some((entry) => entry.kind === 'file')
   ) {
+    return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (action.id === 'core.documentSummary' && soleSelectedEntry?.kind !== 'file') {
     return unavailable(action, t('availability', 'selectFiles'));
   }
   if (action.id === 'core.findDuplicates' && context.hasActiveLocation === false) {

@@ -631,6 +631,10 @@ impl IngestionCoordinator {
                 vector: vector.clone(),
                 record_kind: "chunk".into(),
                 excerpt: chunk.display_excerpt.clone(),
+                content: chunk.embedding_input.clone(),
+                token_count: chunk.estimated_tokens,
+                section_path: chunk.section_path.clone(),
+                structural_role: structural_role(&chunk.section_path, chunk.source_order).into(),
                 provenance,
                 source_position: chunk.source_order,
                 generated: false,
@@ -882,7 +886,36 @@ fn record_id(document: &IngestionDocument, generation: u64, position: usize) -> 
         hasher.update((part.len() as u64).to_le_bytes());
         hasher.update(part.as_bytes());
     }
+
     sha256_hex(&hasher.finalize())
+}
+
+fn structural_role(section_path: &[String], source_position: u32) -> &'static str {
+    let headings = section_path
+        .iter()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    if headings
+        .iter()
+        .any(|value| matches!(value.as_str(), "title" | "document title"))
+    {
+        "title"
+    } else if headings.iter().any(|value| {
+        matches!(
+            value.as_str(),
+            "introduction" | "intro" | "overview" | "background"
+        )
+    }) || source_position == 0
+    {
+        "introduction"
+    } else if headings
+        .iter()
+        .any(|value| matches!(value.as_str(), "conclusion" | "conclusions" | "closing"))
+    {
+        "conclusion"
+    } else {
+        "body"
+    }
 }
 
 #[cfg(test)]
