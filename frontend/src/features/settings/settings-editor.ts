@@ -15,6 +15,7 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  SemanticVocabulary,
   Settings,
   WorkspaceId,
 } from '../../models';
@@ -23,6 +24,7 @@ import type { SelectionPlatform } from '../selection/keybindings';
 import { LlmProfileManagement } from './llm-profile-management';
 import { SemanticComponentManagement } from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
+import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
 import {
   cloneSettings,
   formatListInput,
@@ -463,6 +465,56 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                 ? {}
                 : { workspaceId: current.activeWorkspaceId }),
               ...(current.activeLocation === undefined ? {} : { location: current.activeLocation }),
+            }),
+          ),
+          m('.row', m('h4.fm-settings-section-heading.col.s12', t('semanticVocabulary', 'title'))),
+          m(
+            '.row',
+            m(SemanticVocabularyManagement, {
+              client: current.client,
+              ...(current.activeWorkspaceId === undefined
+                ? {}
+                : { workspaceId: current.activeWorkspaceId }),
+              onCreateConceptFolder: (vocabulary: SemanticVocabulary, conceptUri: string): void => {
+                if (draft === undefined) return;
+                const concept = vocabulary.concepts.find(({ uri }) => uri === conceptUri);
+                const label =
+                  concept?.prefLabels.en ??
+                  (concept ? Object.values(concept.prefLabels)[0] : undefined) ??
+                  conceptUri;
+                update(current, {
+                  savedSearches: [
+                    ...draft.savedSearches,
+                    {
+                      id: crypto.randomUUID(),
+                      name: `${vocabulary.name}: ${label}`,
+                      pinned: false,
+                      query: {
+                        schemaVersion: 3,
+                        mode: 'concept',
+                        scope: {
+                          locations:
+                            current.activeLocation === undefined ? [] : [current.activeLocation],
+                          recurse: true,
+                          showHidden: false,
+                        },
+                        entryKinds: ['file'],
+                        mimeTypes: [],
+                        concept: {
+                          vocabularyId: vocabulary.id,
+                          conceptUri,
+                          hierarchy: 'exact',
+                          libraryId: '',
+                          enrolledRootIds: [],
+                        },
+                        gitStatuses: [],
+                        tags: [],
+                        metadata: {},
+                      },
+                    },
+                  ],
+                });
+              },
             }),
           ),
           m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title'))),

@@ -852,6 +852,7 @@ mod tests {
                 modified_before: None,
                 content: None,
                 semantic: None,
+                concept: None,
                 git_statuses: Vec::new(),
                 tags: Vec::new(),
                 metadata: BTreeMap::new(),

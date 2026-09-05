@@ -14,6 +14,7 @@ import type {
   ArchiveCredentialRequestDto,
   ArchiveSummaryRequestDto,
   ArchiveSummaryResponseDto,
+  AttachSemanticVocabularyRequestDto,
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
@@ -33,6 +34,8 @@ import type {
   CreateWorkspaceRequestDto,
   DeleteLlmProfileRequestDto,
   DeleteRagConversationRequestDto,
+  DeleteSemanticVocabularyImpactDto,
+  DeleteSemanticVocabularyRequestDto,
   DeleteWorkspaceParams,
   DiagnosticsDto,
   DirectorySnapshotDto,
@@ -45,6 +48,7 @@ import type {
   EntryMetadataDto,
   EntryMetadataRequest,
   EntrySummaryDto,
+  ExportSemanticVocabularyResponseDto,
   FinderTagsDto,
   GenerateDocumentSummaryRequestDto,
   GenerateRagAnswerRequestDto,
@@ -65,6 +69,7 @@ import type {
   HealthDto,
   HostKeyProbeDto,
   ImportSemanticLocalModelRequestDto,
+  ImportSemanticVocabularyRequestDto,
   InstallSemanticWorkerPatchRequestDto,
   InvokeActionRequestDto,
   ListDirectoryChildrenRequest,
@@ -113,6 +118,7 @@ import type {
   ResolveRagCitationRequestDto,
   ResolvedRagCitationDto,
   ResumeSemanticCleanupRequestDto,
+  ReviewConceptCandidateRequestDto,
   RuntimeCapabilitiesDto,
   SaveChecksumFileRequestDto,
   SaveChecksumFileResponseDto,
@@ -146,6 +152,7 @@ import type {
   SemanticModelProfileDto,
   SemanticModelSelectionDto,
   SemanticUninstallReceiptDto,
+  SemanticVocabularyDto,
   SemanticWorkerPatchResponseDto,
   SetFinderTagsParams,
   SetPaneActivityRequest,
@@ -172,6 +179,7 @@ import type {
   UpdateStructuredViewRequestDto,
   VerificationReportDto,
   VerifyChecksumFileRequestDto,
+  VocabularyIdRequestDto,
   VolumeDto,
   WorkspaceCommandDto,
   WorkspaceDto,
@@ -6570,6 +6578,296 @@ export const getSemanticLibraryStatus = async ( options?: Parameters<typeof fetc
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listSemanticVocabulariesResponse200 = {
+  data: SemanticVocabularyDto[]
+  status: 200
+}
+
+export type listSemanticVocabulariesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type listSemanticVocabulariesResponseSuccess = (listSemanticVocabulariesResponse200) & {
+  headers: Headers;
+};
+export type listSemanticVocabulariesResponseError = (listSemanticVocabulariesResponse403) & {
+  headers: Headers;
+};
+
+export type listSemanticVocabulariesResponse = (listSemanticVocabulariesResponseSuccess | listSemanticVocabulariesResponseError)
+
+export const getListSemanticVocabulariesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies`
+}
+
+export const listSemanticVocabularies = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listSemanticVocabulariesResponse> => {
+
+  return fetchMutator<listSemanticVocabulariesResponse>(getListSemanticVocabulariesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type attachSemanticVocabularyResponse200 = {
+  data: SemanticVocabularyDto
+  status: 200
+}
+
+export type attachSemanticVocabularyResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type attachSemanticVocabularyResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type attachSemanticVocabularyResponseSuccess = (attachSemanticVocabularyResponse200) & {
+  headers: Headers;
+};
+export type attachSemanticVocabularyResponseError = (attachSemanticVocabularyResponse400 | attachSemanticVocabularyResponse403) & {
+  headers: Headers;
+};
+
+export type attachSemanticVocabularyResponse = (attachSemanticVocabularyResponseSuccess | attachSemanticVocabularyResponseError)
+
+export const getAttachSemanticVocabularyUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies/attach`
+}
+
+export const attachSemanticVocabulary = async (attachSemanticVocabularyRequestDto: AttachSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<attachSemanticVocabularyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<attachSemanticVocabularyResponse>(getAttachSemanticVocabularyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(attachSemanticVocabularyRequestDto)
+  }
+);}
+
+
+
+export type deleteSemanticVocabularyResponse200 = {
+  data: DeleteSemanticVocabularyImpactDto
+  status: 200
+}
+
+export type deleteSemanticVocabularyResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type deleteSemanticVocabularyResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type deleteSemanticVocabularyResponseSuccess = (deleteSemanticVocabularyResponse200) & {
+  headers: Headers;
+};
+export type deleteSemanticVocabularyResponseError = (deleteSemanticVocabularyResponse400 | deleteSemanticVocabularyResponse403) & {
+  headers: Headers;
+};
+
+export type deleteSemanticVocabularyResponse = (deleteSemanticVocabularyResponseSuccess | deleteSemanticVocabularyResponseError)
+
+export const getDeleteSemanticVocabularyUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies/delete`
+}
+
+export const deleteSemanticVocabulary = async (deleteSemanticVocabularyRequestDto: DeleteSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteSemanticVocabularyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<deleteSemanticVocabularyResponse>(getDeleteSemanticVocabularyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteSemanticVocabularyRequestDto)
+  }
+);}
+
+
+
+export type exportSemanticVocabularyResponse200 = {
+  data: ExportSemanticVocabularyResponseDto
+  status: 200
+}
+
+export type exportSemanticVocabularyResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type exportSemanticVocabularyResponseSuccess = (exportSemanticVocabularyResponse200) & {
+  headers: Headers;
+};
+export type exportSemanticVocabularyResponseError = (exportSemanticVocabularyResponse400) & {
+  headers: Headers;
+};
+
+export type exportSemanticVocabularyResponse = (exportSemanticVocabularyResponseSuccess | exportSemanticVocabularyResponseError)
+
+export const getExportSemanticVocabularyUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies/export`
+}
+
+export const exportSemanticVocabulary = async (vocabularyIdRequestDto: VocabularyIdRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<exportSemanticVocabularyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<exportSemanticVocabularyResponse>(getExportSemanticVocabularyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(vocabularyIdRequestDto)
+  }
+);}
+
+
+
+export type importSemanticVocabularyResponse201 = {
+  data: SemanticVocabularyDto
+  status: 201
+}
+
+export type importSemanticVocabularyResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type importSemanticVocabularyResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type importSemanticVocabularyResponseSuccess = (importSemanticVocabularyResponse201) & {
+  headers: Headers;
+};
+export type importSemanticVocabularyResponseError = (importSemanticVocabularyResponse400 | importSemanticVocabularyResponse403) & {
+  headers: Headers;
+};
+
+export type importSemanticVocabularyResponse = (importSemanticVocabularyResponseSuccess | importSemanticVocabularyResponseError)
+
+export const getImportSemanticVocabularyUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies/import`
+}
+
+export const importSemanticVocabulary = async (importSemanticVocabularyRequestDto: ImportSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<importSemanticVocabularyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<importSemanticVocabularyResponse>(getImportSemanticVocabularyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(importSemanticVocabularyRequestDto)
+  }
+);}
+
+
+
+export type reviewSemanticConceptCandidateResponse200 = {
+  data: SemanticVocabularyDto
+  status: 200
+}
+
+export type reviewSemanticConceptCandidateResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type reviewSemanticConceptCandidateResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type reviewSemanticConceptCandidateResponseSuccess = (reviewSemanticConceptCandidateResponse200) & {
+  headers: Headers;
+};
+export type reviewSemanticConceptCandidateResponseError = (reviewSemanticConceptCandidateResponse400 | reviewSemanticConceptCandidateResponse403) & {
+  headers: Headers;
+};
+
+export type reviewSemanticConceptCandidateResponse = (reviewSemanticConceptCandidateResponseSuccess | reviewSemanticConceptCandidateResponseError)
+
+export const getReviewSemanticConceptCandidateUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/vocabularies/review`
+}
+
+export const reviewSemanticConceptCandidate = async (reviewConceptCandidateRequestDto: ReviewConceptCandidateRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<reviewSemanticConceptCandidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<reviewSemanticConceptCandidateResponse>(getReviewSemanticConceptCandidateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewConceptCandidateRequestDto)
   }
 );}
 

@@ -1,8 +1,9 @@
 import type { Location } from './location';
 
 export type SearchNameMode = 'substring' | 'glob';
-export type SearchMode = 'name' | 'content' | 'semantic';
+export type SearchMode = 'name' | 'content' | 'semantic' | 'concept';
 export type SemanticSearchScope = 'currentFolder' | 'entireLibrary' | 'enrolledRoots';
+export type ConceptHierarchyScope = 'exact' | 'narrower' | 'broader' | 'broaderAndNarrower';
 export type SearchEntryKind = 'file' | 'directory' | 'symlink';
 export type SearchGitStatus = 'clean' | 'modified' | 'staged' | 'untracked' | 'ignored';
 export type SearchPredicateKind =
@@ -21,7 +22,7 @@ export type SearchPredicateKind =
 export type SearchExecutionMode = 'indexed' | 'liveRecursive' | 'mixed' | 'semantic';
 
 export interface SearchQuery {
-  readonly schemaVersion: 1 | 2;
+  readonly schemaVersion: 1 | 2 | 3;
   readonly mode?: SearchMode;
   readonly scope: {
     readonly locations: readonly Location[];
@@ -49,6 +50,13 @@ export interface SearchQuery {
     readonly query: string;
     readonly libraryId: string;
     readonly scope: SemanticSearchScope;
+    readonly enrolledRootIds: string[];
+  };
+  readonly concept?: {
+    readonly vocabularyId: string;
+    readonly conceptUri: string;
+    readonly hierarchy: ConceptHierarchyScope;
+    readonly libraryId: string;
     readonly enrolledRootIds: string[];
   };
   readonly gitStatuses: readonly SearchGitStatus[];

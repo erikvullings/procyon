@@ -7,6 +7,7 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -29,6 +30,7 @@ import type {
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -95,6 +97,7 @@ import type {
   ResolvedRagCitation,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -124,6 +127,7 @@ import type {
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticUninstallReceipt,
+  SemanticVocabulary,
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
@@ -241,6 +245,22 @@ export interface FileManagerClient {
   ): Promise<SemanticModelSelection>;
   getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
   getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
+  listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]>;
+  importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary>;
+  exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string>;
+  attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary>;
+  reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary>;
+  deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact>;
   getSemanticFolderStatus(
     request: GetSemanticFolderStatusRequest,
     signal?: AbortSignal,

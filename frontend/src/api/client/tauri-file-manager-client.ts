@@ -11,6 +11,7 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -33,6 +34,7 @@ import type {
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -99,6 +101,7 @@ import type {
   ResolvedRagCitation,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -128,6 +131,7 @@ import type {
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticUninstallReceipt,
+  SemanticVocabulary,
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
@@ -327,6 +331,50 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async getSemanticLibraryStatus(_signal?: AbortSignal): Promise<SemanticLibraryStatus> {
     return invoke<SemanticLibraryStatus>('get_semantic_library_status');
+  }
+
+  async listSemanticVocabularies(_signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    return invoke<SemanticVocabulary[]>('list_semantic_vocabularies');
+  }
+
+  async importSemanticVocabulary(
+    skosJson: string,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('import_semantic_vocabulary', {
+      request: { skosJson },
+    });
+  }
+
+  async exportSemanticVocabulary(vocabularyId: string, _signal?: AbortSignal): Promise<string> {
+    const response = await invoke<{ skosJson: string }>('export_semantic_vocabulary', {
+      request: { vocabularyId },
+    });
+    return response.skosJson;
+  }
+
+  async attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('attach_semantic_vocabulary', { request });
+  }
+
+  async reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('review_semantic_concept_candidate', { request });
+  }
+
+  async deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    _signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    return invoke<DeleteSemanticVocabularyImpact>('delete_semantic_vocabulary', {
+      request: { vocabularyId, confirmAffected },
+    });
   }
 
   async getSemanticFolderStatus(

@@ -10,6 +10,7 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -37,6 +38,7 @@ import type {
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -105,6 +107,7 @@ import type {
   ResolvedRagCitation,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -145,6 +148,7 @@ import type {
   SemanticProfile,
   SemanticRootStatus,
   SemanticUninstallReceipt,
+  SemanticVocabulary,
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
@@ -236,6 +240,12 @@ export type MockClientMethod =
   | 'completeSemanticComponentModelMigration'
   | 'getSemanticLibraryCapabilities'
   | 'getSemanticLibraryStatus'
+  | 'listSemanticVocabularies'
+  | 'importSemanticVocabulary'
+  | 'exportSemanticVocabulary'
+  | 'attachSemanticVocabulary'
+  | 'reviewSemanticConceptCandidate'
+  | 'deleteSemanticVocabulary'
   | 'getSemanticFolderStatus'
   | 'previewSemanticEnrolment'
   | 'confirmSemanticEnrolment'
@@ -1189,6 +1199,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly semanticIndexRemovalPlans = new Map<string, SemanticIndexRemovalPlan>();
   private readonly semanticMigrationPlans = new Map<string, SemanticModelMigrationPlan>();
   private semanticLibrary = mockSemanticLibraryStatus();
+  private semanticVocabularies: SemanticVocabulary[] = [];
   private semanticLibrarySequence = 0;
   private readonly semanticEnrolmentPreviews = new Map<
     string,
@@ -1705,6 +1716,112 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getSemanticLibraryStatus', signal, () =>
       structuredClone(this.semanticLibrary),
     );
+  }
+
+  listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    return this.perform('listSemanticVocabularies', signal, () =>
+      structuredClone(this.semanticVocabularies),
+    );
+  }
+
+  importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary> {
+    return this.perform('importSemanticVocabulary', signal, () => {
+      const parsed = JSON.parse(skosJson) as {
+        id: string;
+        name: string;
+        concepts?: SemanticVocabulary['concepts'];
+      };
+      const vocabulary: SemanticVocabulary = {
+        id: parsed.id,
+        name: parsed.name,
+        concepts: parsed.concepts ?? [],
+        workspaceIds: [],
+        rootIds: [],
+        reviewQueue: [],
+        revision: 0,
+      };
+      this.semanticVocabularies.push(vocabulary);
+      return structuredClone(vocabulary);
+    });
+  }
+
+  exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
+    return this.perform('exportSemanticVocabulary', signal, () => {
+      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
+      if (!vocabulary) throw new Error('Vocabulary not found');
+      return JSON.stringify({ format: 'procyon-skos-1', ...vocabulary });
+    });
+  }
+
+  attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return this.perform('attachSemanticVocabulary', signal, () => {
+      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
+      const current = this.semanticVocabularies[index];
+      if (!current) throw new Error('Vocabulary not found');
+      const updated: SemanticVocabulary = {
+        ...current,
+        workspaceIds: request.workspaceId
+          ? [...new Set([...current.workspaceIds, request.workspaceId])]
+          : current.workspaceIds,
+        rootIds: request.rootId
+          ? [...new Set([...current.rootIds, request.rootId])]
+          : current.rootIds,
+        revision: current.revision + 1,
+      };
+      this.semanticVocabularies[index] = updated;
+      return structuredClone(updated);
+    });
+  }
+
+  reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return this.perform('reviewSemanticConceptCandidate', signal, () => {
+      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
+      const current = this.semanticVocabularies[index];
+      if (!current) throw new Error('Vocabulary not found');
+      const updated: SemanticVocabulary = {
+        ...current,
+        reviewQueue: current.reviewQueue.map((candidate) =>
+          candidate.id === request.candidateId
+            ? { ...candidate, status: request.action === 'reject' ? 'rejected' : 'accepted' }
+            : candidate,
+        ),
+        revision: current.revision + 1,
+      };
+      this.semanticVocabularies[index] = updated;
+      return structuredClone(updated);
+    });
+  }
+
+  deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    return this.perform('deleteSemanticVocabulary', signal, () => {
+      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
+      if (!vocabulary) throw new Error('Vocabulary not found');
+      const requiresConfirmation =
+        vocabulary.workspaceIds.length > 0 || vocabulary.rootIds.length > 0;
+      const deleted = confirmAffected || !requiresConfirmation;
+      if (deleted) {
+        this.semanticVocabularies = this.semanticVocabularies.filter(
+          ({ id }) => id !== vocabularyId,
+        );
+      }
+      return {
+        vocabularyId,
+        affectedWorkspaceIds: vocabulary.workspaceIds,
+        affectedRootIds: vocabulary.rootIds,
+        requiresConfirmation,
+        deleted,
+      };
+    });
   }
 
   getSemanticFolderStatus(

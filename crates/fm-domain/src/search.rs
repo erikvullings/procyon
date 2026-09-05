@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{GitFileStatus, Location};
 
 /// Current durable query schema.
-pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 2;
+pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 3;
 
 /// Explicit interpretation of the user's primary query text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -23,6 +23,8 @@ pub enum SearchMode {
     Content,
     /// Dense-vector retrieval using the enrolled library's local model.
     Semantic,
+    /// Stable SKOS concept membership from a published labelling generation.
+    Concept,
 }
 
 /// User-visible semantic scope. Search never changes enrolment.
@@ -45,6 +47,33 @@ pub struct SearchSemanticPredicate {
     pub query: String,
     pub library_id: String,
     pub scope: SemanticSearchScope,
+    #[serde(default)]
+    pub enrolled_root_ids: Vec<String>,
+}
+
+/// Relationship expansion applied to a concept virtual folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ConceptHierarchyScope {
+    /// Match only the persisted concept URI.
+    #[default]
+    Exact,
+    /// Include all recursively narrower concepts.
+    Narrower,
+    /// Include all recursively broader concepts.
+    Broader,
+    /// Include both recursively broader and narrower concepts.
+    BroaderAndNarrower,
+}
+
+/// Durable concept virtual-folder predicate. Labels remain presentation-only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchConceptPredicate {
+    pub vocabulary_id: String,
+    pub concept_uri: String,
+    pub hierarchy: ConceptHierarchyScope,
+    pub library_id: String,
     #[serde(default)]
     pub enrolled_root_ids: Vec<String>,
 }
@@ -106,6 +135,8 @@ pub struct SearchQuery {
     pub content: Option<SearchContentPredicate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic: Option<SearchSemanticPredicate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concept: Option<SearchConceptPredicate>,
     pub git_statuses: Vec<GitFileStatus>,
     pub tags: Vec<String>,
     pub metadata: BTreeMap<String, String>,

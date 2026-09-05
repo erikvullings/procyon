@@ -179,6 +179,58 @@ impl WorkerQueryBackend for DenseWorkerQueryBackend {
         input: WorkerQueryInput,
         cancellation: &CancellationToken,
     ) -> Result<Vec<SearchResult>, String> {
+        if let Some(concept) = input.concept_query {
+            if cancellation.is_cancelled() {
+                return Err(SemanticSearchError::Cancelled.to_string());
+            }
+            let documents = self
+                .service
+                .catalog
+                .concept_folder_documents(
+                    &QueryFilters {
+                        tenant_id: input.tenant_id,
+                        library_id: Some(input.library_id),
+                        root_id: concept.root_id,
+                        workspace_id: concept.workspace_id,
+                        include_unavailable: concept.include_unavailable,
+                        ..QueryFilters::default()
+                    },
+                    &concept.vocabulary_id,
+                    &concept.concept_uris,
+                    usize::try_from(concept.offset).unwrap_or(usize::MAX),
+                    usize::try_from(input.maximum_results)
+                        .unwrap_or(200)
+                        .min(200),
+                )
+                .map_err(|error| error.to_string())?;
+            if cancellation.is_cancelled() {
+                return Err(SemanticSearchError::Cancelled.to_string());
+            }
+            return documents
+                .into_iter()
+                .map(|document| {
+                    Ok(SearchResult {
+                        document_id: document.document_id,
+                        score: f64::from(document.confidence),
+                        metadata: BTreeMap::from([
+                            ("semantic.sourceId".into(), document.source_id),
+                            ("available".into(), document.available.to_string()),
+                            (
+                                "semantic.generation".into(),
+                                document.source_generation.to_string(),
+                            ),
+                            ("semantic.concept".into(), concept.vocabulary_id.clone()),
+                            (
+                                "semantic.conceptEvidence".into(),
+                                serde_json::to_string(&document.supporting_chunk_ids)
+                                    .map_err(|error| error.to_string())?,
+                            ),
+                        ]),
+                        excerpt: String::new(),
+                    })
+                })
+                .collect();
+        }
         let page = self
             .service
             .search(

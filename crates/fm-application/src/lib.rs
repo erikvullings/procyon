@@ -46,6 +46,8 @@ pub mod semantic_components;
 pub mod semantic_ingestion;
 pub mod semantic_library;
 pub mod semantic_library_mapping;
+pub mod semantic_vocabulary;
+mod semantic_vocabulary_mapping;
 mod service;
 mod settings_mapping;
 mod ssh;

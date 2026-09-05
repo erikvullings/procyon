@@ -104,7 +104,7 @@ semantic components are not installed.
 - [x] 0185 Representative document summaries *(needs 0182, 0184; production worker/model activation
   remains measurement-gated by 0188)*
 - [x] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*
-- [ ] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
+- [x] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
 - [ ] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
 - [ ] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
 

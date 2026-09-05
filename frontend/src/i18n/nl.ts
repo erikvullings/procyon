@@ -1163,6 +1163,25 @@ export const nl = {
     resumeCleanup: 'Opschoning hervatten',
     working: 'Bezig…',
   },
+  semanticVocabulary: {
+    title: 'Conceptwoordenlijsten',
+    description:
+      'Importeer beheerde SKOS-woordenlijsten, koppel ze aan deze werkruimte, beoordeel lokale suggesties en maak stabiele conceptmappen.',
+    importLabel: 'SKOS-JSON',
+    importPlaceholder: 'Plak een procyon-skos-1-document',
+    importAction: 'Woordenlijst importeren',
+    loading: 'Woordenlijsten laden...',
+    empty: 'Geen woordenlijsten geïmporteerd.',
+    unknownError: 'De woordenlijstbewerking is mislukt.',
+    summary: '{concepts} concepten; {pending} suggesties wachten op beoordeling',
+    attachWorkspace: 'Aan werkruimte koppelen',
+    createFolder: 'Conceptmap maken',
+    candidateEvidence: '{confidence}% zekerheid in {frequency} voorkomens',
+    accept: 'Accepteren',
+    reject: 'Afwijzen',
+    delete: 'Woordenlijst verwijderen',
+    confirmDelete: 'Verwijderen en mappen loskoppelen bevestigen',
+  },
   llmProfiles: {
     title: 'Generatieprofielen',
     description:

@@ -8,11 +8,12 @@ use fm_settings::{
     MultiRenamePreset, MultiRenameRules, MultiRenameSequence, Settings, SizeFormat, Theme,
 };
 use fm_transport_dto::{
-    ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, LanguageDto,
+    ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, LanguageDto,
     MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,
-    SavedSearchDto, SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto,
-    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
-    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto, ThemeDto,
+    SavedSearchDto, SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto,
+    SearchGitStatusDto, SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto,
+    SearchScopeDto, SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
+    ThemeDto,
 };
 
 pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
@@ -231,6 +232,7 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
             fm_domain::SearchMode::Name => SearchModeDto::Name,
             fm_domain::SearchMode::Content => SearchModeDto::Content,
             fm_domain::SearchMode::Semantic => SearchModeDto::Semantic,
+            fm_domain::SearchMode::Concept => SearchModeDto::Concept,
         },
         scope: SearchScopeDto {
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
@@ -281,6 +283,20 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
             },
             enrolled_root_ids: semantic.enrolled_root_ids,
         }),
+        concept: query.concept.map(|concept| SearchConceptPredicateDto {
+            vocabulary_id: concept.vocabulary_id,
+            concept_uri: concept.concept_uri,
+            hierarchy: match concept.hierarchy {
+                fm_domain::ConceptHierarchyScope::Exact => ConceptHierarchyScopeDto::Exact,
+                fm_domain::ConceptHierarchyScope::Narrower => ConceptHierarchyScopeDto::Narrower,
+                fm_domain::ConceptHierarchyScope::Broader => ConceptHierarchyScopeDto::Broader,
+                fm_domain::ConceptHierarchyScope::BroaderAndNarrower => {
+                    ConceptHierarchyScopeDto::BroaderAndNarrower
+                }
+            },
+            library_id: concept.library_id,
+            enrolled_root_ids: concept.enrolled_root_ids,
+        }),
         git_statuses: query
             .git_statuses
             .into_iter()
@@ -307,6 +323,7 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
             SearchModeDto::Name => fm_domain::SearchMode::Name,
             SearchModeDto::Content => fm_domain::SearchMode::Content,
             SearchModeDto::Semantic => fm_domain::SearchMode::Semantic,
+            SearchModeDto::Concept => fm_domain::SearchMode::Concept,
         },
         scope: fm_domain::SearchScope {
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
@@ -360,6 +377,24 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
                     }
                 },
                 enrolled_root_ids: semantic.enrolled_root_ids,
+            }),
+        concept: query
+            .concept
+            .map(|concept| fm_domain::SearchConceptPredicate {
+                vocabulary_id: concept.vocabulary_id,
+                concept_uri: concept.concept_uri,
+                hierarchy: match concept.hierarchy {
+                    ConceptHierarchyScopeDto::Exact => fm_domain::ConceptHierarchyScope::Exact,
+                    ConceptHierarchyScopeDto::Narrower => {
+                        fm_domain::ConceptHierarchyScope::Narrower
+                    }
+                    ConceptHierarchyScopeDto::Broader => fm_domain::ConceptHierarchyScope::Broader,
+                    ConceptHierarchyScopeDto::BroaderAndNarrower => {
+                        fm_domain::ConceptHierarchyScope::BroaderAndNarrower
+                    }
+                },
+                library_id: concept.library_id,
+                enrolled_root_ids: concept.enrolled_root_ids,
             }),
         git_statuses: query
             .git_statuses

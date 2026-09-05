@@ -205,6 +205,18 @@ message QueryRequest {
   string query = 4;
   // Maximum result count, additionally bounded by worker policy.
   uint32 maximum_results = 5;
+  // Optional stable concept-folder query. When set, `query` may be empty.
+  ConceptQuery concept_query = 6;
+}
+
+// Published concept annotations selected without re-embedding documents.
+message ConceptQuery {
+  string vocabulary_id = 1;
+  repeated string concept_uris = 2;
+  optional string root_id = 3;
+  optional string workspace_id = 4;
+  bool include_unavailable = 5;
+  uint64 offset = 6;
 }
 
 // One semantic query result.

@@ -16,53 +16,56 @@ use fm_transport_dto::{
     AcceptSemanticInstallationOfferRequestDto, AcceptSshHostKeyRequestDto, ActionDescriptorDto,
     ActionResultDto, ApplicationErrorDto, ApplySyncPlanRequestDto, ApplySyncPlanResponseDto,
     ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
-    BeginOneDriveAuthorizationResponseDto, CalculateFolderSizeRequestDto,
-    CalculateFolderSizeResponseDto, CheckpointSemanticModelMigrationRequestDto, ChecksumFileDto,
-    ChecksumPageDto, ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
+    AttachSemanticVocabularyRequestDto, BeginOneDriveAuthorizationResponseDto,
+    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
+    CheckpointSemanticModelMigrationRequestDto, ChecksumFileDto, ChecksumPageDto,
+    ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
     ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
     ConfirmSemanticIndexRemovalRequestDto, ConfirmSemanticModelMigrationRequestDto, ConnectionDto,
     ConnectionStateDto, CreateConnectionRequestDto, CreateSemanticIndexRemovalPlanRequestDto,
     CreateSemanticInstallationOfferRequestDto, CreateWorkspaceRequestDto,
-    DeleteLlmProfileRequestDto, DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
+    DeleteLlmProfileRequestDto, DeleteSemanticVocabularyImpactDto,
+    DeleteSemanticVocabularyRequestDto, DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
     DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DocumentSummaryDto,
     DocumentSummaryPreviewDto, DocxPreviewSessionRequestDto, DuplicatePageDto, EntryMetadataDto,
-    EntryMetadataRequest, EntrySummaryDto, FinderTagsDto, GenerateDocumentSummaryRequestDto,
-    GenerateSyncPlanRequestDto, GetDocumentSummaryRequestDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto, HostKeyProbeDto,
-    ImportSemanticLocalModelRequestDto, InstallSemanticWorkerPatchRequestDto,
-    InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
-    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
-    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
-    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
-    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
-    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
-    PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    EntryMetadataRequest, EntrySummaryDto, ExportSemanticVocabularyResponseDto, FinderTagsDto,
+    GenerateDocumentSummaryRequestDto, GenerateSyncPlanRequestDto, GetDocumentSummaryRequestDto,
+    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
+    HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
+    InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, ListDirectoryChildrenRequest,
+    ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
+    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
+    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
+    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
+    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, ResumeSemanticCleanupRequestDto, RuntimeCapabilitiesDto,
-    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, SaveLlmProfileRequestDto,
-    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
-    SemanticComponentCapabilitiesDto, SemanticComponentErrorDto, SemanticComponentStatusDto,
-    SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto,
-    SemanticFolderStatusDto, SemanticIndexRemovalPlanDto, SemanticIndexRemovalReceiptDto,
-    SemanticInstallReceiptDto, SemanticInstallationOfferDto, SemanticLibraryCapabilitiesDto,
-    SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto,
-    SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto, SemanticModelProfileDto,
-    SemanticModelSelectionDto, SemanticUninstallReceiptDto, SemanticWorkerPatchResponseDto,
-    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
-    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
-    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
-    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
-    StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
-    UpdateConnectionRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
-    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, ResumeSemanticCleanupRequestDto,
+    ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
+    SaveChecksumFileResponseDto, SaveLlmProfileRequestDto, ScanDiskUsageRequestDto,
+    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
+    SearchStructuredRowsResponseDto, SemanticComponentCapabilitiesDto, SemanticComponentErrorDto,
+    SemanticComponentStatusDto, SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto,
+    SemanticExclusionPlanDto, SemanticFolderStatusDto, SemanticIndexRemovalPlanDto,
+    SemanticIndexRemovalReceiptDto, SemanticInstallReceiptDto, SemanticInstallationOfferDto,
+    SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
+    SemanticLibraryStatusDto, SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto,
+    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticUninstallReceiptDto,
+    SemanticVocabularyDto, SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SettingsDto,
+    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
+    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
+    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
+    StartSearchResponseDto, StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
+    UninstallSemanticComponentsRequestDto, UpdateConnectionRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
+    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
     WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
@@ -745,6 +748,77 @@ pub(crate) async fn get_semantic_library_status(
         .semantic_library_status_dto(&desktop_semantic_access())
         .await
         .map_err(semantic_library_error)
+}
+
+#[tauri::command]
+pub(crate) async fn list_semantic_vocabularies(
+    state: State<'_, AppState>,
+) -> Result<Vec<SemanticVocabularyDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_semantic_vocabularies(&desktop_semantic_access())
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn import_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: ImportSemanticVocabularyRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .import_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn export_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: VocabularyIdRequestDto,
+) -> Result<ExportSemanticVocabularyResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .export_semantic_vocabulary(&desktop_semantic_access(), &request.vocabulary_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: AttachSemanticVocabularyRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .attach_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn review_semantic_concept_candidate(
+    state: State<'_, AppState>,
+    request: ReviewConceptCandidateRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .review_semantic_concept_candidate(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: DeleteSemanticVocabularyRequestDto,
+) -> Result<DeleteSemanticVocabularyImpactDto, ApplicationErrorDto> {
+    state
+        .service
+        .delete_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
 /// Reports consent for the active workspace folder.

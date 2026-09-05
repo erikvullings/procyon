@@ -488,6 +488,29 @@
         ],
         "type": "object"
       },
+      "AttachSemanticVocabularyRequestDto": {
+        "properties": {
+          "rootId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vocabularyId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "vocabularyId"
+        ],
+        "type": "object"
+      },
       "BeginOneDriveAuthorizationResponseDto": {
         "description": "The outcome of beginning a OneDrive authorization attempt (task 0110,\n`POST /api/v1/connections/{connectionId}/onedrive/authorize`): the caller\nopens `authorization_url` in the system browser (the backend never opens\na browser or embedded webview itself) and polls `attempt_id` for\ncompletion. Never carries a token - the authorization code/token exchange\nhappens entirely on the backend, asynchronously.",
         "properties": {
@@ -931,6 +954,67 @@
           "migrationId"
         ],
         "type": "object"
+      },
+      "ConceptCandidateDto": {
+        "properties": {
+          "confidence": {
+            "format": "float",
+            "type": "number"
+          },
+          "corpusFrequency": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConceptCandidateStatusDto"
+          },
+          "supportingChunkIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "synonyms",
+          "supportingChunkIds",
+          "confidence",
+          "corpusFrequency",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ConceptCandidateStatusDto": {
+        "enum": [
+          "pending",
+          "accepted",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "ConceptHierarchyScopeDto": {
+        "enum": [
+          "exact",
+          "narrower",
+          "broader",
+          "broaderAndNarrower"
+        ],
+        "type": "string"
       },
       "ConfirmSemanticEnrolmentRequestDto": {
         "additionalProperties": false,
@@ -1592,6 +1676,53 @@
         },
         "required": [
           "conversationId"
+        ],
+        "type": "object"
+      },
+      "DeleteSemanticVocabularyImpactDto": {
+        "properties": {
+          "affectedRootIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "affectedWorkspaceIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "requiresConfirmation": {
+            "type": "boolean"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vocabularyId",
+          "affectedWorkspaceIds",
+          "affectedRootIds",
+          "requiresConfirmation",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "DeleteSemanticVocabularyRequestDto": {
+        "properties": {
+          "confirmAffected": {
+            "type": "boolean"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vocabularyId"
         ],
         "type": "object"
       },
@@ -2611,6 +2742,17 @@
         ],
         "type": "object"
       },
+      "ExportSemanticVocabularyResponseDto": {
+        "properties": {
+          "skosJson": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "skosJson"
+        ],
+        "type": "object"
+      },
       "FavouriteLocationDto": {
         "description": "A named, provider-neutral location saved by the user.",
         "properties": {
@@ -3204,6 +3346,17 @@
           "estimatedRamBytes",
           "profile",
           "estimate"
+        ],
+        "type": "object"
+      },
+      "ImportSemanticVocabularyRequestDto": {
+        "properties": {
+          "skosJson": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "skosJson"
         ],
         "type": "object"
       },
@@ -6369,6 +6522,45 @@
         ],
         "type": "object"
       },
+      "ReviewConceptCandidateActionDto": {
+        "enum": [
+          "accept",
+          "edit",
+          "reject"
+        ],
+        "type": "string"
+      },
+      "ReviewConceptCandidateRequestDto": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewConceptCandidateActionDto"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "conceptUri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vocabularyId",
+          "candidateId",
+          "action"
+        ],
+        "type": "object"
+      },
       "RuntimeCapabilitiesDto": {
         "description": "Capabilities the current runtime and platform support, so the frontend can\nrespond to capabilities rather than detecting operating systems directly\n(spec §21).",
         "example": {
@@ -6847,6 +7039,35 @@
         ],
         "type": "object"
       },
+      "SearchConceptPredicateDto": {
+        "properties": {
+          "conceptUri": {
+            "type": "string"
+          },
+          "enrolledRootIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hierarchy": {
+            "$ref": "#/components/schemas/ConceptHierarchyScopeDto"
+          },
+          "libraryId": {
+            "type": "string"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vocabularyId",
+          "conceptUri",
+          "hierarchy",
+          "libraryId"
+        ],
+        "type": "object"
+      },
       "SearchContentPredicateDto": {
         "description": "A bounded content predicate.",
         "properties": {
@@ -7006,7 +7227,8 @@
         "enum": [
           "name",
           "content",
-          "semantic"
+          "semantic",
+          "concept"
         ],
         "type": "string"
       },
@@ -7075,6 +7297,16 @@
       "SearchQueryDto": {
         "description": "Structured, versioned search query suitable for durable persistence.",
         "properties": {
+          "concept": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SearchConceptPredicateDto"
+              }
+            ]
+          },
           "content": {
             "oneOf": [
               {
@@ -9643,6 +9875,55 @@
         ],
         "type": "object"
       },
+      "SemanticVocabularyDto": {
+        "properties": {
+          "concepts": {
+            "items": {
+              "$ref": "#/components/schemas/SkosConceptDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reviewQueue": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptCandidateDto"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rootIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workspaceIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "concepts",
+          "workspaceIds",
+          "rootIds",
+          "reviewQueue",
+          "revision"
+        ],
+        "type": "object"
+      },
       "SemanticWorkerPatchResponseDto": {
         "description": "Result of checking for and applying a compatible worker patch.",
         "properties": {
@@ -9877,6 +10158,85 @@
           "bytes"
         ],
         "type": "string"
+      },
+      "SkosConceptDto": {
+        "properties": {
+          "altLabels": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "broader": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "definitions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "extensions": {
+            "type": "object"
+          },
+          "narrower": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prefLabels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "related": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scopeNotes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "prefLabels",
+          "altLabels",
+          "definitions",
+          "scopeNotes",
+          "broader",
+          "narrower",
+          "related",
+          "extensions"
+        ],
+        "type": "object"
       },
       "SmbConnectionConfigurationDto": {
         "description": "Minimal native SMB configuration stub.",
@@ -11096,6 +11456,17 @@
         },
         "required": [
           "content"
+        ],
+        "type": "object"
+      },
+      "VocabularyIdRequestDto": {
+        "properties": {
+          "vocabularyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vocabularyId"
         ],
         "type": "object"
       },
@@ -17654,6 +18025,261 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies": {
+      "get": {
+        "operationId": "listSemanticVocabularies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SemanticVocabularyDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies/attach": {
+      "post": {
+        "operationId": "attachSemanticVocabulary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachSemanticVocabularyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticVocabularyDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies/delete": {
+      "post": {
+        "operationId": "deleteSemanticVocabulary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteSemanticVocabularyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSemanticVocabularyImpactDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies/export": {
+      "post": {
+        "operationId": "exportSemanticVocabulary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VocabularyIdRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportSemanticVocabularyResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies/import": {
+      "post": {
+        "operationId": "importSemanticVocabulary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSemanticVocabularyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticVocabularyDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/vocabularies/review": {
+      "post": {
+        "operationId": "reviewSemanticConceptCandidate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewConceptCandidateRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticVocabularyDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
                 }
               }
             },

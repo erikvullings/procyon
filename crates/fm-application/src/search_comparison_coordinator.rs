@@ -64,13 +64,12 @@ impl SearchComparisonCoordinator {
         &self,
         request: StartSearchRequestDto,
         semantic_library: Option<&crate::semantic_library::SemanticLibraryService>,
+        vocabulary_store: Option<&crate::semantic_vocabulary::VocabularyStore>,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
         let structured = request.structured_query.as_ref();
         if structured.is_some_and(|query| {
-            !matches!(
-                query.schema_version,
-                1 | fm_transport_dto::search::SEARCH_QUERY_SCHEMA_VERSION
-            )
+            !(1..=fm_transport_dto::search::SEARCH_QUERY_SCHEMA_VERSION)
+                .contains(&query.schema_version)
         }) {
             return Err(ApplicationError::InvalidRequest(
                 "unsupported search query schema version".to_owned(),
@@ -91,6 +90,17 @@ impl SearchComparisonCoordinator {
         if let Some(query) = structured.filter(|query| query.mode == SearchModeDto::Semantic) {
             return self
                 .start_semantic_search(request.workspace_id, query, roots, semantic_library)
+                .await;
+        }
+        if let Some(query) = structured.filter(|query| query.mode == SearchModeDto::Concept) {
+            return self
+                .start_concept_search(
+                    request.workspace_id,
+                    query,
+                    roots,
+                    semantic_library,
+                    vocabulary_store,
+                )
                 .await;
         }
 
@@ -231,6 +241,7 @@ impl SearchComparisonCoordinator {
                 "semantic query must not be empty".to_owned(),
             ));
         }
+
         if query.name.is_some() || query.content.is_some() {
             return Err(ApplicationError::InvalidRequest(
                 "semantic mode cannot be combined with name or content predicates".to_owned(),
@@ -246,6 +257,7 @@ impl SearchComparisonCoordinator {
                 ),
                 request_id: SemanticOperationId::new(search_id.to_string()),
                 text: semantic.query.clone(),
+                concept: None,
                 maximum_results: 500,
             })
             .await
@@ -323,6 +335,101 @@ impl SearchComparisonCoordinator {
             execution_mode: SearchExecutionModeDto::Semantic,
             semantic_results,
             semantic_coverage: coverage,
+        })
+    }
+
+    async fn start_concept_search(
+        &self,
+        workspace_id: Uuid,
+        query: &fm_transport_dto::SearchQueryDto,
+        roots: Vec<Location>,
+        semantic_library: Option<&crate::semantic_library::SemanticLibraryService>,
+        vocabulary_store: Option<&crate::semantic_vocabulary::VocabularyStore>,
+    ) -> Result<StartSearchResponseDto, ApplicationError> {
+        let concept = query.concept.as_ref().ok_or_else(|| {
+            ApplicationError::InvalidRequest("concept mode requires a concept predicate".into())
+        })?;
+        let vocabulary = vocabulary_store
+            .ok_or(ApplicationError::ProviderUnavailable)?
+            .get(&concept.vocabulary_id)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        if !vocabulary.workspace_ids.contains(&workspace_id.to_string())
+            && !concept
+                .enrolled_root_ids
+                .iter()
+                .any(|root| vocabulary.root_ids.contains(root))
+        {
+            return Err(ApplicationError::PermissionDenied);
+        }
+        let hierarchy = match concept.hierarchy {
+            fm_transport_dto::ConceptHierarchyScopeDto::Exact => (false, false),
+            fm_transport_dto::ConceptHierarchyScopeDto::Narrower => (false, true),
+            fm_transport_dto::ConceptHierarchyScopeDto::Broader => (true, false),
+            fm_transport_dto::ConceptHierarchyScopeDto::BroaderAndNarrower => (true, true),
+        };
+        let concept_uris = vocabulary
+            .expanded_concept_uris(&concept.concept_uri, hierarchy.0, hierarchy.1)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        let search_id = Uuid::new_v4();
+        let mut results = self
+            .semantic
+            .query(SemanticQuery {
+                scope: SemanticScope::new(
+                    TenantId::new(workspace_id.to_string()),
+                    LibraryId::new(concept.library_id.clone()),
+                ),
+                request_id: SemanticOperationId::new(search_id.to_string()),
+                text: String::new(),
+                concept: Some(crate::semantic::SemanticConceptQuery {
+                    vocabulary_id: concept.vocabulary_id.clone(),
+                    concept_uris,
+                    root_id: concept.enrolled_root_ids.first().cloned(),
+                    workspace_id: Some(workspace_id.to_string()),
+                    include_unavailable: true,
+                    offset: 0,
+                }),
+                maximum_results: 500,
+            })
+            .await
+            .map_err(|error| match error {
+                crate::semantic::SemanticError::Unavailable => {
+                    ApplicationError::ProviderUnavailable
+                }
+                _ => ApplicationError::InvalidRequest(error.to_string()),
+            })?;
+        let mut entries = Vec::new();
+        for result in &mut results {
+            if let Some(library) = semantic_library
+                && let Some(source_id) = result.metadata.get("semantic.sourceId")
+                && let Ok(Some(occurrence)) = library.resolve_occurrence(
+                    &crate::semantic_library::SemanticAccessContext::Host,
+                    workspace_id.into(),
+                    source_id,
+                )
+            {
+                result.metadata.insert(
+                    "provider_id".into(),
+                    occurrence.location.provider_id.as_str().to_owned(),
+                );
+                result
+                    .metadata
+                    .insert("uri".into(), occurrence.location.uri.clone());
+                result
+                    .metadata
+                    .insert("entry_id".into(), occurrence.entry_id.to_string());
+            }
+            if let Some(entry) = semantic_result_entry(result, query, &roots) {
+                entries.push(entry);
+            }
+        }
+        let started = self.search.start_materialized(search_id, entries);
+        Ok(StartSearchResponseDto {
+            search_id,
+            location: started.location.into(),
+            limitations: Vec::new(),
+            execution_mode: SearchExecutionModeDto::Semantic,
+            semantic_results: Vec::new(),
+            semantic_coverage: None,
         })
     }
 
@@ -653,8 +760,9 @@ mod tests {
     use fm_events::EventBus;
     use fm_search::{SearchEngine, SearchResultsStore};
     use fm_transport_dto::{
-        SearchExecutionModeDto, SearchModeDto, SearchQueryDto, SearchScopeDto,
-        SearchSemanticPredicateDto, SemanticSearchScopeDto, StartSearchRequestDto,
+        ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchExecutionModeDto, SearchModeDto,
+        SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto, SemanticSearchScopeDto,
+        StartSearchRequestDto,
     };
     use fm_vfs::ProviderRegistry;
     use uuid::Uuid;
@@ -755,11 +863,13 @@ mod tests {
                             scope: SemanticSearchScopeDto::CurrentFolder,
                             enrolled_root_ids: Vec::new(),
                         }),
+                        concept: None,
                         git_statuses: Vec::new(),
                         tags: Vec::new(),
                         metadata: BTreeMap::new(),
                     }),
                 },
+                None,
                 None,
             )
             .await
@@ -771,6 +881,129 @@ mod tests {
             .expect("registered search");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "report.pdf");
+        assert!(!more);
+    }
+
+    #[tokio::test]
+    async fn concept_mode_authorizes_attachment_and_expands_hierarchy() {
+        let providers = ProviderRegistry::new();
+        let events = EventBus::default();
+        let search_store = Arc::new(SearchResultsStore::new());
+        let comparison_store = Arc::new(ComparisonResultsStore::new());
+        let capability = Arc::new(FakeSemanticCapability::new());
+        let workspace_id = Uuid::new_v4();
+        capability
+            .ingest(DocumentIngestion {
+                scope: SemanticScope::new(
+                    TenantId::new(workspace_id.to_string()),
+                    LibraryId::new("library-1"),
+                ),
+                operation_id: SemanticOperationId::new("ingest-concept"),
+                document_id: DocumentId::new("document-1"),
+                metadata: BTreeMap::from([
+                    ("provider_id".to_owned(), "local".to_owned()),
+                    ("uri".to_owned(), "file:///library/ml.pdf".to_owned()),
+                    ("name".to_owned(), "ml.pdf".to_owned()),
+                    (
+                        "concept_uri".to_owned(),
+                        "https://example.test/concepts/ml".to_owned(),
+                    ),
+                ]),
+                media_type: "application/pdf".to_owned(),
+                content: b"machine learning".to_vec(),
+            })
+            .await
+            .expect("ingest fixture");
+        let coordinator = SearchComparisonCoordinator::new(
+            SearchEngine::new(Arc::clone(&search_store), events.clone(), providers.clone()),
+            ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
+            comparison_store,
+            events,
+            SemanticService::new(capability),
+        );
+        let directory = tempfile::tempdir().expect("temporary vocabulary store");
+        let store = crate::semantic_vocabulary::VocabularyStore::open(
+            directory.path().join("vocabularies.json"),
+        )
+        .expect("open vocabulary store");
+        store
+            .import(
+                r#"{
+                  "format":"procyon-skos-1",
+                  "id":"topics",
+                  "name":"Topics",
+                  "concepts":[
+                    {"uri":"https://example.test/concepts/ai","prefLabels":{"en":"AI"},
+                     "broader":[],"narrower":["https://example.test/concepts/ml"],"related":[]},
+                    {"uri":"https://example.test/concepts/ml","prefLabels":{"en":"ML"},
+                     "broader":["https://example.test/concepts/ai"],"narrower":[],"related":[]}
+                  ]
+                }"#,
+            )
+            .expect("import vocabulary");
+        store
+            .update("topics", |vocabulary| {
+                vocabulary.attach(Some(workspace_id.to_string()), None)
+            })
+            .expect("attach vocabulary");
+        let query = StartSearchRequestDto {
+            workspace_id,
+            roots: vec![fm_transport_dto::LocationDto {
+                provider_id: "local".to_owned(),
+                uri: "file:///library".to_owned(),
+            }],
+            query: String::new(),
+            content_query: None,
+            content_regex: false,
+            content_case_sensitive: false,
+            content_whole_word: false,
+            recurse: true,
+            show_hidden: false,
+            structured_query: Some(SearchQueryDto {
+                schema_version: 3,
+                mode: SearchModeDto::Concept,
+                scope: SearchScopeDto {
+                    locations: Vec::new(),
+                    recurse: true,
+                    show_hidden: false,
+                },
+                name: None,
+                entry_kinds: Vec::new(),
+                mime_types: Vec::new(),
+                min_size_bytes: None,
+                max_size_bytes: None,
+                modified_after: None,
+                modified_before: None,
+                content: None,
+                semantic: None,
+                concept: Some(SearchConceptPredicateDto {
+                    vocabulary_id: "topics".to_owned(),
+                    concept_uri: "https://example.test/concepts/ai".to_owned(),
+                    hierarchy: ConceptHierarchyScopeDto::Narrower,
+                    library_id: "library-1".to_owned(),
+                    enrolled_root_ids: Vec::new(),
+                }),
+                git_statuses: Vec::new(),
+                tags: Vec::new(),
+                metadata: BTreeMap::new(),
+            }),
+        };
+
+        let denied = coordinator
+            .start_search(query.clone(), None, None)
+            .await
+            .expect_err("missing vocabulary store must deny concept navigation");
+        assert_eq!(denied, ApplicationError::ProviderUnavailable);
+
+        let response = coordinator
+            .start_search(query, None, Some(&store))
+            .await
+            .expect("navigate concept folder");
+        let (entries, more) = search_store
+            .page(response.search_id, 0, 10)
+            .expect("materialized concept search");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "ml.pdf");
         assert!(!more);
     }
 
@@ -799,6 +1032,7 @@ mod tests {
                     show_hidden: true,
                     structured_query: None,
                 },
+                None,
                 None,
             )
             .await

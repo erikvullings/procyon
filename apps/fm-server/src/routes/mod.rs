@@ -23,6 +23,7 @@ pub(crate) mod runtime;
 pub(crate) mod search;
 pub(crate) mod semantic_components;
 pub(crate) mod semantic_library;
+pub(crate) mod semantic_vocabulary;
 pub(crate) mod settings;
 pub(crate) mod system_location;
 pub(crate) mod thumbnails;

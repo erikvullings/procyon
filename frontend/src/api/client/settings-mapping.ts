@@ -95,6 +95,14 @@ export function settingsToDto(settings: Settings): SettingsDto {
                 enrolledRootIds: [...saved.query.semantic.enrolledRootIds],
               },
             }),
+        ...(saved.query.concept === undefined
+          ? {}
+          : {
+              concept: {
+                ...saved.query.concept,
+                enrolledRootIds: [...saved.query.concept.enrolledRootIds],
+              },
+            }),
       },
     })),
     favouriteLocations: settings.favouriteLocations.map((favourite) => ({

@@ -10,4 +10,5 @@ export const SearchModeDto = {
   name: 'name',
   content: 'content',
   semantic: 'semantic',
+  concept: 'concept',
 } as const;

@@ -631,6 +631,23 @@ pub struct SearchResult {
     pub excerpt: String,
 }
 
+/// Stable concept-folder query carried over the authenticated worker channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConceptFolderQuery {
+    /// Vocabulary owning the selected concepts.
+    pub vocabulary_id: String,
+    /// Pre-expanded stable concept URIs.
+    pub concept_uris: Vec<String>,
+    /// Optional enrolled-root scope.
+    pub root_id: Option<String>,
+    /// Optional workspace scope.
+    pub workspace_id: Option<String>,
+    /// Whether currently unavailable occurrences remain visible.
+    pub include_unavailable: bool,
+    /// Stable paging offset.
+    pub offset: u64,
+}
+
 /// Tenant and library ownership for a host-provided ingestion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IngestionScope {
@@ -722,6 +739,8 @@ pub struct WorkerQueryInput {
     pub library_id: String,
     /// User query text.
     pub query: String,
+    /// Stable concept-folder selection, when this is not a dense text query.
+    pub concept_query: Option<ConceptFolderQuery>,
     /// Maximum file-primary results.
     pub maximum_results: u32,
 }
@@ -1104,6 +1123,59 @@ impl WorkerClient {
                     request_id: request_id.to_owned(),
                     query: query.to_owned(),
                     maximum_results,
+                    concept_query: None,
+                }),
+                DeadlineKind::Stream,
+            )
+            .await?;
+        Ok(payloads
+            .into_iter()
+            .filter_map(|payload| match payload {
+                v1::server_frame::Payload::QueryEvent(v1::QueryEvent {
+                    payload: Some(v1::query_event::Payload::Result(result)),
+                }) => Some(SearchResult {
+                    document_id: result.document_id,
+                    score: result.score,
+                    metadata: result
+                        .metadata
+                        .into_iter()
+                        .map(|entry| (entry.key, entry.value))
+                        .collect(),
+                    excerpt: result.excerpt,
+                }),
+                _ => None,
+            })
+            .collect())
+    }
+
+    /// Executes a stable concept-folder query without embedding query text.
+    pub async fn query_concepts_with_request_id(
+        &self,
+        request_id: &str,
+        tenant_id: &str,
+        library_id: &str,
+        query: ConceptFolderQuery,
+        maximum_results: u32,
+    ) -> Result<Vec<SearchResult>, ClientError> {
+        let payloads = self
+            .request(
+                v1::client_frame::Payload::Query(v1::QueryRequest {
+                    session: Some(self.session.clone()),
+                    scope: Some(v1::ResourceScope {
+                        tenant_id: tenant_id.to_owned(),
+                        library_id: library_id.to_owned(),
+                    }),
+                    request_id: request_id.to_owned(),
+                    query: String::new(),
+                    maximum_results,
+                    concept_query: Some(v1::ConceptQuery {
+                        vocabulary_id: query.vocabulary_id,
+                        concept_uris: query.concept_uris,
+                        root_id: query.root_id,
+                        workspace_id: query.workspace_id,
+                        include_unavailable: query.include_unavailable,
+                        offset: query.offset,
+                    }),
                 }),
                 DeadlineKind::Stream,
             )
@@ -2391,6 +2463,14 @@ async fn handle_frame(
                 .clone();
             let query_backend = state.query_backend.clone();
             let query_text = request.query.clone();
+            let concept_query = request.concept_query.map(|query| ConceptFolderQuery {
+                vocabulary_id: query.vocabulary_id,
+                concept_uris: query.concept_uris,
+                root_id: query.root_id,
+                workspace_id: query.workspace_id,
+                include_unavailable: query.include_unavailable,
+                offset: query.offset,
+            });
             let maximum_results = request.maximum_results;
             let backend_scope = scope.clone();
             let scan_cancellation = cancellation.clone();
@@ -2405,6 +2485,7 @@ async fn handle_frame(
                                 tenant_id: backend_scope.tenant_id,
                                 library_id: backend_scope.library_id,
                                 query: query_text,
+                                concept_query,
                                 maximum_results,
                             },
                             &scan_cancellation,
@@ -3596,6 +3677,7 @@ fn request_validation_error(error: RequestValidationError) -> v1::ProtocolError 
         | RequestValidationError::MissingPayload
         | RequestValidationError::MissingDocumentId
         | RequestValidationError::EmptyQuery
+        | RequestValidationError::InvalidConceptQuery
         | RequestValidationError::InvalidMaximumResults => v1::ErrorCode::InvalidRequest,
     };
     protocol_error(code, error.to_string())

@@ -1152,6 +1152,25 @@ export const en = {
     resumeCleanup: 'Resume cleanup',
     working: 'Working…',
   },
+  semanticVocabulary: {
+    title: 'Concept vocabularies',
+    description:
+      'Import curated SKOS vocabularies, attach them to this workspace, review local suggestions, and create stable concept folders.',
+    importLabel: 'SKOS JSON',
+    importPlaceholder: 'Paste a procyon-skos-1 document',
+    importAction: 'Import vocabulary',
+    loading: 'Loading vocabularies...',
+    empty: 'No vocabularies imported.',
+    unknownError: 'The vocabulary operation failed.',
+    summary: '{concepts} concepts; {pending} suggestions awaiting review',
+    attachWorkspace: 'Attach to workspace',
+    createFolder: 'Create concept folder',
+    candidateEvidence: '{confidence}% confidence across {frequency} occurrences',
+    accept: 'Accept',
+    reject: 'Reject',
+    delete: 'Delete vocabulary',
+    confirmDelete: 'Confirm deletion and detach folders',
+  },
   llmProfiles: {
     title: 'Generation profiles',
     description:

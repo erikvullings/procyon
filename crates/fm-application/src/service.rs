@@ -151,6 +151,7 @@ pub struct FileManagerService {
     document_summaries: DocumentSummaryCoordinator,
     rag: RagCoordinator,
     rag_conversation_path: PathBuf,
+    semantic_vocabulary_path: PathBuf,
     rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
@@ -309,6 +310,7 @@ impl FileManagerService {
     ) -> Self {
         let settings_directory = settings_directory.into();
         let rag_conversation_path = settings_directory.join("rag-conversations.json");
+        let semantic_vocabulary_path = settings_directory.join("semantic-vocabularies.json");
         let credential_store: Arc<dyn CredentialStore> =
             Arc::new(SessionCredentialStore::new(credential_store));
         let mut providers = ProviderRegistry::new();
@@ -566,6 +568,7 @@ impl FileManagerService {
             )),
             rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
             rag_conversation_path,
+            semantic_vocabulary_path,
             rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
@@ -628,6 +631,170 @@ impl FileManagerService {
         access: &SemanticAccessContext,
     ) -> SemanticLibraryCapabilities {
         self.semantic_library().await.capabilities(access)
+    }
+
+    /// Lists device-local vocabularies after applying the semantic-library authority check.
+    pub async fn list_semantic_vocabularies(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> Result<Vec<fm_transport_dto::SemanticVocabularyDto>, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .list()
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+                    .collect()
+            })
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Imports one validated deterministic SKOS JSON source.
+    pub async fn import_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ImportSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .import(&request.skos_json)
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Exports the authoritative source and accepted edits without derived annotations.
+    pub async fn export_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        vocabulary_id: &str,
+    ) -> Result<fm_transport_dto::ExportSemanticVocabularyResponseDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        let vocabulary =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+                .get(vocabulary_id)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        Ok(fm_transport_dto::ExportSemanticVocabularyResponseDto {
+            skos_json: crate::semantic_vocabulary::export_skos_json(&vocabulary)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?,
+        })
+    }
+
+    /// Attaches a vocabulary only to roots/workspaces already authorized for this caller.
+    pub async fn attach_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::AttachSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        let status = self
+            .semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        if request
+            .root_id
+            .as_ref()
+            .is_some_and(|root_id| !status.roots.iter().any(|root| root.id == *root_id))
+            || request.workspace_id.as_ref().is_some_and(|workspace_id| {
+                !status.roots.iter().any(|root| {
+                    root.workspace_references
+                        .iter()
+                        .any(|id| id.to_string() == *workspace_id)
+                })
+            })
+        {
+            return Err(ApplicationError::PermissionDenied);
+        }
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .update(&request.vocabulary_id, |vocabulary| {
+                vocabulary.attach(request.workspace_id, request.root_id)
+            })
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Applies an explicit accept/edit/reject decision to a review-only candidate.
+    pub async fn review_semantic_concept_candidate(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ReviewConceptCandidateRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        use fm_transport_dto::ReviewConceptCandidateActionDto;
+        let decision = match request.action {
+            ReviewConceptCandidateActionDto::Accept => {
+                crate::semantic_vocabulary::ReviewDecision::Accept
+            }
+            ReviewConceptCandidateActionDto::Reject => {
+                crate::semantic_vocabulary::ReviewDecision::Reject
+            }
+            ReviewConceptCandidateActionDto::Edit => {
+                crate::semantic_vocabulary::ReviewDecision::AcceptEdited {
+                    concept_uri: request.concept_uri.ok_or_else(|| {
+                        ApplicationError::InvalidRequest("concept URI is required".into())
+                    })?,
+                    pref_label: request.preferred_label.ok_or_else(|| {
+                        ApplicationError::InvalidRequest("preferred label is required".into())
+                    })?,
+                }
+            }
+        };
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .update(&request.vocabulary_id, |vocabulary| {
+                vocabulary.review_candidate(&request.candidate_id, decision)
+            })
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Previews or confirms vocabulary deletion, reporting every affected attachment.
+    pub async fn delete_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::DeleteSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::DeleteSemanticVocabularyImpactDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        let store =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        let vocabulary = store
+            .get(&request.vocabulary_id)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        let requires_confirmation =
+            !vocabulary.workspace_ids.is_empty() || !vocabulary.root_ids.is_empty();
+        let impact = fm_transport_dto::DeleteSemanticVocabularyImpactDto {
+            vocabulary_id: request.vocabulary_id.clone(),
+            affected_workspace_ids: vocabulary.workspace_ids.iter().cloned().collect(),
+            affected_root_ids: vocabulary.root_ids.iter().cloned().collect(),
+            requires_confirmation,
+            deleted: request.confirm_affected || !requires_confirmation,
+        };
+        if impact.deleted {
+            store
+                .delete(&request.vocabulary_id)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        }
+        Ok(impact)
     }
 
     pub(crate) async fn ensure_semantic_library_operation(
@@ -2283,8 +2450,11 @@ impl FileManagerService {
         request: StartSearchRequestDto,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
         let semantic_library = self.semantic_library().await;
+        let vocabulary_store =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
         self.search_comparison
-            .start_search(request, Some(&semantic_library))
+            .start_search(request, Some(&semantic_library), Some(&vocabulary_store))
             .await
     }
 

@@ -218,8 +218,27 @@ pub struct SemanticQuery {
     pub request_id: SemanticOperationId,
     /// Query text interpreted by the capability.
     pub text: String,
+    /// Optional stable concept-folder query over published annotations.
+    pub concept: Option<SemanticConceptQuery>,
     /// Maximum number of results to return.
     pub maximum_results: u32,
+}
+
+/// Pre-authorized and hierarchy-expanded concept query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticConceptQuery {
+    /// Attached vocabulary identity.
+    pub vocabulary_id: String,
+    /// Stable selected and expanded concept URIs.
+    pub concept_uris: Vec<String>,
+    /// Optional enrolled-root filter.
+    pub root_id: Option<String>,
+    /// Optional workspace filter.
+    pub workspace_id: Option<String>,
+    /// Include unavailable sources for honest stale browsing.
+    pub include_unavailable: bool,
+    /// Stable paging offset.
+    pub offset: u64,
 }
 
 /// One provider-neutral semantic query result.
@@ -427,6 +446,16 @@ impl SemanticCapability for FakeSemanticCapability {
             .iter()
             .filter(|((scope, _), _)| *scope == query.scope)
             .filter(|(_, document)| {
+                query.concept.as_ref().is_none_or(|concept| {
+                    document.metadata.get("concept_uri").is_some_and(|uri| {
+                        concept
+                            .concept_uris
+                            .iter()
+                            .any(|candidate| candidate == uri)
+                    })
+                })
+            })
+            .filter(|(_, document)| {
                 String::from_utf8_lossy(&document.content)
                     .to_lowercase()
                     .contains(&needle)
@@ -588,10 +617,28 @@ impl SemanticCapability for IpcSemanticCapability {
             scope,
             request_id,
             text,
+            concept,
             maximum_results,
         } = query;
         let client = self.worker_client().await?;
-        self.adapt_result(
+        let result = if let Some(concept) = concept {
+            client
+                .query_concepts_with_request_id(
+                    request_id.as_str(),
+                    scope.tenant_id.as_str(),
+                    scope.library_id.as_str(),
+                    fm_semantic_worker::ConceptFolderQuery {
+                        vocabulary_id: concept.vocabulary_id,
+                        concept_uris: concept.concept_uris,
+                        root_id: concept.root_id,
+                        workspace_id: concept.workspace_id,
+                        include_unavailable: concept.include_unavailable,
+                        offset: concept.offset,
+                    },
+                    maximum_results,
+                )
+                .await
+        } else {
             client
                 .query_with_request_id(
                     request_id.as_str(),
@@ -600,10 +647,9 @@ impl SemanticCapability for IpcSemanticCapability {
                     &text,
                     maximum_results,
                 )
-                .await,
-        )
-        .await
-        .map(|results| {
+                .await
+        };
+        self.adapt_result(result).await.map(|results| {
             results
                 .into_iter()
                 .map(|result| SemanticSearchResult {

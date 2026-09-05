@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 4;
+const CATALOG_SCHEMA_VERSION: i64 = 5;
 
 /// Distance metric bound into one library's immutable index manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,6 +301,51 @@ pub struct QueryFilters {
     pub generation: Option<u64>,
     /// Whether unavailable occurrences may be returned.
     pub include_unavailable: bool,
+}
+
+/// One replaceable concept label derived from an existing source chunk.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConceptAnnotation {
+    /// Existing visible chunk record.
+    pub record_id: String,
+    /// Stable SKOS concept URI.
+    pub concept_uri: String,
+    /// Deterministic local similarity score.
+    pub confidence: f32,
+    /// Bounded supporting chunk identities for explanation.
+    pub supporting_chunk_ids: Vec<String>,
+}
+
+/// One complete relabelling generation staged for atomic publication.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConceptAnnotationGeneration {
+    /// Tenant boundary.
+    pub tenant_id: String,
+    /// Semantic library.
+    pub library_id: String,
+    /// Attached vocabulary identity.
+    pub vocabulary_id: String,
+    /// Monotonically increasing relabelling generation.
+    pub generation: u64,
+    /// Complete set of active labels for this generation.
+    pub annotations: Vec<ConceptAnnotation>,
+}
+
+/// One document returned by a concept virtual folder.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConceptFolderDocument {
+    /// Content identity.
+    pub document_id: String,
+    /// Authorized source identity.
+    pub source_id: String,
+    /// Source availability.
+    pub available: bool,
+    /// Highest matching confidence across the selected concepts.
+    pub confidence: f32,
+    /// Bounded source chunks explaining the active labels.
+    pub supporting_chunk_ids: Vec<String>,
+    /// Published source generation.
+    pub source_generation: u64,
 }
 
 /// Occurrence-level evidence authorized by the catalog.
@@ -1133,6 +1178,253 @@ impl SemanticCatalog {
             .transpose()
     }
 
+    /// Stages a complete replaceable concept-labelling generation.
+    ///
+    /// Existing published labels remain visible until [`Self::publish_concept_annotations`].
+    pub fn stage_concept_annotations(
+        &self,
+        staged: &ConceptAnnotationGeneration,
+    ) -> Result<(), StorageError> {
+        validate_identifier(&staged.tenant_id, "tenant_id")?;
+        validate_identifier(&staged.library_id, "library_id")?;
+        validate_identifier(&staged.vocabulary_id, "vocabulary_id")?;
+        if staged.generation == 0 {
+            return Err(StorageError::InvalidIdentifier(
+                "concept_annotation_generation",
+            ));
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        load_manifest(&transaction, &staged.tenant_id, &staged.library_id)?;
+        transaction.execute(
+            "INSERT INTO concept_annotation_generations
+             (tenant_id, library_id, vocabulary_id, generation, state)
+             VALUES (?1, ?2, ?3, ?4, 'staging')
+             ON CONFLICT(tenant_id, library_id, vocabulary_id, generation)
+             DO UPDATE SET state = 'staging'",
+            params![
+                staged.tenant_id,
+                staged.library_id,
+                staged.vocabulary_id,
+                i64_generation(staged.generation)?
+            ],
+        )?;
+        transaction.execute(
+            "DELETE FROM concept_annotations
+             WHERE tenant_id = ?1 AND library_id = ?2
+               AND vocabulary_id = ?3 AND label_generation = ?4",
+            params![
+                staged.tenant_id,
+                staged.library_id,
+                staged.vocabulary_id,
+                i64_generation(staged.generation)?
+            ],
+        )?;
+        for annotation in &staged.annotations {
+            validate_identifier(&annotation.record_id, "record_id")?;
+            validate_identifier(&annotation.concept_uri, "concept_uri")?;
+            if !annotation.confidence.is_finite()
+                || !(0.0..=1.0).contains(&annotation.confidence)
+                || annotation.supporting_chunk_ids.len() > 32
+            {
+                return Err(StorageError::InvalidConceptAnnotation);
+            }
+            let visible = transaction.query_row(
+                "SELECT EXISTS (
+                   SELECT 1 FROM records r
+                   JOIN generations g
+                     ON g.tenant_id = r.tenant_id AND g.library_id = r.library_id
+                    AND g.document_id = r.document_id AND g.generation = r.generation
+                   WHERE r.record_id = ?1 AND r.tenant_id = ?2 AND r.library_id = ?3
+                     AND g.state = 'complete'
+                 )",
+                params![annotation.record_id, staged.tenant_id, staged.library_id],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !visible {
+                return Err(StorageError::ConceptAnnotationSourceNotFound);
+            }
+            for chunk_id in &annotation.supporting_chunk_ids {
+                validate_identifier(chunk_id, "supporting_chunk_id")?;
+            }
+            transaction.execute(
+                "INSERT INTO concept_annotations
+                 (tenant_id, library_id, vocabulary_id, label_generation,
+                  record_id, concept_uri, confidence, supporting_chunk_ids_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    staged.tenant_id,
+                    staged.library_id,
+                    staged.vocabulary_id,
+                    i64_generation(staged.generation)?,
+                    annotation.record_id,
+                    annotation.concept_uri,
+                    annotation.confidence,
+                    serde_json::to_string(&annotation.supporting_chunk_ids)?
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Atomically activates one complete concept-labelling generation.
+    pub fn publish_concept_annotations(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+        vocabulary_id: &str,
+        generation: u64,
+    ) -> Result<(), StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let generation = i64_generation(generation)?;
+        let staged = transaction.query_row(
+            "SELECT EXISTS (
+               SELECT 1 FROM concept_annotation_generations
+               WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3
+                 AND generation = ?4 AND state = 'staging'
+             )",
+            params![tenant_id, library_id, vocabulary_id, generation],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !staged {
+            return Err(StorageError::ConceptAnnotationGenerationNotStaged);
+        }
+        transaction.execute(
+            "UPDATE concept_annotation_generations SET state = 'superseded'
+             WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3
+               AND state = 'complete'",
+            params![tenant_id, library_id, vocabulary_id],
+        )?;
+        transaction.execute(
+            "UPDATE concept_annotation_generations SET state = 'complete'
+             WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3
+               AND generation = ?4",
+            params![tenant_id, library_id, vocabulary_id, generation],
+        )?;
+        transaction.execute(
+            "DELETE FROM concept_annotations
+             WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3
+               AND label_generation <> ?4",
+            params![tenant_id, library_id, vocabulary_id, generation],
+        )?;
+        transaction.execute(
+            "DELETE FROM concept_annotation_generations
+             WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3
+               AND state = 'superseded'",
+            params![tenant_id, library_id, vocabulary_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Removes all replaceable labels owned by a deleted vocabulary.
+    pub fn remove_vocabulary_annotations(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+        vocabulary_id: &str,
+    ) -> Result<(), StorageError> {
+        self.connection()?.execute(
+            "DELETE FROM concept_annotation_generations
+             WHERE tenant_id = ?1 AND library_id = ?2 AND vocabulary_id = ?3",
+            params![tenant_id, library_id, vocabulary_id],
+        )?;
+        Ok(())
+    }
+
+    /// Returns stable, paged concept-folder documents from active labels only.
+    pub fn concept_folder_documents(
+        &self,
+        filters: &QueryFilters,
+        vocabulary_id: &str,
+        concept_uris: &[String],
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ConceptFolderDocument>, StorageError> {
+        if concept_uris.is_empty() || concept_uris.len() > 256 || limit == 0 || limit > 200 {
+            return Err(StorageError::InvalidConceptFolderQuery);
+        }
+        validate_identifier(&filters.tenant_id, "tenant_id")?;
+        validate_identifier(vocabulary_id, "vocabulary_id")?;
+        let concept_json = serde_json::to_string(concept_uris)?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT r.document_id, MIN(o.source_id), MAX(o.available),
+                    MAX(a.confidence), r.generation,
+                    json_group_array(a.supporting_chunk_ids_json)
+             FROM concept_annotations a
+             JOIN concept_annotation_generations ag
+               ON ag.tenant_id = a.tenant_id AND ag.library_id = a.library_id
+              AND ag.vocabulary_id = a.vocabulary_id
+              AND ag.generation = a.label_generation AND ag.state = 'complete'
+             JOIN records r ON r.record_id = a.record_id
+             JOIN generations g
+               ON g.tenant_id = r.tenant_id AND g.library_id = r.library_id
+              AND g.document_id = r.document_id AND g.generation = r.generation
+              AND g.state = 'complete'
+             JOIN occurrences o
+               ON o.tenant_id = r.tenant_id AND o.library_id = r.library_id
+              AND o.document_id = r.document_id AND o.generation = r.generation
+             WHERE a.tenant_id = ?1 AND a.vocabulary_id = ?2
+               AND (?3 IS NULL OR a.library_id = ?3)
+               AND a.concept_uri IN (SELECT value FROM json_each(?4))
+               AND (?5 IS NULL OR o.root_id = ?5)
+               AND (?6 IS NULL OR o.workspace_id = ?6)
+               AND (?7 OR o.available = 1)
+             GROUP BY r.document_id, r.generation
+             ORDER BY MAX(a.confidence) DESC, r.document_id
+             LIMIT ?8 OFFSET ?9",
+        )?;
+        let rows = statement.query_map(
+            params![
+                filters.tenant_id,
+                vocabulary_id,
+                filters.library_id,
+                concept_json,
+                filters.root_id,
+                filters.workspace_id,
+                filters.include_unavailable,
+                i64::try_from(limit).map_err(|_| StorageError::InvalidConceptFolderQuery)?,
+                i64::try_from(offset).map_err(|_| StorageError::InvalidConceptFolderQuery)?
+            ],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, bool>(2)?,
+                    row.get::<_, f32>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )?;
+        rows.map(|row| {
+            let (document_id, source_id, available, confidence, generation, evidence_json) = row?;
+            let mut supporting_chunk_ids = serde_json::from_str::<Vec<String>>(&evidence_json)?
+                .into_iter()
+                .map(|value| serde_json::from_str::<Vec<String>>(&value))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            supporting_chunk_ids.sort();
+            supporting_chunk_ids.dedup();
+            supporting_chunk_ids.truncate(32);
+            Ok(ConceptFolderDocument {
+                document_id,
+                source_id,
+                available,
+                confidence,
+                supporting_chunk_ids,
+                source_generation: u64::try_from(generation)
+                    .map_err(|_| StorageError::CorruptCatalog)?,
+            })
+        })
+        .collect()
+    }
+
     /// Returns the next generation for one logical document.
     ///
     /// # Errors
@@ -1522,6 +1814,18 @@ pub enum StorageError {
     /// Source generation changed before summary publication.
     #[error("summary source generation is stale")]
     StaleSummarySource,
+    /// A concept label points at a record outside the current visible generation.
+    #[error("concept annotation source record is not visible")]
+    ConceptAnnotationSourceNotFound,
+    /// Concept score or evidence exceeds the bounded annotation contract.
+    #[error("concept annotation is invalid")]
+    InvalidConceptAnnotation,
+    /// Publication requires a durable staging relabelling generation.
+    #[error("concept annotation generation was not staged")]
+    ConceptAnnotationGenerationNotStaged,
+    /// Concept folder URI set or paging request exceeds bounded limits.
+    #[error("concept folder query is invalid")]
+    InvalidConceptFolderQuery,
     /// Reclamation must wait for active evidence readers.
     #[error("semantic records are still in use by active readers")]
     ReadersActive,
@@ -1547,7 +1851,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            schema_version INTEGER NOT NULL
          );
          INSERT INTO catalog_meta (schema_version)
-           SELECT 4 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
+           SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
          CREATE TABLE IF NOT EXISTS libraries (
            tenant_id TEXT NOT NULL,
            library_id TEXT NOT NULL,
@@ -1651,6 +1955,39 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            component_id TEXT PRIMARY KEY,
            revision TEXT NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS concept_annotation_generations (
+           tenant_id TEXT NOT NULL,
+           library_id TEXT NOT NULL,
+           vocabulary_id TEXT NOT NULL,
+           generation INTEGER NOT NULL,
+           state TEXT NOT NULL CHECK (state IN ('staging', 'complete', 'superseded')),
+           PRIMARY KEY (tenant_id, library_id, vocabulary_id, generation),
+           FOREIGN KEY (tenant_id, library_id)
+             REFERENCES libraries (tenant_id, library_id)
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS one_complete_concept_annotation_generation
+           ON concept_annotation_generations (tenant_id, library_id, vocabulary_id)
+           WHERE state = 'complete';
+         CREATE TABLE IF NOT EXISTS concept_annotations (
+           tenant_id TEXT NOT NULL,
+           library_id TEXT NOT NULL,
+           vocabulary_id TEXT NOT NULL,
+           label_generation INTEGER NOT NULL,
+           record_id TEXT NOT NULL,
+           concept_uri TEXT NOT NULL,
+           confidence REAL NOT NULL,
+           supporting_chunk_ids_json TEXT NOT NULL,
+           PRIMARY KEY (
+             tenant_id, library_id, vocabulary_id, label_generation, record_id, concept_uri
+           ),
+           FOREIGN KEY (tenant_id, library_id, vocabulary_id, label_generation)
+             REFERENCES concept_annotation_generations
+               (tenant_id, library_id, vocabulary_id, generation)
+             ON DELETE CASCADE,
+           FOREIGN KEY (record_id) REFERENCES records (record_id) ON DELETE CASCADE
+         );
+         CREATE INDEX IF NOT EXISTS concept_annotation_lookup
+           ON concept_annotations (tenant_id, vocabulary_id, concept_uri);
          COMMIT;",
     )?;
     let mut version =
@@ -1668,6 +2005,47 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
              COMMIT;",
         )?;
         version = 4;
+    }
+    if version == 4 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             CREATE TABLE IF NOT EXISTS concept_annotation_generations (
+               tenant_id TEXT NOT NULL,
+               library_id TEXT NOT NULL,
+               vocabulary_id TEXT NOT NULL,
+               generation INTEGER NOT NULL,
+               state TEXT NOT NULL CHECK (state IN ('staging', 'complete', 'superseded')),
+               PRIMARY KEY (tenant_id, library_id, vocabulary_id, generation),
+               FOREIGN KEY (tenant_id, library_id)
+                 REFERENCES libraries (tenant_id, library_id)
+             );
+             CREATE UNIQUE INDEX IF NOT EXISTS one_complete_concept_annotation_generation
+               ON concept_annotation_generations (tenant_id, library_id, vocabulary_id)
+               WHERE state = 'complete';
+             CREATE TABLE IF NOT EXISTS concept_annotations (
+               tenant_id TEXT NOT NULL,
+               library_id TEXT NOT NULL,
+               vocabulary_id TEXT NOT NULL,
+               label_generation INTEGER NOT NULL,
+               record_id TEXT NOT NULL,
+               concept_uri TEXT NOT NULL,
+               confidence REAL NOT NULL,
+               supporting_chunk_ids_json TEXT NOT NULL,
+               PRIMARY KEY (
+                 tenant_id, library_id, vocabulary_id, label_generation, record_id, concept_uri
+               ),
+               FOREIGN KEY (tenant_id, library_id, vocabulary_id, label_generation)
+                 REFERENCES concept_annotation_generations
+                   (tenant_id, library_id, vocabulary_id, generation)
+                 ON DELETE CASCADE,
+               FOREIGN KEY (record_id) REFERENCES records (record_id) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS concept_annotation_lookup
+               ON concept_annotations (tenant_id, vocabulary_id, concept_uri);
+             UPDATE catalog_meta SET schema_version = 5;
+             COMMIT;",
+        )?;
+        version = 5;
     }
     if version != CATALOG_SCHEMA_VERSION {
         return Err(StorageError::MigrationRequired {
@@ -2043,7 +2421,7 @@ mod tests {
                 row.get(0)
             })
             .expect("schema version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         let mut statement = connection
             .prepare("PRAGMA table_info(records)")
             .expect("record columns");
@@ -2060,6 +2438,139 @@ mod tests {
         ] {
             assert!(columns.iter().any(|column| column == required));
         }
+    }
+
+    #[test]
+    fn concept_labels_publish_atomically_and_drive_scoped_virtual_folders() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let staged = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "machine learning",
+        );
+        let record_id = staged.records[0].record_id.clone();
+        catalog.stage_generation(&staged).expect("stage source");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .expect("publish source");
+
+        let generation_one = ConceptAnnotationGeneration {
+            tenant_id: "tenant-a".into(),
+            library_id: "library-a".into(),
+            vocabulary_id: "research-topics".into(),
+            generation: 1,
+            annotations: vec![ConceptAnnotation {
+                record_id: record_id.clone(),
+                concept_uri: "https://example.test/concepts/ml".into(),
+                confidence: 0.97,
+                supporting_chunk_ids: vec![record_id.clone()],
+            }],
+        };
+        catalog
+            .stage_concept_annotations(&generation_one)
+            .expect("stage labels");
+        let filters = QueryFilters {
+            tenant_id: "tenant-a".into(),
+            root_id: Some("root-a".into()),
+            workspace_id: Some("workspace-a".into()),
+            ..QueryFilters::default()
+        };
+        let selected = vec!["https://example.test/concepts/ml".into()];
+        assert!(
+            catalog
+                .concept_folder_documents(&filters, "research-topics", &selected, 0, 50)
+                .expect("query before publish")
+                .is_empty()
+        );
+        catalog
+            .publish_concept_annotations("tenant-a", "library-a", "research-topics", 1)
+            .expect("publish labels");
+        let visible = catalog
+            .concept_folder_documents(&filters, "research-topics", &selected, 0, 50)
+            .expect("query folder");
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].document_id, "document-a");
+        assert_eq!(visible[0].confidence, 0.97);
+        assert_eq!(visible[0].supporting_chunk_ids, vec![record_id.clone()]);
+        for unauthorized in [
+            QueryFilters {
+                tenant_id: "tenant-b".into(),
+                ..filters.clone()
+            },
+            QueryFilters {
+                root_id: Some("root-b".into()),
+                ..filters.clone()
+            },
+            QueryFilters {
+                workspace_id: Some("workspace-b".into()),
+                ..filters.clone()
+            },
+        ] {
+            assert!(
+                catalog
+                    .concept_folder_documents(&unauthorized, "research-topics", &selected, 0, 50)
+                    .expect("isolated concept query")
+                    .is_empty()
+            );
+        }
+
+        let generation_two = ConceptAnnotationGeneration {
+            generation: 2,
+            annotations: Vec::new(),
+            ..generation_one
+        };
+        catalog
+            .stage_concept_annotations(&generation_two)
+            .expect("stage replacement");
+        assert_eq!(
+            catalog
+                .concept_folder_documents(&filters, "research-topics", &selected, 0, 50)
+                .expect("old labels remain visible")
+                .len(),
+            1
+        );
+        catalog
+            .publish_concept_annotations("tenant-a", "library-a", "research-topics", 2)
+            .expect("publish replacement");
+        assert!(
+            catalog
+                .concept_folder_documents(&filters, "research-topics", &selected, 0, 50)
+                .expect("replaced labels")
+                .is_empty()
+        );
+
+        catalog
+            .stage_concept_annotations(&ConceptAnnotationGeneration {
+                tenant_id: "tenant-a".into(),
+                library_id: "library-a".into(),
+                vocabulary_id: "research-topics".into(),
+                generation: 3,
+                annotations: vec![ConceptAnnotation {
+                    record_id: record_id.clone(),
+                    concept_uri: "https://example.test/concepts/ml".into(),
+                    confidence: 0.96,
+                    supporting_chunk_ids: vec![record_id],
+                }],
+            })
+            .expect("stage labels after threshold change");
+        catalog
+            .publish_concept_annotations("tenant-a", "library-a", "research-topics", 3)
+            .expect("publish labels after threshold change");
+        catalog
+            .delete_occurrence("occurrence-a")
+            .expect("exclude source occurrence");
+        assert!(
+            catalog
+                .concept_folder_documents(&filters, "research-topics", &selected, 0, 50)
+                .expect("query after source exclusion")
+                .is_empty()
+        );
     }
 
     #[test]

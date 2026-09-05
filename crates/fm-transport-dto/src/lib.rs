@@ -29,6 +29,7 @@ pub mod runtime;
 pub mod search;
 pub mod semantic_components;
 pub mod semantic_library;
+pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
 pub mod system_location;
@@ -138,14 +139,16 @@ pub use requests::{
 };
 pub use runtime::{PlatformKindDto, RuntimeCapabilitiesDto, RuntimeKindDto};
 pub use search::{
-    SearchContentPredicateDto, SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto,
-    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto,
-    SearchProviderLimitationDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
-    SemanticEvidenceDto, SemanticSearchCoverageDto, SemanticSearchResultDto,
-    SemanticSearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
+    ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchContentPredicateDto,
+    SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto, SearchModeDto,
+    SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
+    SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto, SemanticEvidenceDto,
+    SemanticSearchCoverageDto, SemanticSearchResultDto, SemanticSearchScopeDto,
+    StartSearchRequestDto, StartSearchResponseDto,
 };
 pub use semantic_components::*;
 pub use semantic_library::*;
+pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, LanguageDto,
     MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,

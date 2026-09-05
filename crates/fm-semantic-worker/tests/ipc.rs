@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fm_semantic_protocol::{
@@ -13,9 +14,32 @@ use fm_semantic_protocol::{
     write_frame,
 };
 use fm_semantic_worker::{
-    ClientError, Endpoint, IngestionScope, LaunchSecret, WorkerClient, WorkerConfig,
-    WorkerConnector, WorkerHealth, WorkerServer,
+    ClientError, ConceptFolderQuery, Endpoint, IngestionScope, LaunchSecret, SearchResult,
+    WorkerClient, WorkerConfig, WorkerConnector, WorkerHealth, WorkerQueryBackend,
+    WorkerQueryInput, WorkerServer,
 };
+use tokio_util::sync::CancellationToken;
+
+#[derive(Default)]
+struct CapturingQueryBackend {
+    input: Mutex<Option<WorkerQueryInput>>,
+}
+
+impl WorkerQueryBackend for CapturingQueryBackend {
+    fn query(
+        &self,
+        input: WorkerQueryInput,
+        _cancellation: &CancellationToken,
+    ) -> Result<Vec<SearchResult>, String> {
+        *self.input.lock().expect("query capture lock") = Some(input);
+        Ok(vec![SearchResult {
+            document_id: "document-1".to_owned(),
+            score: 0.91,
+            metadata: BTreeMap::new(),
+            excerpt: String::new(),
+        }])
+    }
+}
 
 struct TestDirectory(PathBuf);
 
@@ -46,6 +70,66 @@ fn test_directory(name: &str) -> TestDirectory {
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).expect("create worker test directory");
     TestDirectory(path)
+}
+
+#[tokio::test]
+async fn concept_query_preserves_stable_identity_scope_and_paging() {
+    let directory = test_directory("concept-query");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([91; 32]);
+    let backend = Arc::new(CapturingQueryBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_query_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            backend.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+
+    let results = client
+        .query_concepts_with_request_id(
+            "concept-request",
+            "tenant-1",
+            "library-1",
+            ConceptFolderQuery {
+                vocabulary_id: "topics".to_owned(),
+                concept_uris: vec!["urn:topic:parent".to_owned(), "urn:topic:child".to_owned()],
+                root_id: Some("root-1".to_owned()),
+                workspace_id: Some("workspace-1".to_owned()),
+                include_unavailable: true,
+                offset: 40,
+            },
+            20,
+        )
+        .await
+        .expect("concept query");
+    assert_eq!(results[0].document_id, "document-1");
+    let captured = backend
+        .input
+        .lock()
+        .expect("query capture lock")
+        .clone()
+        .expect("captured query");
+    assert_eq!(captured.tenant_id, "tenant-1");
+    assert_eq!(captured.library_id, "library-1");
+    assert!(captured.query.is_empty());
+    assert_eq!(captured.maximum_results, 20);
+    assert_eq!(
+        captured.concept_query,
+        Some(ConceptFolderQuery {
+            vocabulary_id: "topics".to_owned(),
+            concept_uris: vec!["urn:topic:parent".to_owned(), "urn:topic:child".to_owned()],
+            root_id: Some("root-1".to_owned()),
+            workspace_id: Some("workspace-1".to_owned()),
+            include_unavailable: true,
+            offset: 40,
+        })
+    );
+
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -357,6 +441,7 @@ async fn cancellation_sent_immediately_after_a_query_is_accepted_deterministical
                 request_id: "immediate-cancel".to_owned(),
                 query: "needle".to_owned(),
                 maximum_results: 1,
+                concept_query: None,
             })),
         },
         MAX_MESSAGE_BYTES,
@@ -2077,6 +2162,7 @@ async fn non_reading_client_releases_server_capacity_at_the_request_deadline() {
                 request_id: "blocked-query-write".to_owned(),
                 query: "needle".to_owned(),
                 maximum_results: 1,
+                concept_query: None,
             })),
         },
         512,

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::location::LocationDto;
 
 /// Current structured search-query schema.
-pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 2;
+pub const SEARCH_QUERY_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,7 @@ pub enum SearchModeDto {
     Name,
     Content,
     Semantic,
+    Concept,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
@@ -38,6 +39,27 @@ pub struct SearchSemanticPredicateDto {
     pub query: String,
     pub library_id: String,
     pub scope: SemanticSearchScopeDto,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enrolled_root_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ConceptHierarchyScopeDto {
+    #[default]
+    Exact,
+    Narrower,
+    Broader,
+    BroaderAndNarrower,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchConceptPredicateDto {
+    pub vocabulary_id: String,
+    pub concept_uri: String,
+    pub hierarchy: ConceptHierarchyScopeDto,
+    pub library_id: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enrolled_root_ids: Vec<String>,
 }
@@ -141,6 +163,8 @@ pub struct SearchQueryDto {
     pub content: Option<SearchContentPredicateDto>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic: Option<SearchSemanticPredicateDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concept: Option<SearchConceptPredicateDto>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub git_statuses: Vec<SearchGitStatusDto>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -422,6 +446,7 @@ mod tests {
             modified_before: None,
             content: None,
             semantic: None,
+            concept: None,
             git_statuses: vec![SearchGitStatusDto::Modified, SearchGitStatusDto::Untracked],
             tags: vec!["review".to_owned()],
             metadata: [("project".to_owned(), "procyon".to_owned())].into(),

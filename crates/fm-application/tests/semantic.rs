@@ -91,6 +91,7 @@ async fn semantic_fake_filters_interleaved_unsorted_documents_before_returning_r
             scope: wanted,
             request_id: "query-1".into(),
             text: "needle".to_owned(),
+            concept: None,
             maximum_results: 10,
         })
         .await
@@ -132,6 +133,7 @@ async fn semantic_injected_fake_ingestion_and_query_flow_through_the_facade() {
             scope,
             request_id: "query".into(),
             text: "searchable".to_owned(),
+            concept: None,
             maximum_results: 5,
         })
         .await
@@ -333,6 +335,7 @@ async fn semantic_ipc_capability_adapts_worker_operations_to_application_types()
             scope: scope.clone(),
             request_id: SemanticOperationId::new("query"),
             text: "semantic".to_owned(),
+            concept: None,
             maximum_results: 5,
         })
         .await
@@ -531,6 +534,7 @@ async fn semantic_cancel_targets_an_ingestion_operation_while_it_is_in_flight() 
                 scope,
                 request_id: SemanticOperationId::new("verify-cancelled-ingestion"),
                 text: "committed".to_owned(),
+                concept: None,
                 maximum_results: 1,
             })
             .await

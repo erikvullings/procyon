@@ -41,12 +41,14 @@ fn assert_query_request_shape(request: v1::QueryRequest) {
         request_id,
         query,
         maximum_results,
+        concept_query,
     } = request;
     assert!(session.is_some());
     assert!(scope.is_some());
     assert!(!request_id.is_empty());
     assert!(!query.is_empty());
     assert!(maximum_results > 0);
+    assert!(concept_query.is_none());
 }
 
 #[test]
@@ -89,6 +91,7 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
         request_id: "request-2".to_owned(),
         query: "revenue".to_owned(),
         maximum_results: 20,
+        concept_query: None,
     };
     assert_eq!(validate_query(&query), Ok(()));
     assert_query_request_shape(query.clone());
@@ -98,6 +101,45 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
     assert_eq!(
         validate_query(&unscoped),
         Err(RequestValidationError::MissingScope)
+    );
+}
+
+#[test]
+fn concept_queries_are_bounded_and_do_not_require_text() {
+    let mut query = v1::QueryRequest {
+        session: Some(session()),
+        scope: Some(scope()),
+        request_id: "request-concepts".to_owned(),
+        query: String::new(),
+        maximum_results: 20,
+        concept_query: Some(v1::ConceptQuery {
+            vocabulary_id: "vocabulary-1".to_owned(),
+            concept_uris: vec!["urn:concept:revenue".to_owned()],
+            root_id: None,
+            workspace_id: Some("workspace-1".to_owned()),
+            include_unavailable: true,
+            offset: 0,
+        }),
+    };
+    assert_eq!(validate_query(&query), Ok(()));
+
+    query.concept_query.as_mut().unwrap().vocabulary_id.clear();
+    assert_eq!(
+        validate_query(&query),
+        Err(RequestValidationError::InvalidConceptQuery)
+    );
+    query.concept_query.as_mut().unwrap().vocabulary_id = "vocabulary-1".to_owned();
+    query.concept_query.as_mut().unwrap().concept_uris.clear();
+    assert_eq!(
+        validate_query(&query),
+        Err(RequestValidationError::InvalidConceptQuery)
+    );
+    query.concept_query.as_mut().unwrap().concept_uris = (0..257)
+        .map(|index| format!("urn:concept:{index}"))
+        .collect();
+    assert_eq!(
+        validate_query(&query),
+        Err(RequestValidationError::InvalidConceptQuery)
     );
 }
 

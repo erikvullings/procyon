@@ -937,6 +937,9 @@ pub enum RequestValidationError {
     /// Query text is empty.
     #[error("query text is required")]
     EmptyQuery,
+    /// Concept query identity or bounded concept selection is invalid.
+    #[error("concept query requires a vocabulary and 1 to 256 concept URIs")]
+    InvalidConceptQuery,
     /// Query result limit is zero.
     #[error("maximum query results must be greater than zero")]
     InvalidMaximumResults,
@@ -998,8 +1001,16 @@ pub fn validate_query(request: &v1::QueryRequest) -> Result<(), RequestValidatio
     if request.request_id.is_empty() {
         return Err(RequestValidationError::MissingRequestId);
     }
-    if request.query.is_empty() {
+    if request.query.is_empty() && request.concept_query.is_none() {
         return Err(RequestValidationError::EmptyQuery);
+    }
+    if let Some(concept) = &request.concept_query
+        && (concept.vocabulary_id.is_empty()
+            || concept.concept_uris.is_empty()
+            || concept.concept_uris.len() > 256
+            || concept.concept_uris.iter().any(String::is_empty))
+    {
+        return Err(RequestValidationError::InvalidConceptQuery);
     }
     if request.maximum_results == 0 {
         return Err(RequestValidationError::InvalidMaximumResults);

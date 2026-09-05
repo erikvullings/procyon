@@ -7,6 +7,7 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -29,6 +30,7 @@ import type {
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -96,6 +98,7 @@ import type {
   ResolvedRagCitation,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
@@ -125,6 +128,7 @@ import type {
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticUninstallReceipt,
+  SemanticVocabulary,
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
@@ -284,6 +288,12 @@ import {
   planSemanticComponentModelMigration as requestSemanticModelMigrationPlan,
   listSemanticComponentProfiles as requestSemanticProfiles,
   uninstallSemanticComponents as requestSemanticUninstall,
+  listSemanticVocabularies as requestSemanticVocabularies,
+  attachSemanticVocabulary as requestSemanticVocabularyAttachment,
+  deleteSemanticVocabulary as requestSemanticVocabularyDelete,
+  exportSemanticVocabulary as requestSemanticVocabularyExport,
+  importSemanticVocabulary as requestSemanticVocabularyImport,
+  reviewSemanticConceptCandidate as requestSemanticVocabularyReview,
   getSettings as requestSettings,
   updateSettings as requestSettingsUpdate,
   getSpotlightComment as requestSpotlightComment,
@@ -621,6 +631,78 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200) {
       throw new Error(`Unexpected getSemanticLibraryStatus response status: ${response.status}`);
     }
+    return response.data;
+  }
+
+  async listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    const response = await requestSemanticVocabularies(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async importSemanticVocabulary(
+    skosJson: string,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyImport(
+      { skosJson },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
+    const response = await requestSemanticVocabularyExport(
+      { vocabularyId },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data.skosJson;
+  }
+
+  async attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyAttachment(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyReview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    const response = await requestSemanticVocabularyDelete(
+      { vocabularyId, confirmAffected },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
     return response.data;
   }
 
@@ -1480,6 +1562,14 @@ export class HttpFileManagerClient implements FileManagerClient {
                       semantic: {
                         ...request.structuredQuery.semantic,
                         enrolledRootIds: [...request.structuredQuery.semantic.enrolledRootIds],
+                      },
+                    }),
+                ...(request.structuredQuery.concept === undefined
+                  ? {}
+                  : {
+                      concept: {
+                        ...request.structuredQuery.concept,
+                        enrolledRootIds: [...request.structuredQuery.concept.enrolledRootIds],
                       },
                     }),
               },
