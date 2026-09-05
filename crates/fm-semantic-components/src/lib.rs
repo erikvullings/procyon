@@ -5,6 +5,7 @@ mod data_root;
 mod deletion;
 mod installer;
 mod model_migration;
+mod optional_pack;
 mod report;
 mod state;
 
@@ -34,6 +35,11 @@ pub use installer::{
 };
 pub use model_migration::{
     LocalModelImport, LocalModelImportRequest, ModelImportError, ModelImportField,
+};
+pub use optional_pack::{
+    AdvancedCapabilityKind, AdvancedEvaluationReport, AdvancedFixture, AdvancedFixtureResult,
+    AdvancedPackError, AdvancedPackKind, AdvancedPackManifest, AdvancedPackRegistry,
+    AdvancedPackResources, AdvancedPackStatus, SignedAdvancedPackManifest, TrustedAdvancedPack,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,

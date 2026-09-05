@@ -110,6 +110,18 @@ impl ConversionContext {
     pub fn budgets(&self) -> &ConversionBudgets {
         &self.budgets
     }
+
+    /// Whether the caller has cancelled this conversion.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
+    /// Elapsed time observed by the configured monotonic clock.
+    #[must_use]
+    pub fn elapsed(&self) -> std::time::Duration {
+        self.clock.elapsed()
+    }
 }
 
 /// A versioned document converter.

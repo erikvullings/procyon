@@ -3,6 +3,7 @@
 //! Only opaque identifiers, metadata, and caller-provided bytes cross this
 //! boundary. The worker has no file-provider or network-facing dependency.
 
+pub mod advanced;
 pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;

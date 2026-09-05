@@ -25,9 +25,9 @@ The boundaries are:
 
 | Threat | Required control and evidence |
 | --- | --- |
-| Component supply-chain compromise | Signed trusted catalogs, digest verification before activation, version compatibility checks, atomic activation, and rollback to the last valid component. |
+| Component supply-chain compromise | Signed trusted catalogs and independently signed optional-pack manifests, digest verification before activation, version compatibility checks, atomic activation, and rollback to the last valid component. |
 | Local IPC impersonation or replay | Owner-only Unix socket/named pipe, per-launch secret, authenticated expiring sessions, request IDs, bounded frames, deadlines, and connection/request limits. |
-| Malicious documents and archive/converter bombs | Rust baseline conversion, bounded source/message/stream sizes, archive expansion limits, structural chunk limits, cancellation, timeouts, and isolated optional converters. |
+| Malicious documents and archive/converter bombs | Rust baseline conversion, bounded source/message/stream sizes, archive expansion limits, structural chunk limits, cancellation, timeouts, and optional converters isolated behind a bytes-and-trusted-metadata boundary with no path or network authority. |
 | Prompt injection | Retrieved text is delimited as untrusted evidence, cannot alter authority, receives no tools, credentials, paths, or provider metadata, and cannot broaden scope. |
 | Tenant/filter bypass | Tenant and library are mandatory IPC scope; SQLite re-applies tenant, library, root, workspace, availability, and generation filters to untrusted vector candidates. |
 | Path or metadata disclosure | Workers use opaque IDs; cloud prompts use the configured metadata-redaction policy; default diagnostics contain only IDs/hashes, stages, timings, counts, versions, and error categories. |
@@ -35,6 +35,7 @@ The boundaries are:
 | Credential leakage | Credentials remain in the credential store, are write-only over DTOs, never enter worker messages, backups, logs, prompts, or exported profile metadata. |
 | Stale or unavailable evidence | Results carry content hash, generation, stale/available state, provenance, and coverage. Citations resolve locally and report when the original cannot open. |
 | Denial of service | Hard per-tenant budgets, pre-enrolment estimates, free-space reserve admission, bounded queues/batches/candidates/tokens, cooperative cancellation, and graceful shutdown. |
+| Accelerator or reranker compromise | Local-only execution, signed pack identity, finite fixed-dimension vector validation, CPU parity or explicit model-space migration, bounded reranking input, complete output-identity validation, cancellation, and CPU/dense fallback. |
 | Deletion or retention failure | Exclusion uses a durable category inventory and resumable deletion plan; SQLite foreign keys cascade summaries/concepts; shared vectors remain until the final occurrence reference is removed. |
 | Corruption or interrupted publication | Versioned manifests, atomic temp-file replacement, staged/complete generations, schema checks, checksummed exports, and rebuildable derived indexes. |
 

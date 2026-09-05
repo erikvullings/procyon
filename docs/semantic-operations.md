@@ -61,6 +61,42 @@ PDFs with an extractable text layer. Unsupported, encrypted, malformed, over-bud
 documents remain visible as typed skip or omission reasons; install an optional converter only
 after its capability and resource disclosure has been reviewed.
 
+## Optional advanced packs
+
+Advanced converters, acceleration backends, and rerankers are independent packs rather than
+baseline dependencies. Each pack has its own signed manifest, artifact checksum, target triples,
+worker-protocol and index-schema range, download/disk/RAM estimate, and baseline comparison. A
+server accepts only capability families on its administrator allow-list. Installation verifies the
+signature, compatibility, policy, and payload before activation; activation retains one rollback
+version per capability family. Removing one family does not alter the others.
+
+Advanced converters receive bounded bytes and trusted metadata, never paths, credentials, provider
+handles, or network authority. Baseline conversion runs first and remains authoritative for every
+format it supports. Advanced output must preserve the task-0180 structure, report provenance
+precision and omissions, and pass the same source, expansion, output, timeout, and cancellation
+limits. Removing the pack therefore returns unsupported scanned or complex documents to their
+typed baseline outcome without affecting baseline-readable documents.
+
+Acceleration starts in CPU mode. Before sharing an existing index, the accelerated backend must
+match CPU vectors within the configured tolerance. A different embedding space is exposed as an
+explicit baseline/candidate fingerprint migration and requires building and activating a separate
+index generation. Driver or runtime failure returns CPU vectors; it never publishes partial or
+unlabelled accelerated vectors.
+
+Reranking is local, quality-gated, bounded to the configured candidate count and text size, and
+cancellable. Diagnostics report only model fingerprint, count, input characters, and elapsed time.
+Without an active reranker, dense retrieval remains unchanged. `Semantic` remains dense-only;
+`Hybrid` is a separately selected mode that combines independently ranked dense and lexical
+results using deterministic weighted reciprocal-rank fusion. Fusion uses ranks rather than
+incomparable raw scores, applies structured filters first, and rejects a request if any candidate
+has a different tenant or library scope.
+
+Every signed advanced-pack report contains comparable baseline and candidate measurements for
+multilingual, OCR, exact-term, code, structured-document, duplicate, latency, memory, and storage
+fixtures. Rerankers additionally require at least a 0.02 absolute nDCG improvement. Release
+packaging tests verify all declared macOS, Windows, and Linux target triples and reject undeclared
+targets; platform hardware smoke tests remain mandatory before publishing an accelerated pack.
+
 ## Troubleshooting and deletion
 
 1. Check component/model compatibility and available disk reserve.

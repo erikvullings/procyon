@@ -25,6 +25,7 @@
 //! marked [`Completeness::Partial`] and carries [`Omission`]s; there is no
 //! silent partial success.
 
+mod advanced;
 mod budget;
 mod builder;
 mod cancellation;
@@ -36,6 +37,10 @@ mod sniff;
 mod text;
 mod tokens;
 
+pub use advanced::{
+    AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
+    OptionalConverter, ProvenancePrecision,
+};
 pub use budget::{BudgetKind, Clock, ConversionBudgets, ManualClock, SystemClock};
 pub use cancellation::{Cancellation, CancellationFlag, CancellationSignal};
 pub use chunk::{
