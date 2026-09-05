@@ -1581,6 +1581,20 @@
         ],
         "type": "object"
       },
+      "DeleteRagConversationRequestDto": {
+        "description": "Requests deletion of one tenant-owned saved conversation.",
+        "properties": {
+          "conversationId": {
+            "description": "Saved conversation identity.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId"
+        ],
+        "type": "object"
+      },
       "DiagnosticErrorDto": {
         "description": "A single error entry from the recent errors buffer.",
         "properties": {
@@ -2726,6 +2740,70 @@
         ],
         "type": "object"
       },
+      "GenerateRagAnswerRequestDto": {
+        "description": "Confirms generation against an inspected evidence set.",
+        "properties": {
+          "allowModelKnowledge": {
+            "description": "Explicit opt-in to distinguishable model-only knowledge.",
+            "type": "boolean"
+          },
+          "conversationId": {
+            "description": "Server-issued ephemeral conversation to continue.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expectedRetrievalFingerprint": {
+            "description": "Fingerprint returned by preview.",
+            "type": "string"
+          },
+          "profileId": {
+            "description": "Selected saved generation profile.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "question": {
+            "description": "Exact question used during preview.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized evidence scope."
+          }
+        },
+        "required": [
+          "question",
+          "profileId",
+          "scope",
+          "expectedRetrievalFingerprint",
+          "allowModelKnowledge"
+        ],
+        "type": "object"
+      },
+      "GenerateRagAnswerResponseDto": {
+        "description": "Result of starting one Ask generation.",
+        "properties": {
+          "conversationId": {
+            "description": "Ephemeral conversation identity used by explicit Save.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "events": {
+            "description": "Retrieval and generation events in lifecycle order.",
+            "items": {
+              "$ref": "#/components/schemas/RagAnswerEventDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversationId",
+          "events"
+        ],
+        "type": "object"
+      },
       "GenerateSyncPlanRequestDto": {
         "description": "Proposes a sync plan from a comparison's current results\n(`POST /api/v1/comparisons/{comparisonId}/sync-plan`).\n\nGenerating a plan never touches a filesystem (spec §35): it only reads\nthe comparison's already-computed results.",
         "properties": {
@@ -3382,6 +3460,20 @@
           "paneId",
           "requestId",
           "location"
+        ],
+        "type": "object"
+      },
+      "ListSavedRagConversationsRequestDto": {
+        "description": "Requests saved conversations visible to one workspace tenant.",
+        "properties": {
+          "workspaceId": {
+            "description": "Workspace used to render saved scope metadata.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId"
         ],
         "type": "object"
       },
@@ -5390,6 +5482,30 @@
         ],
         "type": "object"
       },
+      "PreviewRagRequestDto": {
+        "description": "Requests inspectable local evidence without generation.",
+        "properties": {
+          "profileId": {
+            "description": "Selected saved generation profile.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "question": {
+            "description": "Exact question used for local dense retrieval.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized evidence scope."
+          }
+        },
+        "required": [
+          "question",
+          "profileId",
+          "scope"
+        ],
+        "type": "object"
+      },
       "PreviewSemanticEnrolmentRequestDto": {
         "additionalProperties": false,
         "description": "Requests a pre-consent enrolment disclosure.",
@@ -5454,6 +5570,380 @@
             "type": "object"
           }
         ]
+      },
+      "RagAnswerDto": {
+        "description": "Completed grounded answer.",
+        "properties": {
+          "citations": {
+            "description": "Citations referenced by the answer.",
+            "items": {
+              "$ref": "#/components/schemas/RagCitationDto"
+            },
+            "type": "array"
+          },
+          "modelKnowledgeAllowed": {
+            "description": "Whether general model knowledge was permitted.",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "Answer text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "citations",
+          "modelKnowledgeAllowed"
+        ],
+        "type": "object"
+      },
+      "RagAnswerEventDto": {
+        "description": "Bounded retrieval/generation event returned in lifecycle order.",
+        "oneOf": [
+          {
+            "description": "Retrieval completed.",
+            "properties": {
+              "preview": {
+                "$ref": "#/components/schemas/RagPreviewDto",
+                "description": "Inspectable evidence."
+              },
+              "type": {
+                "enum": [
+                  "retrieval"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "preview",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Generated token segment.",
+            "properties": {
+              "text": {
+                "description": "Text appended to the answer.",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "token"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Generation completed.",
+            "properties": {
+              "answer": {
+                "$ref": "#/components/schemas/RagAnswerDto",
+                "description": "Completed answer."
+              },
+              "type": {
+                "enum": [
+                  "done"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "answer",
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "RagCitationDto": {
+        "description": "One locally resolved citation.",
+        "properties": {
+          "generated": {
+            "description": "Evidence was generated compression rather than primary source text.",
+            "type": "boolean"
+          },
+          "label": {
+            "description": "Opaque citation label.",
+            "type": "string"
+          },
+          "provenance": {
+            "description": "Best available provenance.",
+            "type": "string"
+          },
+          "sourceId": {
+            "description": "Opaque source occurrence identity used only for local navigation.",
+            "type": "string"
+          },
+          "stale": {
+            "description": "Source changed after indexing.",
+            "type": "boolean"
+          },
+          "unavailable": {
+            "description": "Original source is currently unavailable.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "sourceId",
+          "provenance",
+          "unavailable",
+          "stale",
+          "generated"
+        ],
+        "type": "object"
+      },
+      "RagCoverageDto": {
+        "description": "Honest coverage for an Ask scope.",
+        "properties": {
+          "eligible": {
+            "description": "Eligible source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "excluded": {
+            "description": "Excluded source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "indexed": {
+            "description": "Ready indexed source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pending": {
+            "description": "Pending source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stale": {
+            "description": "Stale source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unavailable": {
+            "description": "Unavailable retained source count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "eligible",
+          "indexed",
+          "stale",
+          "pending",
+          "excluded",
+          "failed",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RagEvidenceDto": {
+        "description": "One inspectable local evidence excerpt.",
+        "properties": {
+          "available": {
+            "description": "Original source can currently open.",
+            "type": "boolean"
+          },
+          "excerpt": {
+            "description": "Complete bounded structural excerpt.",
+            "type": "string"
+          },
+          "generated": {
+            "description": "Generated compression evidence is visually distinguished.",
+            "type": "boolean"
+          },
+          "label": {
+            "description": "Opaque citation label.",
+            "type": "string"
+          },
+          "provenance": {
+            "description": "Serialized page/line/structural provenance.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Dense similarity.",
+            "format": "float",
+            "type": "number"
+          },
+          "sectionPath": {
+            "description": "Structural heading hierarchy.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "stale": {
+            "description": "Source bytes changed after indexing.",
+            "type": "boolean"
+          },
+          "title": {
+            "description": "Optional title permitted by profile redaction policy.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "excerpt",
+          "sectionPath",
+          "provenance",
+          "score",
+          "generated",
+          "stale",
+          "available"
+        ],
+        "type": "object"
+      },
+      "RagPreviewDto": {
+        "description": "Inspectable retrieval preview shown before generation.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/RagCoverageDto",
+            "description": "Honest requested-scope coverage."
+          },
+          "evidence": {
+            "description": "Retrieved evidence.",
+            "items": {
+              "$ref": "#/components/schemas/RagEvidenceDto"
+            },
+            "type": "array"
+          },
+          "evidenceTokens": {
+            "description": "Complete selected evidence token estimate.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "insufficient": {
+            "description": "Whether evidence cannot support a grounded answer.",
+            "type": "boolean"
+          },
+          "locality": {
+            "$ref": "#/components/schemas/LlmEndpointLocalityDto",
+            "description": "Local or cloud classification."
+          },
+          "profileId": {
+            "description": "Selected profile.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "profileName": {
+            "description": "User-visible profile name.",
+            "type": "string"
+          },
+          "retrievalFingerprint": {
+            "description": "Fingerprint required to confirm this evidence set.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible scope."
+          }
+        },
+        "required": [
+          "retrievalFingerprint",
+          "scope",
+          "profileId",
+          "profileName",
+          "locality",
+          "evidenceTokens",
+          "evidence",
+          "coverage",
+          "insufficient"
+        ],
+        "type": "object"
+      },
+      "RagScopeDto": {
+        "description": "Scope selection for one grounded Ask conversation.",
+        "properties": {
+          "enrolledRootIds": {
+            "description": "Enrolled root IDs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "folder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Folder location for current-folder scope."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RagScopeKindDto",
+            "description": "Scope kind."
+          },
+          "label": {
+            "description": "User-visible scope label.",
+            "type": "string"
+          },
+          "selectedFiles": {
+            "description": "Exact file targets for selected-file scope.",
+            "items": {
+              "$ref": "#/components/schemas/DocumentSummaryTargetDto"
+            },
+            "type": "array"
+          },
+          "semanticSourceIds": {
+            "description": "Opaque source IDs from a host-produced semantic result set.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workspaceId": {
+            "description": "Workspace through which access is authorized.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "workspaceId",
+          "label",
+          "selectedFiles",
+          "semanticSourceIds",
+          "enrolledRootIds"
+        ],
+        "type": "object"
+      },
+      "RagScopeKindDto": {
+        "description": "User-visible retrieval scope kind.",
+        "enum": [
+          "entireLibrary",
+          "selectedFiles",
+          "currentFolder",
+          "semanticResults",
+          "enrolledRoots"
+        ],
+        "type": "string"
       },
       "ReadDocxPreviewResourceRequestDto": {
         "description": "Requests one bounded embedded DOCX resource.",
@@ -5812,6 +6302,49 @@
         "required": [
           "resolution",
           "applyToAllSimilar"
+        ],
+        "type": "object"
+      },
+      "ResolveRagCitationRequestDto": {
+        "description": "Resolves one opaque citation locally after current authorization checks.",
+        "properties": {
+          "sourceId": {
+            "description": "Opaque source identity returned by generation.",
+            "type": "string"
+          },
+          "workspaceId": {
+            "description": "Workspace through which the citation is opened.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "ResolvedRagCitationDto": {
+        "description": "Current local navigation target for a citation.",
+        "properties": {
+          "available": {
+            "description": "Whether the original source can currently open.",
+            "type": "boolean"
+          },
+          "entryId": {
+            "description": "Current entry identity.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Current provider-neutral location."
+          }
+        },
+        "required": [
+          "entryId",
+          "location",
+          "available"
         ],
         "type": "object"
       },
@@ -6174,6 +6707,89 @@
           "advanced",
           "capabilities",
           "redactFilenames"
+        ],
+        "type": "object"
+      },
+      "SaveRagConversationRequestDto": {
+        "description": "Requests explicit persistence of one generated conversation.",
+        "properties": {
+          "conversationId": {
+            "description": "Ephemeral conversation returned by generation.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "workspaceId": {
+            "description": "Workspace used to render saved scope metadata.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "SavedRagConversationDto": {
+        "description": "Saved conversation summary without duplicated source chunks.",
+        "properties": {
+          "id": {
+            "description": "Stable local conversation identity.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "modelKnowledgeAllowed": {
+            "description": "Whether model knowledge was allowed.",
+            "type": "boolean"
+          },
+          "profileId": {
+            "description": "Selected profile.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible scope."
+          },
+          "storageBytes": {
+            "description": "Approximate serialized storage use.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "description": "Persisted question/answer turns.",
+            "items": {
+              "$ref": "#/components/schemas/SavedRagTurnDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "profileId",
+          "scope",
+          "modelKnowledgeAllowed",
+          "turns",
+          "storageBytes"
+        ],
+        "type": "object"
+      },
+      "SavedRagTurnDto": {
+        "description": "One persisted turn.",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/RagAnswerDto",
+            "description": "Generated answer."
+          },
+          "question": {
+            "description": "User question.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
         ],
         "type": "object"
       },
@@ -15206,6 +15822,314 @@
             "description": ""
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/citations/resolve": {
+      "post": {
+        "operationId": "resolveRagCitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRagCitationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedRagCitationDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/conversations": {
+      "post": {
+        "operationId": "listSavedRagConversations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListSavedRagConversationsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SavedRagConversationDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/conversations/delete": {
+      "post": {
+        "operationId": "deleteRagConversation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteRagConversationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/conversations/save": {
+      "post": {
+        "operationId": "saveRagConversation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRagConversationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedRagConversationDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/generate": {
+      "post": {
+        "operationId": "generateRagAnswer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRagAnswerRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateRagAnswerResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/ask/preview": {
+      "post": {
+        "operationId": "previewRag",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRagRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagPreviewDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
             "content": {
               "application/json": {
                 "schema": {

@@ -36,6 +36,7 @@ import type {
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -55,6 +56,8 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -87,7 +90,10 @@ import type {
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  RagAnswer,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -96,12 +102,16 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   ScanDiskUsageResult,
   SearchInFileMatch,
@@ -317,6 +327,12 @@ export type MockClientMethod =
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
+  | 'previewRag'
+  | 'generateRagAnswer'
+  | 'saveRagConversation'
+  | 'listSavedRagConversations'
+  | 'deleteRagConversation'
+  | 'resolveRagCitation'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -1192,6 +1208,8 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly connections = new Map<ConnectionId, Connection>();
   private readonly llmProfiles = new Map<string, LlmProfile>();
   private readonly documentSummaries = new Map<string, DocumentSummary>();
+  private readonly ragConversations = new Map<string, SavedRagConversation>();
+  private readonly ephemeralRagConversations = new Map<string, SavedRagConversation>();
   private readonly oneDriveAuthorizations = new Map<
     string,
     { readonly connectionId: ConnectionId; attempt: OneDriveAuthorizationAttempt }
@@ -3959,6 +3977,185 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getDocumentSummary', signal, () => {
       const summary = this.documentSummaries.get(request.target.entryId);
       return summary === undefined ? null : structuredClone(summary);
+    });
+  }
+
+  previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
+    return this.perform('previewRag', signal, () => ({
+      coverage: {
+        eligible: 3,
+        indexed: 3,
+        pending: 0,
+        failed: 0,
+        excluded: 0,
+        stale: 0,
+        unavailable: 0,
+      },
+      evidence: [
+        {
+          available: true,
+          excerpt: `Mock indexed evidence relevant to "${request.question}".`,
+          generated: false,
+          label: 'C1',
+          provenance: 'section 1',
+          score: 0.91,
+          sectionPath: ['Overview'],
+          stale: false,
+          title: 'Example indexed document',
+        },
+      ],
+      evidenceTokens: 18,
+      insufficient: false,
+      locality: 'loopback',
+      profileId: request.profileId,
+      profileName: 'Local mock profile',
+      retrievalFingerprint: `mock-rag-${request.profileId}-${request.question}`,
+      scope: structuredClone(request.scope),
+    }));
+  }
+
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    return this.perform('generateRagAnswer', signal, () => {
+      const expectedFingerprint = `mock-rag-${request.profileId}-${request.question}`;
+      if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
+        throw new MockClientError('invalidRequest', 'Ask evidence confirmation is stale');
+      }
+      const preview: RagPreview = {
+        coverage: {
+          eligible: 3,
+          indexed: 3,
+          pending: 0,
+          failed: 0,
+          excluded: 0,
+          stale: 0,
+          unavailable: 0,
+        },
+        evidence: [
+          {
+            available: true,
+            excerpt: `Mock indexed evidence relevant to "${request.question}".`,
+            generated: false,
+            label: 'C1',
+            provenance: 'section 1',
+            score: 0.91,
+            sectionPath: ['Overview'],
+            stale: false,
+            title: 'Example indexed document',
+          },
+        ],
+        evidenceTokens: 18,
+        insufficient: false,
+        locality: 'loopback',
+        profileId: request.profileId,
+        profileName: 'Local mock profile',
+        retrievalFingerprint: expectedFingerprint,
+        scope: structuredClone(request.scope),
+      };
+      const answer: RagAnswer = {
+        text: 'This answer is grounded in the selected local evidence [C1].',
+        citations: [
+          {
+            generated: false,
+            label: 'C1',
+            provenance: 'section 1',
+            sourceId: 'mock-source-1',
+            stale: false,
+            unavailable: false,
+          },
+        ],
+        modelKnowledgeAllowed: request.allowModelKnowledge,
+      };
+      const conversationId =
+        request.conversationId ?? `rag-${this.ephemeralRagConversations.size + 1}`;
+      const existing = this.ephemeralRagConversations.get(conversationId);
+      if (
+        existing !== undefined &&
+        (existing.profileId !== request.profileId ||
+          existing.scope.kind !== request.scope.kind ||
+          existing.modelKnowledgeAllowed !== request.allowModelKnowledge)
+      ) {
+        throw new MockClientError(
+          'invalidRequest',
+          'Conversation profile, scope, and knowledge mode cannot change',
+        );
+      }
+      this.ephemeralRagConversations.set(conversationId, {
+        id: conversationId,
+        modelKnowledgeAllowed: request.allowModelKnowledge,
+        profileId: request.profileId,
+        scope: structuredClone(request.scope),
+        storageBytes: 0,
+        turns: [...(existing?.turns ?? []), { question: request.question, answer }],
+      });
+      return {
+        conversationId,
+        events: [
+          { type: 'retrieval', preview },
+          { type: 'token', text: answer.text },
+          { type: 'done', answer },
+        ],
+      };
+    });
+  }
+
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    return this.perform('saveRagConversation', signal, () => {
+      const conversation = this.ephemeralRagConversations.get(request.conversationId);
+      if (conversation === undefined || conversation.scope.workspaceId !== request.workspaceId) {
+        throw new MockClientError('notFound', 'Ask conversation not found');
+      }
+      const saved = {
+        ...structuredClone(conversation),
+        storageBytes: JSON.stringify(conversation).length,
+      };
+      this.ragConversations.set(saved.id, saved);
+      return structuredClone(saved);
+    });
+  }
+
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    return this.perform('listSavedRagConversations', signal, () =>
+      [...this.ragConversations.values()]
+        .filter((conversation) => conversation.scope.workspaceId === workspaceId)
+        .map((conversation) => structuredClone(conversation)),
+    );
+  }
+
+  deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('deleteRagConversation', signal, () => {
+      const conversation = this.ragConversations.get(request.conversationId);
+      if (conversation === undefined) {
+        throw new MockClientError('notFound', 'Ask conversation not found');
+      }
+      this.ragConversations.delete(request.conversationId);
+    });
+  }
+
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    return this.perform('resolveRagCitation', signal, () => {
+      if (request.sourceId !== 'mock-source-1') {
+        throw new MockClientError('notFound', 'Citation not found');
+      }
+      return {
+        entryId: '11111111-1111-4111-8111-111111111111',
+        location: { providerId: 'local', uri: 'file:///documents/report.txt' },
+        available: true,
+      };
     });
   }
 

@@ -2197,6 +2197,81 @@ pub(crate) async fn get_document_summary(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Previews authorized local evidence before grounded generation.
+#[tauri::command]
+pub(crate) async fn preview_rag(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PreviewRagRequestDto,
+) -> Result<fm_transport_dto::RagPreviewDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_rag(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Generates one read-only grounded answer.
+#[tauri::command]
+pub(crate) async fn generate_rag_answer(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GenerateRagAnswerRequestDto,
+) -> Result<fm_transport_dto::GenerateRagAnswerResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_rag_answer(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Persists one server-authored ephemeral Ask conversation.
+#[tauri::command]
+pub(crate) async fn save_rag_conversation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SaveRagConversationRequestDto,
+) -> Result<fm_transport_dto::SavedRagConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .save_rag_conversation(&desktop_semantic_access(), request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists caller-owned saved Ask conversations.
+#[tauri::command]
+pub(crate) async fn list_saved_rag_conversations(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+) -> Result<Vec<fm_transport_dto::SavedRagConversationDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_saved_rag_conversations(&desktop_semantic_access(), workspace_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Deletes one caller-owned saved Ask conversation.
+#[tauri::command]
+pub(crate) async fn delete_rag_conversation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::DeleteRagConversationRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_rag_conversation(&desktop_semantic_access(), request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Resolves one opaque citation against current local authorization.
+#[tauri::command]
+pub(crate) async fn resolve_rag_citation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ResolveRagCitationRequestDto,
+) -> Result<fm_transport_dto::ResolvedRagCitationDto, ApplicationErrorDto> {
+    state
+        .service
+        .resolve_rag_citation(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Lists every stored connection profile with its current runtime status,
 /// identical in shape to `GET /api/v1/connections` (task 0103).
 #[tauri::command]

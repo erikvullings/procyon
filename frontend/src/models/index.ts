@@ -14,6 +14,7 @@ export * from './location';
 export * from './native-menu';
 export * from './operation';
 export * from './plugin';
+export * from './rag';
 export * from './requests';
 export * from './runtime-capabilities';
 export * from './search';

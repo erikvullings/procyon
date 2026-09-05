@@ -32,6 +32,7 @@ import type {
   CreateSemanticInstallationOfferRequestDto,
   CreateWorkspaceRequestDto,
   DeleteLlmProfileRequestDto,
+  DeleteRagConversationRequestDto,
   DeleteWorkspaceParams,
   DiagnosticsDto,
   DirectorySnapshotDto,
@@ -46,6 +47,8 @@ import type {
   EntrySummaryDto,
   FinderTagsDto,
   GenerateDocumentSummaryRequestDto,
+  GenerateRagAnswerRequestDto,
+  GenerateRagAnswerResponseDto,
   GenerateSyncPlanRequestDto,
   GetChecksumsParams,
   GetComparisonParams,
@@ -67,6 +70,7 @@ import type {
   ListDirectoryChildrenRequest,
   ListDirectoryRequest,
   ListOperationsParams,
+  ListSavedRagConversationsRequestDto,
   LlmProfileDto,
   LlmProfileExportDto,
   LlmProfilePresetDto,
@@ -90,7 +94,9 @@ import type {
   PluginLogEntryDto,
   PptxPreviewSessionRequestDto,
   PreviewDocumentSummaryRequestDto,
+  PreviewRagRequestDto,
   PreviewSemanticEnrolmentRequestDto,
+  RagPreviewDto,
   ReadDocxPreviewResourceRequestDto,
   ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
@@ -104,6 +110,8 @@ import type {
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
   ResolveOperationConflictRequestDto,
+  ResolveRagCitationRequestDto,
+  ResolvedRagCitationDto,
   ResumeSemanticCleanupRequestDto,
   RuntimeCapabilitiesDto,
   SaveChecksumFileRequestDto,
@@ -111,6 +119,8 @@ import type {
   SaveEditableFileRequestDto,
   SaveEditableFileResponseDto,
   SaveLlmProfileRequestDto,
+  SaveRagConversationRequestDto,
+  SavedRagConversationDto,
   ScanDiskUsageRequestDto,
   SearchInFileRequestDto,
   SearchInFileResponseDto,
@@ -4593,6 +4603,327 @@ export const cancelSearch = async (searchId: string, options?: Parameters<typeof
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type resolveRagCitationResponse200 = {
+  data: ResolvedRagCitationDto
+  status: 200
+}
+
+export type resolveRagCitationResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type resolveRagCitationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type resolveRagCitationResponseSuccess = (resolveRagCitationResponse200) & {
+  headers: Headers;
+};
+export type resolveRagCitationResponseError = (resolveRagCitationResponse403 | resolveRagCitationResponse404) & {
+  headers: Headers;
+};
+
+export type resolveRagCitationResponse = (resolveRagCitationResponseSuccess | resolveRagCitationResponseError)
+
+export const getResolveRagCitationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/citations/resolve`
+}
+
+export const resolveRagCitation = async (resolveRagCitationRequestDto: ResolveRagCitationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveRagCitationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<resolveRagCitationResponse>(getResolveRagCitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveRagCitationRequestDto)
+  }
+);}
+
+
+
+export type listSavedRagConversationsResponse200 = {
+  data: SavedRagConversationDto[]
+  status: 200
+}
+
+export type listSavedRagConversationsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type listSavedRagConversationsResponseSuccess = (listSavedRagConversationsResponse200) & {
+  headers: Headers;
+};
+export type listSavedRagConversationsResponseError = (listSavedRagConversationsResponse403) & {
+  headers: Headers;
+};
+
+export type listSavedRagConversationsResponse = (listSavedRagConversationsResponseSuccess | listSavedRagConversationsResponseError)
+
+export const getListSavedRagConversationsUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/conversations`
+}
+
+export const listSavedRagConversations = async (listSavedRagConversationsRequestDto: ListSavedRagConversationsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<listSavedRagConversationsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<listSavedRagConversationsResponse>(getListSavedRagConversationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(listSavedRagConversationsRequestDto)
+  }
+);}
+
+
+
+export type deleteRagConversationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteRagConversationResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type deleteRagConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteRagConversationResponseSuccess = (deleteRagConversationResponse204) & {
+  headers: Headers;
+};
+export type deleteRagConversationResponseError = (deleteRagConversationResponse403 | deleteRagConversationResponse404) & {
+  headers: Headers;
+};
+
+export type deleteRagConversationResponse = (deleteRagConversationResponseSuccess | deleteRagConversationResponseError)
+
+export const getDeleteRagConversationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/conversations/delete`
+}
+
+export const deleteRagConversation = async (deleteRagConversationRequestDto: DeleteRagConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteRagConversationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<deleteRagConversationResponse>(getDeleteRagConversationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteRagConversationRequestDto)
+  }
+);}
+
+
+
+export type saveRagConversationResponse200 = {
+  data: SavedRagConversationDto
+  status: 200
+}
+
+export type saveRagConversationResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type saveRagConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type saveRagConversationResponseSuccess = (saveRagConversationResponse200) & {
+  headers: Headers;
+};
+export type saveRagConversationResponseError = (saveRagConversationResponse403 | saveRagConversationResponse404) & {
+  headers: Headers;
+};
+
+export type saveRagConversationResponse = (saveRagConversationResponseSuccess | saveRagConversationResponseError)
+
+export const getSaveRagConversationUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/conversations/save`
+}
+
+export const saveRagConversation = async (saveRagConversationRequestDto: SaveRagConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveRagConversationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<saveRagConversationResponse>(getSaveRagConversationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveRagConversationRequestDto)
+  }
+);}
+
+
+
+export type generateRagAnswerResponse200 = {
+  data: GenerateRagAnswerResponseDto
+  status: 200
+}
+
+export type generateRagAnswerResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type generateRagAnswerResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type generateRagAnswerResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type generateRagAnswerResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type generateRagAnswerResponseSuccess = (generateRagAnswerResponse200) & {
+  headers: Headers;
+};
+export type generateRagAnswerResponseError = (generateRagAnswerResponse400 | generateRagAnswerResponse403 | generateRagAnswerResponse404 | generateRagAnswerResponse503) & {
+  headers: Headers;
+};
+
+export type generateRagAnswerResponse = (generateRagAnswerResponseSuccess | generateRagAnswerResponseError)
+
+export const getGenerateRagAnswerUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/generate`
+}
+
+export const generateRagAnswer = async (generateRagAnswerRequestDto: GenerateRagAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateRagAnswerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<generateRagAnswerResponse>(getGenerateRagAnswerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(generateRagAnswerRequestDto)
+  }
+);}
+
+
+
+export type previewRagResponse200 = {
+  data: RagPreviewDto
+  status: 200
+}
+
+export type previewRagResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type previewRagResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type previewRagResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type previewRagResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type previewRagResponseSuccess = (previewRagResponse200) & {
+  headers: Headers;
+};
+export type previewRagResponseError = (previewRagResponse400 | previewRagResponse403 | previewRagResponse404 | previewRagResponse503) & {
+  headers: Headers;
+};
+
+export type previewRagResponse = (previewRagResponseSuccess | previewRagResponseError)
+
+export const getPreviewRagUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/ask/preview`
+}
+
+export const previewRag = async (previewRagRequestDto: PreviewRagRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewRagResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<previewRagResponse>(getPreviewRagUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewRagRequestDto)
   }
 );}
 

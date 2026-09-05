@@ -1,5 +1,6 @@
 //! The `FileManagerService` facade (specification §7).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -26,22 +27,25 @@ use fm_transport_dto::{
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, ChecksumFileDto, ChecksumPageDto, ComparisonPageDto,
     ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DeleteLlmProfileRequestDto,
-    DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
+    DeleteRagConversationRequestDto, DirectorySnapshotDto,
+    DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
-    FinderTagsDto, GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, InvokeActionRequestDto, ListDirectoryRequest, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest,
-    OperationDto, PluginDescriptorDto, PluginLogEntryDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
-    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, RuntimeKindDto,
-    SaveLlmProfileRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
-    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
-    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
-    StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto, UpdateConnectionRequestDto,
-    VerificationReportDto, VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto,
-    WorkspaceSummaryDto,
+    FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
+    GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
+    InvokeActionRequestDto, ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto,
+    LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest, OperationDto,
+    PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto, RagScopeDto,
+    RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
+    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
+    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
+    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
+    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
+    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto,
+    UpdateConnectionRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
@@ -81,6 +85,15 @@ use crate::platform_mapping::{
 };
 use crate::plugin_manager::PluginManager;
 use crate::pptx_preview::PptxPreviewService;
+use crate::rag::{
+    AuthorizedRagRequest, GenerateRagAnswer, RagAnswerEvent, RagConversationStore, RagCoordinator,
+    RagCoverage, RagHistoryTurn, RagRetrievalCapability, RagSourceDisplay, SavedRagConversation,
+    SavedRagTurn, UnavailableRagRetrievalCapability,
+};
+use crate::rag_mapping::{
+    events_to_dto, preview_to_dto as rag_preview_to_dto, rag_error_to_application, saved_to_dto,
+    scope_from_dto,
+};
 use crate::remote_terminal::RemoteTerminalService;
 use crate::search_comparison_coordinator::SearchComparisonCoordinator;
 use crate::semantic::{
@@ -102,10 +115,10 @@ use crate::semantic_components::{
 };
 use crate::semantic_library::SemanticLibraryComposition;
 use crate::semantic_library::{
-    SemanticAccessContext, SemanticEnrolmentPreview, SemanticExclusionPlan, SemanticFeedCandidate,
-    SemanticFolderContext, SemanticFolderStatus, SemanticLibraryCapabilities, SemanticLibraryError,
-    SemanticLibraryOperation, SemanticLibraryService, SemanticLibraryStatus,
-    SemanticWorkerFeedPlan,
+    RagScopeSelection, SemanticAccessContext, SemanticEnrolmentPreview, SemanticExclusionPlan,
+    SemanticFeedCandidate, SemanticFolderContext, SemanticFolderStatus,
+    SemanticLibraryCapabilities, SemanticLibraryError, SemanticLibraryOperation,
+    SemanticLibraryService, SemanticLibraryStatus, SemanticWorkerFeedPlan,
 };
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
@@ -136,6 +149,9 @@ pub struct FileManagerService {
     docx_preview: DocxPreviewService,
     document_conversion: DocumentConversionService,
     document_summaries: DocumentSummaryCoordinator,
+    rag: RagCoordinator,
+    rag_conversation_path: PathBuf,
+    rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
@@ -292,6 +308,7 @@ impl FileManagerService {
         search_accelerator: Arc<dyn SearchAcceleration>,
     ) -> Self {
         let settings_directory = settings_directory.into();
+        let rag_conversation_path = settings_directory.join("rag-conversations.json");
         let credential_store: Arc<dyn CredentialStore> =
             Arc::new(SessionCredentialStore::new(credential_store));
         let mut providers = ProviderRegistry::new();
@@ -547,6 +564,9 @@ impl FileManagerService {
             document_summaries: DocumentSummaryCoordinator::new(Arc::new(
                 UnavailableDocumentSummaryCapability,
             )),
+            rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
+            rag_conversation_path,
+            rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
@@ -1188,6 +1208,16 @@ impl FileManagerService {
         self
     }
 
+    /// Replaces the unavailable default with a worker-backed Ask retriever.
+    #[must_use]
+    pub fn with_rag_retrieval_capability(
+        mut self,
+        capability: Arc<dyn RagRetrievalCapability>,
+    ) -> Self {
+        self.rag = RagCoordinator::new(capability);
+        self
+    }
+
     /// Prepares bounded key passages and the disclosure required before generation.
     pub async fn preview_document_summary(
         &self,
@@ -1290,6 +1320,305 @@ impl FileManagerService {
                     .map_err(|_| ApplicationError::InvalidRequest("invalid token budget".into()))?,
             },
         )
+    }
+
+    /// Retrieves inspectable evidence before any generation request.
+    pub async fn preview_rag(
+        &self,
+        access: &SemanticAccessContext,
+        request: PreviewRagRequestDto,
+    ) -> Result<RagPreviewDto, ApplicationError> {
+        let scope = request.scope.clone();
+        let authorized = self
+            .resolve_rag_request(access, request.question, &scope)
+            .await?;
+        self.rag
+            .preview(
+                authorized,
+                request.profile_id,
+                &self.llm_profiles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .map(|preview| rag_preview_to_dto(preview, scope))
+            .map_err(rag_error_to_application)
+    }
+
+    /// Generates one read-only answer after revalidating inspected evidence.
+    pub async fn generate_rag_answer(
+        &self,
+        access: &SemanticAccessContext,
+        request: GenerateRagAnswerRequestDto,
+    ) -> Result<GenerateRagAnswerResponseDto, ApplicationError> {
+        let scope = request.scope.clone();
+        let authorized = self
+            .resolve_rag_request(access, request.question.clone(), &scope)
+            .await?;
+        let tenant_id = authorized.retrieval.filters.tenant_id.clone();
+        let internal_scope = authorized.scope.clone();
+        let conversation_id = request.conversation_id.unwrap_or_else(Uuid::new_v4);
+        let existing = self
+            .rag_ephemeral
+            .lock()
+            .map_err(|_| ApplicationError::Internal)?
+            .get(&conversation_id)
+            .cloned();
+        let history = if let Some(conversation) = &existing {
+            if conversation.tenant_id != tenant_id {
+                return Err(ApplicationError::PermissionDenied);
+            }
+            if conversation.profile_id != request.profile_id
+                || conversation.scope != internal_scope
+                || conversation.model_knowledge_allowed != request.allow_model_knowledge
+            {
+                return Err(ApplicationError::InvalidRequest(
+                    "conversation profile, scope, and knowledge mode cannot change".into(),
+                ));
+            }
+            conversation
+                .turns
+                .iter()
+                .map(|turn| RagHistoryTurn {
+                    question: turn.question.clone(),
+                    answer: turn.answer.text.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let events = self
+            .rag
+            .generate(
+                GenerateRagAnswer {
+                    authorized,
+                    expected_retrieval_fingerprint: request.expected_retrieval_fingerprint,
+                    profile_id: request.profile_id,
+                    allow_model_knowledge: request.allow_model_knowledge,
+                    history,
+                },
+                &self.llm_profiles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .map_err(rag_error_to_application)?;
+        let answer = events.iter().find_map(|event| match event {
+            RagAnswerEvent::Done { answer } => Some(answer.clone()),
+            RagAnswerEvent::Retrieval { .. } | RagAnswerEvent::Token { .. } => None,
+        });
+        if let Some(answer) = answer {
+            let mut conversation = existing.unwrap_or(SavedRagConversation {
+                id: conversation_id,
+                tenant_id,
+                profile_id: request.profile_id,
+                scope: internal_scope,
+                model_knowledge_allowed: request.allow_model_knowledge,
+                turns: Vec::new(),
+                storage_bytes: 0,
+            });
+            conversation.turns.push(SavedRagTurn {
+                question: request.question,
+                answer,
+            });
+            self.rag_ephemeral
+                .lock()
+                .map_err(|_| ApplicationError::Internal)?
+                .insert(conversation_id, conversation);
+        }
+        Ok(GenerateRagAnswerResponseDto {
+            conversation_id,
+            events: events_to_dto(events, &scope),
+        })
+    }
+
+    /// Persists an explicitly saved, server-authored conversation.
+    pub fn save_rag_conversation(
+        &self,
+        access: &SemanticAccessContext,
+        request: SaveRagConversationRequestDto,
+    ) -> Result<SavedRagConversationDto, ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        let conversation = self
+            .rag_ephemeral
+            .lock()
+            .map_err(|_| ApplicationError::Internal)?
+            .get(&request.conversation_id)
+            .filter(|conversation| conversation.tenant_id == tenant_id)
+            .cloned()
+            .ok_or(ApplicationError::NotFound)?;
+        let store = RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?;
+        store
+            .save(conversation)
+            .map(|saved| saved_to_dto(saved, request.workspace_id))
+            .map_err(rag_error_to_application)
+    }
+
+    /// Lists explicitly saved conversations inside the caller's tenant.
+    pub fn list_saved_rag_conversations(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<SavedRagConversationDto>, ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?
+            .list(&tenant_id)
+            .map(|saved| {
+                saved
+                    .into_iter()
+                    .map(|conversation| saved_to_dto(conversation, workspace_id))
+                    .collect()
+            })
+            .map_err(rag_error_to_application)
+    }
+
+    /// Deletes one caller-owned saved conversation.
+    pub fn delete_rag_conversation(
+        &self,
+        access: &SemanticAccessContext,
+        request: DeleteRagConversationRequestDto,
+    ) -> Result<(), ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        let removed = RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?
+            .delete(&tenant_id, request.conversation_id)
+            .map_err(rag_error_to_application)?;
+        if removed {
+            Ok(())
+        } else {
+            Err(ApplicationError::NotFound)
+        }
+    }
+
+    /// Resolves a citation against current workspace authorization and availability.
+    pub async fn resolve_rag_citation(
+        &self,
+        access: &SemanticAccessContext,
+        request: ResolveRagCitationRequestDto,
+    ) -> Result<ResolvedRagCitationDto, ApplicationError> {
+        let occurrence = self
+            .semantic_library()
+            .await
+            .resolve_occurrence(access, request.workspace_id.into(), &request.source_id)
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                _ => ApplicationError::InvalidRequest(error.to_string()),
+            })?
+            .ok_or(ApplicationError::NotFound)?;
+        Ok(ResolvedRagCitationDto {
+            entry_id: occurrence.entry_id.into_inner(),
+            location: occurrence.location.into(),
+            available: occurrence.available,
+        })
+    }
+
+    async fn resolve_rag_request(
+        &self,
+        access: &SemanticAccessContext,
+        question: String,
+        scope: &RagScopeDto,
+    ) -> Result<AuthorizedRagRequest, ApplicationError> {
+        let selection = match scope.kind {
+            RagScopeKindDto::EntireLibrary => RagScopeSelection::EntireLibrary,
+            RagScopeKindDto::SelectedFiles => {
+                if scope.selected_files.is_empty()
+                    || scope
+                        .selected_files
+                        .iter()
+                        .any(|target| target.workspace_id != scope.workspace_id)
+                {
+                    return Err(ApplicationError::InvalidRequest(
+                        "selected-file Ask scope is invalid".into(),
+                    ));
+                }
+                RagScopeSelection::SelectedFiles(
+                    scope
+                        .selected_files
+                        .iter()
+                        .map(|target| (target.entry_id.into(), target.location.clone().into()))
+                        .collect(),
+                )
+            }
+            RagScopeKindDto::CurrentFolder => RagScopeSelection::CurrentFolder(
+                scope
+                    .folder
+                    .clone()
+                    .ok_or_else(|| {
+                        ApplicationError::InvalidRequest(
+                            "current-folder Ask scope requires a folder".into(),
+                        )
+                    })?
+                    .into(),
+            ),
+            RagScopeKindDto::SemanticResults => {
+                if scope.semantic_source_ids.is_empty() {
+                    return Err(ApplicationError::InvalidRequest(
+                        "semantic-result Ask scope is empty".into(),
+                    ));
+                }
+                RagScopeSelection::SemanticResults(scope.semantic_source_ids.clone())
+            }
+            RagScopeKindDto::EnrolledRoots => {
+                if scope.enrolled_root_ids.is_empty() {
+                    return Err(ApplicationError::InvalidRequest(
+                        "enrolled-root Ask scope is empty".into(),
+                    ));
+                }
+                RagScopeSelection::EnrolledRoots(
+                    scope
+                        .enrolled_root_ids
+                        .iter()
+                        .map(|value| crate::semantic_library::parse_semantic_root_id(value))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| ApplicationError::InvalidRequest("invalid root id".into()))?,
+                )
+            }
+        };
+        let resolved = self
+            .semantic_library()
+            .await
+            .resolve_rag_scope(
+                access,
+                scope.workspace_id.into(),
+                &selection,
+                question.clone(),
+                fm_semantic_worker::rag_retrieval::RagRetrievalPolicy::default_ask(),
+            )
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                _ => ApplicationError::InvalidRequest(error.to_string()),
+            })?;
+        if resolved
+            .retrieval
+            .source_restriction
+            .allowed_source_ids
+            .is_empty()
+        {
+            return Err(ApplicationError::NotFound);
+        }
+        let indexed = resolved.eligible.saturating_sub(resolved.unavailable);
+        Ok(AuthorizedRagRequest {
+            question,
+            scope: scope_from_dto(scope),
+            retrieval: resolved.retrieval,
+            coverage: RagCoverage {
+                eligible: resolved.eligible,
+                indexed,
+                unavailable: resolved.unavailable,
+                ..RagCoverage::default()
+            },
+            display: RagSourceDisplay {
+                titles: resolved.titles,
+            },
+        })
     }
 
     /// Streams a provider-neutral document into the semantic capability.

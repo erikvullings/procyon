@@ -28,6 +28,7 @@ import type {
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -46,6 +47,8 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -78,7 +81,9 @@ import type {
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -87,12 +92,16 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -653,6 +662,24 @@ export interface FileManagerClient {
     request: GetDocumentSummaryRequest,
     signal?: AbortSignal,
   ): Promise<DocumentSummary | null>;
+  previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview>;
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse>;
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation>;
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]>;
+  deleteRagConversation(request: DeleteRagConversationRequest, signal?: AbortSignal): Promise<void>;
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation>;
 
   /** Lists every stored connection profile with its current runtime status (task 0103). */
   listConnections(signal?: AbortSignal): Promise<Connection[]>;

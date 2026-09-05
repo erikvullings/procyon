@@ -5,13 +5,17 @@
 //! tokens. Hosts expose its projections; neither transport is allowed to
 //! mutate the core documents directly.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use fm_domain::{Location, WorkspaceId};
 use fm_semantic_library as core;
+use fm_semantic_worker::rag_retrieval::{
+    RagRetrievalPolicy, RagRetrievalRequest, RagSourceRestriction,
+};
+use fm_semantic_worker::semantic_storage::QueryFilters;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -618,6 +622,14 @@ impl SemanticAccessContext {
         Ok(Self::Server(SemanticServerIdentity::new(
             tenant_id, user_id,
         )?))
+    }
+
+    pub(crate) fn tenant_id(&self) -> Result<String, SemanticLibraryError> {
+        match self {
+            Self::Host => Ok(DEVICE_LOCAL_TENANT_ID.to_owned()),
+            Self::Server(identity) => Ok(identity.tenant_id.to_string()),
+            Self::Anonymous => Err(SemanticLibraryError::InvalidRequest),
+        }
     }
 }
 
@@ -1935,6 +1947,145 @@ impl SemanticLibraryService {
         }))
     }
 
+    /// Resolves a user-visible Ask scope into current worker authorization.
+    pub(crate) fn resolve_rag_scope(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: WorkspaceId,
+        selection: &RagScopeSelection,
+        question: String,
+        policy: RagRetrievalPolicy,
+    ) -> Result<ResolvedRagScope, SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let data = locked.data()?;
+        let tenant_id = match access {
+            SemanticAccessContext::Host => DEVICE_LOCAL_TENANT_ID.to_owned(),
+            SemanticAccessContext::Server(identity) => identity.tenant_id.to_string(),
+            SemanticAccessContext::Anonymous => return Err(SemanticLibraryError::InvalidRequest),
+        };
+        let requested_results = match selection {
+            RagScopeSelection::SemanticResults(ids) => Some(ids.iter().collect::<HashSet<_>>()),
+            _ => None,
+        };
+        let requested_roots = match selection {
+            RagScopeSelection::EnrolledRoots(ids) => {
+                Some(ids.iter().copied().collect::<HashSet<_>>())
+            }
+            _ => None,
+        };
+        if let RagScopeSelection::CurrentFolder(folder) = selection {
+            let authorized = data.policy.roots().values().any(|root| {
+                root.workspace_references().contains(&workspace_id)
+                    && root.location().provider_id == folder.provider_id
+                    && (root.location() == folder
+                        || (root.recursive()
+                            && location_is_within_uri(&folder.uri, &root.location().uri)))
+            });
+            if !authorized {
+                return Err(SemanticLibraryError::InvalidRequest);
+            }
+        }
+        if let Some(root_ids) = &requested_roots
+            && root_ids.iter().any(|root_id| {
+                data.policy
+                    .root(*root_id)
+                    .is_none_or(|root| !root.workspace_references().contains(&workspace_id))
+            })
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        let mut matched_selected = match selection {
+            RagScopeSelection::SelectedFiles(targets) => vec![false; targets.len()],
+            _ => Vec::new(),
+        };
+        let mut allowed_source_ids = BTreeSet::new();
+        let mut titles = HashMap::new();
+        let mut unavailable = 0u64;
+        for candidate in data.catalog.occurrences() {
+            let Some(occurrence) = data
+                .catalog
+                .authorized_occurrence(&data.policy, workspace_id, candidate.id())
+                .map_err(|_| SemanticLibraryError::InvalidRequest)?
+            else {
+                continue;
+            };
+            let selected = match selection {
+                RagScopeSelection::EntireLibrary => true,
+                RagScopeSelection::SelectedFiles(targets) => {
+                    let mut matched = false;
+                    for (index, (entry, location)) in targets.iter().enumerate() {
+                        if occurrence.entry_id() == *entry && occurrence.location() == location {
+                            matched_selected[index] = true;
+                            matched = true;
+                        }
+                    }
+                    matched
+                }
+                RagScopeSelection::CurrentFolder(folder) => {
+                    occurrence.location().provider_id == folder.provider_id
+                        && location_is_within_uri(&occurrence.location().uri, &folder.uri)
+                }
+                RagScopeSelection::SemanticResults(_) => requested_results
+                    .as_ref()
+                    .is_some_and(|ids| ids.contains(&occurrence.id().to_string())),
+                RagScopeSelection::EnrolledRoots(_) => occurrence.scopes().iter().any(|scope| {
+                    scope.workspace_id() == workspace_id
+                        && requested_roots
+                            .as_ref()
+                            .is_some_and(|ids| ids.contains(&scope.root_id()))
+                }),
+            };
+            if !selected {
+                continue;
+            }
+            let source_id = occurrence.id().to_string();
+            if data.catalog.source_availability(occurrence.id())
+                != Some(core::SourceAvailability::Available)
+            {
+                unavailable = unavailable.saturating_add(1);
+            }
+            let title = occurrence
+                .location()
+                .uri
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .filter(|value| !value.is_empty())
+                .unwrap_or("Indexed document")
+                .to_owned();
+            titles.insert(source_id.clone(), title);
+            allowed_source_ids.insert(source_id);
+        }
+        if matched_selected.iter().any(|matched| !matched)
+            || requested_results
+                .as_ref()
+                .is_some_and(|requested| requested.len() != allowed_source_ids.len())
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        let eligible = u64::try_from(allowed_source_ids.len())
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        Ok(ResolvedRagScope {
+            retrieval: RagRetrievalRequest {
+                question,
+                filters: QueryFilters {
+                    tenant_id,
+                    library_id: Some(data.policy.library().id().to_string()),
+                    include_unavailable: true,
+                    ..QueryFilters::default()
+                },
+                source_restriction: RagSourceRestriction { allowed_source_ids },
+                current_hashes: HashMap::new(),
+                policy,
+            },
+            titles,
+            eligible,
+            unavailable,
+        })
+    }
+
     fn unresolved_authority(&self) -> SemanticLibraryAuthority {
         match &self.backend {
             SemanticLibraryBackend::Unavailable { authority } => *authority,
@@ -1998,6 +2149,37 @@ pub(crate) struct ResolvedSummaryDocument {
     pub(crate) tenant_id: String,
     pub(crate) library_id: String,
     pub(crate) document_id: String,
+}
+
+/// Host-side inputs for resolving one visible Ask scope.
+#[derive(Debug, Clone)]
+pub(crate) enum RagScopeSelection {
+    /// Every occurrence authorized through the workspace.
+    EntireLibrary,
+    /// Exact entry/location pairs.
+    SelectedFiles(Vec<(fm_domain::EntryId, Location)>),
+    /// One folder and all descendants.
+    CurrentFolder(Location),
+    /// Opaque occurrence identities from a host-owned semantic result set.
+    SemanticResults(Vec<String>),
+    /// One or more enrolled roots.
+    EnrolledRoots(Vec<core::RootId>),
+}
+
+/// Worker request and host-only display data derived from current authorization.
+pub(crate) struct ResolvedRagScope {
+    pub(crate) retrieval: RagRetrievalRequest,
+    pub(crate) titles: HashMap<String, String>,
+    pub(crate) eligible: u64,
+    pub(crate) unavailable: u64,
+}
+
+fn location_is_within_uri(candidate: &str, folder: &str) -> bool {
+    let folder = folder.trim_end_matches('/');
+    candidate == folder
+        || candidate
+            .strip_prefix(folder)
+            .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 fn build_managed(

@@ -282,6 +282,14 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::document_summary::get_document_summary
         ))
+        .routes(utoipa_axum::routes!(routes::rag::preview_rag))
+        .routes(utoipa_axum::routes!(routes::rag::generate_rag_answer))
+        .routes(utoipa_axum::routes!(routes::rag::save_rag_conversation))
+        .routes(utoipa_axum::routes!(
+            routes::rag::list_saved_rag_conversations
+        ))
+        .routes(utoipa_axum::routes!(routes::rag::delete_rag_conversation))
+        .routes(utoipa_axum::routes!(routes::rag::resolve_rag_citation))
         .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))

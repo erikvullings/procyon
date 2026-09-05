@@ -324,6 +324,12 @@ pub struct QueryEvidence {
     pub record_kind: String,
     /// Bounded display excerpt.
     pub excerpt: String,
+    /// Complete structurally bounded source content.
+    pub content: String,
+    /// Token count from the active local tokenizer.
+    pub token_count: usize,
+    /// Bounded structural heading hierarchy.
+    pub section_path: Vec<String>,
     /// Position in source order.
     pub source_position: u32,
     /// Whether this evidence was generated rather than extracted.
@@ -1250,7 +1256,8 @@ impl CatalogReader {
         let mut statement = transaction.prepare(
             "SELECT r.record_id, r.library_id, r.document_id, o.occurrence_id,
                     o.source_id, r.provenance, r.generation, r.record_kind,
-                    r.excerpt, r.source_position, r.generated, d.content_hash,
+                    r.excerpt, r.content, r.token_count, r.section_path_json,
+                    r.source_position, r.generated, d.content_hash,
                     o.available, o.media_type, o.modified_at_ms
              FROM records r
              JOIN generations g
@@ -1306,12 +1313,15 @@ impl CatalogReader {
                             generation,
                             row.get::<_, String>(7)?,
                             row.get::<_, String>(8)?,
-                            row.get::<_, i64>(9)?,
+                            row.get::<_, String>(9)?,
                             row.get::<_, i64>(10)?,
                             row.get::<_, String>(11)?,
                             row.get::<_, i64>(12)?,
-                            row.get::<_, String>(13)?,
-                            row.get::<_, i64>(14)?,
+                            row.get::<_, i64>(13)?,
+                            row.get::<_, String>(14)?,
+                            row.get::<_, i64>(15)?,
+                            row.get::<_, String>(16)?,
+                            row.get::<_, i64>(17)?,
                         ))
                     },
                 )
@@ -1326,6 +1336,9 @@ impl CatalogReader {
                 generation,
                 record_kind,
                 excerpt,
+                content,
+                token_count,
+                section_path_json,
                 source_position,
                 generated,
                 content_hash,
@@ -1345,6 +1358,11 @@ impl CatalogReader {
                         .map_err(|_| StorageError::CorruptCatalog)?,
                     record_kind,
                     excerpt,
+                    content,
+                    token_count: usize::try_from(token_count)
+                        .map_err(|_| StorageError::CorruptCatalog)?,
+                    section_path: serde_json::from_str(&section_path_json)
+                        .map_err(|_| StorageError::CorruptCatalog)?,
                     source_position: u32::try_from(source_position)
                         .map_err(|_| StorageError::CorruptCatalog)?,
                     generated: generated != 0,
@@ -1356,6 +1374,57 @@ impl CatalogReader {
             }
         }
         Ok(evidence)
+    }
+
+    /// Loads source chunks immediately surrounding an authorized evidence row.
+    ///
+    /// The returned rows are re-authorized through the same tenant and scope
+    /// filters as vector candidates; generated records are never expanded.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog failure or rejects an excessive radius.
+    pub fn adjacent_source_chunks(
+        &self,
+        anchor: &QueryEvidence,
+        radius: u32,
+        filters: &QueryFilters,
+    ) -> Result<Vec<QueryEvidence>, StorageError> {
+        if radius > 4 {
+            return Err(StorageError::InvalidIdentifier("adjacent_radius"));
+        }
+        let lower = anchor.source_position.saturating_sub(radius);
+        let upper = anchor.source_position.saturating_add(radius);
+        let connection = self.catalog.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT record_id
+             FROM records
+             WHERE tenant_id = ?1
+               AND library_id = ?2
+               AND document_id = ?3
+               AND occurrence_id = ?4
+               AND generation = ?5
+               AND generated = 0
+               AND source_position BETWEEN ?6 AND ?7
+             ORDER BY source_position, record_id",
+        )?;
+        let record_ids = statement
+            .query_map(
+                params![
+                    filters.tenant_id,
+                    anchor.library_id,
+                    anchor.document_id,
+                    anchor.occurrence_id,
+                    i64_generation(anchor.generation)?,
+                    i64::from(lower),
+                    i64::from(upper),
+                ],
+                |row| row.get::<_, String>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+        drop(connection);
+        self.filter_visible_candidates(&record_ids, filters)
     }
 }
 

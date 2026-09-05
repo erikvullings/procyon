@@ -1,6 +1,6 @@
 # 0186 Grounded RAG Ask experience
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend, rag
 Depends on: 0183, 0184
@@ -65,3 +65,15 @@ scope, change instructions, request secrets, or invoke Procyon actions.
 
 - 2026-09-04: Split from 0176. Ask defaults to the entire library but always displays scope; it is
   grounded and read-only by default with an explicit model-knowledge toggle.
+- 2026-09-07: Implemented deterministic local retrieval with authoritative scope filters,
+  score thresholds, per-document diversity, adjacent structural expansion, complete-chunk token
+  packing, stale/unavailable evidence, and source-backed summary citations. Added host-owned,
+  injection-resistant prompt assembly and bounded server-owned multi-turn conversations.
+- 2026-09-07: Added equivalent REST, Tauri, and mock transports; an accessible inspect-before-
+  generate Ask dialog with all five scopes, locality and coverage disclosure, grounded/model-
+  knowledge modes, cancellation/error states, citation navigation, explicit save/delete with
+  storage reporting, and export/share preview. Ask is hidden unless both the semantic library and
+  a generation profile are available.
+- 2026-09-07: Verified retrieval budgets/diversity, prompt minimization and injection resistance,
+  model-knowledge/history bounds, tenant-isolated persistence/deletion, adapter parity, shell
+  integration, and keyboard/screen-reader semantics with focused Rust and frontend suites.

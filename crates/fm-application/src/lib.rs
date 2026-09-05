@@ -35,6 +35,8 @@ mod operations_coordinator;
 mod platform_mapping;
 mod plugin_manager;
 mod pptx_preview;
+pub mod rag;
+mod rag_mapping;
 mod remote_terminal;
 mod s3;
 mod search_comparison_coordinator;

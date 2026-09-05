@@ -28,6 +28,7 @@ import type {
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -47,6 +48,8 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -79,7 +82,9 @@ import type {
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -88,12 +93,16 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -235,6 +244,12 @@ import {
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  resolveRagCitation as requestRagCitationResolution,
+  deleteRagConversation as requestRagConversationDeletion,
+  listSavedRagConversations as requestRagConversationList,
+  saveRagConversation as requestRagConversationSave,
+  generateRagAnswer as requestRagGeneration,
+  previewRag as requestRagPreview,
   readFileRange as requestReadFileRange,
   getRuntimeCapabilities as requestRuntimeCapabilities,
   saveEditableFile as requestSaveEditableFile,
@@ -1971,6 +1986,80 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw new Error(`Unexpected getDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
+    const response = await requestRagPreview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected previewRag response status: ${response.status}`);
+    return response.data;
+  }
+
+  async generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    const response = await requestRagGeneration(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected generateRagAnswer response status: ${response.status}`);
+    return response.data;
+  }
+
+  async saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    const response = await requestRagConversationSave(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected saveRagConversation response status: ${response.status}`);
+    return response.data;
+  }
+
+  async listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    const response = await requestRagConversationList(
+      { workspaceId },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected listSavedRagConversations response status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestRagConversationDeletion(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected deleteRagConversation response status: ${response.status}`);
+  }
+
+  async resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    const response = await requestRagCitationResolution(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected resolveRagCitation response status: ${response.status}`);
     return response.data;
   }
 

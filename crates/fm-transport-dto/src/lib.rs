@@ -22,6 +22,7 @@ pub mod llm_profile;
 pub mod location;
 pub mod operation;
 pub mod plugin;
+pub mod rag;
 pub mod redaction;
 pub mod requests;
 pub mod runtime;
@@ -122,6 +123,13 @@ pub use operation::{
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,
     PluginLogEntryDto, PluginPermissionsDto,
+};
+pub use rag::{
+    DeleteRagConversationRequestDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
+    ListSavedRagConversationsRequestDto, PreviewRagRequestDto, RagAnswerDto, RagAnswerEventDto,
+    RagCitationDto, RagCoverageDto, RagEvidenceDto, RagPreviewDto, RagScopeDto, RagScopeKindDto,
+    ResolveRagCitationRequestDto, ResolvedRagCitationDto, SaveRagConversationRequestDto,
+    SavedRagConversationDto, SavedRagTurnDto,
 };
 pub use redaction::{redact, redact_absolute_paths, redact_path};
 pub use requests::{

@@ -18,6 +18,7 @@ pub(crate) mod llm_profile;
 pub(crate) mod onedrive_authorization;
 pub(crate) mod operation;
 pub(crate) mod plugin;
+pub(crate) mod rag;
 pub(crate) mod runtime;
 pub(crate) mod search;
 pub(crate) mod semantic_components;

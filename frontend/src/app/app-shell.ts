@@ -388,6 +388,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connections: readonly Connection[] = [];
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
+  let ragAskAvailable = false;
   let functionKeyModifiers: FunctionKeyModifiers = {};
   /** Last non-empty Quick Filter query per tab key, for the Ctrl+Shift+S "reactivate" shortcut. */
   const lastQuickFilterQueryByTabKey = new Map<string, string>();
@@ -1794,6 +1795,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
   }
 
+  function openRagAsk(): void {
+    const active = activeDirectory();
+    if (workspace === undefined || active === undefined) return;
+    const key = activeTabKey(active.paneId);
+    const directory = directories.get(key);
+    const selectedIds = new Set(selections.get(key)?.selectedEntryIds ?? []);
+    const presentation = findFilesPresentationsByLocationUri.get(active.location.uri);
+    const semanticSourceIds = [
+      ...new Set(
+        (presentation?.semanticResults ?? []).flatMap((result) => [
+          result.bestEvidence.sourceId,
+          ...result.additionalSourceIds,
+        ]),
+      ),
+    ];
+    dialogs.openRagAskDialog({
+      workspaceId: workspace.id,
+      currentFolder: active.location,
+      selectedEntries:
+        directory?.entries.filter((entry) => selectedIds.has(entry.id) && entry.kind === 'file') ??
+        [],
+      semanticSourceIds,
+    });
+  }
+
   /** The composite `paneId:tabId` key of the active pane's active tab, for terminal binding. */
   function activeTerminalTabKey(): string | undefined {
     const active = activeDirectory();
@@ -3105,9 +3131,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getOpsController: () => opsController,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
     getActivePaneId: () => activeDirectory()?.paneId,
-    navigateActiveLocation: async (location) => {
+    navigateActiveLocation: async (location, preferredCursorName) => {
       const paneId = activeDirectory()?.paneId;
-      if (paneId !== undefined) await navigation.navigate(paneId, location);
+      if (paneId !== undefined) await navigation.navigate(paneId, location, preferredCursorName);
     },
     getFocusPane: () => focusPane,
     getSettings: () => currentSettings,
@@ -3138,6 +3164,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   return {
     oninit: ({ attrs }) => {
       attrsClient = attrs.client;
+      void Promise.all([attrs.client.getSemanticLibraryStatus(), attrs.client.listLlmProfiles()])
+        .then(([library, profiles]) => {
+          ragAskAvailable = library.available && profiles.length > 0;
+          m.redraw();
+        })
+        .catch(() => {
+          ragAskAvailable = false;
+        });
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
@@ -3539,6 +3573,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 searchIcon(),
               ),
             ),
+            ragAskAvailable
+              ? m(
+                  'button.btn-flat.fm-rag-ask-trigger',
+                  {
+                    type: 'button',
+                    disabled: activeDirectory() === undefined,
+                    onclick: openRagAsk,
+                  },
+                  t('ragAsk', 'title'),
+                )
+              : undefined,
             tooltip(
               t('shell', 'comparePanes'),
               m(

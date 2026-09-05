@@ -32,6 +32,7 @@ import type {
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
   DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -50,6 +51,8 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -82,7 +85,9 @@ import type {
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -91,12 +96,16 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
@@ -1033,6 +1042,45 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<DocumentSummary | null> {
     return invoke<DocumentSummary | null>('get_document_summary', { request });
+  }
+
+  previewRag(request: PreviewRagRequest, _signal?: AbortSignal): Promise<RagPreview> {
+    return invoke<RagPreview>('preview_rag', { request });
+  }
+
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    _signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    return invoke<GenerateRagAnswerResponse>('generate_rag_answer', { request });
+  }
+
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    return invoke<SavedRagConversation>('save_rag_conversation', { request });
+  }
+
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    _signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    return invoke<SavedRagConversation[]>('list_saved_rag_conversations', { workspaceId });
+  }
+
+  deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('delete_rag_conversation', { request });
+  }
+
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    _signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    return invoke<ResolvedRagCitation>('resolve_rag_citation', { request });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

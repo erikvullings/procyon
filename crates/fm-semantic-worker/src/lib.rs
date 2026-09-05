@@ -6,6 +6,7 @@
 pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;
+pub mod rag_retrieval;
 pub mod representative_selection;
 pub mod semantic_search;
 pub mod semantic_storage;
