@@ -1,0 +1,20 @@
+[package]
+name = "fm-semantic-docling"
+description = "Optional docling.rs PDF adapter for Procyon semantic conversion."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+ml = ["docling-pdf/ml"]
+
+[dependencies]
+docling-core.workspace = true
+docling-pdf.workspace = true
+fm-semantic-conversion.workspace = true
+lopdf.workspace = true
+
+[lints]
+workspace = true

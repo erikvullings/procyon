@@ -3,6 +3,7 @@
 mod catalog;
 mod data_root;
 mod deletion;
+mod docling_pack;
 mod installer;
 mod model_migration;
 mod model_pack;
@@ -27,6 +28,10 @@ pub use deletion::{
     DeletionTarget, EnrolmentDeletionCounts, EnrolmentDeletionError, EnrolmentDeletionPlan,
     EnrolmentDeletionResult, EnrolmentId,
 };
+pub use docling_pack::{
+    DOCLING_PDF_PACK_ID, DOCLING_PDF_TARGETS, DOCLING_RS_REVISION, DOCLING_RS_VERSION,
+    DoclingPackRelease,
+};
 pub use installer::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactRequest, ArtifactSource,
     ArtifactSourceError, ComponentCleanupIssue, ComponentManager, ComponentQuiescer,
@@ -43,8 +48,9 @@ pub use model_pack::{
 };
 pub use optional_pack::{
     AdvancedCapabilityKind, AdvancedEvaluationReport, AdvancedFixture, AdvancedFixtureResult,
-    AdvancedPackError, AdvancedPackKind, AdvancedPackManifest, AdvancedPackRegistry,
-    AdvancedPackResources, AdvancedPackStatus, SignedAdvancedPackManifest, TrustedAdvancedPack,
+    AdvancedPackActivationPlan, AdvancedPackDependency, AdvancedPackError, AdvancedPackKind,
+    AdvancedPackManifest, AdvancedPackRegistry, AdvancedPackResources, AdvancedPackStatus,
+    SignedAdvancedPackManifest, TrustedAdvancedPack,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,

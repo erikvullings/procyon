@@ -360,6 +360,15 @@ pub enum ConversionWarning {
         /// What was not read.
         detail: String,
     },
+    /// OCR configuration and aggregate recognition confidence disclosed by an
+    /// advanced converter.
+    OcrAssessment {
+        /// Stable language selection used by the OCR model.
+        language: String,
+        /// Mean OCR confidence in basis points (`10_000` = 1.0), when the
+        /// backend could measure it.
+        mean_confidence_basis_points: Option<u16>,
+    },
 }
 
 /// Content that a bounded conversion deliberately left out.

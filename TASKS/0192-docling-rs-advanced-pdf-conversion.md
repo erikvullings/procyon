@@ -1,6 +1,6 @@
 # 0192 Docling.rs advanced PDF conversion
 
-Status: open
+Status: blocked
 Priority: high
 Subsystem: backend, search, packaging
 Depends on: 0189
@@ -90,3 +90,25 @@ packs.
   official `docling.rs` project already provides the relevant Rust and ONNX Modules. Begin with an
   independently measured Adapter spike; retain the current `lopdf` Implementation as fallback until
   the advanced pack passes quality, resource, cancellation, malformed-input, and packaging gates.
+- 2026-09-06: Implementation started on `semantic-worker-ipc`, where the completed 0177–0189
+  prerequisite chain and `AdvancedConverterBackend` Seam exist. The main-based planning session
+  cannot implement this task until that chain lands.
+- 2026-09-06: Pinned `docling-core`/`docling-pdf` 1.36.0 and added a separate
+  `fm-semantic-docling` Module. The deterministic Adapter now proves public-Interface PDF
+  conversion, position-aware column ordering, structural mapping, page citations, furniture/page
+  number suppression, sanitization, and output/page/depth/cancellation limits. The optional ML
+  build type-checks offline and maps headings, lists, tables, formulas, OCR language/confidence,
+  and partial page failures. A build guard rejects ML builds unless ONNX downloads are disabled.
+- 2026-09-06: Advanced selection can now prefer an installed converter while retaining typed
+  baseline fallback. Signed pack schema 2 adds native/model provenance, affected-format migration
+  plans, a material nDCG promotion gate, target-specific Docling manifests, and correct no-op
+  rollback reporting. The audit and release gate are documented in
+  `docs/docling-pdf-evaluation.md`.
+- 2026-09-06: Blocked release promotion after code review confirmed an upstream architectural gap:
+  Docling 1.36.0 cannot interrupt a render/inference operation within one page, while Procyon's
+  worker launcher currently relinquishes the child-process handle and therefore cannot enforce a
+  kill-and-restart deadline. The ML pack must remain unpromoted until a killable subprocess
+  watchdog is implemented and exercised, Procyon-owned checksum/signature inventories are produced
+  for PDFium/ONNX/models on every target, and the reproducible PDF corpus supplies actual
+  quality/resource/retrieval measurements. Task 0192 and its README checkbox intentionally remain
+  incomplete rather than substituting invented metrics or self-reported upstream conformance.

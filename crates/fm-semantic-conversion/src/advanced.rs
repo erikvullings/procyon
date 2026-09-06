@@ -142,10 +142,18 @@ impl DocumentConverter for AdvancedConverterAdapter {
     }
 }
 
-/// Baseline-first converter whose optional pack is used only for baseline gaps.
+/// Selection policy for an installed advanced converter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AdvancedSelection {
+    BaselineGaps,
+    Preferred,
+}
+
+/// Converter that keeps the baseline available while an optional pack is active.
 pub struct OptionalConverter {
     baseline: Arc<dyn DocumentConverter>,
     advanced: Option<Arc<AdvancedConverterAdapter>>,
+    selection: AdvancedSelection,
 }
 
 impl OptionalConverter {
@@ -155,7 +163,26 @@ impl OptionalConverter {
         baseline: Arc<dyn DocumentConverter>,
         advanced: Option<Arc<AdvancedConverterAdapter>>,
     ) -> Self {
-        Self { baseline, advanced }
+        Self {
+            baseline,
+            advanced,
+            selection: AdvancedSelection::BaselineGaps,
+        }
+    }
+
+    /// Creates a converter that tries the installed advanced Implementation
+    /// first and falls back to the baseline on absence, incompatibility, or a
+    /// recoverable runtime failure.
+    #[must_use]
+    pub fn prefer_advanced(
+        baseline: Arc<dyn DocumentConverter>,
+        advanced: Option<Arc<AdvancedConverterAdapter>>,
+    ) -> Self {
+        Self {
+            baseline,
+            advanced,
+            selection: AdvancedSelection::Preferred,
+        }
     }
 }
 
@@ -176,6 +203,30 @@ impl DocumentConverter for OptionalConverter {
             BoundedBytes::Bytes(bytes) => bytes,
             BoundedBytes::Outcome(outcome) => return Ok(outcome),
         };
+        if self.selection == AdvancedSelection::Preferred
+            && let Some(advanced) = &self.advanced
+        {
+            let advanced_outcome = advanced
+                .convert_with_report(SourceContent::Bytes(&bytes), metadata, context)?
+                .outcome;
+            if matches!(
+                advanced_outcome,
+                ConversionOutcome::Converted(_)
+                    | ConversionOutcome::Cancelled
+                    | ConversionOutcome::OverBudget { .. }
+                    | ConversionOutcome::Encrypted { .. }
+            ) {
+                return Ok(advanced_outcome);
+            }
+            let baseline =
+                self.baseline
+                    .convert(SourceContent::Bytes(&bytes), metadata, context)?;
+            return Ok(match (&advanced_outcome, &baseline) {
+                (_, ConversionOutcome::Converted(_))
+                | (ConversionOutcome::Unsupported { .. }, _) => baseline,
+                _ => advanced_outcome,
+            });
+        }
         let baseline = self
             .baseline
             .convert(SourceContent::Bytes(&bytes), metadata, context)?;

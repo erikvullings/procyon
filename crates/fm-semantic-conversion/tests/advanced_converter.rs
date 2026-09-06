@@ -115,6 +115,51 @@ fn removing_advanced_pack_keeps_baseline_documents_readable() {
 }
 
 #[test]
+fn preferred_advanced_converter_replaces_baseline_and_falls_back_on_failure() {
+    let preferred = OptionalConverter::prefer_advanced(
+        Arc::new(BaselineConverter::new()),
+        Some(Arc::new(AdvancedConverterAdapter::new(Arc::new(
+            OcrBackend {
+                malformed: false,
+                clock: None,
+            },
+        )))),
+    );
+    let advanced = preferred
+        .convert(
+            SourceContent::Bytes(b"%PDF-1.7 fixture"),
+            &DocumentMetadata::unknown().with_media_type("application/pdf"),
+            &ConversionContext::new(),
+        )
+        .expect("preferred advanced conversion");
+    assert_eq!(
+        advanced.document().expect("advanced document").converter(),
+        ComponentVersion::new("fixture-ocr", 1)
+    );
+
+    let failing = OptionalConverter::prefer_advanced(
+        Arc::new(BaselineConverter::new()),
+        Some(Arc::new(AdvancedConverterAdapter::new(Arc::new(
+            OcrBackend {
+                malformed: true,
+                clock: None,
+            },
+        )))),
+    );
+    let fallback = failing
+        .convert(
+            SourceContent::Bytes(b"baseline survives a pack runtime failure"),
+            &DocumentMetadata::unknown().with_media_type("text/plain"),
+            &ConversionContext::new(),
+        )
+        .expect("baseline fallback");
+    assert_eq!(
+        fallback.document().expect("baseline document").converter(),
+        fm_semantic_conversion::BASELINE_CONVERTER_VERSION
+    );
+}
+
+#[test]
 fn malformed_or_over_budget_advanced_output_is_rejected() {
     let advanced = AdvancedConverterAdapter::new(Arc::new(OcrBackend {
         malformed: true,

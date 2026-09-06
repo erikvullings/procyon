@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-const PACK_SCHEMA_VERSION: u32 = 1;
-const MINIMUM_RERANKER_NDCG_GAIN: f64 = 0.02;
+const PACK_SCHEMA_VERSION: u32 = 2;
+const MINIMUM_QUALITY_NDCG_GAIN: f64 = 0.02;
 const MAX_TARGETS: usize = 32;
+const MAX_DEPENDENCIES: usize = 64;
 const MAX_TARGET_BYTES: usize = 128;
 const MAX_URL_BYTES: usize = 2_048;
 const MAX_MIGRATION_IMPACT_BYTES: usize = 4_096;
@@ -103,6 +104,22 @@ pub struct AdvancedPackResources {
     pub peak_ram_bytes: u64,
 }
 
+/// One native runtime, model, tokenizer, or executable covered by a pack.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvancedPackDependency {
+    /// Stable role such as `pdfium`, `onnx-runtime`, or `ocr-recognizer`.
+    pub role: String,
+    /// Immutable upstream version or revision.
+    pub version: String,
+    /// Declared upstream license identifier.
+    pub license: String,
+    /// Immutable HTTPS acquisition location used by release packaging.
+    pub source_url: String,
+    /// Lowercase SHA-256 of the exact source artifact.
+    pub sha256: String,
+}
+
 /// Evaluation evidence embedded in the signed manifest.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +168,13 @@ pub struct AdvancedPackManifest {
     pub kind: AdvancedPackKind,
     /// Disclosed features.
     pub capabilities: BTreeSet<AdvancedCapabilityKind>,
+    /// Lowercase format identifiers whose converter fingerprints change on
+    /// activation. Non-converter packs leave this empty.
+    #[serde(default)]
+    pub affected_formats: BTreeSet<String>,
+    /// Signed native/model provenance for everything inside the pack.
+    #[serde(default)]
+    pub dependencies: Vec<AdvancedPackDependency>,
     /// HTTPS artifact location.
     pub artifact_url: String,
     /// Lowercase SHA-256 artifact digest.
@@ -201,6 +225,32 @@ impl AdvancedPackManifest {
                     || target.len() > MAX_TARGET_BYTES
                     || !target.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                    })
+            })
+        {
+            return Err(AdvancedPackError::InvalidManifest);
+        }
+        if (self.kind == AdvancedPackKind::Converter && self.affected_formats.is_empty())
+            || (self.kind != AdvancedPackKind::Converter && !self.affected_formats.is_empty())
+            || self.affected_formats.len() > 32
+            || self.affected_formats.iter().any(|format| !safe_id(format))
+        {
+            return Err(AdvancedPackError::InvalidManifest);
+        }
+        if self.dependencies.is_empty()
+            || self.dependencies.len() > MAX_DEPENDENCIES
+            || self.dependencies.iter().any(|dependency| {
+                !safe_id(&dependency.role)
+                    || dependency.version.trim().is_empty()
+                    || dependency.version.len() > 256
+                    || !safe_id(&dependency.license)
+                    || !is_sha256(&dependency.sha256)
+                    || dependency.source_url.len() > MAX_URL_BYTES
+                    || url::Url::parse(&dependency.source_url).map_or(true, |url| {
+                        url.scheme() != "https"
+                            || url.host_str().is_none()
+                            || !url.username().is_empty()
+                            || url.password().is_some()
                     })
             })
         {
@@ -259,8 +309,10 @@ impl AdvancedEvaluationReport {
         {
             return Err(AdvancedPackError::IncompleteEvaluation);
         }
-        if kind == AdvancedPackKind::Reranker
-            && self.candidate_ndcg - self.baseline_ndcg < MINIMUM_RERANKER_NDCG_GAIN
+        if matches!(
+            kind,
+            AdvancedPackKind::Converter | AdvancedPackKind::Reranker
+        ) && self.candidate_ndcg - self.baseline_ndcg < MINIMUM_QUALITY_NDCG_GAIN
         {
             return Err(AdvancedPackError::InsufficientQualityGain);
         }
@@ -391,6 +443,19 @@ pub struct AdvancedPackStatus {
     pub rollback_id: Option<String>,
 }
 
+/// Explicit consequences returned before an installed pack is activated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdvancedPackActivationPlan {
+    /// Pack that will become active.
+    pub pack_id: String,
+    /// Currently active pack retained for rollback.
+    pub rollback_id: Option<String>,
+    /// Formats whose derived documents and vectors require rebuilding.
+    pub affected_formats: BTreeSet<String>,
+    /// Signed human-readable migration and rollback impact.
+    pub migration_impact: String,
+}
+
 /// In-memory lifecycle state used behind a durable host adapter.
 #[derive(Default)]
 pub struct AdvancedPackRegistry {
@@ -420,8 +485,30 @@ impl AdvancedPackRegistry {
         Ok(())
     }
 
-    /// Atomically selects an installed pack while retaining one rollback.
-    pub fn activate(&mut self, id: &str) -> Result<(), AdvancedPackError> {
+    /// Describes the signed reindex and rollback consequences of activation.
+    pub fn activation_plan(
+        &self,
+        id: &str,
+    ) -> Result<AdvancedPackActivationPlan, AdvancedPackError> {
+        let pack = self
+            .installed
+            .get(id)
+            .ok_or(AdvancedPackError::NotInstalled)?;
+        Ok(AdvancedPackActivationPlan {
+            pack_id: id.to_owned(),
+            rollback_id: match self.active.get(&pack.manifest.kind) {
+                Some(active) if active == id => self.rollback.get(&pack.manifest.kind).cloned(),
+                active => active.cloned(),
+            },
+            affected_formats: pack.manifest.affected_formats.clone(),
+            migration_impact: pack.manifest.evaluation.migration_impact.clone(),
+        })
+    }
+
+    /// Atomically selects an installed pack while retaining one rollback and
+    /// returns the reindex plan the host must execute.
+    pub fn activate(&mut self, id: &str) -> Result<AdvancedPackActivationPlan, AdvancedPackError> {
+        let plan = self.activation_plan(id)?;
         let kind = self
             .installed
             .get(id)
@@ -432,7 +519,7 @@ impl AdvancedPackRegistry {
         {
             self.rollback.insert(kind, previous);
         }
-        Ok(())
+        Ok(plan)
     }
 
     /// Restores the previously active pack after startup/runtime failure.
@@ -527,8 +614,8 @@ pub enum AdvancedPackError {
     /// Required quality/performance fixtures or impacts are absent.
     #[error("advanced pack evaluation evidence is incomplete")]
     IncompleteEvaluation,
-    /// A reranker did not materially improve the baseline.
-    #[error("advanced reranker did not meet the minimum nDCG gain")]
+    /// A quality-affecting pack did not materially improve the baseline.
+    #[error("advanced pack did not meet the minimum nDCG gain")]
     InsufficientQualityGain,
     /// Downloaded bytes did not match the signed digest.
     #[error("advanced pack payload checksum is invalid")]

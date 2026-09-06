@@ -231,11 +231,23 @@ signature, compatibility, policy, and payload before activation; activation reta
 version per capability family. Removing one family does not alter the others.
 
 Advanced converters receive bounded bytes and trusted metadata, never paths, credentials, provider
-handles, or network authority. Baseline conversion runs first and remains authoritative for every
-format it supports. Advanced output must preserve the task-0180 structure, report provenance
-precision and omissions, and pass the same source, expansion, output, timeout, and cancellation
-limits. Removing the pack therefore returns unsupported scanned or complex documents to their
-typed baseline outcome without affecting baseline-readable documents.
+handles, or network authority. The default selection remains baseline-first. A promoted
+format-specific pack may explicitly select advanced-first conversion; successful advanced output
+then carries its own converter fingerprint, while pack absence, incompatibility, or recoverable
+runtime failure falls back to the baseline. Cancellation, resource-limit, and encryption outcomes
+are not hidden by fallback. Advanced output must preserve the task-0180 structure, report
+provenance precision and omissions, and pass the same source, expansion, output, timeout, and
+cancellation limits.
+
+The Docling PDF candidate is pinned and audited in
+[`docling-pdf-evaluation.md`](docling-pdf-evaluation.md). Its deterministic text-layer Adapter is
+pure Rust. The ML mode requires a Procyon-signed managed pack containing PDFium, ONNX Runtime,
+layout/OCR/TableFormer models and tokenizers; release builds set `ORT_SKIP_DOWNLOAD=1` and point
+Docling only at checksum-verified installed assets. Activating a converter pack returns its signed
+affected formats and migration impact. The host must obtain consent for the disclosed
+download/disk/RAM cost, rebuild affected PDFs into a candidate generation, and retain the previous
+pack and active index until the candidate is complete. Removal or rollback restores baseline PDF
+conversion without changing library enrolment.
 
 Acceleration starts in CPU mode. Before sharing an existing index, the accelerated backend must
 match CPU vectors within the configured tolerance. A different embedding space is exposed as an
