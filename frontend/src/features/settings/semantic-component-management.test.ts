@@ -474,6 +474,40 @@ describe('SemanticComponentManagement', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Multilingual quality'));
   });
 
+  it('shows a failed migration confirmation directly below its confirmation button', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    vi.spyOn(client, 'confirmSemanticComponentModelMigration').mockRejectedValue(
+      new MockClientError(
+        'installedArtifactInvalid',
+        'artifact `procyon.dev.worker` failed integrity validation',
+      ),
+    );
+    mountComponent(client);
+    await waitForLoaded();
+    root
+      .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
+      ?.setAttribute('open', '');
+    root
+      .querySelector<HTMLInputElement>(
+        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
+      )
+      ?.click();
+    m.redraw.sync();
+    button('Review model change').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Full reindex required'));
+
+    const confirmation = button('Confirm migration');
+    confirmation.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-action-error')?.textContent).toContain(
+        'failed integrity validation',
+      ),
+    );
+    expect(root.querySelectorAll('.fm-semantic-action-error')).toHaveLength(1);
+    expect(confirmation.nextElementSibling).toBe(root.querySelector('.fm-semantic-action-error'));
+  });
+
   it('collects every required local-model metadata field without offering a URL field', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const importModel = vi.spyOn(client, 'importSemanticComponentLocalModel');

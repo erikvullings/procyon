@@ -13,6 +13,9 @@ content search, and baseline document viewing available.
   native Zvec runtime, two model packs, SHA-256 checksums, and a catalog signed by the repository's
   public development key. It is supported where Zvec 0.7 publishes a native runtime: Apple-silicon
   macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable.
+- Developer artifact IDs and the catalog revision include a content-derived digest. Rebuilding
+  changed worker, runtime, or model bytes therefore creates a distinct immutable artifact instead
+  of colliding with an earlier bundle installed under the same workspace version.
 - `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.

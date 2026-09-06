@@ -1,6 +1,7 @@
 //! Builds a host-platform semantic bundle for local pipeline testing.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -141,32 +142,38 @@ fn build_bundle_inner(
     let target = TargetTriple::new(std::env::consts::OS, std::env::consts::ARCH)?;
     let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
     let target_label = format!("{}-{}", target.operating_system(), target.architecture());
-    let worker_id = ArtifactId::new(format!(
-        "procyon.dev.worker.{target_label}.{}",
-        version.to_string().replace('-', ".")
-    ))?;
-    let runtime_id = ArtifactId::new(format!(
-        "procyon.dev.runtime.{target_label}.{}",
-        version.to_string().replace('-', ".")
-    ))?;
-    let model_id = ArtifactId::new("procyon.dev.model.hashing-embedding.v1")?;
-    let multilingual_id = ArtifactId::new("procyon.dev.model.multilingual-e5-small.v1")?;
 
     let staging = output.with_extension("building");
     remove_existing(&staging)?;
     fs::create_dir_all(staging.join("artifacts"))?;
 
     let worker_bytes = fs::read(worker)?;
+    let worker_checksum = Sha256Digest::calculate(&worker_bytes);
+    let worker_id = content_addressed_id(
+        &format!(
+            "procyon.dev.worker.{target_label}.{}",
+            version.to_string().replace('-', ".")
+        ),
+        worker_checksum,
+    )?;
     write_artifact(&staging, &worker_id, &worker_bytes)?;
     preserve_executable_permissions(worker, &staging.join("artifacts").join(worker_id.as_str()))?;
 
     let runtime_bytes = fs::read(native_runtime)?;
+    let runtime_checksum = Sha256Digest::calculate(&runtime_bytes);
+    let runtime_id = content_addressed_id(
+        &format!(
+            "procyon.dev.runtime.{target_label}.{}",
+            version.to_string().replace('-', ".")
+        ),
+        runtime_checksum,
+    )?;
     write_artifact(&staging, &runtime_id, &runtime_bytes)?;
 
     // The deterministic fixture carries no learned parameters, so its pack is
     // an index and nothing else. Packing it anyway keeps one loading path in
     // the worker and one activation contract in the host.
-    let fixture_pack = staging.join("artifacts").join(model_id.as_str());
+    let fixture_pack = staging.join("artifacts").join(".hashing-model-pack");
     write_model_pack(
         &fixture_pack,
         &ModelPackSpec {
@@ -184,6 +191,12 @@ fn build_bundle_inner(
         },
     )?;
     let model_bytes = fs::read(&fixture_pack)?;
+    let model_checksum = Sha256Digest::calculate(&model_bytes);
+    let model_id = content_addressed_id("procyon.dev.model.hashing-embedding.v1", model_checksum)?;
+    fs::rename(
+        &fixture_pack,
+        staging.join("artifacts").join(model_id.as_str()),
+    )?;
 
     let runtime_component = ComponentId::new("procyon.dev.runtime")?;
     let model_identity = ModelIdentity::new(
@@ -208,7 +221,7 @@ fn build_bundle_inner(
         8 * 1024 * 1024,
     )?;
 
-    let multilingual_pack = staging.join("artifacts").join(multilingual_id.as_str());
+    let multilingual_pack = staging.join("artifacts").join(".multilingual-model-pack");
     write_model_pack(
         &multilingual_pack,
         &ModelPackSpec {
@@ -233,6 +246,15 @@ fn build_bundle_inner(
     }
     let multilingual_bytes = fs::metadata(&multilingual_pack)?.len();
     let multilingual_checksum = digest_of(&multilingual_pack)?;
+    let multilingual_id = content_addressed_id(
+        "procyon.dev.model.multilingual-e5-small.v1",
+        multilingual_checksum,
+    )?;
+    let multilingual_pack = staging.join("artifacts").join(multilingual_id.as_str());
+    fs::rename(
+        staging.join("artifacts").join(".multilingual-model-pack"),
+        &multilingual_pack,
+    )?;
     let multilingual_identity = ModelIdentity::new(
         ModelId::new(MULTILINGUAL_MODEL_ID)?,
         ModelRevision::new(MULTILINGUAL_REVISION)?,
@@ -263,7 +285,7 @@ fn build_bundle_inner(
         version.clone(),
         development_location(&worker_id)?,
         LicenseInfo::new("MIT", "Procyon semantic worker development build.")?,
-        Sha256Digest::calculate(&worker_bytes),
+        worker_checksum,
         resources(&worker_bytes, 64 * 1024 * 1024)?,
         ArtifactCompatibility::new(
             Some(target.clone()),
@@ -282,7 +304,7 @@ fn build_bundle_inner(
             "Apache-2.0",
             "Zvec native runtime for the explicitly non-production developer bundle.",
         )?,
-        Sha256Digest::calculate(&runtime_bytes),
+        runtime_checksum,
         resources(&runtime_bytes, 8 * 1024 * 1024)?,
         ArtifactCompatibility::new(Some(target), None, Vec::new(), INDEX_SCHEMA_VERSION),
     )?;
@@ -293,7 +315,7 @@ fn build_bundle_inner(
         Version::new(1, 0, 0),
         development_location(&model_id)?,
         model_metadata.license().clone(),
-        Sha256Digest::calculate(&model_bytes),
+        model_checksum,
         resources(&model_bytes, model_metadata.estimated_ram_bytes())?,
         ArtifactCompatibility::new(
             None,
@@ -341,10 +363,21 @@ fn build_bundle_inner(
             multilingual_manifest.metadata().identity().clone(),
         ),
     ]);
+    let mut revision_material = Vec::with_capacity(4 * 32);
+    for checksum in [
+        worker_checksum,
+        runtime_checksum,
+        model_checksum,
+        multilingual_checksum,
+    ] {
+        revision_material.extend_from_slice(checksum.as_bytes());
+    }
+    let revision_checksum = Sha256Digest::calculate(&revision_material);
     let manifest = CatalogManifest::new(
         ManifestRevision::new(format!(
-            "procyon-dev-{target_label}-{}",
-            env!("CARGO_PKG_VERSION")
+            "procyon-dev-{target_label}-{}-{}",
+            env!("CARGO_PKG_VERSION"),
+            digest_prefix(revision_checksum)
         ))?,
         vec![
             worker_artifact,
@@ -379,6 +412,24 @@ fn development_location(id: &ArtifactId) -> Result<ArtifactLocation, Box<dyn std
         "https://developer.invalid/artifacts/{}",
         id.as_str()
     ))?)
+}
+
+fn content_addressed_id(
+    prefix: &str,
+    checksum: Sha256Digest,
+) -> Result<ArtifactId, Box<dyn std::error::Error>> {
+    Ok(ArtifactId::new(format!(
+        "{prefix}.sha256.{}",
+        digest_prefix(checksum)
+    ))?)
+}
+
+fn digest_prefix(checksum: Sha256Digest) -> String {
+    let mut output = String::with_capacity(32);
+    for byte in &checksum.as_bytes()[..16] {
+        write!(&mut output, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    output
 }
 
 fn resources(
@@ -698,6 +749,15 @@ mod tests {
         fs::write(&worker, b"first worker").unwrap();
         fs::write(&runtime, b"development Zvec fixture").unwrap();
         build_fixture_bundle(&worker, &runtime, &cache, &output);
+        let first_catalog = trusted_catalog(&output);
+        let first_worker_id = first_catalog
+            .artifacts()
+            .iter()
+            .find(|artifact| matches!(artifact.kind(), ArtifactKind::Worker))
+            .unwrap()
+            .id()
+            .clone();
+        let first_revision = first_catalog.revision().clone();
         fs::write(output.join("stale"), b"stale").unwrap();
 
         fs::write(&worker, b"second worker").unwrap();
@@ -725,5 +785,8 @@ mod tests {
             worker_artifact.checksum(),
             Sha256Digest::calculate(b"second worker")
         );
+        assert_ne!(worker_artifact.id(), &first_worker_id);
+        assert_ne!(trusted.revision(), &first_revision);
+        assert!(worker_artifact.id().as_str().contains(".sha256."));
     }
 }

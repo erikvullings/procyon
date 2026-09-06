@@ -142,6 +142,10 @@ component pack.
   labelled as a developer tool rather than an alternative curated-profile switch. Profile status
   compares the exact signed model identity, so an installation created by an older catalog can
   update a profile whose display name stayed the same.
+- 2026-09-06 (migration-integrity follow-up): Developer bundle artifacts are content-addressed, so
+  a rebuilt worker/runtime no longer shares an immutable artifact ID with stale installed bytes and
+  block an otherwise valid model migration. Migration confirmation errors now render immediately
+  below the confirmation button instead of above the full settings form.
 
 ## Validation commands
 

@@ -70,3 +70,7 @@ its model is release-quality.
   regression coverage. The developer worker suite, focused application/component/desktop tests,
   full repository lint, release compilation, frontend component tests, and a real Apple-silicon
   bundle build passed. Generated API files remained unchanged.
+- 2026-09-06 (rebuild follow-up): Every developer artifact ID and the catalog revision now include
+  a content-derived digest. Rebuilding changed worker, runtime, or model bytes can upgrade an
+  existing installation without reusing an immutable ID and triggering the installer's corruption
+  guard; full signed SHA-256 verification remains unchanged.

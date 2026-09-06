@@ -613,6 +613,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   let loaded: LoadedState | undefined;
   let loadError: string | undefined;
   let actionError: string | undefined;
+  let actionErrorAction: ActionName | undefined;
   let actionMessage: string | undefined;
   let busy: ActionName | undefined;
   let offer: SemanticInstallationOffer | undefined;
@@ -697,17 +698,22 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     if (busy !== undefined) return;
     busy = name;
     actionError = undefined;
+    actionErrorAction = undefined;
     actionMessage = undefined;
     try {
       await action();
       actionMessage = success?.();
     } catch (error: unknown) {
       actionError = errorMessage(error);
+      actionErrorAction = name;
     } finally {
       try {
         await refreshStatus();
       } catch (error: unknown) {
-        actionError ??= errorMessage(error);
+        if (actionError === undefined) {
+          actionError = errorMessage(error);
+          actionErrorAction = name;
+        }
       }
       busy = undefined;
       m.redraw();
@@ -980,6 +986,13 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               : t('semanticComponents', 'confirmMigration'),
           )
         : undefined,
+      actionError === undefined || actionErrorAction !== 'confirmMigration'
+        ? undefined
+        : m(
+            'p.fm-semantic-action-error',
+            { role: 'alert' },
+            t('semanticComponents', 'actionFailed', { error: actionError }),
+          ),
     ]);
   }
 
@@ -1487,7 +1500,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         actionMessage === undefined
           ? undefined
           : m('p.fm-semantic-action-message', { role: 'status' }, actionMessage),
-        actionError === undefined
+        actionError === undefined || actionErrorAction === 'confirmMigration'
           ? undefined
           : m(
               'p.fm-semantic-action-error',
