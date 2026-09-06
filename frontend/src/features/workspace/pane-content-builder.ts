@@ -609,7 +609,13 @@ export function createPaneContentBuilder(
             expectedRevision: liveWorkspace.revision,
           },
           context.replaceWorkspace,
-        ).catch(() => undefined);
+        )
+          .then(() => {
+            if (context.getWorkspace()?.panesById[paneId]?.activeTabId === tab.id) {
+              void context.getNavigation().load(paneId, { background: true });
+            }
+          })
+          .catch(() => undefined);
       },
       viewMode: tab?.view.viewMode ?? 'table',
       iconSize: tab?.view.iconSize ?? 'medium',

@@ -515,15 +515,30 @@ function nextSort(
   sort: readonly SortDescriptor[] | undefined,
 ): readonly SortDescriptor[] {
   const active = sort?.[0];
+  const direction =
+    active?.columnId === columnId
+      ? active.direction === 'ascending'
+        ? 'descending'
+        : 'ascending'
+      : columnId === 'core.modified'
+        ? 'descending'
+        : 'ascending';
   return [
     {
       columnId,
-      direction:
-        active?.columnId === columnId && active.direction === 'ascending'
-          ? 'descending'
-          : 'ascending',
+      direction,
     },
   ];
+}
+
+function sortActionTitle(
+  columnId: string,
+  sort: readonly SortDescriptor[] | undefined,
+): string | undefined {
+  if (columnId !== 'core.modified') return undefined;
+  return nextSort(columnId, sort)[0]?.direction === 'descending'
+    ? t('table', 'sortNewestFirst')
+    : t('table', 'sortOldestFirst');
 }
 
 function headerView(
@@ -544,6 +559,7 @@ function headerView(
           role: 'columnheader',
           'data-column-id': column.id,
           'aria-sort': attrs.sort?.[0]?.columnId === column.id ? attrs.sort[0].direction : 'none',
+          title: sortActionTitle(column.id, attrs.sort),
           onclick: () => attrs.onSortChange?.(nextSort(column.id, attrs.sort)),
           onkeydown: (event: KeyboardEvent) => {
             if (event.key === 'Enter' || event.key === ' ') {

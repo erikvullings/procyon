@@ -19,10 +19,11 @@ fn service() -> DirectoryService {
 }
 
 #[tokio::test]
-async fn open_directory_publishes_batched_create_rename_delete_deltas() {
+async fn open_downloads_like_directory_publishes_batched_create_rename_delete_deltas() {
     let root = tempfile::tempdir().expect("must create a temp directory");
-    let location =
-        Location::from_native_path(root.path()).expect("temp path must be representable");
+    let downloads = root.path().join("Downloads");
+    std::fs::create_dir(&downloads).expect("must create Downloads fixture");
+    let location = Location::from_native_path(&downloads).expect("temp path must be representable");
     let workspace_id = fm_domain::WorkspaceId::new();
     let pane_id = PaneId::new();
     let events = EventBus::new(32);
@@ -35,7 +36,7 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
     let mut subscription = events.subscribe(SessionId::new("test"), [workspace_id], None);
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
 
-    std::fs::write(root.path().join("before.txt"), b"file").expect("create fixture");
+    std::fs::write(downloads.join("before.txt"), b"file").expect("create fixture");
     let added = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
@@ -58,11 +59,8 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
         event => panic!("unexpected subscription item: {event:?}"),
     };
 
-    std::fs::rename(
-        root.path().join("before.txt"),
-        root.path().join("after.txt"),
-    )
-    .expect("rename fixture");
+    std::fs::rename(downloads.join("before.txt"), downloads.join("after.txt"))
+        .expect("rename fixture");
     let renamed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
@@ -82,7 +80,7 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
         event => panic!("unexpected subscription item: {event:?}"),
     }
 
-    std::fs::remove_file(root.path().join("after.txt")).expect("remove fixture");
+    std::fs::remove_file(downloads.join("after.txt")).expect("remove fixture");
     let removed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
@@ -227,6 +225,99 @@ async fn paging_a_large_directory_returns_every_entry_in_global_sort_order() {
     assert_eq!(
         names, sorted_names,
         "pages must be contiguous slices of one sorted list"
+    );
+}
+
+#[tokio::test]
+async fn watched_paged_directory_resets_to_a_consistent_first_page_after_an_external_addition() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let downloads = root.path().join("Downloads");
+    std::fs::create_dir(&downloads).expect("must create Downloads fixture");
+    for index in 1..=300 {
+        std::fs::write(downloads.join(format!("entry-{index:04}.txt")), b"x")
+            .expect("must create fixture");
+    }
+    let location =
+        Location::from_native_path(&downloads).expect("Downloads path must be representable");
+    let workspace_id = fm_domain::WorkspaceId::new();
+    let pane_id = PaneId::new();
+    let events = EventBus::new(32);
+    let mut providers = ProviderRegistry::new();
+    providers.register(Arc::new(LocalFileSystemProvider));
+    let service = DirectoryService::with_event_bus(providers, events.clone());
+    let mut first_request = request(pane_id, &location);
+    first_request.workspace_id = workspace_id.into();
+    first_request.sort = vec![SortDescriptorDto {
+        column_id: "core.name".to_owned(),
+        direction: SortDirectionDto::Ascending,
+    }];
+    let first = service
+        .list(first_request)
+        .await
+        .expect("first page must load");
+    assert_eq!(first.entries.len(), 256);
+    assert_eq!(first.total_known_entries, Some(300));
+    assert!(first.has_more);
+    assert_eq!(first.continuation_token.as_deref(), Some("256"));
+    let mut subscription = events.subscribe(SessionId::new("test"), [workspace_id], None);
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    std::fs::write(downloads.join("entry-0000-new.txt"), b"new")
+        .expect("must create external fixture");
+    let changed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
+        .await
+        .expect("delta timeout")
+        .expect("event bus open");
+    let reset = match changed {
+        SubscriptionEvent::Event(event) => match event.payload {
+            BackendEventPayload::DirectoryDelta {
+                pane_id: event_pane,
+                delta: DirectoryDeltaPayload::Reset { snapshot },
+            } => {
+                assert_eq!(event_pane, pane_id);
+                snapshot
+            }
+            payload => panic!("expected a paged reset, got {payload:?}"),
+        },
+        event => panic!("unexpected subscription item: {event:?}"),
+    };
+    assert_eq!(reset.entries.len(), 256);
+    assert_eq!(reset.entries[0].name, "entry-0000-new.txt");
+    assert_eq!(reset.total_known_entries, Some(301));
+    assert!(reset.has_more);
+    assert_eq!(reset.continuation_token.as_deref(), Some("256"));
+
+    let mut next_request = request(pane_id, &location);
+    next_request.workspace_id = workspace_id.into();
+    next_request.sort = vec![SortDescriptorDto {
+        column_id: "core.name".to_owned(),
+        direction: SortDirectionDto::Ascending,
+    }];
+    next_request.continuation_token = reset.continuation_token.clone();
+    let next = service
+        .list(next_request)
+        .await
+        .expect("continuation page must load");
+    assert_eq!(next.entries.len(), 45);
+    assert_eq!(next.total_known_entries, Some(301));
+    assert!(!next.has_more);
+    assert_eq!(next.continuation_token, None);
+
+    let names: Vec<_> = reset
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .chain(next.entries.iter().map(|entry| entry.name.clone()))
+        .collect();
+    let unique: std::collections::HashSet<_> = names.iter().collect();
+    assert_eq!(names.len(), 301);
+    assert_eq!(unique.len(), 301);
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| name.as_str() == "entry-0000-new.txt")
+            .count(),
+        1
     );
 }
 

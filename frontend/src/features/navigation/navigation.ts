@@ -89,6 +89,12 @@ export interface NavigationController {
   loadNextPage(paneId: PaneId): Promise<void>;
   /** Loads every remaining page for the pane's current directory (e.g. before jumping to the last entry). */
   loadAllPages(paneId: PaneId): Promise<void>;
+  /**
+   * Replaces the active tab's cached view with an authoritative externally delivered snapshot.
+   * Returns false when the snapshot no longer belongs to that tab or an explicit navigation is
+   * already replacing it.
+   */
+  applySnapshot(paneId: PaneId, snapshot: DirectorySnapshot): boolean;
   /** Cancels a specific tab's in-flight request, e.g. because it just became hidden. */
   abort(paneId: PaneId, tabId: TabId): void;
   /** Re-keys a tab's cached directory view after it moves between panes. */
@@ -317,6 +323,38 @@ export function createNavigationController(
   ): void {
     paneViews.set(tabKey(paneId, tabId), view);
     options.updatePane(paneId, tabId, view, preferredCursorName);
+  }
+
+  function applySnapshot(paneId: PaneId, snapshot: DirectorySnapshot): boolean {
+    const workspace = options.getWorkspace();
+    const tab = workspace === undefined ? undefined : activeTab(workspace, paneId);
+    if (
+      tab === undefined ||
+      snapshot.paneId !== paneId ||
+      snapshot.location.providerId !== tab.location.providerId ||
+      snapshot.location.uri !== tab.location.uri
+    ) {
+      return false;
+    }
+    const key = tabKey(paneId, tab.id);
+    const current = paneViews.get(key);
+    if (
+      (current?.location !== undefined &&
+        (current.location.providerId !== snapshot.location.providerId ||
+          current.location.uri !== snapshot.location.uri)) ||
+      (current?.revision !== undefined && snapshot.revision <= current.revision)
+    ) {
+      return false;
+    }
+    const inFlight = activeRequests.get(key);
+    if (inFlight?.kind === 'navigate') return false;
+    inFlight?.controller.abort();
+    activeRequests.delete(key);
+    pendingNextPage.delete(key);
+    backgroundFailureCounts.delete(key);
+    clearBackgroundRetry(key);
+    publish(paneId, tab.id, viewFromSnapshot(snapshot));
+    return true;
   }
 
   function loadingView(
@@ -716,7 +754,7 @@ export function createNavigationController(
       return pending;
     }
     const promise = loadNextPageImpl(paneId, resolvedTabId).finally(() => {
-      pendingNextPage.delete(key);
+      if (pendingNextPage.get(key) === promise) pendingNextPage.delete(key);
     });
     pendingNextPage.set(key, promise);
     return promise;
@@ -763,6 +801,7 @@ export function createNavigationController(
     retry: load,
     loadNextPage,
     loadAllPages,
+    applySnapshot,
     abort: (paneId, tabId) => {
       const key = tabKey(paneId, tabId);
       activeRequests.get(key)?.controller.abort();
