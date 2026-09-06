@@ -241,7 +241,20 @@ describe('RagAskDialog', () => {
         ...response,
         events: response.events.map((event) => {
           if (event.type === 'token') return { ...event, text };
-          if (event.type === 'done') return { ...event, answer: { ...event.answer, text } };
+          if (event.type === 'done') {
+            return {
+              ...event,
+              answer: {
+                ...event.answer,
+                text,
+                citations: event.answer.citations.map((citation) => ({
+                  ...citation,
+                  provenance:
+                    '{"kind":"exact","value":"{\\"block_index\\":0,\\"kind\\":\\"pdfBlock\\",\\"page_number\\":195}"}',
+                })),
+              },
+            };
+          }
           if (event.type === 'retrieval') {
             return {
               ...event,
@@ -298,6 +311,8 @@ describe('RagAskDialog', () => {
     expect(root.querySelector<HTMLAnchorElement>('.fm-rag-answer-markdown a')?.textContent).toBe(
       'C1',
     );
+    expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Page 195');
+    expect(root.querySelector('.fm-rag-citations')?.textContent).not.toContain('pdfBlock');
 
     root.querySelector<HTMLButtonElement>('[aria-label="Copy answer"]')?.click();
     await vi.waitFor(() =>

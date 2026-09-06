@@ -213,6 +213,7 @@ struct NormalizedEndpoint {
 #[derive(Debug, Clone)]
 pub struct LlmProbeRequest {
     pub url: String,
+    pub ollama_generation_url: Option<String>,
     pub model: String,
     pub api_key: Option<String>,
     pub api_key_header: &'static str,
@@ -364,6 +365,18 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         generation: &LlmChatGeneration,
         cancellation: &CancellationToken,
     ) -> Result<String, LlmProfileError> {
+        if let Some(url) = &request.ollama_generation_url {
+            let body = ollama_generation_body(request, generation);
+            let response = tokio::select! {
+                () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
+                response = self.request(reqwest::Method::POST, request, url).json(&body).send() => {
+                    response.map_err(map_reqwest)?
+                }
+            };
+            classify_http_status(response.status().as_u16())?;
+            let bytes = read_bounded_body(response, cancellation).await?;
+            return parse_ollama_chat(&bytes);
+        }
         let body = json!({
             "model": request.model,
             "messages": [
@@ -935,6 +948,8 @@ impl LlmProfileService {
         };
         Ok(LlmProbeRequest {
             url: chat_completions_url(profile, &endpoint)?,
+            ollama_generation_url: (profile.preset == LlmPreset::Ollama)
+                .then(|| ollama_chat_url(&endpoint)),
             model: profile.model.clone(),
             api_key,
             api_key_header: if profile.preset == LlmPreset::AzureOpenAi {
@@ -1120,6 +1135,30 @@ fn models_url(chat_url: &str) -> Option<String> {
         .map(|base| format!("{base}/models"))
 }
 
+fn ollama_chat_url(endpoint: &NormalizedEndpoint) -> String {
+    let base = endpoint
+        .base_url
+        .strip_suffix("/v1")
+        .unwrap_or(&endpoint.base_url);
+    format!("{base}/api/chat")
+}
+
+fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGeneration) -> Value {
+    json!({
+        "model": request.model,
+        "messages": [
+            {"role": "system", "content": generation.system_prompt},
+            {"role": "user", "content": generation.user_prompt}
+        ],
+        "stream": false,
+        "think": false,
+        "options": {
+            "num_predict": generation.maximum_tokens,
+            "temperature": generation.temperature
+        }
+    })
+}
+
 fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
     parse_streaming_chat(bytes).map(|_| ())
 }
@@ -1128,6 +1167,7 @@ fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
     let text = std::str::from_utf8(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
     let mut valid_event = false;
     let mut terminated = false;
+    let mut truncated = false;
     let mut content = String::new();
     for line in text.lines() {
         let Some(data) = line.strip_prefix("data:") else {
@@ -1157,17 +1197,38 @@ fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
                 }
             }
         }
-        terminated |= choices.iter().any(|choice| {
-            choice
+        for choice in choices {
+            if let Some(reason) = choice
                 .get("finish_reason")
-                .is_some_and(|reason| !reason.is_null())
-        });
+                .filter(|reason| !reason.is_null())
+            {
+                terminated = true;
+                truncated |= reason.as_str() == Some("length");
+            }
+        }
     }
-    if valid_event && terminated {
+    if valid_event && terminated && !truncated {
         Ok(content)
     } else {
         Err(LlmProfileError::MalformedResponse)
     }
+}
+
+fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
+    let value: Value =
+        serde_json::from_slice(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
+    if value.get("done").and_then(Value::as_bool) != Some(true)
+        || value.get("done_reason").and_then(Value::as_str) == Some("length")
+    {
+        return Err(LlmProfileError::MalformedResponse);
+    }
+    value
+        .get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .filter(|content| !content.trim().is_empty())
+        .map(str::to_owned)
+        .ok_or(LlmProfileError::MalformedResponse)
 }
 
 fn classify_http_status(status: u16) -> Result<(), LlmProfileError> {
@@ -1651,6 +1712,46 @@ mod tests {
             )
             .is_ok()
         );
+        assert!(matches!(
+            parse_streaming_chat(
+                b"data: {\"choices\":[{\"delta\":{\"content\":\"An incomplete answer\"},\"finish_reason\":\"length\"}]}\n\n"
+            ),
+            Err(LlmProfileError::MalformedResponse)
+        ));
+        assert_eq!(
+            parse_ollama_chat(
+                br#"{"message":{"role":"assistant","content":"A complete answer."},"done":true,"done_reason":"stop"}"#
+            )
+            .unwrap(),
+            "A complete answer."
+        );
+        assert!(matches!(
+            parse_ollama_chat(
+                br#"{"message":{"role":"assistant","content":"An incomplete answer"},"done":true,"done_reason":"length"}"#
+            ),
+            Err(LlmProfileError::MalformedResponse)
+        ));
+        let request = LlmProbeRequest {
+            url: "http://localhost:11434/v1/chat/completions".into(),
+            ollama_generation_url: Some("http://localhost:11434/api/chat".into()),
+            model: "reasoning-model".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+        };
+        let body = ollama_generation_body(
+            &request,
+            &LlmChatGeneration {
+                system_prompt: "Answer from evidence.".into(),
+                user_prompt: "Question".into(),
+                maximum_tokens: 1_024,
+                temperature: 0.2,
+            },
+        );
+        assert_eq!(body["think"], false);
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["options"]["num_predict"], 1_024);
         assert_eq!(
             classify_http_status(401).unwrap_err().category(),
             LlmTestErrorCategory::Authentication

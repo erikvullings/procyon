@@ -36,6 +36,10 @@ content search, and baseline document viewing available.
   original Markdown text. Evidence sources and answer references open the containing folder,
   select the source file, and close Ask without discarding its state. **New question** explicitly
   clears that state. Detailed root administration remains under **Settings > Semantic**.
+  Citation locations are rendered as page, line, slide, or block labels rather than serialized
+  provenance. Ollama profiles use its native generation endpoint with hidden reasoning disabled so
+  reasoning-capable models spend the configured answer allowance on visible output; any response
+  that still reaches its length limit is rejected rather than presented as a complete answer.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without

@@ -98,3 +98,8 @@ scope, change instructions, request secrets, or invoke Procyon actions.
   at `0.826`. This policy-only change requires no reindexing or storage migration. Ask now preserves
   and displays section paths and cosine similarity, uses the lighter **Ask your files** workspace,
   and joins folder indexing, model knowledge, and Options and privacy in one separator-free row.
+- 2026-09-06: Prevented reasoning-capable Ollama models from consuming the answer allowance on
+  hidden reasoning by using Ollama's native chat endpoint with thinking disabled. Length-limited
+  provider responses are rejected instead of being displayed as complete answers. Ask now formats
+  serialized source provenance as readable page/line/slide locations, aligns the selected scope
+  with the other bottom-row text, and uses regular font weight throughout its content.

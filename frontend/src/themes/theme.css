@@ -1902,7 +1902,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-rag-section-heading h3 {
   margin: 0;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -1934,12 +1934,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-rag-options summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  line-height: 1.5;
 }
 
 .fm-rag-options summary small {
   color: var(--fm-text-muted);
+  line-height: inherit;
 }
 
 .fm-rag-controls {
@@ -2061,8 +2064,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
   margin-bottom: 0;
 }
 
-.fm-rag-answer-markdown strong {
-  font-weight: 600;
+.fm-rag-ask :is(h1, h2, h3, h4, h5, h6, strong, b) {
+  font-weight: 400;
 }
 
 .fm-rag-evidence-score {

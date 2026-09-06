@@ -128,6 +128,61 @@ function linkAnswerCitations(markdown: string, citations: readonly RagCitation[]
   }, markdown);
 }
 
+function citationLocation(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    try {
+      return citationLocation(JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const provenance = value as Record<string, unknown>;
+  const number = (key: string): number | undefined =>
+    typeof provenance[key] === 'number' ? provenance[key] : undefined;
+  switch (provenance.kind) {
+    case 'exact':
+      return citationLocation(provenance.value);
+    case 'span': {
+      const start = citationLocation(provenance.first);
+      const end = citationLocation(provenance.last);
+      if (start === undefined) return end;
+      if (end === undefined || end === start) return start;
+      return `${start} – ${end}`;
+    }
+    case 'pdfBlock': {
+      const page = number('page_number');
+      return page === undefined ? undefined : t('ragAsk', 'citationPage', { page });
+    }
+    case 'textLines':
+    case 'codeLines': {
+      const start = number('start_line');
+      const end = number('end_line');
+      return start === undefined || end === undefined
+        ? undefined
+        : t('ragAsk', 'citationLines', { start, end });
+    }
+    case 'slide': {
+      const slide = number('slide_number');
+      return slide === undefined ? undefined : t('ragAsk', 'citationSlide', { slide });
+    }
+    case 'docxBlock': {
+      const block = number('block_index');
+      return block === undefined ? undefined : t('ragAsk', 'citationBlock', { block: block + 1 });
+    }
+    default:
+      return undefined;
+  }
+}
+
+function formatCitationProvenance(provenance: string): string {
+  try {
+    return citationLocation(JSON.parse(provenance)) ?? '';
+  } catch {
+    return provenance;
+  }
+}
+
 export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let wasOpen = false;
   let busy: 'loading' | 'retrieving' | 'generating' | 'saving' | undefined;
@@ -536,8 +591,9 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   : undefined,
                 m(
                   'ul.fm-rag-citations',
-                  answer?.citations.map((citation) =>
-                    m('li', { key: `${citation.label}-${citation.sourceId}` }, [
+                  answer?.citations.map((citation) => {
+                    const provenance = formatCitationProvenance(citation.provenance);
+                    return m('li', { key: `${citation.label}-${citation.sourceId}` }, [
                       m(
                         'button',
                         {
@@ -550,12 +606,12 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                         },
                         citation.label,
                       ),
-                      ` ${citation.provenance}`,
+                      provenance === '' ? '' : ` · ${provenance}`,
                       citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
                       citation.stale ? ` · ${t('ragAsk', 'staleEvidence')}` : '',
                       citation.unavailable ? ` · ${t('ragAsk', 'unavailableEvidence')}` : '',
-                    ]),
-                  ),
+                    ]);
+                  }),
                 ),
               ],
             ),
