@@ -945,7 +945,7 @@ export const nl = {
     profile: 'Profiel',
     modelId: 'Model-ID',
     revision: 'Revisie',
-    installedComponentsHeading: 'Versies van geïnstalleerde onderdelen',
+    installedComponentsHeading: 'Onderdelen in gebruik',
     noInstalledComponents: 'Er zijn momenteel geen semantische onderdelen geïnstalleerd.',
     kind: 'Type',
     component: 'Onderdeel',
@@ -957,7 +957,10 @@ export const nl = {
     kindRuntime: 'Runtime',
     kindModel: 'Model',
     componentStateActive: 'In gebruik',
-    componentStateRollback: 'Vorige versie',
+    componentStateRollback: 'Rollbackkopie',
+    rollbackComponentsSummary: '{count} vorige onderdelen bewaard',
+    rollbackComponentsExplanation:
+      'Deze inactieve kopieën maken herstel of terugschakelen mogelijk zonder ze opnieuw te downloaden. Ze tellen wel mee voor het semantische schijfgebruik.',
     developmentFixtureSizeNote:
       'Dit compacte ontwikkelmodel is een kleine deterministische testfixture, geen getraind taalmodel. Kies Meertalige kwaliteit om het volledige E5-model te installeren.',
     diskUseHeading: 'Semantisch schijfgebruik',

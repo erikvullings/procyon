@@ -14,7 +14,7 @@ use crate::{
 pub enum ComponentLifecycleStatus {
     /// Component currently selected by durable state.
     Active,
-    /// Previous working worker retained after a successful update.
+    /// Inactive component retained for rollback.
     Rollback,
 }
 
@@ -143,13 +143,21 @@ pub(crate) fn build_status(
     state: &SemanticState,
 ) -> Result<SemanticStatusReport, SemanticStatusError> {
     let mut components = Vec::new();
+    let active_model = state.active_model().map(|selection| selection.identity());
     for component in state.installed_components() {
-        components.push(component_status(
-            component,
-            ComponentLifecycleStatus::Active,
-        )?);
+        let status = match component.kind() {
+            ArtifactKind::Model(identity) if Some(identity) != active_model => {
+                ComponentLifecycleStatus::Rollback
+            }
+            _ => ComponentLifecycleStatus::Active,
+        };
+        components.push(component_status(component, status)?);
     }
-    for component in state.rollback_workers() {
+    for component in state
+        .rollback_workers()
+        .iter()
+        .chain(state.retained_models())
+    {
         components.push(component_status(
             component,
             ComponentLifecycleStatus::Rollback,

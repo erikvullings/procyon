@@ -50,6 +50,10 @@ installed and activated rather than a fixed one.
   than the fixture, and the first query after a worker launch to pay a few seconds of model-load
   cost. Developer worker startup allows a bounded 30 seconds for that cold load before reporting
   failure.
+- After a successful update, **Components in use** lists one active worker, runtime, and model.
+  Procyon keeps the previous worker and model package locally as recovery copies; Settings places
+  them in a collapsed **previous components retained** section. These copies are inactive but still
+  count toward the reported semantic disk use.
 - The model is applied the way E5 requires: indexed passages are embedded with the `passage: `
   prefix and search queries with the `query: ` prefix. Both prefixes are data in the installed
   model pack, so a model needing none is used unchanged. Inputs longer than the 512-token window

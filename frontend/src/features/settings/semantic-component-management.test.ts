@@ -204,6 +204,47 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).not.toContain('Pause indexing');
   });
 
+  it('shows only active components until rollback copies are expanded', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const status = await client.getSemanticComponentStatus();
+    const worker = status.components.find((component) => component.kind === 'worker');
+    const model = status.components.find((component) => component.kind === 'model');
+    if (worker === undefined || model === undefined) {
+      throw new Error('mock semantic components are incomplete');
+    }
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...status,
+      components: [
+        ...status.components,
+        {
+          ...worker,
+          artifactId: 'mock-worker-previous',
+          version: '0.9.0',
+          state: 'rollback',
+        },
+        {
+          ...model,
+          artifactId: 'mock-model-previous',
+          componentId: 'mock-model-previous',
+          version: '0.9.0',
+          state: 'rollback',
+        },
+      ],
+    });
+
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.querySelectorAll('.fm-semantic-active-components > li')).toHaveLength(3);
+    const previous = root.querySelector<HTMLDetailsElement>('.fm-semantic-rollback-components');
+    expect(previous?.open).toBe(false);
+    expect(previous?.querySelector('summary')?.textContent).toContain(
+      '2 previous components retained',
+    );
+    expect(previous?.querySelectorAll('.fm-semantic-previous-components > li')).toHaveLength(2);
+    expect(previous?.textContent).toContain('Rollback copy');
+  });
+
   it('disables actions and reports progress while an action is busy', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     let release: (() => void) | undefined;

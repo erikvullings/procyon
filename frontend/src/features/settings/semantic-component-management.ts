@@ -4,6 +4,7 @@ import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
   ImportSemanticLocalModelRequest,
+  InstalledSemanticComponent,
   SemanticComponentCapabilities,
   SemanticComponentKind,
   SemanticComponentOperation,
@@ -276,6 +277,10 @@ function modelAndComponentStatus(
   profiles: readonly SemanticModelProfile[],
 ): Vnode[] {
   const activeProfile = profiles.find((profile) => profile.profile === status.activeModel?.profile);
+  const activeComponents = status.components.filter((component) => component.state === 'active');
+  const rollbackComponents = status.components.filter(
+    (component) => component.state === 'rollback',
+  );
   const activeProfileNeedsUpdate =
     activeProfile !== undefined &&
     !modelSelectionMatchesProfile(status.activeModel ?? undefined, activeProfile);
@@ -307,26 +312,25 @@ function modelAndComponentStatus(
         ]),
     m('section.fm-semantic-status-section', [
       m('h6', t('semanticComponents', 'installedComponentsHeading')),
-      status.components.length === 0
+      activeComponents.length === 0
         ? m('p.fm-semantic-empty', t('semanticComponents', 'noInstalledComponents'))
         : [
-            m(
-              'ul.fm-semantic-installed-components',
-              status.components.map((component) =>
-                m('li.fm-semantic-installed-component', { key: component.artifactId }, [
-                  m('strong', componentKindLabel(component.kind)),
-                  m('span', `${component.componentId} · ${component.version}`),
+            componentList(activeComponents, 'fm-semantic-active-components'),
+            rollbackComponents.length === 0
+              ? undefined
+              : m('details.fm-semantic-rollback-components', [
                   m(
-                    'span',
-                    `${
-                      component.state === 'active'
-                        ? t('semanticComponents', 'componentStateActive')
-                        : t('semanticComponents', 'componentStateRollback')
-                    } · ${formatBytes(component.installedBytes)}`,
+                    'summary',
+                    t('semanticComponents', 'rollbackComponentsSummary', {
+                      count: rollbackComponents.length,
+                    }),
                   ),
+                  m(
+                    'p.fm-semantic-component-note',
+                    t('semanticComponents', 'rollbackComponentsExplanation'),
+                  ),
+                  componentList(rollbackComponents, 'fm-semantic-previous-components'),
                 ]),
-              ),
-            ),
             status.activeModel?.identity.modelId.includes('hashing-embedding')
               ? m(
                   'p.fm-semantic-component-note',
@@ -352,6 +356,29 @@ function modelAndComponentStatus(
       ]),
     ]),
   ].filter((node): node is Vnode => node !== undefined);
+}
+
+function componentList(
+  components: readonly InstalledSemanticComponent[],
+  className: string,
+): Vnode {
+  return m(
+    `ul.fm-semantic-installed-components.${className}`,
+    components.map((component) =>
+      m('li.fm-semantic-installed-component', { key: component.artifactId }, [
+        m('strong', componentKindLabel(component.kind)),
+        m('span', `${component.componentId} · ${component.version}`),
+        m(
+          'span',
+          `${
+            component.state === 'active'
+              ? t('semanticComponents', 'componentStateActive')
+              : t('semanticComponents', 'componentStateRollback')
+          } · ${formatBytes(component.installedBytes)}`,
+        ),
+      ]),
+    ),
+  );
 }
 
 function offerView(

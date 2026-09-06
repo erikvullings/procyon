@@ -78,3 +78,7 @@ paths.
   measurements and supplies an evaluated signed catalog. No concrete default model was selected.
   Externally supplied migration checkpoints/completion are denied until the trusted ingestion
   coordinator from 0182 owns them.
+- 2026-09-06 (status follow-up): Component status now compares installed model identities with the
+  durable active selection instead of labelling every installed model as active, and includes
+  retained model revisions consistently with rollback workers. Settings shows only the active
+  worker/runtime/model by default and groups inactive recovery copies in a collapsed section.

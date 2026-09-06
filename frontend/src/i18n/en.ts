@@ -935,7 +935,7 @@ export const en = {
     profile: 'Profile',
     modelId: 'Model ID',
     revision: 'Revision',
-    installedComponentsHeading: 'Installed component versions',
+    installedComponentsHeading: 'Components in use',
     noInstalledComponents: 'No semantic components are currently installed.',
     kind: 'Kind',
     component: 'Component',
@@ -947,7 +947,10 @@ export const en = {
     kindRuntime: 'Runtime',
     kindModel: 'Model',
     componentStateActive: 'In use',
-    componentStateRollback: 'Previous version',
+    componentStateRollback: 'Rollback copy',
+    rollbackComponentsSummary: '{count} previous components retained',
+    rollbackComponentsExplanation:
+      'These inactive copies allow recovery or switching back without downloading them again. They still count toward semantic disk use.',
     developmentFixtureSizeNote:
       'This compact development model is a tiny deterministic test fixture, not a learned language model. Choose Multilingual quality to install the full E5 model.',
     diskUseHeading: 'Semantic disk use',

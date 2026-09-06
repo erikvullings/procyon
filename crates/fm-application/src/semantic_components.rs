@@ -584,7 +584,7 @@ pub enum SemanticComponentKind {
 pub enum InstalledSemanticComponentState {
     /// Active installation.
     Active,
-    /// Previous working worker retained for rollback.
+    /// Inactive component retained for rollback.
     Rollback,
 }
 

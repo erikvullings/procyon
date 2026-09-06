@@ -13,9 +13,10 @@ use fm_application::FileManagerService;
 use fm_application::semantic_components::{
     AdministratorProvisionedSemanticComponentCapability, DesktopSemanticDistribution,
     FakeSemanticComponentCapability, FakeSemanticComponentScenario,
-    ManagedSemanticComponentAdapters, ManagedSemanticComponentCapability,
-    ManagedSemanticComponentConfiguration, RemoveSemanticIndexRequest, RuntimeExecutableDownload,
-    SemanticCategoryDiskUse, SemanticComponentAuthority, SemanticComponentError,
+    InstalledSemanticComponentState, ManagedSemanticComponentAdapters,
+    ManagedSemanticComponentCapability, ManagedSemanticComponentConfiguration,
+    RemoveSemanticIndexRequest, RuntimeExecutableDownload, SemanticCategoryDiskUse,
+    SemanticComponentAuthority, SemanticComponentError, SemanticComponentKind,
     SemanticComponentLifecycle, SemanticComponentOperation, SemanticComponentService,
     SemanticComponentStatus, SemanticDataCategory, SemanticDiskUse, SemanticEmbeddingNormalization,
     SemanticIndexInventory, SemanticIndexRecordCounts, SemanticIndexRemovalError,
@@ -529,6 +530,28 @@ async fn managed_curated_model_migration_stages_target_before_activation() {
         .await
         .unwrap();
     assert_eq!(selected.identity().revision(), "upstream-quality");
+
+    let completed = service.status().await.unwrap();
+    let models: Vec<_> = completed
+        .components()
+        .iter()
+        .filter(|component| component.kind() == SemanticComponentKind::Model)
+        .collect();
+    assert_eq!(models.len(), 2);
+    assert_eq!(
+        models
+            .iter()
+            .filter(|component| component.state() == InstalledSemanticComponentState::Active)
+            .count(),
+        1
+    );
+    assert_eq!(
+        models
+            .iter()
+            .filter(|component| component.state() == InstalledSemanticComponentState::Rollback)
+            .count(),
+        1
+    );
 }
 
 #[tokio::test]

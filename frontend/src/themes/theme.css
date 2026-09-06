@@ -1058,6 +1058,19 @@ main.fm-workspace {
   border-bottom: 0;
 }
 
+.fm-semantic-rollback-components {
+  margin-top: 0.5rem;
+}
+
+.fm-semantic-rollback-components summary {
+  cursor: pointer;
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-rollback-components .fm-semantic-installed-components {
+  margin-top: 0.35rem;
+}
+
 .fm-semantic-component-note,
 .fm-semantic-library-folder-help {
   color: var(--fm-text-muted);
