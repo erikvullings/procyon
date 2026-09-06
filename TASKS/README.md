@@ -104,6 +104,8 @@ semantic components are not installed.
 - [ ] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
 - [ ] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
 - [ ] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
+- [ ] 0192 Docling.rs advanced PDF conversion *(needs 0189; evaluation-gated optional pack with the
+  current pure-Rust PDF converter retained as fallback)*
 
 ## File operations
 
