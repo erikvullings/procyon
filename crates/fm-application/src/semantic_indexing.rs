@@ -55,6 +55,8 @@ pub struct SemanticIndexingReport {
     pub observed_files: u64,
     /// Workspace-scoped worker occurrences successfully ingested.
     pub ingested_occurrences: u64,
+    /// Workspace-scoped occurrences whose worker ingestion job failed.
+    pub failed_occurrences: u64,
     /// Entries rejected by the curated eligibility policy.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Newly committed complete reconciliation generation.
@@ -177,6 +179,7 @@ impl SemanticIndexingService {
         let mut observed = BTreeSet::new();
         let mut observed_files = 0_u64;
         let mut ingested_occurrences = 0_u64;
+        let mut failed_occurrences = 0_u64;
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
 
         while let Some((directory, depth)) = pending.pop_front() {
@@ -230,13 +233,17 @@ impl SemanticIndexingService {
                         }
                         EntryKind::Directory | EntryKind::Symlink => {}
                         EntryKind::File => {
-                            let bytes = read_bounded(
+                            let Some(bytes) = read_bounded(
                                 provider.as_ref(),
                                 &entry,
                                 max_source_bytes,
                                 &cancellation,
                             )
-                            .await?;
+                            .await?
+                            else {
+                                *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
+                                continue;
+                            };
                             let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
                                 .map_err(|_| SemanticLibraryError::InvalidRequest)?;
                             let occurrence_id = library.record_indexing_observation(
@@ -285,7 +292,7 @@ impl SemanticIndexingService {
                                 {
                                     return Err(SemanticLibraryError::AccessDenied.into());
                                 }
-                                ingest_and_wait(
+                                match ingest_and_wait(
                                     &semantic,
                                     &decision,
                                     FeedDocument {
@@ -301,8 +308,16 @@ impl SemanticIndexingService {
                                     },
                                     &cancellation,
                                 )
-                                .await?;
-                                ingested_occurrences = ingested_occurrences.saturating_add(1);
+                                .await?
+                                {
+                                    IngestionOutcome::Completed => {
+                                        ingested_occurrences =
+                                            ingested_occurrences.saturating_add(1);
+                                    }
+                                    IngestionOutcome::Failed => {
+                                        failed_occurrences = failed_occurrences.saturating_add(1);
+                                    }
+                                }
                             }
                         }
                     }
@@ -336,6 +351,7 @@ impl SemanticIndexingService {
             root_id,
             observed_files,
             ingested_occurrences,
+            failed_occurrences,
             skipped_reason_counts: skipped
                 .into_iter()
                 .map(|(reason, count)| SemanticEligibilityReasonCount { reason, count })
@@ -427,11 +443,9 @@ async fn read_bounded(
     entry: &EntrySummary,
     maximum_bytes: u64,
     cancellation: &CancellationToken,
-) -> Result<Vec<u8>, SemanticIndexingError> {
+) -> Result<Option<Vec<u8>>, SemanticIndexingError> {
     if entry.size.is_some_and(|size| size > maximum_bytes) {
-        return Err(SemanticIndexingError::LimitExceeded(
-            "source bytes per document",
-        ));
+        return Ok(None);
     }
     let reader = provider
         .open_read(
@@ -451,12 +465,10 @@ async fn read_bounded(
             message: error.to_string(),
         })?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum_bytes {
-        return Err(SemanticIndexingError::LimitExceeded(
-            "source bytes per document",
-        ));
+        return Ok(None);
     }
     check_cancelled(cancellation)?;
-    Ok(bytes)
+    Ok(Some(bytes))
 }
 
 struct FeedDocument<'content> {
@@ -468,12 +480,17 @@ struct FeedDocument<'content> {
     content: Vec<u8>,
 }
 
+enum IngestionOutcome {
+    Completed,
+    Failed,
+}
+
 async fn ingest_and_wait(
     semantic: &SemanticService,
     decision: &fm_semantic_library::WorkerFeedDecision,
     document: FeedDocument<'_>,
     cancellation: &CancellationToken,
-) -> Result<(), SemanticIndexingError> {
+) -> Result<IngestionOutcome, SemanticIndexingError> {
     let operation_id = SemanticOperationId::new(Uuid::new_v4().to_string());
     let occurrence_id = decision.occurrence_id().to_string();
     let workspace = document.workspace_id.to_string();
@@ -518,13 +535,8 @@ async fn ingest_and_wait(
             result = semantic.ingestion_job(scope.clone(), job_id.clone()) => result?,
         };
         match job.state {
-            SemanticIngestionState::Completed => return Ok(()),
-            SemanticIngestionState::Failed => {
-                return Err(SemanticError::WorkerFailure(
-                    "semantic ingestion job failed".to_owned(),
-                )
-                .into());
-            }
+            SemanticIngestionState::Completed => return Ok(IngestionOutcome::Completed),
+            SemanticIngestionState::Failed => return Ok(IngestionOutcome::Failed),
             SemanticIngestionState::Cancelled => {
                 return Err(SemanticIndexingError::Cancelled);
             }

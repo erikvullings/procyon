@@ -16,6 +16,9 @@ content search, and baseline document viewing available.
 - Developer artifact IDs and the catalog revision include a content-derived digest. Rebuilding
   changed worker, runtime, or model bytes therefore creates a distinct immutable artifact instead
   of colliding with an earlier bundle installed under the same workspace version.
+- The semantic disk-use panel reports physical storage categories. The developer worker keeps
+  normalized chunk text beside its authoritative records in the model-specific Zvec directory, so
+  **Separate extracted-content cache** can remain at 0 B after successful extraction and indexing.
 - `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.

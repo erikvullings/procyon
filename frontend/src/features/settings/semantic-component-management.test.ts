@@ -193,7 +193,11 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).toContain('mock-compact-multilingual-revision');
     expect(root.querySelectorAll('.fm-semantic-installed-component')).toHaveLength(3);
     expect(root.textContent).toContain('In use');
-    expect(root.querySelectorAll('.fm-semantic-disk-category')).toHaveLength(6);
+    expect(root.querySelectorAll('.fm-semantic-disk-category')).toHaveLength(3);
+    expect(root.textContent).toContain(
+      'Only storage categories currently using disk space are shown.',
+    );
+    expect(root.textContent).not.toContain('Separate extracted-content cache');
     expect(root.textContent?.toLowerCase()).not.toContain('worker patch');
     expect(workerPatch).not.toHaveBeenCalled();
 

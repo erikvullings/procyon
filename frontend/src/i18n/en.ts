@@ -962,9 +962,12 @@ export const en = {
     developmentFixtureSizeNote:
       'This compact development model is a tiny deterministic test fixture, not a learned language model. Choose Multilingual quality to install the full E5 model.',
     diskUseHeading: 'Semantic disk use',
+    diskUseAllocatedOnly: 'Only storage categories currently using disk space are shown.',
+    developmentIndexContents:
+      'The developer semantic index includes its catalog records, extracted chunk text, and reusable embeddings.',
     totalDiskUse: 'Total',
     categoryCatalog: 'Catalog',
-    categoryExtracted: 'Extracted content',
+    categoryExtracted: 'Separate extracted-content cache',
     categoryZvec: 'Zvec index',
     categoryEmbeddingCache: 'Embedding cache',
     categoryModels: 'Models',

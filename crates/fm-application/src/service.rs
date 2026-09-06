@@ -1387,6 +1387,25 @@ impl FileManagerService {
             .await
     }
 
+    /// Reconciles every available enrolled root into the active semantic worker.
+    ///
+    /// Trusted hosts invoke this at startup so interrupted or previously failed
+    /// enrolment work is repaired without requiring the user to enrol again.
+    pub async fn semantic_reconcile_all_enrolled_roots(
+        &self,
+        access: &SemanticAccessContext,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        crate::semantic_model_change::reconcile_enrolled_roots(
+            &self.semantic_indexing,
+            self.semantic_library().await,
+            access,
+            cancellation,
+            None,
+        )
+        .await
+    }
+
     /// Rebuilds every enrolled root's index after the active model changed.
     ///
     /// This is opt-in application orchestration for a trusted host command,

@@ -972,9 +972,13 @@ export const nl = {
     developmentFixtureSizeNote:
       'Dit compacte ontwikkelmodel is een kleine deterministische testfixture, geen getraind taalmodel. Kies Meertalige kwaliteit om het volledige E5-model te installeren.',
     diskUseHeading: 'Semantisch schijfgebruik',
+    diskUseAllocatedOnly:
+      'Alleen opslagcategorieën die momenteel schijfruimte gebruiken worden weergegeven.',
+    developmentIndexContents:
+      'De semantische ontwikkelindex bevat de catalogusrecords, uitgepakte tekstfragmenten en herbruikbare embeddings.',
     totalDiskUse: 'Totaal',
     categoryCatalog: 'Catalogus',
-    categoryExtracted: 'Uitgepakte inhoud',
+    categoryExtracted: 'Afzonderlijke cache voor uitgepakte inhoud',
     categoryZvec: 'Zvec-index',
     categoryEmbeddingCache: 'Embeddingcache',
     categoryModels: 'Modellen',

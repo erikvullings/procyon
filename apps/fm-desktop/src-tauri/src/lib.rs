@@ -152,12 +152,18 @@ pub fn run() {
             )) {
                 tracing::warn!(%error, "semantic library startup reconciliation failed");
             }
-            if let Some(marker) =
-                semantic_reindex_pending_marker.filter(|marker| marker.is_file())
-            {
-                tauri::async_runtime::spawn(commands::resume_pending_semantic_model_reindex(
-                    service, marker,
-                ));
+            if semantic_developer_bundle {
+                if let Some(marker) =
+                    semantic_reindex_pending_marker.filter(|marker| marker.is_file())
+                {
+                    tauri::async_runtime::spawn(commands::resume_pending_semantic_model_reindex(
+                        service, marker,
+                    ));
+                } else {
+                    tauri::async_runtime::spawn(commands::reconcile_semantic_library_on_startup(
+                        service,
+                    ));
+                }
             }
 
             // Dock icon right/long-click "New Window" item, mirroring the File menu's own item

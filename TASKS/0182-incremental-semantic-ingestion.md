@@ -78,3 +78,9 @@ application closes rather than installing an always-running login service.
   pauses, cancellation, scope isolation, timestamp lies, missed-event reconciliation, moves,
   partial/offline roots, startup/manual cadence, and replay from every persisted stage. Concrete
   model activation and production index thresholds remain intentionally gated by task 0188.
+- 2026-09-06: Desktop startup now reconciles every enrolled root, including roots whose initial
+  enrolment occurred while the worker was unavailable. Developer startup resolves worker/runtime
+  paths from durable installed-component state rather than a subsequently rebuilt bundle catalog.
+  Failed conversion jobs and oversized documents are isolated per document, allowing the complete
+  root listing to commit while reporting failed and skipped occurrences. Developer index storage
+  now uses the official Zvec category counted by Settings.

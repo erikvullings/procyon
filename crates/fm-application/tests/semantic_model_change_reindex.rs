@@ -261,6 +261,48 @@ async fn a_model_change_stops_the_previous_worker_then_refeeds_every_enrolled_ro
 }
 
 #[tokio::test]
+async fn startup_reconciliation_feeds_every_enrolled_root_without_restarting_the_worker() {
+    let root = project_temp_dir("root-startup-");
+    std::fs::write(
+        root.path().join("startup.txt"),
+        "Startup reconciliation must repair missed enrolment indexing.",
+    )
+    .unwrap();
+
+    let state = project_temp_dir("state-startup-");
+    let library = library(&state);
+    enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1913)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(RecordingCapability::new(None));
+    let service = service(&state, library, Arc::clone(&capability));
+
+    let report = service
+        .semantic_reconcile_all_enrolled_roots(&HOST, CancellationToken::new())
+        .await;
+
+    assert!(report.is_complete(), "{report:?}");
+    assert_eq!(report.reindexed_roots.len(), 1);
+    assert_eq!(report.ingested_occurrences, 1);
+    let interactions = capability.interactions();
+    assert_eq!(
+        interactions
+            .iter()
+            .filter(|interaction| matches!(interaction, Interaction::Ingested(_)))
+            .count(),
+        1
+    );
+    assert!(
+        !interactions
+            .iter()
+            .any(|interaction| matches!(interaction, Interaction::Restarted)),
+        "startup reconciliation must launch/feed the active capability without a model-change restart"
+    );
+}
+
+#[tokio::test]
 async fn a_failed_worker_restart_is_reported_without_feeding_the_old_model() {
     let root = project_temp_dir("root-c-");
     std::fs::write(root.path().join("orchard.txt"), "Semantic apples again.").unwrap();

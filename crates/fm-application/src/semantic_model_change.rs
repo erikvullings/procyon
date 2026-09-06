@@ -43,6 +43,8 @@ pub struct SemanticModelChangeReindexReport {
     pub failures: Vec<SemanticReindexFailure>,
     /// Total occurrences fed to the newly active model.
     pub ingested_occurrences: u64,
+    /// Total occurrences whose worker ingestion job failed.
+    pub failed_occurrences: u64,
 }
 
 impl SemanticModelChangeReindexReport {
@@ -68,12 +70,36 @@ pub(crate) async fn reindex_after_model_change(
     grace: Duration,
     cancellation: CancellationToken,
 ) -> SemanticModelChangeReindexReport {
+    let restart_failure = semantic
+        .restart(grace)
+        .await
+        .err()
+        .map(|error| error.to_string());
+    let mut report = reconcile_enrolled_roots(
+        indexing,
+        library,
+        access,
+        cancellation,
+        restart_failure.as_deref(),
+    )
+    .await;
+    report.restart_failure = restart_failure;
+    report
+}
+
+/// Reconciles every available enrolled root into the active semantic worker.
+///
+/// This is used on host startup to repair work missed while the semantic
+/// capability was unavailable. Unlike model-change reindexing, it must not
+/// restart an already compatible worker.
+pub(crate) async fn reconcile_enrolled_roots(
+    indexing: &SemanticIndexingService,
+    library: Arc<SemanticLibraryService>,
+    access: &SemanticAccessContext,
+    cancellation: CancellationToken,
+    restart_failure: Option<&str>,
+) -> SemanticModelChangeReindexReport {
     let mut report = SemanticModelChangeReindexReport::default();
-    let restart_failure = semantic.restart(grace).await.err().map(|error| {
-        let message = error.to_string();
-        report.restart_failure = Some(message.clone());
-        message
-    });
     let status = match library.status(access) {
         Ok(status) => status,
         Err(error) => {
@@ -131,6 +157,7 @@ pub(crate) async fn reindex_after_model_change(
         {
             Ok(pass) => {
                 report.ingested_occurrences += pass.ingested_occurrences;
+                report.failed_occurrences += pass.failed_occurrences;
                 report.reindexed_roots.push(root.id);
             }
             Err(error) => report.failures.push(SemanticReindexFailure {

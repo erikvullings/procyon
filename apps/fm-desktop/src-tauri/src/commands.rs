@@ -774,6 +774,7 @@ async fn reindex_enrolled_roots_for_the_new_model(
         tracing::info!(
             roots = report.reindexed_roots.len(),
             occurrences = report.ingested_occurrences,
+            failed_occurrences = report.failed_occurrences,
             "semantic developer reindex rebuilt enrolled roots for the newly active model"
         );
     }
@@ -784,6 +785,38 @@ pub(crate) async fn resume_pending_semantic_model_reindex(
     marker: PathBuf,
 ) {
     reindex_enrolled_roots_for_the_new_model(service, Some(&marker)).await;
+}
+
+pub(crate) async fn reconcile_semantic_library_on_startup(
+    service: Arc<fm_application::FileManagerService>,
+) {
+    let report = service
+        .semantic_reconcile_all_enrolled_roots(
+            &desktop_semantic_access(),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+    for root in &report.unavailable_roots {
+        tracing::warn!(
+            root_id = %root,
+            "semantic startup reconciliation skipped an unreachable enrolled root"
+        );
+    }
+    for failure in &report.failures {
+        tracing::error!(
+            root_id = %failure.root_id,
+            error = %failure.reason,
+            "semantic startup reconciliation failed"
+        );
+    }
+    if report.is_complete() {
+        tracing::info!(
+            roots = report.reindexed_roots.len(),
+            occurrences = report.ingested_occurrences,
+            failed_occurrences = report.failed_occurrences,
+            "semantic startup reconciliation completed"
+        );
+    }
 }
 
 fn persist_semantic_reindex_pending(marker: &Path) -> Result<(), SemanticComponentErrorDto> {

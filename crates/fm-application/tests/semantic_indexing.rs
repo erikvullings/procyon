@@ -4,11 +4,15 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
+use async_trait::async_trait;
 use fm_application::FileManagerService;
 use fm_application::semantic::{
-    FakeSemanticCapability, LibraryId as WorkerLibraryId, SemanticOperationId, SemanticQuery,
-    SemanticScope, TenantId,
+    DocumentIngestion, FakeSemanticCapability, LibraryId as WorkerLibraryId, SemanticCapability,
+    SemanticError, SemanticHealth, SemanticIngestionJob, SemanticIngestionState, SemanticJobId,
+    SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
+    TenantId,
 };
 use fm_application::semantic_indexing::SemanticIndexingError;
 use fm_application::semantic_library::{
@@ -27,6 +31,66 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const HOST: SemanticAccessContext = SemanticAccessContext::Host;
+
+struct FailingDocumentCapability {
+    inner: FakeSemanticCapability,
+}
+
+#[async_trait]
+impl SemanticCapability for FailingDocumentCapability {
+    async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.inner.health().await
+    }
+
+    async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        if ingestion.content == b"conversion fails" {
+            return Ok(SemanticJobId::new(format!(
+                "failed-{}",
+                ingestion.document_id.as_str()
+            )));
+        }
+        self.inner.ingest(ingestion).await
+    }
+
+    async fn query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.inner.query(query).await
+    }
+
+    async fn ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        if job_id.as_str().starts_with("failed-") {
+            return Ok(SemanticIngestionJob {
+                document_id: fm_application::semantic::DocumentId::new(
+                    job_id.as_str().trim_start_matches("failed-"),
+                ),
+                job_id,
+                state: SemanticIngestionState::Failed,
+            });
+        }
+        self.inner.ingestion_job(scope, job_id).await
+    }
+
+    async fn events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.inner.events(scope).await
+    }
+
+    async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError> {
+        self.inner.cancel(operation_id).await
+    }
+
+    async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.inner.shutdown(grace).await
+    }
+}
 
 fn project_temp_dir(prefix: &str) -> TempDir {
     let parent =
@@ -233,4 +297,50 @@ async fn cancelled_indexing_never_commits_a_reconciliation() {
         service.semantic_library_status(&HOST).await.unwrap().roots[0].reconciliation_generation,
         0
     );
+}
+
+#[tokio::test]
+async fn one_failed_document_does_not_abort_the_root_reconciliation() {
+    let root = project_temp_dir("partial-root-");
+    std::fs::write(root.path().join("good.txt"), "searchable semantic content").unwrap();
+    std::fs::write(root.path().join("bad.txt"), "conversion fails").unwrap();
+    std::fs::File::create(root.path().join("oversized.txt"))
+        .unwrap()
+        .set_len(65 * 1024 * 1024)
+        .unwrap();
+    let state = project_temp_dir("partial-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1903));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FailingDocumentCapability {
+        inner: FakeSemanticCapability::new(),
+    }));
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(report.observed_files, 2);
+    assert_eq!(report.ingested_occurrences, 1);
+    assert_eq!(report.failed_occurrences, 1);
+    assert_eq!(
+        report
+            .skipped_reason_counts
+            .iter()
+            .find(|count| count.reason == EligibilityReason::Oversized)
+            .map(|count| count.count),
+        Some(1)
+    );
+    assert_eq!(report.reconciliation_generation, 1);
 }

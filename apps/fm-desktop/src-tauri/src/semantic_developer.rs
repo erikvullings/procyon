@@ -14,8 +14,8 @@ use fm_semantic_components::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactKind, ArtifactRequest, ArtifactSource,
     ArtifactSourceError, CatalogArtifact, CatalogManifest, ComponentManager, ComponentQuiescer,
     DataCategory, FreeSpaceError, FreeSpaceProbe, IndexingController, IndexingPauseGuard,
-    InstallEnvironment, ModelPack, PauseError, QuiesceError, SemanticDataRoot, SemanticStateStore,
-    SignedCatalogManifest, TargetTriple, TrustedCatalog,
+    InstallEnvironment, ModelPack, PauseError, QuiesceError, SemanticDataRoot, SemanticState,
+    SemanticStateStore, SignedCatalogManifest, TargetTriple, TrustedCatalog,
 };
 
 const DEVELOPMENT_SIGNING_KEY: [u8; 32] = [0x19; 32];
@@ -102,13 +102,13 @@ impl DeveloperSemanticBundle {
         let worker = workers[0];
         let runtime = runtimes[0];
         let data_root = SemanticDataRoot::from_app_data(app_data_directory);
-        let installed_worker = data_root
+        let catalog_worker_path = data_root
             .category_path(DataCategory::Workers)
             .join(worker.component_id().as_str())
             .join(worker.version().to_string())
             .join(worker.id().as_str())
             .join("payload");
-        let installed_runtime = data_root
+        let catalog_runtime_path = data_root
             .category_path(DataCategory::Workers)
             .join(runtime.component_id().as_str())
             .join(runtime.version().to_string())
@@ -119,6 +119,9 @@ impl DeveloperSemanticBundle {
             SemanticStateStore::new(configuration_directory.join("semantic-components")),
             app_data_directory,
         );
+        let state = manager.state()?;
+        let installed_worker = active_component_payload(&state, worker, catalog_worker_path);
+        let installed_runtime = active_component_payload(&state, runtime, catalog_runtime_path);
         let active_model_pack = active_model_pack_resolver(manager.clone());
         let components = Arc::new(ManagedSemanticComponentCapability::new(
             manager,
@@ -153,10 +156,10 @@ impl DeveloperSemanticBundle {
             components,
             installed_worker,
             runtime_directory: data_root.path().join("worker-runtime"),
-            worker_data_directory: data_root.path().join("developer-worker-data"),
+            worker_data_directory: data_root.category_path(DataCategory::Zvec),
             reindex_pending_marker: data_root
-                .path()
-                .join("developer-worker-data/model-reindex-pending"),
+                .category_path(DataCategory::Zvec)
+                .join("model-reindex-pending"),
             native_library_directory: installed_runtime
                 .parent()
                 .expect("an installed artifact payload always has a parent")
@@ -164,6 +167,17 @@ impl DeveloperSemanticBundle {
             active_model_pack,
         })
     }
+}
+
+fn active_component_payload(
+    state: &SemanticState,
+    catalog_artifact: &CatalogArtifact,
+    catalog_path: PathBuf,
+) -> PathBuf {
+    state
+        .installed_component(catalog_artifact.component_id())
+        .map(|component| component.installed_path().to_owned())
+        .unwrap_or(catalog_path)
 }
 
 /// Resolves the installed payload of the model the durable component state
@@ -392,6 +406,8 @@ pub(crate) enum DeveloperBundleError {
     InvalidSignatureFile,
     #[error("semantic developer catalog is invalid: {0}")]
     Catalog(fm_semantic_components::CatalogError),
+    #[error("semantic developer component state is invalid: {0}")]
+    State(#[from] fm_semantic_components::InstallError),
     #[error("semantic developer artifact layout is invalid: {0}")]
     ArtifactLayout(&'static str),
 }
@@ -539,5 +555,49 @@ mod tests {
         ));
 
         assert_eq!(resolver(), Ok(None));
+    }
+
+    #[test]
+    fn installed_worker_path_wins_when_the_bundle_catalog_has_been_rebuilt() {
+        let directory = tempfile::tempdir().expect("directory");
+        let installed = directory.path().join("installed-worker");
+        fs::write(&installed, b"worker").expect("installed worker");
+        let state: SemanticState = serde_json::from_value(serde_json::json!({
+            "schema_version": 1,
+            "data_root": directory.path(),
+            "active_model": null,
+            "active_index_schema_version": null,
+            "pending_model_migration": null,
+            "installed_components": [{
+                "artifact_id": "procyon.dev.worker.old",
+                "component_id": "procyon.dev.worker",
+                "kind": { "kind": "worker" },
+                "version": "1.0.0",
+                "checksum": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                "installed_path": installed
+            }],
+            "last_working_workers": [],
+            "retained_models": []
+        }))
+        .expect("semantic state");
+        let artifact = CatalogArtifact::new(
+            ArtifactId::new("procyon.dev.worker.new").expect("artifact id"),
+            fm_semantic_components::ComponentId::new("procyon.dev.worker").expect("component id"),
+            ArtifactKind::Worker,
+            semver::Version::new(1, 0, 0),
+            fm_semantic_components::ArtifactLocation::new("https://developer.invalid/worker")
+                .expect("location"),
+            LicenseInfo::new("MIT", "test fixture").expect("license"),
+            Sha256Digest::calculate(b"new worker"),
+            ComponentResources::new(1, 1, 1).expect("resources"),
+            ArtifactCompatibility::new(None, None, Vec::new(), 1),
+        )
+        .expect("artifact");
+
+        assert_eq!(
+            active_component_payload(&state, &artifact, directory.path().join("catalog-worker")),
+            installed
+        );
     }
 }

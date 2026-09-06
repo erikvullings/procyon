@@ -281,6 +281,10 @@ function modelAndComponentStatus(
   const rollbackComponents = status.components.filter(
     (component) => component.state === 'rollback',
   );
+  const allocatedCategories = status.diskUse.categories.filter(({ bytes }) => bytes > 0);
+  const usesDeveloperBundle = status.components.some(({ componentId }) =>
+    componentId.startsWith('procyon.dev.'),
+  );
   const activeProfileNeedsUpdate =
     activeProfile !== undefined &&
     !modelSelectionMatchesProfile(status.activeModel ?? undefined, activeProfile);
@@ -343,13 +347,17 @@ function modelAndComponentStatus(
       m('h6', t('semanticComponents', 'diskUseHeading')),
       m(
         'dl.fm-semantic-disk-use',
-        status.diskUse.categories.flatMap((category) => [
+        allocatedCategories.flatMap((category) => [
           m('dt.fm-semantic-disk-category', { key: `${category.category}-label` }, [
             categoryLabel(category.category),
           ]),
           m('dd', { key: `${category.category}-value` }, formatBytes(category.bytes)),
         ]),
       ),
+      m('p.fm-semantic-component-note', t('semanticComponents', 'diskUseAllocatedOnly')),
+      usesDeveloperBundle
+        ? m('p.fm-semantic-component-note', t('semanticComponents', 'developmentIndexContents'))
+        : undefined,
       m('p.fm-semantic-disk-total', [
         m('strong', `${t('semanticComponents', 'totalDiskUse')}: `),
         formatBytes(status.diskUse.totalBytes),
