@@ -518,6 +518,8 @@ export const it = {
     rename: 'Rinomina {name}',
     directoryContents: 'Contenuto della cartella',
     focusedEntry: 'A fuoco: {name}',
+    sortNewestFirst: 'Ordina dal più recente',
+    sortOldestFirst: 'Ordina dal più vecchio',
     age: 'Età',
     tagged: 'Etichettato',
   },

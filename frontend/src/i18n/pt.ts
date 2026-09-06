@@ -522,6 +522,8 @@ export const pt = {
     rename: 'Renomear {name}',
     directoryContents: 'Conteúdo da pasta',
     focusedEntry: 'Em foco: {name}',
+    sortNewestFirst: 'Ordenar do mais recente',
+    sortOldestFirst: 'Ordenar do mais antigo',
     age: 'Idade',
     tagged: 'Etiquetado',
   },

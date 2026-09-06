@@ -517,6 +517,8 @@ export const pl = {
     rename: 'Zmień nazwę {name}',
     directoryContents: 'Zawartość katalogu',
     focusedEntry: 'Aktywny: {name}',
+    sortNewestFirst: 'Sortuj od najnowszych',
+    sortOldestFirst: 'Sortuj od najstarszych',
     age: 'Wiek',
     tagged: 'Otagowane',
   },

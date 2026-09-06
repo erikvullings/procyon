@@ -522,6 +522,8 @@ export const de = {
     rename: '{name} umbenennen',
     directoryContents: 'Verzeichnisinhalt',
     focusedEntry: 'Fokussiert: {name}',
+    sortNewestFirst: 'Neueste zuerst sortieren',
+    sortOldestFirst: 'Älteste zuerst sortieren',
     age: 'Alter',
     tagged: 'Markiert',
   },

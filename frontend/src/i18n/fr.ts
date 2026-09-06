@@ -521,6 +521,8 @@ export const fr = {
     rename: 'Renommer {name}',
     directoryContents: 'Contenu du répertoire',
     focusedEntry: 'Sélectionné : {name}',
+    sortNewestFirst: 'Trier du plus récent au plus ancien',
+    sortOldestFirst: 'Trier du plus ancien au plus récent',
     age: 'Ancienneté',
     tagged: 'Étiqueté',
   },

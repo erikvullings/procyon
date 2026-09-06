@@ -518,6 +518,8 @@ export const es = {
     rename: 'Renombrar {name}',
     directoryContents: 'Contenido del directorio',
     focusedEntry: 'Enfocado: {name}',
+    sortNewestFirst: 'Ordenar primero los más recientes',
+    sortOldestFirst: 'Ordenar primero los más antiguos',
     age: 'Antigüedad',
     tagged: 'Etiquetado',
   },
