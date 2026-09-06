@@ -23,6 +23,7 @@ export interface RagAskDialogAttrs {
   readonly selectedEntries: readonly EntrySummary[];
   readonly semanticSourceIds: readonly string[];
   readonly onClose: () => void;
+  readonly onIncludeCurrentFolder?: () => void;
   readonly onOpenCitation?: (sourceId: string) => void | Promise<void>;
 }
 
@@ -70,6 +71,7 @@ function scopeAvailable(
   attrs: RagAskDialogAttrs,
   kind: RagScopeKind,
   roots: readonly SemanticRootStatus[],
+  currentFolderIncluded: boolean,
 ): boolean {
   switch (kind) {
     case 'entireLibrary':
@@ -77,7 +79,7 @@ function scopeAvailable(
     case 'selectedFiles':
       return attrs.selectedEntries.some((entry) => entry.kind === 'file');
     case 'currentFolder':
-      return attrs.currentFolder !== undefined;
+      return attrs.currentFolder !== undefined && currentFolderIncluded;
     case 'semanticResults':
       return attrs.semanticSourceIds.length > 0;
     case 'enrolledRoots':
@@ -104,6 +106,8 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let error: string | undefined;
   let profiles: readonly LlmProfile[] = [];
   let roots: readonly SemanticRootStatus[] = [];
+  let currentFolderIncluded = false;
+  let currentFolderStatusError = false;
   let selectedProfileId = '';
   let selectedScope: RagScopeKind = 'entireLibrary';
   let question = '';
@@ -119,6 +123,8 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   async function load(attrs: RagAskDialogAttrs): Promise<void> {
     busy = 'loading';
     error = undefined;
+    currentFolderIncluded = false;
+    currentFolderStatusError = false;
     try {
       const [availableProfiles, library, conversations] = await Promise.all([
         attrs.client.listLlmProfiles(),
@@ -129,6 +135,19 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
       selectedProfileId = profiles[0]?.id ?? '';
       roots = library.roots.filter((root) => root.workspaceReferences.includes(attrs.workspaceId));
       saved = conversations;
+      if (attrs.currentFolder !== undefined) {
+        try {
+          const folder = await attrs.client.getSemanticFolderStatus({
+            workspaceId: attrs.workspaceId,
+            location: attrs.currentFolder,
+          });
+          currentFolderIncluded =
+            (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
+            folder.workspaceReferenced;
+        } catch {
+          currentFolderStatusError = true;
+        }
+      }
     } catch {
       error = t('ragAsk', 'loadFailed');
     } finally {
@@ -264,6 +283,22 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
         description: m('.fm-rag-ask', [
           m('p', t('ragAsk', 'readOnlyDisclosure')),
           error === undefined ? undefined : m('p.fm-rag-error', { role: 'alert' }, error),
+          currentFolderStatusError
+            ? m('p.fm-rag-warning', { role: 'alert' }, t('ragAsk', 'folderStatusFailed'))
+            : undefined,
+          !currentFolderIncluded &&
+          !currentFolderStatusError &&
+          attrs.currentFolder !== undefined &&
+          attrs.onIncludeCurrentFolder !== undefined
+            ? m('.fm-rag-folder-offer', [
+                m('p', t('ragAsk', 'currentFolderNotIncluded')),
+                m(
+                  'button',
+                  { type: 'button', onclick: attrs.onIncludeCurrentFolder },
+                  t('ragAsk', 'includeCurrentFolder'),
+                ),
+              ])
+            : undefined,
           m('.fm-rag-controls', [
             m('label', [
               m('span', t('ragAsk', 'profile')),
@@ -305,7 +340,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                     {
                       key: kind,
                       value: kind,
-                      disabled: !scopeAvailable(attrs, kind, roots),
+                      disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
                     },
                     scopeLabel(kind),
                   ),

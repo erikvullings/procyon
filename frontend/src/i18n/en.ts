@@ -683,6 +683,14 @@ export const en = {
   },
   ragAsk: {
     title: 'Ask your library',
+    includeFolderTitle: 'Include this folder?',
+    includeFolderExplanation:
+      'Ask uses indexed content. Review and include this folder and its descendants before asking a question.',
+    openAssistant: 'Ask your library',
+    currentFolderNotIncluded:
+      'This folder is not included in your semantic library. You can still ask across the rest of the library.',
+    includeCurrentFolder: 'Include current folder',
+    folderStatusFailed: 'The current folder inclusion status could not be loaded.',
     readOnlyDisclosure:
       'Ask is read-only. Retrieved documents are treated as untrusted evidence and cannot run actions or expand the selected scope.',
     loadFailed: 'Ask is not available right now.',

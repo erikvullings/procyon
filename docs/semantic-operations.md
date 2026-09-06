@@ -19,6 +19,16 @@ content search, and baseline document viewing available.
 - `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.
+- Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
+  also available as **Ask your library** in the command palette. It always opens Ask across the
+  existing library. When the active folder is not included, Ask offers an optional **Include current
+  folder** action; accepting it shows the same recursive estimate, retention disclosure, budget
+  warnings, and explicit consent used by Settings. Detailed root administration remains under
+  **Settings > Semantic**.
+- Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
+  Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
+  Desktop startup safely fills this identity for legacy reachable local roots that lack it, without
+  replacing existing identity evidence or changing consent, exclusions, or workspace references.
 
 #### Developer-bundle models
 

@@ -572,6 +572,35 @@ impl SemanticLibraryPolicy {
         Ok(())
     }
 
+    /// Adds stable provider identity to a legacy root that has none.
+    ///
+    /// Existing identity is never replaced: a disagreement must continue
+    /// through move confirmation instead of silently adopting the current path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a missing-root, invalid-identity, or revision-overflow error.
+    pub fn backfill_root_filesystem_identity(
+        &mut self,
+        root_id: RootId,
+        identity: FilesystemIdentity,
+    ) -> Result<bool, PolicyError> {
+        identity.validate()?;
+        let root = self
+            .roots
+            .get(&root_id)
+            .ok_or(PolicyError::UnknownRoot(root_id))?;
+        if root.filesystem_identity.is_some() {
+            return Ok(false);
+        }
+        self.advance_revision()?;
+        self.roots
+            .get_mut(&root_id)
+            .expect("root checked before revision advance")
+            .filesystem_identity = Some(identity);
+        Ok(true)
+    }
+
     /// Returns a root by stable id.
     #[must_use]
     pub fn root(&self, root_id: RootId) -> Option<&EnrolledRoot> {

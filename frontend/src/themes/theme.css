@@ -1911,6 +1911,25 @@ input[type="text"].fm-shortcuts-help-capture-input {
   background: color-mix(in srgb, var(--fm-color-accent, #1976d2) 8%, transparent);
 }
 
+.fm-rag-folder-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem;
+  border: 1px solid var(--fm-color-border, #d0d0d0);
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--fm-color-accent, #1976d2) 6%, transparent);
+}
+
+.fm-rag-folder-offer p {
+  margin: 0;
+}
+
+.fm-rag-folder-offer button {
+  flex: none;
+}
+
 .fm-rag-evidence,
 .fm-rag-citations,
 .fm-rag-saved ul {

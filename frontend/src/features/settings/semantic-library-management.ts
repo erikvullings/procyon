@@ -23,6 +23,13 @@ export interface SemanticLibraryManagementAttrs {
   readonly location?: Location;
 }
 
+export interface SemanticFolderEnrolmentPromptAttrs {
+  readonly client: FileManagerClient;
+  readonly workspaceId: WorkspaceId;
+  readonly location: Location;
+  readonly onEnrolled: () => void;
+}
+
 type LoadState = 'loading' | 'loaded' | 'error';
 type BusyAction =
   | 'preview'
@@ -134,6 +141,7 @@ function estimateView(
   busy: BusyAction | undefined,
   onConfirmed: (value: boolean) => void,
   onEnrol: () => void,
+  consentId = 'fm-semantic-library-consent',
 ): Vnode {
   const estimate = preview.estimate;
   const estimateHeading =
@@ -184,8 +192,9 @@ function estimateView(
             }),
           ),
       m('p.fm-semantic-library-disclosure', t('semanticLibrary', 'normalizedExcerptsDisclosure')),
-      m('label.fm-semantic-library-confirmation', [
-        m('input#fm-semantic-library-consent', {
+      m('label.fm-semantic-library-confirmation', { for: consentId }, [
+        m('input', {
+          id: consentId,
           type: 'checkbox',
           checked: confirmed,
           onchange: (event: Event) => onConfirmed((event.target as HTMLInputElement).checked),
@@ -204,6 +213,83 @@ function estimateView(
     ],
   );
 }
+
+/** Focused consent prompt used by the toolbar assistant for a folder not yet indexed. */
+export const SemanticFolderEnrolmentPrompt: FactoryComponent<
+  SemanticFolderEnrolmentPromptAttrs
+> = () => {
+  let preview: SemanticEnrolmentPreview | undefined;
+  let confirmed = false;
+  let busy: 'preview' | 'enrol' | undefined;
+  let error: string | undefined;
+
+  async function load(attrs: SemanticFolderEnrolmentPromptAttrs): Promise<void> {
+    busy = 'preview';
+    error = undefined;
+    try {
+      preview = await attrs.client.previewSemanticEnrolment({
+        workspaceId: attrs.workspaceId,
+        location: attrs.location,
+        recursive: true,
+      });
+    } catch (cause) {
+      error = errorMessage(cause);
+    } finally {
+      busy = undefined;
+      m.redraw();
+    }
+  }
+
+  async function enrol(attrs: SemanticFolderEnrolmentPromptAttrs): Promise<void> {
+    if (preview === undefined) return;
+    busy = 'enrol';
+    error = undefined;
+    try {
+      await attrs.client.confirmSemanticEnrolment({
+        confirmationId: preview.confirmationId,
+        policyRevision: preview.policyRevision,
+        workspaceId: attrs.workspaceId,
+        location: attrs.location,
+      });
+      attrs.onEnrolled();
+    } catch (cause) {
+      error = errorMessage(cause);
+    } finally {
+      busy = undefined;
+      m.redraw();
+    }
+  }
+
+  return {
+    oninit: ({ attrs }) => void load(attrs),
+    view: ({ attrs }) =>
+      m('.fm-semantic-folder-prompt', [
+        m('p', t('ragAsk', 'includeFolderExplanation')),
+        m('p.fm-semantic-library-location', attrs.location.uri),
+        busy === 'preview'
+          ? m('p', { role: 'status' }, t('semanticLibrary', 'working'))
+          : preview === undefined
+            ? m(
+                'button.fm-semantic-library-action',
+                { type: 'button', onclick: () => void load(attrs) },
+                t('semanticLibrary', 'retry'),
+              )
+            : estimateView(
+                preview,
+                confirmed,
+                busy,
+                (value) => {
+                  confirmed = value;
+                },
+                () => void enrol(attrs),
+                'fm-semantic-folder-consent',
+              ),
+        error === undefined
+          ? undefined
+          : m('p.fm-semantic-library-error', { role: 'alert' }, error),
+      ]),
+  };
+};
 
 function exclusionPlanView(
   plan: SemanticExclusionPlan,

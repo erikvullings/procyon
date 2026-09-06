@@ -1545,6 +1545,8 @@ async fn the_desktop_capability_tracks_managed_component_state() {
     let settings = directory.path().join("settings");
     let data_root = directory.path().join("semantic");
     let moved_root = directory.path().join("semantic-moved");
+    let enrolled_root = directory.path().join("documents");
+    std::fs::create_dir_all(&enrolled_root).unwrap();
     let components = MutableComponentCapability::new(
         installed_component_status(&data_root),
         installed_profiles(),
@@ -1661,7 +1663,10 @@ async fn the_desktop_capability_tracks_managed_component_state() {
     )
     .unwrap();
     let root_id = RootId::from_uuid(Uuid::from_u128(0x5eed));
-    let mut root = EnrolledRoot::new(root_id, location("file:///docs"), None, true);
+    let enrolled_location =
+        Location::from_native_path(&enrolled_root.canonicalize().unwrap()).unwrap();
+    assert!(fm_vfs_local::stable_filesystem_identity(&enrolled_location).is_some());
+    let mut root = EnrolledRoot::new(root_id, enrolled_location, None, true);
     root.attach_workspace(workspace(10));
     policy.enrol_root(root).unwrap();
     SemanticLibraryCoordinator::new(&settings, moved_root.join("library"))
@@ -1700,6 +1705,17 @@ async fn the_desktop_capability_tracks_managed_component_state() {
     assert_eq!(migrated.library_id, installed_library.library_id);
     assert_eq!(migrated_status.roots.len(), 1);
     assert_eq!(migrated_status.roots[0].id, root_id.to_string());
+    let persisted = fm_semantic_library::SemanticLibraryPolicyStore::new(&settings)
+        .load()
+        .unwrap();
+    assert!(
+        persisted
+            .root(root_id)
+            .unwrap()
+            .filesystem_identity()
+            .is_some()
+    );
+    assert!(migrated_status.roots[0].stable_identity_verified);
 }
 
 /// Component capability whose authoritative status and catalog can change, as

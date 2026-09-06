@@ -923,6 +923,30 @@ fn stable_entry_id(_metadata: &std::fs::Metadata, _location: &Location) -> Entry
     EntryId::from(Uuid::new_v5(&Uuid::NAMESPACE_URL, identity.as_bytes()))
 }
 
+/// Returns the host filesystem's stable volume and entry identities for a local location.
+///
+/// The values are opaque provider metadata used to prove that an enrolled semantic root moved
+/// rather than that an unrelated directory appeared at the same path.
+#[must_use]
+pub fn stable_filesystem_identity(location: &Location) -> Option<(String, String)> {
+    let path = location.to_native_path().ok()?;
+    let metadata = std::fs::metadata(&path).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some((metadata.dev().to_string(), metadata.ino().to_string()))
+    }
+    #[cfg(windows)]
+    {
+        windows_file_identity(&path).map(|(volume, file)| (volume.to_string(), file.to_string()))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        None
+    }
+}
+
 #[cfg(unix)]
 fn same_device(
     left: &std::fs::Metadata,

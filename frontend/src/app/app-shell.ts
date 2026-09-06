@@ -16,6 +16,7 @@ import {
   cornerLeftUpIcon,
   layoutGridIcon,
   listIcon,
+  messageCircleIcon,
   searchIcon,
   settingsIcon,
 } from '../components/tabler-icons';
@@ -142,6 +143,7 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
+import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
   createSettingsController,
   type SettingsController,
@@ -388,7 +390,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connections: readonly Connection[] = [];
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
-  let ragAskAvailable = false;
+  let semanticAssistantAvailable = false;
+  let semanticEnrolmentRequest:
+    | { readonly workspaceId: WorkspaceId; readonly location: Location }
+    | undefined;
   let functionKeyModifiers: FunctionKeyModifiers = {};
   /** Last non-empty Quick Filter query per tab key, for the Ctrl+Shift+S "reactivate" shortcut. */
   const lastQuickFilterQueryByTabKey = new Map<string, string>();
@@ -461,6 +466,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         contextRequirements: {},
         source: { kind: 'core' },
       },
+      ...(semanticAssistantAvailable
+        ? [
+            {
+              id: 'client.semanticAssistant',
+              title: t('ragAsk', 'title'),
+              description: t('ragAsk', 'openAssistant'),
+              category: 'tools',
+              defaultShortcuts: [],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+          ]
+        : []),
     ];
   }
 
@@ -1820,6 +1838,29 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     });
   }
 
+  async function refreshSemanticAssistantAvailability(): Promise<void> {
+    try {
+      const [components, library, profiles] = await Promise.all([
+        attrsClient.getSemanticComponentStatus(),
+        attrsClient.getSemanticLibraryStatus(),
+        attrsClient.listLlmProfiles(),
+      ]);
+      semanticAssistantAvailable =
+        components.lifecycle.state === 'installedEnabled' &&
+        components.activeModel != null &&
+        library.available &&
+        profiles.length > 0;
+    } catch {
+      semanticAssistantAvailable = false;
+    }
+    m.redraw();
+  }
+
+  function openSemanticAssistant(): void {
+    if (!semanticAssistantAvailable) return;
+    openRagAsk();
+  }
+
   /** The composite `paneId:tabId` key of the active pane's active tab, for terminal binding. */
   function activeTerminalTabKey(): string | undefined {
     const active = activeDirectory();
@@ -2805,6 +2846,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();
     },
+    openSemanticAssistant,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     toggleDirectoryTree,
@@ -3138,6 +3180,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getFocusPane: () => focusPane,
     getSettings: () => currentSettings,
     updateSettings: (update) => updateLocationSettings(attrsClient, update),
+    includeCurrentSemanticFolder: (workspaceId, location) => {
+      semanticEnrolmentRequest = { workspaceId, location };
+      m.redraw();
+    },
     openEditorForCreatedFile: (location, name) => {
       const active = activeDirectory();
       if (active === undefined) return;
@@ -3164,14 +3210,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   return {
     oninit: ({ attrs }) => {
       attrsClient = attrs.client;
-      void Promise.all([attrs.client.getSemanticLibraryStatus(), attrs.client.listLlmProfiles()])
-        .then(([library, profiles]) => {
-          ragAskAvailable = library.available && profiles.length > 0;
-          m.redraw();
-        })
-        .catch(() => {
-          ragAskAvailable = false;
-        });
+      void refreshSemanticAssistantAvailability();
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
@@ -3573,15 +3612,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 searchIcon(),
               ),
             ),
-            ragAskAvailable
-              ? m(
-                  'button.btn-flat.fm-rag-ask-trigger',
-                  {
-                    type: 'button',
-                    disabled: activeDirectory() === undefined,
-                    onclick: openRagAsk,
-                  },
-                  t('ragAsk', 'title'),
+            semanticAssistantAvailable
+              ? tooltip(
+                  t('ragAsk', 'openAssistant'),
+                  m(
+                    IconButton,
+                    {
+                      className: 'fm-rag-ask-trigger',
+                      disabled: activeDirectory() === undefined,
+                      'aria-label': t('ragAsk', 'openAssistant'),
+                      onclick: openSemanticAssistant,
+                    },
+                    messageCircleIcon(),
+                  ),
                 )
               : undefined,
             tooltip(
@@ -3828,6 +3871,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   settingsDialogOpen = open;
                   if (!open && currentSettings !== undefined) {
                     applyAppearance(currentSettings);
+                    void refreshSemanticAssistantAvailability();
                   }
                   m.redraw();
                 },
@@ -4086,6 +4130,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               commandPaletteOpen = false;
             },
             onInvoke: actionCommandController.invokePaletteAction,
+          }),
+          m(ModalPanel, {
+            title: t('ragAsk', 'includeFolderTitle'),
+            className: 'fm-dense-modal fm-semantic-enrolment-modal',
+            isOpen: semanticEnrolmentRequest !== undefined,
+            closeOnEsc: true,
+            onToggle: (open: boolean) => {
+              if (!open) semanticEnrolmentRequest = undefined;
+            },
+            ...(semanticEnrolmentRequest === undefined
+              ? {}
+              : {
+                  description: m(
+                    '.fm-semantic-enrolment-content',
+                    m(SemanticFolderEnrolmentPrompt, {
+                      client: attrs.client,
+                      workspaceId: semanticEnrolmentRequest.workspaceId,
+                      location: semanticEnrolmentRequest.location,
+                      onEnrolled: () => {
+                        semanticEnrolmentRequest = undefined;
+                        openRagAsk();
+                      },
+                    }),
+                  ),
+                }),
           }),
           m(DirectoryContextMenu, {
             open: contextMenu !== undefined,

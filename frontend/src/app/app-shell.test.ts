@@ -2532,9 +2532,90 @@ describe('AppShell', () => {
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
 
-    expect(status).toHaveBeenCalledOnce();
+    expect(status).toHaveBeenCalledTimes(2);
     expect(createOffer).not.toHaveBeenCalled();
     expect(acceptOffer).not.toHaveBeenCalled();
+  });
+
+  it('hides semantic chat while semantic components are inactive', async () => {
+    m.mount(root, {
+      view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
+    });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    expect(root.querySelector('button[aria-label="Ask your library"]')).toBeNull();
+
+    const paletteButton = await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]');
+      expect(button).not.toBeNull();
+      return button as HTMLButtonElement;
+    });
+    paletteButton.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
+    expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
+      'Ask your library',
+    );
+  });
+
+  it('opens Ask immediately and offers to include an unenrolled active folder', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'ask-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    const chat = await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Ask your library"]');
+      expect(button).not.toBeNull();
+      return button as HTMLButtonElement;
+    });
+    expect(chat.textContent).toBe('');
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Ask your library'),
+    );
+    root
+      .querySelector<HTMLElement>('.fm-command-palette-backdrop')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    chat.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
+        'This folder is not included',
+      ),
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Include current folder')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).not.toBeNull(),
+    );
+    root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')?.click();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Include and index folder')
+      ?.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain('Ask is read-only'),
+    );
   });
 
   it('renders settings content when the native disclosure state opens', async () => {

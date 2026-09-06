@@ -87,6 +87,8 @@ export interface ActionCommandControllerContext {
   openPropertiesForActivePane(): void;
   /** Opens representative key passages and generation controls for one file. */
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
+  /** Opens Ask or the active folder's semantic enrolment prompt. */
+  openSemanticAssistant(): void;
   /** Scans `entry`'s well-known related-file locations and opens the review checklist before
    * anything is deleted (task 0148's macOS application uninstaller). */
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
@@ -320,6 +322,10 @@ export function createActionCommandController(
     }
     if (action.id === 'client.diskUsage') {
       context.openDiskUsage();
+      return;
+    }
+    if (action.id === 'client.semanticAssistant') {
+      context.openSemanticAssistant();
       return;
     }
     const paneId = contextParam.paneId;

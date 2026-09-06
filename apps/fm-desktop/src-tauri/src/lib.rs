@@ -147,6 +147,11 @@ pub fn run() {
                 semantic_developer_bundle,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
             });
+            if let Err(error) = tauri::async_runtime::block_on(service.semantic_library_status(
+                &fm_application::semantic_library::SemanticAccessContext::Host,
+            )) {
+                tracing::warn!(%error, "semantic library startup reconciliation failed");
+            }
             if let Some(marker) =
                 semantic_reindex_pending_marker.filter(|marker| marker.is_file())
             {

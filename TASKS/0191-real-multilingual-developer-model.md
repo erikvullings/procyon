@@ -152,6 +152,13 @@ component pack.
   enrolled root, exclusion, workspace reference, catalog record, and runtime state before automatic
   reconciliation starts. Normal policy writes still reject identity changes, and genuinely copied
   or foreign catalog/state storage remains fail-closed.
+- 2026-09-06 (folder-assistant follow-up): The Operate toolbar now exposes one icon-only semantic
+  assistant action, mirrored in the command palette, only while an installed model and LLM profile
+  make Ask usable. It always opens the existing library; when the active folder is not included, Ask
+  offers an optional action that presents the existing recursive estimate and consent flow. Local
+  enrolment previews now capture stable filesystem identity, and desktop composition atomically
+  fills missing identity on legacy reachable local roots without overwriting existing provider
+  evidence.
 
 ## Validation commands
 

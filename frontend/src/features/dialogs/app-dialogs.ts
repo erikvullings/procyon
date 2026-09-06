@@ -94,6 +94,7 @@ export interface AppDialogsContext {
   getFocusPane(): ((paneId: PaneId) => void) | undefined;
   getSettings(): Settings | undefined;
   updateSettings(update: (settings: Settings) => Settings): Promise<void>;
+  includeCurrentSemanticFolder(workspaceId: string, location: Location): void;
   /** Opens the just-created file (Shift+F4) in the active pane's editor. */
   openEditorForCreatedFile(location: Location, name: string): void;
   cancelAutoDismiss(operationId: OperationId): void;
@@ -505,6 +506,12 @@ export function renderAppDialogs(
       semanticSourceIds: ds.ragAskDialog?.semanticSourceIds ?? [],
       client,
       onClose: () => dialogs.cancelRagAskDialog(),
+      onIncludeCurrentFolder: () => {
+        const request = ds.ragAskDialog;
+        if (request?.currentFolder === undefined) return;
+        dialogs.cancelRagAskDialog();
+        ctx.includeCurrentSemanticFolder(request.workspaceId, request.currentFolder);
+      },
       onOpenCitation: async (sourceId) => {
         const request = ds.ragAskDialog;
         if (request === undefined) return;

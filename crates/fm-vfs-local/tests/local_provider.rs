@@ -7,7 +7,7 @@ use fm_vfs::{
     CopyCommitOptions, EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities,
     ProviderChange, ProviderRegistry, TransferEndpoint, VfsError, WriteOptions,
 };
-use fm_vfs_local::LocalFileSystemProvider;
+use fm_vfs_local::{LocalFileSystemProvider, stable_filesystem_identity};
 use futures::StreamExt;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -34,6 +34,19 @@ fn registry_admits_only_file_uris_validated_by_the_local_provider() {
         registry.parse("unknown://opaque/path"),
         Err(VfsError::UnknownProvider { .. })
     ));
+}
+
+#[test]
+fn local_directory_exposes_a_repeatable_stable_filesystem_identity() {
+    let root = tempdir().expect("temporary directory");
+    let location = Location::from_native_path(root.path()).expect("local location");
+
+    let first = stable_filesystem_identity(&location).expect("stable local identity");
+    let second = stable_filesystem_identity(&location).expect("repeat stable local identity");
+
+    assert_eq!(first, second);
+    assert!(!first.0.is_empty());
+    assert!(!first.1.is_empty());
 }
 
 #[tokio::test]

@@ -113,7 +113,8 @@ semantic components are not installed.
   the quality profile installs a pinned, checksum-verified `multilingual-e5-small` pack while the
   compact profiles keep the zero-download fixture; installed-profile switches stage the signed
   target before activation, preserve the device library and folder consent, and automatically
-  reindex enrolled roots)*
+  reindex enrolled roots; the toolbar and command palette expose one context-aware Ask/include
+  action, and local roots retain stable filesystem identity)*
 
 ## File operations
 

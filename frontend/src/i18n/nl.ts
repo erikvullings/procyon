@@ -690,6 +690,14 @@ export const nl = {
   },
   ragAsk: {
     title: 'Vraag je bibliotheek',
+    includeFolderTitle: 'Deze map opnemen?',
+    includeFolderExplanation:
+      'Vraag gebruikt geïndexeerde inhoud. Controleer en voeg deze map en onderliggende mappen toe voordat je een vraag stelt.',
+    openAssistant: 'Vraag je bibliotheek',
+    currentFolderNotIncluded:
+      'Deze map is niet opgenomen in je semantische bibliotheek. Je kunt nog steeds de rest van de bibliotheek bevragen.',
+    includeCurrentFolder: 'Huidige map opnemen',
+    folderStatusFailed: 'De opnamestatus van de huidige map kon niet worden geladen.',
     readOnlyDisclosure:
       'Vraag is alleen-lezen. Opgehaalde documenten zijn onvertrouwd bewijs en kunnen geen acties uitvoeren of het gekozen bereik uitbreiden.',
     loadFailed: 'Vraag is momenteel niet beschikbaar.',

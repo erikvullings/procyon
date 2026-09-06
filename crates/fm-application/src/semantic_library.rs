@@ -225,6 +225,21 @@ impl SemanticEnrolmentEstimator for UnavailableSemanticEnrolmentEstimator {
     }
 }
 
+/// Desktop estimator that retains stable identity for local roots while leaving
+/// provider-neutral recursive size estimation explicitly unavailable.
+pub struct LocalSemanticEnrolmentEstimator;
+
+impl SemanticEnrolmentEstimator for LocalSemanticEnrolmentEstimator {
+    fn estimate(&self, location: &Location, _recursive: bool) -> SemanticEnrolmentEstimate {
+        let mut estimate = SemanticEnrolmentEstimate::unavailable(
+            "A provider-neutral recursive estimate is not available for this source.",
+        );
+        estimate.filesystem_identity = fm_vfs_local::stable_filesystem_identity(location)
+            .map(|(volume, file)| SemanticRootIdentity::new(volume, file));
+        estimate
+    }
+}
+
 /// Fixed deterministic estimator for tests and mock mode.
 pub struct FixedSemanticEnrolmentEstimator {
     estimate: SemanticEnrolmentEstimate,
@@ -3359,11 +3374,44 @@ async fn desktop_library_from_components(
     .ok()?;
     let coordinator =
         core::SemanticLibraryCoordinator::new(configuration_directory, &semantic_data_root);
-    let persisted_policy = coordinator
-        .lock()
-        .ok()?
-        .migrate_model_if_present(model)
-        .ok()?;
+    let session = coordinator.lock().ok()?;
+    let mut persisted_policy = session.migrate_model_if_present(model).ok()?;
+    if let Some(policy) = persisted_policy.as_mut() {
+        let missing: Vec<_> = policy
+            .roots()
+            .values()
+            .filter(|root| root.filesystem_identity().is_none())
+            .map(|root| (root.id(), root.location().clone()))
+            .collect();
+        let mut changed = false;
+        for (root_id, location) in missing {
+            let Some((volume, file)) = fm_vfs_local::stable_filesystem_identity(&location) else {
+                tracing::warn!(
+                    %root_id,
+                    "stable filesystem identity is unavailable for an enrolled local root"
+                );
+                continue;
+            };
+            let identity = core::FilesystemIdentity::new(volume, file).ok()?;
+            changed |= policy
+                .backfill_root_filesystem_identity(root_id, identity)
+                .ok()?;
+        }
+        if changed {
+            session
+                .transaction(
+                    core::LibraryOperation::Reconciliation,
+                    Some(policy),
+                    None,
+                    None,
+                )
+                .ok()?
+                .commit()
+                .ok()?;
+            tracing::info!("backfilled stable filesystem identity for legacy semantic roots");
+        }
+    }
+    drop(session);
     // Before consent is persisted, derive an inert but stable identity from
     // this app profile rather than from the replaceable embedding model.
     let library_id = persisted_policy.map_or_else(
@@ -3394,7 +3442,7 @@ async fn desktop_library_from_components(
             ),
         )
         .ok()?,
-        Arc::new(UnavailableSemanticEnrolmentEstimator),
+        Arc::new(LocalSemanticEnrolmentEstimator),
     )
     .ok()
 }

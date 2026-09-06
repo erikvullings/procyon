@@ -54,6 +54,59 @@ fn policy_round_trips_atomically_with_stable_library_and_model_identity() {
 }
 
 #[test]
+fn legacy_root_identity_is_backfilled_once_without_overwriting_provider_evidence() {
+    let mut policy = policy();
+    let root_id = RootId::from_uuid(Uuid::from_u128(10));
+    policy
+        .enrol_root(EnrolledRoot::new(
+            root_id,
+            Location::parse("file:///library").unwrap(),
+            None,
+            true,
+        ))
+        .unwrap();
+    let original_revision = policy.revision();
+
+    assert!(
+        policy
+            .backfill_root_filesystem_identity(
+                root_id,
+                FilesystemIdentity::new("volume-a", "file-a").unwrap(),
+            )
+            .unwrap()
+    );
+    assert_eq!(policy.revision(), original_revision + 1);
+    assert_eq!(
+        policy
+            .root(root_id)
+            .unwrap()
+            .filesystem_identity()
+            .unwrap()
+            .file_id(),
+        "file-a"
+    );
+
+    assert!(
+        !policy
+            .backfill_root_filesystem_identity(
+                root_id,
+                FilesystemIdentity::new("volume-b", "file-b").unwrap(),
+            )
+            .unwrap()
+    );
+    assert_eq!(policy.revision(), original_revision + 1);
+    assert_eq!(
+        policy
+            .root(root_id)
+            .unwrap()
+            .filesystem_identity()
+            .unwrap()
+            .file_id(),
+        "file-a"
+    );
+}
+
+#[test]
 fn policy_persists_every_root_consent_and_resource_field() {
     let mut policy = policy();
     policy

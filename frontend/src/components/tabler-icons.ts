@@ -61,6 +61,12 @@ export const searchIcon = trustedStrokeIcon(
   'fm-icon-search',
 );
 
+/** "message-circle" — semantic library assistant. */
+export const messageCircleIcon = trustedStrokeIcon(
+  '<path d="M3 20l1.3 -3.9a9 8 0 1 1 3.4 2.9l-4.7 1" />',
+  'fm-icon-message-circle',
+);
+
 /** "star" — an unpinned saved search. */
 export const starIcon = trustedStrokeIcon(
   '<path d="M12 17.75l-6.172 3.245l1.179 -6.873l-4.993 -4.867l6.902 -1.003l3.086 -6.252l3.086 6.252l6.902 1.003l-4.993 4.867l1.179 6.873z" />',

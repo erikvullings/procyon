@@ -80,6 +80,7 @@ function fakeContext(
     findDuplicates: () => {},
     openDiskUsage: () => {},
     openPropertiesForActivePane: () => {},
+    openSemanticAssistant: () => {},
     uninstallApplication: () => {},
     toggleDirectoryTree: () => {},
     toggleOperationCentre: () => {},
