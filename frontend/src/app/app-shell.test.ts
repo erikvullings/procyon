@@ -640,6 +640,113 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(nameHeader?.getAttribute('aria-sort')).toBe('descending'));
   });
 
+  it('re-fetches the first page when sorting a paged directory', async () => {
+    const client = new MockFileManagerClient({ pageSize: 100 });
+    const originalListDirectory = client.listDirectory.bind(client);
+    const listDirectory = vi
+      .spyOn(client, 'listDirectory')
+      .mockImplementation(async (request, signal) => {
+        const snapshot = await originalListDirectory(request, signal);
+        if (
+          request.location.uri !== 'mock:///large/1000' ||
+          request.sort?.[0]?.columnId !== 'core.modified'
+        ) {
+          return snapshot;
+        }
+        const template = snapshot.entries[0];
+        if (template === undefined) throw new Error('large-directory fixture must not be empty');
+        return {
+          ...snapshot,
+          entries: [
+            {
+              ...template,
+              id: 'external-download',
+              location: {
+                providerId: 'local',
+                uri: 'mock:///large/1000/downloaded-photo.jpg',
+              },
+              name: 'downloaded-photo.jpg',
+              modifiedAt: '2026-09-06T16:00:00Z',
+            },
+            ...snapshot.entries.slice(1),
+          ],
+        };
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    const callsBeforeSort = listDirectory.mock.calls.length;
+
+    const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
+      '[data-column-id="core.modified"]',
+    );
+    modifiedHeader?.click();
+
+    await vi.waitFor(() =>
+      expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBeforeSort),
+    );
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('ascending'));
+    const callsBeforeDescendingSort = listDirectory.mock.calls.length;
+    modifiedHeader?.click();
+
+    await vi.waitFor(() =>
+      expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBeforeDescendingSort),
+    );
+    expect(listDirectory.mock.calls.at(-1)?.[0]).toMatchObject({
+      location: { uri: 'mock:///large/1000' },
+      sort: [{ columnId: 'core.modified', direction: 'descending' }],
+    });
+    // Sorting preserves the cursor and viewport; move the virtualized table to the start before
+    // asserting that the authoritative first-page result reached the rendered pane.
+    activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(activePane, 'downloaded-photo.jpg')).not.toBeUndefined(),
+    );
+  });
+
+  it('re-fetches the directory after applying a keyboard sort shortcut', async () => {
+    const client = new MockFileManagerClient();
+    const originalListActions = client.listActions.bind(client);
+    vi.spyOn(client, 'listActions').mockImplementation(async (...args) => [
+      ...(await originalListActions(...args)),
+      {
+        id: 'core.sortByDate',
+        title: 'Sort by Date',
+        category: 'navigation',
+        defaultShortcuts: [{ key: 'F5', ctrl: true }],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+    ]);
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    listDirectory.mockClear();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F5', ctrlKey: true, bubbles: true }),
+    );
+
+    await vi.waitFor(() =>
+      expect(listDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sort: [{ columnId: 'core.modified', direction: 'ascending' }],
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
   it('shows a parent row outside the root and opens it with Enter', async () => {
     mountShell('mock');
 
@@ -2534,6 +2641,25 @@ describe('AppShell', () => {
     m.redraw.sync();
 
     expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe('true');
+  });
+
+  it('re-fetches a directory when activating its pane', async () => {
+    const client = new MockFileManagerClient();
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    listDirectory.mockClear();
+
+    root.querySelector<HTMLElement>('[data-pane-id="right"]')?.click();
+
+    await vi.waitFor(() =>
+      expect(listDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: expect.objectContaining({ uri: 'mock:///Documents' }),
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
   });
 
   it('refetches panes after confirming a conflict resolution', async () => {

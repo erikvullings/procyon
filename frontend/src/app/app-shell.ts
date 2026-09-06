@@ -2544,7 +2544,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (next) => {
           workspace = next;
         },
-      ).catch(() => undefined);
+      )
+        .then(() => {
+          if (workspace?.panesById[paneId]?.activeTabId === tab.id) {
+            void navigation.load(paneId, { background: true });
+          }
+        })
+        .catch(() => undefined);
     },
     swapPaneTabSets: (paneAId, paneBId) => {
       const liveWorkspace = workspace;
@@ -2963,6 +2969,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     const previousWorkspace = workspace;
     replaceWorkspace({ ...previousWorkspace, activePaneId: paneId });
+    void navigation.load(paneId, { background: true });
     try {
       await dispatchWorkspaceCommand(
         client,

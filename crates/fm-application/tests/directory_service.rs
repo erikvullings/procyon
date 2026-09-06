@@ -19,10 +19,11 @@ fn service() -> DirectoryService {
 }
 
 #[tokio::test]
-async fn open_directory_publishes_batched_create_rename_delete_deltas() {
+async fn open_downloads_like_directory_publishes_batched_create_rename_delete_deltas() {
     let root = tempfile::tempdir().expect("must create a temp directory");
-    let location =
-        Location::from_native_path(root.path()).expect("temp path must be representable");
+    let downloads = root.path().join("Downloads");
+    std::fs::create_dir(&downloads).expect("must create Downloads fixture");
+    let location = Location::from_native_path(&downloads).expect("temp path must be representable");
     let workspace_id = fm_domain::WorkspaceId::new();
     let pane_id = PaneId::new();
     let events = EventBus::new(32);
@@ -35,7 +36,7 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
     let mut subscription = events.subscribe(SessionId::new("test"), [workspace_id], None);
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
 
-    std::fs::write(root.path().join("before.txt"), b"file").expect("create fixture");
+    std::fs::write(downloads.join("before.txt"), b"file").expect("create fixture");
     let added = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
@@ -58,11 +59,8 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
         event => panic!("unexpected subscription item: {event:?}"),
     };
 
-    std::fs::rename(
-        root.path().join("before.txt"),
-        root.path().join("after.txt"),
-    )
-    .expect("rename fixture");
+    std::fs::rename(downloads.join("before.txt"), downloads.join("after.txt"))
+        .expect("rename fixture");
     let renamed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
@@ -82,7 +80,7 @@ async fn open_directory_publishes_batched_create_rename_delete_deltas() {
         event => panic!("unexpected subscription item: {event:?}"),
     }
 
-    std::fs::remove_file(root.path().join("after.txt")).expect("remove fixture");
+    std::fs::remove_file(downloads.join("after.txt")).expect("remove fixture");
     let removed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
         .await
         .expect("delta timeout")
