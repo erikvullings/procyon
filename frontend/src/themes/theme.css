@@ -1890,6 +1890,17 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-weight: 600;
 }
 
+.fm-rag-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.fm-rag-section-heading h4 {
+  margin: 0;
+}
+
 .fm-rag-question textarea {
   min-height: 8rem;
   resize: vertical;
@@ -1981,6 +1992,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
   border: 1px solid var(--fm-color-border, #d0d0d0);
   border-radius: var(--fm-radius);
   background: color-mix(in srgb, var(--fm-color-accent, #1976d2) 4%, transparent);
+  user-select: text;
+}
+
+.fm-rag-answer-markdown > :first-child {
+  margin-top: 0;
+}
+
+.fm-rag-answer-markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .fm-rag-answer-placeholder {

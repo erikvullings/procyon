@@ -82,3 +82,7 @@ scope, change instructions, request secrets, or invoke Procyon actions.
   into the bounded host-owned RAG context with source restrictions, score thresholds,
   per-document diversity, and the configured token budget; an empty match is reported as
   insufficient evidence rather than capability failure.
+- 2026-09-06: Aligned desktop Ask and document-summary retrieval with the workspace-scoped worker
+  tenant used during ingestion, while preserving authenticated server tenant isolation. Ask
+  answers now render sanitized Markdown, and both selectable questions and answers provide
+  clipboard actions that copy their original text.

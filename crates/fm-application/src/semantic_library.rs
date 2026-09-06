@@ -2011,11 +2011,7 @@ impl SemanticLibraryService {
         {
             return Ok(None);
         }
-        let tenant_id = match access {
-            SemanticAccessContext::Host => DEVICE_LOCAL_TENANT_ID.to_owned(),
-            SemanticAccessContext::Server(identity) => identity.tenant_id.to_string(),
-            SemanticAccessContext::Anonymous => return Err(SemanticLibraryError::InvalidRequest),
-        };
+        let tenant_id = semantic_worker_tenant(access, workspace_id)?;
         Ok(Some(ResolvedSummaryDocument {
             tenant_id,
             library_id: data.policy.library().id().to_string(),
@@ -2036,11 +2032,7 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
-        let tenant_id = match access {
-            SemanticAccessContext::Host => DEVICE_LOCAL_TENANT_ID.to_owned(),
-            SemanticAccessContext::Server(identity) => identity.tenant_id.to_string(),
-            SemanticAccessContext::Anonymous => return Err(SemanticLibraryError::InvalidRequest),
-        };
+        let tenant_id = semantic_worker_tenant(access, workspace_id)?;
         let requested_results = match selection {
             RagScopeSelection::SemanticResults(ids) => Some(ids.iter().collect::<HashSet<_>>()),
             _ => None,
@@ -2260,12 +2252,38 @@ pub(crate) struct ResolvedRagScope {
     pub(crate) unavailable: u64,
 }
 
+fn semantic_worker_tenant(
+    access: &SemanticAccessContext,
+    workspace_id: WorkspaceId,
+) -> Result<String, SemanticLibraryError> {
+    match access {
+        SemanticAccessContext::Host => Ok(workspace_id.to_string()),
+        SemanticAccessContext::Server(identity) => Ok(identity.tenant_id.to_string()),
+        SemanticAccessContext::Anonymous => Err(SemanticLibraryError::InvalidRequest),
+    }
+}
+
 fn location_is_within_uri(candidate: &str, folder: &str) -> bool {
     let folder = folder.trim_end_matches('/');
     candidate == folder
         || candidate
             .strip_prefix(folder)
             .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+#[cfg(test)]
+mod tenant_tests {
+    use super::*;
+
+    #[test]
+    fn desktop_worker_tenant_matches_the_ingestion_workspace() {
+        let workspace_id = WorkspaceId::new();
+
+        assert_eq!(
+            semantic_worker_tenant(&SemanticAccessContext::Host, workspace_id).unwrap(),
+            workspace_id.to_string()
+        );
+    }
 }
 
 fn build_managed(

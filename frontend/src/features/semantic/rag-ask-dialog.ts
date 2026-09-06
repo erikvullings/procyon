@@ -1,7 +1,9 @@
 import m, { type FactoryComponent } from 'mithril';
-import { ModalPanel } from 'mithril-materialized';
+import { IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { copyIcon } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
   EntrySummary,
@@ -14,6 +16,8 @@ import type {
   SavedRagConversation,
   SemanticRootStatus,
 } from '../../models';
+import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { copyText } from '../preview/clipboard';
 
 export interface RagAskDialogAttrs {
   readonly open: boolean;
@@ -236,6 +240,15 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
     await generate(attrs);
   }
 
+  async function copy(value: string): Promise<void> {
+    try {
+      await copyText(value);
+    } catch {
+      error = t('ragAsk', 'copyFailed');
+      m.redraw();
+    }
+  }
+
   async function save(attrs: RagAskDialogAttrs): Promise<void> {
     if (conversationId === undefined) return;
     busy = 'saving';
@@ -291,9 +304,25 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
         },
         description: m('.fm-rag-ask', [
           error === undefined ? undefined : m('p.fm-rag-error', { role: 'alert' }, error),
-          m('label.fm-rag-question', [
-            m('span', t('ragAsk', 'question')),
+          m('.fm-rag-question', [
+            m('.fm-rag-section-heading', [
+              m('label', { for: 'fm-rag-question-input' }, t('ragAsk', 'question')),
+              tooltip(
+                t('ragAsk', 'copyQuestion'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    disabled: question === '',
+                    'aria-label': t('ragAsk', 'copyQuestion'),
+                    onclick: () => void copy(question),
+                  },
+                  copyIcon({ size: 18 }),
+                ),
+              ),
+            ]),
             m('textarea', {
+              id: 'fm-rag-question-input',
               rows: 5,
               value: question,
               disabled: busy !== undefined,
@@ -415,10 +444,28 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 ],
               ),
           m('section.fm-rag-answer', { 'aria-live': 'polite' }, [
-            m('h4', t('ragAsk', 'answer')),
+            m('.fm-rag-section-heading', [
+              m('h4', t('ragAsk', 'answer')),
+              tooltip(
+                t('ragAsk', 'copyAnswer'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    disabled: answer === undefined && streamedText === '',
+                    'aria-label': t('ragAsk', 'copyAnswer'),
+                    onclick: () => void copy(answer?.text ?? streamedText),
+                  },
+                  copyIcon({ size: 18 }),
+                ),
+              ),
+            ]),
             streamedText === '' && answer === undefined
               ? m('p.fm-rag-answer-placeholder', t('ragAsk', 'answerPlaceholder'))
-              : m('p', answer?.text ?? streamedText),
+              : m(
+                  '.fm-rag-answer-markdown',
+                  m.trust(safeMarkdownHtml(answer?.text ?? streamedText)),
+                ),
             answer?.modelKnowledgeAllowed === true
               ? m('p.fm-rag-warning', t('ragAsk', 'modelKnowledgeUsed'))
               : undefined,

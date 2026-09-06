@@ -55,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
   m.mount(root, null);
   root.remove();
+  vi.restoreAllMocks();
 });
 
 describe('RagAskDialog', () => {
@@ -199,5 +200,64 @@ describe('RagAskDialog', () => {
     question.dispatchEvent(submit);
     expect(submit.defaultPrevented).toBe(true);
     await vi.waitFor(() => expect(root.textContent).toContain('grounded in the selected'));
+  });
+
+  it('renders sanitized Markdown and copies the raw question and answer', async () => {
+    const client = await configuredClient();
+    const originalGenerate = client.generateRagAnswer.bind(client);
+    vi.spyOn(client, 'generateRagAnswer').mockImplementation(async (request, signal) => {
+      const response = await originalGenerate(request, signal);
+      const text = '# SU-fields\n\nUse **substance-field analysis**.\n\n<script>alert(1)</script>';
+      return {
+        ...response,
+        events: response.events.map((event) => {
+          if (event.type === 'token') return { ...event, text };
+          if (event.type === 'done') return { ...event, answer: { ...event.answer, text } };
+          return event;
+        }),
+      };
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    m.mount(root, {
+      view: () =>
+        m(RagAskDialog, {
+          open: true,
+          client,
+          workspaceId,
+          currentFolder: { providerId: 'local', uri: 'file:///documents' },
+          selectedEntries: [entry],
+          semanticSourceIds: [],
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
+
+    const question = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (question === null) throw new Error('question input not rendered');
+    question.value = 'What explains SU-fields?';
+    question.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('[aria-label="Copy question"]')?.click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('What explains SU-fields?'));
+
+    question.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-rag-answer-markdown h1')).not.toBeNull());
+    expect(root.querySelector('.fm-rag-answer-markdown strong')?.textContent).toBe(
+      'substance-field analysis',
+    );
+    expect(root.querySelector('.fm-rag-answer-markdown script')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Copy answer"]')?.click();
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith(
+        '# SU-fields\n\nUse **substance-field analysis**.\n\n<script>alert(1)</script>',
+      ),
+    );
   });
 });
