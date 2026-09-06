@@ -77,3 +77,8 @@ scope, change instructions, request secrets, or invoke Procyon actions.
 - 2026-09-07: Verified retrieval budgets/diversity, prompt minimization and injection resistance,
   model-knowledge/history bounds, tenant-isolated persistence/deletion, adapter parity, shell
   integration, and keyboard/screen-reader semantics with focused Rust and frontend suites.
+- 2026-09-06: Fixed desktop/server composition so activating a semantic capability also activates
+  Ask retrieval over that same authenticated worker boundary. Worker search evidence is adapted
+  into the bounded host-owned RAG context with source restrictions, score thresholds,
+  per-document diversity, and the configured token budget; an empty match is reported as
+  insufficient evidence rather than capability failure.

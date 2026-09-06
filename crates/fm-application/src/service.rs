@@ -88,7 +88,7 @@ use crate::pptx_preview::PptxPreviewService;
 use crate::rag::{
     AuthorizedRagRequest, GenerateRagAnswer, RagAnswerEvent, RagConversationStore, RagCoordinator,
     RagCoverage, RagHistoryTurn, RagRetrievalCapability, RagSourceDisplay, SavedRagConversation,
-    SavedRagTurn, UnavailableRagRetrievalCapability,
+    SavedRagTurn, SemanticRagRetrievalCapability, UnavailableRagRetrievalCapability,
 };
 use crate::rag_mapping::{
     events_to_dto, preview_to_dto as rag_preview_to_dto, rag_error_to_application, saved_to_dto,
@@ -1368,6 +1368,9 @@ impl FileManagerService {
         let semantic = SemanticService::new(capability);
         self.search_comparison.set_semantic(semantic.clone());
         self.semantic_indexing.set_semantic(semantic.clone());
+        self.rag = RagCoordinator::new(Arc::new(SemanticRagRetrievalCapability::new(
+            semantic.clone(),
+        )));
         self.semantic = semantic;
         self
     }

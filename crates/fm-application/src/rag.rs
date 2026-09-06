@@ -1,6 +1,6 @@
 //! Host-owned grounded retrieval, generation, and conversation persistence.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -10,6 +10,7 @@ use fm_semantic_worker::rag_retrieval::{
     RagContext, RagContextChunk, RagRetrievalError as WorkerRetrievalError, RagRetrievalRequest,
     RagRetrievalService,
 };
+use fm_semantic_worker::semantic_storage::QueryEvidence;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
@@ -18,6 +19,10 @@ use uuid::Uuid;
 use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
     normalize_endpoint_locality,
+};
+use crate::semantic::{
+    LibraryId, SemanticError, SemanticOperationId, SemanticQuery, SemanticScope,
+    SemanticSearchResult, SemanticService, TenantId,
 };
 
 const PROMPT_VERSION: &str = "grounded-rag/1";
@@ -46,6 +51,215 @@ impl RagRetrievalCapability for RagRetrievalService {
     ) -> Result<RagContext, RagError> {
         self.retrieve(request, cancellation)
             .map_err(map_retrieval_error)
+    }
+}
+
+/// Ask retrieval adapter over the same host-provided semantic capability used
+/// by search and indexing.
+pub(crate) struct SemanticRagRetrievalCapability {
+    semantic: SemanticService,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IpcSemanticEvidence {
+    record_id: String,
+    occurrence_id: String,
+    source_id: String,
+    score: f32,
+    chunk_kind: String,
+    excerpt: String,
+    media_type: Option<String>,
+    modified_at_ms: Option<i64>,
+    provenance: serde_json::Value,
+    indexed_content_hash: String,
+    generation: u64,
+    unavailable: bool,
+    stale: bool,
+    generated: bool,
+    source_position: u32,
+}
+
+impl SemanticRagRetrievalCapability {
+    #[must_use]
+    pub(crate) const fn new(semantic: SemanticService) -> Self {
+        Self { semantic }
+    }
+}
+
+#[async_trait]
+impl RagRetrievalCapability for SemanticRagRetrievalCapability {
+    async fn retrieve(
+        &self,
+        request: RagRetrievalRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<RagContext, RagError> {
+        if cancellation.is_cancelled() {
+            return Err(RagError::Cancelled);
+        }
+        let library_id = request
+            .filters
+            .library_id
+            .clone()
+            .ok_or(RagError::InvalidRequest)?;
+        let maximum_results = request
+            .policy
+            .maximum_documents
+            .saturating_mul(request.policy.maximum_chunks_per_document)
+            .saturating_mul(8)
+            .clamp(1, 512) as u32;
+        let results = self
+            .semantic
+            .query(SemanticQuery {
+                scope: SemanticScope::new(
+                    TenantId::new(request.filters.tenant_id.clone()),
+                    LibraryId::new(library_id.clone()),
+                ),
+                request_id: SemanticOperationId::new(Uuid::new_v4().to_string()),
+                text: request.question.clone(),
+                concept: None,
+                maximum_results,
+            })
+            .await
+            .map_err(map_semantic_retrieval_error)?;
+        if cancellation.is_cancelled() {
+            return Err(RagError::Cancelled);
+        }
+        semantic_results_to_context(results, &library_id, &request)
+    }
+}
+
+fn semantic_results_to_context(
+    results: Vec<SemanticSearchResult>,
+    library_id: &str,
+    request: &RagRetrievalRequest,
+) -> Result<RagContext, RagError> {
+    let mut chunks = Vec::new();
+    let mut documents = HashSet::new();
+    let mut chunks_per_document = HashMap::<String, usize>::new();
+    let mut token_count = 0_usize;
+
+    for result in results {
+        let evidence = result
+            .metadata
+            .get("semantic.evidence")
+            .map(|json| serde_json::from_str::<Vec<IpcSemanticEvidence>>(json))
+            .transpose()?
+            .unwrap_or_else(|| vec![fallback_evidence(&result)]);
+        for item in evidence {
+            if item.score < request.policy.minimum_score
+                || (!request.source_restriction.allowed_source_ids.is_empty()
+                    && !request
+                        .source_restriction
+                        .allowed_source_ids
+                        .contains(&item.source_id))
+            {
+                continue;
+            }
+            let document_id = result.document_id.as_str().to_owned();
+            let existing_for_document = chunks_per_document
+                .get(&document_id)
+                .copied()
+                .unwrap_or_default();
+            if existing_for_document >= request.policy.maximum_chunks_per_document
+                || (!documents.contains(&document_id)
+                    && documents.len() >= request.policy.maximum_documents)
+            {
+                continue;
+            }
+            let item_tokens = item.excerpt.split_whitespace().count().max(1);
+            if token_count.saturating_add(item_tokens) > request.policy.context_token_budget {
+                continue;
+            }
+            documents.insert(document_id.clone());
+            chunks_per_document.insert(document_id.clone(), existing_for_document + 1);
+            token_count = token_count.saturating_add(item_tokens);
+            chunks.push(RagContextChunk {
+                label: format!("S{}", chunks.len() + 1),
+                evidence: QueryEvidence {
+                    record_id: item.record_id.clone(),
+                    library_id: library_id.to_owned(),
+                    document_id,
+                    occurrence_id: item.occurrence_id,
+                    source_id: item.source_id,
+                    provenance: serde_json::to_string(&item.provenance)?,
+                    generation: item.generation,
+                    record_kind: item.chunk_kind,
+                    excerpt: item.excerpt.clone(),
+                    content: item.excerpt,
+                    token_count: item_tokens,
+                    section_path: Vec::new(),
+                    source_position: item.source_position,
+                    generated: item.generated,
+                    content_hash: item.indexed_content_hash,
+                    available: !item.unavailable,
+                    media_type: item.media_type.unwrap_or_default(),
+                    modified_at_ms: item.modified_at_ms.unwrap_or_default(),
+                },
+                score: item.score,
+                adjacent: false,
+                source_citation_record_ids: vec![item.record_id],
+                stale: item.stale,
+            });
+        }
+    }
+
+    Ok(RagContext {
+        insufficient: chunks.is_empty(),
+        chunks,
+        token_count,
+    })
+}
+
+fn fallback_evidence(result: &SemanticSearchResult) -> IpcSemanticEvidence {
+    IpcSemanticEvidence {
+        record_id: result
+            .metadata
+            .get("semantic.recordId")
+            .cloned()
+            .unwrap_or_else(|| result.document_id.as_str().to_owned()),
+        occurrence_id: result
+            .metadata
+            .get("occurrence_id")
+            .cloned()
+            .unwrap_or_default(),
+        source_id: result
+            .metadata
+            .get("semantic.sourceId")
+            .or_else(|| result.metadata.get("source_id"))
+            .cloned()
+            .unwrap_or_default(),
+        score: result.score as f32,
+        chunk_kind: "chunk".to_owned(),
+        excerpt: result.excerpt.clone(),
+        media_type: result.metadata.get("media_type").cloned(),
+        modified_at_ms: result
+            .metadata
+            .get("modified_at_ms")
+            .and_then(|value| value.parse().ok()),
+        provenance: serde_json::Value::Null,
+        indexed_content_hash: result
+            .metadata
+            .get("semantic.indexedContentHash")
+            .cloned()
+            .unwrap_or_default(),
+        generation: result
+            .metadata
+            .get("semantic.generation")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_default(),
+        unavailable: false,
+        stale: false,
+        generated: false,
+        source_position: 0,
+    }
+}
+
+fn map_semantic_retrieval_error(error: SemanticError) -> RagError {
+    match error {
+        SemanticError::Unavailable => RagError::Unavailable,
+        SemanticError::Cancelled => RagError::Cancelled,
+        _ => RagError::RetrievalFailed,
     }
 }
 
@@ -715,9 +929,15 @@ pub enum RagError {
 
 #[cfg(test)]
 mod tests {
-    use fm_semantic_worker::rag_retrieval::RagContextChunk;
-    use fm_semantic_worker::semantic_storage::QueryEvidence;
+    use std::collections::BTreeMap;
+
+    use fm_semantic_worker::rag_retrieval::{RagContextChunk, RagRetrievalPolicy};
+    use fm_semantic_worker::semantic_storage::{QueryEvidence, QueryFilters};
     use tempfile::tempdir;
+
+    use crate::semantic::{
+        DocumentId, DocumentIngestion, FakeSemanticCapability, SemanticCapability,
+    };
 
     use super::*;
 
@@ -749,6 +969,47 @@ mod tests {
             source_citation_record_ids: vec!["source-record-a".into()],
             stale: true,
         }
+    }
+
+    #[tokio::test]
+    async fn active_semantic_capability_supplies_ask_evidence() {
+        let capability = Arc::new(FakeSemanticCapability::new());
+        let scope = SemanticScope::new(TenantId::new("workspace-a"), LibraryId::new("library-a"));
+        capability
+            .ingest(DocumentIngestion {
+                scope: scope.clone(),
+                operation_id: SemanticOperationId::new("ingest-a"),
+                document_id: DocumentId::new("document-a"),
+                metadata: BTreeMap::from([("source_id".to_owned(), "source-a".to_owned())]),
+                media_type: "text/plain".to_owned(),
+                content: b"The best introduction to SU-fields is this practical article.".to_vec(),
+            })
+            .await
+            .unwrap();
+        let retrieval =
+            SemanticRagRetrievalCapability::new(SemanticService::new(capability.clone()));
+
+        let context = retrieval
+            .retrieve(
+                RagRetrievalRequest {
+                    question: "SU-fields".to_owned(),
+                    filters: QueryFilters {
+                        tenant_id: scope.tenant_id.as_str().to_owned(),
+                        library_id: Some(scope.library_id.as_str().to_owned()),
+                        ..QueryFilters::default()
+                    },
+                    source_restriction: Default::default(),
+                    current_hashes: HashMap::new(),
+                    policy: RagRetrievalPolicy::default_ask(),
+                },
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert!(!context.insufficient);
+        assert_eq!(context.chunks.len(), 1);
+        assert!(context.chunks[0].evidence.content.contains("SU-fields"));
     }
 
     #[test]
