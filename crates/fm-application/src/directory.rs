@@ -809,20 +809,31 @@ async fn publish_changes(
     let Some(previous) = state.snapshot.clone() else {
         return;
     };
+    let Some(previous_full_entries) = state.full_entries.clone() else {
+        return;
+    };
     state.revision += 1;
     let revision = state.revision;
     let (total_known_size, total_known_file_count) = aggregate_totals(&entries);
+    let page_end = entries.len().min(LIST_PAGE_SIZE);
+    let has_more = page_end < entries.len();
     let snapshot = DirectorySnapshot {
         revision,
-        entries: entries.clone(),
+        entries: entries[..page_end].to_vec(),
         total_known_entries: Some(entries.len() as u64),
         total_known_size: Some(total_known_size),
         total_known_file_count: Some(total_known_file_count),
-        has_more: false,
-        continuation_token: None,
+        has_more,
+        continuation_token: has_more.then(|| page_end.to_string()),
         ..previous.clone()
     };
-    let mut deltas = deltas_for_change(change, &previous, snapshot.clone(), entries, revision);
+    let mut deltas = deltas_for_change(
+        change,
+        &previous_full_entries,
+        snapshot.clone(),
+        &entries,
+        revision,
+    );
     let final_revision = deltas.last().map_or(revision, delta_revision);
     let mut snapshot = snapshot;
     snapshot.revision = final_revision;
@@ -835,7 +846,7 @@ async fn publish_changes(
         reset_snapshot.revision = final_revision;
     }
     state.revision = final_revision;
-    state.full_entries = Some(Arc::new(snapshot.entries.clone()));
+    state.full_entries = Some(Arc::new(entries));
     state.snapshot = Some(snapshot);
     drop(panes);
 
@@ -852,23 +863,26 @@ async fn publish_changes(
 
 fn deltas_for_change(
     change: ProviderChange,
-    previous: &DirectorySnapshot,
+    previous: &[fm_domain::EntrySummary],
     snapshot: DirectorySnapshot,
-    entries: Vec<fm_domain::EntrySummary>,
+    entries: &[fm_domain::EntrySummary],
     revision: u64,
 ) -> Vec<DirectoryDeltaPayload> {
-    if change == ProviderChange::ResetRequired {
+    if change == ProviderChange::ResetRequired
+        || previous.len() > LIST_PAGE_SIZE
+        || entries.len() > LIST_PAGE_SIZE
+    {
         vec![DirectoryDeltaPayload::Reset {
             snapshot: snapshot.into(),
         }]
     } else {
-        diff_entries(&previous.entries, entries, revision)
+        diff_entries(previous, entries, revision)
     }
 }
 
 fn diff_entries(
     previous: &[fm_domain::EntrySummary],
-    current: Vec<fm_domain::EntrySummary>,
+    current: &[fm_domain::EntrySummary],
     revision: u64,
 ) -> Vec<DirectoryDeltaPayload> {
     let previous_by_id: HashMap<_, _> = previous.iter().map(|entry| (entry.id, entry)).collect();
@@ -1974,7 +1988,7 @@ mod tests {
 
     #[test]
     fn ten_thousand_added_entries_are_one_batched_delta() {
-        let entries = (0..10_000)
+        let entries: Vec<_> = (0..10_000)
             .map(|index| fm_domain::EntrySummary {
                 id: fm_domain::EntryId::new(),
                 location: Location::new(
@@ -1996,7 +2010,7 @@ mod tests {
             })
             .collect();
 
-        let deltas = diff_entries(&[], entries, 2);
+        let deltas = diff_entries(&[], &entries, 2);
 
         assert_eq!(deltas.len(), 1);
         assert!(matches!(
@@ -2031,9 +2045,9 @@ mod tests {
 
         let deltas = deltas_for_change(
             ProviderChange::ResetRequired,
-            &previous,
+            &previous.entries,
             fresh,
-            Vec::new(),
+            &[],
             2,
         );
 

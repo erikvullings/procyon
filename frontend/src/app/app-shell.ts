@@ -1674,6 +1674,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       refetchAffectedPanes(paneId);
       return;
     }
+    if (delta.type !== 'reset' && current.hasMore) {
+      refetchAffectedPanes(paneId);
+      return;
+    }
     if (delta.type === 'reset') {
       const nextEntries = delta.snapshot.entries;
       directories.set(
@@ -2969,7 +2973,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     const previousWorkspace = workspace;
     replaceWorkspace({ ...previousWorkspace, activePaneId: paneId });
-    void navigation.load(paneId, { background: true });
     try {
       await dispatchWorkspaceCommand(
         client,

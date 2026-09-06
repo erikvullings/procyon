@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
-import type { Location, Operation } from '../models';
+import type { EntrySummary, Location, Operation } from '../models';
 import {
   AppShell,
   locationForPath,
@@ -712,6 +712,115 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(directoryRowNamed(activePane, 'downloaded-photo.jpg')).not.toBeUndefined(),
     );
+  });
+
+  it('refreshes an active paged sorted pane when an added-entry delta arrives', async () => {
+    const client = new MockFileManagerClient({ pageSize: 100 });
+    const originalListDirectory = client.listDirectory.bind(client);
+    const downloadedPhoto: EntrySummary = {
+      id: 'external-download',
+      location: {
+        providerId: 'local',
+        uri: 'mock:///large/1000/downloaded-photo.jpg',
+      },
+      name: 'downloaded-photo.jpg',
+      kind: 'file',
+      size: 42,
+      modifiedAt: '2030-09-06T16:00:00Z',
+      hidden: false,
+      readOnly: false,
+      extension: 'jpg',
+      mimeType: 'image/jpeg',
+      metadataRevision: 1,
+    };
+    let downloadExists = false;
+    const listDirectory = vi
+      .spyOn(client, 'listDirectory')
+      .mockImplementation(async (request, signal) => {
+        const snapshot = await originalListDirectory(request, signal);
+        if (
+          !downloadExists ||
+          request.location.uri !== 'mock:///large/1000' ||
+          request.sort?.[0]?.columnId !== 'core.modified' ||
+          request.sort[0].direction !== 'descending'
+        ) {
+          return snapshot;
+        }
+        return {
+          ...snapshot,
+          revision: 3,
+          entries: [downloadedPhoto, ...snapshot.entries.slice(0, 99)],
+        };
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
+      '[data-column-id="core.modified"]',
+    );
+    modifiedHeader?.click();
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('ascending'));
+    modifiedHeader?.click();
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
+    await vi.waitFor(() =>
+      expect(
+        listDirectory.mock.calls.some(
+          ([request]) =>
+            request.sort?.[0]?.columnId === 'core.modified' &&
+            request.sort[0].direction === 'descending',
+        ),
+      ).toBe(true),
+    );
+    const viewport = activePane?.querySelector<HTMLElement>('.fm-directory-viewport');
+    viewport?.focus();
+    expect(document.activeElement).toBe(viewport);
+    listDirectory.mockClear();
+
+    downloadExists = true;
+    client.emit({
+      eventId: 50,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId: 'left',
+        delta: { type: 'entriesAdded', revision: 2, entries: [downloadedPhoto] },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(listDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: { providerId: 'file', uri: 'mock:///large/1000' },
+          sort: [{ columnId: 'core.modified', direction: 'descending' }],
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
+    await vi.waitFor(() => {
+      if (viewport !== null && viewport !== undefined) {
+        viewport.scrollTop = 0;
+        viewport.dispatchEvent(new Event('scroll'));
+        m.redraw.sync();
+      }
+      expect(directoryRowNamed(activePane, downloadedPhoto.name)).toBeDefined();
+    });
+    const firstEntryName = [
+      ...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row .fm-entry-name [title]') ??
+        []),
+    ]
+      .map((element) => element.getAttribute('title'))
+      .find((name) => name !== '..');
+    expect(firstEntryName).toBe(downloadedPhoto.name);
   });
 
   it('re-fetches the directory after applying a keyboard sort shortcut', async () => {
@@ -2641,25 +2750,6 @@ describe('AppShell', () => {
     m.redraw.sync();
 
     expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe('true');
-  });
-
-  it('re-fetches a directory when activating its pane', async () => {
-    const client = new MockFileManagerClient();
-    const listDirectory = vi.spyOn(client, 'listDirectory');
-    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
-    listDirectory.mockClear();
-
-    root.querySelector<HTMLElement>('[data-pane-id="right"]')?.click();
-
-    await vi.waitFor(() =>
-      expect(listDirectory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          location: expect.objectContaining({ uri: 'mock:///Documents' }),
-        }),
-        expect.any(AbortSignal),
-      ),
-    );
   });
 
   it('refetches panes after confirming a conflict resolution', async () => {

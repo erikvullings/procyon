@@ -229,6 +229,99 @@ async fn paging_a_large_directory_returns_every_entry_in_global_sort_order() {
 }
 
 #[tokio::test]
+async fn watched_paged_directory_resets_to_a_consistent_first_page_after_an_external_addition() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let downloads = root.path().join("Downloads");
+    std::fs::create_dir(&downloads).expect("must create Downloads fixture");
+    for index in 1..=300 {
+        std::fs::write(downloads.join(format!("entry-{index:04}.txt")), b"x")
+            .expect("must create fixture");
+    }
+    let location =
+        Location::from_native_path(&downloads).expect("Downloads path must be representable");
+    let workspace_id = fm_domain::WorkspaceId::new();
+    let pane_id = PaneId::new();
+    let events = EventBus::new(32);
+    let mut providers = ProviderRegistry::new();
+    providers.register(Arc::new(LocalFileSystemProvider));
+    let service = DirectoryService::with_event_bus(providers, events.clone());
+    let mut first_request = request(pane_id, &location);
+    first_request.workspace_id = workspace_id.into();
+    first_request.sort = vec![SortDescriptorDto {
+        column_id: "core.name".to_owned(),
+        direction: SortDirectionDto::Ascending,
+    }];
+    let first = service
+        .list(first_request)
+        .await
+        .expect("first page must load");
+    assert_eq!(first.entries.len(), 256);
+    assert_eq!(first.total_known_entries, Some(300));
+    assert!(first.has_more);
+    assert_eq!(first.continuation_token.as_deref(), Some("256"));
+    let mut subscription = events.subscribe(SessionId::new("test"), [workspace_id], None);
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    std::fs::write(downloads.join("entry-0000-new.txt"), b"new")
+        .expect("must create external fixture");
+    let changed = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
+        .await
+        .expect("delta timeout")
+        .expect("event bus open");
+    let reset = match changed {
+        SubscriptionEvent::Event(event) => match event.payload {
+            BackendEventPayload::DirectoryDelta {
+                pane_id: event_pane,
+                delta: DirectoryDeltaPayload::Reset { snapshot },
+            } => {
+                assert_eq!(event_pane, pane_id);
+                snapshot
+            }
+            payload => panic!("expected a paged reset, got {payload:?}"),
+        },
+        event => panic!("unexpected subscription item: {event:?}"),
+    };
+    assert_eq!(reset.entries.len(), 256);
+    assert_eq!(reset.entries[0].name, "entry-0000-new.txt");
+    assert_eq!(reset.total_known_entries, Some(301));
+    assert!(reset.has_more);
+    assert_eq!(reset.continuation_token.as_deref(), Some("256"));
+
+    let mut next_request = request(pane_id, &location);
+    next_request.workspace_id = workspace_id.into();
+    next_request.sort = vec![SortDescriptorDto {
+        column_id: "core.name".to_owned(),
+        direction: SortDirectionDto::Ascending,
+    }];
+    next_request.continuation_token = reset.continuation_token.clone();
+    let next = service
+        .list(next_request)
+        .await
+        .expect("continuation page must load");
+    assert_eq!(next.entries.len(), 45);
+    assert_eq!(next.total_known_entries, Some(301));
+    assert!(!next.has_more);
+    assert_eq!(next.continuation_token, None);
+
+    let names: Vec<_> = reset
+        .entries
+        .iter()
+        .map(|entry| entry.name.clone())
+        .chain(next.entries.iter().map(|entry| entry.name.clone()))
+        .collect();
+    let unique: std::collections::HashSet<_> = names.iter().collect();
+    assert_eq!(names.len(), 301);
+    assert_eq!(unique.len(), 301);
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| name.as_str() == "entry-0000-new.txt")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn a_non_existent_directory_maps_to_not_found_without_exposing_an_os_error() {
     let root = tempfile::tempdir().expect("must create a temp directory");
     let missing = root.path().join("missing");
