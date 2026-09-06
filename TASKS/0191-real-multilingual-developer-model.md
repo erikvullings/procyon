@@ -139,7 +139,9 @@ component pack.
   estimate document counts or source bytes. The review action records an unknown workload, while
   still disclosing the full reindex and signed package size; the desktop host derives the actual
   work by reconciling every enrolled root after activation. Local-package import is explicitly
-  labelled as a developer tool rather than an alternative curated-profile switch.
+  labelled as a developer tool rather than an alternative curated-profile switch. Profile status
+  compares the exact signed model identity, so an installation created by an older catalog can
+  update a profile whose display name stayed the same.
 
 ## Validation commands
 

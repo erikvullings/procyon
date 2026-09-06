@@ -1028,6 +1028,9 @@ export const en = {
     migrationSummary: 'Change embedding model',
     migrationExplanation:
       'Choose a signed model profile below. Procyon installs and verifies it after confirmation, then automatically reindexes every enrolled folder.',
+    activeModelUpdateAvailable:
+      'This profile still uses an older model package. Use Change embedding model below to install and activate the current signed model.',
+    profileUpdateAvailable: 'Update available',
     migrationTargetLegend: 'Target profile',
     estimatedDocuments: 'Estimated documents',
     estimatedSourceBytes: 'Estimated source bytes',

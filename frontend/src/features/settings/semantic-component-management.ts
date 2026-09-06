@@ -14,6 +14,7 @@ import type {
   SemanticModelMigrationPlan,
   SemanticModelMigrationProgress,
   SemanticModelProfile,
+  SemanticModelSelection,
   SemanticProfile,
 } from '../../models';
 
@@ -142,6 +143,7 @@ function profileChoices(
   selected: SemanticProfile,
   onchange: (profile: SemanticProfile) => void,
   legend = t('semanticComponents', 'profileChoiceLegend'),
+  activeModel?: SemanticModelSelection,
 ): Vnode {
   return m('fieldset.fm-semantic-profile-choices', [
     m('legend', legend),
@@ -158,6 +160,19 @@ function profileChoices(
             }),
             m('span.fm-semantic-profile-copy', [
               m('strong', profileName(profile.profile)),
+              modelSelectionMatchesProfile(activeModel, profile)
+                ? m(
+                    'span.fm-semantic-profile-status',
+                    { 'data-state': 'in-use' },
+                    t('semanticComponents', 'componentStateActive'),
+                  )
+                : activeModel?.profile === profile.profile
+                  ? m(
+                      'span.fm-semantic-profile-status',
+                      { 'data-state': 'update-available' },
+                      t('semanticComponents', 'profileUpdateAvailable'),
+                    )
+                  : undefined,
               profile.recommended
                 ? m('span.fm-semantic-recommended', t('semanticComponents', 'recommended'))
                 : undefined,
@@ -166,6 +181,17 @@ function profileChoices(
           ]),
         ),
   ]);
+}
+
+function modelSelectionMatchesProfile(
+  selection: SemanticModelSelection | undefined,
+  profile: SemanticModelProfile,
+): boolean {
+  return (
+    selection?.profile === profile.profile &&
+    selection.identity.modelId === profile.resolvedModel.modelId &&
+    selection.identity.revision === profile.resolvedModel.revision
+  );
 }
 
 function lifecycleView(status: SemanticComponentStatus): Vnode {
@@ -245,7 +271,14 @@ function lifecycleView(status: SemanticComponentStatus): Vnode {
   );
 }
 
-function modelAndComponentStatus(status: SemanticComponentStatus): Vnode[] {
+function modelAndComponentStatus(
+  status: SemanticComponentStatus,
+  profiles: readonly SemanticModelProfile[],
+): Vnode[] {
+  const activeProfile = profiles.find((profile) => profile.profile === status.activeModel?.profile);
+  const activeProfileNeedsUpdate =
+    activeProfile !== undefined &&
+    !modelSelectionMatchesProfile(status.activeModel ?? undefined, activeProfile);
   return [
     status.dataRoot == null
       ? undefined
@@ -265,6 +298,12 @@ function modelAndComponentStatus(status: SemanticComponentStatus): Vnode[] {
             m('dt', t('semanticComponents', 'revision')),
             m('dd', status.activeModel.identity.revision),
           ]),
+          activeProfileNeedsUpdate
+            ? m(
+                'p.fm-semantic-component-note',
+                t('semanticComponents', 'activeModelUpdateAvailable'),
+              )
+            : undefined,
         ]),
     m('section.fm-semantic-status-section', [
       m('h6', t('semanticComponents', 'installedComponentsHeading')),
@@ -951,6 +990,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     const developerBundle = profiles.some((profile) =>
       profile.resolvedModel.modelId.startsWith('procyon.dev.'),
     );
+    const migrationTarget = profiles.find((profile) => profile.profile === migrationProfile);
     if (!managed) {
       return [
         capabilities.authority === 'unavailable'
@@ -1196,12 +1236,17 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   migrationProfile = profile;
                   pendingMigration = undefined;
                 },
+                t('semanticComponents', 'migrationTargetLegend'),
+                status.activeModel,
               ),
               m(
                 'button.fm-semantic-action',
                 {
                   type: 'button',
-                  disabled: busy !== undefined || status.activeModel.profile === migrationProfile,
+                  disabled:
+                    busy !== undefined ||
+                    migrationTarget === undefined ||
+                    modelSelectionMatchesProfile(status.activeModel, migrationTarget),
                   onclick: planMigration,
                 },
                 busy === 'planMigration'
@@ -1437,7 +1482,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         m('section.fm-semantic-status', { 'aria-live': 'polite' }, [
           m('h6', t('semanticComponents', 'statusHeading')),
           lifecycleView(loaded.status),
-          ...modelAndComponentStatus(loaded.status),
+          ...modelAndComponentStatus(loaded.status, loaded.profiles),
         ]),
         actionMessage === undefined
           ? undefined

@@ -1138,11 +1138,16 @@ main.fm-workspace {
   color: var(--fm-text-muted);
 }
 
-.fm-semantic-recommended {
+.fm-semantic-recommended,
+.fm-semantic-profile-status {
   width: fit-content;
   color: var(--fm-accent);
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.fm-semantic-profile-status[data-state="update-available"] {
+  color: var(--fm-warning);
 }
 
 .fm-semantic-offer,

@@ -1039,6 +1039,9 @@ export const nl = {
     migrationSummary: 'Embeddingmodel wijzigen',
     migrationExplanation:
       'Kies hieronder een ondertekend modelprofiel. Na bevestiging installeert en controleert Procyon het model en indexeert daarna automatisch alle aangemelde mappen opnieuw.',
+    activeModelUpdateAvailable:
+      'Dit profiel gebruikt nog een ouder modelpakket. Gebruik Embeddingmodel wijzigen hieronder om het huidige ondertekende model te installeren en activeren.',
+    profileUpdateAvailable: 'Update beschikbaar',
     migrationTargetLegend: 'Doelprofiel',
     estimatedDocuments: 'Geschat aantal documenten',
     estimatedSourceBytes: 'Geschatte bronbytes',

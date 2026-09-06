@@ -381,6 +381,48 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).toContain('Complete migration');
   });
 
+  it('offers the current signed model when an older model used the same profile name', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const status = await client.getSemanticComponentStatus();
+    const profiles = await client.listSemanticComponentProfiles();
+    const compact = profiles.find((profile) => profile.profile === 'compactMultilingual');
+    const quality = profiles.find((profile) => profile.profile === 'multilingualQuality');
+    if (status.activeModel == null || compact === undefined || quality === undefined) {
+      throw new Error('mock semantic profiles are incomplete');
+    }
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...status,
+      activeModel: {
+        profile: 'multilingualQuality',
+        identity: compact.resolvedModel,
+      },
+    });
+    const plan = vi.spyOn(client, 'planSemanticComponentModelMigration');
+
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.textContent).toContain('This profile still uses an older model package');
+    expect(root.textContent).toContain('Update available');
+    root
+      .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
+      ?.setAttribute('open', '');
+    expect(
+      root.querySelector<HTMLInputElement>(
+        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
+      )?.checked,
+    ).toBe(true);
+    expect(button('Review model change').disabled).toBe(false);
+    button('Review model change').click();
+
+    await vi.waitFor(() =>
+      expect(plan).toHaveBeenCalledWith({
+        profile: 'multilingualQuality',
+        estimate: { documents: 0, sourceBytes: 0 },
+      }),
+    );
+  });
+
   it('renders resumable migration progress and exposes profile plan and confirmation', async () => {
     mountComponent(new MockFileManagerClient({ semanticLifecycle: 'migrating' }));
     await waitForLoaded();
