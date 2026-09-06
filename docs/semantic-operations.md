@@ -21,10 +21,12 @@ content search, and baseline document viewing available.
   components. Enrolment and indexing still require explicit consent for each local root.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
   also available as **Ask your library** in the command palette. It always opens Ask across the
-  existing library. When the active folder is not included, Ask offers an optional **Include current
-  folder** action; accepting it shows the same recursive estimate, retention disclosure, budget
-  warnings, and explicit consent used by Settings. Detailed root administration remains under
-  **Settings > Semantic**.
+  existing library. The question and answer workspace stays prominent; generation profile, evidence
+  scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The
+  **Include current folder** and **Allow model knowledge** choices remain simple opt-in checkboxes
+  beside the answer area. Including a folder shows the same recursive estimate, retention
+  disclosure, budget warnings, and explicit consent used by Settings; cancelling returns to the
+  question in progress. Detailed root administration remains under **Settings > Semantic**.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without

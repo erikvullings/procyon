@@ -159,6 +159,11 @@ component pack.
   enrolment previews now capture stable filesystem identity, and desktop composition atomically
   fills missing identity on legacy reachable local roots without overwriting existing provider
   evidence.
+- 2026-09-06 (Ask workspace follow-up): Ask now opens as a wide, responsive question-and-answer
+  workspace instead of inheriting the 24rem dense-dialog cap. Profile, scope, privacy disclosure,
+  evidence, and saved conversations are expandable; folder inclusion and model knowledge are
+  adjacent opt-in checkboxes near the answer. Cancelling folder consent returns to the in-progress
+  question, while successful enrolment reopens it with current-folder scope available.
 
 ## Validation commands
 

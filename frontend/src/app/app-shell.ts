@@ -394,6 +394,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
+  let semanticEnrolmentReturnToAsk = false;
   let functionKeyModifiers: FunctionKeyModifiers = {};
   /** Last non-empty Quick Filter query per tab key, for the Ctrl+Shift+S "reactivate" shortcut. */
   const lastQuickFilterQueryByTabKey = new Map<string, string>();
@@ -3182,6 +3183,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     updateSettings: (update) => updateLocationSettings(attrsClient, update),
     includeCurrentSemanticFolder: (workspaceId, location) => {
       semanticEnrolmentRequest = { workspaceId, location };
+      semanticEnrolmentReturnToAsk = true;
       m.redraw();
     },
     openEditorForCreatedFile: (location, name) => {
@@ -4137,7 +4139,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             isOpen: semanticEnrolmentRequest !== undefined,
             closeOnEsc: true,
             onToggle: (open: boolean) => {
-              if (!open) semanticEnrolmentRequest = undefined;
+              if (!open) {
+                const returnToAsk = semanticEnrolmentReturnToAsk;
+                semanticEnrolmentRequest = undefined;
+                semanticEnrolmentReturnToAsk = false;
+                if (returnToAsk) openRagAsk();
+              }
             },
             ...(semanticEnrolmentRequest === undefined
               ? {}
@@ -4150,6 +4157,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       location: semanticEnrolmentRequest.location,
                       onEnrolled: () => {
                         semanticEnrolmentRequest = undefined;
+                        semanticEnrolmentReturnToAsk = false;
                         openRagAsk();
                       },
                     }),

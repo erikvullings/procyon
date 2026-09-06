@@ -60,6 +60,7 @@ afterEach(() => {
 describe('RagAskDialog', () => {
   it('shows the profile, grounded default, and all five one-action scopes', async () => {
     const client = await configuredClient();
+    const includeCurrentFolder = vi.fn();
     m.mount(root, {
       view: () =>
         m(RagAskDialog, {
@@ -70,10 +71,18 @@ describe('RagAskDialog', () => {
           selectedEntries: [entry],
           semanticSourceIds: ['source-1'],
           onClose: vi.fn(),
+          onIncludeCurrentFolder: includeCurrentFolder,
         }),
     });
 
     await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
+    const dialog = root.querySelector('.fm-rag-ask-modal');
+    expect(dialog?.classList.contains('fm-dense-modal')).toBe(false);
+    expect(root.querySelector<HTMLTextAreaElement>('.fm-rag-question textarea')?.rows).toBe(5);
+    expect(root.querySelector<HTMLDetailsElement>('.fm-rag-options')?.open).toBe(false);
+    expect(root.querySelector('.fm-rag-answer')?.textContent).toContain(
+      'Your generated answer will appear here.',
+    );
     const selects = root.querySelectorAll<HTMLSelectElement>('select');
     expect(selects).toHaveLength(2);
     const scopeSelect = selects.item(1);
@@ -85,7 +94,16 @@ describe('RagAskDialog', () => {
       'Named enrolled roots',
     ]);
     expect(scopeSelect.value).toBe('entireLibrary');
-    const modelKnowledge = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const preferences = root.querySelector('.fm-rag-preferences');
+    const checkboxes = preferences?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkboxes).toHaveLength(2);
+    const includeFolder = checkboxes?.item(0);
+    expect(includeFolder?.checked).toBe(false);
+    if (includeFolder === undefined) throw new Error('folder inclusion checkbox not rendered');
+    includeFolder.checked = true;
+    includeFolder.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(includeCurrentFolder).toHaveBeenCalledOnce();
+    const modelKnowledge = checkboxes?.item(1);
     expect(modelKnowledge?.checked).toBe(false);
     expect(root.textContent).toContain('read-only');
   });

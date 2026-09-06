@@ -687,8 +687,7 @@ export const en = {
     includeFolderExplanation:
       'Ask uses indexed content. Review and include this folder and its descendants before asking a question.',
     openAssistant: 'Ask your library',
-    currentFolderNotIncluded:
-      'This folder is not included in your semantic library. You can still ask across the rest of the library.',
+    options: 'Options and privacy',
     includeCurrentFolder: 'Include current folder',
     folderStatusFailed: 'The current folder inclusion status could not be loaded.',
     readOnlyDisclosure:
@@ -718,6 +717,7 @@ export const en = {
     staleEvidence: 'Source changed',
     unavailableEvidence: 'Original unavailable',
     answer: 'Answer',
+    answerPlaceholder: 'Your generated answer will appear here.',
     modelKnowledgeUsed:
       'General model knowledge was allowed; [MODEL] claims are not library-backed.',
     openCitation: 'Open citation {label}',

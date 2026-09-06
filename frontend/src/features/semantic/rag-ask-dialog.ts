@@ -274,92 +274,178 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
     view: ({ attrs }) =>
       m(ModalPanel, {
         title: t('ragAsk', 'title'),
-        className: 'fm-dense-modal fm-rag-ask-modal',
+        className: 'fm-rag-ask-modal',
         isOpen: attrs.open,
         closeOnEsc: true,
         onToggle: (open: boolean) => {
           if (!open) attrs.onClose();
         },
         description: m('.fm-rag-ask', [
-          m('p', t('ragAsk', 'readOnlyDisclosure')),
           error === undefined ? undefined : m('p.fm-rag-error', { role: 'alert' }, error),
-          currentFolderStatusError
-            ? m('p.fm-rag-warning', { role: 'alert' }, t('ragAsk', 'folderStatusFailed'))
-            : undefined,
-          !currentFolderIncluded &&
-          !currentFolderStatusError &&
-          attrs.currentFolder !== undefined &&
-          attrs.onIncludeCurrentFolder !== undefined
-            ? m('.fm-rag-folder-offer', [
-                m('p', t('ragAsk', 'currentFolderNotIncluded')),
+          m('label.fm-rag-question', [
+            m('span', t('ragAsk', 'question')),
+            m('textarea', {
+              rows: 5,
+              value: question,
+              disabled: busy !== undefined,
+              autofocus: true,
+              oninput: (event: InputEvent) => {
+                question = (event.currentTarget as HTMLTextAreaElement).value;
+                resetRetrieval();
+              },
+            }),
+          ]),
+          m('details.fm-rag-options', [
+            m('summary', [
+              m('span', t('ragAsk', 'options')),
+              m('small', scopeLabel(selectedScope)),
+            ]),
+            m('.fm-rag-controls', [
+              m('label', [
+                m('span', t('ragAsk', 'profile')),
                 m(
-                  'button',
-                  { type: 'button', onclick: attrs.onIncludeCurrentFolder },
-                  t('ragAsk', 'includeCurrentFolder'),
-                ),
-              ])
-            : undefined,
-          m('.fm-rag-controls', [
-            m('label', [
-              m('span', t('ragAsk', 'profile')),
-              m(
-                'select.browser-default',
-                {
-                  value: selectedProfileId,
-                  disabled: busy !== undefined,
-                  onchange: (event: Event) => {
-                    selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
-                    resetRetrieval(true);
-                  },
-                },
-                profiles.map((profile) =>
-                  m(
-                    'option',
-                    { key: profile.id, value: profile.id },
-                    `${profile.name} · ${profile.locality}`,
-                  ),
-                ),
-              ),
-            ]),
-            m('label', [
-              m('span', t('ragAsk', 'scope')),
-              m(
-                'select.browser-default',
-                {
-                  value: selectedScope,
-                  disabled: busy !== undefined,
-                  onchange: (event: Event) => {
-                    selectedScope = (event.currentTarget as HTMLSelectElement)
-                      .value as RagScopeKind;
-                    resetRetrieval(true);
-                  },
-                },
-                scopeKinds.map((kind) =>
-                  m(
-                    'option',
-                    {
-                      key: kind,
-                      value: kind,
-                      disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
+                  'select.browser-default',
+                  {
+                    value: selectedProfileId,
+                    disabled: busy !== undefined,
+                    onchange: (event: Event) => {
+                      selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
+                      resetRetrieval(true);
                     },
-                    scopeLabel(kind),
+                  },
+                  profiles.map((profile) =>
+                    m(
+                      'option',
+                      { key: profile.id, value: profile.id },
+                      `${profile.name} · ${profile.locality}`,
+                    ),
                   ),
                 ),
+              ]),
+              m('label', [
+                m('span', t('ragAsk', 'scope')),
+                m(
+                  'select.browser-default',
+                  {
+                    value: selectedScope,
+                    disabled: busy !== undefined,
+                    onchange: (event: Event) => {
+                      selectedScope = (event.currentTarget as HTMLSelectElement)
+                        .value as RagScopeKind;
+                      resetRetrieval(true);
+                    },
+                  },
+                  scopeKinds.map((kind) =>
+                    m(
+                      'option',
+                      {
+                        key: kind,
+                        value: kind,
+                        disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
+                      },
+                      scopeLabel(kind),
+                    ),
+                  ),
+                ),
+              ]),
+              m('p.fm-rag-disclosure', t('ragAsk', 'readOnlyDisclosure')),
+            ]),
+          ]),
+          preview === undefined
+            ? undefined
+            : m(
+                'details.fm-rag-preview',
+                { open: answer === undefined, 'aria-labelledby': 'rag-evidence-heading' },
+                [
+                  m('summary#rag-evidence-heading', t('ragAsk', 'evidence')),
+                  m(
+                    'p.fm-rag-disclosure',
+                    preview.locality === 'cloud'
+                      ? t('ragAsk', 'cloudDisclosure', { tokens: preview.evidenceTokens })
+                      : t('ragAsk', 'localDisclosure', { tokens: preview.evidenceTokens }),
+                  ),
+                  m('p', { role: 'status' }, coverageText(preview)),
+                  preview.insufficient
+                    ? m('p.fm-rag-warning', t('ragAsk', 'insufficient'))
+                    : undefined,
+                  m(
+                    'ol.fm-rag-evidence',
+                    preview.evidence.map((item) =>
+                      m('li', { key: item.label }, [
+                        m('strong', `${item.label}${item.title == null ? '' : ` · ${item.title}`}`),
+                        m('p', item.excerpt),
+                        m(
+                          'small',
+                          [
+                            item.sectionPath.join(' / '),
+                            item.generated ? t('ragAsk', 'generatedEvidence') : undefined,
+                            item.stale ? t('ragAsk', 'staleEvidence') : undefined,
+                            !item.available ? t('ragAsk', 'unavailableEvidence') : undefined,
+                          ]
+                            .filter((value): value is string => value !== undefined && value !== '')
+                            .join(' · '),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ],
               ),
-            ]),
+          m('section.fm-rag-answer', { 'aria-live': 'polite' }, [
+            m('h4', t('ragAsk', 'answer')),
+            streamedText === '' && answer === undefined
+              ? m('p.fm-rag-answer-placeholder', t('ragAsk', 'answerPlaceholder'))
+              : m('p', answer?.text ?? streamedText),
+            answer?.modelKnowledgeAllowed === true
+              ? m('p.fm-rag-warning', t('ragAsk', 'modelKnowledgeUsed'))
+              : undefined,
+            m(
+              'ul.fm-rag-citations',
+              answer?.citations.map((citation) =>
+                m('li', { key: `${citation.label}-${citation.sourceId}` }, [
+                  m(
+                    'button',
+                    {
+                      type: 'button',
+                      disabled: citation.unavailable || attrs.onOpenCitation === undefined,
+                      onclick: () => {
+                        error = undefined;
+                        void Promise.resolve(attrs.onOpenCitation?.(citation.sourceId)).catch(
+                          () => {
+                            error = t('ragAsk', 'citationFailed');
+                            m.redraw();
+                          },
+                        );
+                      },
+                      'aria-label': t('ragAsk', 'openCitation', { label: citation.label }),
+                    },
+                    citation.label,
+                  ),
+                  ` ${citation.provenance}`,
+                  citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
+                  citation.stale ? ` · ${t('ragAsk', 'staleEvidence')}` : '',
+                  citation.unavailable ? ` · ${t('ragAsk', 'unavailableEvidence')}` : '',
+                ]),
+              ),
+            ),
+          ]),
+          m('.fm-rag-preferences', [
+            attrs.currentFolder === undefined || attrs.onIncludeCurrentFolder === undefined
+              ? undefined
+              : m('label', [
+                  m('input', {
+                    type: 'checkbox',
+                    checked: currentFolderIncluded,
+                    disabled:
+                      busy !== undefined || currentFolderStatusError || currentFolderIncluded,
+                    onchange: (event: Event) => {
+                      if ((event.currentTarget as HTMLInputElement).checked) {
+                        attrs.onIncludeCurrentFolder?.();
+                      }
+                    },
+                  }),
+                  m('span', t('ragAsk', 'includeCurrentFolder')),
+                ]),
             m('label', [
-              m('span', t('ragAsk', 'question')),
-              m('textarea', {
-                rows: 3,
-                value: question,
-                disabled: busy !== undefined,
-                oninput: (event: InputEvent) => {
-                  question = (event.currentTarget as HTMLTextAreaElement).value;
-                  resetRetrieval();
-                },
-              }),
-            ]),
-            m('label.fm-rag-model-knowledge', [
               m('input', {
                 type: 'checkbox',
                 checked: allowModelKnowledge,
@@ -371,80 +457,10 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
               }),
               m('span', t('ragAsk', 'allowModelKnowledge')),
             ]),
+            currentFolderStatusError
+              ? m('p.fm-rag-warning', { role: 'alert' }, t('ragAsk', 'folderStatusFailed'))
+              : undefined,
           ]),
-          preview === undefined
-            ? undefined
-            : m('section.fm-rag-preview', { 'aria-labelledby': 'rag-evidence-heading' }, [
-                m('h4#rag-evidence-heading', t('ragAsk', 'evidence')),
-                m(
-                  'p.fm-rag-disclosure',
-                  preview.locality === 'cloud'
-                    ? t('ragAsk', 'cloudDisclosure', { tokens: preview.evidenceTokens })
-                    : t('ragAsk', 'localDisclosure', { tokens: preview.evidenceTokens }),
-                ),
-                m('p', { role: 'status' }, coverageText(preview)),
-                preview.insufficient
-                  ? m('p.fm-rag-warning', t('ragAsk', 'insufficient'))
-                  : undefined,
-                m(
-                  'ol.fm-rag-evidence',
-                  preview.evidence.map((item) =>
-                    m('li', { key: item.label }, [
-                      m('strong', `${item.label}${item.title == null ? '' : ` · ${item.title}`}`),
-                      m('p', item.excerpt),
-                      m(
-                        'small',
-                        [
-                          item.sectionPath.join(' / '),
-                          item.generated ? t('ragAsk', 'generatedEvidence') : undefined,
-                          item.stale ? t('ragAsk', 'staleEvidence') : undefined,
-                          !item.available ? t('ragAsk', 'unavailableEvidence') : undefined,
-                        ]
-                          .filter((value): value is string => value !== undefined && value !== '')
-                          .join(' · '),
-                      ),
-                    ]),
-                  ),
-                ),
-              ]),
-          streamedText === '' && answer === undefined
-            ? undefined
-            : m('section.fm-rag-answer', { 'aria-live': 'polite' }, [
-                m('h4', t('ragAsk', 'answer')),
-                m('p', answer?.text ?? streamedText),
-                answer?.modelKnowledgeAllowed === true
-                  ? m('p.fm-rag-warning', t('ragAsk', 'modelKnowledgeUsed'))
-                  : undefined,
-                m(
-                  'ul.fm-rag-citations',
-                  answer?.citations.map((citation) =>
-                    m('li', { key: `${citation.label}-${citation.sourceId}` }, [
-                      m(
-                        'button',
-                        {
-                          type: 'button',
-                          disabled: citation.unavailable || attrs.onOpenCitation === undefined,
-                          onclick: () => {
-                            error = undefined;
-                            void Promise.resolve(attrs.onOpenCitation?.(citation.sourceId)).catch(
-                              () => {
-                                error = t('ragAsk', 'citationFailed');
-                                m.redraw();
-                              },
-                            );
-                          },
-                          'aria-label': t('ragAsk', 'openCitation', { label: citation.label }),
-                        },
-                        citation.label,
-                      ),
-                      ` ${citation.provenance}`,
-                      citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
-                      citation.stale ? ` · ${t('ragAsk', 'staleEvidence')}` : '',
-                      citation.unavailable ? ` · ${t('ragAsk', 'unavailableEvidence')}` : '',
-                    ]),
-                  ),
-                ),
-              ]),
           exportVisible
             ? m('details.fm-rag-export', { open: true }, [
                 m('summary', t('ragAsk', 'exportPreview')),
@@ -471,8 +487,8 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
             : undefined,
           saved.length === 0
             ? undefined
-            : m('section.fm-rag-saved', [
-                m('h4', t('ragAsk', 'savedConversations')),
+            : m('details.fm-rag-saved', [
+                m('summary', t('ragAsk', 'savedConversations')),
                 m(
                   'ul',
                   saved.map((conversation) =>

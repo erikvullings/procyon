@@ -694,8 +694,7 @@ export const nl = {
     includeFolderExplanation:
       'Vraag gebruikt geïndexeerde inhoud. Controleer en voeg deze map en onderliggende mappen toe voordat je een vraag stelt.',
     openAssistant: 'Vraag je bibliotheek',
-    currentFolderNotIncluded:
-      'Deze map is niet opgenomen in je semantische bibliotheek. Je kunt nog steeds de rest van de bibliotheek bevragen.',
+    options: 'Opties en privacy',
     includeCurrentFolder: 'Huidige map opnemen',
     folderStatusFailed: 'De opnamestatus van de huidige map kon niet worden geladen.',
     readOnlyDisclosure:
@@ -725,6 +724,7 @@ export const nl = {
     staleEvidence: 'Bron gewijzigd',
     unavailableEvidence: 'Origineel niet beschikbaar',
     answer: 'Antwoord',
+    answerPlaceholder: 'Je gegenereerde antwoord verschijnt hier.',
     modelKnowledgeUsed:
       'Algemene modelkennis was toegestaan; [MODEL]-uitspraken zijn niet bibliotheekgebonden.',
     openCitation: 'Citatie {label} openen',

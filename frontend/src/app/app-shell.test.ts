@@ -2598,11 +2598,25 @@ describe('AppShell', () => {
     chat.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
-        'This folder is not included',
+        'Include current folder',
       ),
     );
-    [...root.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Include current folder')
+    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
+      .find((label) => label.textContent?.trim() === 'Include current folder')
+      ?.querySelector<HTMLInputElement>('input')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
+      .find((button) => button.textContent?.trim() === 'Close')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
+        'Include current folder',
+      ),
+    );
+    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
+      .find((label) => label.textContent?.trim() === 'Include current folder')
+      ?.querySelector<HTMLInputElement>('input')
       ?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     await vi.waitFor(() =>
