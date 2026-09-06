@@ -745,6 +745,26 @@ describe('navigation controller', () => {
     expect(context.views.at(-1)?.entries[0]?.name).toBe('new');
   });
 
+  it('rejects an externally delivered snapshot for a stale tab location', async () => {
+    const context = setup();
+    echoingSnapshot(context.client, 'file:///home/erik', ['current']);
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+    await controller.load('left');
+
+    const applied = controller.applySnapshot(
+      'left',
+      snapshot('stale-reset', 'file:///home/erik/Downloads', ['stale'], { revision: 2 }),
+    );
+
+    expect(applied).toBe(false);
+    expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual(['current']);
+  });
+
   it('appends the next page and renders readable errors with retry', async () => {
     const context = setup();
     vi.mocked(context.client.listDirectory)

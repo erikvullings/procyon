@@ -55,6 +55,8 @@ Open directories must reflect external changes without a manual refresh.
   changing sort only reordered the loaded page, so recent files outside that page stayed absent
   until navigation forced a globally sorted relist. Sort changes now trigger background first-page
   relists. Watched paged directories diff authoritative full listings and publish a consistent
-  paged reset; paged frontend deltas likewise trigger an authoritative background relist. AppShell
-  regressions cover paged sorting and active-pane deltas, and the local-provider integration covers
-  both create/rename/delete delivery and pagination after an external addition.
+  paged reset; paged frontend deltas likewise trigger an authoritative background relist. Reset
+  snapshots replace both rendered state and the navigation paging cache so shifted continuations
+  cannot merge onto a stale first page. AppShell regressions cover paged sorting, active-pane
+  deltas, and reset-to-continuation uniqueness; the local-provider integration covers both
+  create/rename/delete delivery and pagination after an external addition.
