@@ -79,6 +79,7 @@ describe('RagAskDialog', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
     const dialog = root.querySelector('.fm-rag-ask-modal');
     expect(dialog?.classList.contains('fm-dense-modal')).toBe(false);
+    expect(root.textContent).toContain('Ask your files');
     expect(root.querySelector<HTMLTextAreaElement>('.fm-rag-question textarea')?.rows).toBe(5);
     expect(root.querySelector<HTMLDetailsElement>('.fm-rag-options')?.open).toBe(false);
     expect(root.querySelector('.fm-rag-options')?.closest('.fm-rag-preferences')).not.toBeNull();
@@ -99,6 +100,8 @@ describe('RagAskDialog', () => {
     ]);
     expect(scopeSelect.value).toBe('entireLibrary');
     const preferences = root.querySelector('.fm-rag-preferences');
+    const preferenceRow = preferences?.querySelector('.fm-rag-preference-row');
+    expect(preferenceRow?.querySelector('.fm-rag-options')).not.toBeNull();
     const checkboxes = preferences?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
     expect(checkboxes).toHaveLength(2);
     const includeFolder = checkboxes?.item(0);
@@ -143,6 +146,9 @@ describe('RagAskDialog', () => {
 
     button('Preview evidence')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Mock indexed evidence'));
+    expect(root.querySelector('.fm-rag-evidence-score')?.textContent).toMatch(
+      /^Similarity -?\d\.\d{3}$/,
+    );
     expect(root.querySelector('[aria-labelledby="rag-evidence-heading"]')).not.toBeNull();
     expect(root.textContent).toContain('Coverage: 3/3 indexed');
 

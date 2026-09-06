@@ -92,3 +92,9 @@ scope, change instructions, request secrets, or invoke Procyon actions.
   explicit New question reset. Moved privacy/profile/scope controls into the bottom options area,
   simplified folder/model labels and actions, and aligned question/answer hierarchy, padding, and
   body typography.
+- 2026-09-06: Calibrated Ask retrieval against the real multilingual-E5 TRIZ index. Replaced the
+  ineffective `0.25` floor with an absolute `0.84` floor plus a `0.02` strongest-candidate window:
+  the SU-fields query peaked at `0.872`, while an unrelated Mars/croissant negative control peaked
+  at `0.826`. This policy-only change requires no reindexing or storage migration. Ask now preserves
+  and displays section paths and cosine similarity, uses the lighter **Ask your files** workspace,
+  and joins folder indexing, model knowledge, and Options and privacy in one separator-free row.

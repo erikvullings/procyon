@@ -428,6 +428,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                     'ol.fm-rag-evidence',
                     preview.evidence.map((item) => {
                       const title = decodeEvidenceTitle(item.title);
+                      const score = item.score.toFixed(3);
                       return m('li', { key: item.label }, [
                         m('.fm-rag-evidence-heading', [
                           m(
@@ -459,13 +460,21 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                         m(
                           'small',
                           [
+                            m(
+                              'span.fm-rag-evidence-score',
+                              {
+                                title: t('ragAsk', 'similarityDescription', { score }),
+                                'aria-label': t('ragAsk', 'similarityDescription', { score }),
+                              },
+                              t('ragAsk', 'similarityScore', { score }),
+                            ),
                             item.sectionPath.join(' / '),
                             item.generated ? t('ragAsk', 'generatedEvidence') : undefined,
                             item.stale ? t('ragAsk', 'staleEvidence') : undefined,
                             !item.available ? t('ragAsk', 'unavailableEvidence') : undefined,
                           ]
-                            .filter((value): value is string => value !== undefined && value !== '')
-                            .join(' · '),
+                            .filter((value) => value !== undefined && value !== '')
+                            .flatMap((value, index) => (index === 0 ? [value] : [' · ', value])),
                         ),
                       ]);
                     }),
@@ -603,7 +612,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 ),
               ]),
           m('.fm-rag-preferences', [
-            m('.fm-rag-preference-toggles', [
+            m('.fm-rag-preference-row', [
               attrs.currentFolder === undefined || attrs.onIncludeCurrentFolder === undefined
                 ? undefined
                 : m('label', [
@@ -632,61 +641,61 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 }),
                 m('span', t('ragAsk', 'allowModelKnowledge')),
               ]),
-            ]),
-            m('details.fm-rag-options', [
-              m('summary', [
-                m('span', t('ragAsk', 'options')),
-                m('small', scopeLabel(selectedScope)),
-              ]),
-              m('.fm-rag-controls', [
-                m('label', [
-                  m('span', t('ragAsk', 'profile')),
-                  m(
-                    'select.browser-default',
-                    {
-                      value: selectedProfileId,
-                      disabled: busy !== undefined,
-                      onchange: (event: Event) => {
-                        selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
-                        resetRetrieval(true);
-                      },
-                    },
-                    profiles.map((profile) =>
-                      m(
-                        'option',
-                        { key: profile.id, value: profile.id },
-                        `${profile.name} · ${profile.locality}`,
-                      ),
-                    ),
-                  ),
+              m('details.fm-rag-options', [
+                m('summary', [
+                  m('span', t('ragAsk', 'options')),
+                  m('small', scopeLabel(selectedScope)),
                 ]),
-                m('label', [
-                  m('span', t('ragAsk', 'scope')),
-                  m(
-                    'select.browser-default',
-                    {
-                      value: selectedScope,
-                      disabled: busy !== undefined,
-                      onchange: (event: Event) => {
-                        selectedScope = (event.currentTarget as HTMLSelectElement)
-                          .value as RagScopeKind;
-                        resetRetrieval(true);
-                      },
-                    },
-                    scopeKinds.map((kind) =>
-                      m(
-                        'option',
-                        {
-                          key: kind,
-                          value: kind,
-                          disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
+                m('.fm-rag-controls', [
+                  m('label', [
+                    m('span', t('ragAsk', 'profile')),
+                    m(
+                      'select.browser-default',
+                      {
+                        value: selectedProfileId,
+                        disabled: busy !== undefined,
+                        onchange: (event: Event) => {
+                          selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
+                          resetRetrieval(true);
                         },
-                        scopeLabel(kind),
+                      },
+                      profiles.map((profile) =>
+                        m(
+                          'option',
+                          { key: profile.id, value: profile.id },
+                          `${profile.name} · ${profile.locality}`,
+                        ),
                       ),
                     ),
-                  ),
+                  ]),
+                  m('label', [
+                    m('span', t('ragAsk', 'scope')),
+                    m(
+                      'select.browser-default',
+                      {
+                        value: selectedScope,
+                        disabled: busy !== undefined,
+                        onchange: (event: Event) => {
+                          selectedScope = (event.currentTarget as HTMLSelectElement)
+                            .value as RagScopeKind;
+                          resetRetrieval(true);
+                        },
+                      },
+                      scopeKinds.map((kind) =>
+                        m(
+                          'option',
+                          {
+                            key: kind,
+                            value: kind,
+                            disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
+                          },
+                          scopeLabel(kind),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  m('p.fm-rag-disclosure', t('ragAsk', 'readOnlyDisclosure')),
                 ]),
-                m('p.fm-rag-disclosure', t('ragAsk', 'readOnlyDisclosure')),
               ]),
             ]),
             currentFolderStatusError

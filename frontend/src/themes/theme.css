@@ -1872,6 +1872,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .modal.fm-rag-ask-modal {
+  --mm-modal-content-padding-top-with-close: 1rem;
   width: min(72rem, calc(100vw - 2rem));
   max-width: min(72rem, calc(100vw - 2rem)) !important;
   max-height: min(90vh, 56rem);
@@ -1922,34 +1923,30 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-rag-options {
-  width: 100%;
-  border-block-start: 1px solid var(--fm-color-border, #d0d0d0);
+  margin-inline-start: auto;
 }
 
 .fm-rag-options summary,
 .fm-rag-preview summary,
 .fm-rag-saved summary {
   cursor: pointer;
-  font-weight: 600;
 }
 
 .fm-rag-options summary {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding-block: 0.75rem 0;
 }
 
 .fm-rag-options summary small {
   color: var(--fm-text-muted);
-  font-weight: 400;
 }
 
 .fm-rag-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-  padding-block: 0.25rem 0.75rem;
+  padding-block: 0.75rem 0;
 }
 
 .fm-rag-controls label {
@@ -1958,24 +1955,25 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-rag-preferences {
-  display: grid;
-  gap: 0.75rem;
   margin-block-start: auto;
-  padding-block-start: 0.75rem;
-  border-block-start: 1px solid var(--fm-color-border, #d0d0d0);
 }
 
-.fm-rag-preference-toggles {
+.fm-rag-preference-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1.5rem;
 }
 
-.fm-rag-preference-toggles label {
+.fm-rag-preference-row > label {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.fm-rag-options[open] {
+  flex-basis: 100%;
+  margin-inline-start: 0;
 }
 
 .fm-rag-error,
@@ -2028,7 +2026,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   background: transparent;
   color: var(--fm-color-accent, #1976d2);
   font: inherit;
-  font-weight: 600;
   text-align: start;
   overflow-wrap: anywhere;
   cursor: pointer;
@@ -2066,6 +2063,11 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-rag-answer-markdown strong {
   font-weight: 600;
+}
+
+.fm-rag-evidence-score {
+  color: var(--fm-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .fm-rag-answer-markdown a,

@@ -689,11 +689,11 @@ export const nl = {
     regenerate: 'Samenvatting opnieuw genereren',
   },
   ragAsk: {
-    title: 'Vraag je bibliotheek',
+    title: 'Vraag je bestanden',
     includeFolderTitle: 'Deze map opnemen?',
     includeFolderExplanation:
       'Vraag gebruikt geïndexeerde inhoud. Controleer en voeg deze map en onderliggende mappen toe voordat je een vraag stelt.',
-    openAssistant: 'Vraag je bibliotheek',
+    openAssistant: 'Vraag je bestanden',
     options: 'Opties en privacy',
     includeCurrentFolder: 'Huidige map indexeren',
     folderStatusFailed: 'De opnamestatus van de huidige map kon niet worden geladen.',
@@ -720,6 +720,8 @@ export const nl = {
     copyFailed: 'De tekst kon niet worden gekopieerd.',
     allowModelKnowledge: 'Modelkennis toestaan',
     evidence: 'Opgehaald bewijs',
+    similarityScore: 'Gelijkenis {score}',
+    similarityDescription: 'Cosinusgelijkenis {score}; hoger is dichterbij',
     cloudDisclosure: '{tokens} geschatte bewijstokens worden naar deze cloudendpoint verzonden.',
     localDisclosure: '{tokens} geschatte bewijstokens worden naar deze lokale endpoint verzonden.',
     coverage:

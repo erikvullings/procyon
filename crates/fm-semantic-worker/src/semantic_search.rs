@@ -87,6 +87,9 @@ pub struct SemanticEvidence {
     pub chunk_kind: String,
     /// Bounded display excerpt.
     pub excerpt: String,
+    /// Structural heading hierarchy included in the embedding input.
+    #[serde(default)]
+    pub section_path: Vec<String>,
     /// Indexed IANA media type.
     pub media_type: Option<String>,
     /// Indexed source modification time.
@@ -404,6 +407,7 @@ impl SemanticSearchService {
                             score,
                             chunk_kind: item.record_kind,
                             excerpt: item.excerpt,
+                            section_path: item.section_path,
                             media_type: Some(item.media_type),
                             modified_at_ms: (item.modified_at_ms != 0)
                                 .then_some(item.modified_at_ms),
@@ -541,6 +545,7 @@ mod tests {
                 score,
                 chunk_kind: if generated { "summary" } else { "chunk" }.into(),
                 excerpt: format!("excerpt {record}"),
+                section_path: vec!["Section".into()],
                 media_type: Some("text/plain".into()),
                 modified_at_ms: None,
                 provenance: ChunkProvenance::Exact(fm_semantic_conversion::Provenance::TextLines {

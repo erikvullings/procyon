@@ -23,11 +23,12 @@ content search, and baseline document viewing available.
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
-  also available as **Ask your library** in the command palette. It always opens Ask across the
+  also available as **Ask your files** in the command palette. It always opens Ask across the
   existing library. The question and answer workspace stays prominent; generation profile, evidence
-  scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The bottom
-  options area keeps **Index current folder** and **Allow model knowledge** as simple opt-in
-  checkboxes. Indexing a folder shows the same recursive estimate, retention
+  scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The final
+  row keeps **Index current folder**, **Allow model knowledge**, and **Options and privacy** together.
+  Each retrieved excerpt shows its cosine-similarity score; higher values are closer matches, but
+  they are not calibrated probabilities. Indexing a folder shows the same recursive estimate, retention
   disclosure, budget warnings, and explicit consent used by Settings; cancelling returns to the
   question in progress. Press **Enter** to retrieve evidence and generate an answer, or use
   **Shift+Enter** for a multiline question. Questions, evidence excerpts, and answers remain
@@ -187,6 +188,20 @@ The local evaluation suite stores query/relevance judgments on device and comput
 chunk recall@k, mean reciprocal rank, and binary nDCG@k. It performs no telemetry. The repository
 fixture covers multilingual recall, near duplicates, boilerplate diversity, structural citations,
 incremental edits, summaries, scope isolation, unavailable sources, and concept labels.
+
+Interactive Ask applies both an absolute cosine-similarity floor (`0.84`) and a relative floor
+(`0.02` below the strongest in-scope extracted chunk). A 2026-09-06 local multilingual-E5
+calibration against the enrolled TRIZ corpus observed a `0.872` peak for the SU-fields query and a
+`0.826` peak for the unrelated negative-control query "How do I bake a sourdough croissant on
+Mars?". The previous `0.25` floor retained 14 and 16 excerpts respectively; the calibrated policy
+retains the close SU-fields evidence and rejects the negative control. This is a retrieval-policy
+change only: it requires no reindexing and has no storage impact.
+
+Chunking itself is structural, not embedding-driven semantic segmentation. Converters retain
+paragraph, heading, page, slide, sheet, and section structure; the chunker packs compatible adjacent
+units toward a 400-token target without crossing incompatible top-level boundaries. The full section
+heading hierarchy is prepended to the chunk content used for embedding and is preserved for evidence
+display.
 
 Changes to model, chunker, converter, index, grouping, summary selection, or labelling threshold
 require a before/after `EvaluationChangeReport` with distinct fingerprints, the same cases/cutoff,

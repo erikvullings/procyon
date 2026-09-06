@@ -69,6 +69,8 @@ struct IpcSemanticEvidence {
     score: f32,
     chunk_kind: String,
     excerpt: String,
+    #[serde(default)]
+    section_path: Vec<String>,
     media_type: Option<String>,
     modified_at_ms: Option<i64>,
     provenance: serde_json::Value,
@@ -139,6 +141,7 @@ fn semantic_results_to_context(
     let mut chunks_per_document = HashMap::<String, usize>::new();
     let mut token_count = 0_usize;
 
+    let mut candidates = Vec::new();
     for result in results {
         let evidence = result
             .metadata
@@ -146,62 +149,75 @@ fn semantic_results_to_context(
             .map(|json| serde_json::from_str::<Vec<IpcSemanticEvidence>>(json))
             .transpose()?
             .unwrap_or_else(|| vec![fallback_evidence(&result)]);
-        for item in evidence {
-            if item.score < request.policy.minimum_score
-                || (!request.source_restriction.allowed_source_ids.is_empty()
-                    && !request
-                        .source_restriction
-                        .allowed_source_ids
-                        .contains(&item.source_id))
-            {
-                continue;
-            }
-            let document_id = result.document_id.as_str().to_owned();
-            let existing_for_document = chunks_per_document
-                .get(&document_id)
-                .copied()
-                .unwrap_or_default();
-            if existing_for_document >= request.policy.maximum_chunks_per_document
-                || (!documents.contains(&document_id)
-                    && documents.len() >= request.policy.maximum_documents)
-            {
-                continue;
-            }
-            let item_tokens = item.excerpt.split_whitespace().count().max(1);
-            if token_count.saturating_add(item_tokens) > request.policy.context_token_budget {
-                continue;
-            }
-            documents.insert(document_id.clone());
-            chunks_per_document.insert(document_id.clone(), existing_for_document + 1);
-            token_count = token_count.saturating_add(item_tokens);
-            chunks.push(RagContextChunk {
-                label: format!("S{}", chunks.len() + 1),
-                evidence: QueryEvidence {
-                    record_id: item.record_id.clone(),
-                    library_id: library_id.to_owned(),
-                    document_id,
-                    occurrence_id: item.occurrence_id,
-                    source_id: item.source_id,
-                    provenance: serde_json::to_string(&item.provenance)?,
-                    generation: item.generation,
-                    record_kind: item.chunk_kind,
-                    excerpt: item.excerpt.clone(),
-                    content: item.excerpt,
-                    token_count: item_tokens,
-                    section_path: Vec::new(),
-                    source_position: item.source_position,
-                    generated: item.generated,
-                    content_hash: item.indexed_content_hash,
-                    available: !item.unavailable,
-                    media_type: item.media_type.unwrap_or_default(),
-                    modified_at_ms: item.modified_at_ms.unwrap_or_default(),
-                },
-                score: item.score,
-                adjacent: false,
-                source_citation_record_ids: vec![item.record_id],
-                stale: item.stale,
-            });
+        candidates.extend(
+            evidence
+                .into_iter()
+                .map(|item| (result.document_id.as_str().to_owned(), item)),
+        );
+    }
+    candidates.retain(|(_, item)| {
+        request.source_restriction.allowed_source_ids.is_empty()
+            || request
+                .source_restriction
+                .allowed_source_ids
+                .contains(&item.source_id)
+    });
+    let has_extracted = candidates.iter().any(|(_, item)| !item.generated);
+    let minimum_score = request.policy.effective_minimum_score(
+        candidates
+            .iter()
+            .filter(|(_, item)| !has_extracted || !item.generated)
+            .map(|(_, item)| item.score),
+    );
+
+    for (document_id, item) in candidates {
+        if item.score < minimum_score {
+            continue;
         }
+        let existing_for_document = chunks_per_document
+            .get(&document_id)
+            .copied()
+            .unwrap_or_default();
+        if existing_for_document >= request.policy.maximum_chunks_per_document
+            || (!documents.contains(&document_id)
+                && documents.len() >= request.policy.maximum_documents)
+        {
+            continue;
+        }
+        let item_tokens = item.excerpt.split_whitespace().count().max(1);
+        if token_count.saturating_add(item_tokens) > request.policy.context_token_budget {
+            continue;
+        }
+        documents.insert(document_id.clone());
+        chunks_per_document.insert(document_id.clone(), existing_for_document + 1);
+        token_count = token_count.saturating_add(item_tokens);
+        chunks.push(RagContextChunk {
+            label: format!("S{}", chunks.len() + 1),
+            evidence: QueryEvidence {
+                record_id: item.record_id.clone(),
+                library_id: library_id.to_owned(),
+                document_id,
+                occurrence_id: item.occurrence_id,
+                source_id: item.source_id,
+                provenance: serde_json::to_string(&item.provenance)?,
+                generation: item.generation,
+                record_kind: item.chunk_kind,
+                excerpt: item.excerpt.clone(),
+                content: item.excerpt,
+                token_count: item_tokens,
+                section_path: item.section_path,
+                source_position: item.source_position,
+                generated: item.generated,
+                content_hash: item.indexed_content_hash,
+                available: !item.unavailable,
+                media_type: item.media_type.unwrap_or_default(),
+                modified_at_ms: item.modified_at_ms.unwrap_or_default(),
+            },
+            score: item.score,
+            adjacent: false,
+            source_citation_record_ids: vec![item.record_id],
+            stale: item.stale,
+        });
     }
 
     Ok(RagContext {
@@ -232,6 +248,7 @@ fn fallback_evidence(result: &SemanticSearchResult) -> IpcSemanticEvidence {
         score: result.score as f32,
         chunk_kind: "chunk".to_owned(),
         excerpt: result.excerpt.clone(),
+        section_path: Vec::new(),
         media_type: result.metadata.get("media_type").cloned(),
         modified_at_ms: result
             .metadata

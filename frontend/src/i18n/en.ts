@@ -682,11 +682,11 @@ export const en = {
     regenerate: 'Regenerate summary',
   },
   ragAsk: {
-    title: 'Ask your library',
+    title: 'Ask your files',
     includeFolderTitle: 'Include this folder?',
     includeFolderExplanation:
       'Ask uses indexed content. Review and include this folder and its descendants before asking a question.',
-    openAssistant: 'Ask your library',
+    openAssistant: 'Ask your files',
     options: 'Options and privacy',
     includeCurrentFolder: 'Index current folder',
     folderStatusFailed: 'The current folder inclusion status could not be loaded.',
@@ -713,6 +713,8 @@ export const en = {
     copyFailed: 'The text could not be copied.',
     allowModelKnowledge: 'Allow model knowledge',
     evidence: 'Retrieved evidence',
+    similarityScore: 'Similarity {score}',
+    similarityDescription: 'Cosine similarity {score}; higher is closer',
     cloudDisclosure: '{tokens} estimated evidence tokens will be sent to this cloud endpoint.',
     localDisclosure: '{tokens} estimated evidence tokens will be sent to this local endpoint.',
     coverage:

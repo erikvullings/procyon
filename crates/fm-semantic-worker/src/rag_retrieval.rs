@@ -19,6 +19,8 @@ const MAX_CONTEXT_TOKENS: usize = 32_768;
 pub struct RagRetrievalPolicy {
     /// Minimum dense similarity accepted as evidence.
     pub minimum_score: f32,
+    /// Maximum score distance below the strongest in-scope candidate.
+    pub maximum_score_drop: f32,
     /// Maximum distinct source documents.
     pub maximum_documents: usize,
     /// Maximum primary hits retained from one document.
@@ -34,7 +36,8 @@ impl RagRetrievalPolicy {
     #[must_use]
     pub const fn default_ask() -> Self {
         Self {
-            minimum_score: 0.25,
+            minimum_score: 0.84,
+            maximum_score_drop: 0.02,
             maximum_documents: 8,
             maximum_chunks_per_document: 2,
             context_token_budget: 8_192,
@@ -42,9 +45,23 @@ impl RagRetrievalPolicy {
         }
     }
 
+    /// Combines the absolute floor with a bounded drop from the strongest candidate.
+    #[must_use]
+    pub fn effective_minimum_score(self, scores: impl IntoIterator<Item = f32>) -> f32 {
+        let strongest = scores
+            .into_iter()
+            .filter(|score| score.is_finite())
+            .max_by(f32::total_cmp);
+        strongest.map_or(self.minimum_score, |score| {
+            self.minimum_score.max(score - self.maximum_score_drop)
+        })
+    }
+
     fn valid(self) -> bool {
         self.minimum_score.is_finite()
             && (-1.0..=1.0).contains(&self.minimum_score)
+            && self.maximum_score_drop.is_finite()
+            && (0.0..=2.0).contains(&self.maximum_score_drop)
             && (1..=MAX_DOCUMENTS).contains(&self.maximum_documents)
             && (1..=MAX_CHUNKS_PER_DOCUMENT).contains(&self.maximum_chunks_per_document)
             && (1..=MAX_CONTEXT_TOKENS).contains(&self.context_token_budget)
@@ -265,11 +282,22 @@ pub fn plan_primary_evidence(
     if !policy.valid() {
         return Err(RagRetrievalError::InvalidPolicy);
     }
+    let candidates = candidates
+        .into_iter()
+        .filter(|candidate| restriction.allows(&candidate.evidence.source_id))
+        .collect::<Vec<_>>();
+    let has_extracted = candidates
+        .iter()
+        .any(|candidate| !candidate.evidence.generated);
+    let minimum_score = policy.effective_minimum_score(
+        candidates
+            .iter()
+            .filter(|candidate| !has_extracted || !candidate.evidence.generated)
+            .map(|candidate| candidate.score),
+    );
     let mut by_document = HashMap::<String, Vec<RagCandidate>>::new();
     for candidate in candidates {
-        if candidate.score >= policy.minimum_score
-            && restriction.allows(&candidate.evidence.source_id)
-        {
+        if candidate.score >= minimum_score {
             by_document
                 .entry(candidate.evidence.document_id.clone())
                 .or_default()
@@ -448,6 +476,7 @@ mod tests {
         };
         let policy = RagRetrievalPolicy {
             minimum_score: 0.25,
+            maximum_score_drop: 1.0,
             maximum_documents: 2,
             maximum_chunks_per_document: 2,
             context_token_budget: 100,
@@ -463,6 +492,62 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["a1", "b1", "a-summary", "b2"]
         );
+    }
+
+    #[test]
+    fn relative_score_floor_rejects_distant_candidates() {
+        let candidates = vec![
+            RagCandidate {
+                evidence: evidence("best", "doc-a", "source-a", 0, 5, false),
+                score: 0.872,
+            },
+            RagCandidate {
+                evidence: evidence("close", "doc-b", "source-b", 0, 5, false),
+                score: 0.860,
+            },
+            RagCandidate {
+                evidence: evidence("distant", "doc-c", "source-c", 0, 5, false),
+                score: 0.849,
+            },
+        ];
+
+        let selected = plan_primary_evidence(
+            candidates,
+            &RagSourceRestriction::default(),
+            RagRetrievalPolicy::default_ask(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            selected
+                .iter()
+                .map(|item| item.evidence.record_id.as_str())
+                .collect::<Vec<_>>(),
+            ["best", "close"]
+        );
+    }
+
+    #[test]
+    fn absolute_score_floor_rejects_an_unrelated_query_distribution() {
+        let candidates = vec![
+            RagCandidate {
+                evidence: evidence("best", "doc-a", "source-a", 0, 5, false),
+                score: 0.826,
+            },
+            RagCandidate {
+                evidence: evidence("next", "doc-b", "source-b", 0, 5, false),
+                score: 0.825,
+            },
+        ];
+
+        let selected = plan_primary_evidence(
+            candidates,
+            &RagSourceRestriction::default(),
+            RagRetrievalPolicy::default_ask(),
+        )
+        .unwrap();
+
+        assert!(selected.is_empty());
     }
 
     #[test]
