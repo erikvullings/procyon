@@ -8,6 +8,8 @@ import type {
   OperationConflict,
   OperationId,
   PaneId,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   SavedSearch,
   Settings,
   TabId,
@@ -115,6 +117,19 @@ export async function openCreatedConnection(
   ctx.setConnectionsManagerOpen(false);
   ctx.redraw();
   await ctx.navigateActiveLocation(remoteRootLocation(connection));
+}
+
+export async function navigateToRagCitation(
+  workspaceId: string,
+  sourceId: string,
+  resolveCitation: (request: ResolveRagCitationRequest) => Promise<ResolvedRagCitation>,
+  navigate: (location: Location, preferredCursorName?: string) => Promise<void>,
+): Promise<boolean> {
+  const citation = await resolveCitation({ workspaceId, sourceId });
+  if (!citation.available) return false;
+  const name = pathFromUri(citation.location.uri).split(/[\\/]/).filter(Boolean).at(-1);
+  await navigate(parentLocation(citation.location), name);
+  return true;
 }
 
 /**
@@ -515,14 +530,13 @@ export function renderAppDialogs(
       onOpenCitation: async (sourceId) => {
         const request = ds.ragAskDialog;
         if (request === undefined) return;
-        const citation = await client.resolveRagCitation({
-          workspaceId: request.workspaceId,
+        const navigated = await navigateToRagCitation(
+          request.workspaceId,
           sourceId,
-        });
-        if (!citation.available) return;
-        const name = pathFromUri(citation.location.uri).split(/[\\/]/).filter(Boolean).at(-1);
-        await ctx.navigateActiveLocation(parentLocation(citation.location), name);
-        dialogs.cancelRagAskDialog();
+          (citationRequest) => client.resolveRagCitation(citationRequest),
+          (location, name) => ctx.navigateActiveLocation(location, name),
+        );
+        if (navigated) dialogs.cancelRagAskDialog();
       },
     }),
     m(FinderTagsDialog, {

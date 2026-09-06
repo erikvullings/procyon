@@ -2,7 +2,7 @@ import m, { type FactoryComponent } from 'mithril';
 import { IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { copyIcon } from '../../components/tabler-icons';
+import { copyIcon, plusIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
@@ -10,6 +10,7 @@ import type {
   LlmProfile,
   Location,
   RagAnswer,
+  RagCitation,
   RagPreview,
   RagScope,
   RagScopeKind,
@@ -104,6 +105,29 @@ function coverageText(preview: RagPreview): string {
   });
 }
 
+function decodeEvidenceTitle(title: string | null | undefined): string | undefined {
+  if (title == null) return undefined;
+  try {
+    return decodeURIComponent(title);
+  } catch {
+    return title;
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function linkAnswerCitations(markdown: string, citations: readonly RagCitation[]): string {
+  return citations.reduce((linked, citation) => {
+    const label = escapeRegExp(citation.label);
+    const target = `#rag-citation-${encodeURIComponent(citation.label)}`;
+    return linked
+      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'g'), `[${citation.label}](${target})`)
+      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'g'), `([${citation.label}](${target})`);
+  }, markdown);
+}
+
 export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let wasOpen = false;
   let busy: 'loading' | 'retrieving' | 'generating' | 'saving' | undefined;
@@ -166,6 +190,27 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
     streamedText = '';
     if (clearConversation) conversationId = undefined;
     exportVisible = false;
+  }
+
+  function startNewQuestion(): void {
+    abortController?.abort();
+    error = undefined;
+    question = '';
+    resetRetrieval(true);
+    queueMicrotask(() =>
+      document.querySelector<HTMLTextAreaElement>('#fm-rag-question-input')?.focus(),
+    );
+  }
+
+  async function openSource(attrs: RagAskDialogAttrs, sourceId: string): Promise<void> {
+    if (attrs.onOpenCitation === undefined) return;
+    error = undefined;
+    try {
+      await attrs.onOpenCitation(sourceId);
+    } catch {
+      error = t('ragAsk', 'citationFailed');
+      m.redraw();
+    }
   }
 
   async function retrieve(attrs: RagAskDialogAttrs): Promise<RagPreview | undefined> {
@@ -306,20 +351,35 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
           error === undefined ? undefined : m('p.fm-rag-error', { role: 'alert' }, error),
           m('.fm-rag-question', [
             m('.fm-rag-section-heading', [
-              m('label', { for: 'fm-rag-question-input' }, t('ragAsk', 'question')),
-              tooltip(
-                t('ragAsk', 'copyQuestion'),
-                m(
-                  IconButton,
-                  {
-                    type: 'button',
-                    disabled: question === '',
-                    'aria-label': t('ragAsk', 'copyQuestion'),
-                    onclick: () => void copy(question),
-                  },
-                  copyIcon({ size: 18 }),
+              m('h3', m('label', { for: 'fm-rag-question-input' }, t('ragAsk', 'question'))),
+              m('.fm-rag-heading-actions', [
+                tooltip(
+                  t('ragAsk', 'newQuestion'),
+                  m(
+                    IconButton,
+                    {
+                      type: 'button',
+                      disabled: question === '' && preview === undefined && answer === undefined,
+                      'aria-label': t('ragAsk', 'newQuestion'),
+                      onclick: startNewQuestion,
+                    },
+                    plusIcon({ size: 18 }),
+                  ),
                 ),
-              ),
+                tooltip(
+                  t('ragAsk', 'copyQuestion'),
+                  m(
+                    IconButton,
+                    {
+                      type: 'button',
+                      disabled: question === '',
+                      'aria-label': t('ragAsk', 'copyQuestion'),
+                      onclick: () => void copy(question),
+                    },
+                    copyIcon({ size: 18 }),
+                  ),
+                ),
+              ]),
             ]),
             m('textarea', {
               id: 'fm-rag-question-input',
@@ -346,63 +406,6 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 void submit(attrs);
               },
             }),
-            m('small', t('ragAsk', 'submitHint')),
-          ]),
-          m('details.fm-rag-options', [
-            m('summary', [
-              m('span', t('ragAsk', 'options')),
-              m('small', scopeLabel(selectedScope)),
-            ]),
-            m('.fm-rag-controls', [
-              m('label', [
-                m('span', t('ragAsk', 'profile')),
-                m(
-                  'select.browser-default',
-                  {
-                    value: selectedProfileId,
-                    disabled: busy !== undefined,
-                    onchange: (event: Event) => {
-                      selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
-                      resetRetrieval(true);
-                    },
-                  },
-                  profiles.map((profile) =>
-                    m(
-                      'option',
-                      { key: profile.id, value: profile.id },
-                      `${profile.name} · ${profile.locality}`,
-                    ),
-                  ),
-                ),
-              ]),
-              m('label', [
-                m('span', t('ragAsk', 'scope')),
-                m(
-                  'select.browser-default',
-                  {
-                    value: selectedScope,
-                    disabled: busy !== undefined,
-                    onchange: (event: Event) => {
-                      selectedScope = (event.currentTarget as HTMLSelectElement)
-                        .value as RagScopeKind;
-                      resetRetrieval(true);
-                    },
-                  },
-                  scopeKinds.map((kind) =>
-                    m(
-                      'option',
-                      {
-                        key: kind,
-                        value: kind,
-                        disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
-                      },
-                      scopeLabel(kind),
-                    ),
-                  ),
-                ),
-              ]),
-              m('p.fm-rag-disclosure', t('ragAsk', 'readOnlyDisclosure')),
-            ]),
           ]),
           preview === undefined
             ? undefined
@@ -423,9 +426,35 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                     : undefined,
                   m(
                     'ol.fm-rag-evidence',
-                    preview.evidence.map((item) =>
-                      m('li', { key: item.label }, [
-                        m('strong', `${item.label}${item.title == null ? '' : ` · ${item.title}`}`),
+                    preview.evidence.map((item) => {
+                      const title = decodeEvidenceTitle(item.title);
+                      return m('li', { key: item.label }, [
+                        m('.fm-rag-evidence-heading', [
+                          m(
+                            'button.fm-rag-source-link',
+                            {
+                              type: 'button',
+                              disabled: !item.available || attrs.onOpenCitation === undefined,
+                              'aria-label': t('ragAsk', 'openEvidence', { label: item.label }),
+                              onclick: () => void openSource(attrs, item.sourceId),
+                            },
+                            `${item.label}${title === undefined ? '' : ` · ${title}`}`,
+                          ),
+                          tooltip(
+                            t('ragAsk', 'copyEvidence', { label: item.label }),
+                            m(
+                              IconButton,
+                              {
+                                type: 'button',
+                                'aria-label': t('ragAsk', 'copyEvidence', {
+                                  label: item.label,
+                                }),
+                                onclick: () => void copy(item.excerpt),
+                              },
+                              copyIcon({ size: 16 }),
+                            ),
+                          ),
+                        ]),
                         m('p', item.excerpt),
                         m(
                           'small',
@@ -438,14 +467,14 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                             .filter((value): value is string => value !== undefined && value !== '')
                             .join(' · '),
                         ),
-                      ]),
-                    ),
+                      ]);
+                    }),
                   ),
                 ],
               ),
-          m('section.fm-rag-answer', { 'aria-live': 'polite' }, [
+          m('section.fm-rag-answer', [
             m('.fm-rag-section-heading', [
-              m('h4', t('ragAsk', 'answer')),
+              m('h3', t('ragAsk', 'answer')),
               tooltip(
                 t('ragAsk', 'copyAnswer'),
                 m(
@@ -460,77 +489,67 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 ),
               ),
             ]),
-            streamedText === '' && answer === undefined
-              ? m('p.fm-rag-answer-placeholder', t('ragAsk', 'answerPlaceholder'))
-              : m(
-                  '.fm-rag-answer-markdown',
-                  m.trust(safeMarkdownHtml(answer?.text ?? streamedText)),
-                ),
-            answer?.modelKnowledgeAllowed === true
-              ? m('p.fm-rag-warning', t('ragAsk', 'modelKnowledgeUsed'))
-              : undefined,
             m(
-              'ul.fm-rag-citations',
-              answer?.citations.map((citation) =>
-                m('li', { key: `${citation.label}-${citation.sourceId}` }, [
-                  m(
-                    'button',
-                    {
-                      type: 'button',
-                      disabled: citation.unavailable || attrs.onOpenCitation === undefined,
-                      onclick: () => {
-                        error = undefined;
-                        void Promise.resolve(attrs.onOpenCitation?.(citation.sourceId)).catch(
-                          () => {
-                            error = t('ragAsk', 'citationFailed');
-                            m.redraw();
-                          },
-                        );
-                      },
-                      'aria-label': t('ragAsk', 'openCitation', { label: citation.label }),
-                    },
-                    citation.label,
-                  ),
-                  ` ${citation.provenance}`,
-                  citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
-                  citation.stale ? ` · ${t('ragAsk', 'staleEvidence')}` : '',
-                  citation.unavailable ? ` · ${t('ragAsk', 'unavailableEvidence')}` : '',
-                ]),
-              ),
-            ),
-          ]),
-          m('.fm-rag-preferences', [
-            attrs.currentFolder === undefined || attrs.onIncludeCurrentFolder === undefined
-              ? undefined
-              : m('label', [
-                  m('input', {
-                    type: 'checkbox',
-                    checked: currentFolderIncluded,
-                    disabled:
-                      busy !== undefined || currentFolderStatusError || currentFolderIncluded,
-                    onchange: (event: Event) => {
-                      if ((event.currentTarget as HTMLInputElement).checked) {
-                        attrs.onIncludeCurrentFolder?.();
-                      }
-                    },
-                  }),
-                  m('span', t('ragAsk', 'includeCurrentFolder')),
-                ]),
-            m('label', [
-              m('input', {
-                type: 'checkbox',
-                checked: allowModelKnowledge,
-                disabled: busy !== undefined,
-                onchange: (event: Event) => {
-                  allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
-                  resetRetrieval(true);
+              '.fm-rag-answer-content',
+              {
+                'aria-live': 'polite',
+                onclick: (event: MouseEvent) => {
+                  if (!(event.target instanceof Element)) return;
+                  const link = event.target.closest<HTMLAnchorElement>('a[href^="#rag-citation-"]');
+                  if (link === null) return;
+                  const target = link.getAttribute('href');
+                  const label =
+                    target === null
+                      ? undefined
+                      : decodeURIComponent(target.slice('#rag-citation-'.length));
+                  const citation = answer?.citations.find((item) => item.label === label);
+                  if (citation === undefined || citation.unavailable) return;
+                  event.preventDefault();
+                  void openSource(attrs, citation.sourceId);
                 },
-              }),
-              m('span', t('ragAsk', 'allowModelKnowledge')),
-            ]),
-            currentFolderStatusError
-              ? m('p.fm-rag-warning', { role: 'alert' }, t('ragAsk', 'folderStatusFailed'))
-              : undefined,
+              },
+              [
+                streamedText === '' && answer === undefined
+                  ? m('p.fm-rag-answer-placeholder', t('ragAsk', 'answerPlaceholder'))
+                  : m(
+                      '.fm-rag-answer-markdown',
+                      m.trust(
+                        safeMarkdownHtml(
+                          linkAnswerCitations(
+                            answer?.text ?? streamedText,
+                            answer?.citations ?? [],
+                          ),
+                        ),
+                      ),
+                    ),
+                answer?.modelKnowledgeAllowed === true
+                  ? m('p.fm-rag-warning', t('ragAsk', 'modelKnowledgeUsed'))
+                  : undefined,
+                m(
+                  'ul.fm-rag-citations',
+                  answer?.citations.map((citation) =>
+                    m('li', { key: `${citation.label}-${citation.sourceId}` }, [
+                      m(
+                        'button',
+                        {
+                          type: 'button',
+                          disabled: citation.unavailable || attrs.onOpenCitation === undefined,
+                          onclick: () => void openSource(attrs, citation.sourceId),
+                          'aria-label': t('ragAsk', 'openCitation', {
+                            label: citation.label,
+                          }),
+                        },
+                        citation.label,
+                      ),
+                      ` ${citation.provenance}`,
+                      citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
+                      citation.stale ? ` · ${t('ragAsk', 'staleEvidence')}` : '',
+                      citation.unavailable ? ` · ${t('ragAsk', 'unavailableEvidence')}` : '',
+                    ]),
+                  ),
+                ),
+              ],
+            ),
           ]),
           exportVisible
             ? m('details.fm-rag-export', { open: true }, [
@@ -583,6 +602,97 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   ),
                 ),
               ]),
+          m('.fm-rag-preferences', [
+            m('.fm-rag-preference-toggles', [
+              attrs.currentFolder === undefined || attrs.onIncludeCurrentFolder === undefined
+                ? undefined
+                : m('label', [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: currentFolderIncluded,
+                      disabled:
+                        busy !== undefined || currentFolderStatusError || currentFolderIncluded,
+                      onchange: (event: Event) => {
+                        if ((event.currentTarget as HTMLInputElement).checked) {
+                          attrs.onIncludeCurrentFolder?.();
+                        }
+                      },
+                    }),
+                    m('span', t('ragAsk', 'includeCurrentFolder')),
+                  ]),
+              m('label', [
+                m('input', {
+                  type: 'checkbox',
+                  checked: allowModelKnowledge,
+                  disabled: busy !== undefined,
+                  onchange: (event: Event) => {
+                    allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
+                    resetRetrieval(true);
+                  },
+                }),
+                m('span', t('ragAsk', 'allowModelKnowledge')),
+              ]),
+            ]),
+            m('details.fm-rag-options', [
+              m('summary', [
+                m('span', t('ragAsk', 'options')),
+                m('small', scopeLabel(selectedScope)),
+              ]),
+              m('.fm-rag-controls', [
+                m('label', [
+                  m('span', t('ragAsk', 'profile')),
+                  m(
+                    'select.browser-default',
+                    {
+                      value: selectedProfileId,
+                      disabled: busy !== undefined,
+                      onchange: (event: Event) => {
+                        selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
+                        resetRetrieval(true);
+                      },
+                    },
+                    profiles.map((profile) =>
+                      m(
+                        'option',
+                        { key: profile.id, value: profile.id },
+                        `${profile.name} · ${profile.locality}`,
+                      ),
+                    ),
+                  ),
+                ]),
+                m('label', [
+                  m('span', t('ragAsk', 'scope')),
+                  m(
+                    'select.browser-default',
+                    {
+                      value: selectedScope,
+                      disabled: busy !== undefined,
+                      onchange: (event: Event) => {
+                        selectedScope = (event.currentTarget as HTMLSelectElement)
+                          .value as RagScopeKind;
+                        resetRetrieval(true);
+                      },
+                    },
+                    scopeKinds.map((kind) =>
+                      m(
+                        'option',
+                        {
+                          key: kind,
+                          value: kind,
+                          disabled: !scopeAvailable(attrs, kind, roots, currentFolderIncluded),
+                        },
+                        scopeLabel(kind),
+                      ),
+                    ),
+                  ),
+                ]),
+                m('p.fm-rag-disclosure', t('ragAsk', 'readOnlyDisclosure')),
+              ]),
+            ]),
+            currentFolderStatusError
+              ? m('p.fm-rag-warning', { role: 'alert' }, t('ragAsk', 'folderStatusFailed'))
+              : undefined,
+          ]),
         ]),
         buttons: [
           { label: t('button', 'close'), onclick: attrs.onClose },
@@ -618,14 +728,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   onclick: () => void retrieve(attrs),
                 },
               ]
-            : [
-                {
-                  label:
-                    busy === 'generating' ? t('ragAsk', 'generating') : t('ragAsk', 'generate'),
-                  disabled: busy !== undefined,
-                  onclick: () => void generate(attrs),
-                },
-              ]),
+            : []),
         ],
       }),
   };

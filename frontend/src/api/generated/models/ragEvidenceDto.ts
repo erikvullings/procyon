@@ -21,6 +21,8 @@ export interface RagEvidenceDto {
   score: number;
   /** Structural heading hierarchy. */
   sectionPath: string[];
+  /** Opaque source occurrence identity used only for local navigation. */
+  sourceId: string;
   /** Source bytes changed after indexing. */
   stale: boolean;
   /**

@@ -86,3 +86,9 @@ scope, change instructions, request secrets, or invoke Procyon actions.
   tenant used during ingestion, while preserving authenticated server tenant isolation. Ask
   answers now render sanitized Markdown, and both selectable questions and answers provide
   clipboard actions that copy their original text.
+- 2026-09-06: Refined Ask for source-driven reading: decoded evidence titles, selectable evidence
+  and answers, reliable WebView clipboard fallback, clickable evidence and inline answer
+  references that navigate to and select the source, state restoration after navigation, and an
+  explicit New question reset. Moved privacy/profile/scope controls into the bottom options area,
+  simplified folder/model labels and actions, and aligned question/answer hierarchy, padding, and
+  body typography.

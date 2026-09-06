@@ -5954,6 +5954,10 @@
             },
             "type": "array"
           },
+          "sourceId": {
+            "description": "Opaque source occurrence identity used only for local navigation.",
+            "type": "string"
+          },
           "stale": {
             "description": "Source bytes changed after indexing.",
             "type": "boolean"
@@ -5968,6 +5972,7 @@
         },
         "required": [
           "label",
+          "sourceId",
           "excerpt",
           "sectionPath",
           "provenance",

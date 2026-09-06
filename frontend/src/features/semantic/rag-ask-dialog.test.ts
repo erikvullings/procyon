@@ -81,9 +81,12 @@ describe('RagAskDialog', () => {
     expect(dialog?.classList.contains('fm-dense-modal')).toBe(false);
     expect(root.querySelector<HTMLTextAreaElement>('.fm-rag-question textarea')?.rows).toBe(5);
     expect(root.querySelector<HTMLDetailsElement>('.fm-rag-options')?.open).toBe(false);
+    expect(root.querySelector('.fm-rag-options')?.closest('.fm-rag-preferences')).not.toBeNull();
     expect(root.querySelector('.fm-rag-answer')?.textContent).toContain(
       'Your generated answer will appear here.',
     );
+    expect(root.textContent).not.toContain('Enter to ask');
+    expect(root.textContent).not.toContain('Generate answer');
     const selects = root.querySelectorAll<HTMLSelectElement>('select');
     expect(selects).toHaveLength(2);
     const scopeSelect = selects.item(1);
@@ -107,6 +110,9 @@ describe('RagAskDialog', () => {
     const modelKnowledge = checkboxes?.item(1);
     expect(modelKnowledge?.checked).toBe(false);
     expect(root.textContent).toContain('read-only');
+    expect(root.textContent).toContain('Index current folder');
+    expect(root.textContent).toContain('Allow model knowledge');
+    expect(root.textContent).not.toContain('model-only claims');
   });
 
   it('previews evidence before generation and explicitly saves and deletes a conversation', async () => {
@@ -140,7 +146,9 @@ describe('RagAskDialog', () => {
     expect(root.querySelector('[aria-labelledby="rag-evidence-heading"]')).not.toBeNull();
     expect(root.textContent).toContain('Coverage: 3/3 indexed');
 
-    button('Generate answer')?.click();
+    question.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
     await vi.waitFor(() => expect(root.textContent).toContain('grounded in the selected'));
     expect(root.querySelector('[aria-live="polite"]')).not.toBeNull();
     expect(root.textContent).toContain('C1');
@@ -150,7 +158,9 @@ describe('RagAskDialog', () => {
     m.redraw.sync();
     button('Preview evidence')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Mock indexed evidence'));
-    button('Generate answer')?.click();
+    question.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
     await vi.waitFor(() => expect(root.textContent).toContain('grounded in the selected'));
 
     button('Save conversation')?.click();
@@ -204,15 +214,40 @@ describe('RagAskDialog', () => {
 
   it('renders sanitized Markdown and copies the raw question and answer', async () => {
     const client = await configuredClient();
+    const originalPreview = client.previewRag.bind(client);
+    vi.spyOn(client, 'previewRag').mockImplementation(async (request, signal) => {
+      const response = await originalPreview(request, signal);
+      return {
+        ...response,
+        evidence: response.evidence.map((evidence) => ({
+          ...evidence,
+          sourceId: 'mock-source-1',
+          title: 'TRIZ%20Engineering%20of%20Creativity.pdf',
+        })),
+      };
+    });
     const originalGenerate = client.generateRagAnswer.bind(client);
     vi.spyOn(client, 'generateRagAnswer').mockImplementation(async (request, signal) => {
       const response = await originalGenerate(request, signal);
-      const text = '# SU-fields\n\nUse **substance-field analysis**.\n\n<script>alert(1)</script>';
+      const text =
+        '# SU-fields\n\nUse **substance-field analysis** [C1].\n\n<script>alert(1)</script>';
       return {
         ...response,
         events: response.events.map((event) => {
           if (event.type === 'token') return { ...event, text };
           if (event.type === 'done') return { ...event, answer: { ...event.answer, text } };
+          if (event.type === 'retrieval') {
+            return {
+              ...event,
+              preview: {
+                ...event.preview,
+                evidence: event.preview.evidence.map((evidence) => ({
+                  ...evidence,
+                  title: 'TRIZ%20Engineering%20of%20Creativity.pdf',
+                })),
+              },
+            };
+          }
           return event;
         }),
       };
@@ -232,6 +267,7 @@ describe('RagAskDialog', () => {
           selectedEntries: [entry],
           semanticSourceIds: [],
           onClose: vi.fn(),
+          onOpenCitation: vi.fn(),
         }),
     });
     await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
@@ -248,16 +284,92 @@ describe('RagAskDialog', () => {
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-rag-answer-markdown h1')).not.toBeNull());
+    expect(root.textContent).toContain('TRIZ Engineering of Creativity.pdf');
     expect(root.querySelector('.fm-rag-answer-markdown strong')?.textContent).toBe(
       'substance-field analysis',
     );
     expect(root.querySelector('.fm-rag-answer-markdown script')).toBeNull();
+    expect(root.querySelector<HTMLAnchorElement>('.fm-rag-answer-markdown a')?.textContent).toBe(
+      'C1',
+    );
 
     root.querySelector<HTMLButtonElement>('[aria-label="Copy answer"]')?.click();
     await vi.waitFor(() =>
       expect(writeText).toHaveBeenLastCalledWith(
-        '# SU-fields\n\nUse **substance-field analysis**.\n\n<script>alert(1)</script>',
+        '# SU-fields\n\nUse **substance-field analysis** [C1].\n\n<script>alert(1)</script>',
       ),
     );
+    root.querySelector<HTMLButtonElement>('[aria-label="Copy evidence C1"]')?.click();
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith(
+        'Mock indexed evidence relevant to "What explains SU-fields?".',
+      ),
+    );
+  });
+
+  it('opens evidence and inline references and restores state until New question is chosen', async () => {
+    const client = await configuredClient();
+    const originalPreview = client.previewRag.bind(client);
+    vi.spyOn(client, 'previewRag').mockImplementation(async (request, signal) => {
+      const response = await originalPreview(request, signal);
+      return {
+        ...response,
+        evidence: response.evidence.map((evidence) => ({
+          ...evidence,
+          sourceId: 'mock-source-1',
+        })),
+      };
+    });
+    const onOpenCitation = vi.fn().mockResolvedValue(undefined);
+    let open = true;
+    m.mount(root, {
+      view: () =>
+        m(RagAskDialog, {
+          open,
+          client,
+          workspaceId,
+          currentFolder: { providerId: 'local', uri: 'file:///documents' },
+          selectedEntries: [entry],
+          semanticSourceIds: [],
+          onClose: () => {
+            open = false;
+          },
+          onOpenCitation,
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
+
+    const question = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (question === null) throw new Error('question input not rendered');
+    question.value = 'What explains SU-fields?';
+    question.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    question.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await vi.waitFor(() => expect(root.textContent).toContain('grounded in the selected'));
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Open evidence C1"]')?.click();
+    await vi.waitFor(() => expect(onOpenCitation).toHaveBeenCalledWith('mock-source-1'));
+    root.querySelector<HTMLAnchorElement>('.fm-rag-answer-markdown a')?.click();
+    await vi.waitFor(() => expect(onOpenCitation).toHaveBeenCalledTimes(2));
+
+    open = false;
+    m.redraw.sync();
+    open = true;
+    m.redraw.sync();
+    await vi.waitFor(
+      () =>
+        expect(root.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(
+          'What explains SU-fields?',
+        ),
+      { timeout: 2_000 },
+    );
+    expect(root.textContent).toContain('grounded in the selected');
+
+    root.querySelector<HTMLButtonElement>('[aria-label="New question"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(''),
+    );
+    expect(root.textContent).not.toContain('grounded in the selected');
   });
 });

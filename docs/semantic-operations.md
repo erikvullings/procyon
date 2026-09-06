@@ -25,14 +25,16 @@ content search, and baseline document viewing available.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
   also available as **Ask your library** in the command palette. It always opens Ask across the
   existing library. The question and answer workspace stays prominent; generation profile, evidence
-  scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The
-  **Include current folder** and **Allow model knowledge** choices remain simple opt-in checkboxes
-  beside the answer area. Including a folder shows the same recursive estimate, retention
+  scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The bottom
+  options area keeps **Index current folder** and **Allow model knowledge** as simple opt-in
+  checkboxes. Indexing a folder shows the same recursive estimate, retention
   disclosure, budget warnings, and explicit consent used by Settings; cancelling returns to the
-  question in progress. Press **Enter** to retrieve evidence and generate an answer, or
-  **Shift+Enter** to insert a new line. Questions and answers remain selectable and each has a copy
-  action. Answers render sanitized Markdown while copying preserves the original Markdown text.
-  Detailed root administration remains under **Settings > Semantic**.
+  question in progress. Press **Enter** to retrieve evidence and generate an answer, or use
+  **Shift+Enter** for a multiline question. Questions, evidence excerpts, and answers remain
+  selectable and have copy actions. Answers render sanitized Markdown while copying preserves the
+  original Markdown text. Evidence sources and answer references open the containing folder,
+  select the source file, and close Ask without discarding its state. **New question** explicitly
+  clears that state. Detailed root administration remains under **Settings > Semantic**.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without

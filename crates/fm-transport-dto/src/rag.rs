@@ -80,6 +80,8 @@ pub struct RagCoverageDto {
 pub struct RagEvidenceDto {
     /// Opaque citation label.
     pub label: String,
+    /// Opaque source occurrence identity used only for local navigation.
+    pub source_id: String,
     /// Complete bounded structural excerpt.
     pub excerpt: String,
     /// Optional title permitted by profile redaction policy.

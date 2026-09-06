@@ -61,6 +61,7 @@ pub(crate) fn preview_to_dto(preview: RagPreview, scope: RagScopeDto) -> RagPrev
             .into_iter()
             .map(|evidence| RagEvidenceDto {
                 label: evidence.label,
+                source_id: evidence.source_id,
                 excerpt: evidence.excerpt,
                 title: evidence.title,
                 section_path: evidence.section_path,

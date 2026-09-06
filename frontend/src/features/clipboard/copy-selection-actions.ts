@@ -51,8 +51,12 @@ export function selectionClipboardText(
 /** Writes text to the host clipboard, including WebViews without the modern Clipboard API. */
 export async function writeSystemClipboardText(text: string): Promise<void> {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText !== undefined) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // WKWebView may expose the Clipboard API while denying it outside a transient user gesture.
+    }
   }
   if (typeof document === 'undefined') {
     throw new Error(t('clipboard', 'unavailable'));

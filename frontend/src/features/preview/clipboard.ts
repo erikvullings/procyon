@@ -1,16 +1,9 @@
-/** Copies text to the system clipboard, with the same `execCommand` fallback used elsewhere in
- * the app (see `frontend/src/features/diagnostics/diagnostics-view.ts`'s `copyDiagnosticsToClipboard`). */
+import { t } from '../../i18n';
+import { writeSystemClipboardText } from '../clipboard/copy-selection-actions';
+
+/** Copies text to the system clipboard across browser and WebView hosts. */
 export async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
+  await writeSystemClipboardText(text);
 }
 
 /** Copies an image `data:` URI (as produced by `bytesToDataUri`) to the system clipboard as image
@@ -35,5 +28,3 @@ export async function copyImageDataUri(dataUri: string): Promise<void> {
     new ClipboardItem({ [mimeType]: new Blob([bytes], { type: mimeType }) }),
   ]);
 }
-
-import { t } from '../../i18n';

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Connection } from '../../models';
-import { openCreatedConnection } from './app-dialogs';
+import type { Connection, ResolvedRagCitation } from '../../models';
+import { navigateToRagCitation, openCreatedConnection } from './app-dialogs';
 
 function connection(overrides: Partial<Connection> = {}): Connection {
   return {
@@ -71,5 +71,32 @@ describe('openCreatedConnection', () => {
 
     expect(ctx.navigateActiveLocation).not.toHaveBeenCalled();
     expect(ctx.setConnectionsManagerOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe('navigateToRagCitation', () => {
+  it('opens the containing folder and selects the decoded source name', async () => {
+    const resolve = vi.fn().mockResolvedValue({
+      available: true,
+      entryId: '11111111-1111-4111-8111-111111111111',
+      location: {
+        providerId: 'local',
+        uri: 'file:///documents/TRIZ%20Engineering.pdf',
+      },
+    } satisfies ResolvedRagCitation);
+    const navigate = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      navigateToRagCitation('22222222-2222-4222-8222-222222222222', 'source-1', resolve, navigate),
+    ).resolves.toBe(true);
+
+    expect(resolve).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      sourceId: 'source-1',
+    });
+    expect(navigate).toHaveBeenCalledWith(
+      { providerId: 'local', uri: 'file:///documents' },
+      'TRIZ Engineering.pdf',
+    );
   });
 });
