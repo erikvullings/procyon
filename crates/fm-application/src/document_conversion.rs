@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_semantic_conversion::{
-    BaselineConverter, Cancellation, CancellationSignal, ConversionBudgets, ConversionContext,
-    ConversionOutcome, DocumentConverter, DocumentMetadata, SourceContent,
+    Cancellation, CancellationSignal, ConversionBudgets, ConversionContext, ConversionOutcome,
+    DocumentConverter, DocumentMetadata, SourceContent,
 };
+use fm_semantic_docling::converter_with_baseline_fallback;
 use fm_vfs::{EntryRef, ProviderCapabilities, ProviderRegistry};
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
@@ -42,11 +43,12 @@ pub(crate) struct DocumentConversionService {
 }
 
 impl DocumentConversionService {
-    /// Creates the service with the baseline converter and default budgets.
+    /// Creates the service with deterministic Docling PDF extraction,
+    /// baseline fallback, and default budgets.
     pub(crate) fn new(providers: ProviderRegistry) -> Self {
         Self {
             providers,
-            converter: Arc::new(BaselineConverter::new()),
+            converter: Arc::new(converter_with_baseline_fallback()),
             budgets: ConversionBudgets::default(),
         }
     }
@@ -165,6 +167,7 @@ mod tests {
         VfsError, WriteOptions,
     };
     use fm_vfs_local::LocalFileSystemProvider;
+    use lopdf::{Document, Object, Stream, dictionary};
 
     use super::*;
 
@@ -297,6 +300,44 @@ mod tests {
         DocumentConversionService::new(providers)
     }
 
+    fn positioned_pdf(content: &str) -> Vec<u8> {
+        let mut document = Document::with_version("1.5");
+        let pages_id = document.new_object_id();
+        let font_id = document.add_object(dictionary! {
+            "Type" => "Font",
+            "Subtype" => "Type1",
+            "BaseFont" => "Helvetica",
+        });
+        let resources_id = document.add_object(dictionary! {
+            "Font" => dictionary! { "F1" => font_id },
+        });
+        let content_id =
+            document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
+        let page_id = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        document.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![Object::Reference(page_id)],
+                "Count" => 1,
+                "Resources" => resources_id,
+            }),
+        );
+        let catalog_id = document.add_object(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        });
+        document.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save positioned PDF");
+        bytes
+    }
+
     #[tokio::test]
     async fn converts_bytes_streamed_from_any_provider() {
         let service = memory_service(b"# Title\n\nBody paragraph.\n", "notes.md");
@@ -316,6 +357,43 @@ mod tests {
             fm_semantic_conversion::FormatKind::Markdown
         );
         assert_eq!(document.units()[0].text, "Title");
+    }
+
+    #[tokio::test]
+    async fn default_conversion_uses_geometry_aware_docling_pdf_order() {
+        let bytes = positioned_pdf(
+            "BT /F1 12 Tf\n\
+             1 0 0 1 330 720 Tm (Right column starts after the left column.) Tj\n\
+             1 0 0 1 72 720 Tm (Left column starts first in reading order.) Tj\n\
+             1 0 0 1 330 690 Tm (Right column continues after left finishes.) Tj\n\
+             1 0 0 1 72 690 Tm (Left column continues before the right column.) Tj\n\
+             ET\n",
+        );
+        let service = memory_service(&bytes, "columns.pdf");
+
+        let outcome = service
+            .convert(
+                Location::new(
+                    ProviderId::new("memory-conversion-test-double"),
+                    "memory://columns.pdf",
+                ),
+                CancellationToken::new(),
+            )
+            .await
+            .expect("conversion");
+
+        let text = outcome
+            .document()
+            .expect("converted")
+            .units()
+            .iter()
+            .map(|unit| unit.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            text.find("Left column starts").expect("left column")
+                < text.find("Right column starts").expect("right column")
+        );
     }
 
     #[tokio::test]

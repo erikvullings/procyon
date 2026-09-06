@@ -22,6 +22,7 @@ developer-bundle = [
 [dependencies]
 fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true
+fm-semantic-docling.workspace = true
 fm-semantic-protocol.workspace = true
 fs2.workspace = true
 ort = {workspace = true, optional = true}
@@ -38,6 +39,7 @@ tokio-util.workspace = true
 zvec-rust = {workspace = true, optional = true}
 
 [dev-dependencies]
+lopdf.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]

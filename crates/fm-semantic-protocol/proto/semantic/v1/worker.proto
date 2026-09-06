@@ -173,7 +173,7 @@ message IngestionJob {
   JobState state = 3;
   // Latest progress measurement.
   Progress progress = 4;
-  // Typed failure, present only for a failed job.
+  // Typed failure or exclusion detail, when present.
   ProtocolError error = 5;
 }
 
@@ -191,6 +191,8 @@ enum JobState {
   JOB_STATE_FAILED = 4;
   // Job was cancelled.
   JOB_STATE_CANCELLED = 5;
+  // Job was intentionally excluded from the derived index.
+  JOB_STATE_SKIPPED = 6;
 }
 
 // Scoped semantic query.

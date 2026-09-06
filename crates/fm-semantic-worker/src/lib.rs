@@ -908,7 +908,10 @@ fn io_error_is_absent_or_stale(error: &io::Error) -> bool {
         error.kind(),
         io::ErrorKind::NotFound
             | io::ErrorKind::ConnectionRefused
+            | io::ErrorKind::ConnectionReset
             | io::ErrorKind::AddrNotAvailable
+            | io::ErrorKind::NotConnected
+            | io::ErrorKind::BrokenPipe
     )
 }
 
@@ -1045,6 +1048,8 @@ pub struct IngestionJobStatus {
     pub document_id: String,
     /// Current lifecycle state.
     pub state: IngestionState,
+    /// Sanitized failure or exclusion detail, when present.
+    pub detail: Option<String>,
 }
 
 /// One validated, path-free ingestion request handed to a worker backend.
@@ -1139,6 +1144,8 @@ pub enum IngestionState {
     Failed,
     /// Cancelled before completion.
     Cancelled,
+    /// Intentionally excluded from the derived index.
+    Skipped,
 }
 
 /// Host-facing worker health.
@@ -1623,8 +1630,10 @@ impl WorkerClient {
                     v1::JobState::Completed => IngestionState::Completed,
                     v1::JobState::Failed => IngestionState::Failed,
                     v1::JobState::Cancelled => IngestionState::Cancelled,
+                    v1::JobState::Skipped => IngestionState::Skipped,
                     v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
                 },
+                detail: job.error.map(|error| error.message),
             }),
             _ => Err(ClientError::UnexpectedResponse),
         }
@@ -3014,6 +3023,7 @@ async fn handle_frame(
                     IngestionState::Completed => v1::JobState::Completed,
                     IngestionState::Failed => v1::JobState::Failed,
                     IngestionState::Cancelled => v1::JobState::Cancelled,
+                    IngestionState::Skipped => v1::JobState::Skipped,
                 };
                 let payload = v1::server_frame::Payload::IngestionJob(v1::IngestionJob {
                     job_id: request.job_id.clone(),
@@ -4258,12 +4268,7 @@ async fn connect_local(endpoint: &Endpoint) -> Result<BoxedIo, ClientError> {
         .await
         .map_err(ClientError::Io)?;
     verify_path()?;
-    if stream
-        .peer_cred()
-        .map_err(|_| ClientError::InsecureEndpoint)?
-        .uid()
-        != rustix::process::geteuid().as_raw()
-    {
+    if stream.peer_cred().map_err(ClientError::Io)?.uid() != rustix::process::geteuid().as_raw() {
         return Err(ClientError::InsecureEndpoint);
     }
     Ok(Box::new(stream))

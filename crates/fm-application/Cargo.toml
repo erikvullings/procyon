@@ -31,6 +31,7 @@ fm-search.workspace = true
 fm-search-acceleration.workspace = true
 fm-semantic-components.workspace = true
 fm-semantic-conversion.workspace = true
+fm-semantic-docling.workspace = true
 fm-semantic-library.workspace = true
 fm-semantic-protocol.workspace = true
 fm-semantic-worker.workspace = true

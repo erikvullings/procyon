@@ -273,6 +273,8 @@ pub enum SemanticIngestionState {
     Failed,
     /// Cancelled before completion.
     Cancelled,
+    /// Intentionally excluded from the derived index.
+    Skipped,
 }
 
 /// Current state of one scoped ingestion job.
@@ -284,6 +286,8 @@ pub struct SemanticIngestionJob {
     pub document_id: DocumentId,
     /// Current lifecycle state.
     pub state: SemanticIngestionState,
+    /// Sanitized failure or exclusion detail, when present.
+    pub detail: Option<String>,
 }
 
 /// One scoped semantic progress event.
@@ -447,6 +451,7 @@ impl SemanticCapability for FakeSemanticCapability {
                     job_id: job_id.clone(),
                     document_id,
                     state: SemanticIngestionState::Completed,
+                    detail: None,
                 },
             );
         Ok(job_id)
@@ -736,7 +741,9 @@ impl SemanticCapability for IpcSemanticCapability {
                 fm_semantic_worker::IngestionState::Completed => SemanticIngestionState::Completed,
                 fm_semantic_worker::IngestionState::Failed => SemanticIngestionState::Failed,
                 fm_semantic_worker::IngestionState::Cancelled => SemanticIngestionState::Cancelled,
+                fm_semantic_worker::IngestionState::Skipped => SemanticIngestionState::Skipped,
             },
+            detail: job.detail,
         })
     }
 

@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fm_semantic_components::{ModelPack, ModelPackKind};
+use fm_semantic_docling::DEFAULT_CONVERTER_PIPELINE_VERSION;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -202,7 +203,7 @@ fn developer_manifest(identity: &EmbeddingModelIdentity) -> LibraryIndexManifest
         distance_metric: DistanceMetric::Cosine,
         model_revision: identity.model_revision.clone(),
         tokenizer: identity.tokenizer.clone(),
-        converter_version: "baseline/1".into(),
+        converter_version: DEFAULT_CONVERTER_PIPELINE_VERSION.into(),
         chunker_version: "structural/2".into(),
         normalization: VectorNormalization::L2,
     }
@@ -346,13 +347,14 @@ it belongs to a superseded embedding space and is no longer queried",
     Ok(())
 }
 
-/// Selects the active model's index and clears stale contents on model changes.
+/// Selects the active model's index and clears stale incompatible contents.
 ///
 /// The durable marker lives beside all model-scoped indexes. A normal worker
-/// restart for the same model preserves its index, while switching to any
-/// different identity removes that target model's previous index before it can
-/// answer queries. If the host exits after activation but before launching a
-/// worker, the old marker remains and the next launch still performs the reset.
+/// restart for the same model and converter pipeline preserves its index,
+/// while switching either identity removes that target model's previous index
+/// before it can answer queries. If the host exits after activation but before
+/// launching a worker, the old marker remains and the next launch still
+/// performs the reset.
 fn prepare_active_model_index(
     data_directory: &Path,
     model: &DeveloperModel,
@@ -365,8 +367,8 @@ fn prepare_active_model_index(
 
     let model_directory = model.index_directory(data_directory);
     let identity = format!(
-        "{}\n{}\n",
-        model.identity.model_id, model.identity.model_revision
+        "{}\n{}\n{}\n",
+        model.identity.model_id, model.identity.model_revision, DEFAULT_CONVERTER_PIPELINE_VERSION
     );
     let marker = data_directory.join(MARKER_NAME);
     let reindex_pending = std::fs::read(data_directory.join(REINDEX_PENDING_NAME)).ok();
@@ -1203,6 +1205,37 @@ mod tests {
         assert!(!model_directory.join("stale-content").exists());
         assert!(model_directory.join("catalog.sqlite").is_file());
         assert!(model_directory.join("zvec").is_dir());
+    }
+
+    #[test]
+    fn legacy_converter_index_is_reset_once_then_rebuilt_content_is_preserved() {
+        let directory = TestDirectory::new("converter-reset");
+        drop(DeveloperWorker::open(&directory.0, None).expect("developer worker"));
+        let model_directory = fixture_index_directory(&directory.0);
+        std::fs::write(model_directory.join("baseline-content"), b"legacy chunks")
+            .expect("legacy content");
+        std::fs::write(
+            directory.0.join("active-model-index"),
+            format!("{DEVELOPMENT_MODEL_ID}\n{DEVELOPMENT_MODEL_REVISION}\n"),
+        )
+        .expect("legacy active-model marker");
+
+        drop(DeveloperWorker::open(&directory.0, None).expect("migrated worker"));
+
+        assert!(!model_directory.join("baseline-content").exists());
+        std::fs::write(model_directory.join("docling-content"), b"rebuilt chunks")
+            .expect("rebuilt content");
+        drop(DeveloperWorker::open(&directory.0, None).expect("replacement worker"));
+
+        assert!(model_directory.join("docling-content").is_file());
+    }
+
+    #[test]
+    fn developer_manifest_identifies_the_docling_first_pipeline() {
+        assert_eq!(
+            developer_manifest(&development_embedding_identity()).converter_version,
+            DEFAULT_CONVERTER_PIPELINE_VERSION
+        );
     }
 
     #[test]

@@ -5,18 +5,30 @@
 //! PDFium/ONNX implementation. The `ml` feature enables those native
 //! dependencies for managed advanced-pack builds.
 
+use std::sync::Arc;
+
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
 use docling_pdf::{PdfError, convert_text_layer_pages};
 use fm_semantic_conversion::{
-    AdvancedCapability, AdvancedConversion, AdvancedConverterBackend, ComponentVersion,
-    ConversionContext, ConversionError, ConversionOutcome, ConversionWarning, ConvertedDocument,
-    DocumentMetadata, FormatKind, Omission, Provenance, ProvenancePrecision, SkipReason, SourceMap,
-    StructuralUnit, TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
+    AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
+    BaselineConverter, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
+    ConversionWarning, ConvertedDocument, DocumentMetadata, FormatKind, Omission,
+    OptionalConverter, Provenance, ProvenancePrecision, SourceMap, StructuralUnit,
+    TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
 };
+
+const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
+    semantic indexing. Add one with OCRmyPDF, then reindex the file. On macOS install OCRmyPDF \
+    with Homebrew; on Linux install the distribution package; on Windows run it through WSL.";
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("docling-pdf", 1_036_000);
+/// Stable identity of the production conversion pipeline.
+///
+/// This changes whenever the preferred converter or fallback behaviour can
+/// produce different derived chunks, forcing compatible indexes to rebuild.
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/1";
 
 /// OCR language bundled by the audited Docling release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,6 +136,19 @@ impl DoclingPdfBackend {
     }
 }
 
+/// Builds Procyon's default converter with deterministic Docling PDF
+/// extraction preferred and the baseline converter retained for every
+/// unsupported or recoverably malformed input.
+#[must_use]
+pub fn converter_with_baseline_fallback() -> OptionalConverter {
+    OptionalConverter::prefer_advanced(
+        Arc::new(BaselineConverter::new()),
+        Some(Arc::new(AdvancedConverterAdapter::new(Arc::new(
+            DoclingPdfBackend::new(),
+        )))),
+    )
+}
+
 #[cfg(feature = "ml")]
 fn requested_ocr_assets(language: OcrLanguage) -> [(&'static str, String); 2] {
     let (recognizer, dictionary) = match language {
@@ -229,9 +254,7 @@ fn convert_text_layer(
         Err(error) => return conversion(pdf_error_outcome(error)),
     };
     if document.nodes.is_empty() {
-        return conversion(ConversionOutcome::Skipped {
-            reason: SkipReason::NoTextContent,
-        });
+        return conversion(no_text_layer());
     }
 
     let mut mapper = Mapper::new(version, context, total_pages, selected_pages, None);
@@ -343,6 +366,12 @@ fn conversion(outcome: ConversionOutcome) -> AdvancedConversion {
         // Procyon's current provenance represents the exact page and reading-order
         // block, but not Docling's region coordinates.
         provenance_precision: ProvenancePrecision::Approximate,
+    }
+}
+
+fn no_text_layer() -> ConversionOutcome {
+    ConversionOutcome::NoTextLayer {
+        detail: OCR_REQUIRED_GUIDANCE.into(),
     }
 }
 
@@ -647,9 +676,7 @@ impl<'a> Mapper<'a> {
             self.warn(ConversionWarning::RemovedInvisibleCharacters { count });
         }
         if self.units.is_empty() {
-            return ConversionOutcome::Skipped {
-                reason: SkipReason::NoTextContent,
-            };
+            return no_text_layer();
         }
         ConversionOutcome::Converted(ConvertedDocument::new(
             self.version,

@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -14,8 +14,9 @@ use fm_semantic_protocol::{
     write_frame,
 };
 use fm_semantic_worker::{
-    ClientError, ConceptFolderQuery, Endpoint, IngestionScope, LaunchSecret, SearchResult,
-    WorkerClient, WorkerConfig, WorkerConnector, WorkerHealth, WorkerQueryBackend,
+    ClientError, ConceptFolderQuery, Endpoint, IngestionScope, IngestionState, LaunchSecret,
+    SearchResult, WorkerClient, WorkerConfig, WorkerConnector, WorkerHealth,
+    WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob, WorkerQueryBackend,
     WorkerQueryInput, WorkerServer,
 };
 use tokio_util::sync::CancellationToken;
@@ -41,35 +42,99 @@ impl WorkerQueryBackend for CapturingQueryBackend {
     }
 }
 
-struct TestDirectory(PathBuf);
+struct SkippingIngestionBackend;
+
+impl WorkerIngestionBackend for SkippingIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        Ok(input.job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(Some(WorkerIngestionJob {
+            document_id: "scan".into(),
+            state: IngestionState::Skipped,
+            phase: "skipped".into(),
+            completed: 0,
+            total: 1,
+            error: Some("Add a text layer with OCRmyPDF, then reindex the file.".into()),
+        }))
+    }
+}
+
+struct TestDirectory(tempfile::TempDir);
 
 impl Deref for TestDirectory {
     type Target = std::path::Path;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0.path()
     }
 }
 
 impl AsRef<std::path::Path> for TestDirectory {
     fn as_ref(&self) -> &std::path::Path {
-        &self.0
+        self.0.path()
     }
 }
 
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
+fn test_directory(_name: &str) -> TestDirectory {
+    TestDirectory(
+        tempfile::Builder::new()
+            .prefix("fm-sw-")
+            .tempdir()
+            .expect("create isolated worker test directory"),
+    )
 }
 
-fn test_directory(name: &str) -> TestDirectory {
-    let path = PathBuf::from("target")
-        .join("semantic-worker-tests")
-        .join(format!("{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("create worker test directory");
-    TestDirectory(path)
+fn built_worker_executable() -> PathBuf {
+    std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable")
+}
+
+fn worker_executable(directory: &Path) -> PathBuf {
+    let source = built_worker_executable();
+    let executable = directory.join("fm-semantic-worker-test");
+    std::fs::copy(source, &executable).expect("copy isolated worker executable");
+    #[cfg(all(target_os = "macos", feature = "developer-bundle"))]
+    {
+        let native_directory = native_zvec_library_directory(&built_worker_executable());
+        let library = std::fs::read_dir(native_directory)
+            .expect("Zvec native library directory")
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("libzvec_c_api")
+            })
+            .expect("Zvec native library");
+        std::fs::copy(library.path(), directory.join(library.file_name()))
+            .expect("copy isolated Zvec native library");
+    }
+    executable
+}
+
+fn desktop_connector(directory: &Path, executable: &Path) -> WorkerConnector {
+    let connector = WorkerConnector::desktop(directory, executable)
+        .with_startup_timeout(Duration::from_secs(10));
+    #[cfg(feature = "developer-bundle")]
+    {
+        connector.with_developer_native_library_directory(&native_zvec_library_directory(
+            &built_worker_executable(),
+        ))
+    }
+    #[cfg(not(feature = "developer-bundle"))]
+    {
+        connector
+    }
 }
 
 #[tokio::test]
@@ -239,6 +304,47 @@ async fn accepts_an_owner_only_socket_served_by_the_same_effective_user() {
 
     let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn skipped_ingestion_and_ocr_guidance_cross_the_ipc_boundary() {
+    let directory = test_directory("skipped-ingestion");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            Arc::new(SkippingIngestionBackend),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let job_id = client
+        .ingest(
+            "skip-scan",
+            IngestionScope::new("tenant", "library"),
+            "scan",
+            BTreeMap::new(),
+            "application/pdf",
+            b"%PDF scan".to_vec(),
+        )
+        .await
+        .unwrap();
+
+    let job = client
+        .ingestion_job("tenant", "library", &job_id)
+        .await
+        .unwrap();
+
+    assert_eq!(job.state, IngestionState::Skipped);
+    assert!(
+        job.detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("OCRmyPDF"))
+    );
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }
@@ -1637,12 +1743,11 @@ async fn concurrent_connectors_elect_one_worker_and_share_it() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = test_directory("concurrent-launch");
-    let executable =
-        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
+    let executable = worker_executable(&directory);
     let first =
-        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+        desktop_connector(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let second =
-        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+        desktop_connector(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
 
     let (first, second) = tokio::join!(first.connect(), second.connect());
     let first = first.unwrap();
@@ -1669,10 +1774,9 @@ async fn concurrent_connectors_elect_one_worker_and_share_it() {
 #[tokio::test]
 async fn desktop_connector_reaps_the_worker_process_after_it_exits() {
     let directory = test_directory("child-reaping");
-    let executable =
-        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
+    let executable = worker_executable(&directory);
     let connector =
-        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+        desktop_connector(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let client = connector.connect().await.unwrap();
     let raw_pid = std::fs::read_to_string(directory.join("worker.pid"))
         .unwrap()
@@ -1699,9 +1803,9 @@ async fn desktop_connector_reaps_the_worker_process_after_it_exits() {
 #[tokio::test]
 async fn desktop_connector_waits_for_process_exit_and_endpoint_removal_after_shutdown() {
     let directory = test_directory("confirmed-shutdown");
-    let executable = PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let executable = worker_executable(&directory);
     let connector =
-        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+        desktop_connector(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let endpoint = Endpoint::for_runtime_directory(&directory);
     let client = connector.connect().await.unwrap();
 
@@ -1749,9 +1853,8 @@ async fn developer_connector_allows_real_model_cold_start_time_before_binding() 
 
     let directory = test_directory("delayed-developer-launch");
     let runtime_directory = std::fs::canonicalize(&directory).expect("runtime directory");
-    let executable =
-        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
-    let native_library_directory = native_zvec_library_directory(&executable);
+    let executable = worker_executable(&directory);
+    let native_library_directory = native_zvec_library_directory(&built_worker_executable());
     let wrapper = directory.join("delayed-worker");
     let log = runtime_directory.join("delayed-worker.log");
     let quoted = executable.display().to_string().replace('\'', "'\\''");
@@ -1802,9 +1905,8 @@ async fn a_new_developer_host_replaces_a_worker_from_the_previous_host() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = test_directory("developer-host-restart");
-    let executable =
-        std::fs::canonicalize(env!("CARGO_BIN_EXE_fm-semantic-worker")).expect("worker executable");
-    let native_library_directory = native_zvec_library_directory(&executable);
+    let executable = worker_executable(&directory);
+    let native_library_directory = native_zvec_library_directory(&built_worker_executable());
     let data_directory = std::fs::canonicalize(&directory)
         .unwrap()
         .join("developer-data");
@@ -1852,9 +1954,9 @@ async fn a_new_developer_host_replaces_a_worker_from_the_previous_host() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connector_replaces_a_crashed_worker_on_the_next_call() {
     let directory = test_directory("crash-restart");
-    let executable = PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let executable = worker_executable(&directory);
     let connector =
-        WorkerConnector::desktop(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
+        desktop_connector(&directory, &executable).with_idle_timeout(Duration::from_secs(2));
     let client = connector.connect().await.unwrap();
     let first_pid = std::fs::read_to_string(directory.join("worker.pid"))
         .unwrap()

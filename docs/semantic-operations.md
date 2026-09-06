@@ -216,10 +216,12 @@ evaluation metric.
 
 Storage diagnostics aggregate authoritative measurements by enrolled root and detected format,
 separating active bytes from bytes pending cleanup. They do not trust caller-supplied totals.
-Baseline conversion supports plain text, source code, Markdown, HTML, DOCX, PPTX, XLSX, CSV, and
-PDFs with an extractable text layer. Unsupported, encrypted, malformed, over-budget, and image-only
-documents remain visible as typed skip or omission reasons; install an optional converter only
-after its capability and resource disclosure has been reviewed.
+Baseline conversion supports plain text, source code, Markdown, HTML, DOCX, PPTX, XLSX, and CSV.
+PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
+with the original `lopdf` implementation retained for recoverable fallback. Image-only PDFs are
+excluded from semantic indexing with actionable OCRmyPDF guidance; they are not counted as
+retryable ingestion failures. Unsupported, encrypted, malformed, and over-budget documents remain
+visible as typed skip or omission reasons.
 
 ## Optional advanced packs
 
@@ -231,17 +233,18 @@ signature, compatibility, policy, and payload before activation; activation reta
 version per capability family. Removing one family does not alter the others.
 
 Advanced converters receive bounded bytes and trusted metadata, never paths, credentials, provider
-handles, or network authority. The default selection remains baseline-first. A promoted
-format-specific pack may explicitly select advanced-first conversion; successful advanced output
+handles, or network authority. Deterministic Docling is the built-in PDF-specific advanced-first
+converter; other formats remain baseline-first. A promoted format-specific pack may explicitly
+select advanced-first conversion; successful advanced output
 then carries its own converter fingerprint, while pack absence, incompatibility, or recoverable
 runtime failure falls back to the baseline. Cancellation, resource-limit, and encryption outcomes
 are not hidden by fallback. Advanced output must preserve the task-0180 structure, report
 provenance precision and omissions, and pass the same source, expansion, output, timeout, and
 cancellation limits.
 
-The Docling PDF candidate is pinned and audited in
+The Docling PDF integration is pinned and audited in
 [`docling-pdf-evaluation.md`](docling-pdf-evaluation.md). Its deterministic text-layer Adapter is
-pure Rust. The ML mode requires a Procyon-signed managed pack containing PDFium, ONNX Runtime,
+pure Rust and is the default PDF path. The optional ML mode requires a Procyon-signed managed pack containing PDFium, ONNX Runtime,
 layout/OCR/TableFormer models and tokenizers; release builds set `ORT_SKIP_DOWNLOAD=1` and point
 Docling only at checksum-verified installed assets. Activating a converter pack returns its signed
 affected formats and migration impact. The host must obtain consent for the disclosed

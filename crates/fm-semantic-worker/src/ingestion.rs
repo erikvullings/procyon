@@ -4,9 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use fm_semantic_conversion::{
-    BaselineConverter, Cancellation, CancellationSignal, Chunker, ConversionContext,
-    ConversionOutcome, DocumentConverter, DocumentMetadata, SourceContent,
+    Cancellation, CancellationSignal, Chunker, ConversionContext, ConversionOutcome,
+    DocumentConverter, DocumentMetadata, SourceContent,
 };
+use fm_semantic_docling::converter_with_baseline_fallback;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -391,10 +392,11 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             "discovered" | "paused" => IngestionState::Pending,
             "complete" => IngestionState::Completed,
             "failed" => IngestionState::Failed,
-            "cancelled" | "skipped" => IngestionState::Cancelled,
+            "cancelled" => IngestionState::Cancelled,
+            "skipped" => IngestionState::Skipped,
             _ => IngestionState::Running,
         };
-        let error = (state == IngestionState::Failed)
+        let error = (state == IngestionState::Failed || state == IngestionState::Skipped)
             .then(|| job.detail.clone())
             .flatten();
         Ok(Some(WorkerIngestionJob {
@@ -409,7 +411,8 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
 }
 
 impl IngestionCoordinator {
-    /// Creates a coordinator around the baseline converter and injected local boundaries.
+    /// Creates a coordinator around deterministic Docling PDF extraction,
+    /// baseline fallback, and injected local boundaries.
     #[must_use]
     pub fn new(
         catalog: SemanticCatalog,
@@ -421,7 +424,7 @@ impl IngestionCoordinator {
     ) -> Self {
         Self {
             catalog,
-            converter: Arc::new(BaselineConverter::new()),
+            converter: Arc::new(converter_with_baseline_fallback()),
             embedder,
             index,
             resources,
@@ -574,6 +577,21 @@ impl IngestionCoordinator {
                     1,
                 )?;
                 return Err(IngestionError::Cancelled);
+            }
+            ConversionOutcome::NoTextLayer { detail } => {
+                let deleted = self.catalog.delete_occurrence(&document.occurrence_id)?;
+                self.index
+                    .delete(&deleted.record_ids)
+                    .map_err(IngestionError::DerivedCleanup)?;
+                self.transition(
+                    document,
+                    IngestionStage::Skipped,
+                    attempts,
+                    Some(&detail),
+                    0,
+                    1,
+                )?;
+                return Err(IngestionError::Excluded(detail));
             }
             outcome => {
                 let detail = format!("{outcome:?}");
@@ -858,6 +876,9 @@ pub enum IngestionError {
     /// Work was cancelled.
     #[error("semantic ingestion cancelled")]
     Cancelled,
+    /// Source was intentionally excluded with actionable remediation.
+    #[error("semantic ingestion excluded the source: {0}")]
+    Excluded(String),
     /// Bounded retry count was exhausted.
     #[error("semantic ingestion retry limit exhausted")]
     RetryExhausted,
@@ -953,6 +974,7 @@ mod tests {
     use crate::semantic_storage::{
         DistanceMetric, LibraryIndexManifest, QueryFilters, VectorIndexKind, choose_index_kind,
     };
+    use lopdf::{Document, Object, Stream, dictionary};
 
     struct FakeEmbedder {
         identity: EmbeddingModelIdentity,
@@ -1122,6 +1144,130 @@ mod tests {
             battery_percent: None,
             thermal_pressure: false,
         }
+    }
+
+    fn positioned_pdf(content: &str) -> Vec<u8> {
+        let mut document = Document::with_version("1.5");
+        let pages_id = document.new_object_id();
+        let font_id = document.add_object(dictionary! {
+            "Type" => "Font",
+            "Subtype" => "Type1",
+            "BaseFont" => "Helvetica",
+        });
+        let resources_id = document.add_object(dictionary! {
+            "Font" => dictionary! { "F1" => font_id },
+        });
+        let content_id =
+            document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
+        let page_id = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        document.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![Object::Reference(page_id)],
+                "Count" => 1,
+                "Resources" => resources_id,
+            }),
+        );
+        let catalog_id = document.add_object(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        });
+        document.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save positioned PDF");
+        bytes
+    }
+
+    #[test]
+    fn default_ingestion_uses_geometry_aware_docling_pdf_order() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.bytes = positioned_pdf(
+            "BT /F1 12 Tf\n\
+             1 0 0 1 330 720 Tm (Right column starts after the left column.) Tj\n\
+             1 0 0 1 72 720 Tm (Left column starts first in reading order.) Tj\n\
+             1 0 0 1 330 690 Tm (Right column continues after left finishes.) Tj\n\
+             1 0 0 1 72 690 Tm (Left column continues before the right column.) Tj\n\
+             ET\n",
+        );
+
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("ingest positioned PDF");
+
+        let excerpt = fixture.visible_excerpt();
+        assert!(
+            excerpt.find("Left column starts").expect("left column")
+                < excerpt.find("Right column starts").expect("right column")
+        );
+    }
+
+    #[test]
+    fn ocr_required_pdf_is_skipped_with_actionable_status() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.bytes = positioned_pdf("");
+        fixture
+            .catalog
+            .register_job(
+                &document.job_id,
+                &document.tenant_id,
+                &document.library_id,
+                &document.document_id,
+            )
+            .expect("register job");
+
+        let result = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new());
+
+        assert!(
+            matches!(result, Err(IngestionError::Excluded(ref detail)) if detail.contains("OCRmyPDF"))
+        );
+        let backend = PipelineIngestionBackend::new(Arc::clone(&fixture.coordinator));
+        let status = backend
+            .job("tenant-a", "library-a", "job-a")
+            .expect("job status")
+            .expect("persisted job");
+        assert_eq!(status.phase, "skipped");
+        assert!(
+            status
+                .error
+                .as_deref()
+                .is_some_and(|detail| detail.contains("Homebrew") && detail.contains("WSL"))
+        );
+    }
+
+    #[test]
+    fn ocr_required_update_removes_previously_indexed_evidence() {
+        let fixture = Fixture::new(healthy_resources());
+        let document = fixture.document("previously searchable evidence");
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("initial ingestion");
+        assert!(!fixture.index.records.lock().expect("records").is_empty());
+
+        let mut scanned = document;
+        scanned.media_type = "application/pdf".into();
+        scanned.bytes = positioned_pdf("");
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&scanned, &CancellationToken::new()),
+            Err(IngestionError::Excluded(_))
+        ));
+
+        assert!(fixture.index.records.lock().expect("records").is_empty());
     }
 
     #[test]

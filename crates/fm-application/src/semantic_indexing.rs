@@ -57,6 +57,10 @@ pub struct SemanticIndexingReport {
     pub ingested_occurrences: u64,
     /// Workspace-scoped occurrences whose worker ingestion job failed.
     pub failed_occurrences: u64,
+    /// Workspace-scoped occurrences intentionally excluded during conversion.
+    pub excluded_occurrences: u64,
+    /// Actionable, sanitized reasons for conversion-time exclusions.
+    pub exclusion_details: Vec<String>,
     /// Entries rejected by the curated eligibility policy.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Newly committed complete reconciliation generation.
@@ -180,6 +184,8 @@ impl SemanticIndexingService {
         let mut observed_files = 0_u64;
         let mut ingested_occurrences = 0_u64;
         let mut failed_occurrences = 0_u64;
+        let mut excluded_occurrences = 0_u64;
+        let mut exclusion_details = BTreeSet::new();
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
 
         while let Some((directory, depth)) = pending.pop_front() {
@@ -317,6 +323,11 @@ impl SemanticIndexingService {
                                     IngestionOutcome::Failed => {
                                         failed_occurrences = failed_occurrences.saturating_add(1);
                                     }
+                                    IngestionOutcome::Excluded(detail) => {
+                                        excluded_occurrences =
+                                            excluded_occurrences.saturating_add(1);
+                                        exclusion_details.insert(detail);
+                                    }
                                 }
                             }
                         }
@@ -352,6 +363,8 @@ impl SemanticIndexingService {
             observed_files,
             ingested_occurrences,
             failed_occurrences,
+            excluded_occurrences,
+            exclusion_details: exclusion_details.into_iter().collect(),
             skipped_reason_counts: skipped
                 .into_iter()
                 .map(|(reason, count)| SemanticEligibilityReasonCount { reason, count })
@@ -483,6 +496,7 @@ struct FeedDocument<'content> {
 enum IngestionOutcome {
     Completed,
     Failed,
+    Excluded(String),
 }
 
 async fn ingest_and_wait(
@@ -537,6 +551,11 @@ async fn ingest_and_wait(
         match job.state {
             SemanticIngestionState::Completed => return Ok(IngestionOutcome::Completed),
             SemanticIngestionState::Failed => return Ok(IngestionOutcome::Failed),
+            SemanticIngestionState::Skipped => {
+                return Ok(IngestionOutcome::Excluded(job.detail.unwrap_or_else(
+                    || "The document was excluded from semantic indexing.".to_owned(),
+                )));
+            }
             SemanticIngestionState::Cancelled => {
                 return Err(SemanticIndexingError::Cancelled);
             }

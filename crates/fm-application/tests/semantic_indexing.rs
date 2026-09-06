@@ -49,6 +49,12 @@ impl SemanticCapability for FailingDocumentCapability {
                 ingestion.document_id.as_str()
             )));
         }
+        if ingestion.content == b"no text layer" {
+            return Ok(SemanticJobId::new(format!(
+                "skipped-{}",
+                ingestion.document_id.as_str()
+            )));
+        }
         self.inner.ingest(ingestion).await
     }
 
@@ -71,6 +77,19 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Failed,
+                detail: None,
+            });
+        }
+        if job_id.as_str().starts_with("skipped-") {
+            return Ok(SemanticIngestionJob {
+                document_id: fm_application::semantic::DocumentId::new(
+                    job_id.as_str().trim_start_matches("skipped-"),
+                ),
+                job_id,
+                state: SemanticIngestionState::Skipped,
+                detail: Some(
+                    "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
+                ),
             });
         }
         self.inner.ingestion_job(scope, job_id).await
@@ -341,6 +360,48 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .find(|count| count.reason == EligibilityReason::Oversized)
             .map(|count| count.count),
         Some(1)
+    );
+    assert_eq!(report.reconciliation_generation, 1);
+}
+
+#[tokio::test]
+async fn one_ocr_required_pdf_is_reported_without_aborting_reconciliation() {
+    let root = project_temp_dir("ocr-required-root-");
+    std::fs::write(
+        root.path().join("searchable.txt"),
+        "searchable semantic content",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("scanned.pdf"), "no text layer").unwrap();
+    let state = project_temp_dir("ocr-required-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x192));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FailingDocumentCapability {
+        inner: FakeSemanticCapability::new(),
+    }));
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(report.ingested_occurrences, 1);
+    assert_eq!(report.failed_occurrences, 0);
+    assert_eq!(report.excluded_occurrences, 1);
+    assert_eq!(
+        report.exclusion_details,
+        ["Add a searchable text layer with OCRmyPDF, then reindex the file."]
     );
     assert_eq!(report.reconciliation_generation, 1);
 }

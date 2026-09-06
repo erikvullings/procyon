@@ -213,6 +213,7 @@ impl DocumentConverter for OptionalConverter {
                 advanced_outcome,
                 ConversionOutcome::Converted(_)
                     | ConversionOutcome::Cancelled
+                    | ConversionOutcome::NoTextLayer { .. }
                     | ConversionOutcome::OverBudget { .. }
                     | ConversionOutcome::Encrypted { .. }
             ) {

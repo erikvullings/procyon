@@ -1,13 +1,10 @@
 //! Public-Interface tests for the optional Docling PDF Adapter.
 
-use std::sync::Arc;
-
 use fm_semantic_conversion::{
-    AdvancedConverterAdapter, BaselineConverter, ConversionBudgets, ConversionContext,
-    ConversionOutcome, DocumentConverter, DocumentMetadata, OptionalConverter, Provenance,
-    SourceContent, TopLevelBoundary,
+    BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
+    DocumentMetadata, OptionalConverter, Provenance, SourceContent, TopLevelBoundary,
 };
-use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, DoclingPdfBackend};
+use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline_fallback};
 use lopdf::{Document, Object, Stream, dictionary};
 
 fn text_pdf(pages: &[&[&str]]) -> Vec<u8> {
@@ -96,12 +93,7 @@ fn positioned_pdf(content: &str) -> Vec<u8> {
 }
 
 fn converter() -> OptionalConverter {
-    OptionalConverter::prefer_advanced(
-        Arc::new(BaselineConverter::new()),
-        Some(Arc::new(AdvancedConverterAdapter::new(Arc::new(
-            DoclingPdfBackend::new(),
-        )))),
-    )
+    converter_with_baseline_fallback()
 }
 
 #[test]
@@ -158,6 +150,42 @@ fn page_limit_is_explicit_partial_output() {
             total: 2,
         }]
     );
+}
+
+#[test]
+fn image_only_pdf_is_excluded_with_actionable_cross_platform_ocr_guidance() {
+    let bytes = text_pdf(&[&[]]);
+
+    let outcome = converter()
+        .convert(
+            SourceContent::Bytes(&bytes),
+            &DocumentMetadata::unknown().with_extension("pdf"),
+            &ConversionContext::new(),
+        )
+        .expect("typed outcome");
+
+    let ConversionOutcome::NoTextLayer { detail } = outcome else {
+        panic!("expected an OCR-required outcome");
+    };
+    assert!(detail.contains("OCRmyPDF"));
+    assert!(detail.contains("Homebrew"));
+    assert!(detail.contains("Linux"));
+    assert!(detail.contains("WSL"));
+}
+
+#[test]
+fn page_number_only_pdf_is_not_reintroduced_by_the_baseline_fallback() {
+    let bytes = text_pdf(&[&["1"]]);
+
+    let outcome = converter()
+        .convert(
+            SourceContent::Bytes(&bytes),
+            &DocumentMetadata::unknown().with_extension("pdf"),
+            &ConversionContext::new(),
+        )
+        .expect("typed outcome");
+
+    assert!(matches!(outcome, ConversionOutcome::NoTextLayer { .. }));
 }
 
 #[test]

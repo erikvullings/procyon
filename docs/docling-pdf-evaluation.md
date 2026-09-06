@@ -1,7 +1,12 @@
-# Docling.rs PDF Adapter audit and promotion gate
+# Docling.rs PDF audit and optional ML promotion gate
 
-Task 0192 evaluates an optional PDF Adapter; it does not replace Procyon's always-available
-converter until the candidate passes this gate.
+Task 0192 promotes Docling's deterministic, pure-Rust text-layer pipeline as Procyon's preferred
+PDF converter, with the original converter retained as fallback. That path requires no native
+runtime, model pack, or runtime download and is not blocked by the optional ML gate below.
+
+This document preserves the source audit and defines the release gate only for a future
+PDFium/ONNX/OCR/TableFormer managed pack. Task 0193 separately tracks an optional user-installed
+OCRmyPDF fallback for image-only PDFs.
 
 ## Audited source
 
@@ -103,12 +108,12 @@ accuracy, heading F1, table cell F1, boilerplate/low-information rate, OCR word 
 rates, citation precision, p50/p95 latency, peak RSS, installed bytes, retrieval nDCG/recall, and
 grounded-Ask citation correctness. Use Python Docling only as an offline quality oracle.
 
-## Current promotion decision
+## Current ML promotion decision
 
 Upstream reports 6 of 14 PDF conformance fixtures exact and 7 of 14 equal after whitespace
 normalization. Those numbers are self-reported, not Procyon corpus results. The project is young,
-high-churn, and effectively single-maintainer; the audited commit is unsigned. The deterministic
-Adapter is accepted as an optional spike, but the ML pack is **not promoted** until:
+high-churn, and effectively single-maintainer; the audited commit is unsigned. The deterministic Adapter is accepted as the production text-layer converter. The ML pack is
+**not promoted** until:
 
 - Procyon-owned, signed per-platform artifact inventories exist;
 - the outer hard-deadline watchdog is exercised;
