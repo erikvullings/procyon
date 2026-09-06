@@ -499,7 +499,7 @@ async fn managed_curated_model_migration_stages_target_before_activation() {
     let plan = service
         .plan_model_migration(
             fm_semantic_components::SemanticProfile::MultilingualQuality,
-            SemanticReindexEstimate::new(2, 200),
+            SemanticReindexEstimate::new(0, 0),
         )
         .await
         .unwrap();
@@ -519,7 +519,7 @@ async fn managed_curated_model_migration_stages_target_before_activation() {
     service
         .checkpoint_model_migration(SemanticModelMigrationCheckpoint {
             migration_id: migration_id.clone(),
-            completed_documents: 2,
+            completed_documents: 0,
             resume_cursor: None,
         })
         .await

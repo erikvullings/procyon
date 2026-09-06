@@ -30,6 +30,14 @@ async function mountLoaded(
   m.redraw.sync();
 }
 
+function fieldInput(label: string): HTMLInputElement | undefined {
+  return (
+    [...root.querySelectorAll('.input-field')]
+      .find((field) => field.querySelector('label')?.textContent === label)
+      ?.querySelector('input') ?? undefined
+  );
+}
+
 describe('LlmProfileManagement', () => {
   it('loads provider defaults and exposes an accessible profile form', async () => {
     const client = new MockFileManagerClient();
@@ -101,7 +109,7 @@ describe('LlmProfileManagement', () => {
     expect(profile.hasCredential).toBe(true);
   });
 
-  it('offers models discovered by a saved provider while keeping manual entry available', async () => {
+  it('integrates models discovered by a saved provider into the model field', async () => {
     const client = new MockFileManagerClient();
     const profile = await client.createLlmProfile({
       name: 'Local Ollama',
@@ -143,27 +151,33 @@ describe('LlmProfileManagement', () => {
       .find((button) => button.textContent?.trim() === 'Test')
       ?.click();
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
-    expect(
-      [...root.querySelectorAll<HTMLInputElement>('input')].some(
-        (input) => input.value === 'model-a' && !input.classList.contains('select-dropdown'),
-      ),
-    ).toBe(true);
+    await vi.waitFor(() => {
+      expect(fieldInput('Model')?.value).toBe('model-a');
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
+    });
+    expect(root.textContent).not.toContain('Available provider models');
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.textContent?.trim() === 'Test',
+        )?.disabled,
+      ).toBe(false),
+    );
 
     testProfile.mockRejectedValueOnce(new Error('Provider unavailable'));
     [...root.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Test')
       ?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Provider unavailable'));
-    expect(root.textContent).not.toContain('Available provider models');
+    expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(false);
     [...root.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Test')
       ?.click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
-
-    const discovered = [...root.querySelectorAll<HTMLInputElement>('input.select-dropdown')].find(
-      (input) => input.value === 'model-a',
+    await vi.waitFor(() =>
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true),
     );
+
+    const discovered = fieldInput('Model');
     discovered?.click();
     m.redraw.sync();
     [...root.querySelectorAll('li')]
@@ -171,11 +185,12 @@ describe('LlmProfileManagement', () => {
       ?.click();
     m.redraw.sync();
 
+    expect(fieldInput('Model')?.value).toBe('model-b');
     expect(
-      [...root.querySelectorAll<HTMLInputElement>('input')].some(
-        (input) => input.value === 'model-b' && !input.classList.contains('select-dropdown'),
+      [...root.querySelectorAll('.input-field')].filter(
+        (field) => field.querySelector('label')?.textContent === 'Model',
       ),
-    ).toBe(true);
+    ).toHaveLength(1);
     expect(
       [...root.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) => button.textContent?.trim() === 'Test',
@@ -201,10 +216,11 @@ describe('LlmProfileManagement', () => {
     await save();
 
     await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
-    const discoveredModels = [...root.querySelectorAll<HTMLElement>('.row')]
-      .find((row) => row.textContent?.includes('Available provider models'))
-      ?.querySelector<HTMLInputElement>('input.select-dropdown');
+    const discoveredModels = await vi.waitFor(() => {
+      const input = fieldInput('Model');
+      expect(input?.classList.contains('select-dropdown')).toBe(true);
+      return input;
+    });
     discoveredModels?.click();
     m.redraw.sync();
     expect(root.textContent).toContain('qwen3:14b');
@@ -219,12 +235,11 @@ describe('LlmProfileManagement', () => {
     await mountLoaded(client);
 
     await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
-    expect(
-      [...root.querySelectorAll<HTMLInputElement>('input')].some(
-        (input) => input.value === 'llama3.2:3b' && !input.classList.contains('select-dropdown'),
-      ),
-    ).toBe(true);
+    await vi.waitFor(() => {
+      expect(fieldInput('Model')?.value).toBe('llama3.2:3b');
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
+    });
+    expect(root.textContent).not.toContain('Available provider models');
   });
 
   it('selects and discovers the first saved local profile on load', async () => {
@@ -255,7 +270,9 @@ describe('LlmProfileManagement', () => {
     await mountLoaded(client);
 
     await vi.waitFor(() => expect(discover).toHaveBeenCalledWith(profile.id));
-    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+    await vi.waitFor(() =>
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true),
+    );
     expect(
       [...root.querySelectorAll<HTMLButtonElement>('button')]
         .find((button) => button.textContent?.includes('Local Ollama'))

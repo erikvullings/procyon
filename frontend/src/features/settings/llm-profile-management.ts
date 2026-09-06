@@ -273,6 +273,12 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       const active = profiles.find((profile) => profile.id === selectedId);
       const request = editor.request;
       const customHeaders = request.advanced.customHeaders;
+      const modelOptions =
+        availableModels.length === 0
+          ? []
+          : request.model.trim() === '' || availableModels.includes(request.model)
+            ? availableModels
+            : [request.model, ...availableModels];
       return m('.fm-llm-profiles', { 'aria-label': t('llmProfiles', 'title') }, [
         m('p', t('llmProfiles', 'description')),
         m('.fm-llm-profile-list', [
@@ -333,25 +339,21 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               updateRequest({ baseUrl: value });
             },
           }),
-          m(TextInput, {
-            className: 'col s12 m6',
-            label: t('llmProfiles', 'model'),
-            value: request.model,
-            oninput: (value: string) => updateRequest({ model: value }),
-          }),
-        ]),
-        availableModels.length === 0
-          ? undefined
-          : m(
-              '.row',
-              m(Select<string>, {
-                className: 'col s12',
-                label: t('llmProfiles', 'availableModels'),
-                options: availableModels.map((model) => ({ id: model, label: model })),
-                ...(availableModels.includes(request.model) ? { checkedId: request.model } : {}),
+          modelOptions.length === 0
+            ? m(TextInput, {
+                className: 'col s12 m6',
+                label: t('llmProfiles', 'model'),
+                value: request.model,
+                oninput: (value: string) => updateRequest({ model: value }),
+              })
+            : m(Select<string>, {
+                className: 'col s12 m6',
+                label: t('llmProfiles', 'model'),
+                options: modelOptions.map((model) => ({ id: model, label: model })),
+                checkedId: request.model,
                 onchange: ([value]) => value !== undefined && updateRequest({ model: value }),
               }),
-            ),
+        ]),
         request.preset === 'azureOpenAi'
           ? m('.row', [
               m(TextInput, {

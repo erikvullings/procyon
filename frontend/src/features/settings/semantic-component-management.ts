@@ -582,8 +582,6 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   let installProfile: SemanticProfile = 'compactMultilingual';
   let migrationProfile: SemanticProfile = 'compactMultilingual';
   let localModelProfile: SemanticProfile = 'compactMultilingual';
-  let migrationDocuments = '';
-  let migrationSourceBytes = '';
   let checkpointDocuments = '';
   let checkpointCursor = '';
   let moveDestination = '';
@@ -629,9 +627,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       const recommended = profiles.find((profile) => profile.recommended) ?? profiles[0];
       if (recommended !== undefined) {
         installProfile = recommended.profile;
-        migrationProfile = recommended.profile;
         localModelProfile = recommended.profile;
       }
+      migrationProfile = status.activeModel?.profile ?? recommended?.profile ?? migrationProfile;
       syncMigrationForm(status);
       loaded = { capabilities, status, profiles };
       onStatusChange?.(status);
@@ -791,14 +789,10 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   }
 
   function planMigration(): void {
-    if (inputNumber(migrationDocuments) === 0 || inputNumber(migrationSourceBytes) === 0) return;
     void runAction('planMigration', async () => {
       pendingMigration = await client.planSemanticComponentModelMigration({
         profile: migrationProfile,
-        estimate: {
-          documents: inputNumber(migrationDocuments),
-          sourceBytes: inputNumber(migrationSourceBytes),
-        },
+        estimate: { documents: 0, sourceBytes: 0 },
       });
     });
   }
@@ -918,10 +912,14 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
           ? undefined
           : m('dt', t('semanticComponents', 'estimatedInstalledSize')),
         target === undefined ? undefined : m('dd', formatBytes(target.metadata.estimatedDiskBytes)),
-        m('dt', t('semanticComponents', 'estimatedDocuments')),
-        m('dd', String(plan.estimate.documents)),
-        m('dt', t('semanticComponents', 'estimatedSourceBytes')),
-        m('dd', formatBytes(plan.estimate.sourceBytes)),
+        plan.estimate.documents > 0
+          ? m('dt', t('semanticComponents', 'estimatedDocuments'))
+          : undefined,
+        plan.estimate.documents > 0 ? m('dd', String(plan.estimate.documents)) : undefined,
+        plan.estimate.sourceBytes > 0
+          ? m('dt', t('semanticComponents', 'estimatedSourceBytes'))
+          : undefined,
+        plan.estimate.sourceBytes > 0 ? m('dd', formatBytes(plan.estimate.sourceBytes)) : undefined,
       ]),
       m('ul.fm-semantic-plan-properties', [
         plan.fullReindex ? m('li', t('semanticComponents', 'fullReindexRequired')) : undefined,
@@ -1187,6 +1185,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       can('planModelMigration') && status.activeModel != null
         ? m('details.fm-semantic-action-details.fm-semantic-migration-details', [
             m('summary', t('semanticComponents', 'migrationSummary')),
+            m('p.fm-semantic-guidance', t('semanticComponents', 'migrationExplanation')),
             m('fieldset.fm-semantic-form-grid', [
               m('legend', t('semanticComponents', 'migrationTargetLegend')),
               profileChoices(
@@ -1198,37 +1197,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   pendingMigration = undefined;
                 },
               ),
-              textField(
-                'fm-semantic-migration-documents',
-                t('semanticComponents', 'estimatedDocuments'),
-                migrationDocuments,
-                (value) => {
-                  migrationDocuments = value;
-                },
-                'number',
-              ),
-              textField(
-                'fm-semantic-migration-source-bytes',
-                t('semanticComponents', 'estimatedSourceBytes'),
-                migrationSourceBytes,
-                (value) => {
-                  migrationSourceBytes = value;
-                },
-                'number',
-              ),
               m(
                 'button.fm-semantic-action',
                 {
                   type: 'button',
-                  disabled:
-                    busy !== undefined ||
-                    inputNumber(migrationDocuments) === 0 ||
-                    inputNumber(migrationSourceBytes) === 0,
+                  disabled: busy !== undefined || status.activeModel.profile === migrationProfile,
                   onclick: planMigration,
                 },
                 busy === 'planMigration'
                   ? t('semanticComponents', 'working')
-                  : t('semanticComponents', 'reviewMigrationPlan'),
+                  : t('semanticComponents', 'reviewModelChange'),
               ),
             ]),
           ])
@@ -1461,7 +1439,6 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
           lifecycleView(loaded.status),
           ...modelAndComponentStatus(loaded.status),
         ]),
-        ...renderManagement(loaded),
         actionMessage === undefined
           ? undefined
           : m('p.fm-semantic-action-message', { role: 'status' }, actionMessage),
@@ -1472,6 +1449,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               { role: 'alert' },
               t('semanticComponents', 'actionFailed', { error: actionError }),
             ),
+        ...renderManagement(loaded),
       ]);
     },
   };

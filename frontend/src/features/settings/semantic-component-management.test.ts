@@ -244,6 +244,13 @@ describe('SemanticComponentManagement', () => {
         'Indexer refused to pause',
       ),
     );
+    const actionError = root.querySelector('.fm-semantic-action-error');
+    const actions = root.querySelector('.fm-semantic-actions');
+    expect(
+      actionError !== null &&
+        actions !== null &&
+        (actionError.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
   });
 
   it('shows typed Tauri errors and refreshes consumed offers after a failed install', async () => {
@@ -386,6 +393,7 @@ describe('SemanticComponentManagement', () => {
 
     m.mount(root, null);
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const plan = vi.spyOn(client, 'planSemanticComponentModelMigration');
     const confirm = vi.spyOn(client, 'confirmSemanticComponentModelMigration');
     const checkpoint = vi.spyOn(client, 'checkpointSemanticComponentModelMigration');
     const complete = vi.spyOn(client, 'completeSemanticComponentModelMigration');
@@ -394,13 +402,21 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
       ?.setAttribute('open', '');
-    setInput('#fm-semantic-migration-documents', '10');
-    setInput('#fm-semantic-migration-source-bytes', '1000');
+    expect(root.querySelector('#fm-semantic-migration-documents')).toBeNull();
+    expect(root.querySelector('#fm-semantic-migration-source-bytes')).toBeNull();
     const quality = root.querySelector<HTMLInputElement>(
       'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
     );
     quality?.click();
-    button('Review migration plan').click();
+    m.redraw.sync();
+    expect(button('Review model change').disabled).toBe(false);
+    button('Review model change').click();
+    await vi.waitFor(() =>
+      expect(plan).toHaveBeenCalledWith({
+        profile: 'multilingualQuality',
+        estimate: { documents: 0, sourceBytes: 0 },
+      }),
+    );
     await vi.waitFor(() => expect(root.textContent).toContain('Full reindex required'));
     button('Confirm migration').click();
 
@@ -408,7 +424,7 @@ describe('SemanticComponentManagement', () => {
     await vi.waitFor(() =>
       expect(checkpoint).toHaveBeenCalledWith({
         migrationId: expect.any(String),
-        completedDocuments: 10,
+        completedDocuments: 0,
         resumeCursor: null,
       }),
     );
@@ -428,9 +444,9 @@ describe('SemanticComponentManagement', () => {
     const localModelDetails = root.querySelector<HTMLDetailsElement>(
       '.fm-semantic-local-model-details',
     );
-    expect(localModelDetails?.querySelector('summary')?.textContent).toContain('Advanced');
+    expect(localModelDetails?.querySelector('summary')?.textContent).toContain('Developer tool');
     expect(localModelDetails?.textContent).toContain(
-      'This is not needed for the signed models above.',
+      'This does not switch between the signed models above.',
     );
     const dimensions = localModelDetails?.querySelector<HTMLInputElement>(
       '#fm-semantic-local-dimensions',

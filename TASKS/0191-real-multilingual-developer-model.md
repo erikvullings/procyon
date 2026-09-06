@@ -135,6 +135,11 @@ component pack.
   target license and installed size, completes the lifecycle, and lets the Tauri host restart the
   worker and reindex enrolled roots. A managed integration test covers compact-to-quality staging
   and proves the compact model remains active until completion.
+- 2026-09-06 (settings follow-up): Changing between signed profiles no longer asks the user to
+  estimate document counts or source bytes. The review action records an unknown workload, while
+  still disclosing the full reindex and signed package size; the desktop host derives the actual
+  work by reconciling every enrolled root after activation. Local-package import is explicitly
+  labelled as a developer tool rather than an alternative curated-profile switch.
 
 ## Validation commands
 
