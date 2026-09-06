@@ -34,6 +34,17 @@ const AVAILABLE_DEFAULT_COLUMNS = [
   { id: 'core.modified', labelKey: 'modified' },
 ] as const satisfies readonly { readonly id: string; readonly labelKey: keyof typeof en.table }[];
 
+const LANGUAGE_LABEL_KEYS = {
+  en: 'languageEnglish',
+  nl: 'languageDutch',
+  de: 'languageGerman',
+  fr: 'languageFrench',
+  es: 'languageSpanish',
+  it: 'languageItalian',
+  pt: 'languagePortuguese',
+  pl: 'languagePolish',
+} as const satisfies Readonly<Record<Locale, keyof typeof en.settings>>;
+
 export interface SettingsEditorAttrs {
   readonly settings: Settings;
   readonly actions: readonly ActionDescriptor[];
@@ -174,10 +185,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
               label: t('settings', 'language'),
               options: LOCALES.map((locale) => ({
                 id: locale,
-                label:
-                  locale === 'en'
-                    ? t('settings', 'languageEnglish')
-                    : t('settings', 'languageDutch'),
+                label: t('settings', LANGUAGE_LABEL_KEYS[locale]),
               })),
               checkedId: activeDraft.language,
               onchange: ([value]) => value !== undefined && update(current, { language: value }),

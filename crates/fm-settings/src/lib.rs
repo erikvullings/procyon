@@ -29,6 +29,18 @@ pub enum Language {
     En,
     /// Dutch.
     Nl,
+    /// German.
+    De,
+    /// French.
+    Fr,
+    /// Spanish.
+    Es,
+    /// Italian.
+    It,
+    /// Portuguese.
+    Pt,
+    /// Polish.
+    Pl,
 }
 
 /// Application colour theme.
@@ -507,6 +519,33 @@ mod tests {
         store.save(&settings).expect("save settings");
 
         assert_eq!(store.load().expect("load settings").settings, settings);
+    }
+
+    #[test]
+    fn every_supported_language_round_trips() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+
+        for language in [
+            Language::En,
+            Language::Nl,
+            Language::De,
+            Language::Fr,
+            Language::Es,
+            Language::It,
+            Language::Pt,
+            Language::Pl,
+        ] {
+            let settings = Settings {
+                language,
+                ..Settings::default()
+            };
+            store.save(&settings).expect("save settings");
+            assert_eq!(
+                store.load().expect("load settings").settings.language,
+                language
+            );
+        }
     }
 
     #[test]

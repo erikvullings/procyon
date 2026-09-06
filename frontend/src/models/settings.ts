@@ -34,7 +34,7 @@ export interface MultiRenamePreset {
 export interface Settings {
   readonly schemaVersion: number;
   readonly theme: 'auto' | 'light' | 'dark';
-  readonly language: 'en' | 'nl';
+  readonly language: 'en' | 'nl' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'pl';
   readonly fontSize: number;
   readonly rowHeight: number;
   readonly dateFormat: 'short' | 'medium' | 'iso';
