@@ -19,8 +19,8 @@ present, and only then deletes the source. The forced-fallback integration path 
 an actual second-volume move still requires manual platform testing.
 
 Duplicate places every selected entry beside its source. Names are deterministic: `report.pdf`
-becomes `report copy.pdf`, then `report copy 2.pdf`. The suffix precedes the full extension, so
-`archive.tar.gz` becomes `archive copy.tar.gz`; dotfiles such as `.env` become `.env copy`.
+becomes `report.pdf (1)`, then `report.pdf (2)`. The suffix follows the complete original name, so
+`archive.tar.gz` becomes `archive.tar.gz (1)` and dotfiles such as `.env` become `.env (1)`.
 
 Permanent delete enumerates directory trees without following symbolic links and shows the exact
 planned totals before confirmation. Read-only entries require an explicit override. Cancellation

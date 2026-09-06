@@ -901,7 +901,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               m.redraw();
             }
           },
-          onauxclick: (event: MouseEvent) => {
+          onmouseup: (event: MouseEvent) => {
             if (event.button === 3) {
               event.preventDefault();
               void attrs.navigation.onBack();

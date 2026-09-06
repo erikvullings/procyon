@@ -21,6 +21,7 @@ import {
   clearClipboard,
   copyToClipboard,
   cutToClipboard,
+  isSameFolderPaste,
   validatePasteTarget,
 } from '../clipboard/clipboard';
 import type { CommandAvailabilityContext } from '../commands/availability';
@@ -763,7 +764,9 @@ const ACTION_KEYDOWN_ROUTES = [
           void (
             mode === 'move'
               ? context.getOpsController().move(currentClipboard.locations, active.location)
-              : context.getOpsController().copy(currentClipboard.locations, active.location)
+              : isSameFolderPaste(currentClipboard, active.location)
+                ? context.getOpsController().duplicate(currentClipboard.locations)
+                : context.getOpsController().copy(currentClipboard.locations, active.location)
           )
             .then(() => {
               if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));

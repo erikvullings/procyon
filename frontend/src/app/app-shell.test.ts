@@ -2223,6 +2223,45 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(file?.classList.contains('fm-cut-entry')).toBe(false));
   });
 
+  it('copies the cursor entry and duplicates it when Cmd+V targets the same folder', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      clipboard: false,
+      extendedAttributes: false,
+      finderAliases: false,
+      finderTags: false,
+      nativeDragOut: false,
+      nativeFileIcons: false,
+      nativeMenus: false,
+      platformContextMenu: false,
+      nativeThumbnails: false,
+      openTerminal: false,
+      platform: 'macos',
+      plugins: true,
+      revealInSystemFileManager: false,
+      runtime: 'mock',
+      serverAdministration: false,
+      systemTrash: false,
+    });
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'c', metaKey: true, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'v', metaKey: true, bubbles: true }),
+    );
+
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'duplicate',
+      sources: [{ uri: 'mock:///Applications' }],
+      conflictPolicy: 'ask',
+    });
+  });
+
   it('drags a selection between panes through the operation engine', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');
