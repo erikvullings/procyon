@@ -805,9 +805,25 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 
   function confirmMigration(): void {
     if (pendingMigration === undefined) return;
-    const migrationId = pendingMigration.migrationId;
+    const plan = pendingMigration;
     void runAction('confirmMigration', async () => {
-      await client.confirmSemanticComponentModelMigration({ migrationId });
+      await client.confirmSemanticComponentModelMigration({ migrationId: plan.migrationId });
+      const curatedTarget = loaded?.profiles.some(
+        (profile) =>
+          profile.profile === plan.target.profile &&
+          profile.resolvedModel.modelId === plan.target.identity.modelId &&
+          profile.resolvedModel.revision === plan.target.identity.revision,
+      );
+      if (curatedTarget) {
+        await client.checkpointSemanticComponentModelMigration({
+          migrationId: plan.migrationId,
+          completedDocuments: plan.estimate.documents,
+          resumeCursor: null,
+        });
+        await client.completeSemanticComponentModelMigration({
+          migrationId: plan.migrationId,
+        });
+      }
       pendingMigration = undefined;
     });
   }
@@ -879,13 +895,28 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   }
 
   function renderPendingMigration(plan: SemanticModelMigrationPlan): Vnode {
+    const target = loaded?.profiles.find((profile) => profile.profile === plan.target.profile);
     return m('section.fm-semantic-migration-plan', [
       m('h6', t('semanticComponents', 'migrationPlanHeading')),
+      target === undefined
+        ? undefined
+        : m(
+            'p.fm-semantic-guidance',
+            t('semanticComponents', 'migrationDownloadDisclosure', {
+              size: formatBytes(target.metadata.estimatedDiskBytes),
+            }),
+          ),
       m('dl.fm-semantic-definition-list', [
         m('dt', t('semanticComponents', 'profile')),
         m('dd', profileName(plan.target.profile)),
         m('dt', t('semanticComponents', 'exactModelRevision')),
         m('dd', plan.target.identity.revision),
+        target === undefined ? undefined : m('dt', t('semanticComponents', 'license')),
+        target === undefined ? undefined : m('dd', target.metadata.license.spdx),
+        target === undefined
+          ? undefined
+          : m('dt', t('semanticComponents', 'estimatedInstalledSize')),
+        target === undefined ? undefined : m('dd', formatBytes(target.metadata.estimatedDiskBytes)),
         m('dt', t('semanticComponents', 'estimatedDocuments')),
         m('dd', String(plan.estimate.documents)),
         m('dt', t('semanticComponents', 'estimatedSourceBytes')),

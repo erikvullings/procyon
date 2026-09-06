@@ -2375,6 +2375,19 @@ pub(crate) async fn discover_llm_profile_models(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Discovers provider models for an unsaved profile draft.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_draft_models(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<Vec<String>, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_draft_models(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Prepares representative key passages without contacting a generation endpoint.
 #[tauri::command]
 pub(crate) async fn preview_document_summary(

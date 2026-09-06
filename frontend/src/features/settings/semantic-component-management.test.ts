@@ -341,7 +341,7 @@ describe('SemanticComponentManagement', () => {
     );
   });
 
-  it('does not expose checkpoint or completion controls for a managed desktop runtime', async () => {
+  it('exposes resumable migration controls for a managed desktop runtime', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'migrating' });
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
       authority: 'desktopManaged',
@@ -360,16 +360,18 @@ describe('SemanticComponentManagement', () => {
         'importLocalModel',
         'planModelMigration',
         'confirmModelMigration',
+        'checkpointModelMigration',
+        'completeModelMigration',
       ],
     });
 
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.querySelector('#fm-semantic-checkpoint-documents')).toBeNull();
-    expect(root.querySelector('#fm-semantic-checkpoint-cursor')).toBeNull();
-    expect(root.textContent).not.toContain('Save checkpoint');
-    expect(root.textContent).not.toContain('Complete migration');
+    expect(root.querySelector('#fm-semantic-checkpoint-documents')).not.toBeNull();
+    expect(root.querySelector('#fm-semantic-checkpoint-cursor')).not.toBeNull();
+    expect(root.textContent).toContain('Save checkpoint');
+    expect(root.textContent).toContain('Complete migration');
   });
 
   it('renders resumable migration progress and exposes profile plan and confirmation', async () => {
@@ -385,6 +387,8 @@ describe('SemanticComponentManagement', () => {
     m.mount(root, null);
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const confirm = vi.spyOn(client, 'confirmSemanticComponentModelMigration');
+    const checkpoint = vi.spyOn(client, 'checkpointSemanticComponentModelMigration');
+    const complete = vi.spyOn(client, 'completeSemanticComponentModelMigration');
     mountComponent(client);
     await waitForLoaded();
     root
@@ -401,7 +405,15 @@ describe('SemanticComponentManagement', () => {
     button('Confirm migration').click();
 
     await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(root.textContent).toContain('0 of 10 documents'));
+    await vi.waitFor(() =>
+      expect(checkpoint).toHaveBeenCalledWith({
+        migrationId: expect.any(String),
+        completedDocuments: 10,
+        resumeCursor: null,
+      }),
+    );
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('Multilingual quality'));
   });
 
   it('collects every required local-model metadata field without offering a URL field', async () => {

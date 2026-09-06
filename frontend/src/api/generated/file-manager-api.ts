@@ -3476,6 +3476,57 @@ return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
 
 
 
+export type discoverLlmProfileDraftModelsResponse200 = {
+  data: string[]
+  status: 200
+}
+
+export type discoverLlmProfileDraftModelsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type discoverLlmProfileDraftModelsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type discoverLlmProfileDraftModelsResponseSuccess = (discoverLlmProfileDraftModelsResponse200) & {
+  headers: Headers;
+};
+export type discoverLlmProfileDraftModelsResponseError = (discoverLlmProfileDraftModelsResponse400 | discoverLlmProfileDraftModelsResponse403) & {
+  headers: Headers;
+};
+
+export type discoverLlmProfileDraftModelsResponse = (discoverLlmProfileDraftModelsResponseSuccess | discoverLlmProfileDraftModelsResponseError)
+
+export const getDiscoverLlmProfileDraftModelsUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles/discover-models`
+}
+
+export const discoverLlmProfileDraftModels = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileDraftModelsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<discoverLlmProfileDraftModelsResponse>(getDiscoverLlmProfileDraftModelsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
 export type listLlmProfilePresetsResponse200 = {
   data: LlmProfilePresetDto[]
   status: 200

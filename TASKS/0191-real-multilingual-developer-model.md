@@ -129,6 +129,12 @@ component pack.
   resumes reconciliation after a host crash, and only a complete reindex removes the marker. A new
   developer host also replaces a discoverable worker from the previous host so it cannot keep
   serving the pre-activation model; an already-stopped stale cached worker no longer aborts reindex.
+- 2026-09-06 (installed-model switch follow-up): Desktop-managed migrations now stage and verify the
+  signed target model pack while retaining the active embedding space, expose durable checkpoint and
+  completion operations, and activate only after confirmation. The settings flow discloses the
+  target license and installed size, completes the lifecycle, and lets the Tauri host restart the
+  worker and reindex enrolled roots. A managed integration test covers compact-to-quality staging
+  and proves the compact model remains active until completion.
 
 ## Validation commands
 

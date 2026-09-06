@@ -20,6 +20,7 @@ const planSemanticComponentModelMigration = vi.fn();
 const confirmSemanticComponentModelMigration = vi.fn();
 const checkpointSemanticComponentModelMigration = vi.fn();
 const completeSemanticComponentModelMigration = vi.fn();
+const discoverLlmProfileDraftModels = vi.fn();
 const getSemanticLibraryCapabilities = vi.fn();
 const getSemanticLibraryStatus = vi.fn();
 const getSemanticFolderStatus = vi.fn();
@@ -113,6 +114,7 @@ vi.mock('../generated/file-manager-api', () => ({
     checkpointSemanticComponentModelMigration(...args),
   completeSemanticComponentModelMigration: (...args: unknown[]) =>
     completeSemanticComponentModelMigration(...args),
+  discoverLlmProfileDraftModels: (...args: unknown[]) => discoverLlmProfileDraftModels(...args),
   getSemanticLibraryCapabilities: (...args: unknown[]) => getSemanticLibraryCapabilities(...args),
   getSemanticLibraryStatus: (...args: unknown[]) => getSemanticLibraryStatus(...args),
   getSemanticFolderStatus: (...args: unknown[]) => getSemanticFolderStatus(...args),

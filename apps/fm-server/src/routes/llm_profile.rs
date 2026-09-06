@@ -248,3 +248,29 @@ pub(crate) async fn discover_llm_profile_models(
             .map_err(|error| ApiError::new(error, request_id))?,
     ))
 }
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/llm-profiles/discover-models",
+    operation_id = "discoverLlmProfileDraftModels",
+    request_body = SaveLlmProfileRequestDto,
+    responses(
+        (status = 200, description = "Bounded provider model identifiers for an unsaved draft", body = Vec<String>),
+        (status = 400, description = "Invalid provider configuration", body = ApplicationErrorDto),
+        (status = 403, description = "Host denied by administrator policy", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn discover_llm_profile_draft_models(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<SaveLlmProfileRequestDto>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .discover_llm_profile_draft_models(request)
+            .await
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}

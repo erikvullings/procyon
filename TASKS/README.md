@@ -111,7 +111,8 @@ semantic components are not installed.
   non-production and signed only by the public development key)*
 - [x] 0191 Real multilingual model in the semantic developer bundle *(needs 0178, 0181, 0190;
   the quality profile installs a pinned, checksum-verified `multilingual-e5-small` pack while the
-  compact profiles keep the zero-download fixture)*
+  compact profiles keep the zero-download fixture; installed-profile switches stage the signed
+  target before activation and automatically reindex enrolled roots)*
 
 ## File operations
 

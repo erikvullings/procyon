@@ -801,6 +801,42 @@ impl LlmProfileService {
         ))
     }
 
+    /// Discovers provider models from an unsaved draft without persisting a
+    /// placeholder profile or credential.
+    pub async fn discover_draft_models(
+        &self,
+        mut draft: LlmProfileDraft,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<String>, LlmProfileError> {
+        if !draft
+            .capabilities
+            .contains(&LlmApiCapability::ModelDiscovery)
+            || draft.preset == LlmPreset::AzureOpenAi
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let api_key = draft.api_key.take();
+        let mut profile = profile_from_draft(Uuid::new_v4(), draft, None);
+        profile.model = "__model_discovery__".to_owned();
+        validate_profile(&profile)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        let mut request = self.probe_request(&profile).await?;
+        request.api_key = api_key.map(|key| {
+            if profile.preset == LlmPreset::AzureOpenAi {
+                key
+            } else {
+                format!("Bearer {key}")
+            }
+        });
+        Ok(bounded_model_ids(
+            self.transport
+                .discover_models(&request, cancellation)
+                .await?
+                .unwrap_or_default(),
+        ))
+    }
+
     /// Generates bounded text through a saved profile after policy and consent checks.
     pub async fn generate(
         &self,
@@ -1577,6 +1613,26 @@ mod tests {
         let captured = transport.captured.lock().unwrap();
         assert_eq!(captured.len(), 1);
         assert!(captured[0].url.ends_with("/v1/chat/completions"));
+    }
+
+    #[tokio::test]
+    async fn draft_model_discovery_accepts_an_empty_model_without_persisting_a_profile() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let mut profile = draft(LlmPreset::Ollama, "http://localhost:11434");
+        profile.model.clear();
+        profile.api_key = Some("draft-secret".to_owned());
+
+        let models = service
+            .discover_draft_models(profile, &CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(models, vec!["model-a".to_owned()]);
+        assert!(service.list().unwrap().is_empty());
+        let captured = transport.captured.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].url.ends_with("/v1/chat/completions"));
+        assert_eq!(captured[0].api_key.as_deref(), Some("Bearer draft-secret"));
     }
 
     #[test]

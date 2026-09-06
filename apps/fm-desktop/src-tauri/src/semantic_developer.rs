@@ -182,9 +182,7 @@ fn active_model_pack_resolver(
         let Some(active) = state.active_model().map(|model| model.identity().clone()) else {
             return Ok(None);
         };
-        let component = state.installed_components().iter().find(|component| {
-            matches!(component.kind(), ArtifactKind::Model(identity) if *identity == active)
-        }).ok_or_else(|| {
+        let component = state.installed_model(&active).ok_or_else(|| {
             format!(
                 "active model {}@{} has no installed component",
                 active.model_id().as_str(),

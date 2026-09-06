@@ -2947,6 +2947,18 @@ impl FileManagerService {
         Ok(self.llm_profiles.discover_models(id, &cancellation).await?)
     }
 
+    /// Discovers bounded model identifiers for an unsaved provider draft.
+    pub async fn discover_llm_profile_draft_models(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(self
+            .llm_profiles
+            .discover_draft_models(draft_from_dto(request), &cancellation)
+            .await?)
+    }
+
     /// Lists every stored connection profile with its current runtime status
     /// (spec §16 `GET /api/v1/connections`, task 0103).
     pub async fn list_connections(&self) -> Result<Vec<ConnectionDto>, ApplicationError> {

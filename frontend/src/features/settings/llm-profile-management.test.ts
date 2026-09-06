@@ -209,4 +209,72 @@ describe('LlmProfileManagement', () => {
     m.redraw.sync();
     expect(root.textContent).toContain('qwen3:14b');
   });
+
+  it('discovers models for a new Ollama profile before it can be saved', async () => {
+    const client = new MockFileManagerClient();
+    const discover = vi
+      .spyOn(client, 'discoverLlmProfileDraftModels')
+      .mockResolvedValue(['llama3.2:3b', 'qwen3:14b']);
+
+    await mountLoaded(client);
+
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>('input')].some(
+        (input) => input.value === 'llama3.2:3b' && !input.classList.contains('select-dropdown'),
+      ),
+    ).toBe(true);
+  });
+
+  it('selects and discovers the first saved local profile on load', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'llama3.2:3b',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions', 'modelDiscovery'],
+      redactFilenames: false,
+    });
+    const discover = vi
+      .spyOn(client, 'discoverLlmProfileModels')
+      .mockResolvedValue(['llama3.2:3b', 'qwen3:14b']);
+
+    await mountLoaded(client);
+
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledWith(profile.id));
+    await vi.waitFor(() => expect(root.textContent).toContain('Available provider models'));
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.includes('Local Ollama'))
+        ?.hasAttribute('aria-pressed'),
+    ).toBe(true);
+  });
+
+  it('surfaces structured host errors instead of replacing their message', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockRejectedValue({
+      code: 'invalidConfiguration',
+      message: 'LLM profile failed validation',
+      requestId: 'request-1',
+      details: null,
+    });
+
+    await mountLoaded(client);
+
+    await vi.waitFor(() => expect(root.textContent).toContain('LLM profile failed validation'));
+    expect(root.textContent).not.toContain('Unknown generation-profile error');
+  });
 });

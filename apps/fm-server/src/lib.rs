@@ -283,6 +283,9 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::llm_profile::discover_llm_profile_models
         ))
         .routes(utoipa_axum::routes!(
+            routes::llm_profile::discover_llm_profile_draft_models
+        ))
+        .routes(utoipa_axum::routes!(
             routes::document_summary::preview_document_summary
         ))
         .routes(utoipa_axum::routes!(

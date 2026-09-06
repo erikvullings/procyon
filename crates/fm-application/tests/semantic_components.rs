@@ -431,8 +431,8 @@ async fn managed_offer_maps_signed_catalog_and_low_disk_is_actionable() {
         capabilities.runtime_executable_download(),
         RuntimeExecutableDownload::DirectDistribution
     );
-    assert!(!capabilities.supports(SemanticComponentOperation::CheckpointModelMigration));
-    assert!(!capabilities.supports(SemanticComponentOperation::CompleteModelMigration));
+    assert!(capabilities.supports(SemanticComponentOperation::CheckpointModelMigration));
+    assert!(capabilities.supports(SemanticComponentOperation::CompleteModelMigration));
     let profiles = service.catalog_profiles().await.unwrap();
     assert_eq!(profiles.len(), 3);
     assert!(profiles.iter().any(|profile| profile.recommended));
@@ -485,6 +485,53 @@ async fn managed_offer_maps_signed_catalog_and_low_disk_is_actionable() {
 }
 
 #[tokio::test]
+async fn managed_curated_model_migration_stages_target_before_activation() {
+    let directory = project_temp_dir("managed-curated-migration-");
+    let (capability, source) =
+        managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+    let service = SemanticComponentService::new(capability);
+    let offer = service
+        .installation_offer(fm_semantic_components::SemanticProfile::CompactMultilingual)
+        .await
+        .unwrap();
+    service.install_or_enable(offer.consent()).await.unwrap();
+
+    let plan = service
+        .plan_model_migration(
+            fm_semantic_components::SemanticProfile::MultilingualQuality,
+            SemanticReindexEstimate::new(2, 200),
+        )
+        .await
+        .unwrap();
+    let migration_id = plan.id().clone();
+    service
+        .confirm_model_migration(plan.confirm())
+        .await
+        .unwrap();
+
+    let migrating = service.status().await.unwrap();
+    assert_eq!(
+        migrating.active_model().unwrap().identity().revision(),
+        "upstream-deadbeef"
+    );
+    assert_eq!(source.calls.load(Ordering::SeqCst), 4);
+
+    service
+        .checkpoint_model_migration(SemanticModelMigrationCheckpoint {
+            migration_id: migration_id.clone(),
+            completed_documents: 2,
+            resume_cursor: None,
+        })
+        .await
+        .unwrap();
+    let selected = service
+        .complete_model_migration(migration_id)
+        .await
+        .unwrap();
+    assert_eq!(selected.identity().revision(), "upstream-quality");
+}
+
+#[tokio::test]
 async fn mac_app_store_distribution_blocks_executable_component_offers() {
     let directory = project_temp_dir("app-store-");
     let (capability, source) = managed_capability(
@@ -527,7 +574,7 @@ fn local_model_request(source_path: PathBuf) -> SemanticLocalModelImportRequest 
 }
 
 #[tokio::test]
-async fn managed_local_model_migration_confirmation_cannot_claim_reindex_completion() {
+async fn managed_local_model_migration_does_not_activate_an_unstaged_package() {
     let directory = project_temp_dir("managed-migration-");
     let model_path = directory.path().join("local-model.bin");
     std::fs::write(&model_path, b"local model").unwrap();
@@ -587,26 +634,20 @@ async fn managed_local_model_migration_confirmation_cannot_claim_reindex_complet
         .await
         .unwrap();
     assert_eq!(progress.completed_documents(), 0);
-    assert!(matches!(
+    service
+        .checkpoint_model_migration(SemanticModelMigrationCheckpoint {
+            migration_id: migration_id.clone(),
+            completed_documents: 2,
+            resume_cursor: Some("document-2".to_owned()),
+        })
+        .await
+        .unwrap();
+    assert!(
         service
-            .checkpoint_model_migration(SemanticModelMigrationCheckpoint {
-                migration_id: migration_id.clone(),
-                completed_documents: 2,
-                resume_cursor: Some("document-2".to_owned()),
-            })
-            .await,
-        Err(SemanticComponentError::AuthorityDenied {
-            authority: SemanticComponentAuthority::DesktopManaged,
-            operation: SemanticComponentOperation::CheckpointModelMigration,
-        })
-    ));
-    assert!(matches!(
-        service.complete_model_migration(migration_id.clone()).await,
-        Err(SemanticComponentError::AuthorityDenied {
-            authority: SemanticComponentAuthority::DesktopManaged,
-            operation: SemanticComponentOperation::CompleteModelMigration,
-        })
-    ));
+            .complete_model_migration(migration_id.clone())
+            .await
+            .is_err()
+    );
     assert!(matches!(
         service.status().await.unwrap().lifecycle(),
         SemanticComponentLifecycle::Migrating { .. }
@@ -618,11 +659,26 @@ async fn managed_local_model_migration_confirmation_cannot_claim_reindex_complet
     let service = SemanticComponentService::new(resumed_capability);
     let resumed = service.status().await.unwrap();
     assert_eq!(resumed.migration().unwrap().migration_id(), &migration_id);
-    assert_eq!(resumed.migration().unwrap().resume_cursor(), None);
+    assert_eq!(
+        resumed.migration().unwrap().resume_cursor(),
+        Some("document-2")
+    );
     assert_eq!(
         resumed.migration().unwrap().target().identity().revision(),
         "local-revision-a"
     );
+    service
+        .checkpoint_model_migration(SemanticModelMigrationCheckpoint {
+            migration_id: migration_id.clone(),
+            completed_documents: 3,
+            resume_cursor: None,
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.complete_model_migration(migration_id).await,
+        Err(SemanticComponentError::State { .. })
+    ));
     assert_eq!(resumed.migration().unwrap().estimate().source_bytes(), 30);
     assert_eq!(
         resumed.active_model().unwrap().identity().revision(),

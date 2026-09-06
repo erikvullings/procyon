@@ -76,3 +76,7 @@ service and never enter ordinary settings, exports, logs, or the semantic worker
 - 2026-09-05: Profile tests now return a bounded, deduplicated list of discovered model IDs. The
   generation-profile editor offers those models through a selector after Test while retaining
   manual model entry for providers without discovery support.
+- 2026-09-06: Model discovery now accepts an unsaved draft through the application boundary, so a
+  new Ollama profile can select a provider model before its required model field is saved. Existing
+  local profiles are selected and discovered on load, manual discovery remains available, and
+  structured Tauri errors preserve their backend message instead of becoming an unknown error.

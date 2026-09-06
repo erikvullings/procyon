@@ -38,11 +38,15 @@ installed and activated rather than a fixed one.
 - The figures above are the ones the signed catalog declares, so the installation preview, the
   free-space admission check, and this table always agree. The memory figure is the conservative
   rounded-up peak while the graph is resident, not a steady-state average.
-- Selecting that profile downloads and installs the packed model through the ordinary consent,
-  checksum, and activation lifecycle. Ingestion and search then run real transformer inference
-  locally on the CPU. Expect indexing to be markedly slower than the fixture, and the first query
-  after a worker launch to pay a few seconds of model-load cost. Developer worker startup allows a
-  bounded 30 seconds for that cold load before reporting failure.
+- To switch an installed developer bundle, open **Settings > Semantic > Change embedding model**,
+  select **Multilingual quality**, review the signed model identity, MIT license, and approximately
+  465 MiB installation disclosure, then confirm the migration. Confirmation downloads and verifies
+  the target pack without replacing the running model; activation happens only after the durable
+  migration checkpoint, followed by an automatic reindex of enrolled roots. Ingestion and search
+  then run real transformer inference locally on the CPU. Expect indexing to be markedly slower
+  than the fixture, and the first query after a worker launch to pay a few seconds of model-load
+  cost. Developer worker startup allows a bounded 30 seconds for that cold load before reporting
+  failure.
 - The model is applied the way E5 requires: indexed passages are embedded with the `passage: `
   prefix and search queries with the `query: ` prefix. Both prefixes are data in the installed
   model pack, so a model needing none is used unchanged. Inputs longer than the 512-token window

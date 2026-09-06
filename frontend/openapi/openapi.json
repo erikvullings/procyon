@@ -15192,6 +15192,56 @@
         }
       }
     },
+    "/api/v1/llm-profiles/discover-models": {
+      "post": {
+        "operationId": "discoverLlmProfileDraftModels",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Bounded provider model identifiers for an unsaved draft"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Invalid provider configuration"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            },
+            "description": "Host denied by administrator policy"
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/presets": {
       "get": {
         "operationId": "listLlmProfilePresets",

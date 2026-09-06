@@ -671,6 +671,10 @@ export interface FileManagerClient {
   ): Promise<LlmProfile>;
   testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult>;
   discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]>;
+  discoverLlmProfileDraftModels(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<string[]>;
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,

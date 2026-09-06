@@ -23,7 +23,16 @@ interface EditorState {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : t('llmProfiles', 'unknownError');
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return t('llmProfiles', 'unknownError');
 }
 
 function requestFromPreset(preset: LlmProfilePreset): SaveLlmProfileRequest {
@@ -106,8 +115,16 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
         client.listLlmProfilePresets(),
         client.listLlmProfiles(),
       ]);
-      if (editor === undefined && presets[0] !== undefined) {
-        editor = { request: requestFromPreset(presets[0]), apiKey: '' };
+      if (editor === undefined) {
+        const saved = profiles[0];
+        const preset = presets[0];
+        if (saved !== undefined) {
+          selectProfile(saved);
+          discoverModels(client, saved);
+        } else if (preset !== undefined) {
+          editor = { request: requestFromPreset(preset), apiKey: '' };
+          discoverDraftModels(client);
+        }
       }
     } catch (reason) {
       error = errorMessage(reason);
@@ -143,7 +160,35 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }, isCurrent);
   }
 
-  function choosePreset(presetId: string): void {
+  function discoverDraftModels(client: FileManagerClient): void {
+    if (
+      editor === undefined ||
+      !editor.request.capabilities.includes('modelDiscovery') ||
+      editor.request.preset === 'azureOpenAi'
+    ) {
+      return;
+    }
+    const revision = modelTestRevision;
+    const request = {
+      ...editor.request,
+      credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
+    };
+    const isCurrent = () => revision === modelTestRevision && selectedId === undefined;
+    void run(async () => {
+      const models = await client.discoverLlmProfileDraftModels(request);
+      if (!isCurrent()) return;
+      availableModels = models;
+      if (editor !== undefined && editor.request.model.trim() === '' && models[0] !== undefined) {
+        editor = {
+          ...editor,
+          request: { ...editor.request, model: models[0] },
+        };
+        dirty = true;
+      }
+    }, isCurrent);
+  }
+
+  function choosePreset(client: FileManagerClient, presetId: string): void {
     const preset = presets.find((candidate) => candidate.preset === presetId);
     if (preset === undefined) return;
     selectedId = undefined;
@@ -152,6 +197,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     clearAvailableModels();
     consent = false;
     message = undefined;
+    discoverDraftModels(client);
   }
 
   async function run(
@@ -256,7 +302,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               type: 'button',
               onclick: () => {
                 const preset = presets[0];
-                if (preset !== undefined) choosePreset(preset.preset);
+                if (preset !== undefined) choosePreset(attrs.client, preset.preset);
               },
             },
             t('llmProfiles', 'newProfile'),
@@ -268,7 +314,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             label: t('llmProfiles', 'preset'),
             options: presets.map((preset) => ({ id: preset.preset, label: preset.name })),
             checkedId: request.preset,
-            onchange: ([value]) => value !== undefined && choosePreset(value),
+            onchange: ([value]) => value !== undefined && choosePreset(attrs.client, value),
           }),
           m(TextInput, {
             className: 'col s12 m6',
@@ -450,6 +496,21 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             ])
           : undefined,
         m('.fm-llm-profile-actions', [
+          request.capabilities.includes('modelDiscovery') && request.preset !== 'azureOpenAi'
+            ? m(
+                'button.fm-semantic-action',
+                {
+                  type: 'button',
+                  disabled: busy,
+                  onclick: () => {
+                    clearAvailableModels();
+                    if (active !== undefined && !dirty) discoverModels(attrs.client, active);
+                    else discoverDraftModels(attrs.client);
+                  },
+                },
+                t('llmProfiles', 'discoverModels'),
+              )
+            : undefined,
           active === undefined
             ? undefined
             : m(

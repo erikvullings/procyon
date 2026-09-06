@@ -179,6 +179,8 @@ impl SemanticComponentCapabilities {
             SemanticComponentOperation::ImportLocalModel,
             SemanticComponentOperation::PlanModelMigration,
             SemanticComponentOperation::ConfirmModelMigration,
+            SemanticComponentOperation::CheckpointModelMigration,
+            SemanticComponentOperation::CompleteModelMigration,
         ];
         if can_remove_index {
             operations.push(SemanticComponentOperation::RemoveIndex);
@@ -3194,6 +3196,46 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
             .cloned()
             .ok_or(SemanticComponentError::InvalidMigrationPlan)?;
         let manager = self.manager.clone();
+        let catalog = Arc::clone(&self.catalog);
+        let environment = self.configuration.environment.clone();
+        let runtime_and_worker_artifacts = self.configuration.runtime_and_worker_artifacts.clone();
+        let reserve = self.configuration.minimum_free_space_reserve_bytes;
+        let source = Arc::clone(&self.adapters.artifact_source);
+        let free_space = Arc::clone(&self.adapters.free_space);
+        let activation = Arc::clone(&self.adapters.activation);
+        let profile = plan.target().profile();
+        let curated_target = catalog.resolve_profile(profile) == Some(plan.target().identity());
+        if curated_target {
+            run_component_blocking(move || {
+                let state = manager.state().map_err(map_install_error)?;
+                let artifact_ids = catalog
+                    .installation_artifacts(profile, &runtime_and_worker_artifacts)
+                    .map_err(map_catalog_error)?;
+                let offer = catalog
+                    .installation_offer(
+                        profile,
+                        &artifact_ids,
+                        environment.target(),
+                        environment.protocol_version(),
+                        state.data_root().path(),
+                        reserve,
+                    )
+                    .map_err(map_catalog_error)?;
+                manager
+                    .install_for_model_migration(
+                        offer.consent(),
+                        &catalog,
+                        &environment,
+                        source.as_ref(),
+                        free_space.as_ref(),
+                        activation.as_ref(),
+                    )
+                    .map_err(map_install_error)?;
+                Ok(())
+            })
+            .await?;
+        }
+        let manager = self.manager.clone();
         let pending = run_component_blocking(move || {
             manager
                 .begin_model_migration(plan.confirm())
@@ -3213,22 +3255,63 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
 
     async fn checkpoint_model_migration(
         &self,
-        _checkpoint: SemanticModelMigrationCheckpoint,
+        checkpoint: SemanticModelMigrationCheckpoint,
     ) -> Result<SemanticModelMigrationProgress, SemanticComponentError> {
-        Err(SemanticComponentError::AuthorityDenied {
-            authority: SemanticComponentAuthority::DesktopManaged,
-            operation: SemanticComponentOperation::CheckpointModelMigration,
+        let _mutation = self.mutation.lock().await;
+        let migration_id = core::MigrationId::from_uuid(
+            Uuid::parse_str(checkpoint.migration_id.as_str())
+                .map_err(|_| SemanticComponentError::InvalidMigrationPlan)?,
+        );
+        let manager = self.manager.clone();
+        let pending = run_component_blocking(move || {
+            manager
+                .checkpoint_model_migration(
+                    migration_id,
+                    checkpoint.completed_documents,
+                    checkpoint.resume_cursor,
+                )
+                .map_err(map_state_error)
         })
+        .await?;
+        let progress = map_pending_migration(&pending);
+        self.set_lifecycle(SemanticComponentLifecycle::Migrating {
+            progress: progress.clone(),
+        });
+        Ok(progress)
     }
 
     async fn complete_model_migration(
         &self,
-        _migration_id: SemanticModelMigrationId,
+        migration_id: SemanticModelMigrationId,
     ) -> Result<SemanticModelSelection, SemanticComponentError> {
-        Err(SemanticComponentError::AuthorityDenied {
-            authority: SemanticComponentAuthority::DesktopManaged,
-            operation: SemanticComponentOperation::CompleteModelMigration,
+        let _mutation = self.mutation.lock().await;
+        let migration_id = core::MigrationId::from_uuid(
+            Uuid::parse_str(migration_id.as_str())
+                .map_err(|_| SemanticComponentError::InvalidMigrationPlan)?,
+        );
+        let manager = self.manager.clone();
+        let selection = run_component_blocking(move || {
+            let state = manager.state().map_err(map_install_error)?;
+            let target = state
+                .pending_model_migration()
+                .filter(|pending| pending.plan().id() == migration_id)
+                .map(|pending| pending.plan().target().identity())
+                .ok_or(SemanticComponentError::InvalidMigrationPlan)?;
+            if state.installed_model(target).is_none() {
+                return Err(SemanticComponentError::State {
+                    message:
+                        "the target model package must be installed before migration can complete"
+                            .to_owned(),
+                });
+            }
+            manager
+                .complete_model_migration(migration_id)
+                .map_err(map_state_error)
         })
+        .await?;
+        self.set_lifecycle_after_component_mutation(SemanticComponentLifecycle::InstalledEnabled)
+            .await;
+        Ok(map_model_selection(&selection))
     }
 }
 

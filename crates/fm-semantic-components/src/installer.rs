@@ -391,6 +391,11 @@ pub struct ComponentManager {
     app_data: PathBuf,
 }
 
+struct InstallActivation<'a> {
+    probe: &'a dyn ActivationProbe,
+    activate_model: bool,
+}
+
 impl ComponentManager {
     /// Creates a manager using injected state and platform app-data locations.
     #[must_use]
@@ -618,7 +623,39 @@ impl ComponentManager {
                 environment,
                 source,
                 free_space,
-                activation,
+                InstallActivation {
+                    probe: activation,
+                    activate_model: true,
+                },
+            )
+        })
+    }
+
+    /// Installs and verifies the artifacts for a reviewed model migration
+    /// without replacing the active embedding space.
+    ///
+    /// The migration transaction activates the staged model only after its
+    /// durable reindex checkpoint has completed.
+    pub fn install_for_model_migration(
+        &self,
+        consent: InstallationConsent,
+        catalog: &TrustedCatalog,
+        environment: &InstallEnvironment,
+        source: &dyn ArtifactSource,
+        free_space: &dyn FreeSpaceProbe,
+        activation: &dyn ActivationProbe,
+    ) -> Result<InstallReceipt, InstallError> {
+        self.store.with_exclusive_lock(|| {
+            self.install_locked(
+                consent,
+                catalog,
+                environment,
+                source,
+                free_space,
+                InstallActivation {
+                    probe: activation,
+                    activate_model: false,
+                },
             )
         })
     }
@@ -630,7 +667,7 @@ impl ComponentManager {
         environment: &InstallEnvironment,
         source: &dyn ArtifactSource,
         free_space: &dyn FreeSpaceProbe,
-        activation: &dyn ActivationProbe,
+        activation: InstallActivation<'_>,
     ) -> Result<InstallReceipt, InstallError> {
         if consent.catalog_revision != *catalog.revision() {
             return Err(InstallError::CatalogChanged);
@@ -642,7 +679,9 @@ impl ComponentManager {
         if state.data_root().path() != consent.semantic_data_root {
             return Err(InstallError::DataRootChanged);
         }
-        state.ensure_model_can_activate(consent.profile, &consent.resolved_model)?;
+        if activation.activate_model {
+            state.ensure_model_can_activate(consent.profile, &consent.resolved_model)?;
+        }
 
         let artifacts: Vec<CatalogArtifact> = consent
             .artifact_ids
@@ -684,7 +723,9 @@ impl ComponentManager {
                 }
                 _ => None,
             });
-        if let Some(index_schema_version) = offered_index_schema_version {
+        if activation.activate_model
+            && let Some(index_schema_version) = offered_index_schema_version
+        {
             state.ensure_index_schema_can_activate(index_schema_version)?;
         }
 
@@ -732,7 +773,7 @@ impl ComponentManager {
 
         let mut prepared = Vec::with_capacity(pending_artifacts.len());
         for artifact in &pending_artifacts {
-            match prepare_artifact(state.data_root(), artifact, source, activation) {
+            match prepare_artifact(state.data_root(), artifact, source, activation.probe) {
                 Ok(item) => prepared.push(item),
                 Err(error) => {
                     restore_prepared(&prepared);
@@ -806,7 +847,9 @@ impl ComponentManager {
                 installed_path,
             );
         }
-        if let Some(index_schema_version) = offered_index_schema_version {
+        if activation.activate_model
+            && let Some(index_schema_version) = offered_index_schema_version
+        {
             state.activate_installed_model(
                 consent.profile,
                 consent.resolved_model,
@@ -899,7 +942,10 @@ impl ComponentManager {
             environment,
             source,
             free_space,
-            activation,
+            InstallActivation {
+                probe: activation,
+                activate_model: true,
+            },
         )
     }
 
@@ -1589,6 +1635,7 @@ fn collect_superseded_component_versions(
         .installed_components()
         .iter()
         .chain(state.rollback_workers())
+        .chain(state.retained_models())
         .filter_map(|component| component.installed_path().parent().map(Path::to_owned))
         .collect();
     let mut issues = Vec::new();

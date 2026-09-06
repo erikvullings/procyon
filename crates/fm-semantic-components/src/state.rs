@@ -229,6 +229,8 @@ pub struct SemanticState {
     installed_components: Vec<InstalledComponent>,
     #[serde(default)]
     last_working_workers: Vec<InstalledComponent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    retained_models: Vec<InstalledComponent>,
 }
 
 impl SemanticState {
@@ -243,6 +245,7 @@ impl SemanticState {
             pending_model_migration: None,
             installed_components: Vec::new(),
             last_working_workers: Vec::new(),
+            retained_models: Vec::new(),
         }
     }
 
@@ -493,6 +496,22 @@ impl SemanticState {
         &self.last_working_workers
     }
 
+    /// Returns the installed artifact matching an exact model identity,
+    /// including a model retained while its replacement is staged.
+    #[must_use]
+    pub fn installed_model(&self, identity: &ModelIdentity) -> Option<&InstalledComponent> {
+        self.installed_components
+            .iter()
+            .chain(&self.retained_models)
+            .find(|component| {
+                matches!(component.kind(), ArtifactKind::Model(model) if model == identity)
+            })
+    }
+
+    pub(crate) fn retained_models(&self) -> &[InstalledComponent] {
+        &self.retained_models
+    }
+
     pub(crate) fn retained_component(
         &self,
         artifact_id: &ArtifactId,
@@ -500,6 +519,7 @@ impl SemanticState {
         self.installed_components
             .iter()
             .chain(&self.last_working_workers)
+            .chain(&self.retained_models)
             .find(|component| component.artifact_id() == artifact_id)
     }
 
@@ -553,12 +573,16 @@ impl SemanticState {
         data_root: SemanticDataRoot,
     ) -> Result<(), SemanticStateError> {
         let old_root = self.data_root.path();
-        let mut rebased =
-            Vec::with_capacity(self.installed_components.len() + self.last_working_workers.len());
+        let mut rebased = Vec::with_capacity(
+            self.installed_components.len()
+                + self.last_working_workers.len()
+                + self.retained_models.len(),
+        );
         for component in self
             .installed_components
             .iter()
             .chain(&self.last_working_workers)
+            .chain(&self.retained_models)
         {
             let relative = component
                 .installed_path
@@ -572,6 +596,7 @@ impl SemanticState {
             .installed_components
             .iter_mut()
             .chain(&mut self.last_working_workers)
+            .chain(&mut self.retained_models)
             .zip(rebased)
         {
             component.installed_path = path;
@@ -613,6 +638,16 @@ impl SemanticState {
                 } else {
                     self.last_working_workers.push(previous);
                 }
+            } else if matches!(kind, ArtifactKind::Model(_)) {
+                if let Some(existing) = self
+                    .retained_models
+                    .iter_mut()
+                    .find(|component| component.component_id == component_id)
+                {
+                    *existing = previous;
+                } else {
+                    self.retained_models.push(previous);
+                }
             }
         } else {
             self.installed_components.push(installed);
@@ -620,11 +655,15 @@ impl SemanticState {
     }
 
     pub(crate) fn apply_uninstall(&mut self, delete_indexes: bool) -> u64 {
-        let removed =
-            u64::try_from(self.installed_components.len() + self.last_working_workers.len())
-                .unwrap_or(u64::MAX);
+        let removed = u64::try_from(
+            self.installed_components.len()
+                + self.last_working_workers.len()
+                + self.retained_models.len(),
+        )
+        .unwrap_or(u64::MAX);
         self.installed_components.clear();
         self.last_working_workers.clear();
+        self.retained_models.clear();
         self.pending_model_migration = None;
         if delete_indexes {
             self.active_model = None;
@@ -718,6 +757,20 @@ impl SemanticState {
                 &component.installed_path,
             )?;
         }
+        let mut retained_models = BTreeMap::new();
+        for component in &self.retained_models {
+            if !matches!(component.kind, ArtifactKind::Model(_))
+                || retained_models
+                    .insert(component.component_id(), component.artifact_id())
+                    .is_some()
+            {
+                return Err(SemanticStateError::InvalidPersistedState);
+            }
+            validate_component_path(
+                &self.data_root.category_path(DataCategory::Models),
+                &component.installed_path,
+            )?;
+        }
         Ok(())
     }
 
@@ -726,6 +779,7 @@ impl SemanticState {
             .installed_components
             .iter()
             .chain(&self.last_working_workers)
+            .chain(&self.retained_models)
         {
             match fs::symlink_metadata(component.installed_path()) {
                 Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
@@ -1300,5 +1354,60 @@ pub enum SemanticStateError {
 impl SemanticStateError {
     pub(crate) const fn commit_outcome_unknown(&self) -> bool {
         matches!(self, Self::CommitOutcomeUnknown { .. })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ModelId, ModelRevision};
+
+    #[test]
+    fn staging_a_model_revision_retains_the_current_payload() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut state = SemanticState::from_app_data(directory.path());
+        let component = ComponentId::new("fixture.embedding").unwrap();
+        let first = ModelIdentity::new(
+            ModelId::new("fixture.model").unwrap(),
+            ModelRevision::new("revision-a").unwrap(),
+        );
+        let second = ModelIdentity::new(
+            ModelId::new("fixture.model").unwrap(),
+            ModelRevision::new("revision-b").unwrap(),
+        );
+
+        state.record_installed(
+            ArtifactId::new("model-a").unwrap(),
+            component.clone(),
+            ArtifactKind::Model(first.clone()),
+            "1.0.0".parse().unwrap(),
+            Sha256Digest::calculate(b"model-a"),
+            directory.path().join("model-a"),
+        );
+        state.record_installed(
+            ArtifactId::new("model-b").unwrap(),
+            component,
+            ArtifactKind::Model(second.clone()),
+            "2.0.0".parse().unwrap(),
+            Sha256Digest::calculate(b"model-b"),
+            directory.path().join("model-b"),
+        );
+
+        assert_eq!(
+            state
+                .installed_model(&first)
+                .unwrap()
+                .artifact_id()
+                .as_str(),
+            "model-a"
+        );
+        assert_eq!(
+            state
+                .installed_model(&second)
+                .unwrap()
+                .artifact_id()
+                .as_str(),
+            "model-b"
+        );
     }
 }
