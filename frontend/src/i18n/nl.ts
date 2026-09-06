@@ -513,6 +513,8 @@ export const nl = {
     rename: 'Hernoem {name}',
     directoryContents: 'Mapinhoud',
     focusedEntry: 'Geselecteerd: {name}',
+    sortNewestFirst: 'Nieuwste eerst sorteren',
+    sortOldestFirst: 'Oudste eerst sorteren',
     age: 'Leeftijd',
     tagged: 'Gelabeld',
   },

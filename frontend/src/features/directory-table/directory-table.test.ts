@@ -332,6 +332,36 @@ describe('DirectoryTable rows', () => {
     ]);
   });
 
+  it('sorts Modified newest-first on initial activation and describes the next action', () => {
+    const onSortChange = vi.fn();
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([entry()]),
+      onSortChange,
+    });
+
+    let modifiedHeader = root.querySelector<HTMLButtonElement>('[data-column-id="core.modified"]');
+    expect(modifiedHeader?.title).toBe('Sort newest first');
+    modifiedHeader?.click();
+    expect(onSortChange).toHaveBeenLastCalledWith([
+      { columnId: 'core.modified', direction: 'descending' },
+    ]);
+
+    m.mount(root, null);
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([entry()]),
+      sort: [{ columnId: 'core.modified', direction: 'descending' }],
+      onSortChange,
+    });
+    modifiedHeader = root.querySelector<HTMLButtonElement>('[data-column-id="core.modified"]');
+    expect(modifiedHeader?.title).toBe('Sort oldest first');
+    modifiedHeader?.click();
+    expect(onSortChange).toHaveBeenLastCalledWith([
+      { columnId: 'core.modified', direction: 'ascending' },
+    ]);
+  });
+
   it('shows live width feedback while dragging a column resize handle, and persists the final width on release', () => {
     const onColumnWidthChange = vi.fn();
     // Mirrors `pane-content-builder.ts`, which rebuilds `columnWidths` as a brand-new array (and

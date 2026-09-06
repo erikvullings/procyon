@@ -49,3 +49,6 @@ Depends on: 0028
   socket tests pass. The full suite remains red only because an unrelated concurrent
   `frontend/src/themes/theme.css` edit removes the cursor outline required by its existing test; it
   was preserved and excluded from this task's commit. No `CLAUDE.md` exists to update.
+- 2026-09-06: Modified-time column headers now sort newest-first on initial activation, then toggle
+  normally. Localized action tooltips distinguish "Sort newest first" from "Sort oldest first"
+  while the caret and `aria-sort` retain standard descending/ascending semantics.

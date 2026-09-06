@@ -695,13 +695,7 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBeforeSort),
     );
-    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('ascending'));
-    const callsBeforeDescendingSort = listDirectory.mock.calls.length;
-    modifiedHeader?.click();
-
-    await vi.waitFor(() =>
-      expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBeforeDescendingSort),
-    );
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
     expect(listDirectory.mock.calls.at(-1)?.[0]).toMatchObject({
       location: { uri: 'mock:///large/1000' },
       sort: [{ columnId: 'core.modified', direction: 'descending' }],
@@ -768,8 +762,6 @@ describe('AppShell', () => {
     const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
       '[data-column-id="core.modified"]',
     );
-    modifiedHeader?.click();
-    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('ascending'));
     modifiedHeader?.click();
     await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
     await vi.waitFor(() =>
@@ -889,8 +881,6 @@ describe('AppShell', () => {
     const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
       '[data-column-id="core.modified"]',
     );
-    modifiedHeader?.click();
-    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('ascending'));
     modifiedHeader?.click();
     await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
     await vi.waitFor(() => expect(firstSnapshot?.entries).toHaveLength(100));
