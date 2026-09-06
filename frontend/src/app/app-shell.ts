@@ -1674,32 +1674,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       refetchAffectedPanes(paneId);
       return;
     }
+    if (delta.type !== 'reset' && current.hasMore) {
+      refetchAffectedPanes(paneId);
+      return;
+    }
     if (delta.type === 'reset') {
-      const nextEntries = delta.snapshot.entries;
-      directories.set(
-        key,
-        respectSystemLocationReadOnly(
-          {
-            state: delta.snapshot.loadingState,
-            entries: delta.snapshot.entries,
-            location: delta.snapshot.location,
-            writable: delta.snapshot.writable,
-            requestId: delta.snapshot.requestId,
-            revision,
-            hasMore: delta.snapshot.hasMore,
-            ...(delta.snapshot.continuationToken === undefined
-              ? {}
-              : { continuationToken: delta.snapshot.continuationToken }),
-          },
-          systemLocations,
-        ),
-      );
-      reconcileSelectionAfterEntryChange(
-        paneId,
-        workspace?.panesById[paneId]?.activeTabId,
-        current.entries,
-        nextEntries,
-      );
+      navigation.applySnapshot(paneId, delta.snapshot);
       m.redraw();
       return;
     }
@@ -2544,7 +2524,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (next) => {
           workspace = next;
         },
-      ).catch(() => undefined);
+      )
+        .then(() => {
+          if (workspace?.panesById[paneId]?.activeTabId === tab.id) {
+            void navigation.load(paneId, { background: true });
+          }
+        })
+        .catch(() => undefined);
     },
     swapPaneTabSets: (paneAId, paneBId) => {
       const liveWorkspace = workspace;

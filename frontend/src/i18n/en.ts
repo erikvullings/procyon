@@ -509,6 +509,8 @@ export const en = {
     rename: 'Rename {name}',
     directoryContents: 'Directory contents',
     focusedEntry: 'Focused {name}',
+    sortNewestFirst: 'Sort newest first',
+    sortOldestFirst: 'Sort oldest first',
     age: 'Age',
     tagged: 'Tagged',
   },

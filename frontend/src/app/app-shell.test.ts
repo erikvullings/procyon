@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
-import type { Location, Operation } from '../models';
+import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import {
   AppShell,
   locationForPath,
@@ -638,6 +638,369 @@ describe('AppShell', () => {
     nameHeader?.click();
 
     await vi.waitFor(() => expect(nameHeader?.getAttribute('aria-sort')).toBe('descending'));
+  });
+
+  it('re-fetches the first page when sorting a paged directory', async () => {
+    const client = new MockFileManagerClient({ pageSize: 100 });
+    const originalListDirectory = client.listDirectory.bind(client);
+    const listDirectory = vi
+      .spyOn(client, 'listDirectory')
+      .mockImplementation(async (request, signal) => {
+        const snapshot = await originalListDirectory(request, signal);
+        if (
+          request.location.uri !== 'mock:///large/1000' ||
+          request.sort?.[0]?.columnId !== 'core.modified'
+        ) {
+          return snapshot;
+        }
+        const template = snapshot.entries[0];
+        if (template === undefined) throw new Error('large-directory fixture must not be empty');
+        return {
+          ...snapshot,
+          entries: [
+            {
+              ...template,
+              id: 'external-download',
+              location: {
+                providerId: 'local',
+                uri: 'mock:///large/1000/downloaded-photo.jpg',
+              },
+              name: 'downloaded-photo.jpg',
+              modifiedAt: '2026-09-06T16:00:00Z',
+            },
+            ...snapshot.entries.slice(1),
+          ],
+        };
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    const callsBeforeSort = listDirectory.mock.calls.length;
+
+    const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
+      '[data-column-id="core.modified"]',
+    );
+    modifiedHeader?.click();
+
+    await vi.waitFor(() =>
+      expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBeforeSort),
+    );
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
+    expect(listDirectory.mock.calls.at(-1)?.[0]).toMatchObject({
+      location: { uri: 'mock:///large/1000' },
+      sort: [{ columnId: 'core.modified', direction: 'descending' }],
+    });
+    // Sorting preserves the cursor and viewport; move the virtualized table to the start before
+    // asserting that the authoritative first-page result reached the rendered pane.
+    activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(activePane, 'downloaded-photo.jpg')).not.toBeUndefined(),
+    );
+  });
+
+  it('refreshes an active paged sorted pane when an added-entry delta arrives', async () => {
+    const client = new MockFileManagerClient({ pageSize: 100 });
+    const originalListDirectory = client.listDirectory.bind(client);
+    const downloadedPhoto: EntrySummary = {
+      id: 'external-download',
+      location: {
+        providerId: 'local',
+        uri: 'mock:///large/1000/downloaded-photo.jpg',
+      },
+      name: 'downloaded-photo.jpg',
+      kind: 'file',
+      size: 42,
+      modifiedAt: '2030-09-06T16:00:00Z',
+      hidden: false,
+      readOnly: false,
+      extension: 'jpg',
+      mimeType: 'image/jpeg',
+      metadataRevision: 1,
+    };
+    let downloadExists = false;
+    const listDirectory = vi
+      .spyOn(client, 'listDirectory')
+      .mockImplementation(async (request, signal) => {
+        const snapshot = await originalListDirectory(request, signal);
+        if (
+          !downloadExists ||
+          request.location.uri !== 'mock:///large/1000' ||
+          request.sort?.[0]?.columnId !== 'core.modified' ||
+          request.sort[0].direction !== 'descending'
+        ) {
+          return snapshot;
+        }
+        return {
+          ...snapshot,
+          revision: 3,
+          entries: [downloadedPhoto, ...snapshot.entries.slice(0, 99)],
+        };
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
+      '[data-column-id="core.modified"]',
+    );
+    modifiedHeader?.click();
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
+    await vi.waitFor(() =>
+      expect(
+        listDirectory.mock.calls.some(
+          ([request]) =>
+            request.sort?.[0]?.columnId === 'core.modified' &&
+            request.sort[0].direction === 'descending',
+        ),
+      ).toBe(true),
+    );
+    const viewport = activePane?.querySelector<HTMLElement>('.fm-directory-viewport');
+    viewport?.focus();
+    expect(document.activeElement).toBe(viewport);
+    listDirectory.mockClear();
+
+    downloadExists = true;
+    client.emit({
+      eventId: 50,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId: 'left',
+        delta: { type: 'entriesAdded', revision: 2, entries: [downloadedPhoto] },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(listDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: { providerId: 'file', uri: 'mock:///large/1000' },
+          sort: [{ columnId: 'core.modified', direction: 'descending' }],
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
+    await vi.waitFor(() => {
+      if (viewport !== null && viewport !== undefined) {
+        viewport.scrollTop = 0;
+        viewport.dispatchEvent(new Event('scroll'));
+        m.redraw.sync();
+      }
+      expect(directoryRowNamed(activePane, downloadedPhoto.name)).toBeDefined();
+    });
+    const firstEntryName = [
+      ...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row .fm-entry-name [title]') ??
+        []),
+    ]
+      .map((element) => element.getAttribute('title'))
+      .find((name) => name !== '..');
+    expect(firstEntryName).toBe(downloadedPhoto.name);
+  });
+
+  it('keeps a paged reset authoritative when loading the shifted continuation', async () => {
+    const client = new MockFileManagerClient({ pageSize: 100 });
+    const originalListDirectory = client.listDirectory.bind(client);
+    const downloadedPhoto: EntrySummary = {
+      id: 'external-reset-download',
+      location: {
+        providerId: 'local',
+        uri: 'mock:///large/1000/downloaded-reset-photo.jpg',
+      },
+      name: 'downloaded-reset-photo.jpg',
+      kind: 'file',
+      size: 42,
+      modifiedAt: '2030-09-06T16:00:00Z',
+      hidden: false,
+      readOnly: false,
+      extension: 'jpg',
+      mimeType: 'image/jpeg',
+      metadataRevision: 1,
+    };
+    let firstSnapshot: DirectorySnapshot | undefined;
+    let resetPublished = false;
+    const listDirectory = vi
+      .spyOn(client, 'listDirectory')
+      .mockImplementation(async (request, signal) => {
+        const snapshot = await originalListDirectory(request, signal);
+        if (
+          request.location.uri !== 'mock:///large/1000' ||
+          request.sort?.[0]?.columnId !== 'core.modified' ||
+          request.sort[0].direction !== 'descending'
+        ) {
+          return snapshot;
+        }
+        if (request.continuationToken === undefined) {
+          firstSnapshot = snapshot;
+          return snapshot;
+        }
+        if (resetPublished && request.continuationToken === '100') {
+          const boundaryEntry = firstSnapshot?.entries[99];
+          if (boundaryEntry === undefined) throw new Error('first-page boundary missing');
+          return {
+            ...snapshot,
+            revision: 2,
+            entries: [boundaryEntry, ...snapshot.entries.slice(0, 99)],
+            totalKnownEntries: 1_001,
+            hasMore: true,
+            continuationToken: '200',
+          };
+        }
+        return snapshot;
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    const modifiedHeader = activePane?.querySelector<HTMLButtonElement>(
+      '[data-column-id="core.modified"]',
+    );
+    modifiedHeader?.click();
+    await vi.waitFor(() => expect(modifiedHeader?.getAttribute('aria-sort')).toBe('descending'));
+    await vi.waitFor(() => expect(firstSnapshot?.entries).toHaveLength(100));
+    const sortedFirstPageCall = listDirectory.mock.calls.findLastIndex(
+      ([request]) =>
+        request.location.uri === 'mock:///large/1000' &&
+        request.continuationToken === undefined &&
+        request.sort?.[0]?.columnId === 'core.modified' &&
+        request.sort[0].direction === 'descending',
+    );
+    const sortedFirstPageResult = listDirectory.mock.results[sortedFirstPageCall]?.value;
+    if (sortedFirstPageResult !== undefined) await sortedFirstPageResult;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    m.redraw.sync();
+    const resetBase = firstSnapshot;
+    const boundaryName = resetBase?.entries[99]?.name;
+    if (resetBase === undefined || boundaryName === undefined) {
+      throw new Error('sorted first page missing');
+    }
+
+    resetPublished = true;
+    client.emit({
+      eventId: 51,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId: 'left',
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...resetBase,
+            requestId: 'watched-reset',
+            revision: 2,
+            entries: [downloadedPhoto, ...resetBase.entries.slice(0, 99)],
+            totalKnownEntries: 1_001,
+            hasMore: true,
+            continuationToken: '100',
+          },
+        },
+      },
+    });
+    const viewport = activePane?.querySelector<HTMLElement>('.fm-directory-viewport');
+    if (viewport === null || viewport === undefined) throw new Error('directory viewport missing');
+    activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(activePane, downloadedPhoto.name)?.classList).toContain(
+        'fm-cursor-row',
+      ),
+    );
+    Object.defineProperties(viewport, {
+      clientHeight: { value: 100, configurable: true },
+      scrollHeight: { value: 2_000, configurable: true },
+      scrollTop: { value: 1_900, writable: true, configurable: true },
+    });
+    viewport.dispatchEvent(new Event('scroll'));
+
+    await vi.waitFor(() =>
+      expect(
+        listDirectory.mock.calls.some(
+          ([request]) =>
+            request.location.uri === 'mock:///large/1000' && request.continuationToken === '100',
+        ),
+      ).toBe(true),
+    );
+    await vi.waitFor(() => {
+      activePane?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }),
+      );
+      m.redraw.sync();
+      // The synthetic parent plus 200 real rows must all have distinct IDs.
+      expect(activePane?.querySelector('.fm-pane-status')?.textContent).toContain('201 selected');
+    });
+
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new Event('scroll'));
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(activePane, downloadedPhoto.name)).toBeDefined(),
+    );
+    for (const typed of boundaryName.slice(-7)) {
+      activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: typed, bubbles: true }));
+    }
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(activePane, boundaryName)?.classList).toContain('fm-cursor-row'),
+    );
+  });
+
+  it('re-fetches the directory after applying a keyboard sort shortcut', async () => {
+    const client = new MockFileManagerClient();
+    const originalListActions = client.listActions.bind(client);
+    vi.spyOn(client, 'listActions').mockImplementation(async (...args) => [
+      ...(await originalListActions(...args)),
+      {
+        id: 'core.sortByDate',
+        title: 'Sort by Date',
+        category: 'navigation',
+        defaultShortcuts: [{ key: 'F5', ctrl: true }],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+    ]);
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    listDirectory.mockClear();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F5', ctrlKey: true, bubbles: true }),
+    );
+
+    await vi.waitFor(() =>
+      expect(listDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sort: [{ columnId: 'core.modified', direction: 'ascending' }],
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
   });
 
   it('shows a parent row outside the root and opens it with Enter', async () => {
