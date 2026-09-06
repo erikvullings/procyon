@@ -1623,12 +1623,16 @@ async fn the_desktop_capability_tracks_managed_component_state() {
     // Reinstalling at a moved data root composes a library rooted there, and
     // nothing is written beneath the old root.
     components.set_status(installed_component_status(&moved_root));
-    assert!(
-        service
-            .semantic_library_status(&HOST)
-            .await
-            .unwrap()
-            .available
+    let moved_status = service.semantic_library_status(&HOST).await.unwrap();
+    assert!(moved_status.available);
+    assert_eq!(
+        moved_status
+            .library
+            .as_ref()
+            .expect("moved root keeps the device library")
+            .library_id,
+        installed_library.library_id,
+        "changing the data root or model must not define device identity"
     );
     assert_eq!(
         data_root_entries(&moved_root.join("library")),
@@ -1636,8 +1640,45 @@ async fn the_desktop_capability_tracks_managed_component_state() {
         "the composed library must follow the authoritative data root"
     );
 
-    // A model migration addresses a different device-local library, because
-    // the library identity is derived from the immutable embedding identity.
+    // Persist consent at the active data root before changing models.
+    let library_id =
+        LibraryId::from_uuid(Uuid::parse_str(installed_library.library_id.as_ref()).unwrap());
+    let mut policy = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(
+            library_id,
+            ModelIdentity::new(
+                "installed-model",
+                "installed-revision-1",
+                384,
+                "installed-model@installed-revision-1",
+            )
+            .unwrap(),
+        ),
+        ResourceProfile {
+            kind: ResourceProfileKind::Balanced,
+            budgets: ResourceBudgets::default(),
+        },
+    )
+    .unwrap();
+    let root_id = RootId::from_uuid(Uuid::from_u128(0x5eed));
+    let mut root = EnrolledRoot::new(root_id, location("file:///docs"), None, true);
+    root.attach_workspace(workspace(10));
+    policy.enrol_root(root).unwrap();
+    SemanticLibraryCoordinator::new(&settings, moved_root.join("library"))
+        .lock()
+        .unwrap()
+        .transaction(
+            LibraryOperation::Enrolment,
+            Some(&policy),
+            Some(&SemanticCatalog::new(library_id)),
+            Some(&SemanticLibraryState::new(library_id)),
+        )
+        .unwrap()
+        .commit()
+        .unwrap();
+
+    // A model migration retains device-local consent and library identity
+    // while replacing only the embedding-space identity.
     components.set_status(SemanticComponentStatus::new(
         SemanticComponentLifecycle::InstalledEnabled,
         Some(moved_root.clone()),
@@ -1650,18 +1691,15 @@ async fn the_desktop_capability_tracks_managed_component_state() {
         SemanticDiskUse::empty(),
     ));
     components.set_profiles(migrated_profiles());
-    let migrated = service
-        .semantic_library_status(&HOST)
-        .await
-        .unwrap()
+    let migrated_status = service.semantic_library_status(&HOST).await.unwrap();
+    let migrated = migrated_status
         .library
-        .expect("the migrated model composes its own library");
+        .expect("the migrated model retains its library");
 
     assert_eq!(migrated.model.model_id, "migrated-model");
-    assert_ne!(
-        migrated.library_id, installed_library.library_id,
-        "another embedding space must never reuse the previous library's records"
-    );
+    assert_eq!(migrated.library_id, installed_library.library_id);
+    assert_eq!(migrated_status.roots.len(), 1);
+    assert_eq!(migrated_status.roots[0].id, root_id.to_string());
 }
 
 /// Component capability whose authoritative status and catalog can change, as

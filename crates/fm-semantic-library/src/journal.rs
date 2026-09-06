@@ -28,8 +28,8 @@ use uuid::Uuid;
 use crate::lock::{LibraryLock, LibraryLockGuard};
 use crate::store::{CATALOG_FILE_NAME, STATE_FILE_NAME, write_atomically};
 use crate::{
-    LibraryId, OccurrenceId, POLICY_FILE_NAME, SemanticCatalog, SemanticCatalogStore,
-    SemanticLibraryPolicy, SemanticLibraryPolicyStore, SemanticLibraryState,
+    LibraryId, ModelIdentity, OccurrenceId, POLICY_FILE_NAME, SemanticCatalog,
+    SemanticCatalogStore, SemanticLibraryPolicy, SemanticLibraryPolicyStore, SemanticLibraryState,
     SemanticLibraryStateStore, StoreError,
 };
 
@@ -580,6 +580,33 @@ impl<'coordinator> LibrarySession<'coordinator> {
             .policy_store
             .load_optional()?
             .map(|policy| policy.revision()))
+    }
+
+    /// Migrates an existing policy to a new embedding model under the library
+    /// lock, preserving its stable id, roots, resource policy, and references.
+    ///
+    /// No policy is created when consent has never been persisted. The policy
+    /// is one atomic document, so no multi-document journal is needed; pending
+    /// transactions are recovered before the migration is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed recovery, persistence, validation, or revision failure.
+    pub fn migrate_model_if_present(
+        &self,
+        model: ModelIdentity,
+    ) -> Result<Option<SemanticLibraryPolicy>, StoreError> {
+        let mut policy = match self.coordinator.load_locked() {
+            Ok(loaded) => loaded.policy,
+            Err(StoreError::PolicyMissing) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if policy.migrate_model(model)? {
+            self.coordinator
+                .policy_store
+                .save_model_migration(&policy)?;
+        }
+        Ok(Some(policy))
     }
 
     /// Stages a durable transaction over any combination of participants.

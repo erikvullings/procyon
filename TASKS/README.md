@@ -112,7 +112,8 @@ semantic components are not installed.
 - [x] 0191 Real multilingual model in the semantic developer bundle *(needs 0178, 0181, 0190;
   the quality profile installs a pinned, checksum-verified `multilingual-e5-small` pack while the
   compact profiles keep the zero-download fixture; installed-profile switches stage the signed
-  target before activation and automatically reindex enrolled roots)*
+  target before activation, preserve the device library and folder consent, and automatically
+  reindex enrolled roots)*
 
 ## File operations
 

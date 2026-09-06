@@ -91,6 +91,46 @@ fn journal_record_count(semantic_root: &Path) -> usize {
         .unwrap_or(0)
 }
 
+#[test]
+fn model_migration_preserves_library_consent_catalog_and_state() {
+    let configuration = project_temp_dir("model-migration-config-");
+    let semantic_root = project_temp_dir("model-migration-data-");
+    let coordinator = coordinator(configuration.path(), semantic_root.path());
+    let (policy, catalog) = seeded_library();
+    let state = SemanticLibraryState::new(library_id());
+    coordinator
+        .lock()
+        .unwrap()
+        .transaction(
+            LibraryOperation::Enrolment,
+            Some(&policy),
+            Some(&catalog),
+            Some(&state),
+        )
+        .unwrap()
+        .commit()
+        .unwrap();
+
+    let migrated = coordinator
+        .lock()
+        .unwrap()
+        .migrate_model_if_present(
+            ModelIdentity::new("quality-model", "quality-revision", 384, "quality-space").unwrap(),
+        )
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(migrated.library().id(), library_id());
+    assert_eq!(migrated.library().model().model_id(), "quality-model");
+    assert_eq!(migrated.revision(), policy.revision() + 1);
+    assert_eq!(migrated.roots(), policy.roots());
+
+    let reloaded = coordinator.load().unwrap();
+    assert_eq!(reloaded.policy, migrated);
+    assert_eq!(reloaded.catalog, catalog);
+    assert_eq!(reloaded.state, state);
+}
+
 const COMMIT_STEPS: [CommitStep; 8] = [
     CommitStep::StageCatalog,
     CommitStep::StagePolicy,

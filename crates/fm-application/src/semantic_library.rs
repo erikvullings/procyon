@@ -3136,7 +3136,9 @@ pub enum SemanticLibraryError {
     AccessDenied,
     /// Durable state belongs to a different library or embedding model than
     /// the one this host is configured for.
-    #[error("semantic library storage belongs to a different library or model")]
+    #[error(
+        "the semantic library does not match the active model; retry the model migration, or restore the component setup that created copied library storage"
+    )]
     IncompatibleLibraryIdentity,
     /// Request data is malformed or violates policy.
     #[error("semantic library request is invalid")]
@@ -3343,23 +3345,44 @@ async fn desktop_library_from_components(
             metadata.identity.model_id() == key.model_id
                 && metadata.identity.revision() == key.model_revision
         })?;
-    // The library id is derived from the immutable embedding identity, so the
-    // same installed model always addresses the same device-local library and a
-    // model migration cannot silently reuse another embedding space's records.
-    let library_id = Uuid::new_v5(
-        &Uuid::NAMESPACE_OID,
+    let semantic_data_root = key.data_root.join("library");
+    let model = core::ModelIdentity::new(
+        metadata.identity.model_id(),
+        metadata.identity.revision(),
+        metadata.dimensions,
         format!(
-            "procyon-semantic-library:{}:{}:{}",
+            "{}@{}",
             metadata.identity.model_id(),
-            metadata.identity.revision(),
-            metadata.dimensions
-        )
-        .as_bytes(),
+            metadata.identity.revision()
+        ),
+    )
+    .ok()?;
+    let coordinator =
+        core::SemanticLibraryCoordinator::new(configuration_directory, &semantic_data_root);
+    let persisted_policy = coordinator
+        .lock()
+        .ok()?
+        .migrate_model_if_present(model)
+        .ok()?;
+    // Before consent is persisted, derive an inert but stable identity from
+    // this app profile rather than from the replaceable embedding model.
+    let library_id = persisted_policy.map_or_else(
+        || {
+            Uuid::new_v5(
+                &Uuid::NAMESPACE_OID,
+                format!(
+                    "procyon-device-semantic-library:{}",
+                    configuration_directory.display()
+                )
+                .as_bytes(),
+            )
+        },
+        |policy| policy.library().id().into_uuid(),
     );
     SemanticLibraryService::desktop_managed(
         SemanticLibraryConfiguration::balanced(
             configuration_directory,
-            key.data_root.join("library"),
+            semantic_data_root,
             library_id,
             metadata.identity.model_id(),
             metadata.identity.revision(),

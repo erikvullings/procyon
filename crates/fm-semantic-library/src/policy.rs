@@ -82,7 +82,7 @@ impl ModelIdentity {
     }
 }
 
-/// Stable device-local library and its immutable embedding identity.
+/// Stable device-local library and its current exact embedding identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceLibraryIdentity {
@@ -508,6 +508,24 @@ impl SemanticLibraryPolicy {
     #[must_use]
     pub const fn library(&self) -> &DeviceLibraryIdentity {
         &self.library
+    }
+
+    /// Replaces only the embedding model while preserving device-local consent.
+    ///
+    /// Returns whether the identity changed. A real migration advances the
+    /// durable revision exactly once so cached readers cannot retain the old
+    /// embedding-space identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError::RevisionOverflow`] when the counter is exhausted.
+    pub fn migrate_model(&mut self, model: ModelIdentity) -> Result<bool, PolicyError> {
+        if self.library.model() == &model {
+            return Ok(false);
+        }
+        self.advance_revision()?;
+        self.library = DeviceLibraryIdentity::new(self.library.id(), model);
+        Ok(true)
     }
 
     /// Returns the resource profile and hard budgets.

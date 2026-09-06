@@ -140,6 +140,27 @@ impl SemanticLibraryPolicyStore {
         self.settings.save_document(policy)?;
         Ok(())
     }
+
+    /// Atomically persists an explicit model migration for the same library.
+    ///
+    /// Unlike [`Self::save`], this permits the model identity to change, but
+    /// only when the submitted policy is exactly the current durable policy
+    /// with that model replaced and its revision advanced once.
+    pub(crate) fn save_model_migration(
+        &self,
+        policy: &SemanticLibraryPolicy,
+    ) -> Result<(), StoreError> {
+        let existing = self.load()?;
+        if existing.library().id() != policy.library().id() {
+            return Err(StoreError::IdentityChanged);
+        }
+        let mut expected = existing;
+        if !expected.migrate_model(policy.library().model().clone())? || expected != *policy {
+            return Err(StoreError::InvalidModelMigration);
+        }
+        self.settings.save_document(policy)?;
+        Ok(())
+    }
 }
 
 /// Atomic JSON repository for high-volume authoritative catalog state.
@@ -304,6 +325,9 @@ pub enum StoreError {
     /// A normal write attempted to replace the stable library/model identity.
     #[error("semantic library or model identity cannot change without migration")]
     IdentityChanged,
+    /// A model migration attempted to alter consent or skip the next revision.
+    #[error("semantic library model migration must preserve consent and advance one revision")]
+    InvalidModelMigration,
     /// A write would move the durable monotonic policy revision backwards.
     #[error("semantic library policy revision cannot regress")]
     RevisionRegressed,

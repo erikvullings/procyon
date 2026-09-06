@@ -146,6 +146,12 @@ component pack.
   a rebuilt worker/runtime no longer shares an immutable artifact ID with stale installed bytes and
   block an otherwise valid model migration. Migration confirmation errors now render immediately
   below the confirmation button instead of above the full settings form.
+- 2026-09-06 (library-migration follow-up): The device-local semantic library ID is now stable
+  across embedding-model changes. Activating a signed model atomically updates only the policy's
+  model identity under the cross-process library lock, advances its revision, and preserves every
+  enrolled root, exclusion, workspace reference, catalog record, and runtime state before automatic
+  reconciliation starts. Normal policy writes still reject identity changes, and genuinely copied
+  or foreign catalog/state storage remains fail-closed.
 
 ## Validation commands
 

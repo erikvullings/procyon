@@ -59,15 +59,17 @@ installed and activated rather than a fixed one.
   model pack, so a model needing none is used unchanged. Inputs longer than the 512-token window
   are truncated rather than rejected.
 - Each model owns its own catalog and vector index under the worker data root, so switching
-  profiles never mixes incompatible embedding spaces. Completing a model migration in the debug
-  host stops the worker still holding the previous model, drops its connection, deletes any
-  earlier index for the newly activated model, and then reconciles every available enrolled root
-  into a clean index. Clearing an index when switching back prevents deleted documents or revoked
-  roots from reappearing from stale vectors. Model activation is already durable at that point, so
-  a failed restart or a failed root is logged with the same visibility as post-enrolment indexing
-  rather than rolled back — check the development log and repeat **Include folder** for any root
-  the log names. Unreachable roots are skipped and logged, and are picked up the next time they are
-  reconciled.
+  profiles never mixes incompatible embedding spaces. The device-local library identity, folder
+  consent, exclusions, and workspace references remain stable across that switch; only the
+  policy's exact model identity changes. Completing a model migration in the debug host updates
+  that policy atomically under the library lock, stops the worker still holding the previous model,
+  drops its connection, deletes any earlier index for the newly activated model, and then
+  reconciles every available enrolled root into a clean index. Clearing an index when switching
+  back prevents deleted documents or revoked roots from reappearing from stale vectors. Model
+  activation is already durable at that point, so a failed restart or a failed root is logged with
+  the same visibility as post-enrolment indexing rather than rolled back — check the development
+  log and repeat **Include folder** for any root the log names. Unreachable roots are skipped and
+  logged, and are picked up the next time they are reconciled.
 - Indexes written by the earlier task-0190 layout lived directly beneath the worker data root
   (`catalog.sqlite` and `zvec/`) and were implicitly owned by the only model that existed then.
   On first launch after this change the worker moves them to `superseded-flat-index/` under the
