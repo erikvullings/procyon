@@ -1246,13 +1246,27 @@ main.fm-workspace {
 .fm-semantic-field select {
   box-sizing: border-box;
   width: 100%;
-  min-height: 1.9rem;
+  min-height: var(--fm-row-height);
+  height: var(--fm-row-height);
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
-  padding: 0.25rem 0.4rem;
+  padding: 0 0.55rem;
   background: var(--fm-surface);
   color: var(--fm-text);
   font: inherit;
+  line-height: calc(var(--fm-row-height) - 2px);
+}
+
+.fm-semantic-field .fm-semantic-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+  padding-inline: 0.55rem;
+}
+
+.fm-semantic-field .fm-semantic-number-input::-webkit-outer-spin-button,
+.fm-semantic-field .fm-semantic-number-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .fm-semantic-field input:focus,

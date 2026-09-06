@@ -425,6 +425,22 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-local-model-details')
       ?.setAttribute('open', '');
+    const localModelDetails = root.querySelector<HTMLDetailsElement>(
+      '.fm-semantic-local-model-details',
+    );
+    expect(localModelDetails?.querySelector('summary')?.textContent).toContain('Advanced');
+    expect(localModelDetails?.textContent).toContain(
+      'This is not needed for the signed models above.',
+    );
+    const dimensions = localModelDetails?.querySelector<HTMLInputElement>(
+      '#fm-semantic-local-dimensions',
+    );
+    expect(dimensions?.classList.contains('fm-semantic-number-input')).toBe(true);
+    const normalization = localModelDetails?.querySelector<HTMLSelectElement>(
+      '#fm-semantic-local-normalization',
+    );
+    expect(normalization?.value).toBe('unitLength');
+    expect(normalization?.selectedOptions[0]?.textContent).toBe('Unit length');
     const values: ReadonlyArray<readonly [string, string]> = [
       ['#fm-semantic-local-source-path', 'https://models.example.test/model'],
       ['#fm-semantic-local-model-id', 'local-model'],

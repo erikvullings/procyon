@@ -1056,10 +1056,10 @@ export const nl = {
     checkpointCursor: 'Controlepuntcursor',
     saveCheckpoint: 'Controlepunt opslaan',
     completeMigration: 'Migratie voltooien',
-    localModelSummary: 'Lokale modelimport voor experts',
+    localModelSummary: 'Geavanceerd: lokaal modelpakket importeren',
     localModelProfileLegend: 'Profiel voor het geïmporteerde model',
     localModelExplanation:
-      'Importeer een bestaand lokaal pakket. Procyon haalt geen URL op en activering vereist altijd een gecontroleerde migratie.',
+      'Dit is niet nodig voor de ondertekende modellen hierboven. Importeer alleen een bestaand lokaal pakket als je de bestanden en metadata zelf beheert. Procyon haalt geen URL op en activering vereist altijd een gecontroleerde migratie.',
     sourcePath: 'Pad naar lokaal pakket',
     upstreamRevision: 'Upstreamrevisie',
     licenseSpdx: 'SPDX-licentie-expressie',

@@ -178,6 +178,15 @@ describe('theme stylesheet', () => {
     );
     expect(materializedCss).toContain('position: static');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');
+    expect(materializedCss).toMatch(
+      /\.input-field input\[type="number"\]\s*\{[^}]*padding-right:\s*1\.75rem/s,
+    );
+    expect(materializedCss).toMatch(
+      /\.select-wrapper input\.select-dropdown\s*\{[^}]*-webkit-text-fill-color:\s*currentColor/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-semantic-field \.fm-semantic-number-input\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+    );
   });
 
   it('removes transitions and animations when reduced motion is requested', () => {

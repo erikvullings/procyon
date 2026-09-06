@@ -83,7 +83,7 @@
   min-height: var(--fm-row-height);
   height: var(--fm-row-height);
   margin: 0;
-  padding: 0 0.35rem;
+  padding: 0 0.55rem;
   border: 1px solid var(--fm-border);
   border-radius: 2px;
   background: var(--fm-surface);
@@ -94,7 +94,7 @@
 .fm-app-shell .input-field input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
-  padding-right: 1.3rem;
+  padding-right: 1.75rem;
 }
 
 .fm-app-shell .input-field input[type="number"]::-webkit-outer-spin-button,
@@ -117,7 +117,9 @@
 }
 
 .fm-app-shell .select-wrapper input.select-dropdown {
-  padding-right: 1.35rem;
+  padding-right: 1.75rem;
+  opacity: 1;
+  -webkit-text-fill-color: currentColor;
 }
 
 .fm-app-shell .select-wrapper svg.caret {
@@ -319,7 +321,7 @@
 
 .fm-app-shell .input-field .number-input-controls {
   top: calc(0.82rem * 1.15 + 0.2rem);
-  right: 0.15rem;
+  right: 0.25rem;
   display: flex;
   flex-direction: column;
   justify-content: center;

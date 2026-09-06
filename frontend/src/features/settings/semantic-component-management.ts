@@ -886,6 +886,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     return m('label.fm-semantic-field', { for: id }, [
       m('span', label),
       m(`input#${id}`, {
+        class: type === 'number' ? 'fm-semantic-number-input' : undefined,
         type,
         ...(type === 'number' ? { min: 0 } : {}),
         value,
@@ -1320,10 +1321,17 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   [
                     m(
                       'option',
-                      { value: 'unitLength' },
+                      {
+                        value: 'unitLength',
+                        selected: localModel.normalization === 'unitLength',
+                      },
                       t('semanticComponents', 'normalizationUnitLength'),
                     ),
-                    m('option', { value: 'none' }, t('semanticComponents', 'normalizationNone')),
+                    m(
+                      'option',
+                      { value: 'none', selected: localModel.normalization === 'none' },
+                      t('semanticComponents', 'normalizationNone'),
+                    ),
                   ],
                 ),
               ]),

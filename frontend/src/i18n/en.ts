@@ -1045,10 +1045,10 @@ export const en = {
     checkpointCursor: 'Checkpoint cursor',
     saveCheckpoint: 'Save checkpoint',
     completeMigration: 'Complete migration',
-    localModelSummary: 'Expert local-model import',
+    localModelSummary: 'Advanced: import a local model package',
     localModelProfileLegend: 'Profile for the imported model',
     localModelExplanation:
-      'Import an existing local package. Procyon will not fetch a URL, and activation always requires a reviewed migration.',
+      'This is not needed for the signed models above. Import an existing local package only when you manage its files and metadata yourself. Procyon will not fetch a URL, and activation always requires a reviewed migration.',
     sourcePath: 'Local package path',
     upstreamRevision: 'Upstream revision',
     licenseSpdx: 'SPDX license expression',
