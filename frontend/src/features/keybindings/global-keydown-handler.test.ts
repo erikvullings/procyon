@@ -331,6 +331,7 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     const context = makeContext({
       getNavigation: () => ({ navigate }) as unknown as NavigationController,
     });
+
     createGlobalKeydownHandler(context)(keydown('Backspace', { ctrlKey: true }));
     expect(navigate).toHaveBeenCalledWith(PANE_A, { providerId: 'local', uri: 'file:///' });
   });
@@ -1242,5 +1243,58 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     });
     createGlobalKeydownHandler(context)(keydown('F3'));
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorFile, undefined);
+  });
+});
+
+describe('createGlobalKeydownHandler clipboard paste', () => {
+  const source: Location = { providerId: 'local', uri: 'file:///a/report.txt' };
+  const destination: Location = { providerId: 'local', uri: 'file:///a' };
+
+  function pasteContext(activeLocation: Location) {
+    const copy = vi.fn().mockResolvedValue({});
+    const duplicate = vi.fn().mockResolvedValue({});
+    return {
+      copy,
+      duplicate,
+      context: makeContext({
+        clipboard: () => ({ mode: 'copy', locations: [source] }),
+        activeDirectory: () => ({ paneId: PANE_A, location: activeLocation }),
+        getDirectories: () =>
+          new Map([
+            [
+              'pane-a:tab',
+              {
+                location: activeLocation,
+                state: { type: 'loaded' },
+                writable: true,
+                entries: [],
+              } as unknown as PaneDirectoryView,
+            ],
+          ]),
+        getOpsController: () => ({ copy, duplicate }) as unknown as OperationsController,
+      }),
+    };
+  }
+
+  it('duplicates copied cursor entries when Cmd+V pastes into their current folder', async () => {
+    const { context, copy, duplicate } = pasteContext(destination);
+    const macContext = { ...context, getPlatform: () => 'macos' as const };
+
+    createGlobalKeydownHandler(macContext)(keydown('v', { metaKey: true }));
+    await Promise.resolve();
+
+    expect(duplicate).toHaveBeenCalledWith([source]);
+    expect(copy).not.toHaveBeenCalled();
+  });
+
+  it('keeps original names by using copy when pasted into another folder', async () => {
+    const otherFolder: Location = { providerId: 'local', uri: 'file:///b' };
+    const { context, copy, duplicate } = pasteContext(otherFolder);
+
+    createGlobalKeydownHandler(context)(keydown('v', { ctrlKey: true }));
+    await Promise.resolve();
+
+    expect(copy).toHaveBeenCalledWith([source], otherFolder);
+    expect(duplicate).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import {
   cutToClipboard,
   emptyClipboard,
   isCutLocation,
+  isSameFolderPaste,
   validatePasteTarget,
 } from './clipboard';
 
@@ -50,5 +51,47 @@ describe('in-app clipboard', () => {
     expect(
       validatePasteTarget(clipboard, { location: document, writable: true, loaded: true }),
     ).toEqual({ ok: true });
+  });
+
+  it('detects only copy-pastes back into every source location parent', () => {
+    const projectFile: Location = {
+      providerId: 'file',
+      uri: 'file:///home/erik/Projects/report.txt',
+    };
+    const otherProjectFile: Location = {
+      providerId: 'file',
+      uri: 'file:///home/erik/Projects/notes.txt',
+    };
+
+    expect(
+      isSameFolderPaste(copyToClipboard(emptyClipboard, [projectFile, otherProjectFile]), source),
+    ).toBe(true);
+    expect(isSameFolderPaste(copyToClipboard(emptyClipboard, [projectFile]), document)).toBe(false);
+    expect(isSameFolderPaste(cutToClipboard(emptyClipboard, [projectFile]), source)).toBe(false);
+  });
+
+  it('does not confuse matching paths on different remote authorities', () => {
+    expect(
+      isSameFolderPaste(
+        copyToClipboard(emptyClipboard, [
+          {
+            providerId: 'sftp',
+            uri: 'sftp://connection-a/home/erik/report.txt',
+          },
+        ]),
+        { providerId: 'sftp', uri: 'sftp://connection-b/home/erik' },
+      ),
+    ).toBe(false);
+    expect(
+      isSameFolderPaste(
+        copyToClipboard(emptyClipboard, [
+          {
+            providerId: 'local',
+            uri: 'file://server-a/share/report.txt',
+          },
+        ]),
+        { providerId: 'local', uri: 'file://server-b/share' },
+      ),
+    ).toBe(false);
   });
 });

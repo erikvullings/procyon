@@ -2050,7 +2050,7 @@ describe('Pane navigation input', () => {
     expect(onParent).toHaveBeenCalledTimes(2);
   });
 
-  it('supports history keyboard shortcuts and auxiliary mouse buttons', () => {
+  it('supports history keyboard shortcuts and navigation mouse buttons', () => {
     const onBack = vi.fn();
     const onForward = vi.fn();
     mount(attrs({ onBack, onForward }));
@@ -2062,8 +2062,8 @@ describe('Pane navigation input', () => {
     pane?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }),
     );
-    pane?.dispatchEvent(new MouseEvent('auxclick', { button: 3, bubbles: true }));
-    pane?.dispatchEvent(new MouseEvent('auxclick', { button: 4, bubbles: true }));
+    pane?.dispatchEvent(new MouseEvent('mouseup', { button: 3, bubbles: true }));
+    pane?.dispatchEvent(new MouseEvent('mouseup', { button: 4, bubbles: true }));
 
     expect(onBack).toHaveBeenCalledTimes(2);
     expect(onForward).toHaveBeenCalledTimes(2);
