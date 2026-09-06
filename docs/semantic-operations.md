@@ -29,7 +29,9 @@ content search, and baseline document viewing available.
   **Include current folder** and **Allow model knowledge** choices remain simple opt-in checkboxes
   beside the answer area. Including a folder shows the same recursive estimate, retention
   disclosure, budget warnings, and explicit consent used by Settings; cancelling returns to the
-  question in progress. Detailed root administration remains under **Settings > Semantic**.
+  question in progress. Press **Enter** to retrieve evidence and generate an answer, or
+  **Shift+Enter** to insert a new line. Detailed root administration remains under
+  **Settings > Semantic**.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without

@@ -159,4 +159,45 @@ describe('RagAskDialog', () => {
     button('Delete')?.click();
     await vi.waitFor(() => expect(root.textContent).not.toContain('Saved conversations'));
   });
+
+  it('submits with Enter and preserves Shift+Enter for a newline', async () => {
+    const client = await configuredClient();
+    m.mount(root, {
+      view: () =>
+        m(RagAskDialog, {
+          open: true,
+          client,
+          workspaceId,
+          currentFolder: { providerId: 'local', uri: 'file:///documents' },
+          selectedEntries: [entry],
+          semanticSourceIds: [],
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
+
+    const question = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (question === null) throw new Error('question input not rendered');
+    question.value = 'What does the report conclude?';
+    question.dispatchEvent(new InputEvent('input', { bubbles: true }));
+
+    const newline = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    question.dispatchEvent(newline);
+    expect(newline.defaultPrevented).toBe(false);
+    expect(root.textContent).not.toContain('Mock indexed evidence');
+
+    const submit = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    question.dispatchEvent(submit);
+    expect(submit.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(root.textContent).toContain('grounded in the selected'));
+  });
 });

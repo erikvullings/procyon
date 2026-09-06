@@ -713,6 +713,7 @@ export const nl = {
     scopeSemanticResults: 'Huidige semantische resultaten',
     scopeEnrolledRoots: 'Genoemde opgenomen hoofdmappen',
     question: 'Vraag',
+    submitHint: 'Enter om te vragen · Shift+Enter voor een nieuwe regel',
     allowModelKnowledge: 'Modelkennis toestaan (uitspraken van het model krijgen [MODEL])',
     evidence: 'Opgehaald bewijs',
     cloudDisclosure: '{tokens} geschatte bewijstokens worden naar deze cloudendpoint verzonden.',

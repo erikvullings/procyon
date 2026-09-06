@@ -706,6 +706,7 @@ export const en = {
     scopeSemanticResults: 'Current semantic result set',
     scopeEnrolledRoots: 'Named enrolled roots',
     question: 'Question',
+    submitHint: 'Enter to ask · Shift+Enter for a new line',
     allowModelKnowledge: 'Allow model knowledge (model-only claims are marked [MODEL])',
     evidence: 'Retrieved evidence',
     cloudDisclosure: '{tokens} estimated evidence tokens will be sent to this cloud endpoint.',

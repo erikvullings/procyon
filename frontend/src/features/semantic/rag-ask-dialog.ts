@@ -164,14 +164,15 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
     exportVisible = false;
   }
 
-  async function retrieve(attrs: RagAskDialogAttrs): Promise<void> {
-    if (selectedProfileId === '' || question.trim() === '') return;
+  async function retrieve(attrs: RagAskDialogAttrs): Promise<RagPreview | undefined> {
+    if (selectedProfileId === '' || question.trim() === '') return undefined;
     busy = 'retrieving';
     error = undefined;
     resetRetrieval();
     abortController = new AbortController();
+    let retrieved: RagPreview | undefined;
     try {
-      preview = await attrs.client.previewRag(
+      retrieved = await attrs.client.previewRag(
         {
           profileId: selectedProfileId,
           question: question.trim(),
@@ -179,6 +180,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
         },
         abortController.signal,
       );
+      preview = retrieved;
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
         error = t('ragAsk', 'retrievalFailed');
@@ -188,6 +190,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
       abortController = undefined;
       m.redraw();
     }
+    return retrieved;
   }
 
   async function generate(attrs: RagAskDialogAttrs): Promise<void> {
@@ -225,6 +228,12 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
       abortController = undefined;
       m.redraw();
     }
+  }
+
+  async function submit(attrs: RagAskDialogAttrs): Promise<void> {
+    if (busy !== undefined || selectedProfileId === '' || question.trim() === '') return;
+    if (preview === undefined && (await retrieve(attrs)) === undefined) return;
+    await generate(attrs);
   }
 
   async function save(attrs: RagAskDialogAttrs): Promise<void> {
@@ -293,7 +302,22 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                 question = (event.currentTarget as HTMLTextAreaElement).value;
                 resetRetrieval();
               },
+              onkeydown: (event: KeyboardEvent) => {
+                if (
+                  event.key !== 'Enter' ||
+                  event.shiftKey ||
+                  event.altKey ||
+                  event.ctrlKey ||
+                  event.metaKey ||
+                  event.isComposing
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                void submit(attrs);
+              },
             }),
+            m('small', t('ragAsk', 'submitHint')),
           ]),
           m('details.fm-rag-options', [
             m('summary', [
