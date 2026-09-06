@@ -12,4 +12,10 @@ export type LanguageDto = typeof LanguageDto[keyof typeof LanguageDto];
 export const LanguageDto = {
   en: 'en',
   nl: 'nl',
+  de: 'de',
+  fr: 'fr',
+  es: 'es',
+  it: 'it',
+  pt: 'pt',
+  pl: 'pl',
 } as const;

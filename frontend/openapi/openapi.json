@@ -2717,7 +2717,13 @@
         "description": "UI language.",
         "enum": [
           "en",
-          "nl"
+          "nl",
+          "de",
+          "fr",
+          "es",
+          "it",
+          "pt",
+          "pl"
         ],
         "type": "string"
       },

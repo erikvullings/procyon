@@ -47,6 +47,19 @@ describe('i18n', () => {
       expect(t('settings', 'language')).toBe('Language');
     });
 
+    it.each([
+      ['de', 'Sprache'],
+      ['fr', 'Langue'],
+      ['es', 'Idioma'],
+      ['it', 'Lingua'],
+      ['pt', 'Idioma'],
+      ['pl', 'Język'],
+    ] as const)('switches to %s', (locale, languageLabel) => {
+      setLocale(locale);
+      expect(getLocale()).toBe(locale);
+      expect(t('settings', 'language')).toBe(languageLabel);
+    });
+
     it('updates the same translator object on every call', () => {
       const before = t('settings', 'language');
       setLocale('nl');
@@ -158,7 +171,7 @@ describe('i18n', () => {
     });
 
     it('LOCALES covers every catalogue entry', () => {
-      expect(LOCALES).toEqual(['en', 'nl']);
+      expect(LOCALES).toEqual(['en', 'nl', 'de', 'fr', 'es', 'it', 'pt', 'pl']);
     });
   });
 
