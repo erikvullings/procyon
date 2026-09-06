@@ -956,8 +956,10 @@ export const nl = {
     kindWorker: 'Worker',
     kindRuntime: 'Runtime',
     kindModel: 'Model',
-    componentStateActive: 'Actief',
-    componentStateRollback: 'Terugvalversie',
+    componentStateActive: 'In gebruik',
+    componentStateRollback: 'Vorige versie',
+    developmentFixtureSizeNote:
+      'Dit compacte ontwikkelmodel is een kleine deterministische testfixture, geen getraind taalmodel. Kies Meertalige kwaliteit om het volledige E5-model te installeren.',
     diskUseHeading: 'Semantisch schijfgebruik',
     totalDiskUse: 'Totaal',
     categoryCatalog: 'Catalogus',
@@ -1100,15 +1102,18 @@ export const nl = {
     notAvailable: 'Niet beschikbaar',
     dataPreservedDisclosure:
       'Semantische indexering bewaart genormaliseerde fragmenten lokaal totdat hun bronbereik expliciet wordt uitgesloten.',
-    openFolder: 'Open een werkruimtemap om de toestemming te beheren.',
+    openFolder:
+      'Open een map in een werkruimte en ga daarna hier terug om het indexeren te controleren en te starten.',
     folderStatusUnavailable: 'Toestemmingsstatus van de map is niet beschikbaar.',
-    currentFolder: 'Huidige map',
+    currentFolder: 'Map geselecteerd voor indexering',
+    changeFolder:
+      'Dit is de map die in het actieve paneel is geopend. Sluit Instellingen, open een andere map en ga daarna hier terug om een andere map te kiezen.',
     includedHere: 'Hier opgenomen',
     inheritedFromParent: 'Geërfd van bovenliggende map',
     excluded: 'Uitgesloten',
     notIncluded: 'Niet opgenomen',
     sourceUnavailable: 'Bron niet beschikbaar',
-    previewInclusion: 'Voorbeeld van opname',
+    previewInclusion: 'Indexering controleren',
     attachToWorkspace: 'Aan deze werkruimte koppelen',
     estimate: 'Schatting',
     partialEstimate: 'Gedeeltelijke schatting',
@@ -1125,7 +1130,7 @@ export const nl = {
     normalizedExcerptsDisclosure: 'Genormaliseerde fragmenten worden lokaal bewaard.',
     confirmConsent:
       'Ik begrijp dat dit duurzame toestemming geeft voor verwerking en lokale opslag van deze map en onderliggende mappen.',
-    includeFolder: 'Map opnemen',
+    includeFolder: 'Map opnemen en indexeren',
     reviewExclusion: 'Uitsluiting controleren',
     exclusionPlan: 'Destructief uitsluitingsplan',
     exclusionWarning:

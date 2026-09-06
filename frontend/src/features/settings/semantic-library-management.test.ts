@@ -60,6 +60,8 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Balanced');
     expect(root.textContent).toContain('Every 30 minutes');
     expect(root.textContent).toContain('normalized excerpts');
+    expect(root.textContent).toContain(location.uri);
+    expect(root.textContent).toContain('folder open in the active pane');
     expect(root.textContent).not.toContain('mock-volume');
   });
 
@@ -69,14 +71,14 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    button('Preview inclusion').click();
+    button('Review indexing').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Partial estimate'));
     expect(root.textContent).toContain('Estimated files');
     expect(root.textContent).toContain('42');
     expect(root.textContent).toContain('Missing model download');
     expect(root.textContent).toContain('Unsupported MIME type');
     expect(root.textContent).toContain('Normalized excerpts will be retained locally');
-    expect(button('Include folder').disabled).toBe(true);
+    expect(button('Include and index folder').disabled).toBe(true);
     expect(preview).toHaveBeenCalledWith({
       workspaceId: workspace.id,
       location,
@@ -85,7 +87,7 @@ describe('SemanticLibraryManagement', () => {
 
     root.querySelector<HTMLInputElement>('#fm-semantic-library-consent')?.click();
     m.redraw.sync();
-    button('Include folder').click();
+    button('Include and index folder').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Included here'));
     expect(confirm).toHaveBeenCalledWith({
       confirmationId: 'mock-enrol-confirmation-1',
@@ -364,7 +366,7 @@ describe('SemanticLibraryManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain('Niet opgenomen');
-    button('Voorbeeld van opname').click();
+    button('Indexering controleren').click();
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toContain(
         'Het beleid is gewijzigd',

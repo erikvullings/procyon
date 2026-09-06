@@ -666,6 +666,8 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
               ? m('p', t('semanticLibrary', 'folderStatusUnavailable'))
               : m('section.fm-semantic-library-folder', [
                   m('h6', t('semanticLibrary', 'currentFolder')),
+                  m('p.fm-semantic-library-location', attrs.location.uri),
+                  m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder')),
                   m(
                     '.fm-semantic-library-consent-state',
                     { 'data-consent': folder.consent, 'aria-live': 'polite' },

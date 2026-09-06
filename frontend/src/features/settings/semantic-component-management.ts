@@ -270,23 +270,31 @@ function modelAndComponentStatus(status: SemanticComponentStatus): Vnode[] {
       m('h6', t('semanticComponents', 'installedComponentsHeading')),
       status.components.length === 0
         ? m('p.fm-semantic-empty', t('semanticComponents', 'noInstalledComponents'))
-        : m(
-            'ul.fm-semantic-installed-components',
-            status.components.map((component) =>
-              m('li.fm-semantic-installed-component', { key: component.artifactId }, [
-                m('strong', componentKindLabel(component.kind)),
-                m('span', `${component.componentId} · ${component.version}`),
-                m(
-                  'span',
-                  `${
-                    component.state === 'active'
-                      ? t('semanticComponents', 'componentStateActive')
-                      : t('semanticComponents', 'componentStateRollback')
-                  } · ${formatBytes(component.installedBytes)}`,
-                ),
-              ]),
+        : [
+            m(
+              'ul.fm-semantic-installed-components',
+              status.components.map((component) =>
+                m('li.fm-semantic-installed-component', { key: component.artifactId }, [
+                  m('strong', componentKindLabel(component.kind)),
+                  m('span', `${component.componentId} · ${component.version}`),
+                  m(
+                    'span',
+                    `${
+                      component.state === 'active'
+                        ? t('semanticComponents', 'componentStateActive')
+                        : t('semanticComponents', 'componentStateRollback')
+                    } · ${formatBytes(component.installedBytes)}`,
+                  ),
+                ]),
+              ),
             ),
-          ),
+            status.activeModel?.identity.modelId.includes('hashing-embedding')
+              ? m(
+                  'p.fm-semantic-component-note',
+                  t('semanticComponents', 'developmentFixtureSizeNote'),
+                )
+              : undefined,
+          ],
     ]),
     m('section.fm-semantic-status-section', [
       m('h6', t('semanticComponents', 'diskUseHeading')),

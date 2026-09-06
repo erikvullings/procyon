@@ -1040,9 +1040,15 @@ main.fm-workspace {
   list-style: none;
 }
 
-.fm-semantic-installed-component {
+.fm-semantic-installed-components {
   display: grid;
   grid-template-columns: minmax(5rem, 0.35fr) minmax(8rem, 1fr) auto;
+}
+
+.fm-semantic-installed-component {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   gap: 0.5rem;
   padding: 0.25rem 0;
   border-bottom: 1px solid var(--fm-border);
@@ -1050,6 +1056,21 @@ main.fm-workspace {
 
 .fm-semantic-installed-component:last-child {
   border-bottom: 0;
+}
+
+.fm-semantic-component-note,
+.fm-semantic-library-folder-help {
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-component-note,
+.fm-semantic-library-location,
+.fm-semantic-library-folder-help {
+  margin: 0.35rem 0;
+}
+
+.fm-semantic-library-location {
+  overflow-wrap: anywhere;
 }
 
 .fm-semantic-disk-total {
@@ -1257,9 +1278,13 @@ main.fm-workspace {
 @media (max-width: 640px) {
   .fm-semantic-definition-list,
   .fm-semantic-disk-use,
-  .fm-semantic-installed-component,
+  .fm-semantic-installed-components,
   .fm-semantic-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fm-semantic-installed-component {
+    grid-column: 1;
   }
 
   .fm-semantic-definition-list dd,

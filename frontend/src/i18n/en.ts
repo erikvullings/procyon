@@ -946,8 +946,10 @@ export const en = {
     kindWorker: 'Worker',
     kindRuntime: 'Runtime',
     kindModel: 'Model',
-    componentStateActive: 'Active',
-    componentStateRollback: 'Rollback',
+    componentStateActive: 'In use',
+    componentStateRollback: 'Previous version',
+    developmentFixtureSizeNote:
+      'This compact development model is a tiny deterministic test fixture, not a learned language model. Choose Multilingual quality to install the full E5 model.',
     diskUseHeading: 'Semantic disk use',
     totalDiskUse: 'Total',
     categoryCatalog: 'Catalog',
@@ -1089,15 +1091,17 @@ export const en = {
     notAvailable: 'Not available',
     dataPreservedDisclosure:
       'Semantic indexing retains normalized excerpts locally until their source scope is explicitly excluded.',
-    openFolder: 'Open a workspace folder to manage its consent.',
+    openFolder: 'Open a folder in a workspace, then return here to review and start indexing it.',
     folderStatusUnavailable: 'Folder consent status is unavailable.',
-    currentFolder: 'Current folder',
+    currentFolder: 'Folder selected for indexing',
+    changeFolder:
+      'This is the folder open in the active pane. To choose another folder, close Settings, open that folder, then return here.',
     includedHere: 'Included here',
     inheritedFromParent: 'Inherited from parent',
     excluded: 'Excluded',
     notIncluded: 'Not included',
     sourceUnavailable: 'Source unavailable',
-    previewInclusion: 'Preview inclusion',
+    previewInclusion: 'Review indexing',
     attachToWorkspace: 'Attach to this workspace',
     estimate: 'Estimate',
     partialEstimate: 'Partial estimate',
@@ -1114,7 +1118,7 @@ export const en = {
     normalizedExcerptsDisclosure: 'Normalized excerpts will be retained locally.',
     confirmConsent:
       'I understand this grants durable processing and local storage consent for this folder and its descendants.',
-    includeFolder: 'Include folder',
+    includeFolder: 'Include and index folder',
     reviewExclusion: 'Review exclusion',
     exclusionPlan: 'Destructive exclusion plan',
     exclusionWarning:

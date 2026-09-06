@@ -192,6 +192,7 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).toContain('Exact active model');
     expect(root.textContent).toContain('mock-compact-multilingual-revision');
     expect(root.querySelectorAll('.fm-semantic-installed-component')).toHaveLength(3);
+    expect(root.textContent).toContain('In use');
     expect(root.querySelectorAll('.fm-semantic-disk-category')).toHaveLength(6);
     expect(root.textContent?.toLowerCase()).not.toContain('worker patch');
     expect(workerPatch).not.toHaveBeenCalled();
