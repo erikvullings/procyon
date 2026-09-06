@@ -115,6 +115,8 @@ semantic components are not installed.
   target before activation, preserve the device library and folder consent, and automatically
   reindex enrolled roots; the toolbar and command palette expose one context-aware Ask/include
   action, and local roots retain stable filesystem identity)*
+- [ ] 0192 Docling.rs advanced PDF conversion *(needs 0189; evaluation-gated optional pack with the
+  current pure-Rust PDF converter retained as fallback)*
 
 ## File operations
 
