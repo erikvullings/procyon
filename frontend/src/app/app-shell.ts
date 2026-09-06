@@ -1203,7 +1203,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     void dispatchWorkspaceCommand(
       client,
       {
-        type: 'addTab',
+        type: 'addTransientTab',
         workspaceId: currentWorkspace.id,
         paneId,
         location: activeTab.location,
@@ -1694,32 +1694,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       refetchAffectedPanes(paneId);
       return;
     }
+    if (delta.type !== 'reset' && current.hasMore) {
+      refetchAffectedPanes(paneId);
+      return;
+    }
     if (delta.type === 'reset') {
-      const nextEntries = delta.snapshot.entries;
-      directories.set(
-        key,
-        respectSystemLocationReadOnly(
-          {
-            state: delta.snapshot.loadingState,
-            entries: delta.snapshot.entries,
-            location: delta.snapshot.location,
-            writable: delta.snapshot.writable,
-            requestId: delta.snapshot.requestId,
-            revision,
-            hasMore: delta.snapshot.hasMore,
-            ...(delta.snapshot.continuationToken === undefined
-              ? {}
-              : { continuationToken: delta.snapshot.continuationToken }),
-          },
-          systemLocations,
-        ),
-      );
-      reconcileSelectionAfterEntryChange(
-        paneId,
-        workspace?.panesById[paneId]?.activeTabId,
-        current.entries,
-        nextEntries,
-      );
+      navigation.applySnapshot(paneId, delta.snapshot);
       m.redraw();
       return;
     }
@@ -2088,9 +2068,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   /** Moves keyboard focus into `paneId`'s open F3 viewer - see `GlobalKeydownContext.focusViewer`. */
   function focusViewer(paneId: PaneId): void {
     const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
+    const readingSurface = root?.querySelector<HTMLElement>('[data-viewer-focus-target]');
     const searchInput = root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
     const section = root?.querySelector<HTMLElement>('.fm-pane-viewer');
-    (searchInput ?? section)?.focus();
+    (readingSurface ?? searchInput ?? section)?.focus();
+  }
+
+  function focusViewerSearch(paneId: PaneId): void {
+    const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
+    root
+      ?.querySelector<HTMLElement>('.fm-file-viewer')
+      ?.dispatchEvent(new CustomEvent('fm-viewer-toggle-search'));
+    root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input')?.focus();
   }
 
   /** One `scrollViewer('line', ...)` step, in CSS pixels - roughly a text line or a comfortable
@@ -2566,6 +2555,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       else void activatePane(attrsClient, paneId);
     },
     focusViewer,
+    focusViewerSearch,
     scrollViewer,
     toggleTerminal: () => {
       if (runtimeKind !== 'tauri') return;
@@ -2602,7 +2592,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (next) => {
           workspace = next;
         },
-      ).catch(() => undefined);
+      )
+        .then(() => {
+          if (workspace?.panesById[paneId]?.activeTabId === tab.id) {
+            void navigation.load(paneId, { background: true });
+          }
+        })
+        .catch(() => undefined);
     },
     swapPaneTabSets: (paneAId, paneBId) => {
       const liveWorkspace = workspace;

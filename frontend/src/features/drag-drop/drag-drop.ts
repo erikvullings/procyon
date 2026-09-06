@@ -4,6 +4,11 @@ import type { EntrySummary, Location, OperationKind, RuntimeCapabilities } from 
 export interface DropModifiers {
   readonly altKey: boolean;
   readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+}
+
+export interface DropEventState extends DropModifiers {
+  readonly dataTransfer?: DataTransfer | null;
 }
 
 export type DropValidation =
@@ -29,6 +34,23 @@ function isSameOrDescendant(source: Location, destination: Location): boolean {
   }
 }
 
+function isCurrentParent(source: Location, destination: Location): boolean {
+  if (source.providerId !== destination.providerId) return false;
+  try {
+    const sourceUrl = new URL(source.uri);
+    const destinationUrl = new URL(destination.uri);
+    if (sourceUrl.origin !== destinationUrl.origin) return false;
+    const sourcePath = sourceUrl.pathname.replace(/\/+$/u, '');
+    const separator = sourcePath.lastIndexOf('/');
+    const parentPath = sourcePath.slice(0, Math.max(separator, 0)) || '/';
+    return destinationUrl.pathname.replace(/\/+$/u, '') === parentPath.replace(/\/+$/u, '');
+  } catch {
+    const sourceUri = source.uri.replace(/\/+$/u, '');
+    const separator = sourceUri.lastIndexOf('/');
+    return destination.uri.replace(/\/+$/u, '') === sourceUri.slice(0, Math.max(separator, 0));
+  }
+}
+
 /** Validates before `dragover` is accepted, so invalid targets never appear droppable. */
 export function validateDropTarget(
   sources: readonly Location[],
@@ -38,19 +60,22 @@ export function validateDropTarget(
   if (sources.length === 0) return { ok: false, message: t('clipboard', 'nothingDragged') };
   if (target === undefined) return { ok: false, message: t('clipboard', 'destinationUnavailable') };
   if (!writable) return { ok: false, message: t('clipboard', 'destinationReadOnly') };
+  if (sources.some((source) => isCurrentParent(source, target))) {
+    return { ok: false, message: t('clipboard', 'destinationUnchanged') };
+  }
   if (sources.some((source) => isSameOrDescendant(source, target))) {
     return { ok: false, message: t('clipboard', 'recursiveDrop') };
   }
   return { ok: true };
 }
 
-/** Default is move; Option on macOS and Control elsewhere requests a copy. */
+/** Default is move; Command or Option on macOS and Control elsewhere requests a copy. */
 export function operationForDrop(
   platform: RuntimeCapabilities['platform'],
   modifiers: DropModifiers,
 ): Extract<OperationKind, 'copy' | 'move'> {
   return platform === 'macos'
-    ? modifiers.altKey
+    ? modifiers.altKey || modifiers.metaKey
       ? 'copy'
       : 'move'
     : modifiers.ctrlKey

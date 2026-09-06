@@ -218,6 +218,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     activatePane: vi.fn(),
     focusPane: vi.fn(),
     focusViewer: vi.fn(),
+    focusViewerSearch: vi.fn(),
     scrollViewer: vi.fn(),
     redraw: vi.fn(),
     toggleTerminal: vi.fn(),
@@ -744,6 +745,34 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(previousPage).toHaveBeenCalledTimes(1);
   });
 
+  it('ArrowLeft/ArrowRight change EPUB sections unless focus is in the search input', () => {
+    const nextPage = vi.fn();
+    const previousPage = vi.fn();
+    const context = makeContext({
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: { nextPage, previousPage } as never,
+              state: { status: 'ready', content: { kind: 'epub' } } as never,
+            } as never)
+          : undefined,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('ArrowRight'));
+    createGlobalKeydownHandler(context)(viewerKeydown('ArrowLeft'));
+    createGlobalKeydownHandler(context)(
+      viewerKeydown('ArrowRight', {}, (section) => {
+        const input = document.createElement('input');
+        input.className = 'fm-file-viewer-search-input';
+        section.append(input);
+        return input;
+      }),
+    );
+
+    expect(nextPage).toHaveBeenCalledOnce();
+    expect(previousPage).toHaveBeenCalledOnce();
+  });
+
   it('does not intercept ArrowLeft/ArrowRight when no viewer is open (or it is showing non-paged content)', () => {
     const nextPage = vi.fn();
     const context = makeContext({
@@ -792,6 +821,26 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
           ? ({
               controller: {} as never,
               state: { status: 'ready', content: { kind: 'docx' } } as never,
+            } as never)
+          : undefined,
+      scrollViewer,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('PageDown'));
+    createGlobalKeydownHandler(context)(viewerKeydown('PageUp'));
+
+    expect(scrollViewer).toHaveBeenNthCalledWith(1, PANE_B, 0, 1, 'page');
+    expect(scrollViewer).toHaveBeenNthCalledWith(2, PANE_B, 0, -1, 'page');
+  });
+
+  it('PageUp/PageDown scroll within an EPUB section once focus is inside it', () => {
+    const scrollViewer = vi.fn();
+    const context = makeContext({
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: {} as never,
+              state: { status: 'ready', content: { kind: 'epub' } } as never,
             } as never)
           : undefined,
       scrollViewer,
@@ -923,10 +972,11 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(scrollViewer).toHaveBeenNthCalledWith(4, PANE_B, 1, 0, 'line');
   });
 
-  it('PageUp/PageDown and +/- zoom an image viewer once focus is inside it', () => {
+  it('PageUp/PageDown and Mod+/- zoom an image viewer once focus is inside it', () => {
     const zoomIn = vi.fn();
     const zoomOut = vi.fn();
     const context = makeContext({
+      getPlatform: () => 'macos',
       getViewer: (paneId) =>
         paneId === PANE_B
           ? ({
@@ -937,10 +987,54 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     });
     createGlobalKeydownHandler(context)(viewerKeydown('PageUp'));
     createGlobalKeydownHandler(context)(viewerKeydown('PageDown'));
+    createGlobalKeydownHandler(context)(viewerKeydown('+', { metaKey: true }));
+    createGlobalKeydownHandler(context)(viewerKeydown('-', { metaKey: true }));
     createGlobalKeydownHandler(context)(viewerKeydown('+'));
     createGlobalKeydownHandler(context)(viewerKeydown('-'));
-    expect(zoomIn).toHaveBeenCalledTimes(2);
-    expect(zoomOut).toHaveBeenCalledTimes(2);
+    expect(zoomIn).toHaveBeenCalledTimes(3);
+    expect(zoomOut).toHaveBeenCalledTimes(3);
+  });
+
+  it('Mod+/- zoom EPUB content once focus is inside it', () => {
+    const zoomIn = vi.fn();
+    const zoomOut = vi.fn();
+    const context = makeContext({
+      getPlatform: () => 'macos',
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: { zoomIn, zoomOut } as never,
+              state: { status: 'ready', content: { kind: 'epub' } } as never,
+            } as never)
+          : undefined,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('+', { metaKey: true }));
+    createGlobalKeydownHandler(context)(viewerKeydown('-', { metaKey: true }));
+
+    expect(zoomIn).toHaveBeenCalledOnce();
+    expect(zoomOut).toHaveBeenCalledOnce();
+  });
+
+  it('Mod+F opens search for every searchable viewer kind', () => {
+    const focusViewerSearch = vi.fn();
+    for (const kind of ['text', 'docx', 'pdf', 'epub'] as const) {
+      const context = makeContext({
+        getPlatform: () => 'macos',
+        getViewer: (paneId) =>
+          paneId === PANE_B
+            ? ({
+                controller: {} as never,
+                state: { status: 'ready', content: { kind } } as never,
+              } as never)
+            : undefined,
+        focusViewerSearch,
+      });
+      createGlobalKeydownHandler(context)(viewerKeydown('f', { metaKey: true }));
+    }
+
+    expect(focusViewerSearch).toHaveBeenCalledTimes(4);
+    expect(focusViewerSearch).toHaveBeenCalledWith(PANE_B);
   });
 
   it('F3/Shift+F3 navigate search matches once focus is inside a text viewer', () => {
@@ -959,6 +1053,26 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     createGlobalKeydownHandler(context)(viewerKeydown('F3', { shiftKey: true }));
     expect(goToNextMatch).toHaveBeenCalledTimes(1);
     expect(goToPreviousMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('F3/Shift+F3 navigate EPUB search matches once focus is inside the viewer', () => {
+    const goToNextEpubMatch = vi.fn();
+    const goToPreviousEpubMatch = vi.fn();
+    const context = makeContext({
+      getViewer: (paneId) =>
+        paneId === PANE_B
+          ? ({
+              controller: { goToNextEpubMatch, goToPreviousEpubMatch } as never,
+              state: { status: 'ready', content: { kind: 'epub' } } as never,
+            } as never)
+          : undefined,
+    });
+
+    createGlobalKeydownHandler(context)(viewerKeydown('F3'));
+    createGlobalKeydownHandler(context)(viewerKeydown('F3', { shiftKey: true }));
+
+    expect(goToNextEpubMatch).toHaveBeenCalledOnce();
+    expect(goToPreviousEpubMatch).toHaveBeenCalledOnce();
   });
 
   it('does not intercept F3 for search navigation outside the viewer, or for non-text content', () => {

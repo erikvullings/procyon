@@ -84,11 +84,29 @@ function workspaceErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function locationsMatch(a: readonly Location[], b: readonly Location[]): boolean {
+function locationKey(location: Location): string {
+  try {
+    const url = new URL(location.uri);
+    const pathSegments = url.pathname
+      .split('/')
+      .map((segment) => decodeURIComponent(segment).normalize('NFC'));
+    return JSON.stringify([
+      location.providerId,
+      url.protocol,
+      url.hostname === 'localhost' ? '' : url.host,
+      pathSegments,
+      url.search,
+      url.hash,
+    ]);
+  } catch {
+    return `${location.providerId} ${location.uri.normalize('NFC')}`;
+  }
+}
+
+export function locationsMatch(a: readonly Location[], b: readonly Location[]): boolean {
   if (a.length !== b.length) return false;
-  const key = (location: Location): string => `${location.providerId} ${location.uri}`;
-  const remaining = new Set(a.map(key));
-  return b.every((location) => remaining.delete(key(location)));
+  const remaining = new Set(a.map(locationKey));
+  return b.every((location) => remaining.delete(locationKey(location)));
 }
 
 export function createWorkspaceController(
@@ -195,7 +213,7 @@ export function createWorkspaceController(
           context.setNativeDragSourceInternal(false);
           const isInternalDrop =
             wasInternalOrigin && locationsMatch(previousLocations, drop.locations);
-          context.setDraggedLocations(drop.locations);
+          context.setDraggedLocations(isInternalDrop ? previousLocations : drop.locations);
           const scale = window.devicePixelRatio || 1;
           const hit = document.elementFromPoint(drop.position.x / scale, drop.position.y / scale);
           const target = hit?.closest<HTMLElement>(

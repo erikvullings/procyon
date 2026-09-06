@@ -1,9 +1,15 @@
 import m from 'mithril';
 import type { Messages } from 'translate.js';
 import translate from 'translate.js';
+import { de } from './de';
 import type { EnglishCatalogue } from './en';
 import { en } from './en';
+import { es } from './es';
+import { fr } from './fr';
+import { it } from './it';
 import { nl } from './nl';
+import { pl } from './pl';
+import { pt } from './pt';
 import type { Entry, Locale, LocalisedCatalogue, Params, Translator } from './types';
 
 type Catalogue = LocalisedCatalogue<EnglishCatalogue>;
@@ -16,7 +22,7 @@ export const DEFAULT_LOCALE: Locale = 'en';
  * Every catalogue, keyed by locale. Adding a language is one import and one
  * entry here; the parity test in `i18n.test.ts` guards key coverage.
  */
-export const catalogues: Record<Locale, Catalogue> = { en, nl };
+export const catalogues: Record<Locale, Catalogue> = { en, nl, de, fr, es, it, pt, pl };
 
 function isDev(): boolean {
   if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -163,12 +169,30 @@ let currentLocale: Locale = DEFAULT_LOCALE;
 let currentTranslator: AppTranslator = createTranslatorFor(currentLocale);
 
 if (import.meta.hot !== undefined) {
-  import.meta.hot.accept(['./en.ts', './nl.ts'], ([englishModule, dutchModule]) => {
-    if (englishModule !== undefined) catalogues.en = englishModule.en;
-    if (dutchModule !== undefined) catalogues.nl = dutchModule.nl;
-    currentTranslator = createTranslatorFor(currentLocale);
-    m.redraw();
-  });
+  import.meta.hot.accept(
+    ['./en.ts', './nl.ts', './de.ts', './fr.ts', './es.ts', './it.ts', './pt.ts', './pl.ts'],
+    ([
+      englishModule,
+      dutchModule,
+      germanModule,
+      frenchModule,
+      spanishModule,
+      italianModule,
+      portugueseModule,
+      polishModule,
+    ]) => {
+      if (englishModule !== undefined) catalogues.en = englishModule.en;
+      if (dutchModule !== undefined) catalogues.nl = dutchModule.nl;
+      if (germanModule !== undefined) catalogues.de = germanModule.de;
+      if (frenchModule !== undefined) catalogues.fr = frenchModule.fr;
+      if (spanishModule !== undefined) catalogues.es = spanishModule.es;
+      if (italianModule !== undefined) catalogues.it = italianModule.it;
+      if (portugueseModule !== undefined) catalogues.pt = portugueseModule.pt;
+      if (polishModule !== undefined) catalogues.pl = polishModule.pl;
+      currentTranslator = createTranslatorFor(currentLocale);
+      m.redraw();
+    },
+  );
 }
 
 /**

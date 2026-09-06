@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderPdfPageToCanvas } from './pdf-preview';
+import { highlightPdfTextLayer, renderPdfPageToCanvas } from './pdf-preview';
 
 /** A fake pdf.js document whose `page.render()` resolves after a macrotask, returning a
  * cancellable `RenderTask`-like object - just enough to exercise `renderPdfPageToCanvas`'s
@@ -8,12 +8,17 @@ function fakePdfDocument(): {
   readonly pdfDocument: { getPage: (pageNumber: number) => Promise<unknown> };
   readonly renderCalls: number[];
   readonly cancelCalls: number[];
+  readonly viewportScales: number[];
 } {
   const renderCalls: number[] = [];
   const cancelCalls: number[] = [];
+  const viewportScales: number[] = [];
   let nextTaskId = 0;
   const page = {
-    getViewport: ({ scale }: { scale: number }) => ({ width: 100 * scale, height: 200 * scale }),
+    getViewport: ({ scale }: { scale: number }) => {
+      viewportScales.push(scale);
+      return { width: 100 * scale, height: 200 * scale };
+    },
     render: () => {
       const taskId = nextTaskId;
       nextTaskId += 1;
@@ -35,7 +40,12 @@ function fakePdfDocument(): {
       };
     },
   };
-  return { pdfDocument: { getPage: () => Promise.resolve(page) }, renderCalls, cancelCalls };
+  return {
+    pdfDocument: { getPage: () => Promise.resolve(page) },
+    renderCalls,
+    cancelCalls,
+    viewportScales,
+  };
 }
 
 describe('renderPdfPageToCanvas', () => {
@@ -44,7 +54,7 @@ describe('renderPdfPageToCanvas', () => {
   beforeEach(() => {
     getContextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue({} as CanvasRenderingContext2D);
+      .mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
   });
 
   afterEach(() => {
@@ -92,5 +102,71 @@ describe('renderPdfPageToCanvas', () => {
     ]);
 
     expect(cancelCalls).toEqual([]);
+  });
+
+  it('multiplies the fitted page scale by the requested zoom', async () => {
+    const { pdfDocument, viewportScales } = fakePdfDocument();
+    const canvas = document.createElement('canvas');
+
+    await renderPdfPageToCanvas(pdfDocument as never, 1, canvas, 200, 400, 1.5);
+
+    expect(viewportScales).toEqual([1, 3]);
+    expect(canvas.style.width).toBe('300px');
+    expect(canvas.style.height).toBe('600px');
+  });
+
+  it('keeps the previous canvas visible until the replacement page finishes rendering', async () => {
+    let finishRender: (() => void) | undefined;
+    const render = vi.fn(() => ({
+      promise: new Promise<void>((resolve) => {
+        finishRender = resolve;
+      }),
+      cancel: vi.fn(),
+    }));
+    const pdfDocument = {
+      getPage: vi.fn().mockResolvedValue({
+        getViewport: ({ scale }: { scale: number }) => ({
+          width: 100 * scale,
+          height: 200 * scale,
+        }),
+        render,
+      }),
+    };
+    const canvas = document.createElement('canvas');
+    canvas.width = 123;
+    canvas.height = 456;
+
+    const rendering = renderPdfPageToCanvas(pdfDocument as never, 1, canvas, 200, 400);
+    await vi.waitFor(() => expect(render).toHaveBeenCalledOnce());
+    expect(canvas.width).toBe(123);
+    expect(canvas.height).toBe(456);
+
+    finishRender?.();
+    await rendering;
+    expect(canvas.width).toBe(200);
+    expect(canvas.height).toBe(400);
+  });
+});
+
+describe('highlightPdfTextLayer', () => {
+  it('highlights matches within and across pdf.js text items', () => {
+    const first = document.createElement('span');
+    first.textContent = 'TR';
+    const second = document.createElement('span');
+    second.textContent = 'IZ and TRIZ';
+
+    highlightPdfTextLayer([first, second], ['TR', 'IZ and TRIZ'], /triz/giu, 1);
+
+    expect(first.querySelector('mark')?.textContent).toBe('TR');
+    expect(Array.from(second.querySelectorAll('mark'), (mark) => mark.textContent)).toEqual([
+      'IZ',
+      'TRIZ',
+    ]);
+    expect(
+      first.querySelector('mark')?.classList.contains('fm-file-viewer-pdf-highlight-active'),
+    ).toBe(false);
+    expect(second.querySelectorAll('mark')[1]?.classList).toContain(
+      'fm-file-viewer-pdf-highlight-active',
+    );
   });
 });

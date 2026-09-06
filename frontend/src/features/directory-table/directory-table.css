@@ -71,6 +71,24 @@
   outline-offset: -2px;
 }
 
+.fm-pointer-file-dragging[data-file-drag-effect="move"],
+.fm-pointer-file-dragging[data-file-drag-effect="move"] * {
+  cursor: move !important;
+  user-select: none;
+}
+
+.fm-pointer-file-dragging[data-file-drag-effect="copy"],
+.fm-pointer-file-dragging[data-file-drag-effect="copy"] * {
+  cursor: copy !important;
+  user-select: none;
+}
+
+.fm-pointer-file-dragging[data-file-drag-effect="none"],
+.fm-pointer-file-dragging[data-file-drag-effect="none"] * {
+  cursor: not-allowed !important;
+  user-select: none;
+}
+
 .fm-directory-header {
   flex: 0 0 auto;
   height: var(--fm-row-height);

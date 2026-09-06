@@ -1177,6 +1177,12 @@ function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatu
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
 
+  async openExternalUrl(url: string): Promise<void> {
+    const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
+    if (opened === null) throw new Error('The browser blocked the external link.');
+    opened.opener = null;
+  }
+
   cacheArchivePassword(_request: ArchiveCredentialRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('cacheArchivePassword', signal, () => undefined);
   }

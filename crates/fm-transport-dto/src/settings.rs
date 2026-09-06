@@ -28,6 +28,18 @@ pub enum LanguageDto {
     En,
     /// Dutch.
     Nl,
+    /// German.
+    De,
+    /// French.
+    Fr,
+    /// Spanish.
+    Es,
+    /// Italian.
+    It,
+    /// Portuguese.
+    Pt,
+    /// Polish.
+    Pl,
 }
 
 /// Timestamp presentation.

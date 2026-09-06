@@ -56,6 +56,11 @@
   user-select: none;
 }
 
+.fm-grid-tile.fm-drop-target {
+  outline: 2px solid var(--fm-selection);
+  outline-offset: -2px;
+}
+
 .fm-grid-tile:hover {
   background: var(--fm-hover);
 }

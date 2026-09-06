@@ -1,4 +1,4 @@
-import m, { type FactoryComponent } from 'mithril';
+import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { IconButton } from 'mithril-materialized';
 import {
   contentSearchIcon,
@@ -10,6 +10,8 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { PaneId, TabId } from '../../models';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
+import { registerPointerFileDropTarget } from '../drag-drop/pointer-file-drag';
 
 interface ActiveTabDrag {
   readonly paneId: PaneId;
@@ -141,8 +143,8 @@ export interface TabStripAttrs {
     targetPaneId: PaneId,
     targetIndex: number,
   ) => void;
-  readonly onTabDragOver?: ((tabId: TabId, event: DragEvent) => boolean) | undefined;
-  readonly onTabDrop?: ((tabId: TabId, event: DragEvent) => void) | undefined;
+  readonly onTabDragOver?: ((tabId: TabId, event: DropEventState) => boolean) | undefined;
+  readonly onTabDrop?: ((tabId: TabId, event: DropModifiers) => void) | undefined;
   /** Whether the favourites menu is currently open (controls aria-expanded). */
   readonly favouritesOpen: boolean;
   readonly onToggleFavourites: () => void;
@@ -153,13 +155,16 @@ export interface TabStripAttrs {
 
 /** Renders the pane tab bar — individual tabs with drag-to-reorder, new-tab and favourites buttons. */
 export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
-  // File-drop-onto-tab highlight (external entries dragged from a directory table onto a tab to
-  // navigate there). This is a distinct feature from tab reordering below and still uses native
-  // HTML5 DnD, since its drag source (directory table rows) is unaffected by this fix.
+  // File-drop-onto-tab highlighting is distinct from tab reordering below. Browser drags arrive
+  // through HTML5 DnD; Tauri's in-app file drags use the registered pointer drop target.
   let dropTargetTabId: TabId | undefined;
+  let currentAttrs: TabStripAttrs | undefined;
+  let unregisterPointerDropTarget: (() => void) | undefined;
 
   return {
+    onremove: () => unregisterPointerDropTarget?.(),
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       const preview = dragPreview?.paneId === attrs.paneId ? dragPreview : undefined;
       const appendDropTarget = preview !== undefined && preview.tabId === undefined;
       return m(
@@ -167,6 +172,20 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
         {
           role: 'tablist',
           'aria-label': t('pane', 'paneTabs'),
+          oncreate: ({ dom }: VnodeDOM) => {
+            unregisterPointerDropTarget = registerPointerFileDropTarget(dom as HTMLElement, {
+              onDragOver: (index, event) => {
+                const tab = index === undefined ? undefined : currentAttrs?.tabs[index];
+                return tab === undefined
+                  ? false
+                  : (currentAttrs?.onTabDragOver?.(tab.id, event) ?? false);
+              },
+              onDrop: (index, event) => {
+                const tab = index === undefined ? undefined : currentAttrs?.tabs[index];
+                if (tab !== undefined) currentAttrs?.onTabDrop?.(tab.id, event);
+              },
+            });
+          },
           // Self-contained fallback for pointer-drag hit testing (see `updateTabDragPreview`) —
           // an ancestor wrapper (workspace-layout.ts) also sets this for the same pane, so
           // `closest('[data-pane-id]')` resolves correctly whether or not TabStrip is mounted
@@ -175,7 +194,7 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
           class: appendDropTarget ? 'fm-tab-append-target' : '',
         },
         [
-          ...attrs.tabs.map((tab) => {
+          ...attrs.tabs.map((tab, index) => {
             const isReorderTarget = preview?.tabId === tab.id;
             const compactConnection =
               tab.connectionName === undefined
@@ -190,6 +209,7 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
                 role: 'tab',
                 tabindex: 0,
                 'data-tab-id': tab.id,
+                'data-entry-index': index,
                 title:
                   tab.connectionName === undefined
                     ? tab.path

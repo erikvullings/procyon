@@ -1,8 +1,8 @@
 /** A supported locale identifier (task 0098). */
-export type Locale = 'en' | 'nl';
+export type Locale = 'en' | 'nl' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'pl';
 
 /** All supported locales, in the order they appear in the settings selector. */
-export const LOCALES: readonly Locale[] = ['en', 'nl'];
+export const LOCALES: readonly Locale[] = ['en', 'nl', 'de', 'fr', 'es', 'it', 'pt', 'pl'];
 
 /** The default and fallback locale. */
 export const DEFAULT_LOCALE: Locale = 'en';

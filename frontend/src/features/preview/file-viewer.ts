@@ -1,6 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, PaginationControls, Select, toast } from 'mithril-materialized';
-import { closeIcon, copyIcon, infoCircleIcon, searchIcon } from '../../components/tabler-icons';
+import { FlatButton, ModalPanel, PaginationControls, Select, toast } from 'mithril-materialized';
+import {
+  closeIcon,
+  copyIcon,
+  infoCircleIcon,
+  menuIcon,
+  searchIcon,
+} from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { GitLogEntry } from '../../models';
@@ -16,13 +22,23 @@ import {
 import { copyText } from './clipboard';
 import { type FileViewerMetadata, mapLinkFor } from './file-metadata';
 import type {
+  FileViewerEpubSearchState,
   FileViewerPdfSearchState,
   FileViewerSearchState,
   FileViewerState,
 } from './file-viewer-controller';
-import { STRUCTURED_SORT_MAX_BYTES, TEXT_WINDOW_BYTES } from './file-viewer-controller';
+import {
+  STRUCTURED_SORT_MAX_BYTES,
+  searchExpression,
+  TEXT_WINDOW_BYTES,
+} from './file-viewer-controller';
+import { searchHtml } from './html-search-highlight';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
-import { type PDFDocumentProxy, renderPdfPageToCanvas } from './pdf-preview';
+import {
+  type PDFDocumentProxy,
+  renderPdfPageToCanvas,
+  renderPdfSearchHighlights,
+} from './pdf-preview';
 import './file-viewer.css';
 
 /** Copies `value` to the clipboard and reports success/failure via toast - the same feedback
@@ -64,6 +80,7 @@ export interface FileViewerAttrs {
   readonly onPreviousMatch: () => void;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
+  readonly onZoomChange: (zoom: number) => void;
   readonly onResetZoom: () => void;
   readonly onCopy: () => Promise<void>;
   readonly onToggleMetadata: () => void;
@@ -72,6 +89,14 @@ export interface FileViewerAttrs {
   readonly onPdfSearchQueryChange: (query: string) => void;
   readonly onNextPdfMatch: () => void;
   readonly onPreviousPdfMatch: () => void;
+  readonly onEpubSearchQueryChange: (query: string) => void;
+  readonly onNextEpubMatch: () => void;
+  readonly onPreviousEpubMatch: () => void;
+  readonly onSelectEpubSection: (sectionIndex: number, fragment?: string) => void;
+  readonly onFollowEpubLink: (href: string) => void;
+  readonly onOpenExternalLink: (url: string) => void;
+  readonly onSelectPdfPage: (pageNumber: number) => void;
+  readonly onNavigateTextOffset: (offset: number, length: number) => void;
   readonly videoPosterDataUri?: string;
   readonly quickLookAvailable: boolean;
   readonly onQuickLook: () => void;
@@ -147,6 +172,87 @@ function pagedContentInfo(
   if (content.kind === 'epub')
     return { current: content.currentChapter + 1, total: content.chapterCount };
   return undefined;
+}
+
+type ViewerOutlineItem = {
+  readonly label: string;
+  readonly level: number;
+  readonly destination:
+    | { readonly kind: 'epub'; readonly index: number; readonly fragment?: string }
+    | { readonly kind: 'pdf'; readonly page: number }
+    | { readonly kind: 'heading'; readonly index: number }
+    | { readonly kind: 'text'; readonly offset: number; readonly length: number };
+};
+
+function htmlHeadingOutline(html: string): readonly ViewerOutlineItem[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('h1, h2, h3, h4, h5, h6')).flatMap((heading, index) => {
+    const label = heading.textContent?.replace(/\s+/g, ' ').trim();
+    if (label === undefined || label === '') return [];
+    const level = Number(heading.tagName.slice(1));
+    return [{ label, level, destination: { kind: 'heading' as const, index } }];
+  });
+}
+
+function htmlSourceHeadingOutline(html: string): readonly ViewerOutlineItem[] {
+  const headings: ViewerOutlineItem[] = [];
+  for (const match of html.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/giu)) {
+    const label = new DOMParser()
+      .parseFromString(match[2] ?? '', 'text/html')
+      .body.textContent?.replace(/\s+/g, ' ')
+      .trim();
+    if (label === undefined || label === '') continue;
+    headings.push({
+      label,
+      level: Number(match[1]),
+      destination: {
+        kind: 'text',
+        offset: match.index,
+        length: Math.max(1, match[0].length),
+      },
+    });
+  }
+  return headings;
+}
+
+function viewerOutline(
+  state: Extract<FileViewerState, { status: 'ready' }>,
+): readonly ViewerOutlineItem[] {
+  const content = state.content;
+  if (content.kind === 'epub') {
+    if (content.outline !== undefined && content.outline.length > 0) {
+      return content.outline.map((item) => ({
+        label: item.label,
+        level: item.level,
+        destination: {
+          kind: 'epub' as const,
+          index: item.chapterIndex,
+          ...(item.fragment === undefined ? {} : { fragment: item.fragment }),
+        },
+      }));
+    }
+    return content.sectionLabels.map((label, index) => ({
+      label: label ?? t('viewer', 'sectionNumber', { number: index + 1 }),
+      level: 1,
+      destination: { kind: 'epub', index },
+    }));
+  }
+  if (content.kind === 'pdf') {
+    return (content.outline ?? []).map((item) => ({
+      label: item.label,
+      level: item.level,
+      destination: { kind: 'pdf', page: item.page },
+    }));
+  }
+  if (content.kind === 'docx') return htmlHeadingOutline(content.sourceHtml);
+  if (content.kind !== 'text') return [];
+  const language = editableLanguageForExtension(state.entry.extension, state.entry.name);
+  if (language === 'markdown') return htmlHeadingOutline(safeMarkdownHtml(content.text));
+  const extension = state.entry.extension?.toLowerCase();
+  if (extension === 'html' || extension === 'htm') {
+    return htmlSourceHeadingOutline(content.text);
+  }
+  return [];
 }
 
 function metadataField(label: string, value: string, href?: string): m.Children {
@@ -285,6 +391,7 @@ function renderSearchBar(
   attrs: FileViewerAttrs,
   search: FileViewerSearchState | undefined,
   onInputRef: (el: HTMLInputElement) => void,
+  onClose: () => void,
 ): m.Children {
   const query = search?.query ?? '';
   const matches = search?.matches ?? [];
@@ -292,13 +399,24 @@ function renderSearchBar(
   return m('.fm-file-viewer-search', [
     m('input.fm-file-viewer-search-input', {
       type: 'text',
+      autocomplete: 'new-password',
+      autocapitalize: 'none',
       placeholder: t('viewer', 'searchPlaceholder'),
       value: query,
       'aria-label': t('viewer', 'searchThisFile'),
-      oncreate: ({ dom }) => onInputRef(dom as HTMLInputElement),
+      oncreate: ({ dom }) => {
+        const input = dom as HTMLInputElement;
+        disableSearchInputCorrections(input);
+        onInputRef(input);
+      },
+      onupdate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
       oninput: (event: InputEvent) =>
         attrs.onSearchQueryChange((event.currentTarget as HTMLInputElement).value),
       onkeydown: (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onClose();
+          return;
+        }
         if (event.key === 'Enter') {
           event.preventDefault();
           attrs.onRunSearch();
@@ -340,7 +458,7 @@ function renderSearchBar(
       'span.fm-file-viewer-search-count',
       search === undefined
         ? undefined
-        : search.searching
+        : search.searching && matches.length === 0
           ? t('viewer', 'searching')
           : search.error !== undefined
             ? search.error
@@ -370,7 +488,23 @@ function renderSearchBar(
       },
       '▼',
     ),
+    tooltip(
+      t('viewer', 'closeSearch'),
+      m(
+        'button.fm-file-viewer-search-close',
+        { type: 'button', 'aria-label': t('viewer', 'closeSearch'), onclick: onClose },
+        closeIcon({ size: 13 }),
+      ),
+    ),
   ]);
+}
+
+function disableSearchInputCorrections(input: HTMLInputElement): void {
+  const webkitInput = input as HTMLInputElement & { autocorrect: boolean };
+  webkitInput.autocorrect = false;
+  input.spellcheck = false;
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('spellcheck', 'false');
 }
 
 function renderTextBody(
@@ -828,91 +962,281 @@ function renderImageBody(
  * otherwise indistinguishable from "still loading". */
 const PdfPageCanvas: FactoryComponent<{
   readonly document: PDFDocumentProxy;
+  readonly searchDocument?: PDFDocumentProxy;
   readonly pageNumber: number;
+  readonly zoom: number;
+  readonly search?: FileViewerPdfSearchState;
 }> = () => {
+  let renderedDocument: PDFDocumentProxy | undefined;
   let renderedPage: number | undefined;
+  let renderedZoom: number | undefined;
+  let renderingDocument: PDFDocumentProxy | undefined;
+  let renderingPage: number | undefined;
+  let renderingZoom: number | undefined;
+  let canvasRenderGeneration = 0;
+  let renderedHighlightDocument: PDFDocumentProxy | undefined;
+  let renderedHighlightKey: string | undefined;
   let error: string | undefined;
   let resizeObserver: ResizeObserver | undefined;
   // The canvas element itself persists across page navigation (no key remount - see the class
   // doc comment), so `oncreate` only fires once; the resize observer it sets up there must read
   // the *current* attrs on every resize, not the ones captured when it was created.
-  let latestAttrs: { document: PDFDocumentProxy; pageNumber: number } | undefined;
-  function render(
-    canvas: HTMLCanvasElement,
-    attrs: { document: PDFDocumentProxy; pageNumber: number },
-  ): void {
-    renderedPage = attrs.pageNumber;
+  let latestAttrs:
+    | {
+        document: PDFDocumentProxy;
+        searchDocument?: PDFDocumentProxy;
+        pageNumber: number;
+        zoom: number;
+        search?: FileViewerPdfSearchState;
+      }
+    | undefined;
+  async function render(
+    root: HTMLElement,
+    attrs: {
+      document: PDFDocumentProxy;
+      searchDocument?: PDFDocumentProxy;
+      pageNumber: number;
+      zoom: number;
+      search?: FileViewerPdfSearchState;
+    },
+  ): Promise<boolean> {
+    const canvas = root.querySelector<HTMLCanvasElement>('.fm-file-viewer-pdf-canvas');
+    if (canvas === null) return false;
+    const generation = canvasRenderGeneration + 1;
+    canvasRenderGeneration = generation;
+    renderingDocument = attrs.document;
+    renderingPage = attrs.pageNumber;
+    renderingZoom = attrs.zoom;
     error = undefined;
-    const container = canvas.parentElement;
+    const container = root.parentElement;
     const width = container?.clientWidth ?? 800;
     const height = container?.clientHeight ?? 1000;
-    renderPdfPageToCanvas(attrs.document, attrs.pageNumber, canvas, width, height).catch(
-      (cause: unknown) => {
-        renderedPage = undefined;
-        error = cause instanceof Error ? cause.message : t('viewer', 'failedToRenderPage');
-        m.redraw();
-      },
-    );
+    try {
+      await renderPdfPageToCanvas(
+        attrs.document,
+        attrs.pageNumber,
+        canvas,
+        width,
+        height,
+        attrs.zoom,
+      );
+      if (canvasRenderGeneration !== generation) return false;
+      renderedDocument = attrs.document;
+      renderedPage = attrs.pageNumber;
+      renderedZoom = attrs.zoom;
+      renderingDocument = undefined;
+      renderingPage = undefined;
+      renderingZoom = undefined;
+      return true;
+    } catch (cause: unknown) {
+      if (canvasRenderGeneration !== generation) return false;
+      renderedPage = undefined;
+      error = cause instanceof Error ? cause.message : t('viewer', 'failedToRenderPage');
+      m.redraw();
+      return false;
+    }
   }
-  function renderIfPageChanged(
-    canvas: HTMLCanvasElement,
-    attrs: { document: PDFDocumentProxy; pageNumber: number },
+  function renderHighlights(
+    root: HTMLElement,
+    attrs: {
+      document: PDFDocumentProxy;
+      searchDocument?: PDFDocumentProxy;
+      pageNumber: number;
+      zoom: number;
+      search?: FileViewerPdfSearchState;
+    },
+    force = false,
   ): void {
+    const layer = root.querySelector<HTMLElement>('.fm-file-viewer-pdf-text-layer');
+    if (layer === null) return;
+    const search = attrs.search;
+    const activeMatch = search?.matches[search.currentMatchIndex ?? -1];
+    const activeOccurrenceIndex =
+      activeMatch?.pageNumber === attrs.pageNumber ? activeMatch.occurrenceIndex : undefined;
+    const highlightKey = `${attrs.pageNumber}:${attrs.zoom}:${search?.query ?? ''}:${search?.regex === true}:${search?.caseSensitive === true}:${search?.wholeWord === true}:${search?.searching === true}:${activeOccurrenceIndex ?? ''}`;
+    if (
+      !force &&
+      renderedHighlightDocument === attrs.searchDocument &&
+      renderedHighlightKey === highlightKey
+    )
+      return;
+    renderedHighlightDocument = attrs.searchDocument;
+    renderedHighlightKey = highlightKey;
+    let expression: RegExp | undefined;
+    if (
+      attrs.searchDocument !== undefined &&
+      search !== undefined &&
+      search.query.trim() !== '' &&
+      !search.searching &&
+      search.error === undefined &&
+      search.matches.some((match) => match.pageNumber === attrs.pageNumber)
+    ) {
+      try {
+        expression = searchExpression(search);
+      } catch {
+        expression = undefined;
+      }
+    }
+    const container = root.parentElement;
+    const width = container?.clientWidth ?? 800;
+    const height = container?.clientHeight ?? 1000;
+    renderPdfSearchHighlights(
+      attrs.searchDocument ?? attrs.document,
+      attrs.pageNumber,
+      layer,
+      width,
+      height,
+      expression,
+      activeOccurrenceIndex,
+      attrs.zoom,
+    ).catch(() => layer.replaceChildren());
+  }
+  function renderIfChanged(root: HTMLElement, attrs: NonNullable<typeof latestAttrs>): void {
     latestAttrs = attrs;
-    if (renderedPage === attrs.pageNumber) return;
-    render(canvas, attrs);
+    if (
+      renderedDocument === attrs.document &&
+      renderedPage === attrs.pageNumber &&
+      renderedZoom === attrs.zoom
+    ) {
+      renderHighlights(root, attrs);
+      return;
+    }
+    if (
+      renderingDocument === attrs.document &&
+      renderingPage === attrs.pageNumber &&
+      renderingZoom === attrs.zoom
+    )
+      return;
+    void render(root, attrs).then((rendered) => {
+      const latest = latestAttrs;
+      if (
+        rendered &&
+        latest !== undefined &&
+        latest.document === attrs.document &&
+        latest.pageNumber === attrs.pageNumber &&
+        latest.zoom === attrs.zoom
+      ) {
+        renderHighlights(root, latest, true);
+      }
+    });
   }
   return {
     view: ({ attrs }) =>
       error !== undefined
         ? m('.fm-file-viewer-pdf-page-error', `Couldn't render page ${attrs.pageNumber}: ${error}`)
-        : m('canvas.fm-file-viewer-pdf-canvas', {
-            oncreate: (vnode) => {
-              const canvas = vnode.dom as HTMLCanvasElement;
-              renderIfPageChanged(canvas, attrs);
-              if (typeof ResizeObserver === 'function' && canvas.parentElement !== null) {
-                resizeObserver = new ResizeObserver(() => {
-                  if (latestAttrs !== undefined) render(canvas, latestAttrs);
-                });
-                resizeObserver.observe(canvas.parentElement);
-              }
+        : m(
+            '.fm-file-viewer-pdf-page',
+            {
+              oncreate: (vnode) => {
+                const root = vnode.dom as HTMLElement;
+                renderIfChanged(root, attrs);
+                if (typeof ResizeObserver === 'function' && root.parentElement !== null) {
+                  resizeObserver = new ResizeObserver(() => {
+                    if (latestAttrs !== undefined) {
+                      const resizedAttrs = latestAttrs;
+                      void render(root, resizedAttrs).then((rendered) => {
+                        if (rendered && latestAttrs === resizedAttrs) {
+                          renderHighlights(root, resizedAttrs, true);
+                        }
+                      });
+                    }
+                  });
+                  resizeObserver.observe(root.parentElement);
+                }
+              },
+              onupdate: (vnode) => renderIfChanged(vnode.dom as HTMLElement, attrs),
+              onremove: () => {
+                resizeObserver?.disconnect();
+                resizeObserver = undefined;
+              },
             },
-            onupdate: (vnode) => renderIfPageChanged(vnode.dom as HTMLCanvasElement, attrs),
-            onremove: () => {
-              resizeObserver?.disconnect();
-              resizeObserver = undefined;
-            },
-          }),
+            [
+              m('canvas.fm-file-viewer-pdf-canvas'),
+              m('.fm-file-viewer-pdf-text-layer', { 'aria-hidden': 'true' }),
+            ],
+          ),
   };
 };
 
-function renderPdfSearchBar(
-  attrs: FileViewerAttrs,
-  pdfSearch: FileViewerPdfSearchState | undefined,
+function renderPagedSearchBar(
+  search: FileViewerPdfSearchState | FileViewerEpubSearchState | undefined,
+  placeholder: string,
+  matchLabel: string,
+  onQueryChange: (query: string) => void,
+  onPreviousMatch: () => void,
+  onNextMatch: () => void,
+  onOptionChange: FileViewerAttrs['onSearchOptionChange'],
+  onClose: () => void,
 ): m.Children {
-  const query = pdfSearch?.query ?? '';
-  const matches = pdfSearch?.matches ?? [];
-  const currentMatchIndex = pdfSearch?.currentMatchIndex;
+  const query = search?.query ?? '';
+  const matches = search?.matches ?? [];
+  const currentMatchIndex = search?.currentMatchIndex;
+  const currentMatch = matches[currentMatchIndex ?? 0];
+  const matchPosition =
+    currentMatch === undefined
+      ? undefined
+      : 'pageNumber' in currentMatch
+        ? currentMatch.pageNumber
+        : currentMatch.chapterNumber;
   return m('.fm-file-viewer-search', [
     m('input.fm-file-viewer-search-input', {
       type: 'text',
-      placeholder: t('viewer', 'searchPdfPlaceholder'),
+      autocomplete: 'new-password',
+      autocapitalize: 'none',
+      placeholder,
       value: query,
-      'aria-label': t('viewer', 'searchPdfPlaceholder'),
+      'aria-label': placeholder,
+      oncreate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
+      onupdate: ({ dom }) => disableSearchInputCorrections(dom as HTMLInputElement),
       oninput: (event: InputEvent) =>
-        attrs.onPdfSearchQueryChange((event.currentTarget as HTMLInputElement).value),
+        onQueryChange((event.currentTarget as HTMLInputElement).value),
+      onkeydown: (event: KeyboardEvent) => {
+        if (event.key === 'Escape') onClose();
+      },
     }),
     m(
+      'button.fm-file-viewer-search-toggle',
+      {
+        type: 'button',
+        title: t('viewer', 'matchCase'),
+        'aria-pressed': search?.caseSensitive === true ? 'true' : 'false',
+        onclick: () => onOptionChange({ caseSensitive: search?.caseSensitive !== true }),
+      },
+      'Aa',
+    ),
+    m(
+      'button.fm-file-viewer-search-toggle',
+      {
+        type: 'button',
+        title: t('viewer', 'matchWholeWord'),
+        'aria-pressed': search?.wholeWord === true ? 'true' : 'false',
+        onclick: () => onOptionChange({ wholeWord: search?.wholeWord !== true }),
+      },
+      'Ab',
+    ),
+    m(
+      'button.fm-file-viewer-search-toggle',
+      {
+        type: 'button',
+        title: t('viewer', 'useRegex'),
+        'aria-pressed': search?.regex === true ? 'true' : 'false',
+        onclick: () => onOptionChange({ regex: search?.regex !== true }),
+      },
+      '.*',
+    ),
+    m(
       'span.fm-file-viewer-search-count',
-      pdfSearch === undefined
+      search === undefined
         ? undefined
-        : pdfSearch.searching
+        : search.searching
           ? t('viewer', 'searching')
-          : matches.length === 0
-            ? query.trim() === ''
-              ? undefined
-              : t('viewer', 'noResults')
-            : `Page ${matches[currentMatchIndex ?? 0]} · ${(currentMatchIndex ?? 0) + 1} of ${matches.length}`,
+          : search.error !== undefined
+            ? search.error
+            : matches.length === 0
+              ? query.trim() === ''
+                ? undefined
+                : t('viewer', 'noResults')
+              : `${matchLabel} ${matchPosition} · ${(currentMatchIndex ?? 0) + 1} of ${matches.length}${search.searching ? '+' : ''}`,
     ),
     m(
       'button.fm-file-viewer-search-nav',
@@ -920,7 +1244,7 @@ function renderPdfSearchBar(
         type: 'button',
         title: t('viewer', 'previousMatch'),
         disabled: matches.length === 0,
-        onclick: attrs.onPreviousPdfMatch,
+        onclick: onPreviousMatch,
       },
       '▲',
     ),
@@ -930,9 +1254,17 @@ function renderPdfSearchBar(
         type: 'button',
         title: t('viewer', 'nextMatch'),
         disabled: matches.length === 0,
-        onclick: attrs.onNextPdfMatch,
+        onclick: onNextMatch,
       },
       '▼',
+    ),
+    tooltip(
+      t('viewer', 'closeSearch'),
+      m(
+        'button.fm-file-viewer-search-close',
+        { type: 'button', 'aria-label': t('viewer', 'closeSearch'), onclick: onClose },
+        closeIcon({ size: 13 }),
+      ),
     ),
   ]);
 }
@@ -942,7 +1274,13 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
   if (content.kind !== 'pdf') return undefined;
   return m(
     '.fm-file-viewer-body.fm-file-viewer-body-pdf',
-    m(PdfPageCanvas, { document: content.document, pageNumber: content.currentPage }),
+    m(PdfPageCanvas, {
+      document: content.document,
+      pageNumber: content.currentPage,
+      zoom: content.zoom,
+      ...(content.searchDocument === undefined ? {} : { searchDocument: content.searchDocument }),
+      ...(state.pdfSearch === undefined ? {} : { search: state.pdfSearch }),
+    }),
   );
 }
 
@@ -960,15 +1298,92 @@ function renderComicBody(state: Extract<FileViewerState, { status: 'ready' }>): 
   );
 }
 
-function renderEpubBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
+function externalEpubUrl(href: string): string | undefined {
+  const trimmed = href.trim();
+  const candidate = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:'
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function renderEpubBody(
+  attrs: FileViewerAttrs,
+  state: Extract<FileViewerState, { status: 'ready' }>,
+  requestExternalLink: (url: string) => void,
+): m.Children {
   const content = state.content;
   if (content.kind !== 'epub') return undefined;
+  let chapterHtml = content.currentChapterHtml;
+  const search = state.epubSearch;
+  if (chapterHtml !== undefined && search !== undefined && search.query !== '') {
+    try {
+      const activeMatch =
+        search.currentMatchIndex === undefined ||
+        search.matches[search.currentMatchIndex]?.chapterNumber !== content.currentChapter + 1
+          ? undefined
+          : search.matches[search.currentMatchIndex]?.occurrenceIndex;
+      chapterHtml = searchHtml(
+        chapterHtml,
+        search.query,
+        search.regex === true,
+        search.caseSensitive === true,
+        search.wholeWord === true,
+        activeMatch,
+      ).html;
+    } catch {
+      // The controller reports malformed regexes; preserve readable chapter HTML meanwhile.
+    }
+  }
+  const revealTarget = (vnode: m.VnodeDOM): void => {
+    if (content.targetFragment !== undefined) {
+      let fragment = content.targetFragment;
+      try {
+        fragment = decodeURIComponent(fragment);
+      } catch {
+        // Keep the literal fragment when an EPUB contains malformed percent encoding.
+      }
+      (vnode.dom as Element).querySelector(`#${CSS.escape(fragment)}`)?.scrollIntoView({
+        block: 'start',
+        inline: 'nearest',
+      });
+      return;
+    }
+    const activeMatch = (vnode.dom as Element).querySelector('.fm-document-search-match-active');
+    if (activeMatch instanceof HTMLElement && typeof activeMatch.scrollIntoView === 'function') {
+      activeMatch.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+  };
   return m(
     '.fm-file-viewer-body.fm-file-viewer-body-epub',
-    content.currentChapterHtml === undefined
+    {
+      tabindex: 0,
+      'data-viewer-focus-target': true,
+      onclick: (event: MouseEvent) => {
+        const anchor =
+          event.target instanceof Element
+            ? event.target.closest<HTMLAnchorElement>('a[href]')
+            : null;
+        if (anchor === null) return;
+        const href = anchor.getAttribute('href');
+        if (href === null) return;
+        event.preventDefault();
+        const externalUrl = externalEpubUrl(href);
+        if (externalUrl === undefined) attrs.onFollowEpubLink(href);
+        else requestExternalLink(externalUrl);
+      },
+    },
+    chapterHtml === undefined
       ? m('span', t('viewer', 'loadingChapter'))
       : m('.fm-file-viewer-epub-chapter.browser-default', {
-          innerHTML: content.currentChapterHtml,
+          innerHTML: chapterHtml,
+          style: { fontSize: `${content.zoom}em` },
+          oncreate: revealTarget,
+          onupdate: revealTarget,
         }),
   );
 }
@@ -978,7 +1393,7 @@ function renderDocxBody(state: Extract<FileViewerState, { status: 'ready' }>): m
   if (content.kind !== 'docx') return undefined;
   const revealActiveMatch = (vnode: m.VnodeDOM): void => {
     (vnode.dom as Element)
-      .querySelector('.fm-docx-search-match-active')
+      .querySelector('.fm-document-search-match-active')
       ?.scrollIntoView({ block: 'center', inline: 'nearest' });
   };
   return m('.fm-file-viewer-body.fm-file-viewer-body-docx', [
@@ -1097,31 +1512,144 @@ function renderExternalFallback(attrs: FileViewerAttrs, message: string): m.Chil
 
 export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
   let searchInput: HTMLInputElement | undefined;
+  let editingPage = false;
+  let pageInputValue = '';
+  let editingZoom = false;
+  let zoomInputValue = '';
+  let searchOpen = false;
+  let initialSearchVisibilitySet = false;
+  let outlineOpen = false;
+  let pendingExternalLink: string | undefined;
+  let viewerElement: HTMLElement | undefined;
+  let currentAttrs: FileViewerAttrs | undefined;
+  const closeSearch = (attrs: FileViewerAttrs): void => {
+    searchOpen = false;
+    const state = attrs.state;
+    if (state.status !== 'ready') return;
+    if (state.content.kind === 'pdf') attrs.onPdfSearchQueryChange('');
+    else if (state.content.kind === 'epub') attrs.onEpubSearchQueryChange('');
+    else if (state.content.kind === 'text' || state.content.kind === 'docx') {
+      attrs.onSearchQueryChange('');
+    }
+  };
+  const toggleSearch = (): void => {
+    if (searchOpen && currentAttrs !== undefined) closeSearch(currentAttrs);
+    else searchOpen = true;
+    m.redraw.sync();
+    if (searchOpen) {
+      searchInput =
+        viewerElement?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input') ?? undefined;
+      searchInput?.focus();
+    }
+  };
   return {
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       const state = attrs.state;
+      if (!initialSearchVisibilitySet && state.status === 'ready') {
+        initialSearchVisibilitySet = true;
+        const initialQuery =
+          state.content.kind === 'pdf'
+            ? state.pdfSearch?.query
+            : state.content.kind === 'epub'
+              ? state.epubSearch?.query
+              : state.search?.query;
+        searchOpen = initialQuery !== undefined && initialQuery !== '';
+      }
+      const outline = state.status === 'ready' ? viewerOutline(state) : [];
       const search =
         state.status === 'ready' && (state.content.kind === 'text' || state.content.kind === 'docx')
           ? state.search
           : undefined;
       return m(
         'section.fm-file-viewer',
-        { 'aria-label': t('viewer', 'viewing', { name: state.entry.name }) },
+        {
+          'aria-label': t('viewer', 'viewing', { name: state.entry.name }),
+          oncreate: ({ dom }) => {
+            viewerElement = dom as HTMLElement;
+            viewerElement.addEventListener('fm-viewer-toggle-search', toggleSearch);
+          },
+          onremove: () => {
+            viewerElement?.removeEventListener('fm-viewer-toggle-search', toggleSearch);
+            viewerElement = undefined;
+            currentAttrs = undefined;
+          },
+        },
         [
           m('.fm-file-viewer-header', [
+            outline.length > 0
+              ? tooltip(
+                  t('viewer', 'documentOutline'),
+                  m(
+                    'button.fm-file-viewer-outline-toggle',
+                    {
+                      type: 'button',
+                      'aria-label': t('viewer', 'documentOutline'),
+                      'aria-expanded': outlineOpen ? 'true' : 'false',
+                      onclick: () => {
+                        outlineOpen = !outlineOpen;
+                      },
+                    },
+                    menuIcon({ size: 15 }),
+                  ),
+                )
+              : undefined,
             m('strong.fm-file-viewer-title', state.entry.name),
-            state.status === 'ready' && state.content.kind === 'image'
+            state.status === 'ready' &&
+            (state.content.kind === 'image' ||
+              state.content.kind === 'pdf' ||
+              state.content.kind === 'epub')
               ? m('.fm-file-viewer-zoom-controls', [
                   tooltip(
                     t('viewer', 'zoomOut'),
                     m('button', { type: 'button', onclick: attrs.onZoomOut }, '−'),
                   ),
-                  m(
-                    'span.fm-file-viewer-zoom-level',
-                    state.content.fitToContainer
-                      ? t('viewer', 'fit')
-                      : `${Math.round(state.content.zoom * 100)}%`,
-                  ),
+                  editingZoom
+                    ? m('input.fm-file-viewer-zoom-input', {
+                        type: 'text',
+                        inputmode: 'numeric',
+                        min: '10',
+                        max: '800',
+                        value: zoomInputValue,
+                        'aria-label': t('viewer', 'zoomPercent'),
+                        oncreate: ({ dom }) => (dom as HTMLInputElement).select(),
+                        oninput: (event: InputEvent) => {
+                          zoomInputValue = (event.currentTarget as HTMLInputElement).value;
+                        },
+                        onkeydown: (event: KeyboardEvent) => {
+                          if (event.key === 'Escape') editingZoom = false;
+                          if (event.key !== 'Enter') return;
+                          const value = Number((event.currentTarget as HTMLInputElement).value);
+                          if (Number.isFinite(value)) attrs.onZoomChange(value / 100);
+                          editingZoom = false;
+                        },
+                        onblur: () => {
+                          editingZoom = false;
+                          zoomInputValue = '';
+                        },
+                      })
+                    : m(
+                        'button.fm-file-viewer-zoom-level',
+                        {
+                          type: 'button',
+                          title: t('viewer', 'zoomPercent'),
+                          onclick: () => {
+                            const content =
+                              attrs.state.status === 'ready' ? attrs.state.content : undefined;
+                            if (
+                              content?.kind !== 'image' &&
+                              content?.kind !== 'pdf' &&
+                              content?.kind !== 'epub'
+                            )
+                              return;
+                            zoomInputValue = String(Math.round(content.zoom * 100));
+                            editingZoom = true;
+                          },
+                        },
+                        state.content.kind === 'image' && state.content.fitToContainer
+                          ? t('viewer', 'fit')
+                          : `${Math.round(state.content.zoom * 100)}%`,
+                      ),
                   tooltip(
                     t('viewer', 'zoomIn'),
                     m('button', { type: 'button', onclick: attrs.onZoomIn }, '+'),
@@ -1150,7 +1678,64 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                         '◀',
                       ),
                     ),
-                    m('span.fm-file-viewer-page-count', `${pageInfo.current} / ${pageInfo.total}`),
+                    editingPage && (state.content.kind === 'epub' || state.content.kind === 'pdf')
+                      ? m('.fm-file-viewer-page-editor', [
+                          m('input.fm-file-viewer-page-input', {
+                            type: 'text',
+                            inputmode: 'numeric',
+                            min: '1',
+                            max: String(pageInfo.total),
+                            value: pageInputValue,
+                            'aria-label':
+                              state.content.kind === 'epub'
+                                ? t('viewer', 'selectSection')
+                                : t('viewer', 'goToPage'),
+                            oncreate: ({ dom }) => (dom as HTMLInputElement).select(),
+                            oninput: (event: InputEvent) => {
+                              pageInputValue = (event.currentTarget as HTMLInputElement).value;
+                            },
+                            onkeydown: (event: KeyboardEvent) => {
+                              if (event.key === 'Escape') editingPage = false;
+                              if (event.key !== 'Enter') return;
+                              const value = Math.trunc(
+                                Number((event.currentTarget as HTMLInputElement).value),
+                              );
+                              if (value >= 1 && value <= pageInfo.total) {
+                                if (state.content.kind === 'epub') {
+                                  attrs.onSelectEpubSection(value - 1);
+                                } else {
+                                  attrs.onSelectPdfPage(value);
+                                }
+                              }
+                              editingPage = false;
+                            },
+                            onblur: () => {
+                              editingPage = false;
+                              pageInputValue = '';
+                            },
+                          }),
+                          m('span', `/ ${pageInfo.total}`),
+                        ])
+                      : state.content.kind === 'epub' || state.content.kind === 'pdf'
+                        ? m(
+                            'button.fm-file-viewer-page-count',
+                            {
+                              type: 'button',
+                              title:
+                                state.content.kind === 'epub'
+                                  ? t('viewer', 'selectSection')
+                                  : t('viewer', 'goToPage'),
+                              onclick: () => {
+                                pageInputValue = String(pageInfo.current);
+                                editingPage = true;
+                              },
+                            },
+                            `${pageInfo.current} / ${pageInfo.total}`,
+                          )
+                        : m(
+                            'span.fm-file-viewer-page-count',
+                            `${pageInfo.current} / ${pageInfo.total}`,
+                          ),
                     tooltip(
                       t('viewer', 'nextPage'),
                       m(
@@ -1232,15 +1817,100 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
               ),
             ),
           ]),
-          state.status === 'ready' &&
-          (state.content.kind === 'text' || state.content.kind === 'docx')
-            ? renderSearchBar(attrs, search, (el) => {
-                searchInput = el;
-              })
+          outlineOpen && outline.length > 0
+            ? m(
+                '.fm-file-viewer-outline',
+                {
+                  role: 'menu',
+                  'aria-label': t('viewer', 'documentOutline'),
+                  onkeydown: (event: KeyboardEvent) => {
+                    if (event.key === 'Escape') outlineOpen = false;
+                  },
+                },
+                outline.map((item, index) =>
+                  m(
+                    'button.fm-file-viewer-outline-item',
+                    {
+                      type: 'button',
+                      role: 'menuitem',
+                      title: item.label,
+                      style: { paddingInlineStart: `${0.5 + (item.level - 1) * 0.75}rem` },
+                      onclick: () => {
+                        outlineOpen = false;
+                        if (item.destination.kind === 'epub') {
+                          if (item.destination.fragment === undefined) {
+                            attrs.onSelectEpubSection(item.destination.index);
+                          } else {
+                            attrs.onSelectEpubSection(
+                              item.destination.index,
+                              item.destination.fragment,
+                            );
+                          }
+                        } else if (item.destination.kind === 'pdf') {
+                          attrs.onSelectPdfPage(item.destination.page);
+                        } else if (item.destination.kind === 'text') {
+                          attrs.onNavigateTextOffset(
+                            item.destination.offset,
+                            item.destination.length,
+                          );
+                        } else {
+                          viewerElement
+                            ?.querySelectorAll<HTMLElement>(
+                              '.fm-file-viewer-markdown h1, .fm-file-viewer-markdown h2, .fm-file-viewer-markdown h3, .fm-file-viewer-markdown h4, .fm-file-viewer-markdown h5, .fm-file-viewer-markdown h6, .fm-file-viewer-docx-content h1, .fm-file-viewer-docx-content h2, .fm-file-viewer-docx-content h3, .fm-file-viewer-docx-content h4, .fm-file-viewer-docx-content h5, .fm-file-viewer-docx-content h6',
+                            )
+                            [item.destination.index]?.scrollIntoView({
+                              block: 'start',
+                              inline: 'nearest',
+                            });
+                        }
+                      },
+                    },
+                    [
+                      m('span.fm-file-viewer-outline-index', String(index + 1)),
+                      m('span', item.label),
+                    ],
+                  ),
+                ),
+              )
             : undefined,
-          state.status === 'ready' && state.content.kind === 'pdf'
-            ? renderPdfSearchBar(attrs, state.pdfSearch)
-            : undefined,
+          m('.fm-file-viewer-search-slot', [
+            searchOpen &&
+            state.status === 'ready' &&
+            (state.content.kind === 'text' || state.content.kind === 'docx')
+              ? renderSearchBar(
+                  attrs,
+                  search,
+                  (el) => {
+                    searchInput = el;
+                  },
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+            searchOpen && state.status === 'ready' && state.content.kind === 'pdf'
+              ? renderPagedSearchBar(
+                  state.pdfSearch,
+                  t('viewer', 'searchPdfPlaceholder'),
+                  'Page',
+                  attrs.onPdfSearchQueryChange,
+                  attrs.onPreviousPdfMatch,
+                  attrs.onNextPdfMatch,
+                  attrs.onSearchOptionChange,
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+            searchOpen && state.status === 'ready' && state.content.kind === 'epub'
+              ? renderPagedSearchBar(
+                  state.epubSearch,
+                  t('viewer', 'searchThisFile'),
+                  t('viewer', 'chapter'),
+                  attrs.onEpubSearchQueryChange,
+                  attrs.onPreviousEpubMatch,
+                  attrs.onNextEpubMatch,
+                  attrs.onSearchOptionChange,
+                  () => closeSearch(attrs),
+                )
+              : undefined,
+          ]),
           state.status === 'loading'
             ? m('.fm-file-viewer-body', m('span', t('shell', 'loading')))
             : state.status === 'unsupported'
@@ -1268,7 +1938,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                 : state.content.kind === 'comic'
                                   ? renderComicBody(state)
                                   : state.content.kind === 'epub'
-                                    ? renderEpubBody(state)
+                                    ? renderEpubBody(attrs, state, (url) => {
+                                        pendingExternalLink = url;
+                                      })
                                     : state.content.kind === 'docx'
                                       ? renderDocxBody(state)
                                       : state.content.kind === 'archiveSummary'
@@ -1280,6 +1952,34 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                 renderGitHistorySection(state.gitHistory),
               ])
             : undefined,
+          m(ModalPanel, {
+            title: t('viewer', 'openExternalLinkTitle'),
+            description: m(
+              'p',
+              t('viewer', 'openExternalLinkMessage', { url: pendingExternalLink ?? '' }),
+            ),
+            isOpen: pendingExternalLink !== undefined,
+            closeOnEsc: true,
+            onToggle: (open: boolean) => {
+              if (!open) pendingExternalLink = undefined;
+            },
+            buttons: [
+              {
+                label: t('button', 'cancel'),
+                onclick: () => {
+                  pendingExternalLink = undefined;
+                },
+              },
+              {
+                label: t('viewer', 'openLink'),
+                onclick: () => {
+                  const url = pendingExternalLink;
+                  pendingExternalLink = undefined;
+                  if (url !== undefined) attrs.onOpenExternalLink(url);
+                },
+              },
+            ],
+          }),
         ],
       );
     },

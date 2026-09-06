@@ -33,15 +33,17 @@ describe('prepareDocxPreviewHtml', () => {
       );
 
       expect(result.matches).toHaveLength(2);
-      expect(result.html).toContain('<h1><mark class="fm-docx-search-match">Report</mark></h1>');
-      expect(result.html).toContain('<mark class="fm-docx-search-match-active">report</mark>');
+      expect(result.html).toContain(
+        '<h1><mark class="fm-document-search-match">Report</mark></h1>',
+      );
+      expect(result.html).toContain('<mark class="fm-document-search-match-active">report</mark>');
     });
 
     it('supports regex, case-sensitive, and whole-word search options', () => {
       const result = searchDocxHtml('<p>Cat category cat</p>', 'C.t', true, true, true, 0);
 
       expect(result.matches).toHaveLength(1);
-      expect(result.html).toContain('fm-docx-search-match-active');
+      expect(result.html).toContain('fm-document-search-match-active');
     });
 
     it('finds phrases that cross inline formatting boundaries', () => {
@@ -56,7 +58,7 @@ describe('prepareDocxPreviewHtml', () => {
 
       expect(result.matches).toHaveLength(1);
       expect(result.html).toContain(
-        '<strong><mark class="fm-docx-search-match-active">formatted</mark>',
+        '<strong><mark class="fm-document-search-match-active">formatted</mark>',
       );
     });
 

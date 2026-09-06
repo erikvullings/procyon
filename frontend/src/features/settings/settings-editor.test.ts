@@ -195,6 +195,26 @@ describe('SettingsEditor', () => {
     expect(numberInput('Row height (px)').value).toBe('30');
   });
 
+  it('offers every supported language', () => {
+    const { onPreview } = mountEditor();
+    root.querySelectorAll<HTMLInputElement>('input.select-dropdown')[0]?.click();
+    m.redraw.sync();
+
+    expect(root.textContent).toContain('English');
+    expect(root.textContent).toContain('Dutch');
+    expect(root.textContent).toContain('German');
+    expect(root.textContent).toContain('French');
+    expect(root.textContent).toContain('Spanish');
+    expect(root.textContent).toContain('Italian');
+    expect(root.textContent).toContain('Portuguese');
+    expect(root.textContent).toContain('Polish');
+
+    Array.from(root.querySelectorAll('li'))
+      .find((item) => item.textContent === 'German')
+      ?.click();
+    expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({ language: 'de' }));
+  });
+
   it('renders without throwing when a plugin has no icon theme (backend sends null, not undefined)', () => {
     // The JSON DTO serializes an absent Option<T> field as null, though `PluginDescriptor` models it as `undefined`.
     const pluginWithNullIconTheme = {

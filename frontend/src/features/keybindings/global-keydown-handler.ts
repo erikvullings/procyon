@@ -139,6 +139,8 @@ export interface GlobalKeydownContext {
    * content (Total Commander Lister's Tab-to-search convention), or the viewer's own focusable
    * section for content kinds without a search bar (image/pdf/...). No-op if no viewer is open. */
   focusViewer(paneId: PaneId): void;
+  /** Moves keyboard focus to the open viewer's inline search input. */
+  focusViewerSearch(paneId: PaneId): void;
   /** Scrolls (`unit: 'line'`, Arrow keys) or pages (`unit: 'page'`, Page Up/Down) `paneId`'s open
    * viewer's scrollable body by one step in the `(dx, dy)` direction - used both for vertical text
    * scrolling and (both-axis) image panning. No-op if no viewer is open. */
@@ -479,7 +481,10 @@ const ACTION_KEYDOWN_ROUTES = [
           activeViewer !== undefined && activeViewer.state.status === 'ready'
             ? activeViewer.state.content
             : undefined;
-        if (viewerPaneId !== undefined && (content?.kind === 'text' || content?.kind === 'docx')) {
+        if (
+          viewerPaneId !== undefined &&
+          (content?.kind === 'text' || content?.kind === 'docx' || content?.kind === 'epub')
+        ) {
           if (content.kind === 'text' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
             event.preventDefault();
             context.scrollViewer(viewerPaneId, 0, event.key === 'ArrowUp' ? -1 : 1, 'line');
@@ -522,15 +527,47 @@ const ACTION_KEYDOWN_ROUTES = [
       return false;
     },
   },
-  // +/- zoom an open F3 viewer's image content. Matched on `event.key` alone (not gated on
-  // `!event.shiftKey`) since '+' itself requires Shift on most keyboard layouts.
+  // Mod+F focuses the inline search field consistently across searchable viewer implementations.
+  {
+    id: 'viewer-search-focus',
+    tryHandle: (context, event) => {
+      if (
+        hasPrimaryModifier(event, context.getPlatform()) &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'f' &&
+        isWithinViewer(event.target)
+      ) {
+        const viewerPaneId = findOpenViewerPaneId(context);
+        const activeViewer =
+          viewerPaneId === undefined ? undefined : context.getViewer(viewerPaneId);
+        const content =
+          activeViewer !== undefined && activeViewer.state.status === 'ready'
+            ? activeViewer.state.content
+            : undefined;
+        if (
+          viewerPaneId !== undefined &&
+          (content?.kind === 'text' ||
+            content?.kind === 'docx' ||
+            content?.kind === 'pdf' ||
+            content?.kind === 'epub')
+        ) {
+          event.preventDefault();
+          context.focusViewerSearch(viewerPaneId);
+          return;
+        }
+      }
+      return false;
+    },
+  },
+  // Mod+/- zoom an open F3 viewer's scalable content while preserving the image viewer's existing
+  // bare +/- shortcuts. '+' itself requires Shift on most keyboard layouts, so this intentionally
+  // does not reject `shiftKey`.
   {
     id: 'viewer-zoom',
     tryHandle: (context, event) => {
       if (
         !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
+        ((!event.ctrlKey && !event.metaKey) || hasPrimaryModifier(event, context.getPlatform())) &&
         isViewerNavigationTarget(event.target) &&
         (event.key === '+' || event.key === '=' || event.key === '-')
       ) {
@@ -541,7 +578,7 @@ const ACTION_KEYDOWN_ROUTES = [
           activeViewer !== undefined && activeViewer.state.status === 'ready'
             ? activeViewer.state.content
             : undefined;
-        if (content?.kind === 'image') {
+        if (content?.kind === 'image' || content?.kind === 'epub') {
           event.preventDefault();
           if (event.key === '-') activeViewer?.controller.zoomOut();
           else activeViewer?.controller.zoomIn();
@@ -552,7 +589,7 @@ const ACTION_KEYDOWN_ROUTES = [
       return false;
     },
   },
-  // F3/Shift+F3 navigate search matches once focus is inside an open F3 viewer showing text
+  // F3/Shift+F3 navigate search matches once focus is inside a searchable F3 viewer
   // content - the standard browser/Lister find-next/previous convention, and the one reliable
   // way to do this once Tab has moved focus into the viewer (see `isViewerNavigationTarget`):
   // `core.view`'s own "F3 repeats as next match" below only fires when `activePaneId` itself is
@@ -574,10 +611,24 @@ const ACTION_KEYDOWN_ROUTES = [
           activeViewer !== undefined && activeViewer.state.status === 'ready'
             ? activeViewer.state.content
             : undefined;
-        if (content?.kind === 'text') {
+        if (content?.kind === 'text' || content?.kind === 'docx') {
           event.preventDefault();
           if (event.shiftKey) activeViewer?.controller.goToPreviousMatch();
           else activeViewer?.controller.goToNextMatch();
+          context.redraw();
+          return;
+        }
+        if (content?.kind === 'pdf') {
+          event.preventDefault();
+          if (event.shiftKey) activeViewer?.controller.goToPreviousPdfMatch();
+          else activeViewer?.controller.goToNextPdfMatch();
+          context.redraw();
+          return;
+        }
+        if (content?.kind === 'epub') {
+          event.preventDefault();
+          if (event.shiftKey) activeViewer?.controller.goToPreviousEpubMatch();
+          else activeViewer?.controller.goToNextEpubMatch();
           context.redraw();
           return;
         }

@@ -10,6 +10,10 @@
   --fm-accent: #075ea8;
   --fm-selection: #c9e2ff;
   --fm-selection-inactive: #e2e8f0;
+  --fm-search-highlight: #ffe066;
+  --fm-search-highlight-active: #ffb000;
+  --fm-search-highlight-text: #111827;
+  --fm-viewer-active-control: #ffffff;
   --fm-hover: #e9eef4;
   --fm-error: #b42318;
   --fm-warning: #8a4b08;

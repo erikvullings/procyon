@@ -619,7 +619,13 @@ export function createPaneContentBuilder(
             expectedRevision: liveWorkspace.revision,
           },
           context.replaceWorkspace,
-        ).catch(() => undefined);
+        )
+          .then(() => {
+            if (context.getWorkspace()?.panesById[paneId]?.activeTabId === tab.id) {
+              void context.getNavigation().load(paneId, { background: true });
+            }
+          })
+          .catch(() => undefined);
       },
       viewMode: tab?.view.viewMode ?? 'table',
       iconSize: tab?.view.iconSize ?? 'medium',
@@ -716,22 +722,28 @@ export function createPaneContentBuilder(
       onContextMenu: (entries, x, y) => context.openContextMenu(paneId, entries, x, y),
       onDragStart: (draggedEntries, event) => {
         context.setDraggedLocations(draggedEntries.map((entry) => entry.location));
-        if (context.getNativeDragOutSupported()) {
-          event.preventDefault();
-          context.setNativeDragSourceInternal(true);
-          void client
-            .startNativeDrag(draggedEntries.map((entry) => entry.location))
-            .catch((error: unknown) => {
-              context.setClipboardMessage(
-                context.workspaceErrorMessage(error, 'Unable to start native drag'),
-              );
-              m.redraw();
-            });
-          return;
-        }
         event.dataTransfer?.setData('application/x-fm-locations', 'internal');
         if (event.dataTransfer != null) event.dataTransfer.effectAllowed = 'copyMove';
       },
+      ...(context.getNativeDragOutSupported()
+        ? {
+            onPointerDragStart: (draggedEntries) => {
+              context.setDraggedLocations(draggedEntries.map((entry) => entry.location));
+            },
+            pointerDragEffect: (event) => operationForDrop(context.getPlatform(), event),
+            onPointerDragOut: (draggedEntries) => {
+              const locations = draggedEntries.map((entry) => entry.location);
+              context.setDraggedLocations(locations);
+              context.setNativeDragSourceInternal(true);
+              void client.startNativeDrag(locations).catch((error: unknown) => {
+                context.setClipboardMessage(
+                  context.workspaceErrorMessage(error, 'Unable to start native drag'),
+                );
+                m.redraw();
+              });
+            },
+          }
+        : {}),
       onDragOver: (entry, event) => {
         const target = tab === undefined ? undefined : resolveDropTarget(tab.location, entry);
         const validation = validateDropTarget(
@@ -883,6 +895,7 @@ export function createPaneContentBuilder(
                     onPreviousMatch: () => void viewer.controller.goToPreviousMatch(),
                     onZoomIn: () => viewer.controller.zoomIn(),
                     onZoomOut: () => viewer.controller.zoomOut(),
+                    onZoomChange: (zoom) => viewer.controller.setZoom(zoom),
                     onResetZoom: () => viewer.controller.resetZoom(),
                     onCopy: () => viewer.controller.copyContent(),
                     onToggleMetadata: () => viewer.controller.toggleMetadataPanel(),
@@ -891,6 +904,16 @@ export function createPaneContentBuilder(
                     onPdfSearchQueryChange: (query) => viewer.controller.setPdfSearchQuery(query),
                     onNextPdfMatch: () => viewer.controller.goToNextPdfMatch(),
                     onPreviousPdfMatch: () => viewer.controller.goToPreviousPdfMatch(),
+                    onEpubSearchQueryChange: (query) => viewer.controller.setEpubSearchQuery(query),
+                    onNextEpubMatch: () => viewer.controller.goToNextEpubMatch(),
+                    onPreviousEpubMatch: () => viewer.controller.goToPreviousEpubMatch(),
+                    onSelectEpubSection: (sectionIndex, fragment) =>
+                      viewer.controller.goToEpubSection(sectionIndex, fragment),
+                    onFollowEpubLink: (href) => viewer.controller.followEpubLink(href),
+                    onSelectPdfPage: (pageNumber) => viewer.controller.goToPdfPage(pageNumber),
+                    onNavigateTextOffset: (offset, length) =>
+                      viewer.controller.goToTextOffset(offset, length),
+                    onOpenExternalLink: (url) => void client.openExternalUrl(url),
                     ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
                     quickLookAvailable,
                     onQuickLook: () =>

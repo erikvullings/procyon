@@ -49,7 +49,7 @@ function generateHomebrew() {
   homepage "https://github.com/${options.repository}"
 
   app "Procyon.app"
-  binary "#{appdir}/Procyon.app/Contents/MacOS/Procyon", target: "procyon"
+  binary "#{appdir}/Procyon.app/Contents/Resources/procyon", target: "procyon"
 end
 `;
   mkdirSync(dirname(options.output), { recursive: true });

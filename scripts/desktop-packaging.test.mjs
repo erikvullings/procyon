@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -165,6 +165,16 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   assert.match(cask, new RegExp(`sha256 "${checksum}"`));
   assert.match(cask, /releases\/download\/v1\.2\.3\/Procyon_1\.2\.3_universal\.dmg/);
   assert.match(cask, /app "Procyon\.app"/);
+  assert.match(cask, /binary "#{appdir}\/Procyon\.app\/Contents\/Resources\/procyon"/);
+
+  const tauriConfig = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
+  assert.equal(tauriConfig.bundle.resources['resources/procyon'], 'procyon');
+  const launcher = read('apps', 'fm-desktop', 'src-tauri', 'resources', 'procyon');
+  assert.match(launcher, /exec \/usr\/bin\/open .* --args "\$@"/);
+  assert.notEqual(
+    statSync(join(repoRoot, 'apps/fm-desktop/src-tauri/resources/procyon')).mode & 0o111,
+    0,
+  );
 
   const chocolateyDir = join(outputRoot, 'chocolatey');
   execFileSync(
