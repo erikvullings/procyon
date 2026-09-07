@@ -1,6 +1,6 @@
 # 0198 Semantic release qualification
 
-Status: open
+Status: blocked
 Priority: high
 Subsystem: quality, release
 Depends on: 0195, 0196
@@ -44,3 +44,9 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
 - 2026-09-07 Copilot: Current TRIZ calibration observed `0.905` for `Su-fields`, `0.881` for the
   full cup/hot-liquid question, and `0.848`-`0.850` for hard unrelated controls. This supports
   keeping the `0.84` floor unchanged until a larger labelled evaluation, not lowering it.
+- 2026-09-08 Copilot: Release decision is **NO-GO**. The repository has no signed production
+  catalogs/installers or production-run task-0188 observations, and cross-platform installed,
+  accessibility, privacy, and failure-mode evidence has not been collected. Added
+  `docs/semantic-release-qualification.md` as the operator record and made release publication
+  fail closed behind the protected `SEMANTIC_RELEASE_QUALIFIED == 'true'` repository variable.
+  Base desktop releases continue without a production semantic catalog while this task is blocked.

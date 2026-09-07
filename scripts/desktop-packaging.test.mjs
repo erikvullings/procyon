@@ -149,6 +149,8 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   const publish = release.jobs['semantic-publish'];
 
   assert.ok(payloads, 'expected a semantic payload build matrix');
+  assert.match(payloads.if, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(payloads.if, /vars\.SEMANTIC_RELEASE_QUALIFIED == 'true'/);
   assert.deepEqual(payloads.strategy.matrix.include.map(({ target }) => target).sort(), [
     'linux-aarch64',
     'linux-x86_64',
@@ -162,8 +164,11 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(smokeScript, /production_model_pack_activates_offline/);
   assert.match(smokeScript, /fm-semantic-components/);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
+  assert.match(catalogs.if, /needs\.semantic-payloads\.result == 'success'/);
   assert.equal(catalogs.secrets, 'inherit');
   assert.deepEqual(publish.needs, ['semantic-payloads', 'semantic-catalogs']);
+  assert.match(publish.if, /needs\.semantic-payloads\.result == 'success'/);
+  assert.match(publish.if, /needs\.semantic-catalogs\.result == 'success'/);
   assert.match(JSON.stringify(payloads), /semantic-payloads-\$\{\{ matrix.target \}\}/);
   assert.match(JSON.stringify(payloads), /check-desktop-release\.mjs/);
   assert.equal(payloads.environment, 'desktop-release');
@@ -182,9 +187,22 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   ]) {
     const job = release.jobs[jobName];
     assert.deepEqual(job.needs, ['release', 'semantic-catalogs']);
+    assert.match(job.if, /needs\.semantic-catalogs\.result == 'skipped'/);
     assert.match(JSON.stringify(job), new RegExp(`semantic-catalog-${catalogTarget}`));
     assert.match(JSON.stringify(job), /resources\/semantic/);
     assert.match(JSON.stringify(job), /export-semantic-verifying-key\.mjs/);
+    const semanticSteps = job.steps.filter(
+      (step) =>
+        step.name?.startsWith('Embed the signed') ||
+        step.name === 'Compile the production semantic catalog trust key',
+    );
+    assert.equal(semanticSteps.length, 2);
+    for (const step of semanticSteps) {
+      assert.equal(
+        step.if,
+        "github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
+      );
+    }
     assert.doesNotMatch(JSON.stringify(job), /SEMANTIC_CATALOG_SIGNING_KEY_BASE64/);
   }
   assert.match(releaseText, /vars\.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64/);

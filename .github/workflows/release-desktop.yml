@@ -22,7 +22,7 @@ jobs:
   macos:
     name: Signed and notarized macOS bundles
     needs: [release, semantic-catalogs]
-    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
@@ -37,11 +37,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed macOS arm64 semantic catalog
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-macos-aarch64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
@@ -175,7 +177,7 @@ jobs:
   linux:
     name: Linux packages
     needs: [release, semantic-catalogs]
-    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
@@ -197,11 +199,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed Linux x86-64 semantic catalog
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-linux-x86_64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
@@ -220,7 +224,7 @@ jobs:
   windows:
     name: Unsigned Windows installers
     needs: [release, semantic-catalogs]
-    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: windows-latest
     environment: desktop-release
     steps:
@@ -234,11 +238,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed Windows x86-64 semantic catalog
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-windows-x86_64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
+        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
@@ -257,7 +263,7 @@ jobs:
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
     needs: [release]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && needs.release.result == 'success')) }}
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 120
@@ -385,6 +391,7 @@ jobs:
   semantic-catalogs:
     name: Semantic catalog (${{ matrix.target }})
     needs: [semantic-payloads]
+    if: ${{ needs.semantic-payloads.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -398,6 +405,7 @@ jobs:
   semantic-publish:
     name: Publish semantic release assets
     needs: [semantic-payloads, semantic-catalogs]
+    if: ${{ needs.semantic-payloads.result == 'success' && needs.semantic-catalogs.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -220,9 +220,13 @@ The production identity contract pins `intfloat/multilingual-e5-small` at revisi
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 1.
-The production payload and signed-catalog jobs run before desktop packaging. Each installer embeds
-only its matching `catalog.json`, `catalog.sig`, and public verification key; task 0198 qualifies
-the installed result. The developer bundle
+Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
+installers for qualification without publishing them. Tagged releases do that work only when the
+protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
+passes, leave that variable absent or false: ordinary tagged desktop installers are still produced,
+but contain no production semantic catalog or verification key and therefore keep managed semantic
+installation unavailable. Once qualified, each installer embeds only its matching `catalog.json`,
+`catalog.sig`, and public verification key. The developer bundle
 packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point
