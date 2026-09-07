@@ -817,6 +817,8 @@ mod tests {
 
         assert_eq!(results[0].record_id, "near");
         assert!(results[0].score > results[1].score);
+        assert!((results[0].score - 1.0).abs() < f32::EPSILON);
+        assert!(results[1].score.abs() < f32::EPSILON);
     }
 
     #[test]

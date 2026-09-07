@@ -102,18 +102,12 @@ impl DeveloperSemanticBundle {
         let worker = workers[0];
         let runtime = runtimes[0];
         let data_root = SemanticDataRoot::from_app_data(app_data_directory);
-        let catalog_worker_path = data_root
-            .category_path(DataCategory::Workers)
-            .join(worker.component_id().as_str())
-            .join(worker.version().to_string())
-            .join(worker.id().as_str())
-            .join("payload");
-        let catalog_runtime_path = data_root
-            .category_path(DataCategory::Workers)
-            .join(runtime.component_id().as_str())
-            .join(runtime.version().to_string())
-            .join(runtime.id().as_str())
-            .join("payload");
+        let catalog_worker_path = bundle_directory
+            .join("artifacts")
+            .join(worker.id().as_str());
+        let catalog_runtime_path = bundle_directory
+            .join("artifacts")
+            .join(runtime.id().as_str());
 
         let manager = ComponentManager::new(
             SemanticStateStore::new(configuration_directory.join("semantic-components")),
@@ -176,6 +170,11 @@ fn active_component_payload(
 ) -> PathBuf {
     state
         .installed_component(catalog_artifact.component_id())
+        .filter(|component| {
+            component.artifact_id() == catalog_artifact.id()
+                && component.version() == catalog_artifact.version()
+                && component.checksum() == catalog_artifact.checksum()
+        })
         .map(|component| component.installed_path().to_owned())
         .unwrap_or(catalog_path)
 }
@@ -558,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn installed_worker_path_wins_when_the_bundle_catalog_has_been_rebuilt() {
+    fn rebuilt_bundle_worker_wins_over_a_stale_installed_worker() {
         let directory = tempfile::tempdir().expect("directory");
         let installed = directory.path().join("installed-worker");
         fs::write(&installed, b"worker").expect("installed worker");
@@ -595,9 +594,10 @@ mod tests {
         )
         .expect("artifact");
 
+        let catalog_worker = directory.path().join("catalog-worker");
         assert_eq!(
-            active_component_payload(&state, &artifact, directory.path().join("catalog-worker")),
-            installed
+            active_component_payload(&state, &artifact, catalog_worker.clone()),
+            catalog_worker
         );
     }
 }
