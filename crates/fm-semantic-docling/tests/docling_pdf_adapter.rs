@@ -1,13 +1,15 @@
 //! Public-Interface tests for the optional Docling PDF Adapter.
 
+#[cfg(unix)]
+use fm_semantic_conversion::CancellationFlag;
 use fm_semantic_conversion::{
-    BaselineConverter, CancellationFlag, ConversionBudgets, ConversionContext, ConversionOutcome,
-    DocumentConverter, DocumentMetadata, OptionalConverter, Provenance, SourceContent,
-    TopLevelBoundary,
+    BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
+    DocumentMetadata, OptionalConverter, Provenance, SourceContent, TopLevelBoundary,
 };
+use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline_fallback};
+#[cfg(unix)]
 use fm_semantic_docling::{
-    DOCLING_PDF_CONVERTER_VERSION, OCRMYPDF_CONVERTER_VERSION, OcrMyPdfAvailability,
-    OcrMyPdfConfiguration, OcrMyPdfConverter, converter_with_baseline_fallback,
+    OCRMYPDF_CONVERTER_VERSION, OcrMyPdfAvailability, OcrMyPdfConfiguration, OcrMyPdfConverter,
 };
 use lopdf::{Document, Object, Stream, dictionary};
 
