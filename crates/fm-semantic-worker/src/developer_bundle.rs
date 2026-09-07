@@ -243,9 +243,27 @@ impl DeveloperModel {
         if !model_pack.is_absolute() {
             return Err(DeveloperBundleError::RelativeModelPack);
         }
+        Self::resolve_pack(model_pack, false)
+    }
+
+    fn resolve_managed(model_pack: &Path) -> Result<Self, DeveloperBundleError> {
+        Self::resolve_pack(model_pack, true)
+    }
+
+    fn resolve_pack(
+        model_pack: &Path,
+        expected_production: bool,
+    ) -> Result<Self, DeveloperBundleError> {
+        if !model_pack.is_absolute() {
+            return Err(DeveloperBundleError::RelativeModelPack);
+        }
         let pack = ModelPack::open(model_pack)?;
-        if pack.index().production {
-            return Err(DeveloperBundleError::ProductionModelPack);
+        if pack.index().production != expected_production {
+            return Err(if expected_production {
+                DeveloperBundleError::DevelopmentModelPack
+            } else {
+                DeveloperBundleError::ProductionModelPack
+            });
         }
         let identity = EmbeddingModelIdentity {
             model_id: pack.index().model_id.clone(),
@@ -512,6 +530,13 @@ impl DeveloperWorker {
 
         let model =
             DeveloperModel::resolve(model_pack, &data_directory.join("development-embedder"))?;
+        Self::open_with_model(data_directory, model)
+    }
+
+    fn open_with_model(
+        data_directory: &Path,
+        model: DeveloperModel,
+    ) -> Result<Self, DeveloperBundleError> {
         let package = CuratedModelPackage {
             identity: model.identity.clone(),
             directory: model.package_directory.clone(),
@@ -552,6 +577,23 @@ impl DeveloperWorker {
             data_directory: data_directory.to_owned(),
             description: model.description,
         })
+    }
+
+    fn open_managed(
+        data_directory: &Path,
+        model_pack: &Path,
+    ) -> Result<Self, DeveloperBundleError> {
+        if !data_directory.is_absolute() {
+            return Err(DeveloperBundleError::RelativeDataDirectory);
+        }
+        std::fs::create_dir_all(data_directory)?;
+        if !data_directory.is_dir() {
+            return Err(DeveloperBundleError::InvalidDataDirectory(
+                data_directory.to_owned(),
+            ));
+        }
+        let model = DeveloperModel::resolve_managed(model_pack)?;
+        Self::open_with_model(data_directory, model)
     }
 
     fn backends(&self) -> (Arc<dyn WorkerIngestionBackend>, Arc<dyn WorkerQueryBackend>) {
@@ -627,6 +669,26 @@ pub async fn run_developer_worker(
     .await
 }
 
+/// Runs the authenticated, network-free managed worker from verified paths.
+///
+/// # Errors
+///
+/// Returns setup, persistence, Zvec, embedding, lock, or IPC failures. The
+/// model pack must be marked for production by the signed release builder.
+pub async fn run_managed_worker(
+    runtime_directory: &Path,
+    data_directory: &Path,
+    model_pack: &Path,
+    idle_timeout: Duration,
+) -> Result<(), ServerError> {
+    run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
+        DeveloperWorker::open_managed(data_directory, model_pack)
+            .map(|worker| worker.into_server(config))
+            .map_err(|error| ServerError::Io(io::Error::other(error)))
+    })
+    .await
+}
+
 /// Failure to assemble the explicitly non-production developer worker.
 #[derive(Debug, thiserror::Error)]
 enum DeveloperBundleError {
@@ -636,6 +698,8 @@ enum DeveloperBundleError {
     RelativeModelPack,
     #[error("developer bundles must not load a model pack marked as production")]
     ProductionModelPack,
+    #[error("managed workers must not load a development model pack")]
+    DevelopmentModelPack,
     #[error("developer model pack declares unusable limits or location")]
     UnusableModelPack,
     #[error("developer model pack failed: {0}")]
@@ -882,6 +946,14 @@ mod tests {
         pack
     }
 
+    fn required_production_model_pack() -> PathBuf {
+        let pack = std::env::var_os("PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK")
+            .map(PathBuf::from)
+            .expect("set PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK to the release model artifact");
+        assert!(pack.is_file(), "production model pack is missing");
+        pack
+    }
+
     fn write_pack(path: &Path, spec: &fm_semantic_components::ModelPackSpec) {
         std::fs::create_dir_all(path.parent().expect("pack parent")).expect("pack directory");
         fm_semantic_components::write_model_pack(path, spec).expect("model pack");
@@ -956,6 +1028,33 @@ mod tests {
         assert!(matches!(
             DeveloperModel::resolve(Some(&foreign), &directory.0),
             Err(DeveloperBundleError::ModelPack(_))
+        ));
+    }
+
+    #[test]
+    fn managed_and_developer_workers_reject_each_others_model_packs() {
+        let directory = TestDirectory::new("pack-trust");
+        let mut production = fixture_pack_spec();
+        production.kind = ModelPackKind::OnnxTransformerMeanPool;
+        production.production = true;
+        production.model_id = "intfloat.multilingual-e5-small".into();
+        production.model_revision = "immutable-production-revision".into();
+        production.tokenizer = "production-tokenizer".into();
+        production.max_input_tokens = 512;
+        let production_pack = directory.0.join("artifacts").join("production");
+        write_pack(&production_pack, &production);
+
+        assert!(DeveloperModel::resolve_managed(&production_pack).is_ok());
+        assert!(matches!(
+            DeveloperModel::resolve(Some(&production_pack), &directory.0),
+            Err(DeveloperBundleError::ProductionModelPack)
+        ));
+
+        let development_pack = directory.0.join("artifacts").join("development");
+        write_pack(&development_pack, &fixture_pack_spec());
+        assert!(matches!(
+            DeveloperModel::resolve_managed(&development_pack),
+            Err(DeveloperBundleError::DevelopmentModelPack)
         ));
     }
 
@@ -1059,6 +1158,7 @@ mod tests {
             let norm = vector.iter().map(|value| value * value).sum::<f32>();
             assert!((norm - 1.0).abs() < 0.001, "vector is not unit length");
         }
+
         let similarity = |left: &[f32], right: &[f32]| {
             left.iter()
                 .zip(right)
@@ -1086,6 +1186,36 @@ mod tests {
             }),
             Err(EmbeddingError::Cancelled)
         ));
+    }
+
+    #[test]
+    #[ignore = "requires PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK from a release bundle"]
+    fn production_model_pack_activates_offline() {
+        let pack = required_production_model_pack();
+        let model = DeveloperModel::resolve_managed(&pack).expect("production model identity");
+        assert_eq!(model.query_prefix, "query: ");
+        assert_eq!(model.passage_prefix, "passage: ");
+        let runtime = LocalEmbeddingRuntime::load(
+            &CuratedModelPackage {
+                identity: model.identity.clone(),
+                directory: model.package_directory.clone(),
+            },
+            model.loader.as_ref(),
+            EmbeddingResourceProfile::Balanced,
+            VectorNormalization::L2,
+        )
+        .expect("offline production model load");
+        let vectors = runtime
+            .embed(
+                &["query: semantic retrieval".to_owned()],
+                &CancellationToken::new(),
+            )
+            .expect("production model inference");
+
+        assert_eq!(vectors.len(), 1);
+        assert_eq!(vectors[0].len(), 384);
+        let norm = vectors[0].iter().map(|value| value * value).sum::<f32>();
+        assert!((norm - 1.0).abs() < 0.001, "vector is not unit length");
     }
 
     /// End-to-end proof that the installed real model, not the fixture, drives

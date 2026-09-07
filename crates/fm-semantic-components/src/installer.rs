@@ -1299,6 +1299,7 @@ fn prepare_artifact(
     ensure_confined_directory(root, &ready_directory)?;
     let installed_path = ready_directory.join("payload");
     fs::rename(&partial_path, &installed_path)?;
+    make_worker_executable(artifact, &installed_path)?;
     if let Err(source_error) = activation.validate(artifact, &installed_path) {
         let _ = fs::rename(&installed_path, &partial_path);
         let _ = fs::remove_dir_all(&ready_directory);
@@ -1314,6 +1315,21 @@ fn prepare_artifact(
         ready_directory,
         final_directory,
     })
+}
+
+fn make_worker_executable(
+    artifact: &CatalogArtifact,
+    installed_path: &Path,
+) -> std::io::Result<()> {
+    #[cfg(unix)]
+    if matches!(artifact.kind(), ArtifactKind::Worker) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(installed_path, fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    let _ = (artifact, installed_path);
+    Ok(())
 }
 
 fn recover_interrupted_commit(

@@ -14,6 +14,7 @@
     "dev:tauri:semantic": "node scripts/dev-tauri-semantic.mjs",
     "dev:tauri:semantic:ocr": "node scripts/dev-tauri-semantic.mjs --ocr",
     "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
+    "semantic:bundle:production": "node scripts/build-semantic-production-bundle.mjs",
     "semantic:catalog": "node scripts/semantic-production-catalog.mjs",
     "semantic:model:fetch": "node scripts/fetch-semantic-model.mjs",
     "semantic:model:verify": "node scripts/verify-semantic-model.mjs",

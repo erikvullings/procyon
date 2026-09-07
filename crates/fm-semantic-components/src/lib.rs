@@ -9,6 +9,7 @@ mod model_migration;
 mod model_pack;
 mod optional_pack;
 mod production;
+mod release_bundle;
 mod report;
 mod state;
 
@@ -61,6 +62,9 @@ pub use production::{
     embedded_production_verifying_key, load_production_signing_key, production_artifact_id,
     sign_production_catalog, verify_production_payloads, verify_serialized_production_catalog,
     write_signed_production_catalog,
+};
+pub use release_bundle::{
+    ProductionBundleError, ProductionBundleSpec, build_production_release_bundle,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,

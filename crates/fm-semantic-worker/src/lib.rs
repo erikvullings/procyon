@@ -4,9 +4,9 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod advanced;
-#[cfg(feature = "developer-bundle")]
+#[cfg(feature = "semantic-runtime")]
 pub mod developer_bundle;
-#[cfg(feature = "developer-bundle")]
+#[cfg(feature = "semantic-runtime")]
 mod developer_onnx;
 pub mod document_summary;
 pub mod embedding;
@@ -380,6 +380,9 @@ enum ConnectorSource {
         executable: PathBuf,
         idle_timeout: Duration,
         startup_timeout: Duration,
+        managed_data_directory: Option<PathBuf>,
+        managed_native_library_directory: Option<PathBuf>,
+        managed_model_pack: Option<PathBuf>,
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
@@ -420,11 +423,39 @@ impl WorkerConnector {
                 executable: executable.to_owned(),
                 idle_timeout: Duration::from_secs(30),
                 startup_timeout: Duration::from_secs(2),
+                managed_data_directory: None,
+                managed_native_library_directory: None,
+                managed_model_pack: None,
                 developer_data_directory: None,
                 developer_native_library_directory: None,
                 developer_model_pack: None,
             },
         }
+    }
+
+    /// Creates an on-demand production worker launcher from host-verified installed components.
+    #[must_use]
+    pub fn desktop_managed(
+        runtime_directory: &Path,
+        executable: &Path,
+        data_directory: &Path,
+        native_library_directory: &Path,
+        model_pack: &Path,
+    ) -> Self {
+        let mut connector = Self::desktop(runtime_directory, executable)
+            .with_startup_timeout(Duration::from_secs(30));
+        if let ConnectorSource::Desktop {
+            managed_data_directory,
+            managed_native_library_directory,
+            managed_model_pack,
+            ..
+        } = &mut connector.source
+        {
+            *managed_data_directory = Some(data_directory.to_owned());
+            *managed_native_library_directory = Some(native_library_directory.to_owned());
+            *managed_model_pack = Some(model_pack.to_owned());
+        }
+        connector
     }
 
     /// Creates an on-demand developer worker launcher with host-owned data and
@@ -621,6 +652,9 @@ impl WorkerConnector {
                 executable,
                 idle_timeout,
                 startup_timeout,
+                managed_data_directory,
+                managed_native_library_directory,
+                managed_model_pack,
                 developer_data_directory,
                 developer_native_library_directory,
                 developer_model_pack,
@@ -667,14 +701,29 @@ impl WorkerConnector {
                     .arg(runtime_directory)
                     .arg("--idle-timeout-ms")
                     .arg(idle_timeout.as_millis().to_string());
-                if let Some(directory) = developer_data_directory {
+                if let Some(directory) = managed_data_directory {
+                    let model_pack = managed_model_pack.as_ref().ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "managed semantic worker requires an installed model pack",
+                        )
+                    })?;
+                    command
+                        .arg("--semantic-data-dir")
+                        .arg(directory)
+                        .arg("--semantic-model-pack")
+                        .arg(model_pack);
+                } else if let Some(directory) = developer_data_directory {
                     command.arg("--developer-data-dir").arg(directory);
                     if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
                     {
                         command.arg("--developer-model-pack").arg(pack);
                     }
                 }
-                if let Some(directory) = developer_native_library_directory {
+                if let Some(directory) = managed_native_library_directory
+                    .as_ref()
+                    .or(developer_native_library_directory.as_ref())
+                {
                     configure_developer_native_library(&mut command, directory)?;
                 }
                 let child = command

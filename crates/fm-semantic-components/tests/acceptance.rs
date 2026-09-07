@@ -1481,6 +1481,26 @@ fn installed_fixture(prefix: &str) -> (TempDir, ComponentManager, InstallEnviron
     (directory, manager, environment)
 }
 
+#[cfg(unix)]
+#[test]
+fn install_restores_owner_executable_permission_for_downloaded_workers() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_directory, manager, _environment) = installed_fixture("worker-permissions-");
+    let state = manager.state().expect("installed state");
+    let worker = state
+        .installed_components()
+        .iter()
+        .find(|component| matches!(component.kind(), ArtifactKind::Worker))
+        .expect("installed worker");
+    let mode = std::fs::metadata(worker.installed_path())
+        .expect("worker metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o700);
+}
+
 #[test]
 fn interrupted_install_resumes_by_artifact_id_and_never_activates_partial_content() {
     let directory = project_temp_dir("resume-");

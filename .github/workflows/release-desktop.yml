@@ -42,7 +42,7 @@ jobs:
         run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
-        run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
+        run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
       - name: Configure temporary signing paths
         run: |
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
@@ -218,6 +218,176 @@ jobs:
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
+
+  semantic-payloads:
+    name: Semantic payloads (${{ matrix.target }})
+    needs: [release]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    runs-on: ${{ matrix.runner }}
+    environment: desktop-release
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-aarch64
+            runner: macos-14-xlarge
+          - target: windows-x86_64
+            runner: windows-latest
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Require tag to match the Cargo-owned desktop version
+        if: github.event_name == 'push'
+        run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
+      - name: Configure temporary macOS notarization path
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        run: echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+      - name: Import Developer ID Application certificate
+        if: matrix.target == 'macos-aarch64'
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Install Developer ID G2 intermediate certificate
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          curl --fail --silent --show-error --location \
+            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer \
+            --output "$CERTIFICATE_PATH"
+          echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $CERTIFICATE_PATH" |
+            shasum -a 256 --check
+          sudo security add-trusted-cert \
+            -d -r trustRoot \
+            -k /Library/Keychains/System.keychain \
+            "$CERTIFICATE_PATH"
+      - name: Select Developer ID Application identity
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        run: |
+          IDENTITY="$(
+            security find-identity -v -p codesigning |
+              awk -F'"' '/Developer ID Application/ { print $2; exit }'
+          )"
+          test -n "$IDENTITY"
+          echo "PROCYON_APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+      - name: Prepare App Store Connect API key
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          test -n "$APPLE_API_KEY"
+          test -n "$APPLE_API_KEY_P8"
+          test -n "$APPLE_API_ISSUER"
+          printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          chmod 600 "$APPLE_API_KEY_PATH"
+      - name: Build verified semantic release payloads
+        env:
+          PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
+        run: >
+          pnpm semantic:bundle:production --
+          --output "target/semantic-production-release/${{ matrix.target }}"
+          --release-base-url
+          "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          --source-revision "${{ github.sha }}"
+      - name: Notarize and verify macOS semantic executables
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          ARTIFACTS="target/semantic-production-release/${{ matrix.target }}/artifacts"
+          WORKER="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.worker.*' -print -quit)"
+          RUNTIME="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.zvec-runtime.*' -print -quit)"
+          test -n "$WORKER"
+          test -n "$RUNTIME"
+          codesign --verify --strict --verbose=2 "$WORKER"
+          codesign --verify --strict --verbose=2 "$RUNTIME"
+          NOTARY_DIRECTORY="$RUNNER_TEMP/semantic-notary"
+          mkdir -p "$NOTARY_DIRECTORY"
+          cp "$WORKER" "$RUNTIME" "$NOTARY_DIRECTORY/"
+          ditto -c -k --keepParent "$NOTARY_DIRECTORY" "$RUNNER_TEMP/semantic-notary.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/semantic-notary.zip" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait \
+            --timeout 45m \
+            --no-s3-acceleration
+          spctl --assess --type execute --verbose=4 "$WORKER"
+      - name: Smoke-test protocol, model activation, and component lifecycle
+        run: >
+          node scripts/smoke-semantic-production-bundle.mjs
+          "target/semantic-production-release/${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: semantic-payloads-${{ matrix.target }}
+          path: target/semantic-production-release/${{ matrix.target }}/
+          if-no-files-found: error
+      - name: Remove temporary macOS signing credentials
+        if: always() && matrix.target == 'macos-aarch64'
+        shell: bash
+        run: rm -f "$APPLE_API_KEY_PATH"
+
+  semantic-catalogs:
+    name: Semantic catalog (${{ matrix.target }})
+    needs: [semantic-payloads]
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [macos-aarch64, windows-x86_64, linux-x86_64, linux-aarch64]
+    uses: ./.github/workflows/sign-semantic-catalog.yml
+    with:
+      release-input-artifact: semantic-payloads-${{ matrix.target }}
+      signed-catalog-artifact: semantic-catalog-${{ matrix.target }}
+    secrets: inherit
+
+  semantic-publish:
+    name: Publish semantic release assets
+    needs: [semantic-payloads, semantic-catalogs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: semantic-payloads-*
+          path: semantic-payloads
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: semantic-catalog-*
+          path: semantic-catalogs
+      - name: Collect unique payloads and target catalogs
+        run: >
+          node scripts/collect-semantic-release-assets.mjs
+          semantic-payloads semantic-catalogs semantic-release-assets
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
+        with:
+          files: semantic-release-assets/*
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: semantic-release-assets-${{ github.sha }}
+          path: semantic-release-assets/
+          if-no-files-found: error
 
   homebrew:
     name: Publish Homebrew cask

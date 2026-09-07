@@ -11,13 +11,15 @@ default = []
 # The official SDK dynamically links Zvec and downloads a native artifact at
 # build time unless ZVEC_LIB_DIR is supplied. Keep it out of normal builds.
 zvec = ["dep:zvec-rust"]
-# Explicitly non-production local bundle used only for end-to-end development.
-developer-bundle = [
+# Offline managed semantic runtime used by production and development bundles.
+semantic-runtime = [
   "zvec",
   "dep:fm-semantic-components",
   "dep:ort",
   "dep:tokenizers",
 ]
+# Explicitly non-production local bundle used only for end-to-end development.
+developer-bundle = ["semantic-runtime"]
 
 [dependencies]
 fm-semantic-components = {workspace = true, optional = true}

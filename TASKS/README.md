@@ -120,7 +120,8 @@ semantic components are not installed.
 - [x] 0193 Optional OCRmyPDF fallback *(needs 0192; explicit opt-in, never a mandatory dependency)*
 - [x] 0194 Production semantic component catalog *(needs 0178, 0188, 0191, 0192; began after the
   semantic implementation branch was merged and green on main)*
-- [ ] 0195 Cross-platform semantic release artifacts *(needs 0063, 0194)*
+- [x] 0195 Cross-platform semantic release artifacts *(needs 0194; macOS x86-64 explicitly
+  unsupported because Zvec 0.7.0 has no matching runtime)*
 - [ ] 0196 Release desktop semantic activation *(needs 0194; can proceed alongside 0195)*
 - [ ] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*

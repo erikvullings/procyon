@@ -140,6 +140,47 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(chocolateyText, /choco push/);
 });
 
+test('release workflow builds, verifies, signs, and publishes optional semantic payloads separately', () => {
+  const releaseText = workflowText('release-desktop.yml');
+  const release = workflow('release-desktop.yml');
+  const smokeScript = read('scripts', 'smoke-semantic-production-bundle.mjs');
+  const payloads = release.jobs['semantic-payloads'];
+  const catalogs = release.jobs['semantic-catalogs'];
+  const publish = release.jobs['semantic-publish'];
+
+  assert.ok(payloads, 'expected a semantic payload build matrix');
+  assert.deepEqual(payloads.strategy.matrix.include.map(({ target }) => target).sort(), [
+    'linux-aarch64',
+    'linux-x86_64',
+    'macos-aarch64',
+    'windows-x86_64',
+  ]);
+  assert.match(JSON.stringify(payloads), /semantic:bundle:production/);
+  assert.match(JSON.stringify(payloads), /smoke-semantic-production-bundle/);
+  assert.match(smokeScript, /cargo.*test/s);
+  assert.match(smokeScript, /packaged_production_worker_starts_negotiates_and_shuts_down/);
+  assert.match(smokeScript, /production_model_pack_activates_offline/);
+  assert.match(smokeScript, /fm-semantic-components/);
+  assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
+  assert.equal(catalogs.secrets, 'inherit');
+  assert.deepEqual(publish.needs, ['semantic-payloads', 'semantic-catalogs']);
+  assert.match(JSON.stringify(payloads), /semantic-payloads-\$\{\{ matrix.target \}\}/);
+  assert.match(JSON.stringify(payloads), /check-desktop-release\.mjs/);
+  assert.equal(payloads.environment, 'desktop-release');
+  assert.match(JSON.stringify(payloads), /PROCYON_REQUIRE_PLATFORM_SIGNING/);
+  assert.match(JSON.stringify(payloads), /PROCYON_APPLE_SIGNING_IDENTITY/);
+  assert.match(JSON.stringify(payloads), /Notarize and verify macOS semantic executables/);
+  assert.match(JSON.stringify(payloads), /notarytool submit/);
+  assert.match(JSON.stringify(payloads), /procyon\.semantic\.worker\.\*/);
+  assert.match(JSON.stringify(payloads), /procyon\.semantic\.zvec-runtime\.\*/);
+  assert.match(JSON.stringify(catalogs), /semantic-catalog-\$\{\{ matrix.target \}\}/);
+  assert.match(JSON.stringify(publish), /softprops\/action-gh-release@v2/);
+  assert.doesNotMatch(
+    releaseText,
+    /bundle\/(?:dmg|msi|nsis|deb|appimage).*semantic|semantic.*bundle\/(?:dmg|msi|nsis|deb|appimage)/i,
+  );
+});
+
 test('package-manager generator creates a Homebrew cask and Chocolatey installer package', () => {
   const outputRoot = mkdtempSync(join(tmpdir(), 'procyon-packages-'));
   const checksum = 'a'.repeat(64);

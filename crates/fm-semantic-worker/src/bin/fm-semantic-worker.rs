@@ -7,12 +7,27 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), fm_semantic_worker::ServerError> {
     let arguments = arguments_from(std::env::args_os().skip(1))?;
-    #[cfg(feature = "developer-bundle")]
-    if let Some(developer_data_directory) = arguments.developer_data_directory {
-        return fm_semantic_worker::developer_bundle::run_developer_worker(
+    #[cfg(feature = "semantic-runtime")]
+    if let Some(semantic_data_directory) = arguments.semantic_data_directory {
+        if arguments.development_mode {
+            return fm_semantic_worker::developer_bundle::run_developer_worker(
+                &arguments.runtime_directory,
+                &semantic_data_directory,
+                arguments.semantic_model_pack.as_deref(),
+                arguments.idle_timeout,
+            )
+            .await;
+        }
+        let model_pack = arguments.semantic_model_pack.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--semantic-model-pack is required with --semantic-data-dir",
+            )
+        })?;
+        return fm_semantic_worker::developer_bundle::run_managed_worker(
             &arguments.runtime_directory,
-            &developer_data_directory,
-            arguments.developer_model_pack.as_deref(),
+            &semantic_data_directory,
+            &model_pack,
             arguments.idle_timeout,
         )
         .await;
@@ -24,10 +39,12 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
 struct Arguments {
     runtime_directory: PathBuf,
     idle_timeout: Duration,
-    #[cfg(feature = "developer-bundle")]
-    developer_data_directory: Option<PathBuf>,
-    #[cfg(feature = "developer-bundle")]
-    developer_model_pack: Option<PathBuf>,
+    #[cfg(feature = "semantic-runtime")]
+    semantic_data_directory: Option<PathBuf>,
+    #[cfg(feature = "semantic-runtime")]
+    semantic_model_pack: Option<PathBuf>,
+    #[cfg(feature = "semantic-runtime")]
+    development_mode: bool,
 }
 
 fn arguments_from(
@@ -36,10 +53,14 @@ fn arguments_from(
     let mut arguments = arguments.into_iter();
     let mut runtime_directory = None;
     let mut idle_timeout = Duration::from_secs(30);
-    #[cfg(feature = "developer-bundle")]
-    let mut developer_data_directory = None;
-    #[cfg(feature = "developer-bundle")]
-    let mut developer_model_pack = None;
+    #[cfg(feature = "semantic-runtime")]
+    let mut semantic_data_directory = None;
+    #[cfg(feature = "semantic-runtime")]
+    let mut semantic_model_pack = None;
+    #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
+    let mut development_mode = false;
+    #[cfg(all(feature = "semantic-runtime", not(feature = "developer-bundle")))]
+    let development_mode = false;
     while let Some(argument) = arguments.next() {
         if argument == "--runtime-dir" {
             runtime_directory = arguments.next().map(PathBuf::from);
@@ -57,10 +78,46 @@ fn arguments_from(
                 )
             })?;
             idle_timeout = Duration::from_millis(value);
+        } else if argument == "--semantic-data-dir" {
+            #[cfg(feature = "semantic-runtime")]
+            {
+                semantic_data_directory =
+                    Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "semantic data directory value is required",
+                        )
+                    })?));
+            }
+            #[cfg(not(feature = "semantic-runtime"))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--semantic-data-dir requires the opt-in semantic-runtime feature",
+                ));
+            }
+        } else if argument == "--semantic-model-pack" {
+            #[cfg(feature = "semantic-runtime")]
+            {
+                semantic_model_pack = Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "semantic model pack value is required",
+                    )
+                })?));
+            }
+            #[cfg(not(feature = "semantic-runtime"))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--semantic-model-pack requires the opt-in semantic-runtime feature",
+                ));
+            }
         } else if argument == "--developer-data-dir" {
             #[cfg(feature = "developer-bundle")]
             {
-                developer_data_directory =
+                development_mode = true;
+                semantic_data_directory =
                     Some(PathBuf::from(arguments.next().ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
@@ -78,7 +135,8 @@ fn arguments_from(
         } else if argument == "--developer-model-pack" {
             #[cfg(feature = "developer-bundle")]
             {
-                developer_model_pack = Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                development_mode = true;
+                semantic_model_pack = Some(PathBuf::from(arguments.next().ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "developer model pack value is required",
@@ -104,10 +162,12 @@ fn arguments_from(
     Ok(Arguments {
         runtime_directory,
         idle_timeout,
-        #[cfg(feature = "developer-bundle")]
-        developer_data_directory,
-        #[cfg(feature = "developer-bundle")]
-        developer_model_pack,
+        #[cfg(feature = "semantic-runtime")]
+        semantic_data_directory,
+        #[cfg(feature = "semantic-runtime")]
+        semantic_model_pack,
+        #[cfg(feature = "semantic-runtime")]
+        development_mode,
     })
 }
 
@@ -115,10 +175,10 @@ fn arguments_from(
 mod tests {
     use super::*;
 
-    #[cfg(not(feature = "developer-bundle"))]
+    #[cfg(not(feature = "semantic-runtime"))]
     #[test]
-    fn developer_arguments_require_the_feature() {
-        for argument in ["--developer-data-dir", "--developer-model-pack"] {
+    fn semantic_arguments_require_the_feature() {
+        for argument in ["--semantic-data-dir", "--semantic-model-pack"] {
             let error = arguments_from([
                 "--runtime-dir".into(),
                 "runtime".into(),
@@ -128,8 +188,29 @@ mod tests {
             .err()
             .expect("argument must be rejected");
 
-            assert!(error.to_string().contains("developer-bundle feature"));
+            assert!(error.to_string().contains("semantic-runtime feature"));
         }
+    }
+
+    #[cfg(all(feature = "semantic-runtime", not(feature = "developer-bundle")))]
+    #[test]
+    fn managed_data_and_model_arguments_are_explicitly_parsed() {
+        let arguments = arguments_from([
+            "--runtime-dir".into(),
+            "runtime".into(),
+            "--semantic-data-dir".into(),
+            "data".into(),
+            "--semantic-model-pack".into(),
+            "pack".into(),
+        ])
+        .expect("arguments");
+
+        assert_eq!(
+            arguments.semantic_data_directory,
+            Some(PathBuf::from("data"))
+        );
+        assert_eq!(arguments.semantic_model_pack, Some(PathBuf::from("pack")));
+        assert!(!arguments.development_mode);
     }
 
     #[cfg(feature = "developer-bundle")]
@@ -146,10 +227,11 @@ mod tests {
         .expect("arguments");
 
         assert_eq!(
-            arguments.developer_data_directory,
+            arguments.semantic_data_directory,
             Some(PathBuf::from("data"))
         );
-        assert_eq!(arguments.developer_model_pack, Some(PathBuf::from("pack")));
+        assert_eq!(arguments.semantic_model_pack, Some(PathBuf::from("pack")));
+        assert!(arguments.development_mode);
     }
 
     #[test]

@@ -143,8 +143,8 @@ installed and activated rather than a fixed one.
 
 ### Publishing a production component pack
 
-The common production catalog contract is implemented; target payload production and desktop
-activation remain tasks 0195 and 0196. A release input artifact has this fixed layout:
+The release workflow produces a separate semantic component set for each supported target; desktop
+activation remains task 0196. A release input artifact has this fixed layout:
 
 ```text
 catalog-input.json
@@ -162,8 +162,11 @@ plus one exact worker-protocol/index-schema/converter/chunker/tokenizer/model id
 IDs use the `procyon.semantic.*` component namespaces and include target, package version, and a
 SHA-256 prefix; development IDs and the public developer key are never accepted as release trust.
 
-1. Build worker/runtime artifacts for each supported target and publish immutable payloads through
-   a catalog-ID-only artifact source. Do not accept user-supplied download URLs.
+1. Build worker/runtime artifacts for macOS arm64, Windows x86-64, Linux x86-64, and Linux arm64,
+   and publish immutable payloads through a catalog-ID-only artifact source. Intel macOS is an
+   explicit exception because Zvec 0.7.0 does not publish an x86-64 macOS runtime. Unsupported
+   hosts fail closed instead of receiving another target's payload. Do not accept user-supplied
+   download URLs.
 2. Evaluate the exact model revision and package set against the task-0188 baseline, then assemble
    `catalog-input.json` from the build outputs. The release tool enumerates the exact payload set
    and recomputes each file's length and SHA-256 before signing, so an unknown, missing, truncated,
@@ -184,17 +187,27 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
    indexing pause, worker quiescence, and authoritative index removal. Pass the resulting
    `ManagedSemanticComponentCapability` to `FileManagerService::with_semantic_component_capability`
    in the desktop host.
-6. Publish the platform payloads alongside a direct-distribution release and run installed/absent,
-   rollback, tamper, low-disk, and hardware smoke tests. Mac App Store builds must bundle executable
-   capabilities or keep them unavailable; they may not download executable packs at runtime.
+6. Publish the platform payloads alongside, but never inside, the base desktop installers. The
+   release exposes each content-addressed worker, Zvec runtime, and deduplicated model pack as its
+   own asset, plus `semantic-catalog-<target>.json` and `.sig` for each target. Target-independent
+   model bytes are published once; conflicting bytes under one immutable ID fail the release.
+   Run protocol negotiation, real-model activation, component lifecycle, tamper, low-disk, and
+   hardware smoke tests before publication.
+7. Preserve the platform's existing release policy. macOS worker and runtime payloads are signed
+   with the same Developer ID Application identity as the desktop application, submitted together
+   to Apple's notary service, and verified before upload. Windows payloads remain unsigned only
+   while the base Windows installer is also explicitly unsigned under task 0063; adding
+   Authenticode to that release path must cover semantic executables too. Linux uses the same
+   unsigned-release policy as the AppImage and Debian packages. Mac App Store builds must bundle
+   executable capabilities or keep them unavailable; they may not download executable packs.
 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 1.
-No production payload set or release catalog is shipped yet; task 0195 produces the platform
-artifacts, task 0196 embeds the matching public key and activates the desktop host, and task 0198
-qualifies the installed result. The developer bundle
+The production payload and signed-catalog jobs run for releases, but users cannot activate them
+until task 0196 embeds the matching public key and connects the desktop host; task 0198 qualifies
+the installed result. The developer bundle
 packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point

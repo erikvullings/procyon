@@ -221,6 +221,46 @@ async fn negotiates_and_rejects_an_invalid_launch_secret() {
 }
 
 #[tokio::test]
+#[ignore = "requires production worker, native runtime, and model-pack artifact paths"]
+async fn packaged_production_worker_starts_negotiates_and_shuts_down() {
+    let worker = PathBuf::from(
+        std::env::var_os("PROCYON_SEMANTIC_PRODUCTION_WORKER")
+            .expect("PROCYON_SEMANTIC_PRODUCTION_WORKER"),
+    );
+    let native_runtime = PathBuf::from(
+        std::env::var_os("PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME")
+            .expect("PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME"),
+    );
+    let model_pack = PathBuf::from(
+        std::env::var_os("PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK")
+            .expect("PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK"),
+    );
+    let runtime_directory = test_directory("production-worker");
+    let data_directory = runtime_directory.join("semantic-data");
+    let native_directory = native_runtime.parent().expect("native runtime parent");
+    let connector = WorkerConnector::desktop_managed(
+        &runtime_directory,
+        &worker,
+        &data_directory,
+        native_directory,
+        &model_pack,
+    )
+    .with_idle_timeout(Duration::from_secs(1));
+
+    let client = connector
+        .connect()
+        .await
+        .expect("packaged production worker");
+    assert_eq!(client.protocol_version(), 1);
+    assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    client.shutdown(Duration::from_secs(10)).await.unwrap();
+    connector
+        .wait_until_stopped(Duration::from_secs(12))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn expired_sessions_are_rejected_and_a_new_session_can_authenticate() {
     let directory = test_directory("session-expiry");
     let endpoint = Endpoint::for_runtime_directory(&directory);
