@@ -175,7 +175,15 @@ async fn main() {
     let cli = Cli::parse();
 
     if let Some(Command::ExportOpenapi { path }) = &cli.command {
-        fm_server::openapi_export::write_to_file(path).unwrap_or_else(|err| {
+        let export_path = path.clone();
+        let result = std::thread::Builder::new()
+            .name("openapi-export".to_owned())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(move || fm_server::openapi_export::write_to_file(&export_path))
+            .expect("failed to start OpenAPI export worker")
+            .join()
+            .expect("OpenAPI export worker panicked");
+        result.unwrap_or_else(|err| {
             panic!(
                 "failed to export OpenAPI document to {}: {err}",
                 path.display()

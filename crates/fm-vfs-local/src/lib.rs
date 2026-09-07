@@ -930,6 +930,7 @@ fn stable_entry_id(_metadata: &std::fs::Metadata, _location: &Location) -> Entry
 #[must_use]
 pub fn stable_filesystem_identity(location: &Location) -> Option<(String, String)> {
     let path = location.to_native_path().ok()?;
+    #[cfg(not(windows))]
     let metadata = std::fs::metadata(&path).ok()?;
     #[cfg(unix)]
     {

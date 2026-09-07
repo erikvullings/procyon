@@ -9,11 +9,12 @@ use std::time::Duration;
 use async_trait::async_trait;
 use fm_application::FileManagerService;
 use fm_application::semantic::{
-    DocumentIngestion, FakeSemanticCapability, LibraryId as WorkerLibraryId, SemanticCapability,
-    SemanticError, SemanticHealth, SemanticIngestionJob, SemanticIngestionState, SemanticJobId,
-    SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
-    TenantId,
+    DocumentIngestion, FakeSemanticCapability, SemanticCapability, SemanticError, SemanticHealth,
+    SemanticIngestionJob, SemanticIngestionState, SemanticJobId, SemanticOperationId,
+    SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
 };
+#[cfg(unix)]
+use fm_application::semantic::{LibraryId as WorkerLibraryId, TenantId};
 use fm_application::semantic_indexing::SemanticIndexingError;
 use fm_application::semantic_library::{
     FixedSemanticEnrolmentEstimator, SemanticAccessContext, SemanticEnrolmentEstimate,
@@ -25,7 +26,9 @@ use fm_semantic_library::{
     DeviceLibraryIdentity, EligibilityReason, EligibilityReasonCounts, LibraryId, ModelIdentity,
     ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId,
 };
-use fm_transport_dto::{ResolveRagCitationRequestDto, RuntimeKindDto};
+#[cfg(unix)]
+use fm_transport_dto::ResolveRagCitationRequestDto;
+use fm_transport_dto::RuntimeKindDto;
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;

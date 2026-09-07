@@ -1224,11 +1224,18 @@ fn system_sync_directory(directory: &Path) -> Result<(), std::io::Error> {
         use std::os::windows::fs::OpenOptionsExt;
 
         const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-        return OpenOptions::new()
-            .read(true)
+        const ERROR_INVALID_FUNCTION: i32 = 1;
+        match OpenOptions::new()
+            .write(true)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
             .open(directory)?
-            .sync_all();
+            .sync_all()
+        {
+            // Windows exposes directory handles but filesystems do not support
+            // flushing them. Files are flushed before their atomic renames.
+            Err(error) if error.raw_os_error() == Some(ERROR_INVALID_FUNCTION) => Ok(()),
+            result => result,
+        }
     }
     #[cfg(not(windows))]
     fs::File::open(directory)?.sync_all()

@@ -106,12 +106,12 @@ impl SemanticDataRoot {
 }
 
 pub(crate) fn ensure_no_symlink_components(path: &Path) -> Result<(), DataRootError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component.as_os_str());
-        match fs::symlink_metadata(&current) {
+    for ancestor in ancestors_root_first(path) {
+        match fs::symlink_metadata(ancestor) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(DataRootError::UnsafeLayout { path: current });
+                return Err(DataRootError::UnsafeLayout {
+                    path: ancestor.to_owned(),
+                });
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
@@ -119,6 +119,15 @@ pub(crate) fn ensure_no_symlink_components(path: &Path) -> Result<(), DataRootEr
         }
     }
     Ok(())
+}
+
+fn ancestors_root_first(path: &Path) -> impl Iterator<Item = &Path> {
+    let mut ancestors = path
+        .ancestors()
+        .filter(|ancestor| !ancestor.as_os_str().is_empty())
+        .collect::<Vec<_>>();
+    ancestors.reverse();
+    ancestors.into_iter()
 }
 
 fn ensure_directory(path: &Path) -> Result<(), DataRootError> {
@@ -143,6 +152,29 @@ pub enum DataRootError {
     /// A filesystem operation failed.
     #[error("semantic data filesystem operation failed: {0}")]
     Io(#[from] std::io::Error),
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_path_validation_starts_at_the_root_not_the_drive_prefix() {
+        let ancestors = ancestors_root_first(Path::new(r"C:\Users\runner\semantic"))
+            .map(Path::to_owned)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ancestors,
+            [
+                PathBuf::from(r"C:\"),
+                PathBuf::from(r"C:\Users"),
+                PathBuf::from(r"C:\Users\runner"),
+                PathBuf::from(r"C:\Users\runner\semantic"),
+            ]
+        );
+        assert!(ancestors.iter().all(|ancestor| ancestor.is_absolute()));
+    }
 }
 
 /// A host-owned RAII pause that resumes indexing when dropped.

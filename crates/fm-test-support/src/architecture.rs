@@ -38,6 +38,10 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-platform", 1),
     ("fm-plugin-api", 1),
     ("fm-search-acceleration", 1),
+    // `fm-semantic-conversion` is a self-contained parsing engine: it accepts
+    // bounded bytes plus trusted metadata and has no workspace dependencies.
+    // Keeping it below the optional Docling adapter preserves strict layering.
+    ("fm-semantic-conversion", 1),
     ("fm-ssh", 1),
     ("fm-transport-dto", 1),
     ("fm-vfs", 1),
@@ -60,10 +64,9 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-pptx-renderer", 2),
     ("fm-search", 2),
     ("fm-semantic-components", 2),
-    // `fm-semantic-conversion` is a self-contained parsing engine: it accepts
-    // bounded bytes plus trusted metadata and never touches the VFS, transport
-    // DTOs or a host runtime, so it sits with the other primitive engines.
-    ("fm-semantic-conversion", 2),
+    // The optional Docling adapter builds on the provider-neutral conversion
+    // contract without depending on the worker or a host runtime.
+    ("fm-semantic-docling", 2),
     ("fm-settings", 2),
     ("fm-vcs-status", 2),
     ("fm-vfs-local", 2),
@@ -415,6 +418,8 @@ mod tests {
         assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
         assert_eq!(layer_of("fm-semantic-worker"), Some(3));
         assert_eq!(layer_of("fm-semantic-components"), Some(2));
+        assert_eq!(layer_of("fm-semantic-conversion"), Some(1));
+        assert_eq!(layer_of("fm-semantic-docling"), Some(2));
         assert_eq!(layer_of("fm-semantic-library"), Some(3));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));
         assert!(layer_of("fm-server") > layer_of("fm-application"));
