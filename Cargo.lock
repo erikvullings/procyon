@@ -3184,7 +3184,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-components"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "ed25519-dalek",
  "fs2",
@@ -3202,7 +3202,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-conversion"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "blake3",
  "calamine",
@@ -3218,7 +3218,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-docling"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "docling-core",
  "docling-pdf",
@@ -3230,7 +3230,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-library"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "fm-domain",
  "fm-settings",
@@ -3245,7 +3245,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-protocol"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "prost",
  "prost-build",
@@ -3256,7 +3256,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-worker"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "fm-semantic-components",
  "fm-semantic-conversion",
