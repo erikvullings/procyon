@@ -1,6 +1,6 @@
 # 0196 Release desktop semantic activation
 
-Status: open
+Status: done
 Priority: high
 Subsystem: frontend, backend, release
 Depends on: 0194
@@ -40,3 +40,13 @@ indexing, search, summary, and Ask flows without changing ordinary file-manager 
 - 2026-09-07 Copilot: Created as the user-facing activation step. It may proceed in parallel with
   0195 once 0194 fixes the catalog and trust contract, but cannot be called release-ready until
   real platform payloads exist.
+- 2026-09-09 Copilot: Wired release desktop construction to a locally embedded, production-signed
+  catalog in `apps/fm-desktop/src-tauri/src/semantic_production.rs` and kept catalog loading
+  network-free. Release jobs now wait for the matching signed catalog, bundle only that catalog,
+  and compile the protected public verification key; payload downloads remain consent-driven HTTPS
+  range requests. Managed worker launch resolves and revalidates the active worker, runtime, and
+  model on every launch, including the native runtime copy, so upgrades cannot reuse stale or
+  tampered generations. Generalized desktop reconciliation from developer-only to managed
+  components, preserved the explicit Intel macOS unavailable case, and extended frontend lifecycle
+  coverage for absent, downloading, host download policy, rollback, and uninstall states. Updated
+  `docs/semantic-operations.md`; the server remains unchanged and administrator-provisioned.

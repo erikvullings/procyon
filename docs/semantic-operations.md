@@ -130,8 +130,16 @@ installed and activated rather than a fixed one.
   provider indexing fails, consent remains enrolled and its reconciliation generation stays
   unchanged; inspect the development log, correct the reported problem, then repeat **Include
   folder** to retry without removing the root.
-- Production desktop builds remain unavailable until the host injects a
-  `ManagedSemanticComponentCapability`. This is an optional component pack, not a Lua plugin.
+- Release desktop builds embed the signed catalog and production public key, then inject a
+  `ManagedSemanticComponentCapability`. The catalog is local installer metadata; worker, runtime,
+  and model payloads remain optional release assets and are downloaded only after the user reviews
+  the exact disclosure and consents. Ordinary startup performs no semantic network request and
+  launches no worker.
+- Each worker launch resolves the current active generation again and verifies the installed
+  worker, runtime, and model bytes against the signed catalog. Missing, stale, tampered, or mixed
+  generations fail closed. Intel macOS keeps semantic installation unavailable because Zvec 0.7.0
+  has no supported runtime, but the universal desktop application continues to provide ordinary
+  file-management features.
 - Desktop-managed builds install only packages from the signed catalog. The preview reports exact
   package/model identity, download bytes, disk/RAM estimates, and the filesystem authority used.
 - Before enrolment, estimate eligible files, extracted text, vectors, and any missing model bytes.
@@ -143,8 +151,8 @@ installed and activated rather than a fixed one.
 
 ### Publishing a production component pack
 
-The release workflow produces a separate semantic component set for each supported target; desktop
-activation remains task 0196. A release input artifact has this fixed layout:
+The release workflow produces a separate semantic component set and signed catalog for each
+supported target. A release input artifact has this fixed layout:
 
 ```text
 catalog-input.json
@@ -205,8 +213,8 @@ The production identity contract pins `intfloat/multilingual-e5-small` at revisi
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 1.
-The production payload and signed-catalog jobs run for releases, but users cannot activate them
-until task 0196 embeds the matching public key and connects the desktop host; task 0198 qualifies
+The production payload and signed-catalog jobs run before desktop packaging. Each installer embeds
+only its matching `catalog.json`, `catalog.sig`, and public verification key; task 0198 qualifies
 the installed result. The developer bundle
 packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same

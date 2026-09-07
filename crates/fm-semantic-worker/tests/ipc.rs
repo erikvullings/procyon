@@ -15,9 +15,9 @@ use fm_semantic_protocol::{
 };
 use fm_semantic_worker::{
     ClientError, ConceptFolderQuery, Endpoint, IngestionScope, IngestionState, LaunchSecret,
-    SearchResult, WorkerClient, WorkerConfig, WorkerConnector, WorkerHealth,
-    WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob, WorkerQueryBackend,
-    WorkerQueryInput, WorkerServer,
+    ManagedWorkerLaunch, ManagedWorkerResolver, SearchResult, WorkerClient, WorkerConfig,
+    WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
+    WorkerIngestionJob, WorkerQueryBackend, WorkerQueryInput, WorkerServer,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -238,14 +238,15 @@ async fn packaged_production_worker_starts_negotiates_and_shuts_down() {
     let runtime_directory = test_directory("production-worker");
     let data_directory = runtime_directory.join("semantic-data");
     let native_directory = native_runtime.parent().expect("native runtime parent");
-    let connector = WorkerConnector::desktop_managed(
-        &runtime_directory,
-        &worker,
-        &data_directory,
-        native_directory,
-        &model_pack,
-    )
-    .with_idle_timeout(Duration::from_secs(1));
+    let launch = ManagedWorkerLaunch::new(
+        worker,
+        data_directory,
+        native_directory.to_path_buf(),
+        model_pack,
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let connector = WorkerConnector::desktop_managed_resolved(&runtime_directory, resolver)
+        .with_idle_timeout(Duration::from_secs(1));
 
     let client = connector
         .connect()

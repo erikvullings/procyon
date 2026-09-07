@@ -175,9 +175,53 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(JSON.stringify(payloads), /procyon\.semantic\.zvec-runtime\.\*/);
   assert.match(JSON.stringify(catalogs), /semantic-catalog-\$\{\{ matrix.target \}\}/);
   assert.match(JSON.stringify(publish), /softprops\/action-gh-release@v2/);
+  for (const [jobName, catalogTarget] of [
+    ['macos', 'macos-aarch64'],
+    ['windows', 'windows-x86_64'],
+    ['linux', 'linux-x86_64'],
+  ]) {
+    const job = release.jobs[jobName];
+    assert.deepEqual(job.needs, ['release', 'semantic-catalogs']);
+    assert.match(JSON.stringify(job), new RegExp(`semantic-catalog-${catalogTarget}`));
+    assert.match(JSON.stringify(job), /resources\/semantic/);
+    assert.match(JSON.stringify(job), /export-semantic-verifying-key\.mjs/);
+    assert.doesNotMatch(JSON.stringify(job), /SEMANTIC_CATALOG_SIGNING_KEY_BASE64/);
+  }
+  assert.match(releaseText, /vars\.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64/);
   assert.doesNotMatch(
     releaseText,
     /bundle\/(?:dmg|msi|nsis|deb|appimage).*semantic|semantic.*bundle\/(?:dmg|msi|nsis|deb|appimage)/i,
+  );
+});
+
+test('release verification key exporter writes only a validated public key as hex', () => {
+  const outputRoot = mkdtempSync(join(tmpdir(), 'procyon-semantic-key-'));
+  const environmentFile = join(outputRoot, 'github.env');
+  const key = Buffer.alloc(32, 0x2a);
+
+  execFileSync('node', ['scripts/export-semantic-verifying-key.mjs', environmentFile], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      VERIFYING_KEY_BASE64: key.toString('base64'),
+    },
+  });
+
+  assert.equal(
+    readFileSync(environmentFile, 'utf8'),
+    `PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX=${key.toString('hex')}\n`,
+  );
+  assert.throws(
+    () =>
+      execFileSync('node', ['scripts/export-semantic-verifying-key.mjs', environmentFile], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          VERIFYING_KEY_BASE64: Buffer.alloc(31).toString('base64'),
+        },
+        stdio: 'pipe',
+      }),
+    /Command failed/,
   );
 });
 
@@ -210,6 +254,7 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
 
   const tauriConfig = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.equal(tauriConfig.bundle.resources['resources/procyon'], 'procyon');
+  assert.equal(tauriConfig.bundle.resources['resources/semantic'], 'semantic');
   const launcher = read('apps', 'fm-desktop', 'src-tauri', 'resources', 'procyon');
   assert.match(launcher, /exec \/usr\/bin\/open .* --args "\$@"/);
   assert.notEqual(

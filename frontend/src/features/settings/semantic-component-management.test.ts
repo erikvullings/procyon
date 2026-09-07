@@ -118,6 +118,31 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelectorAll('.fm-semantic-action')).toHaveLength(0);
   });
 
+  it.each([
+    ['directDistribution', true],
+    ['simulated', true],
+    ['prohibitedByMacAppStore', false],
+  ] as const)(
+    'makes pre-install desktop management actionable for %s distribution',
+    async (runtimeExecutableDownload, actionable) => {
+      const client = new MockFileManagerClient({ semanticLifecycle: 'absent' });
+      vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
+        authority: 'desktopManaged',
+        runtimeExecutableDownload,
+        operations: ['viewStatus', 'viewCatalog', 'createInstallationOffer', 'installOrEnable'],
+      });
+
+      mountComponent(client);
+      await waitForLoaded();
+
+      expect(root.querySelector('.fm-semantic-install') !== null).toBe(actionable);
+      expect(root.querySelectorAll('.fm-semantic-action')).toHaveLength(actionable ? 1 : 0);
+      if (!actionable) {
+        expect(root.textContent).toContain('cannot download executable semantic components');
+      }
+    },
+  );
+
   it('shows a load error with a working retry and an empty-profile state', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockRejectedValueOnce(
@@ -329,7 +354,9 @@ describe('SemanticComponentManagement', () => {
 
   it.each([
     ['unavailable', 'Semantic components unavailable'],
+    ['absent', 'Not installed'],
     ['offered', 'Installation offer awaiting review'],
+    ['downloading', 'Downloading'],
     ['downloadingResumable', 'Download can resume'],
     ['paused', 'Indexing paused'],
     ['updateFailedRolledBack', 'Update failed; restored version 1.0.0'],
@@ -340,6 +367,16 @@ describe('SemanticComponentManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain(copy);
+  });
+
+  it('presents a failed upgrade and restored active version as an alert', async () => {
+    mountComponent(new MockFileManagerClient({ semanticLifecycle: 'updateFailedRolledBack' }));
+    await waitForLoaded();
+
+    const alert = root.querySelector('.fm-semantic-lifecycle[role="alert"]');
+    expect(alert?.textContent).toContain('Update failed; restored version 1.0.0');
+    expect(alert?.textContent).toContain('Failed version: 1.0.1');
+    expect(root.textContent).toContain('Uninstall components');
   });
 
   it('requires an explicit retain/delete choice before uninstalling', async () => {

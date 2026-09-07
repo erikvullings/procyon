@@ -21,8 +21,8 @@ jobs:
 
   macos:
     name: Signed and notarized macOS bundles
-    needs: [release]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    needs: [release, semantic-catalogs]
+    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
@@ -36,6 +36,17 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Embed the signed macOS arm64 semantic catalog
+        uses: actions/download-artifact@v5
+        with:
+          name: semantic-catalog-macos-aarch64
+          path: apps/fm-desktop/src-tauri/resources/semantic
+      - name: Compile the production semantic catalog trust key
+        env:
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: >
+          node scripts/export-semantic-verifying-key.mjs
+          "$GITHUB_ENV"
       - name: Install universal macOS Rust targets
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Install lld
@@ -163,7 +174,8 @@ jobs:
 
   linux:
     name: Linux packages
-    needs: [release]
+    needs: [release, semantic-catalogs]
+    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
@@ -184,6 +196,17 @@ jobs:
             patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Embed the signed Linux x86-64 semantic catalog
+        uses: actions/download-artifact@v5
+        with:
+          name: semantic-catalog-linux-x86_64
+          path: apps/fm-desktop/src-tauri/resources/semantic
+      - name: Compile the production semantic catalog trust key
+        env:
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: >
+          node scripts/export-semantic-verifying-key.mjs
+          "$GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
       - name: Build Linux packages
@@ -196,7 +219,8 @@ jobs:
 
   windows:
     name: Unsigned Windows installers
-    needs: [release]
+    needs: [release, semantic-catalogs]
+    if: ${{ always() && needs.semantic-catalogs.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
     runs-on: windows-latest
     environment: desktop-release
     steps:
@@ -209,6 +233,17 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Embed the signed Windows x86-64 semantic catalog
+        uses: actions/download-artifact@v5
+        with:
+          name: semantic-catalog-windows-x86_64
+          path: apps/fm-desktop/src-tauri/resources/semantic
+      - name: Compile the production semantic catalog trust key
+        env:
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: >
+          node scripts/export-semantic-verifying-key.mjs
+          "$env:GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
         run: node scripts/check-desktop-release.mjs "$env:GITHUB_REF_NAME"
       - name: Build unsigned Windows installers

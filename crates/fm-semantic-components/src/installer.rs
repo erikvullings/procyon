@@ -447,6 +447,34 @@ impl ComponentManager {
         self.state_and_status().map(|(_, report)| report)
     }
 
+    /// Resolves and re-verifies one active installed payload against its trusted catalog entry.
+    ///
+    /// Returns `Ok(None)` when the component is not active or belongs to another artifact
+    /// generation. The file type, length, and SHA-256 are checked again before its path leaves the
+    /// component manager so worker launch never trusts stale durable state alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed state or integrity error when durable state cannot be read or the recorded
+    /// payload is missing, unsafe, truncated, or tampered.
+    pub fn verified_installed_payload(
+        &self,
+        artifact: &CatalogArtifact,
+    ) -> Result<Option<PathBuf>, InstallError> {
+        let state = self.state()?;
+        let Some(installed) = state.installed_component(artifact.component_id()) else {
+            return Ok(None);
+        };
+        if installed.artifact_id() != artifact.id()
+            || installed.version() != artifact.version()
+            || installed.checksum() != artifact.checksum()
+        {
+            return Ok(None);
+        }
+        verify_installed_artifact(artifact, installed.installed_path())?;
+        Ok(Some(installed.installed_path().to_owned()))
+    }
+
     /// Loads one state snapshot and its corresponding filesystem report.
     ///
     /// # Errors

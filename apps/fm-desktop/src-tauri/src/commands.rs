@@ -717,7 +717,7 @@ pub(crate) async fn complete_semantic_component_model_migration(
         .complete_semantic_component_model_migration(request)
         .await
         .map_err(semantic_component_error)?;
-    if state.semantic_developer_bundle {
+    if state.semantic_managed_components {
         reindex_enrolled_roots_for_the_new_model(
             Arc::clone(&state.service),
             state.semantic_reindex_pending_marker.as_deref(),
@@ -989,7 +989,7 @@ pub(crate) async fn confirm_semantic_enrolment(
         .confirm_semantic_enrolment(&desktop_semantic_access(), request)
         .await
         .map_err(semantic_library_error)?;
-    if !state.semantic_developer_bundle {
+    if !state.semantic_managed_components {
         return Ok(status);
     }
     let Some(root_id) = status

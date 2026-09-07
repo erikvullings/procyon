@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use fm_semantic_components::{ModelPack, ModelPackKind};
+use fm_semantic_components::{ModelPack, ModelPackKind, ProductionPipelineIdentity};
 use fm_semantic_conversion::{ConversionBudgets, STRUCTURAL_CHUNKER_VERSION};
 use fm_semantic_docling::{
     DEFAULT_CONVERTER_PIPELINE_VERSION, OcrMyPdfConfiguration, converter_with_optional_ocr,
@@ -53,6 +53,16 @@ const DEVELOPMENT_MODEL_ID: &str = "procyon.dev.hashing-embedding";
 const DEVELOPMENT_MODEL_REVISION: &str = "sha256-token-hashing-v1";
 const DEVELOPMENT_TOKENIZER: &str = "unicode-words-v1";
 const MAX_TOKEN_BYTES: usize = 64;
+
+/// Returns the exact production pipeline identity compiled into this worker.
+#[must_use]
+pub fn production_pipeline_identity() -> ProductionPipelineIdentity {
+    let identity = fm_semantic_components::production_pipeline_identity();
+    debug_assert_eq!(identity.index_schema_version(), ZVEC_SCHEMA_VERSION);
+    debug_assert_eq!(identity.converter(), DEFAULT_CONVERTER_PIPELINE_VERSION);
+    debug_assert_eq!(identity.chunker(), STRUCTURAL_CHUNKER_VERSION.to_string());
+    identity
+}
 const PROJECTIONS_PER_TOKEN: usize = 8;
 
 /// Returns the immutable identity of the non-production developer embedder.

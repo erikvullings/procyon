@@ -102,6 +102,9 @@ impl From<fm_semantic_worker::ClientError> for SemanticError {
             fm_semantic_worker::ClientError::InvalidDeveloperModelPack(message) => {
                 Self::WorkerFailure(message)
             }
+            fm_semantic_worker::ClientError::InvalidManagedComponents(message) => {
+                Self::WorkerFailure(message)
+            }
             fm_semantic_worker::ClientError::ShutdownTimedOut => {
                 Self::WorkerFailure("worker did not stop within the shutdown deadline".to_owned())
             }
@@ -567,6 +570,18 @@ impl IpcSemanticCapability {
     pub fn desktop_on_demand(runtime_directory: &Path, executable: &Path) -> Self {
         Self {
             connector: WorkerConnector::desktop(runtime_directory, executable),
+            client: AsyncMutex::new(None),
+        }
+    }
+
+    /// Configures a production desktop worker resolved lazily from verified managed state.
+    #[must_use]
+    pub fn desktop_managed(
+        runtime_directory: &Path,
+        resolver: fm_semantic_worker::ManagedWorkerResolver,
+    ) -> Self {
+        Self {
+            connector: WorkerConnector::desktop_managed_resolved(runtime_directory, resolver),
             client: AsyncMutex::new(None),
         }
     }

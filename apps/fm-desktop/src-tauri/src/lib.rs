@@ -11,6 +11,7 @@ mod native_menu;
 mod platform;
 #[cfg(debug_assertions)]
 mod semantic_developer;
+mod semantic_production;
 mod terminal;
 
 use std::sync::Arc;
@@ -28,7 +29,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// service).
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
-    pub(crate) semantic_developer_bundle: bool,
+    pub(crate) semantic_managed_components: bool,
     pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
 }
 
@@ -85,6 +86,7 @@ pub fn run() {
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
                 .to_path_buf();
+            let resource_directory = app.path().resource_dir().ok();
             #[cfg(not(debug_assertions))]
             if std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE").is_some() {
                 return Err(std::io::Error::other(
@@ -102,19 +104,13 @@ pub fn run() {
                 credentials::build_credential_store(),
                 platform::build_search_accelerator(),
             );
-            #[cfg(debug_assertions)]
-            let mut semantic_developer_bundle = false;
-            #[cfg(debug_assertions)]
+            let mut semantic_managed_components = false;
             let mut semantic_reindex_pending_marker = None;
-            #[cfg(not(debug_assertions))]
-            let semantic_developer_bundle = false;
-            #[cfg(not(debug_assertions))]
-            let semantic_reindex_pending_marker = None;
             #[cfg(debug_assertions)]
             if let Some(bundle_directory) =
                 std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE")
             {
-                semantic_developer_bundle = true;
+                semantic_managed_components = true;
                 let bundle = semantic_developer::DeveloperSemanticBundle::load(
                     std::path::Path::new(&bundle_directory),
                     &app_data_directory,
@@ -133,18 +129,41 @@ pub fn run() {
                     .with_semantic_component_capability(bundle.components)
                     .with_semantic_capability(Arc::new(semantic));
                 semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
-            } else if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
+            }
+            if !semantic_managed_components
+                && let Some(resource_directory) = resource_directory.as_deref()
+                && let Some(bundle) = semantic_production::ProductionSemanticBundle::load(
+                    resource_directory,
+                    &app_data_directory,
+                    &app_data_directory,
+                )
+                .map_err(|error| std::io::Error::other(error.to_string()))?
+            {
+                semantic_managed_components = true;
+                let semantic = fm_application::semantic::IpcSemanticCapability::desktop_managed(
+                    &bundle.runtime_directory,
+                    Arc::clone(&bundle.worker),
+                );
+                service = service
+                    .with_semantic_component_capability(bundle.components)
+                    .with_semantic_capability(Arc::new(semantic));
+                semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
+            }
+            #[cfg(debug_assertions)]
+            if !semantic_managed_components
+                && std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock")
+            {
                 service = service.with_semantic_component_capability(Arc::new(
                     fm_application::semantic_components::FakeSemanticComponentCapability::new(),
                 ));
             }
-            if let Ok(resource_dir) = app.path().resource_dir() {
+            if let Some(resource_dir) = resource_directory {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
             let service = Arc::new(service);
             app.manage(AppState {
                 service: Arc::clone(&service),
-                semantic_developer_bundle,
+                semantic_managed_components,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
             });
             if let Err(error) = tauri::async_runtime::block_on(service.semantic_library_status(
@@ -152,7 +171,7 @@ pub fn run() {
             )) {
                 tracing::warn!(%error, "semantic library startup reconciliation failed");
             }
-            if semantic_developer_bundle {
+            if semantic_managed_components {
                 if let Some(marker) =
                     semantic_reindex_pending_marker.filter(|marker| marker.is_file())
                 {
@@ -534,7 +553,7 @@ mod tests {
                         fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
                     ),
                 ),
-                semantic_developer_bundle,
+                semantic_managed_components: semantic_developer_bundle,
                 semantic_reindex_pending_marker: None,
             })
             .manage(event_stream::EventSubscriptionRegistry::default())

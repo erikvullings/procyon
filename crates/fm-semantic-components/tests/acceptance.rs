@@ -1502,6 +1502,27 @@ fn install_restores_owner_executable_permission_for_downloaded_workers() {
 }
 
 #[test]
+fn managed_launch_resolution_revalidates_installed_payload_bytes() {
+    let (_directory, manager, _environment) = installed_fixture("verified-launch-");
+    let catalog = signed_fixture_catalog();
+    let worker = catalog
+        .artifacts()
+        .iter()
+        .find(|artifact| matches!(artifact.kind(), ArtifactKind::Worker))
+        .expect("worker artifact");
+
+    let installed = manager
+        .verified_installed_payload(worker)
+        .expect("verify installed worker")
+        .expect("installed worker");
+    std::fs::write(&installed, b"tampered worker").expect("tamper worker");
+    assert!(matches!(
+        manager.verified_installed_payload(worker),
+        Err(InstallError::InstalledArtifactInvalid { .. })
+    ));
+}
+
+#[test]
 fn interrupted_install_resumes_by_artifact_id_and_never_activates_partial_content() {
     let directory = project_temp_dir("resume-");
     let app_data = directory.path().join("app-data");

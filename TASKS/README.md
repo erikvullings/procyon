@@ -122,7 +122,7 @@ semantic components are not installed.
   semantic implementation branch was merged and green on main)*
 - [x] 0195 Cross-platform semantic release artifacts *(needs 0194; macOS x86-64 explicitly
   unsupported because Zvec 0.7.0 has no matching runtime)*
-- [ ] 0196 Release desktop semantic activation *(needs 0194; can proceed alongside 0195)*
+- [x] 0196 Release desktop semantic activation
 - [ ] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
 - [ ] 0198 Semantic release qualification *(needs 0195, 0196; gates the user-facing release)*

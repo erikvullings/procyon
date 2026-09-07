@@ -368,6 +368,9 @@ pub enum ClientError {
     /// The host selected a developer model whose installed artifact is unusable.
     #[error("active developer model pack is invalid: {0}")]
     InvalidDeveloperModelPack(String),
+    /// The host's verified managed component selection is incomplete or stale.
+    #[error("managed semantic components are unavailable: {0}")]
+    InvalidManagedComponents(String),
     /// A worker acknowledged shutdown but did not release its endpoint in time.
     #[error("semantic worker did not stop within the shutdown deadline")]
     ShutdownTimedOut,
@@ -380,9 +383,7 @@ enum ConnectorSource {
         executable: PathBuf,
         idle_timeout: Duration,
         startup_timeout: Duration,
-        managed_data_directory: Option<PathBuf>,
-        managed_native_library_directory: Option<PathBuf>,
-        managed_model_pack: Option<PathBuf>,
+        managed_worker: Option<ManagedWorkerResolver>,
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
@@ -396,6 +397,36 @@ enum ConnectorSource {
 /// supply this: nothing reachable from a frontend request contributes to it.
 pub type DeveloperModelPackResolver =
     Arc<dyn Fn() -> Result<Option<PathBuf>, String> + Send + Sync>;
+
+/// Host-verified paths required to launch one installed production worker generation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedWorkerLaunch {
+    executable: PathBuf,
+    data_directory: PathBuf,
+    native_library_directory: PathBuf,
+    model_pack: PathBuf,
+}
+
+impl ManagedWorkerLaunch {
+    /// Records paths selected exclusively from verified managed component state.
+    #[must_use]
+    pub fn new(
+        executable: PathBuf,
+        data_directory: PathBuf,
+        native_library_directory: PathBuf,
+        model_pack: PathBuf,
+    ) -> Self {
+        Self {
+            executable,
+            data_directory,
+            native_library_directory,
+            model_pack,
+        }
+    }
+}
+
+/// Resolves the currently active production worker generation at launch time.
+pub type ManagedWorkerResolver = Arc<dyn Fn() -> Result<ManagedWorkerLaunch, String> + Send + Sync>;
 
 /// Discovers or starts the one per-user worker on demand.
 pub struct WorkerConnector {
@@ -423,9 +454,7 @@ impl WorkerConnector {
                 executable: executable.to_owned(),
                 idle_timeout: Duration::from_secs(30),
                 startup_timeout: Duration::from_secs(2),
-                managed_data_directory: None,
-                managed_native_library_directory: None,
-                managed_model_pack: None,
+                managed_worker: None,
                 developer_data_directory: None,
                 developer_native_library_directory: None,
                 developer_model_pack: None,
@@ -442,18 +471,25 @@ impl WorkerConnector {
         native_library_directory: &Path,
         model_pack: &Path,
     ) -> Self {
-        let mut connector = Self::desktop(runtime_directory, executable)
+        let launch = ManagedWorkerLaunch::new(
+            executable.to_owned(),
+            data_directory.to_owned(),
+            native_library_directory.to_owned(),
+            model_pack.to_owned(),
+        );
+        Self::desktop_managed_resolved(runtime_directory, Arc::new(move || Ok(launch.clone())))
+    }
+
+    /// Creates a lazy production launcher that resolves verified active paths per launch.
+    #[must_use]
+    pub fn desktop_managed_resolved(
+        runtime_directory: &Path,
+        resolver: ManagedWorkerResolver,
+    ) -> Self {
+        let mut connector = Self::desktop(runtime_directory, Path::new(""))
             .with_startup_timeout(Duration::from_secs(30));
-        if let ConnectorSource::Desktop {
-            managed_data_directory,
-            managed_native_library_directory,
-            managed_model_pack,
-            ..
-        } = &mut connector.source
-        {
-            *managed_data_directory = Some(data_directory.to_owned());
-            *managed_native_library_directory = Some(native_library_directory.to_owned());
-            *managed_model_pack = Some(model_pack.to_owned());
+        if let ConnectorSource::Desktop { managed_worker, .. } = &mut connector.source {
+            *managed_worker = Some(resolver);
         }
         connector
     }
@@ -618,14 +654,17 @@ impl WorkerConnector {
         &self,
         client: WorkerClient,
     ) -> Result<Option<WorkerClient>, ClientError> {
-        let is_developer = matches!(
+        let requires_fresh_launch = matches!(
             &self.source,
             ConnectorSource::Desktop {
+                managed_worker: Some(_),
+                ..
+            } | ConnectorSource::Desktop {
                 developer_model_pack: Some(_),
                 ..
             }
         );
-        if !is_developer {
+        if !requires_fresh_launch {
             return Ok(Some(client));
         }
         client.shutdown(Duration::from_secs(10)).await?;
@@ -652,9 +691,7 @@ impl WorkerConnector {
                 executable,
                 idle_timeout,
                 startup_timeout,
-                managed_data_directory,
-                managed_native_library_directory,
-                managed_model_pack,
+                managed_worker,
                 developer_data_directory,
                 developer_native_library_directory,
                 developer_model_pack,
@@ -693,26 +730,27 @@ impl WorkerConnector {
                     return Ok(client);
                 }
 
+                let managed_launch = managed_worker
+                    .as_ref()
+                    .map(resolve_managed_worker)
+                    .transpose()?;
+                let launch_executable = managed_launch
+                    .as_ref()
+                    .map_or(executable.as_path(), |launch| launch.executable.as_path());
                 let secret = LaunchSecret::generate();
                 write_secret_file(&secret_path, &secret)?;
-                let mut command = std::process::Command::new(executable);
+                let mut command = std::process::Command::new(launch_executable);
                 command
                     .arg("--runtime-dir")
                     .arg(runtime_directory)
                     .arg("--idle-timeout-ms")
                     .arg(idle_timeout.as_millis().to_string());
-                if let Some(directory) = managed_data_directory {
-                    let model_pack = managed_model_pack.as_ref().ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "managed semantic worker requires an installed model pack",
-                        )
-                    })?;
+                if let Some(launch) = &managed_launch {
                     command
                         .arg("--semantic-data-dir")
-                        .arg(directory)
+                        .arg(&launch.data_directory)
                         .arg("--semantic-model-pack")
-                        .arg(model_pack);
+                        .arg(&launch.model_pack);
                 } else if let Some(directory) = developer_data_directory {
                     command.arg("--developer-data-dir").arg(directory);
                     if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
@@ -720,8 +758,9 @@ impl WorkerConnector {
                         command.arg("--developer-model-pack").arg(pack);
                     }
                 }
-                if let Some(directory) = managed_native_library_directory
+                if let Some(directory) = managed_launch
                     .as_ref()
+                    .map(|launch| &launch.native_library_directory)
                     .or(developer_native_library_directory.as_ref())
                 {
                     configure_developer_native_library(&mut command, directory)?;
@@ -828,6 +867,42 @@ fn resolve_developer_model_pack(
         )));
     }
     Ok(Some(pack))
+}
+
+fn resolve_managed_worker(
+    resolver: &ManagedWorkerResolver,
+) -> Result<ManagedWorkerLaunch, ClientError> {
+    let launch = resolver().map_err(ClientError::InvalidManagedComponents)?;
+    for (label, path, file) in [
+        ("worker executable", &launch.executable, true),
+        ("semantic data directory", &launch.data_directory, false),
+        (
+            "native runtime directory",
+            &launch.native_library_directory,
+            false,
+        ),
+        ("model pack", &launch.model_pack, true),
+    ] {
+        if !path.is_absolute() {
+            return Err(ClientError::InvalidManagedComponents(format!(
+                "{label} path is not absolute: {}",
+                path.display()
+            )));
+        }
+        if file && !path.is_file() {
+            return Err(ClientError::InvalidManagedComponents(format!(
+                "{label} is not an installed regular file: {}",
+                path.display()
+            )));
+        }
+        if !file && label == "native runtime directory" && !path.is_dir() {
+            return Err(ClientError::InvalidManagedComponents(format!(
+                "{label} is not an installed directory: {}",
+                path.display()
+            )));
+        }
+    }
+    Ok(launch)
 }
 
 #[cfg(test)]

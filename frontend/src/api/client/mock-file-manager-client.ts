@@ -365,6 +365,7 @@ export type MockSemanticLifecycle =
   | 'unavailable'
   | 'absent'
   | 'offered'
+  | 'downloading'
   | 'downloadingResumable'
   | 'installedEnabled'
   | 'paused'
@@ -1022,6 +1023,13 @@ function mockSemanticStatus(lifecycleName: MockSemanticLifecycle): SemanticCompo
         return { state: 'absent' };
       case 'offered':
         return { state: 'offered', offerId: 'mock-scenario-offer' };
+      case 'downloading':
+        return {
+          state: 'downloading',
+          downloadedBytes: 160,
+          totalBytes: 400,
+          resumable: false,
+        };
       case 'downloadingResumable':
         return {
           state: 'downloading',

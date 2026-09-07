@@ -47,7 +47,8 @@
     ],
     "resources": {
       "../../../plugins": "plugins",
-      "resources/procyon": "procyon"
+      "resources/procyon": "procyon",
+      "resources/semantic": "semantic"
     }
   }
 }

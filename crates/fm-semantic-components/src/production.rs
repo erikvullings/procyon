@@ -17,6 +17,10 @@ use crate::{
 pub const PRODUCTION_SIGNING_KEY_FILE_ENV: &str = "PROCYON_SEMANTIC_CATALOG_SIGNING_KEY_FILE";
 /// Compile-time variable containing the trusted public key as 64 lowercase hex digits.
 pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX";
+/// Converter pipeline compiled into the production semantic worker.
+pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036000+baseline/1";
+/// Structural chunker compiled into the production semantic worker.
+pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/2";
 /// Logical component identity of the production semantic worker.
 pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 /// Logical component identity of the production Zvec native runtime.
@@ -43,6 +47,25 @@ pub fn embedded_production_verifying_key() -> Result<VerifyingKey, ProductionCat
     let value = option_env!("PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX")
         .ok_or(ProductionCatalogError::VerifyingKeyUnavailable)?;
     parse_verifying_key_hex(value)
+}
+
+/// Returns the complete semantic pipeline identity trusted by this application build.
+#[must_use]
+pub fn production_pipeline_identity() -> crate::ProductionPipelineIdentity {
+    crate::ProductionPipelineIdentity::new(
+        1,
+        1,
+        PRODUCTION_CONVERTER_IDENTITY,
+        PRODUCTION_CHUNKER_IDENTITY,
+        crate::TokenizerId::new(PRODUCTION_TOKENIZER_ID)
+            .expect("production tokenizer constant is valid"),
+        crate::ModelIdentity::new(
+            crate::ModelId::new(PRODUCTION_MODEL_ID).expect("production model constant is valid"),
+            crate::ModelRevision::new(PRODUCTION_MODEL_REVISION)
+                .expect("production model revision constant is valid"),
+        ),
+    )
+    .expect("production pipeline constants are valid")
 }
 
 /// Derives an immutable content-addressed production artifact identifier.
