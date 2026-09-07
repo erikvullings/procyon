@@ -1224,11 +1224,11 @@ fn system_sync_directory(directory: &Path) -> Result<(), std::io::Error> {
         use std::os::windows::fs::OpenOptionsExt;
 
         const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-        return OpenOptions::new()
+        OpenOptions::new()
             .read(true)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
             .open(directory)?
-            .sync_all();
+            .sync_all()
     }
     #[cfg(not(windows))]
     fs::File::open(directory)?.sync_all()
