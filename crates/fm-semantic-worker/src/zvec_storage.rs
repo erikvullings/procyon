@@ -25,6 +25,7 @@ pub const ZVEC_NATIVE_VERSION: &str = "0.7.0";
 pub const ZVEC_SCHEMA_VERSION: u32 = 1;
 /// Maximum retrieval candidates accepted by the worker.
 pub const MAX_TOP_K: usize = 1_000;
+const MAX_WRITE_BATCH_DOCUMENTS: usize = 1_024;
 
 /// Audited packaging facts for one Procyon target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,9 +229,12 @@ impl ZvecStorage {
     ///
     /// Rejects dimension mismatches and partial SDK writes.
     pub fn upsert(&self, records: &[ZvecRecord]) -> Result<(), ZvecStorageError> {
-        let documents = self.documents(records)?;
-        let references = documents.iter().collect::<Vec<_>>();
-        ensure_complete_write(self.collection.upsert(&references)?)
+        for batch in records.chunks(MAX_WRITE_BATCH_DOCUMENTS) {
+            let documents = self.documents(batch)?;
+            let references = documents.iter().collect::<Vec<_>>();
+            ensure_complete_write(self.collection.upsert(&references)?)?;
+        }
+        Ok(())
     }
 
     /// Inserts records that must not already exist.
@@ -298,12 +302,14 @@ impl ZvecStorage {
     ///
     /// Returns a typed SDK or partial-write error.
     pub fn delete(&self, record_ids: &[&str]) -> Result<(), ZvecStorageError> {
-        let result = self.collection.delete(record_ids)?;
-        if result.error_count != 0 {
-            return Err(ZvecStorageError::PartialWrite {
-                succeeded: result.success_count,
-                failed: result.error_count,
-            });
+        for batch in record_ids.chunks(MAX_WRITE_BATCH_DOCUMENTS) {
+            let result = self.collection.delete(batch)?;
+            if result.error_count != 0 {
+                return Err(ZvecStorageError::PartialWrite {
+                    succeeded: result.success_count,
+                    failed: result.error_count,
+                });
+            }
         }
         Ok(())
     }
@@ -701,6 +707,67 @@ mod tests {
 
         let reopened = ZvecStorage::open(&path, 3, false).expect("reopen");
         assert_eq!(reopened.record_ids().expect("iterate"), vec!["a"]);
+    }
+
+    #[test]
+    fn upsert_batches_documents_at_the_sdk_write_limit() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 1, VectorIndexKind::Flat)
+            .expect("create collection");
+        let records = (0..=MAX_WRITE_BATCH_DOCUMENTS)
+            .map(|index| {
+                record(
+                    &format!("record-{index}"),
+                    "tenant-a",
+                    "text-plain",
+                    vec![1.0],
+                )
+            })
+            .collect::<Vec<_>>();
+
+        storage.upsert(&records).expect("batched upsert");
+
+        assert_eq!(
+            storage.record_ids().expect("iterate records").len(),
+            records.len()
+        );
+    }
+
+    #[test]
+    fn deleting_no_records_is_a_no_op() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 1, VectorIndexKind::Flat)
+            .expect("create collection");
+
+        storage.delete(&[]).expect("empty delete");
+
+        assert!(storage.record_ids().expect("iterate records").is_empty());
+    }
+
+    #[test]
+    fn delete_batches_documents_at_the_sdk_write_limit() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 1, VectorIndexKind::Flat)
+            .expect("create collection");
+        let records = (0..=MAX_WRITE_BATCH_DOCUMENTS)
+            .map(|index| {
+                record(
+                    &format!("record-{index}"),
+                    "tenant-a",
+                    "text-plain",
+                    vec![1.0],
+                )
+            })
+            .collect::<Vec<_>>();
+        storage.upsert(&records).expect("batched upsert");
+        let record_ids = records
+            .iter()
+            .map(|record| record.record_id.as_str())
+            .collect::<Vec<_>>();
+
+        storage.delete(&record_ids).expect("batched delete");
+
+        assert!(storage.record_ids().expect("iterate records").is_empty());
     }
 
     #[test]

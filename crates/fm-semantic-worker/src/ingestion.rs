@@ -19,6 +19,8 @@ use crate::semantic_storage::{
 };
 use crate::{IngestionState, WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob};
 
+const EMBEDDING_CHECKPOINT_INPUTS: usize = 8;
+
 /// Persisted ingestion/reconciliation state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IngestionStage {
@@ -624,22 +626,45 @@ impl IngestionCoordinator {
             })
             .collect::<Vec<_>>();
         let mut vectors = vec![None; chunks.len()];
-        let mut missing_inputs = Vec::new();
         let mut missing_positions = Vec::new();
         for (position, key) in keys.iter().copied().enumerate() {
             if let Some(vector) = self.catalog.cached_vector(key)? {
                 vectors[position] = Some(vector);
             } else {
                 missing_positions.push(position);
-                missing_inputs.push(chunks[position].embedding_input.clone());
             }
         }
-        let embedded = self
-            .embedder
-            .embed(&missing_inputs, cancellation)
-            .map_err(|error| self.fail(document, attempts, error.to_string()))?;
-        for (position, vector) in missing_positions.into_iter().zip(embedded) {
-            vectors[position] = Some(vector);
+        let embedded_count = missing_positions.len();
+        let mut completed = 0_u64;
+        for positions in missing_positions.chunks(EMBEDDING_CHECKPOINT_INPUTS) {
+            let inputs = positions
+                .iter()
+                .map(|position| chunks[*position].embedding_input.clone())
+                .collect::<Vec<_>>();
+            let embedded = self
+                .embedder
+                .embed(&inputs, cancellation)
+                .map_err(|error| self.fail(document, attempts, error.to_string()))?;
+            let checkpoint = positions
+                .iter()
+                .copied()
+                .zip(embedded.iter().cloned())
+                .map(|(position, vector)| (keys[position], vector))
+                .collect::<Vec<_>>();
+            self.catalog
+                .cache_vectors(&checkpoint, identity.dimensions)?;
+            for (position, vector) in positions.iter().copied().zip(embedded) {
+                vectors[position] = Some(vector);
+            }
+            completed = completed.saturating_add(positions.len() as u64);
+            self.transition(
+                document,
+                IngestionStage::Embedding,
+                attempts,
+                None,
+                completed,
+                embedded_count as u64,
+            )?;
         }
         self.check_cancelled(document, attempts, cancellation)?;
 
@@ -730,6 +755,15 @@ impl IngestionCoordinator {
             &document.document_id,
             generation,
         )?;
+        match self.catalog.reclaim_superseded() {
+            Ok(reclaimed) => {
+                self.index
+                    .delete(&reclaimed.record_ids)
+                    .map_err(IngestionError::DerivedCleanup)?;
+            }
+            Err(StorageError::ReadersActive) => {}
+            Err(error) => return Err(error.into()),
+        }
         self.transition(
             document,
             IngestionStage::Complete,
@@ -741,8 +775,8 @@ impl IngestionCoordinator {
         Ok(IngestionReceipt {
             generation,
             chunks: chunks.len(),
-            embedded: missing_inputs.len(),
-            reused: chunks.len().saturating_sub(missing_inputs.len()),
+            embedded: embedded_count,
+            reused: chunks.len().saturating_sub(embedded_count),
         })
     }
 
@@ -979,6 +1013,7 @@ mod tests {
     struct FakeEmbedder {
         identity: EmbeddingModelIdentity,
         calls: Mutex<usize>,
+        remaining_before_failure: Mutex<Option<usize>>,
     }
 
     impl EmbeddingProvider for FakeEmbedder {
@@ -993,6 +1028,13 @@ mod tests {
         ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
             if cancellation.is_cancelled() {
                 return Err(EmbeddingError::Cancelled);
+            }
+            let mut remaining = self.remaining_before_failure.lock().expect("failure lock");
+            if let Some(allowed) = remaining.as_mut() {
+                if *allowed < inputs.len() {
+                    return Err(EmbeddingError::Backend("injected failure".into()));
+                }
+                *allowed -= inputs.len();
             }
             *self.calls.lock().expect("calls") += inputs.len();
             Ok(inputs.iter().map(|_| vec![1.0, 0.0, 0.0]).collect())
@@ -1083,6 +1125,7 @@ mod tests {
                     max_input_tokens: 512,
                 },
                 calls: Mutex::new(0),
+                remaining_before_failure: Mutex::new(None),
             });
             let index = Arc::new(FakeIndex::default());
             let coordinator = Arc::new(IngestionCoordinator::new(
@@ -1348,6 +1391,45 @@ mod tests {
         assert!(receipt.reused > 0);
         assert!(receipt.embedded > 0);
         assert!(receipt.embedded < receipt.chunks);
+    }
+
+    #[test]
+    fn interrupted_embedding_reuses_durable_batch_checkpoints() {
+        let fixture = Fixture::new(healthy_resources());
+        let document = fixture.document(&"semantic evidence ".repeat(10_000));
+        *fixture
+            .embedder
+            .remaining_before_failure
+            .lock()
+            .expect("failure lock") = Some(EMBEDDING_CHECKPOINT_INPUTS);
+
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new()),
+            Err(IngestionError::PipelineFailed(_))
+        ));
+        assert_eq!(
+            *fixture.embedder.calls.lock().expect("calls"),
+            EMBEDDING_CHECKPOINT_INPUTS
+        );
+
+        *fixture
+            .embedder
+            .remaining_before_failure
+            .lock()
+            .expect("failure lock") = None;
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("resumed ingestion");
+
+        assert!(receipt.chunks > EMBEDDING_CHECKPOINT_INPUTS);
+        assert!(receipt.reused >= EMBEDDING_CHECKPOINT_INPUTS);
+        assert_eq!(
+            *fixture.embedder.calls.lock().expect("calls"),
+            EMBEDDING_CHECKPOINT_INPUTS + receipt.embedded
+        );
     }
 
     #[test]

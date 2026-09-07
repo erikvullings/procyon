@@ -516,7 +516,7 @@ impl DeveloperWorker {
         let embedder = Arc::new(LocalEmbeddingRuntime::load(
             &package,
             model.loader.as_ref(),
-            EmbeddingResourceProfile::Balanced,
+            EmbeddingResourceProfile::Fast,
             VectorNormalization::L2,
         )?);
 

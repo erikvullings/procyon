@@ -37,7 +37,10 @@ const MAX_DIRECTORIES: u64 = 10_000;
 const MAX_RECURSION_DEPTH: u16 = 64;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
-const INGESTION_TIMEOUT: Duration = Duration::from_secs(120);
+// Covers conversion, chunking, local CPU embedding, and publication. Durable
+// embedding checkpoints make retries resumable; expiry isolates one stranded
+// document instead of aborting the enrolled-root reconciliation.
+const INGESTION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Outcome of one complete root enumeration and worker feed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -537,9 +540,7 @@ async fn ingest_and_wait(
     loop {
         if Instant::now() >= deadline {
             semantic.cancel(operation_id).await?;
-            return Err(SemanticIndexingError::LimitExceeded(
-                "worker ingestion deadline",
-            ));
+            return Ok(IngestionOutcome::Failed);
         }
         let job = tokio::select! {
             () = cancellation.cancelled() => {

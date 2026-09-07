@@ -223,6 +223,13 @@ excluded from semantic indexing with actionable OCRmyPDF guidance; they are not 
 retryable ingestion failures. Unsupported, encrypted, malformed, and over-budget documents remain
 visible as typed skip or omission reasons.
 
+Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
+vectors without exposing them to search until the complete document generation is published.
+Publication respects Zvec's 1,024-document write limit, and one document that exceeds the
+five-minute ingestion fail-safe is recorded as failed without aborting reconciliation of the rest
+of the enrolled root. Source conversion remains bounded at 64 MiB per document. Once a replacement
+generation is published, superseded catalogue and Zvec records are reclaimed in bounded batches.
+
 ## Optional advanced packs
 
 Advanced converters, acceleration backends, and rerankers are independent packs rather than

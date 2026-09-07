@@ -98,3 +98,11 @@ this deterministic integration.
   binaries, and native libraries; stale peer teardown is classified separately from insecure
   ownership. Validation: 644 application tests, 251 conversion/Docling/worker tests, 20 repeated
   parallel connector lifecycle runs, and `pnpm run lint`.
+- 2026-09-07: Real-corpus rebuilding hardened ingestion around the deterministic converter.
+  Embeddings are checkpointed in bounded batches and reused after interruption, while unpublished
+  checkpoints remain invisible to search and survive unrelated occurrence deletion. Zvec
+  publication is split at its 1,024-document SDK limit. Empty derived-index deletions are no-ops,
+  preventing OCR-required PDFs from leaving jobs indefinitely in `converting`. A five-minute
+  per-document fail-safe now isolates a stranded item instead of aborting the remaining root. The
+  converter's source limit now matches the host's bounded 64 MiB feed limit. Completed publication
+  reclaims superseded SQLite and Zvec generations in bounded SDK batches.

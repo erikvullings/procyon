@@ -85,7 +85,7 @@ pub struct ConversionBudgets {
 impl Default for ConversionBudgets {
     fn default() -> Self {
         Self {
-            max_source_bytes: 32 * 1024 * 1024,
+            max_source_bytes: 64 * 1024 * 1024,
             max_expanded_bytes: 128 * 1024 * 1024,
             max_archive_entries: 4_096,
             max_items: 4_096,

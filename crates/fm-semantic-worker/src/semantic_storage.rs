@@ -647,6 +647,7 @@ impl SemanticCatalog {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         drop(statement);
+        let mut removed_vectors = 0;
         for (record_id, cache_key) in &rows {
             transaction.execute("DELETE FROM records WHERE record_id = ?1", [record_id])?;
             transaction.execute(
@@ -654,9 +655,11 @@ impl SemanticCatalog {
                  WHERE cache_key = ?1",
                 [cache_key],
             )?;
+            removed_vectors += transaction.execute(
+                "DELETE FROM vectors WHERE cache_key = ?1 AND reference_count <= 0",
+                [cache_key],
+            )?;
         }
-        let removed_vectors =
-            transaction.execute("DELETE FROM vectors WHERE reference_count <= 0", [])?;
         transaction.execute(
             "DELETE FROM occurrences
              WHERE EXISTS (
@@ -674,6 +677,7 @@ impl SemanticCatalog {
         Ok(ReclaimStats {
             records: rows.len(),
             vectors: removed_vectors,
+            record_ids: rows.into_iter().map(|(record_id, _)| record_id).collect(),
         })
     }
 
@@ -1102,12 +1106,15 @@ impl SemanticCatalog {
                  WHERE cache_key = ?1",
                 [cache_key],
             )?;
+            transaction.execute(
+                "DELETE FROM vectors WHERE cache_key = ?1 AND reference_count <= 0",
+                [cache_key],
+            )?;
         }
         transaction.execute(
             "DELETE FROM occurrences WHERE occurrence_id = ?1",
             [occurrence_id],
         )?;
-        transaction.execute("DELETE FROM vectors WHERE reference_count <= 0", [])?;
         transaction.commit()?;
         Ok(DeletedOccurrence {
             record_ids: records
@@ -1526,6 +1533,58 @@ impl SemanticCatalog {
         bytes.map(|bytes| decode_vector(&bytes)).transpose()
     }
 
+    /// Checkpoints normalized embeddings before their document generation is staged.
+    ///
+    /// Zero-reference entries remain invisible to search. A retried ingestion can
+    /// reuse them, while normal reclamation may discard them if they are never
+    /// attached to a published record.
+    ///
+    /// # Errors
+    ///
+    /// Rejects dimension mismatches, non-finite values, and cache-key collisions.
+    pub fn cache_vectors(
+        &self,
+        vectors: &[(EmbeddingCacheKey, Vec<f32>)],
+        expected_dimensions: usize,
+    ) -> Result<(), StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        for (key, vector) in vectors {
+            if vector.len() != expected_dimensions {
+                return Err(StorageError::DimensionMismatch {
+                    expected: expected_dimensions,
+                    actual: vector.len(),
+                });
+            }
+            if vector.iter().any(|value| !value.is_finite()) {
+                return Err(StorageError::NonFiniteVector);
+            }
+            let encoded = encode_vector(vector);
+            let existing = transaction
+                .query_row(
+                    "SELECT vector FROM vectors WHERE cache_key = ?1",
+                    [key.as_bytes().as_slice()],
+                    |row| row.get::<_, Vec<u8>>(0),
+                )
+                .optional()?;
+            if existing.as_deref().is_some_and(|value| value != encoded) {
+                return Err(StorageError::CacheConflict);
+            }
+            transaction.execute(
+                "INSERT INTO vectors (cache_key, dimensions, vector, reference_count)
+                 VALUES (?1, ?2, ?3, 0)
+                 ON CONFLICT(cache_key) DO NOTHING",
+                params![
+                    key.as_bytes().as_slice(),
+                    i64::try_from(vector.len()).map_err(|_| StorageError::CorruptCatalog)?,
+                    encoded,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Persists the exact installed worker/runtime/model component revision.
     ///
     /// # Errors
@@ -1761,12 +1820,14 @@ impl Drop for CatalogReader {
 }
 
 /// Number of derived rows reclaimed after readers drain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReclaimStats {
     /// Removed occurrence-level records.
     pub records: usize,
     /// Removed globally cached vectors.
     pub vectors: usize,
+    /// Zvec primary keys that may now be deleted.
+    pub record_ids: Vec<String>,
 }
 
 /// Derived cleanup requested after authoritative occurrence deletion.
@@ -2678,6 +2739,29 @@ mod tests {
     }
 
     #[test]
+    fn deleting_an_occurrence_preserves_unrelated_embedding_checkpoints() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let checkpoint_key = key("unfinished document");
+        catalog
+            .cache_vectors(&[(checkpoint_key, vec![0.1, 0.2, 0.3])], 3)
+            .expect("cache checkpoint");
+
+        catalog
+            .delete_occurrence("missing-occurrence")
+            .expect("delete absent occurrence");
+
+        assert_eq!(
+            catalog
+                .cached_vector(checkpoint_key)
+                .expect("read checkpoint"),
+            Some(vec![0.1, 0.2, 0.3])
+        );
+    }
+
+    #[test]
     fn publication_is_old_or_new_and_reclamation_waits_for_readers() {
         let (_directory, catalog) = catalog();
         catalog
@@ -2738,7 +2822,8 @@ mod tests {
             catalog.reclaim_superseded().expect("reclaim"),
             ReclaimStats {
                 records: 1,
-                vectors: 1
+                vectors: 1,
+                record_ids: vec![old.records[0].record_id.clone()],
             }
         );
     }
