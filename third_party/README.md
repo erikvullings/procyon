@@ -1,5 +1,16 @@
 # Vendored dependencies
 
+## drag-rs
+
+- Repository: https://github.com/crabnebula-dev/drag-rs
+- Version: `2.1.1`
+- Commit: `8b48f9883658507527287169b53d4ec7579b540c`
+- License: MIT OR Apache-2.0
+
+Procyon carries one API extension: `DragMode::CopyMove` advertises both native file operations so
+Finder and Explorer can select move by default or copy when the platform modifier is held. Upstream
+`drag-rs` only permits one fixed operation per drag.
+
 ## ooxmlsdk
 
 - Repository: https://github.com/KaiserY/ooxmlsdk

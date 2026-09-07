@@ -85,3 +85,9 @@ from Finder/Explorer) and §33 step 10.
   Full frontend Vitest: 1352 passed, 0 failed. `tsc --noEmit` clean. Manual Finder/Explorer
   interactive drag tests still not recorded in this non-interactive environment; task remains
   `in_progress` for that reason alone.
+- 2026-09-07 Copilot: Replaced the fixed-operation native handoff with a locally patched
+  `drag-rs 2.1.1` mode that advertises both copy and move. Finder/Explorer now owns native
+  operation negotiation and cursor feedback, including modifier changes after the pointer leaves
+  Procyon. In-app pointer drags retain move-by-default behavior, show an explicit `-`/`+` operation
+  badge, and refresh that feedback immediately on modifier keydown/keyup without requiring mouse
+  movement. Interactive Finder/Explorer verification remains outstanding.

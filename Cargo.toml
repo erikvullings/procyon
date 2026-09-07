@@ -6,6 +6,7 @@ resolver = "3"
 # `src-tauri` does), so it is excluded from the glob match.
 exclude = [
   "apps/fm-desktop",
+  "third_party/drag-rs",
   "third_party/emfsdk",
   "third_party/ooxmlsdk",
   "third_party/olecfsdk",
@@ -77,7 +78,9 @@ clap = {version = "4.6.4", features = ["derive", "env"]}
 crc32fast = "1.5.0"
 criterion = {version = "0.5.1", features = ["html_reports"]}
 dirs = "6.0.0"
-drag = "2.1.1"
+# Local patch of drag-rs 2.1.1: upstream only exposes one operation at a time, while native
+# file drags must advertise both copy and move so Finder/Explorer can negotiate modifiers.
+drag = {path = "third_party/drag-rs"}
 dunce = "1.0.5"
 flate2 = "1"
 ferrodoc = { version = "0.7.0", default-features = false, features = ["docx", "html"] }

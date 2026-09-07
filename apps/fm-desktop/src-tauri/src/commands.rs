@@ -285,7 +285,7 @@ pub(crate) async fn start_native_drag<R: Runtime>(
                 drag::Image::Raw(include_bytes!("../icons/32x32.png").to_vec()),
                 |_, _| {},
                 drag::Options {
-                    mode: drag::DragMode::Move,
+                    mode: drag::DragMode::CopyMove,
                     ..drag::Options::default()
                 },
             )
