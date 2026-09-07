@@ -10,6 +10,7 @@ use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline
 #[cfg(unix)]
 use fm_semantic_docling::{
     OCRMYPDF_CONVERTER_VERSION, OcrMyPdfAvailability, OcrMyPdfConfiguration, OcrMyPdfConverter,
+    OcrMyPdfRejectionReason, OcrMyPdfVersion,
 };
 use lopdf::{Document, Object, Stream, dictionary};
 
@@ -288,7 +289,10 @@ mod ocrmypdf {
         fs::write(
             &executable,
             format!(
-                "#!/bin/sh\nwhile [ \"$#\" -gt 2 ]; do shift; done\ninput=\"$1\"\noutput=\"$2\"\n{body}\n"
+                "#!/bin/sh\n\
+                 if [ \"$1\" = \"--version\" ]; then printf 'ocrmypdf 16.10.4\\n'; exit 0; fi\n\
+                 while [ \"$#\" -gt 2 ]; do shift; done\n\
+                 input=\"$1\"\noutput=\"$2\"\n{body}\n"
             ),
         )
         .expect("write fake OCRmyPDF");
@@ -336,14 +340,18 @@ mod ocrmypdf {
         let executable = fake_executable(directory.path(), "exit 0", None);
         assert_eq!(
             OcrMyPdfAvailability::detect(Some(&executable)),
-            OcrMyPdfAvailability::Available { executable }
+            OcrMyPdfAvailability::Available {
+                executable: executable.canonicalize().expect("canonical executable"),
+                version: OcrMyPdfVersion::new(16, 10, 4),
+            }
         );
 
-        let OcrMyPdfAvailability::Unavailable { guidance } =
+        let OcrMyPdfAvailability::Unavailable { reason, guidance } =
             OcrMyPdfAvailability::detect(Some(&directory.path().join("missing")))
         else {
             panic!("missing executable should be unavailable");
         };
+        assert_eq!(reason, OcrMyPdfRejectionReason::Missing);
         assert!(guidance.contains("Homebrew"));
         assert!(guidance.contains("Linux"));
         assert!(guidance.contains("WSL"));
@@ -507,6 +515,29 @@ mod ocrmypdf {
     }
 
     #[test]
+    fn successful_process_without_searchable_text_has_a_distinct_outcome() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let still_textless = no_text_pdf();
+        let executable = fake_executable(
+            directory.path(),
+            "cp \"$(dirname \"$0\")/fixture.pdf\" \"$output\"",
+            Some(&still_textless),
+        );
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_temporary_root(temporary_root.path()),
+        );
+
+        let ConversionOutcome::NoTextLayer { detail } =
+            convert(&converter, &still_textless, &ConversionContext::new())
+        else {
+            panic!("textless OCR output must remain excluded");
+        };
+        assert!(detail.contains("OCRmyPDF completed, but"));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
     fn timeout_terminates_ocr_descendants() {
         let directory = tempfile::tempdir().expect("tempdir");
         let temporary_root = tempfile::tempdir().expect("OCR temporary root");
@@ -552,7 +583,7 @@ mod ocrmypdf {
     fn real_ocrmypdf_smoke_test_preserves_the_source_and_produces_text() {
         let source_path = std::env::var_os("PROCYON_OCR_SMOKE_PDF").expect("PROCYON_OCR_SMOKE_PDF");
         let source = fs::read(&source_path).expect("read smoke PDF");
-        let OcrMyPdfAvailability::Available { executable } = OcrMyPdfAvailability::detect(None)
+        let OcrMyPdfAvailability::Available { executable, .. } = OcrMyPdfAvailability::detect(None)
         else {
             panic!("OCRmyPDF is not installed");
         };

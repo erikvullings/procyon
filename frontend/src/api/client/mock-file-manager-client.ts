@@ -145,6 +145,9 @@ import type {
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
+  SemanticOcrJob,
+  SemanticOcrStatus,
+  SemanticOcrTarget,
   SemanticProfile,
   SemanticRootStatus,
   SemanticUninstallReceipt,
@@ -162,6 +165,7 @@ import type {
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
+  StartSemanticOcrRemediationRequest,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -238,6 +242,10 @@ export type MockClientMethod =
   | 'confirmSemanticComponentModelMigration'
   | 'checkpointSemanticComponentModelMigration'
   | 'completeSemanticComponentModelMigration'
+  | 'getSemanticOcrStatus'
+  | 'setSemanticOcrConsent'
+  | 'startSemanticOcrRemediation'
+  | 'cancelSemanticOcrRemediation'
   | 'getSemanticLibraryCapabilities'
   | 'getSemanticLibraryStatus'
   | 'listSemanticVocabularies'
@@ -383,6 +391,7 @@ export interface MockFileManagerClientOptions {
   failures?: Partial<Record<MockClientMethod, Error>>;
   nativeIconExtensions?: readonly string[];
   semanticLifecycle?: MockSemanticLifecycle;
+  semanticOcrStatus?: SemanticOcrStatus;
 }
 
 function fixtureEntry(
@@ -1164,6 +1173,36 @@ function mockSemanticLibraryStatus(): SemanticLibraryStatus {
   };
 }
 
+function mockSemanticOcrStatus(): SemanticOcrStatus {
+  return {
+    enabled: false,
+    availability: {
+      state: 'available',
+      executable: '/usr/local/bin/ocrmypdf',
+      version: '16.10.4',
+    },
+    reportedFiles: [
+      {
+        rootId: 'mock-ocr-root',
+        location: { providerId: 'file', uri: 'file:///Documents/scanned-invoice.pdf' },
+      },
+      {
+        rootId: 'mock-ocr-root',
+        location: { providerId: 'file', uri: 'file:///Documents/scanned-notes.pdf' },
+      },
+    ],
+    jobs: [],
+  };
+}
+
+function sameSemanticOcrTarget(left: SemanticOcrTarget, right: SemanticOcrTarget): boolean {
+  return (
+    left.rootId === right.rootId &&
+    left.location.providerId === right.location.providerId &&
+    left.location.uri === right.location.uri
+  );
+}
+
 function semanticLocationContains(root: Location, candidate: Location): boolean {
   if (root.providerId !== candidate.providerId) return false;
   if (root.uri === candidate.uri) return true;
@@ -1202,6 +1241,10 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly failures: Partial<Record<MockClientMethod, Error>>;
   private readonly nativeIconExtensions: ReadonlySet<string>;
   private semanticStatus: SemanticComponentStatus;
+  private semanticOcrStatus: SemanticOcrStatus;
+  private readonly semanticOcrAutoAdvance: boolean;
+  private semanticOcrJobSequence = 0;
+  private readonly semanticOcrJobTargets = new Map<string, readonly SemanticOcrTarget[]>();
   private semanticOfferSequence = 0;
   private semanticIndexRemovalSequence = 0;
   private semanticMigrationSequence = 0;
@@ -1338,6 +1381,8 @@ export class MockFileManagerClient implements FileManagerClient {
     );
     const semanticLifecycle = options.semanticLifecycle ?? 'absent';
     this.semanticStatus = mockSemanticStatus(semanticLifecycle);
+    this.semanticOcrStatus = structuredClone(options.semanticOcrStatus ?? mockSemanticOcrStatus());
+    this.semanticOcrAutoAdvance = options.semanticOcrStatus === undefined;
     if (semanticLifecycle === 'offered') {
       this.semanticOffers.set(
         'mock-scenario-offer',
@@ -1400,6 +1445,117 @@ export class MockFileManagerClient implements FileManagerClient {
             runtimeExecutableDownload: 'simulated',
           },
     );
+  }
+
+  getSemanticOcrStatus(signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    return this.perform('getSemanticOcrStatus', signal, () => {
+      if (this.semanticOcrAutoAdvance) this.advanceSemanticOcrJobs();
+      return structuredClone(this.semanticOcrStatus);
+    });
+  }
+
+  setSemanticOcrConsent(enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    return this.perform('setSemanticOcrConsent', signal, () => {
+      if (enabled && this.semanticOcrStatus.availability.state !== 'available') {
+        throw new MockClientError('unavailable', 'OCRmyPDF is unavailable');
+      }
+      this.semanticOcrStatus = {
+        ...this.semanticOcrStatus,
+        enabled,
+        jobs: enabled
+          ? this.semanticOcrStatus.jobs
+          : this.semanticOcrStatus.jobs.map((job) =>
+              job.state === 'queued' || job.state === 'running'
+                ? { ...job, state: 'cancelled', updatedAtMs: Date.now() }
+                : job,
+            ),
+      };
+      return structuredClone(this.semanticOcrStatus);
+    });
+  }
+
+  startSemanticOcrRemediation(
+    request: StartSemanticOcrRemediationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticOcrJob> {
+    return this.perform('startSemanticOcrRemediation', signal, () => {
+      if (!this.semanticOcrStatus.enabled) {
+        throw new MockClientError('disabled', 'OCR remediation is disabled');
+      }
+      if (this.semanticOcrStatus.availability.state !== 'available') {
+        throw new MockClientError('unavailable', 'OCRmyPDF is unavailable');
+      }
+      const reported = this.semanticOcrStatus.reportedFiles;
+      let targets: readonly SemanticOcrTarget[];
+      switch (request.scope) {
+        case 'oneFile':
+          targets = [request.file];
+          break;
+        case 'selectedFiles':
+          targets = request.files;
+          break;
+        case 'enrolledRoot':
+          targets = reported.filter((target) => target.rootId === request.rootId);
+          break;
+        case 'allReported':
+          targets = reported;
+          break;
+      }
+      if (targets.length === 0) {
+        throw new MockClientError('nothingToRemediate', 'No files currently require OCR');
+      }
+      if (
+        targets.some(
+          (target) => !reported.some((candidate) => sameSemanticOcrTarget(candidate, target)),
+        )
+      ) {
+        throw new MockClientError(
+          'unreportedTarget',
+          'The requested file is not currently reported as requiring OCR',
+        );
+      }
+      const unique = targets.filter(
+        (target, index) =>
+          targets.findIndex((candidate) => sameSemanticOcrTarget(candidate, target)) === index,
+      );
+      this.semanticOcrJobSequence += 1;
+      const now = Date.now();
+      const job: SemanticOcrJob = {
+        id: `00000000-0000-4000-8000-${String(this.semanticOcrJobSequence).padStart(12, '0')}`,
+        state: 'queued',
+        createdAtMs: now,
+        updatedAtMs: now,
+        totalFiles: unique.length,
+        processedFiles: 0,
+        files: [],
+        availabilityFailure: null,
+      };
+      this.semanticOcrJobTargets.set(job.id, structuredClone(unique));
+      this.semanticOcrStatus = {
+        ...this.semanticOcrStatus,
+        jobs: [job, ...this.semanticOcrStatus.jobs],
+      };
+      return structuredClone(job);
+    });
+  }
+
+  cancelSemanticOcrRemediation(jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob> {
+    return this.perform('cancelSemanticOcrRemediation', signal, () => {
+      const job = this.semanticOcrStatus.jobs.find((candidate) => candidate.id === jobId);
+      if (job === undefined) throw new MockClientError('notFound', 'OCR job was not found');
+      const cancelled: SemanticOcrJob =
+        job.state === 'queued' || job.state === 'running'
+          ? { ...job, state: 'cancelled', updatedAtMs: Date.now() }
+          : job;
+      this.semanticOcrJobTargets.delete(jobId);
+      this.semanticOcrStatus = {
+        ...this.semanticOcrStatus,
+        jobs: this.semanticOcrStatus.jobs.map((candidate) =>
+          candidate.id === jobId ? cancelled : candidate,
+        ),
+      };
+      return structuredClone(cancelled);
+    });
   }
 
   getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
@@ -4896,6 +5052,41 @@ export class MockFileManagerClient implements FileManagerClient {
       throw new MockClientError('alreadyExcluded', 'The folder is already excluded');
     }
     return root;
+  }
+
+  private advanceSemanticOcrJobs(): void {
+    const active = this.semanticOcrStatus.jobs.find(
+      (job) => job.state === 'queued' || job.state === 'running',
+    );
+    if (active === undefined) return;
+    if (active.state === 'queued') {
+      this.semanticOcrStatus = {
+        ...this.semanticOcrStatus,
+        jobs: this.semanticOcrStatus.jobs.map((job) =>
+          job.id === active.id ? { ...job, state: 'running', updatedAtMs: Date.now() } : job,
+        ),
+      };
+      return;
+    }
+    const targets = this.semanticOcrJobTargets.get(active.id) ?? [];
+    const completed: SemanticOcrJob = {
+      ...active,
+      state: 'completed',
+      updatedAtMs: Date.now(),
+      processedFiles: targets.length,
+      files: targets.map((target) => ({
+        ...target,
+        outcome: { outcome: 'succeeded' as const },
+      })),
+    };
+    this.semanticOcrJobTargets.delete(active.id);
+    this.semanticOcrStatus = {
+      ...this.semanticOcrStatus,
+      reportedFiles: this.semanticOcrStatus.reportedFiles.filter(
+        (reported) => !targets.some((target) => sameSemanticOcrTarget(reported, target)),
+      ),
+      jobs: this.semanticOcrStatus.jobs.map((job) => (job.id === active.id ? completed : job)),
+    };
   }
 
   private advanceSemanticLibraryRevision(): void {

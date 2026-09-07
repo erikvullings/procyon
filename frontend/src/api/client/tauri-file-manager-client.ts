@@ -130,6 +130,8 @@ import type {
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
+  SemanticOcrJob,
+  SemanticOcrStatus,
   SemanticUninstallReceipt,
   SemanticVocabulary,
   SemanticWorkerPatchResponse,
@@ -145,6 +147,7 @@ import type {
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
+  StartSemanticOcrRemediationRequest,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -348,6 +351,32 @@ export class TauriFileManagerClient implements FileManagerClient {
   ): Promise<SemanticModelSelection> {
     return invoke<SemanticModelSelection>('complete_semantic_component_model_migration', {
       request,
+    });
+  }
+
+  async getSemanticOcrStatus(_signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    return invoke<SemanticOcrStatus>('get_semantic_ocr_status');
+  }
+
+  async setSemanticOcrConsent(enabled: boolean, _signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    return invoke<SemanticOcrStatus>('set_semantic_ocr_consent', {
+      request: { enabled },
+    });
+  }
+
+  async startSemanticOcrRemediation(
+    request: StartSemanticOcrRemediationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticOcrJob> {
+    return invoke<SemanticOcrJob>('start_semantic_ocr_remediation', { request });
+  }
+
+  async cancelSemanticOcrRemediation(
+    jobId: string,
+    _signal?: AbortSignal,
+  ): Promise<SemanticOcrJob> {
+    return invoke<SemanticOcrJob>('cancel_semantic_ocr_remediation', {
+      request: { jobId },
     });
   }
 

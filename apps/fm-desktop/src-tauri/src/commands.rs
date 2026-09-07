@@ -13,6 +13,11 @@ use uuid::Uuid;
 
 use fm_application::semantic_component_mapping::semantic_component_error_to_dto;
 use fm_application::semantic_library_mapping::semantic_library_error_to_dto;
+use fm_application::semantic_ocr::OcrRemediationJobId;
+use fm_application::semantic_ocr_mapping::{
+    remediation_scope_from_dto, semantic_ocr_error_to_dto, semantic_ocr_job_to_dto,
+    semantic_ocr_status_to_dto,
+};
 use fm_domain::OperationId;
 use fm_transport_dto::{
     AcceptSemanticInstallationOfferRequestDto, AcceptSshHostKeyRequestDto, ActionDescriptorDto,
@@ -20,8 +25,8 @@ use fm_transport_dto::{
     ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
     AttachSemanticVocabularyRequestDto, BeginOneDriveAuthorizationResponseDto,
     CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    CheckpointSemanticModelMigrationRequestDto, ChecksumFileDto, ChecksumPageDto,
-    ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
+    CancelSemanticOcrRemediationRequestDto, CheckpointSemanticModelMigrationRequestDto,
+    ChecksumFileDto, ChecksumPageDto, ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
     ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
     ConfirmSemanticIndexRemovalRequestDto, ConfirmSemanticModelMigrationRequestDto, ConnectionDto,
     ConnectionStateDto, CreateConnectionRequestDto, CreateSemanticIndexRemovalPlanRequestDto,
@@ -59,16 +64,17 @@ use fm_transport_dto::{
     SemanticIndexRemovalReceiptDto, SemanticInstallReceiptDto, SemanticInstallationOfferDto,
     SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
     SemanticLibraryStatusDto, SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto,
-    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticUninstallReceiptDto,
-    SemanticVocabularyDto, SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SettingsDto,
-    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
+    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticOcrErrorDto, SemanticOcrJobDto,
+    SemanticOcrStatusDto, SemanticUninstallReceiptDto, SemanticVocabularyDto,
+    SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SetSemanticOcrConsentRequestDto,
+    SettingsDto, SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
     StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
     StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
-    StartSearchResponseDto, StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
-    UninstallSemanticComponentsRequestDto, UpdateConnectionRequestDto,
-    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
-    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
-    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    StartSearchResponseDto, StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
+    StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
+    UpdateConnectionRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
+    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    VocabularyIdRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -511,6 +517,64 @@ pub(crate) async fn get_semantic_component_capabilities(
     state: State<'_, AppState>,
 ) -> Result<SemanticComponentCapabilitiesDto, SemanticComponentErrorDto> {
     Ok(state.service.semantic_component_capabilities_dto().await)
+}
+
+/// Reports safe OCRmyPDF discovery, explicit consent, reported files, and jobs.
+#[tauri::command]
+pub(crate) fn get_semantic_ocr_status(
+    state: State<'_, AppState>,
+) -> Result<SemanticOcrStatusDto, SemanticOcrErrorDto> {
+    Ok(semantic_ocr_status_to_dto(
+        state.service.semantic_ocr_status(),
+    ))
+}
+
+/// Persists explicit OCR remediation consent and retires a stale worker.
+#[tauri::command]
+pub(crate) async fn set_semantic_ocr_consent(
+    state: State<'_, AppState>,
+    request: SetSemanticOcrConsentRequestDto,
+) -> Result<SemanticOcrStatusDto, SemanticOcrErrorDto> {
+    state
+        .service
+        .set_semantic_ocr_consent(request.enabled)
+        .await
+        .map(semantic_ocr_status_to_dto)
+        .map_err(semantic_ocr_error_to_dto)
+}
+
+/// Starts bounded background remediation for one explicit scope.
+#[tauri::command]
+pub(crate) fn start_semantic_ocr_remediation(
+    state: State<'_, AppState>,
+    request: StartSemanticOcrRemediationRequestDto,
+) -> Result<SemanticOcrJobDto, SemanticOcrErrorDto> {
+    let scope = remediation_scope_from_dto(request).map_err(semantic_ocr_error_to_dto)?;
+    state
+        .service
+        .start_semantic_ocr_remediation(scope)
+        .map(semantic_ocr_job_to_dto)
+        .map_err(semantic_ocr_error_to_dto)
+}
+
+/// Cancels one queued or running OCR remediation job.
+#[tauri::command]
+pub(crate) fn cancel_semantic_ocr_remediation(
+    state: State<'_, AppState>,
+    request: CancelSemanticOcrRemediationRequestDto,
+) -> Result<SemanticOcrJobDto, SemanticOcrErrorDto> {
+    let id = uuid::Uuid::parse_str(&request.job_id)
+        .map(|_| OcrRemediationJobId::new(request.job_id))
+        .map_err(|_| {
+            semantic_ocr_error_to_dto(
+                fm_application::semantic_ocr::SemanticOcrError::InvalidRequest,
+            )
+        })?;
+    state
+        .service
+        .cancel_semantic_ocr_remediation(&id)
+        .map(semantic_ocr_job_to_dto)
+        .map_err(semantic_ocr_error_to_dto)
 }
 
 /// Reports semantic component lifecycle, installed versions, and disk use.

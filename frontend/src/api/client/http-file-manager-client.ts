@@ -127,6 +127,8 @@ import type {
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
+  SemanticOcrJob,
+  SemanticOcrStatus,
   SemanticUninstallReceipt,
   SemanticVocabulary,
   SemanticWorkerPatchResponse,
@@ -142,6 +144,7 @@ import type {
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
+  StartSemanticOcrRemediationRequest,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -622,6 +625,44 @@ export class HttpFileManagerClient implements FileManagerClient {
       );
     }
     return response.data;
+  }
+
+  async getSemanticOcrStatus(signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    signal?.throwIfAborted();
+    return {
+      enabled: false,
+      availability: {
+        state: 'unavailable',
+        reason: { code: 'hostUnavailable' },
+        guidance: 'OCR remediation is available only in the desktop application.',
+      },
+      reportedFiles: [],
+      jobs: [],
+    };
+  }
+
+  setSemanticOcrConsent(_enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    signal?.throwIfAborted();
+    return Promise.reject(
+      new Error('OCR remediation is available only in the desktop application'),
+    );
+  }
+
+  startSemanticOcrRemediation(
+    _request: StartSemanticOcrRemediationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticOcrJob> {
+    signal?.throwIfAborted();
+    return Promise.reject(
+      new Error('OCR remediation is available only in the desktop application'),
+    );
+  }
+
+  cancelSemanticOcrRemediation(_jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob> {
+    signal?.throwIfAborted();
+    return Promise.reject(
+      new Error('OCR remediation is available only in the desktop application'),
+    );
   }
 
   async getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {

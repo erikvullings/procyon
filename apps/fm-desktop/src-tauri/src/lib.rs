@@ -34,6 +34,7 @@ pub struct AppState {
     pub(crate) rag_cancellations: Mutex<HashMap<uuid::Uuid, Option<CancellationToken>>>,
     pub(crate) semantic_managed_components: bool,
     pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
+    pub(crate) semantic_ocr_shutdown: CancellationToken,
 }
 
 /// True once the whole app has started quitting (`RunEvent::ExitRequested`/`Exit`), checked by
@@ -149,7 +150,8 @@ pub fn run() {
                 );
                 service = service
                     .with_semantic_component_capability(bundle.components)
-                    .with_semantic_capability(Arc::new(semantic));
+                    .with_semantic_capability(Arc::new(semantic))
+                    .with_semantic_ocr_service(bundle.ocr);
                 semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
             }
             #[cfg(debug_assertions)]
@@ -164,12 +166,21 @@ pub fn run() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
             let service = Arc::new(service);
+            let semantic_ocr_shutdown = CancellationToken::new();
             app.manage(AppState {
                 service: Arc::clone(&service),
                 rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
+                semantic_ocr_shutdown: semantic_ocr_shutdown.clone(),
             });
+            if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
+                tracing::error!(%error, "OCR remediation recovery failed");
+            }
+            tauri::async_runtime::spawn(
+                Arc::clone(&service)
+                    .run_semantic_ocr_remediation_jobs(semantic_ocr_shutdown),
+            );
             if let Err(error) = tauri::async_runtime::block_on(service.semantic_library_status(
                 &fm_application::semantic_library::SemanticAccessContext::Host,
             )) {
@@ -278,6 +289,10 @@ pub fn run() {
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
             commands::get_semantic_component_capabilities,
+            commands::get_semantic_ocr_status,
+            commands::set_semantic_ocr_consent,
+            commands::start_semantic_ocr_remediation,
+            commands::cancel_semantic_ocr_remediation,
             commands::get_semantic_component_status,
             commands::list_semantic_component_profiles,
             commands::create_semantic_component_installation_offer,
@@ -448,6 +463,10 @@ pub fn run() {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
                 app_handle.state::<QuittingFlag>().mark_quitting();
+                app_handle
+                    .state::<AppState>()
+                    .semantic_ocr_shutdown
+                    .cancel();
             }
             // Fires when macOS reactivates the app (Dock icon, `open -a`) while it has no
             // visible windows - the ordinary state after closing the last window without
@@ -561,6 +580,7 @@ mod tests {
                 rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components: semantic_developer_bundle,
                 semantic_reindex_pending_marker: None,
+                semantic_ocr_shutdown: CancellationToken::new(),
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
             .manage(native_menu::NativeMenuActionChannel::default())
@@ -569,6 +589,10 @@ mod tests {
                 commands::unsubscribe_events,
                 commands::get_runtime_capabilities,
                 commands::get_semantic_component_capabilities,
+                commands::get_semantic_ocr_status,
+                commands::set_semantic_ocr_consent,
+                commands::start_semantic_ocr_remediation,
+                commands::cancel_semantic_ocr_remediation,
                 commands::get_semantic_component_status,
                 commands::list_semantic_component_profiles,
                 commands::create_semantic_component_installation_offer,
@@ -1368,6 +1392,94 @@ mod tests {
         assert_eq!(
             uninstall.index_decision,
             fm_transport_dto::SemanticIndexRetentionDecisionDto::Delete
+        );
+    }
+
+    #[test]
+    fn semantic_ocr_commands_are_registered_and_return_typed_unavailable_errors() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let status = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "get_semantic_ocr_status".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({})),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("OCR status command must succeed")
+        .deserialize::<fm_transport_dto::SemanticOcrStatusDto>()
+        .expect("OCR status must deserialize");
+        assert!(!status.enabled);
+        assert!(matches!(
+            status.availability,
+            fm_transport_dto::SemanticOcrAvailabilityDto::Unavailable {
+                reason: fm_transport_dto::SemanticOcrUnavailableReasonDto::HostUnavailable,
+                ..
+            }
+        ));
+
+        let error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "set_semantic_ocr_consent".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "enabled": true }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("unavailable OCR consent must be rejected");
+        assert!(error.to_string().contains("\"code\":\"unavailable\""));
+        assert!(error.to_string().contains("\"code\":\"hostUnavailable\""));
+
+        let start_error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "start_semantic_ocr_remediation".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "scope": "allReported" }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("disabled OCR remediation must reject a job");
+        assert!(start_error.to_string().contains("\"code\":\"disabled\""));
+
+        let cancel_error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "cancel_semantic_ocr_remediation".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "jobId": "not-a-job-id" }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("malformed OCR job id must reject cancellation");
+        assert!(
+            cancel_error
+                .to_string()
+                .contains("\"code\":\"invalidRequest\"")
         );
     }
 

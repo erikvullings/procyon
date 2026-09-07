@@ -405,6 +405,7 @@ pub struct ManagedWorkerLaunch {
     data_directory: PathBuf,
     native_library_directory: PathBuf,
     model_pack: PathBuf,
+    ocrmypdf_executable: Option<PathBuf>,
 }
 
 impl ManagedWorkerLaunch {
@@ -421,8 +422,33 @@ impl ManagedWorkerLaunch {
             data_directory,
             native_library_directory,
             model_pack,
+            ocrmypdf_executable: None,
         }
     }
+
+    /// Records the host-discovered canonical OCRmyPDF executable to hand the
+    /// worker as a typed fixed CLI argument.
+    ///
+    /// Only a trusted desktop host that has both durable OCR consent and a
+    /// supported discovered installation supplies this. Nothing reachable from
+    /// a frontend request contributes to it, and the value is re-validated
+    /// (absolute, regular file) before it is ever passed on. `None` launches
+    /// the worker without OCR remediation.
+    #[must_use]
+    pub fn with_ocrmypdf_executable(mut self, executable: Option<PathBuf>) -> Self {
+        self.ocrmypdf_executable = sanitize_ocrmypdf_executable(executable);
+        self
+    }
+}
+
+/// Accepts only an absolute path to an existing regular file.
+///
+/// The host discovers and canonicalizes the executable, but a bad or stale
+/// path must never reach the worker as a runnable command: it is dropped so
+/// the worker simply launches without OCR rather than trusting an unusable or
+/// relative argument.
+fn sanitize_ocrmypdf_executable(executable: Option<PathBuf>) -> Option<PathBuf> {
+    executable.filter(|path| path.is_absolute() && path.is_file())
 }
 
 /// Resolves the currently active production worker generation at launch time.
@@ -746,11 +772,7 @@ impl WorkerConnector {
                     .arg("--idle-timeout-ms")
                     .arg(idle_timeout.as_millis().to_string());
                 if let Some(launch) = &managed_launch {
-                    command
-                        .arg("--semantic-data-dir")
-                        .arg(&launch.data_directory)
-                        .arg("--semantic-model-pack")
-                        .arg(&launch.model_pack);
+                    command.args(managed_launch_arguments(launch));
                 } else if let Some(directory) = developer_data_directory {
                     command.arg("--developer-data-dir").arg(directory);
                     if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
@@ -872,7 +894,7 @@ fn resolve_developer_model_pack(
 fn resolve_managed_worker(
     resolver: &ManagedWorkerResolver,
 ) -> Result<ManagedWorkerLaunch, ClientError> {
-    let launch = resolver().map_err(ClientError::InvalidManagedComponents)?;
+    let mut launch = resolver().map_err(ClientError::InvalidManagedComponents)?;
     for (label, path, file) in [
         ("worker executable", &launch.executable, true),
         ("semantic data directory", &launch.data_directory, false),
@@ -902,12 +924,132 @@ fn resolve_managed_worker(
             )));
         }
     }
+    // Optional OCR remediation must never block the worker: a missing or stale
+    // executable is dropped here so the worker launches without OCR rather than
+    // failing the whole semantic capability. It is re-checked at launch time
+    // because discovery ran earlier and the file may have changed since.
+    launch.ocrmypdf_executable = sanitize_ocrmypdf_executable(launch.ocrmypdf_executable);
     Ok(launch)
+}
+
+/// Builds the fixed, typed worker arguments for one managed launch.
+///
+/// The OCRmyPDF executable is passed only as this trusted, host-resolved
+/// argument. It never originates in a frontend request, and the worker never
+/// consults an environment override for it in this managed mode.
+fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsString> {
+    let mut arguments = vec![
+        std::ffi::OsString::from("--semantic-data-dir"),
+        launch.data_directory.clone().into_os_string(),
+        std::ffi::OsString::from("--semantic-model-pack"),
+        launch.model_pack.clone().into_os_string(),
+    ];
+    if let Some(executable) = &launch.ocrmypdf_executable {
+        arguments.push(std::ffi::OsString::from("--ocrmypdf-executable"));
+        arguments.push(executable.clone().into_os_string());
+    }
+    arguments
 }
 
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
+
+    #[test]
+    fn managed_launch_passes_a_discovered_ocrmypdf_executable_as_a_fixed_argument() {
+        let directory = tempfile::tempdir().expect("directory");
+        let data = directory.path().join("data");
+        let model = directory.path().join("model-pack");
+        let executable = directory.path().join("ocrmypdf");
+        std::fs::write(&executable, b"#!/bin/sh\n").expect("executable");
+
+        let launch = ManagedWorkerLaunch::new(
+            directory.path().join("worker"),
+            data.clone(),
+            directory.path().join("native"),
+            model.clone(),
+        )
+        .with_ocrmypdf_executable(Some(executable.clone()));
+        assert_eq!(
+            launch.ocrmypdf_executable.as_deref(),
+            Some(executable.as_path())
+        );
+
+        let arguments = managed_launch_arguments(&launch);
+        assert_eq!(
+            arguments,
+            vec![
+                std::ffi::OsString::from("--semantic-data-dir"),
+                data.into_os_string(),
+                std::ffi::OsString::from("--semantic-model-pack"),
+                model.into_os_string(),
+                std::ffi::OsString::from("--ocrmypdf-executable"),
+                executable.into_os_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn managed_launch_omits_ocr_argument_when_no_executable_is_supplied() {
+        let directory = tempfile::tempdir().expect("directory");
+        let launch = ManagedWorkerLaunch::new(
+            directory.path().join("worker"),
+            directory.path().join("data"),
+            directory.path().join("native"),
+            directory.path().join("model-pack"),
+        );
+        assert!(launch.ocrmypdf_executable.is_none());
+        let arguments = managed_launch_arguments(&launch);
+        assert!(
+            !arguments
+                .iter()
+                .any(|argument| argument == "--ocrmypdf-executable"),
+            "{arguments:?}"
+        );
+    }
+
+    #[test]
+    fn a_relative_or_missing_ocr_executable_is_dropped_before_launch() {
+        let directory = tempfile::tempdir().expect("directory");
+        // Relative paths never reach the worker.
+        assert!(sanitize_ocrmypdf_executable(Some(PathBuf::from("ocrmypdf"))).is_none());
+        // Absent absolute paths never reach the worker.
+        assert!(sanitize_ocrmypdf_executable(Some(directory.path().join("absent"))).is_none());
+        // A directory is not a runnable executable.
+        assert!(sanitize_ocrmypdf_executable(Some(directory.path().to_owned())).is_none());
+        // An absolute regular file is kept verbatim.
+        let executable = directory.path().join("ocrmypdf");
+        std::fs::write(&executable, b"#!/bin/sh\n").expect("executable");
+        assert_eq!(
+            sanitize_ocrmypdf_executable(Some(executable.clone())),
+            Some(executable)
+        );
+    }
+
+    #[test]
+    fn resolve_managed_worker_drops_a_stale_ocr_executable_but_keeps_the_launch() {
+        let directory = tempfile::tempdir().expect("directory");
+        let worker = directory.path().join("worker");
+        std::fs::write(&worker, b"worker").expect("worker");
+        let model = directory.path().join("model-pack");
+        std::fs::write(&model, b"pack").expect("model");
+        let native = directory.path().join("native");
+        std::fs::create_dir_all(&native).expect("native");
+        let data = directory.path().join("data");
+        std::fs::create_dir_all(&data).expect("data");
+        let stale = directory.path().join("was-uninstalled");
+
+        let launch = ManagedWorkerLaunch {
+            executable: worker,
+            data_directory: data,
+            native_library_directory: native,
+            model_pack: model,
+            ocrmypdf_executable: Some(stale),
+        };
+        let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+        let resolved = resolve_managed_worker(&resolver).expect("launch");
+        assert!(resolved.ocrmypdf_executable.is_none());
+    }
 
     #[test]
     fn only_absolute_existing_host_resolved_model_packs_reach_the_worker() {

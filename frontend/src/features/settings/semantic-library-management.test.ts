@@ -192,7 +192,7 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('vocabulary-1');
     expect(root.textContent).toContain('Files requiring OCR');
     expect(root.textContent).toContain('/docs/Scanned reference.pdf');
-    expect(root.textContent).toContain('pnpm dev:tauri:semantic:ocr');
+    expect(root.textContent).toContain('OCR remediation controls below');
     expect(root.querySelectorAll('.fm-semantic-library-override')).toHaveLength(7);
     expect(root.textContent).not.toContain('Symlink outside root');
     expect(root.textContent).not.toContain('Over budget');

@@ -576,6 +576,70 @@ describe('MockFileManagerClient semantic component lifecycle', () => {
   });
 });
 
+describe('MockFileManagerClient OCR remediation', () => {
+  it('requires consent and advances selected work through durable job states', async () => {
+    const client = new MockFileManagerClient();
+    const initial = await client.getSemanticOcrStatus();
+    expect(initial.enabled).toBe(false);
+    expect(initial.availability).toMatchObject({
+      state: 'available',
+      version: '16.10.4',
+    });
+    const firstReported = initial.reportedFiles[0];
+    expect(firstReported).toBeDefined();
+    if (firstReported === undefined) throw new Error('missing OCR fixture');
+    await expect(
+      client.startSemanticOcrRemediation({
+        scope: 'oneFile',
+        file: firstReported,
+      }),
+    ).rejects.toMatchObject({ code: 'disabled' });
+
+    await client.setSemanticOcrConsent(true);
+    const selected = initial.reportedFiles.slice(0, 1);
+    const queued = await client.startSemanticOcrRemediation({
+      scope: 'selectedFiles',
+      files: selected,
+    });
+    expect(queued.state).toBe('queued');
+
+    const running = await client.getSemanticOcrStatus();
+    expect(running.jobs[0]?.state).toBe('running');
+    const completed = await client.getSemanticOcrStatus();
+    expect(completed.jobs[0]).toMatchObject({
+      state: 'completed',
+      processedFiles: 1,
+    });
+    expect(completed.jobs[0]?.files[0]?.outcome.outcome).toBe('succeeded');
+    expect(completed.reportedFiles).toHaveLength(initial.reportedFiles.length - 1);
+  });
+
+  it('rejects stale frontend paths and supports cancellation', async () => {
+    const client = new MockFileManagerClient();
+    const status = await client.setSemanticOcrConsent(true);
+    const firstReported = status.reportedFiles[0];
+    expect(firstReported).toBeDefined();
+    if (firstReported === undefined) throw new Error('missing OCR fixture');
+    await expect(
+      client.startSemanticOcrRemediation({
+        scope: 'oneFile',
+        file: {
+          rootId: 'root-1',
+          location: { providerId: 'local', uri: 'file:///not-reported.pdf' },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'unreportedTarget' });
+
+    const queued = await client.startSemanticOcrRemediation({
+      scope: 'enrolledRoot',
+      rootId: firstReported.rootId,
+    });
+    await expect(client.cancelSemanticOcrRemediation(queued.id)).resolves.toMatchObject({
+      state: 'cancelled',
+    });
+  });
+});
+
 describe('MockFileManagerClient semantic library lifecycle', () => {
   it('previews, enrols, pauses, excludes, and keeps counts backend-owned', async () => {
     const client = new MockFileManagerClient();

@@ -364,6 +364,112 @@ main.fm-workspace {
   width: 100%;
 }
 
+.fm-semantic-ocr-management {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.fm-semantic-ocr-description,
+.fm-semantic-ocr-consent,
+.fm-semantic-ocr-note {
+  max-width: 72ch;
+}
+
+.fm-semantic-ocr-note {
+  color: var(--fm-text-muted);
+}
+
+.fm-semantic-ocr-availability {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+}
+
+.fm-semantic-ocr-availability dt {
+  color: var(--mm-text-secondary);
+}
+
+.fm-semantic-ocr-availability dd {
+  margin: 0;
+}
+
+.fm-semantic-ocr-consent,
+.fm-semantic-ocr-file > label {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fm-semantic-ocr-reported,
+.fm-semantic-ocr-jobs {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.fm-semantic-ocr-root {
+  border: 1px solid var(--fm-border);
+  border-radius: 0.35rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.fm-semantic-ocr-root > ul,
+.fm-semantic-ocr-jobs ol,
+.fm-semantic-ocr-job ul {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+}
+
+.fm-semantic-ocr-file,
+.fm-semantic-ocr-job {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.fm-semantic-ocr-file > label {
+  min-width: 0;
+}
+
+.fm-semantic-ocr-path {
+  overflow-wrap: anywhere;
+}
+
+.fm-semantic-ocr-action {
+  margin: 0.2rem 0.5rem 0.2rem 0;
+}
+
+.fm-semantic-ocr-success {
+  color: var(--fm-success);
+}
+
+.fm-semantic-ocr-warning {
+  color: var(--fm-warning);
+}
+
+.fm-semantic-ocr-error,
+.fm-semantic-ocr-unavailable {
+  color: var(--fm-error);
+}
+
+.fm-semantic-ocr-job small {
+  display: block;
+}
+
+@media (width <= 600px) {
+  .fm-semantic-ocr-availability {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fm-semantic-library-ingestion,
 .fm-semantic-library-consent-state {
   font-weight: 600;

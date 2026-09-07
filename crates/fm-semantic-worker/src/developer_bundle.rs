@@ -521,6 +521,37 @@ struct DeveloperWorker {
     passage_prefix: String,
     data_directory: PathBuf,
     description: String,
+    ocr: OcrConfigSource,
+}
+
+/// How this worker resolves optional OCRmyPDF configuration.
+///
+/// The two shapes are deliberately isolated so a production managed worker
+/// can never fall back to an environment override: it uses only the canonical
+/// executable path the trusted host discovered and passed as a fixed CLI
+/// argument. The developer bundle keeps its explicit environment opt-in.
+enum OcrConfigSource {
+    /// Development-only environment opt-in (`PROCYON_SEMANTIC_OCRMYPDF`).
+    DeveloperEnvironment,
+    /// Managed production: the host-discovered executable, or none.
+    ManagedExecutable(Option<PathBuf>),
+}
+
+impl OcrConfigSource {
+    fn configuration(&self) -> Option<OcrMyPdfConfiguration> {
+        match self {
+            // Developer bundles are rejected by release builds, so reading the
+            // environment here never affects a production worker.
+            Self::DeveloperEnvironment => OcrMyPdfConfiguration::from_environment(),
+            // Defense in depth: the host already validated the path, but the
+            // worker still accepts only an absolute regular file and never
+            // consults the environment in this managed mode.
+            Self::ManagedExecutable(executable) => executable
+                .as_deref()
+                .filter(|path| path.is_absolute() && path.is_file())
+                .map(OcrMyPdfConfiguration::new),
+        }
+    }
 }
 
 impl DeveloperWorker {
@@ -540,12 +571,13 @@ impl DeveloperWorker {
 
         let model =
             DeveloperModel::resolve(model_pack, &data_directory.join("development-embedder"))?;
-        Self::open_with_model(data_directory, model)
+        Self::open_with_model(data_directory, model, OcrConfigSource::DeveloperEnvironment)
     }
 
     fn open_with_model(
         data_directory: &Path,
         model: DeveloperModel,
+        ocr: OcrConfigSource,
     ) -> Result<Self, DeveloperBundleError> {
         let package = CuratedModelPackage {
             identity: model.identity.clone(),
@@ -586,12 +618,14 @@ impl DeveloperWorker {
             passage_prefix: model.passage_prefix,
             data_directory: data_directory.to_owned(),
             description: model.description,
+            ocr,
         })
     }
 
     fn open_managed(
         data_directory: &Path,
         model_pack: &Path,
+        ocrmypdf_executable: Option<&Path>,
     ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
             return Err(DeveloperBundleError::RelativeDataDirectory);
@@ -603,7 +637,11 @@ impl DeveloperWorker {
             ));
         }
         let model = DeveloperModel::resolve_managed(model_pack)?;
-        Self::open_with_model(data_directory, model)
+        Self::open_with_model(
+            data_directory,
+            model,
+            OcrConfigSource::ManagedExecutable(ocrmypdf_executable.map(Path::to_path_buf)),
+        )
     }
 
     fn backends(&self) -> (Arc<dyn WorkerIngestionBackend>, Arc<dyn WorkerQueryBackend>) {
@@ -611,7 +649,7 @@ impl DeveloperWorker {
         let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
         let derived_index: Arc<dyn DerivedIndex> = self.index.clone();
         let candidate_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
-        let ocr_configuration = OcrMyPdfConfiguration::from_environment();
+        let ocr_configuration = self.ocr.configuration();
         let ocr_enabled = ocr_configuration.is_some();
         let mut coordinator = IngestionCoordinator::with_converter(
             self.catalog.clone(),
@@ -681,6 +719,11 @@ pub async fn run_developer_worker(
 
 /// Runs the authenticated, network-free managed worker from verified paths.
 ///
+/// `ocrmypdf_executable` is the trusted, host-discovered canonical OCRmyPDF
+/// executable. It is the only way this managed worker enables OCR remediation:
+/// the environment is never consulted in production, and a `None` (or later
+/// stale) path simply runs the worker without OCR.
+///
 /// # Errors
 ///
 /// Returns setup, persistence, Zvec, embedding, lock, or IPC failures. The
@@ -689,10 +732,11 @@ pub async fn run_managed_worker(
     runtime_directory: &Path,
     data_directory: &Path,
     model_pack: &Path,
+    ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
-        DeveloperWorker::open_managed(data_directory, model_pack)
+        DeveloperWorker::open_managed(data_directory, model_pack, ocrmypdf_executable)
             .map(|worker| worker.into_server(config))
             .map_err(|error| ServerError::Io(io::Error::other(error)))
     })
@@ -825,6 +869,37 @@ mod tests {
                 .sum::<f32>()
         };
         assert!(dot(&first[0], &first[1]) > dot(&first[0], &first[2]));
+    }
+
+    #[test]
+    fn managed_ocr_configuration_uses_only_a_valid_absolute_executable() {
+        let directory = TestDirectory::new("managed-ocr");
+        // No executable disables OCR.
+        assert!(
+            OcrConfigSource::ManagedExecutable(None)
+                .configuration()
+                .is_none()
+        );
+        // A relative path never yields a runnable command.
+        assert!(
+            OcrConfigSource::ManagedExecutable(Some(PathBuf::from("ocrmypdf")))
+                .configuration()
+                .is_none()
+        );
+        // An absent absolute path never yields a runnable command.
+        assert!(
+            OcrConfigSource::ManagedExecutable(Some(directory.0.join("absent")))
+                .configuration()
+                .is_none()
+        );
+        // An absolute regular file becomes a configuration.
+        let executable = directory.0.join("ocrmypdf");
+        std::fs::write(&executable, b"#!/bin/sh\n").unwrap();
+        assert!(
+            OcrConfigSource::ManagedExecutable(Some(executable))
+                .configuration()
+                .is_some()
+        );
     }
 
     #[test]

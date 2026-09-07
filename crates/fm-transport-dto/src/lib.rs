@@ -29,6 +29,7 @@ pub mod runtime;
 pub mod search;
 pub mod semantic_components;
 pub mod semantic_library;
+pub mod semantic_ocr;
 pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
@@ -149,6 +150,7 @@ pub use search::{
 };
 pub use semantic_components::*;
 pub use semantic_library::*;
+pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, LanguageDto,

@@ -290,6 +290,23 @@ afterEach(() => {
 });
 
 describe('HttpFileManagerClient', () => {
+  it('reports OCR remediation unavailable without adding server endpoints', async () => {
+    const client = new HttpFileManagerClient();
+
+    await expect(client.getSemanticOcrStatus()).resolves.toMatchObject({
+      enabled: false,
+      availability: {
+        state: 'unavailable',
+        reason: { code: 'hostUnavailable' },
+      },
+      reportedFiles: [],
+      jobs: [],
+    });
+    await expect(client.setSemanticOcrConsent(true)).rejects.toThrow(
+      'available only in the desktop application',
+    );
+  });
+
   describe('OneDrive authorization', () => {
     it('opens a placeholder synchronously, then navigates it to Microsoft after begin succeeds', async () => {
       const popup = { location: { href: '' }, close: vi.fn(), opener: window };

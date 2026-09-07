@@ -856,6 +856,7 @@ export const pt = {
   },
   semanticComponents: en.semanticComponents,
   semanticLibrary: en.semanticLibrary,
+  semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,
   documentSummary: en.documentSummary,

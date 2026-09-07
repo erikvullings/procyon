@@ -123,6 +123,11 @@ use crate::semantic_library::{
     SemanticLibraryCapabilities, SemanticLibraryError, SemanticLibraryOperation,
     SemanticLibraryService, SemanticLibraryStatus, SemanticWorkerFeedPlan,
 };
+use crate::semantic_ocr::{
+    OcrPolicyStore, OcrRemediationJob, OcrRemediationJobId, OcrRemediationScope,
+    SemanticOcrCoordinator, SemanticOcrError, SemanticOcrService, SemanticOcrStatus,
+    UnavailableOcrExecutableProbe,
+};
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
@@ -171,7 +176,8 @@ pub struct FileManagerService {
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
-    semantic_indexing: SemanticIndexingService,
+    semantic_indexing: Arc<SemanticIndexingService>,
+    semantic_ocr: SemanticOcrCoordinator,
     semantic_components: SemanticComponentService,
     semantic_library: SemanticLibraryComposition,
 }
@@ -471,7 +477,17 @@ impl FileManagerService {
             providers.clone(),
         );
         let semantic = SemanticService::unavailable();
-        let semantic_indexing = SemanticIndexingService::new(providers.clone());
+        let semantic_indexing = Arc::new(SemanticIndexingService::new(providers.clone()));
+        let semantic_ocr_directory = settings_directory.join("semantic-ocr");
+        let semantic_ocr_policy = Arc::new(OcrPolicyStore::load(&semantic_ocr_directory));
+        let semantic_ocr = SemanticOcrCoordinator::new(
+            Arc::new(SemanticOcrService::load(
+                semantic_ocr_directory,
+                semantic_ocr_policy,
+                Arc::new(UnavailableOcrExecutableProbe),
+            )),
+            Arc::clone(&semantic_indexing),
+        );
         let search_comparison = SearchComparisonCoordinator::new(
             search,
             comparison,
@@ -596,6 +612,7 @@ impl FileManagerService {
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
             semantic_indexing,
+            semantic_ocr,
             semantic_components: match runtime {
                 RuntimeKindDto::BrowserServer => SemanticComponentService::new(Arc::new(
                     AdministratorProvisionedSemanticComponentCapability::new(
@@ -1379,6 +1396,98 @@ impl FileManagerService {
         )));
         self.semantic = semantic;
         self
+    }
+
+    /// Replaces the inert host default with an explicitly configured desktop
+    /// OCR remediation capability.
+    #[must_use]
+    pub fn with_semantic_ocr_service(mut self, service: SemanticOcrService) -> Self {
+        self.semantic_ocr = self.semantic_ocr.with_jobs(service);
+        self
+    }
+
+    /// Returns the backend-authoritative OCR availability, consent, reported
+    /// files, and durable job history.
+    #[must_use]
+    pub fn semantic_ocr_status(&self) -> SemanticOcrStatus {
+        self.semantic_ocr.status()
+    }
+
+    /// Persists explicit OCR consent and retires any worker whose process
+    /// configuration was built from the previous value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an availability, persistence, or worker-restart failure.
+    pub async fn set_semantic_ocr_consent(
+        &self,
+        enabled: bool,
+    ) -> Result<SemanticOcrStatus, SemanticOcrError> {
+        self.semantic_ocr.set_consent(&self.semantic, enabled).await
+    }
+
+    /// Expands one of the four user-visible scopes against the current
+    /// backend-owned OCR report and enqueues only exact reported targets.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed consent, availability, stale-target, bound, or
+    /// persistence failure.
+    pub fn start_semantic_ocr_remediation(
+        &self,
+        scope: OcrRemediationScope,
+    ) -> Result<OcrRemediationJob, SemanticOcrError> {
+        self.semantic_ocr.start(scope)
+    }
+
+    /// Cancels one queued or running OCR remediation job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a not-found or persistence failure.
+    pub fn cancel_semantic_ocr_remediation(
+        &self,
+        id: &OcrRemediationJobId,
+    ) -> Result<OcrRemediationJob, SemanticOcrError> {
+        self.semantic_ocr.cancel(id)
+    }
+
+    /// Requeues any durable OCR jobs interrupted by the previous process.
+    ///
+    /// # Errors
+    ///
+    /// Returns a persistence failure.
+    pub fn recover_semantic_ocr_remediation_jobs(&self) -> Result<(), SemanticOcrError> {
+        self.semantic_ocr.recover()
+    }
+
+    /// Runs the single-consumer OCR remediation queue until host shutdown.
+    pub async fn run_semantic_ocr_remediation_jobs(
+        self: Arc<Self>,
+        shutdown: tokio_util::sync::CancellationToken,
+    ) {
+        loop {
+            let claimed = tokio::select! {
+                () = shutdown.cancelled() => break,
+                claimed = self.semantic_ocr.claim_next() => {
+                    match claimed {
+                        Ok(claimed) => claimed,
+                        Err(error) => {
+                            tracing::error!(%error, "OCR remediation queue could not persist a claimed job");
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    }
+                },
+            };
+            if let Err(error) = self
+                .semantic_ocr
+                .process(self.semantic_library().await, claimed)
+                .await
+            {
+                tracing::error!(%error, "OCR remediation job state could not be persisted");
+            }
+        }
     }
 
     /// Reconciles one explicitly enrolled root into the active semantic worker.

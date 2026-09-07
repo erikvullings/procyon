@@ -10,6 +10,10 @@ use fm_application::semantic_components::{
     DesktopSemanticDistribution, ManagedSemanticComponentAdapters,
     ManagedSemanticComponentCapability, ManagedSemanticComponentConfiguration,
 };
+use fm_application::semantic_ocr::{
+    DoclingOcrExecutableProbe, OcrAvailability, OcrExecutableProbe, OcrPolicyStore,
+    SemanticOcrService,
+};
 use fm_semantic_components::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactId, ArtifactKind, ArtifactRequest,
     ArtifactSource, ArtifactSourceError, CatalogArtifact, ComponentManager, ComponentQuiescer,
@@ -27,6 +31,7 @@ pub(crate) struct ProductionSemanticBundle {
     pub(crate) runtime_directory: PathBuf,
     pub(crate) reindex_pending_marker: PathBuf,
     pub(crate) worker: fm_semantic_worker::ManagedWorkerResolver,
+    pub(crate) ocr: SemanticOcrService,
 }
 
 impl ProductionSemanticBundle {
@@ -83,10 +88,15 @@ impl ProductionSemanticBundle {
         );
         let data_root = SemanticDataRoot::from_app_data(app_data_directory);
         let runtime_directory = data_root.path().join("worker-runtime");
+        let ocr_directory = configuration_directory.join("semantic-ocr");
+        let ocr_policy = Arc::new(OcrPolicyStore::load(&ocr_directory));
+        let ocr_probe: Arc<dyn OcrExecutableProbe> = Arc::new(DoclingOcrExecutableProbe);
         let resolver = managed_worker_resolver(
             manager.clone(),
             Arc::clone(&catalog),
             data_root.category_path(DataCategory::Zvec),
+            Arc::clone(&ocr_policy),
+            Arc::clone(&ocr_probe),
         );
         let source = HttpArtifactSource::new(&catalog)?;
         let components = Arc::new(ManagedSemanticComponentCapability::new(
@@ -117,6 +127,7 @@ impl ProductionSemanticBundle {
                 .category_path(DataCategory::Zvec)
                 .join("model-reindex-pending"),
             worker: resolver,
+            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
         })
     }
 }
@@ -156,6 +167,8 @@ fn managed_worker_resolver(
     manager: ComponentManager,
     catalog: Arc<TrustedCatalog>,
     data_directory: PathBuf,
+    ocr_policy: Arc<OcrPolicyStore>,
+    ocr_probe: Arc<dyn OcrExecutableProbe>,
 ) -> fm_semantic_worker::ManagedWorkerResolver {
     Arc::new(move || {
         let state = manager
@@ -203,13 +216,29 @@ fn managed_worker_resolver(
                     .to_owned(),
             );
         }
+        let ocrmypdf_executable =
+            configured_ocrmypdf_executable(ocr_policy.as_ref(), ocr_probe.as_ref());
         Ok(fm_semantic_worker::ManagedWorkerLaunch::new(
             executable,
             data_directory.clone(),
             native_library_directory,
             model_pack,
-        ))
+        )
+        .with_ocrmypdf_executable(ocrmypdf_executable))
     })
+}
+
+fn configured_ocrmypdf_executable(
+    policy: &OcrPolicyStore,
+    probe: &dyn OcrExecutableProbe,
+) -> Option<PathBuf> {
+    if !policy.enabled() {
+        return None;
+    }
+    match probe.probe() {
+        OcrAvailability::Available { executable, .. } => Some(executable),
+        OcrAvailability::Unavailable { .. } => None,
+    }
 }
 
 fn required_verified_payload(
@@ -454,6 +483,17 @@ mod tests {
 
     use super::*;
 
+    struct FixedOcrProbe(PathBuf);
+
+    impl OcrExecutableProbe for FixedOcrProbe {
+        fn probe(&self) -> OcrAvailability {
+            OcrAvailability::Available {
+                executable: self.0.clone(),
+                version: "16.10.4".to_owned(),
+            }
+        }
+    }
+
     #[test]
     fn absent_catalog_keeps_desktop_semantics_inert() {
         let resources = tempfile::tempdir().expect("resources");
@@ -505,5 +545,23 @@ mod tests {
 
         assert!(matches!(error, ProductionSemanticError::CatalogJson(_)));
         assert!(!root.path().join("semantic-components").exists());
+    }
+
+    #[test]
+    fn production_worker_receives_discovered_ocr_only_after_consent() {
+        let root = tempfile::tempdir().expect("root");
+        let executable = root.path().join("ocrmypdf");
+        fs::write(&executable, b"fixture").expect("executable");
+        let policy = OcrPolicyStore::load(root.path().join("ocr-policy"));
+        let probe = FixedOcrProbe(executable.clone());
+
+        assert!(configured_ocrmypdf_executable(&policy, &probe).is_none());
+        policy.set_enabled(true).expect("enable OCR");
+        assert_eq!(
+            configured_ocrmypdf_executable(&policy, &probe),
+            Some(executable)
+        );
+        policy.set_enabled(false).expect("disable OCR");
+        assert!(configured_ocrmypdf_executable(&policy, &probe).is_none());
     }
 }

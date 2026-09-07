@@ -123,7 +123,7 @@ semantic components are not installed.
 - [x] 0195 Cross-platform semantic release artifacts *(needs 0194; macOS x86-64 explicitly
   unsupported because Zvec 0.7.0 has no matching runtime)*
 - [x] 0196 Release desktop semantic activation
-- [ ] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
+- [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
 - [ ] 0198 Semantic release qualification *(needs 0195, 0196; gates the user-facing release)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a

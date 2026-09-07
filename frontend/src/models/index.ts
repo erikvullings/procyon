@@ -20,6 +20,7 @@ export * from './runtime-capabilities';
 export * from './search';
 export * from './semantic-components';
 export * from './semantic-library';
+export * from './semantic-ocr';
 export * from './semantic-vocabulary';
 export * from './settings';
 export * from './snapshot';

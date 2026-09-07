@@ -101,6 +101,32 @@ describe('TauriFileManagerClient', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'cancel_rag', { operationId });
   });
 
+  it('uses the dedicated desktop OCR commands without forwarding executable paths', async () => {
+    invoke.mockResolvedValue({});
+    const client = new TauriFileManagerClient();
+    const file = {
+      rootId: 'root-1',
+      location: { providerId: 'local', uri: 'file:///Documents/scan.pdf' },
+    };
+
+    await client.getSemanticOcrStatus();
+    await client.setSemanticOcrConsent(true);
+    await client.startSemanticOcrRemediation({ scope: 'oneFile', file });
+    await client.cancelSemanticOcrRemediation('job-1');
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_semantic_ocr_status');
+    expect(invoke).toHaveBeenNthCalledWith(2, 'set_semantic_ocr_consent', {
+      request: { enabled: true },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'start_semantic_ocr_remediation', {
+      request: { scope: 'oneFile', file },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, 'cancel_semantic_ocr_remediation', {
+      request: { jobId: 'job-1' },
+    });
+    expect(JSON.stringify(invoke.mock.calls)).not.toContain('executable');
+  });
+
   describe('operation transport', () => {
     it('maps the Tauri operation discriminator to the frontend kind', async () => {
       invoke.mockResolvedValue([

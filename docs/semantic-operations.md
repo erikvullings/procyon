@@ -22,15 +22,22 @@ content search, and baseline document viewing available.
 - `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.
-- Local OCR automation is disabled even when OCRmyPDF is installed. Start the developer host with
-  `pnpm dev:tauri:semantic:ocr` to opt in for that process. Set
-  `PROCYON_OCRMYPDF_EXECUTABLE` as well when `ocrmypdf` is outside `PATH`. On macOS install it with
-  Homebrew (`brew install ocrmypdf`); on Linux use the distribution's OCRmyPDF package; on Windows
-  install and run Procyon's local semantic developer environment through WSL. Procyon never
-  downloads OCRmyPDF.
-- **Settings > Semantic > Enrolled roots** lists the decoded paths of files that still require OCR
-  after the latest completed reconciliation. The list clears when a later OCR-enabled
-  reconciliation successfully indexes them.
+- Local OCR automation is disabled even when OCRmyPDF is installed. Release desktop builds safely
+  discover only the literal `ocrmypdf` executable in absolute `PATH` entries and documented
+  platform locations, run a bounded `--version` check, and accept audited stable 16.x or 17.x
+  releases. **Settings > Semantic > OCR remediation** reports the canonical executable and version,
+  or the exact rejection reason, before the user can opt in. Procyon never downloads OCRmyPDF.
+- After opting in, Settings can queue one reported file, checked files, one enrolled root, or every
+  currently reported OCR-required file. The durable single-consumer queue exposes
+  queued/running/completed/failed/cancelled state and per-file success, execution failure, or
+  post-OCR no-text outcomes. Disabling consent cancels work and retires the running worker so a
+  later launch cannot retain stale OCR authority. The backend intersects explicit file requests
+  with its own report; frontend paths never become executable commands.
+- `pnpm dev:tauri:semantic:ocr` remains the explicit environment opt-in for the developer bundle.
+  Set `PROCYON_OCRMYPDF_EXECUTABLE` when its test executable is outside `PATH`. Production managed
+  workers never read that override. On macOS install OCRmyPDF with Homebrew
+  (`brew install ocrmypdf`); on Linux use the distribution package; on Windows use Procyon's local
+  semantic environment through WSL.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
   also available as **Ask your files** in the command palette and through
   `Ctrl/Cmd+Shift+F`. It always opens Ask across the
@@ -309,17 +316,18 @@ Storage diagnostics aggregate authoritative measurements by enrolled root and de
 separating active bytes from bytes pending cleanup. They do not trust caller-supplied totals.
 Baseline conversion supports plain text, source code, Markdown, HTML, DOCX, PPTX, XLSX, and CSV.
 PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
-with the original `lopdf` implementation retained for recoverable fallback. Image-only PDFs are
-excluded from semantic indexing with actionable OCRmyPDF guidance; they are not counted as
-retryable ingestion failures. When local OCR is explicitly enabled, only that `NoTextLayer`
-outcome invokes OCRmyPDF. Procyon copies the bounded bytes into a private temporary directory,
-passes neither the provider path nor credentials, gives the child only an allow-listed environment,
-enforces the remaining conversion deadline, terminates the complete OCR process group on
-cancellation, and removes input, output, and OCR scratch files on every exit path. Successful output
-is converted again by deterministic Docling (with baseline extraction retained for OCR text-layer
-encodings Docling cannot yet read) before publication. A later reconciliation retries previously
-excluded PDFs automatically. Unsupported, encrypted, malformed, and over-budget documents remain
-visible as typed skip or omission reasons.
+with the original `lopdf` implementation retained for recoverable fallback. Image-only PDFs are excluded from semantic indexing with actionable OCRmyPDF guidance; they are not
+counted as retryable ingestion failures. When local OCR is explicitly enabled, only that
+`NoTextLayer` outcome invokes OCRmyPDF. Procyon copies the bounded bytes into a private temporary
+directory, passes neither the provider path nor credentials, gives the child only an allow-listed
+environment, enforces the remaining conversion deadline, terminates the complete OCR process group
+on cancellation, and removes input, output, and OCR scratch files on every exit path. Successful
+output is converted again by deterministic Docling (with baseline extraction retained for OCR
+text-layer encodings Docling cannot yet read) before publication. Successful remediation removes
+only those requested files from the backend's OCR-required report; failures remain visible for a
+later retry. Unsupported, encrypted, malformed, and over-budget documents remain visible as typed
+skip or omission reasons. Browser/server mode exposes OCR as unavailable and has no OCR mutation
+routes.
 
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.

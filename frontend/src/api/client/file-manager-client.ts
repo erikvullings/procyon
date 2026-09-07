@@ -126,6 +126,8 @@ import type {
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
+  SemanticOcrJob,
+  SemanticOcrStatus,
   SemanticUninstallReceipt,
   SemanticVocabulary,
   SemanticWorkerPatchResponse,
@@ -141,6 +143,7 @@ import type {
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
+  StartSemanticOcrRemediationRequest,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -243,6 +246,13 @@ export interface FileManagerClient {
     request: CompleteSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelSelection>;
+  getSemanticOcrStatus(signal?: AbortSignal): Promise<SemanticOcrStatus>;
+  setSemanticOcrConsent(enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus>;
+  startSemanticOcrRemediation(
+    request: StartSemanticOcrRemediationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticOcrJob>;
+  cancelSemanticOcrRemediation(jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob>;
   getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
   getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]>;

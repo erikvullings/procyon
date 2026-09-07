@@ -11,9 +11,12 @@ use std::time::Duration;
 
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, WorkspaceId};
 use fm_semantic_library::{
-    ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason, RootId,
+    ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
+    OccurrenceId, RootId,
 };
-use fm_vfs::{EntryRef, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError};
+use fm_vfs::{
+    EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError,
+};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
@@ -149,51 +152,11 @@ impl SemanticIndexingService {
         let _run = self.run_lock.lock().await;
         check_cancelled(&cancellation)?;
 
-        let status = library.status(access)?;
-        if status.paused {
-            return Err(SemanticIndexingError::Paused);
-        }
-        let root = status
-            .roots
-            .into_iter()
-            .find(|candidate| candidate.id == root_id.to_string())
-            .ok_or(SemanticIndexingError::RootNotFound)?;
-        if root.availability != SemanticRootAvailability::Available {
-            return Err(SemanticIndexingError::RootUnavailable);
-        }
-        let library_id = status
-            .library
-            .ok_or(SemanticLibraryError::Unavailable)?
-            .library_id;
-        let max_source_bytes = status
-            .resource_profile
-            .ok_or(SemanticLibraryError::Unavailable)?
-            .budgets
-            .max_source_bytes_per_document
-            .min(MAX_SOURCE_BYTES);
-        let workspace_ids = root
-            .workspace_references
-            .iter()
-            .copied()
-            .map(WorkspaceId::from)
-            .collect::<Vec<_>>();
-        if workspace_ids.is_empty() {
-            return Err(SemanticLibraryError::WorkspaceRequired.into());
-        }
+        let (context, provider, semantic) =
+            self.resolve_root_context(&library, access, root_id).await?;
+        let library_id = context.library_id.clone();
 
-        let provider = self.providers.resolve(&root.location)?;
-        let capabilities = provider.capabilities_for(&root.location)?;
-        capabilities.require(ProviderCapabilities::LIST)?;
-        capabilities.require(ProviderCapabilities::READ)?;
-
-        let semantic = self
-            .semantic
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
-        semantic.health().await?;
-
-        let mut pending = VecDeque::from([(root.location.clone(), 0_u16)]);
+        let mut pending = VecDeque::from([(context.location.clone(), 0_u16)]);
         let mut directory_count = 0_u64;
         let mut entry_count = 0_u64;
         let mut observed = BTreeSet::new();
@@ -245,7 +208,7 @@ impl SemanticIndexingService {
                         continue;
                     }
                     match entry.kind {
-                        EntryKind::Directory if root.recursive => {
+                        EntryKind::Directory if context.recursive => {
                             let next_depth = depth.saturating_add(1);
                             if next_depth > MAX_RECURSION_DEPTH {
                                 return Err(SemanticIndexingError::LimitExceeded(
@@ -256,101 +219,37 @@ impl SemanticIndexingService {
                         }
                         EntryKind::Directory | EntryKind::Symlink => {}
                         EntryKind::File => {
-                            let Some(bytes) = read_bounded(
-                                provider.as_ref(),
-                                &entry,
-                                max_source_bytes,
-                                &cancellation,
-                            )
-                            .await?
-                            else {
-                                *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
-                                continue;
-                            };
-                            let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
-                                .map_err(|_| SemanticLibraryError::InvalidRequest)?;
-                            let occurrence_id = library.record_indexing_observation(
-                                access,
-                                SemanticIndexingObservation {
-                                    entry_id: entry.id,
-                                    location: entry.location.clone(),
-                                    content_fingerprint: fingerprint,
-                                    root_id,
-                                    workspace_ids: workspace_ids.clone(),
-                                    source_bytes: u64::try_from(bytes.len()).map_err(|_| {
-                                        SemanticIndexingError::LimitExceeded("source bytes")
-                                    })?,
-                                },
-                            )?;
-                            observed.insert(occurrence_id);
-                            observed_files = observed_files.saturating_add(1);
-
-                            let feed = library.worker_feed_plan(
-                                access,
-                                &[SemanticFeedCandidate {
-                                    root_id,
-                                    candidate: eligibility_candidate(entry.clone()),
-                                }],
-                            )?;
-                            let decision = feed
-                                .decisions
-                                .into_iter()
-                                .find(|decision| decision.occurrence_id() == occurrence_id)
-                                .ok_or(SemanticLibraryError::InvalidRequest)?;
-                            if decision.library_id().to_string() != library_id {
-                                return Err(
-                                    SemanticLibraryError::IncompatibleLibraryIdentity.into()
-                                );
-                            }
-                            let mut requires_ocr = false;
-                            for workspace_id in &workspace_ids {
-                                let tenant_id = match access {
-                                    SemanticAccessContext::Host => workspace_id.to_string(),
-                                    SemanticAccessContext::Server(_) => access.tenant_id()?,
-                                    SemanticAccessContext::Anonymous => {
-                                        return Err(SemanticLibraryError::AccessDenied.into());
-                                    }
-                                };
-                                if matches!(access, SemanticAccessContext::Server(_))
-                                    && decision.tenant_id().as_str() != tenant_id
-                                {
-                                    return Err(SemanticLibraryError::AccessDenied.into());
-                                }
-                                match ingest_and_wait(
-                                    &semantic,
-                                    &decision,
-                                    FeedDocument {
-                                        tenant_id,
-                                        root_id,
-                                        workspace_id: *workspace_id,
-                                        media_type: media_type(&entry)
-                                            .ok_or(SemanticLibraryError::InvalidRequest)?,
-                                        modified_at_ms: entry
-                                            .modified_at
-                                            .map_or(0, |value| value.timestamp_millis()),
-                                        content: bytes.clone(),
-                                    },
-                                    &cancellation,
-                                )
+                            match self
+                                .ingest_entry(EntryIngestRequest {
+                                    library: &library,
+                                    access,
+                                    context: &context,
+                                    provider: provider.as_ref(),
+                                    entry: &entry,
+                                    semantic: &semantic,
+                                    cancellation: &cancellation,
+                                })
                                 .await?
-                                {
-                                    IngestionOutcome::Completed => {
-                                        ingested_occurrences =
-                                            ingested_occurrences.saturating_add(1);
-                                    }
-                                    IngestionOutcome::Failed => {
-                                        failed_occurrences = failed_occurrences.saturating_add(1);
-                                    }
-                                    IngestionOutcome::Excluded(detail) => {
-                                        excluded_occurrences =
-                                            excluded_occurrences.saturating_add(1);
-                                        requires_ocr |= detail.contains("OCRmyPDF");
+                            {
+                                EntryIngestOutcome::Oversized => {
+                                    *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
+                                }
+                                EntryIngestOutcome::Ingested(report) => {
+                                    observed.insert(report.occurrence_id);
+                                    observed_files = observed_files.saturating_add(1);
+                                    ingested_occurrences =
+                                        ingested_occurrences.saturating_add(report.ingested);
+                                    failed_occurrences =
+                                        failed_occurrences.saturating_add(report.failed);
+                                    excluded_occurrences =
+                                        excluded_occurrences.saturating_add(report.excluded);
+                                    for detail in report.exclusion_details {
                                         exclusion_details.insert(detail);
                                     }
+                                    if report.requires_ocr {
+                                        ocr_required_files.push(entry.location.clone());
+                                    }
                                 }
-                            }
-                            if requires_ocr {
-                                ocr_required_files.push(entry.location.clone());
                             }
                         }
                     }
@@ -376,7 +275,11 @@ impl SemanticIndexingService {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(root_id, ocr_required_files.clone());
         let tenant_ids = match access {
-            SemanticAccessContext::Host => workspace_ids.iter().map(ToString::to_string).collect(),
+            SemanticAccessContext::Host => context
+                .workspace_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             SemanticAccessContext::Server(_) => vec![access.tenant_id()?],
             SemanticAccessContext::Anonymous => {
                 return Err(SemanticLibraryError::AccessDenied.into());
@@ -399,6 +302,321 @@ impl SemanticIndexingService {
             reconciliation_generation,
         })
     }
+
+    /// Resolves the shared per-root ingestion context, provider, and semantic
+    /// service, mirroring the checks the full reconciliation performs before
+    /// enumeration. Both root reconciliation and single-file OCR remediation
+    /// use it so they agree on eligibility scope, budgets, and authority.
+    async fn resolve_root_context(
+        &self,
+        library: &SemanticLibraryService,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+    ) -> Result<
+        (
+            RootIngestContext,
+            Arc<dyn FileSystemProvider>,
+            SemanticService,
+        ),
+        SemanticIndexingError,
+    > {
+        let status = library.status(access)?;
+        if status.paused {
+            return Err(SemanticIndexingError::Paused);
+        }
+        let root = status
+            .roots
+            .into_iter()
+            .find(|candidate| candidate.id == root_id.to_string())
+            .ok_or(SemanticIndexingError::RootNotFound)?;
+        if root.availability != SemanticRootAvailability::Available {
+            return Err(SemanticIndexingError::RootUnavailable);
+        }
+        let library_id = status
+            .library
+            .ok_or(SemanticLibraryError::Unavailable)?
+            .library_id;
+        let max_source_bytes = status
+            .resource_profile
+            .ok_or(SemanticLibraryError::Unavailable)?
+            .budgets
+            .max_source_bytes_per_document
+            .min(MAX_SOURCE_BYTES);
+        let workspace_ids = root
+            .workspace_references
+            .iter()
+            .copied()
+            .map(WorkspaceId::from)
+            .collect::<Vec<_>>();
+        if workspace_ids.is_empty() {
+            return Err(SemanticLibraryError::WorkspaceRequired.into());
+        }
+        let provider = self.providers.resolve(&root.location)?;
+        let capabilities = provider.capabilities_for(&root.location)?;
+        capabilities.require(ProviderCapabilities::LIST)?;
+        capabilities.require(ProviderCapabilities::READ)?;
+        let semantic = self
+            .semantic
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        semantic.health().await?;
+        Ok((
+            RootIngestContext {
+                root_id,
+                library_id,
+                max_source_bytes,
+                workspace_ids,
+                location: root.location,
+                recursive: root.recursive,
+            },
+            provider,
+            semantic,
+        ))
+    }
+
+    /// Records, feeds, and awaits ingestion of one already-eligible file.
+    ///
+    /// This is the bounded single-file ingestion unit shared by enrolled-root
+    /// reconciliation and OCR remediation. It never commits a reconciliation
+    /// generation, so remediating specific files cannot remove documents that
+    /// were merely absent from a partial scope.
+    async fn ingest_entry(
+        &self,
+        request: EntryIngestRequest<'_>,
+    ) -> Result<EntryIngestOutcome, SemanticIndexingError> {
+        let EntryIngestRequest {
+            library,
+            access,
+            context,
+            provider,
+            entry,
+            semantic,
+            cancellation,
+        } = request;
+        let Some(bytes) =
+            read_bounded(provider, entry, context.max_source_bytes, cancellation).await?
+        else {
+            return Ok(EntryIngestOutcome::Oversized);
+        };
+        let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        let occurrence_id = library.record_indexing_observation(
+            access,
+            SemanticIndexingObservation {
+                entry_id: entry.id,
+                location: entry.location.clone(),
+                content_fingerprint: fingerprint,
+                root_id: context.root_id,
+                workspace_ids: context.workspace_ids.clone(),
+                source_bytes: u64::try_from(bytes.len())
+                    .map_err(|_| SemanticIndexingError::LimitExceeded("source bytes"))?,
+            },
+        )?;
+
+        let feed = library.worker_feed_plan(
+            access,
+            &[SemanticFeedCandidate {
+                root_id: context.root_id,
+                candidate: eligibility_candidate(entry.clone()),
+            }],
+        )?;
+        let decision = feed
+            .decisions
+            .into_iter()
+            .find(|decision| decision.occurrence_id() == occurrence_id)
+            .ok_or(SemanticLibraryError::InvalidRequest)?;
+        if decision.library_id().to_string() != context.library_id {
+            return Err(SemanticLibraryError::IncompatibleLibraryIdentity.into());
+        }
+        let mut report = EntryIngestReport {
+            occurrence_id,
+            ingested: 0,
+            failed: 0,
+            excluded: 0,
+            exclusion_details: Vec::new(),
+            requires_ocr: false,
+        };
+        for workspace_id in &context.workspace_ids {
+            let tenant_id = match access {
+                SemanticAccessContext::Host => workspace_id.to_string(),
+                SemanticAccessContext::Server(_) => access.tenant_id()?,
+                SemanticAccessContext::Anonymous => {
+                    return Err(SemanticLibraryError::AccessDenied.into());
+                }
+            };
+            if matches!(access, SemanticAccessContext::Server(_))
+                && decision.tenant_id().as_str() != tenant_id
+            {
+                return Err(SemanticLibraryError::AccessDenied.into());
+            }
+            match ingest_and_wait(
+                semantic,
+                &decision,
+                FeedDocument {
+                    tenant_id,
+                    root_id: context.root_id,
+                    workspace_id: *workspace_id,
+                    media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
+                    modified_at_ms: entry
+                        .modified_at
+                        .map_or(0, |value| value.timestamp_millis()),
+                    content: bytes.clone(),
+                },
+                cancellation,
+            )
+            .await?
+            {
+                IngestionOutcome::Completed => report.ingested = report.ingested.saturating_add(1),
+                IngestionOutcome::Failed => report.failed = report.failed.saturating_add(1),
+                IngestionOutcome::Excluded(detail) => {
+                    report.excluded = report.excluded.saturating_add(1);
+                    report.requires_ocr |= detail.contains("OCRmyPDF");
+                    report.exclusion_details.push(detail);
+                }
+            }
+        }
+        Ok(EntryIngestOutcome::Ingested(report))
+    }
+
+    /// Returns every source file whose latest reconciliation reported it as
+    /// requiring OCR, paired with its enrolled root.
+    pub(crate) fn all_ocr_required_files(&self) -> Vec<(RootId, Location)> {
+        self.ocr_required_files
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .flat_map(|(root_id, locations)| {
+                locations
+                    .iter()
+                    .map(move |location| (*root_id, location.clone()))
+            })
+            .collect()
+    }
+
+    /// Removes one file from the backend-owned OCR-required report after the
+    /// file was successfully re-ingested or ceased to be eligible.
+    pub(crate) fn clear_ocr_required_file(&self, root_id: RootId, location: &Location) {
+        let mut reported = self
+            .ocr_required_files
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(locations) = reported.get_mut(&root_id) {
+            locations.retain(|candidate| candidate != location);
+            if locations.is_empty() {
+                reported.remove(&root_id);
+            }
+        }
+    }
+
+    /// Re-ingests one previously text-less file through the OCR-aware worker.
+    ///
+    /// The file is re-inspected (so a changed file is remediated as it is now),
+    /// re-checked against the curated eligibility policy (so unrelated or newly
+    /// excluded files are never OCR'd), and fed to the worker. The worker
+    /// performs the OCR, reconversion, and ingestion; this returns only the
+    /// bounded ingestion outcome for the file.
+    pub(crate) async fn remediate_file(
+        &self,
+        library: &SemanticLibraryService,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+        location: &Location,
+        cancellation: &CancellationToken,
+    ) -> Result<SingleFileIngestOutcome, SemanticIndexingError> {
+        let _run = self.run_lock.lock().await;
+        check_cancelled(cancellation)?;
+        let (context, provider, semantic) =
+            self.resolve_root_context(library, access, root_id).await?;
+        // Re-inspect without following links so a changed or replaced file is
+        // remediated exactly as it is now, and a directory or symlink target is
+        // never opened as a document.
+        let entry = provider
+            .inspect(
+                &EntryRef {
+                    id: fm_domain::EntryId::new(),
+                    location: location.clone(),
+                },
+                cancellation.child_token(),
+            )
+            .await?;
+        if entry.kind != EntryKind::File {
+            return Ok(SingleFileIngestOutcome::Ineligible);
+        }
+        // Only remediate files the curated policy would still admit for this
+        // root: an unrelated or newly excluded file must never be OCR'd.
+        let plan = library.worker_feed_plan(
+            access,
+            &[SemanticFeedCandidate {
+                root_id,
+                candidate: eligibility_candidate(entry.clone()),
+            }],
+        )?;
+        if plan.eligible_locations.first() != Some(&entry.location) {
+            return Ok(SingleFileIngestOutcome::Ineligible);
+        }
+        match self
+            .ingest_entry(EntryIngestRequest {
+                library,
+                access,
+                context: &context,
+                provider: provider.as_ref(),
+                entry: &entry,
+                semantic: &semantic,
+                cancellation,
+            })
+            .await?
+        {
+            EntryIngestOutcome::Oversized => Ok(SingleFileIngestOutcome::Oversized),
+            EntryIngestOutcome::Ingested(report) => Ok(SingleFileIngestOutcome::Ingested(report)),
+        }
+    }
+}
+
+/// Shared per-root ingestion context resolved once for a reconciliation or a
+/// remediation pass.
+struct RootIngestContext {
+    root_id: RootId,
+    library_id: String,
+    max_source_bytes: u64,
+    workspace_ids: Vec<WorkspaceId>,
+    location: Location,
+    recursive: bool,
+}
+
+struct EntryIngestRequest<'a> {
+    library: &'a SemanticLibraryService,
+    access: &'a SemanticAccessContext,
+    context: &'a RootIngestContext,
+    provider: &'a dyn FileSystemProvider,
+    entry: &'a EntrySummary,
+    semantic: &'a SemanticService,
+    cancellation: &'a CancellationToken,
+}
+
+/// Aggregated bounded ingestion result for one observed file.
+pub(crate) struct EntryIngestReport {
+    pub(crate) occurrence_id: OccurrenceId,
+    pub(crate) ingested: u64,
+    pub(crate) failed: u64,
+    pub(crate) excluded: u64,
+    pub(crate) exclusion_details: Vec<String>,
+    pub(crate) requires_ocr: bool,
+}
+
+enum EntryIngestOutcome {
+    Oversized,
+    Ingested(EntryIngestReport),
+}
+
+/// Outcome of remediating one specific file.
+pub(crate) enum SingleFileIngestOutcome {
+    /// The file was observed and fed to the worker.
+    Ingested(EntryIngestReport),
+    /// The file exceeded the per-document source budget.
+    Oversized,
+    /// The file is no longer a policy-eligible regular file for its root.
+    Ineligible,
 }
 
 fn eligibility_candidate(entry: EntrySummary) -> EligibilityCandidate {

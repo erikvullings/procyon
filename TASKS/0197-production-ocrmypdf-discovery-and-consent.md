@@ -1,6 +1,6 @@
 # 0197 Production OCRmyPDF discovery and consent
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend
 Depends on: 0193, 0196
@@ -38,3 +38,17 @@ OCR support must not block the initial semantic release.
 
 - 2026-09-07 Copilot: Tracked separately because OCRmyPDF is a user-installed optional executable,
   not one of the signed semantic component artifacts required for the first production release.
+- 2026-09-09 Copilot: Started production discovery and remediation orchestration after 0196.
+  Production discovery is isolated in `fm-semantic-docling`; application policy and queueing will
+  reuse the existing semantic indexing capability rather than adding OCR branches to search or Ask.
+- 2026-09-07 Copilot: Completed production desktop OCR remediation. Added bounded safe executable
+  discovery and version rejection, versioned default-off consent, a durable single-consumer queue
+  with restart recovery and cancellation, backend-authoritative expansion for one file, selected
+  files, one enrolled root, and all reported files, worker retirement on consent changes, and
+  selected-file re-ingestion that clears only successful/no-longer-eligible OCR reports. Added a
+  hand-authored shared DTO, Tauri commands and registration, an explicitly unavailable HTTP
+  adapter, deterministic mock behavior, and keyboard/screen-reader-tested Settings controls with
+  complete locale keys. Verified the full affected Rust crate suites, all 1,873 frontend tests,
+  TypeScript typechecking, workspace Clippy/Biome lint, and unchanged generated OpenAPI artifacts.
+  Native Windows intentionally remains unavailable and directs users to WSL; the real external
+  OCRmyPDF smoke test remains opt-in while controlled executable tests cover the release contract.

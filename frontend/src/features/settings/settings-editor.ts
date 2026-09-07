@@ -25,6 +25,7 @@ import type { SelectionPlatform } from '../selection/keybindings';
 import { LlmProfileManagement } from './llm-profile-management';
 import { SemanticComponentManagement } from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
+import { SemanticOcrManagement } from './semantic-ocr-management';
 import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
 import {
   cloneSettings,
@@ -597,6 +598,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                 : { location: current.activeLocation }),
                             }),
                           ),
+                          m('.row', m(SemanticOcrManagement, { client: current.client })),
                           m(
                             '.row',
                             m(

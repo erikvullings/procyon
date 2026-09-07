@@ -28,6 +28,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             &arguments.runtime_directory,
             &semantic_data_directory,
             &model_pack,
+            arguments.ocrmypdf_executable.as_deref(),
             arguments.idle_timeout,
         )
         .await;
@@ -44,6 +45,8 @@ struct Arguments {
     #[cfg(feature = "semantic-runtime")]
     semantic_model_pack: Option<PathBuf>,
     #[cfg(feature = "semantic-runtime")]
+    ocrmypdf_executable: Option<PathBuf>,
+    #[cfg(feature = "semantic-runtime")]
     development_mode: bool,
 }
 
@@ -57,6 +60,8 @@ fn arguments_from(
     let mut semantic_data_directory = None;
     #[cfg(feature = "semantic-runtime")]
     let mut semantic_model_pack = None;
+    #[cfg(feature = "semantic-runtime")]
+    let mut ocrmypdf_executable = None;
     #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
     let mut development_mode = false;
     #[cfg(all(feature = "semantic-runtime", not(feature = "developer-bundle")))]
@@ -113,6 +118,23 @@ fn arguments_from(
                     "--semantic-model-pack requires the opt-in semantic-runtime feature",
                 ));
             }
+        } else if argument == "--ocrmypdf-executable" {
+            #[cfg(feature = "semantic-runtime")]
+            {
+                ocrmypdf_executable = Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "ocrmypdf executable value is required",
+                    )
+                })?));
+            }
+            #[cfg(not(feature = "semantic-runtime"))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--ocrmypdf-executable requires the opt-in semantic-runtime feature",
+                ));
+            }
         } else if argument == "--developer-data-dir" {
             #[cfg(feature = "developer-bundle")]
             {
@@ -167,6 +189,8 @@ fn arguments_from(
         #[cfg(feature = "semantic-runtime")]
         semantic_model_pack,
         #[cfg(feature = "semantic-runtime")]
+        ocrmypdf_executable,
+        #[cfg(feature = "semantic-runtime")]
         development_mode,
     })
 }
@@ -210,7 +234,44 @@ mod tests {
             Some(PathBuf::from("data"))
         );
         assert_eq!(arguments.semantic_model_pack, Some(PathBuf::from("pack")));
+        assert!(arguments.ocrmypdf_executable.is_none());
         assert!(!arguments.development_mode);
+    }
+
+    #[cfg(feature = "semantic-runtime")]
+    #[test]
+    fn managed_ocrmypdf_executable_argument_is_explicitly_parsed() {
+        let arguments = arguments_from([
+            "--runtime-dir".into(),
+            "runtime".into(),
+            "--semantic-data-dir".into(),
+            "data".into(),
+            "--semantic-model-pack".into(),
+            "pack".into(),
+            "--ocrmypdf-executable".into(),
+            "/usr/local/bin/ocrmypdf".into(),
+        ])
+        .expect("arguments");
+
+        assert_eq!(
+            arguments.ocrmypdf_executable,
+            Some(PathBuf::from("/usr/local/bin/ocrmypdf"))
+        );
+    }
+
+    #[cfg(not(feature = "semantic-runtime"))]
+    #[test]
+    fn ocrmypdf_argument_requires_the_semantic_runtime_feature() {
+        let error = arguments_from([
+            "--runtime-dir".into(),
+            "runtime".into(),
+            "--ocrmypdf-executable".into(),
+            "/usr/local/bin/ocrmypdf".into(),
+        ])
+        .err()
+        .expect("argument must be rejected");
+
+        assert!(error.to_string().contains("semantic-runtime feature"));
     }
 
     #[cfg(feature = "developer-bundle")]
