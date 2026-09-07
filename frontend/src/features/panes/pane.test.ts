@@ -237,7 +237,7 @@ type FlatAttrsInput = Partial<{
   actions: readonly ActionDescriptor[];
   keybindingOverrides: Readonly<Record<string, string>>;
   // Operations
-  onOpenEntry: (entry: EntrySummary) => void | Promise<void>;
+  onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
   onSelectionAction: (action: SelectionAction) => void;
   onRetry: () => void | Promise<void>;
   onLoadNextPage: () => void | Promise<void>;
@@ -711,6 +711,66 @@ describe('Pane search breadcrumb rendering', () => {
     ).toBe('14');
     root.querySelector<HTMLButtonElement>('[aria-label="Refresh search"]')?.click();
     expect(onRefreshSearch).toHaveBeenCalledOnce();
+  });
+
+  it('shows bounded semantic evidence and opens the source at its excerpt', () => {
+    const onOpenEntry = vi.fn();
+    const selectedEntry = entries[0];
+    if (selectedEntry === undefined) throw new Error('missing entry fixture');
+    mount(
+      attrs({
+        path: 'search://local/semantic-search',
+        entries: [selectedEntry],
+        selectedEntryIds: new Set([selectedEntry.id]),
+        onOpenEntry,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'multilingual report',
+          executionMode: 'semantic',
+          semanticCoverage: {
+            eligible: 4,
+            indexed: 3,
+            excluded: 0,
+            failed: 0,
+            pending: 1,
+            skipped: 0,
+            stale: 0,
+            unavailable: 0,
+            partial: true,
+          },
+          semanticResults: [
+            {
+              entryId: selectedEntry.id,
+              location: selectedEntry.location,
+              score: 0.91,
+              bestEvidence: {
+                recordId: 'record-1',
+                sourceId: 'source-1',
+                score: 0.91,
+                chunkKind: 'paragraph',
+                excerpt: 'Beste bewijs voor het rapport.',
+                provenanceJson:
+                  '{"kind":"exact","value":{"kind":"textLines","startLine":4,"endLine":6}}',
+                indexedContentHash: 'sha256:fixture',
+                generation: 2,
+                available: true,
+                stale: false,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      '3 of 4 eligible documents indexed',
+    );
+    root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button')?.click();
+    expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');
   });
 
   it('shows a saved search name instead of its underlying query', () => {

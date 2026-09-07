@@ -355,6 +355,318 @@ describe('MockFileManagerClient API', () => {
   });
 });
 
+describe('MockFileManagerClient semantic component lifecycle', () => {
+  it('defaults to an absent, no-download state and exposes all deterministic profiles', async () => {
+    const client = new MockFileManagerClient();
+
+    const status = await client.getSemanticComponentStatus();
+    const profiles = await client.listSemanticComponentProfiles();
+
+    expect(status).toMatchObject({
+      lifecycle: { state: 'absent' },
+      components: [],
+      diskUse: { totalBytes: 0 },
+    });
+    expect(profiles.map(({ profile, recommended }) => ({ profile, recommended }))).toEqual([
+      { profile: 'compactMultilingual', recommended: true },
+      { profile: 'compactEnglish', recommended: false },
+      { profile: 'multilingualQuality', recommended: false },
+    ]);
+  });
+
+  it.each([
+    ['unavailable', { state: 'unavailable' }],
+    ['absent', { state: 'absent' }],
+    ['offered', { state: 'offered', offerId: 'mock-scenario-offer' }],
+    [
+      'downloadingResumable',
+      { state: 'downloading', downloadedBytes: 160, totalBytes: 400, resumable: true },
+    ],
+    ['installedEnabled', { state: 'installedEnabled' }],
+    ['paused', { state: 'paused' }],
+    ['migrating', { state: 'migrating' }],
+    [
+      'updateFailedRolledBack',
+      { state: 'updateFailedRolledBack', activeVersion: '1.0.0', failedVersion: '1.0.1' },
+    ],
+    ['lowDisk', { state: 'lowDisk', availableBytes: 512, requiredBytes: 1_024 }],
+    ['uninstalledRetain', { state: 'uninstalled', indexDecision: 'retain' }],
+    ['uninstalledDelete', { state: 'uninstalled', indexDecision: 'delete' }],
+  ] as const)(
+    'simulates the %s lifecycle variant',
+    async (semanticLifecycle, expectedLifecycle) => {
+      const client = new MockFileManagerClient({ semanticLifecycle });
+
+      expect((await client.getSemanticComponentStatus()).lifecycle).toMatchObject(
+        expectedLifecycle,
+      );
+    },
+  );
+
+  it('reports unavailable authority without exposing lifecycle operations', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'unavailable' });
+
+    await expect(client.getSemanticComponentCapabilities()).resolves.toEqual({
+      authority: 'unavailable',
+      operations: [],
+      runtimeExecutableDownload: 'unavailable',
+    });
+    await expect(client.listSemanticComponentProfiles()).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+  });
+
+  it('creates a complete offer and transitions through install, pause, resume, and move', async () => {
+    const client = new MockFileManagerClient();
+
+    const offer = await client.createSemanticComponentInstallationOffer({
+      profile: 'compactMultilingual',
+    });
+
+    expect(offer).toMatchObject({
+      profile: 'compactMultilingual',
+      resolvedModel: {
+        modelId: 'mock-compact-multilingual',
+        revision: 'mock-compact-multilingual-revision',
+      },
+      catalogRevision: 'mock-signed-catalog-revision',
+      embeddingsStayLocal: true,
+      dataRoot: 'mock/semantic',
+      minimumFreeSpaceReserveBytes: 1_024,
+    });
+    expect(offer.components.map(({ kind }) => kind)).toEqual(['worker', 'runtime', 'model']);
+
+    await client.acceptSemanticComponentInstallationOffer({ offerId: offer.offerId });
+    expect(await client.getSemanticComponentStatus()).toMatchObject({
+      lifecycle: { state: 'installedEnabled' },
+      activeModel: {
+        profile: 'compactMultilingual',
+        identity: offer.resolvedModel,
+      },
+      components: [
+        { kind: 'worker', version: '1.0.0' },
+        { kind: 'runtime', version: '1.0.0' },
+        { kind: 'model', version: '1.0.0' },
+      ],
+      diskUse: { totalBytes: 431 },
+    });
+
+    await client.pauseSemanticComponentIndexing();
+    expect((await client.getSemanticComponentStatus()).lifecycle).toEqual({ state: 'paused' });
+    await client.resumeSemanticComponentIndexing();
+    expect((await client.getSemanticComponentStatus()).lifecycle).toEqual({
+      state: 'installedEnabled',
+    });
+    await expect(
+      client.moveSemanticComponentData({ destination: 'mock/moved-semantic' }),
+    ).resolves.toEqual({
+      source: 'mock/semantic',
+      destination: 'mock/moved-semantic',
+      verifiedBytes: 431,
+      verifiedFileCount: 3,
+    });
+    expect((await client.getSemanticComponentStatus()).dataRoot).toBe('mock/moved-semantic');
+  });
+
+  it('plans from authoritative inventory, confirms by opaque ID, and rejects stale plans', async () => {
+    const expected = {
+      indexRecords: 7,
+      extractedFiles: 6,
+      zvecVectors: 5,
+      cacheEntries: 4,
+      conversationEvidence: 3,
+    };
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+
+    const firstPlan = await client.createSemanticComponentIndexRemovalPlan({
+      enrolmentId: 'library-1',
+    });
+    const stalePlan = await client.createSemanticComponentIndexRemovalPlan({
+      enrolmentId: 'library-1',
+    });
+    expect(firstPlan).toEqual({
+      planId: 'mock-index-removal-1',
+      enrolmentId: 'library-1',
+      expected,
+    });
+    await expect(
+      client.confirmSemanticComponentIndexRemoval({ planId: firstPlan.planId }),
+    ).resolves.toEqual({
+      enrolmentId: 'library-1',
+      deleted: expected,
+      conversationEvidenceDeleted: true,
+    });
+    await expect(
+      client.confirmSemanticComponentIndexRemoval({ planId: stalePlan.planId }),
+    ).rejects.toMatchObject({
+      code: 'indexRemoval',
+    });
+    await expect(
+      client.confirmSemanticComponentIndexRemoval({ planId: 'unknown-plan' }),
+    ).rejects.toMatchObject({
+      code: 'indexRemoval',
+    });
+  });
+
+  it('applies the explicit uninstall retention decision', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+
+    await expect(client.uninstallSemanticComponents({ indexDecision: 'retain' })).resolves.toEqual({
+      indexDecision: 'retain',
+      removedComponentCount: 3,
+    });
+    expect(await client.getSemanticComponentStatus()).toMatchObject({
+      lifecycle: { state: 'uninstalled', indexDecision: 'retain' },
+      components: [],
+    });
+
+    const deletingClient = new MockFileManagerClient({
+      semanticLifecycle: 'installedEnabled',
+    });
+    await deletingClient.uninstallSemanticComponents({ indexDecision: 'delete' });
+    expect(await deletingClient.getSemanticComponentStatus()).toMatchObject({
+      lifecycle: { state: 'uninstalled', indexDecision: 'delete' },
+      activeModel: null,
+      diskUse: { totalBytes: 0 },
+    });
+  });
+
+  it('plans, confirms, checkpoints, and completes a resumable model migration', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const plan = await client.planSemanticComponentModelMigration({
+      profile: 'multilingualQuality',
+      estimate: { documents: 10, sourceBytes: 1_000 },
+    });
+
+    expect(plan).toMatchObject({
+      target: { profile: 'multilingualQuality' },
+      fullReindex: true,
+      requiresConfirmation: true,
+      resumable: true,
+    });
+    await expect(
+      client.confirmSemanticComponentModelMigration({ migrationId: plan.migrationId }),
+    ).resolves.toMatchObject({ completedDocuments: 0, resumeCursor: null });
+    await expect(
+      client.checkpointSemanticComponentModelMigration({
+        migrationId: plan.migrationId,
+        completedDocuments: 10,
+        resumeCursor: 'cursor-10',
+      }),
+    ).resolves.toMatchObject({ completedDocuments: 10, resumeCursor: 'cursor-10' });
+    await expect(
+      client.completeSemanticComponentModelMigration({ migrationId: plan.migrationId }),
+    ).resolves.toEqual(plan.target);
+    expect(await client.getSemanticComponentStatus()).toMatchObject({
+      lifecycle: { state: 'installedEnabled' },
+      activeModel: plan.target,
+      migration: null,
+    });
+  });
+
+  it('supports failure injection for semantic actions', async () => {
+    const failure = new MockClientError('insufficientSpace', 'Not enough free space');
+    const client = new MockFileManagerClient({
+      failures: { acceptSemanticComponentInstallationOffer: failure },
+    });
+
+    await expect(
+      client.acceptSemanticComponentInstallationOffer({ offerId: 'missing' }),
+    ).rejects.toBe(failure);
+  });
+});
+
+describe('MockFileManagerClient semantic library lifecycle', () => {
+  it('previews, enrols, pauses, excludes, and keeps counts backend-owned', async () => {
+    const client = new MockFileManagerClient();
+    const workspace = await client.startWorkspace();
+    const pane = workspace.panesById[workspace.activePaneId];
+    const location = pane?.tabsById[pane.activeTabId]?.location;
+    expect(location).toBeDefined();
+    if (location === undefined) return;
+
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    expect(preview).toMatchObject({
+      policyRevision: 1,
+      normalizedExcerptsRetainedLocally: true,
+      estimate: {
+        completeness: 'partial',
+        estimatedFiles: 42,
+        missingModelDownloadBytes: 500,
+      },
+    });
+    const enrolled = await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(enrolled.roots).toHaveLength(1);
+    await expect(
+      client.getSemanticFolderStatus({ workspaceId: workspace.id, location }),
+    ).resolves.toMatchObject({ consent: 'includedHere' });
+
+    await expect(
+      client.pauseSemanticLibrary({ policyRevision: preview.policyRevision }),
+    ).rejects.toMatchObject({ code: 'staleRevision' });
+    const paused = await client.pauseSemanticLibrary({ policyRevision: enrolled.revision });
+    expect(paused.paused).toBe(true);
+    const resumed = await client.resumeSemanticLibrary({ policyRevision: paused.revision });
+    expect(resumed.paused).toBe(false);
+
+    const plan = await client.planSemanticExclusion({
+      policyRevision: resumed.revision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(plan.categories.map(({ category }) => category)).toEqual([
+      'occurrences',
+      'extractedContent',
+      'summaries',
+      'labels',
+      'orphanVectors',
+      'conversationEvidencePins',
+    ]);
+    const excluded = await client.confirmSemanticExclusion({
+      confirmationId: plan.confirmationId,
+      policyRevision: plan.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    expect(excluded.roots[0]?.exclusions[0]?.cleanup.status).toBe('complete');
+  });
+
+  it('detaches a deleted workspace without revoking global root consent', async () => {
+    const client = new MockFileManagerClient();
+    const workspace = await client.startWorkspace();
+    const pane = workspace.panesById[workspace.activePaneId];
+    const location = pane?.tabsById[pane.activeTabId]?.location;
+    expect(location).toBeDefined();
+    if (location === undefined) return;
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+
+    await client.deleteWorkspace(workspace.id, workspace.revision);
+
+    const status = await client.getSemanticLibraryStatus();
+    expect(status.roots).toHaveLength(1);
+    expect(status.roots[0]?.workspaceReferences).toEqual([]);
+  });
+});
+
 describe('MockFileManagerClient controls', () => {
   it('delivers scripted directory-delta and operation-progress events on demand', async () => {
     const client = new MockFileManagerClient();

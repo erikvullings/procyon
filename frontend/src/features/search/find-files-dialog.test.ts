@@ -42,15 +42,55 @@ describe('FindFilesDialog', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(onSearch).toHaveBeenCalledWith({
+      mode: 'name',
       filenameQuery: 'report',
       contentQuery: undefined,
       contentRegex: false,
       recurse: true,
     });
+
     expect(document.activeElement).not.toBe(input);
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('keeps semantic mode and its visible library scope explicit', () => {
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: 'file:///Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    const semanticButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Semantic',
+    );
+    semanticButton?.click();
+    m.redraw.sync();
+    const query = document.querySelector<HTMLInputElement>('#find-files-query');
+    if (!query) throw new Error('semantic query input missing');
+    query.value = 'renewable energy planning';
+    query.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const scopeButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Current folder recursively',
+    );
+    scopeButton?.click();
+    m.redraw.sync();
+    query.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'semantic',
+        semanticQuery: 'renewable energy planning',
+        semanticScope: 'entireLibrary',
+        filenameQuery: '',
+      }),
+    );
   });
 
   it('does not search on an empty/whitespace-only query', () => {
@@ -223,8 +263,8 @@ describe('FindFilesDialog', () => {
     input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     const expected: FindFilesSearchParams = {
+      mode: 'name',
       filenameQuery: '*.svg',
-      contentQuery: undefined,
       contentRegex: false,
       recurse: true,
     };
@@ -261,9 +301,12 @@ describe('FindFilesDialog', () => {
     });
     m.redraw.sync();
 
-    const contentInput = document.querySelectorAll<HTMLInputElement>(
-      '.fm-find-files-body input',
-    )[1];
+    const contentButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Content',
+    );
+    contentButton?.click();
+    m.redraw.sync();
+    const contentInput = document.querySelector<HTMLInputElement>('#find-files-query');
     if (!contentInput) throw new Error('content input missing');
     contentInput.value = 'TODO';
     contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -296,6 +339,11 @@ describe('FindFilesDialog', () => {
     m.redraw.sync();
 
     const options = document.querySelector('.fm-find-files-options');
+    const contentButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Content',
+    );
+    contentButton?.click();
+    m.redraw.sync();
     expect(options).not.toBeNull();
     expect(options?.textContent).toContain('Recurse subdirectories');
     expect(options?.textContent).toContain('Use regex');

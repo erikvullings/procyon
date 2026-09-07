@@ -1,6 +1,6 @@
 # 0184 OpenAI-compatible LLM connection profiles
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0030, 0103
@@ -56,3 +56,27 @@ service and never enter ordinary settings, exports, logs, or the semantic worker
 
 - 2026-09-04: Split from 0176. Chat Completions is the broad compatibility baseline; profiles are
   reusable globally and cloud consent is bound to the endpoint host.
+- 2026-09-04: Implemented named generation profiles as a dedicated `fm-application` capability
+  rather than filesystem connections. Seven presets share explicit advanced settings, bounded
+  streaming Chat Completions probes, optional model discovery, Azure deployment/API-version
+  semantics, normalized content-free results, and sanitized diagnostics.
+- 2026-09-04: Profile documents migrate independently through `fm-settings`; credentials remain
+  exclusively in `fm-credentials`. Create/update persistence is transactional, clone/export omit
+  credentials and consent, deletion requires an explicit credential disposition, and changing a
+  cloud host invalidates its consent.
+- 2026-09-04: Added equivalent semantic-client, Axum, Tauri, and mock operations plus a bilingual
+  settings editor with persistent local/cloud disclosure and host-specific informed consent.
+  Server mode denies loopback and non-allow-listed hosts; administrators opt in through
+  `PROCYON_LLM_ALLOWED_HOSTS`.
+- 2026-09-04: Covered preset defaults, migration, Azure URL construction, bearer/API-key handling,
+  secret/export redaction, consent invalidation, model and stream validation, normalized HTTP
+  errors, cancellation, TLS/SSRF policy, credential deletion, HTTP parity, Tauri parity, and
+  frontend accessibility. Affected Rust packages, all 1,769 frontend tests, generated-API
+  stability, and full repository lint pass.
+- 2026-09-05: Profile tests now return a bounded, deduplicated list of discovered model IDs. The
+  generation-profile editor offers those models through a selector after Test while retaining
+  manual model entry for providers without discovery support.
+- 2026-09-06: Model discovery now accepts an unsaved draft through the application boundary, so a
+  new Ollama profile can select a provider model before its required model field is saved. Existing
+  local profiles are selected and discovered on load, manual discovery remains available, and
+  structured Tauri errors preserve their backend message instead of becoming an unknown error.

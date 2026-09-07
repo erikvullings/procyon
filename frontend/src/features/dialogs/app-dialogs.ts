@@ -8,6 +8,8 @@ import type {
   OperationConflict,
   OperationId,
   PaneId,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
   SavedSearch,
   Settings,
   TabId,
@@ -36,6 +38,7 @@ import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { FinderTagsDialog } from '../entry-metadata/finder-tags-dialog';
 import { SpotlightCommentDialog } from '../entry-metadata/spotlight-comment-dialog';
 import { ArchivePasswordDialog } from '../navigation/archive-password-dialog';
+import { parentLocation } from '../navigation/navigation';
 import { ApplicationUninstallDialog } from '../operations/application-uninstall-dialog';
 import { ArchiveCreateDialog, type ArchiveFormat } from '../operations/archive-create-dialog';
 import { ConflictDialog } from '../operations/conflict-dialog';
@@ -61,6 +64,8 @@ import {
 import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
+import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
+import { RagAskDialog } from '../semantic/rag-ask-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
@@ -87,10 +92,11 @@ export interface AppDialogsContext {
   getOpsController(): OperationsController;
   getActiveDirectoryLocation(): Location | undefined;
   getActivePaneId(): PaneId | undefined;
-  navigateActiveLocation(location: Location): Promise<void>;
+  navigateActiveLocation(location: Location, preferredCursorName?: string): Promise<void>;
   getFocusPane(): ((paneId: PaneId) => void) | undefined;
   getSettings(): Settings | undefined;
   updateSettings(update: (settings: Settings) => Settings): Promise<void>;
+  includeCurrentSemanticFolder(workspaceId: string, location: Location): void;
   /** Opens the just-created file (Shift+F4) in the active pane's editor. */
   openEditorForCreatedFile(location: Location, name: string): void;
   cancelAutoDismiss(operationId: OperationId): void;
@@ -111,6 +117,19 @@ export async function openCreatedConnection(
   ctx.setConnectionsManagerOpen(false);
   ctx.redraw();
   await ctx.navigateActiveLocation(remoteRootLocation(connection));
+}
+
+export async function navigateToRagCitation(
+  workspaceId: string,
+  sourceId: string,
+  resolveCitation: (request: ResolveRagCitationRequest) => Promise<ResolvedRagCitation>,
+  navigate: (location: Location, preferredCursorName?: string) => Promise<void>,
+): Promise<boolean> {
+  const citation = await resolveCitation({ workspaceId, sourceId });
+  if (!citation.available) return false;
+  const name = pathFromUri(citation.location.uri).split(/[\\/]/).filter(Boolean).at(-1);
+  await navigate(parentLocation(citation.location), name);
+  return true;
 }
 
 /**
@@ -486,6 +505,39 @@ export function renderAppDialogs(
         }
       },
       onCancel: () => ctx.setCloseTabConfirmation(undefined),
+    }),
+    m(DocumentSummaryDialog, {
+      open: ds.documentSummaryDialog !== undefined,
+      workspaceId: ds.documentSummaryDialog?.workspaceId ?? '',
+      entry: ds.documentSummaryDialog?.entry,
+      client,
+      onClose: () => dialogs.cancelDocumentSummaryDialog(),
+    }),
+    m(RagAskDialog, {
+      open: ds.ragAskDialog !== undefined,
+      workspaceId: ds.ragAskDialog?.workspaceId ?? '',
+      currentFolder: ds.ragAskDialog?.currentFolder,
+      selectedEntries: ds.ragAskDialog?.selectedEntries ?? [],
+      semanticSourceIds: ds.ragAskDialog?.semanticSourceIds ?? [],
+      client,
+      onClose: () => dialogs.cancelRagAskDialog(),
+      onIncludeCurrentFolder: () => {
+        const request = ds.ragAskDialog;
+        if (request?.currentFolder === undefined) return;
+        dialogs.cancelRagAskDialog();
+        ctx.includeCurrentSemanticFolder(request.workspaceId, request.currentFolder);
+      },
+      onOpenCitation: async (sourceId) => {
+        const request = ds.ragAskDialog;
+        if (request === undefined) return;
+        const navigated = await navigateToRagCitation(
+          request.workspaceId,
+          sourceId,
+          (citationRequest) => client.resolveRagCitation(citationRequest),
+          (location, name) => ctx.navigateActiveLocation(location, name),
+        );
+        if (navigated) dialogs.cancelRagAskDialog();
+      },
     }),
     m(FinderTagsDialog, {
       open: ds.finderTagsDialog !== undefined,

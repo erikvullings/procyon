@@ -1,11 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EntryId, EntrySummary, Location } from '../../models';
 import {
   type CopySelectionActionId,
   copySelectionToClipboard,
   selectionClipboardText,
+  writeSystemClipboardText,
 } from './copy-selection-actions';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(document, 'execCommand');
+});
 
 function location(uri: string): Location {
   return { providerId: 'local', uri };
@@ -60,5 +67,21 @@ describe('copy selection actions', () => {
       copySelectionToClipboard('core.copyPath', [], activeDirectory, writeText),
     ).resolves.toBe(false);
     expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('falls back when a WebView exposes but denies the modern Clipboard API', async () => {
+    const writeText = vi.fn().mockRejectedValue(new DOMException('Denied', 'NotAllowedError'));
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const execCommand = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    });
+
+    await expect(writeSystemClipboardText('grounded answer')).resolves.toBeUndefined();
+
+    expect(writeText).toHaveBeenCalledWith('grounded answer');
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(document.querySelector('textarea')).toBeNull();
   });
 });

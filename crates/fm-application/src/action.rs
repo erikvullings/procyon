@@ -381,6 +381,13 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::selection(),
         ),
         core_action(
+            "core.documentSummary",
+            "Document Summary",
+            "fileOperations",
+            Vec::new(),
+            ActionContextRequirements::single_selection(),
+        ),
+        core_action(
             "core.copy",
             "Copy",
             "fileOperations",

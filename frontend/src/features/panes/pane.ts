@@ -87,6 +87,7 @@ import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favou
 import { matchesGlobMask } from '../quick-filter/quick-filter';
 import { QuickFilterInput } from '../quick-filter/quick-filter-input';
 import type { SearchPresentation } from '../search/search-presentation';
+import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search/semantic-feedback';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
 import { breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
@@ -228,7 +229,8 @@ export interface PaneAttrs {
   readonly actions?: readonly ActionDescriptor[];
   readonly keybindingOverrides?: Readonly<Record<string, string>>;
   // Entry operations (8)
-  readonly onOpenEntry: (entry: EntrySummary) => void | Promise<void>;
+  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onDocumentSummary?: (entry: EntrySummary) => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;
@@ -394,7 +396,110 @@ function searchExecutionModeLabel(mode: SearchPresentation['executionMode']): st
       return t('search', 'executionLive');
     case 'mixed':
       return t('search', 'executionMixed');
+    case 'semantic':
+      return t('search', 'executionSemantic');
   }
+}
+
+function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
+  const presentation = attrs.searchPresentation;
+  const results = presentation?.semanticResults;
+  if (results === undefined) return undefined;
+
+  const query = presentation?.term ?? '';
+  const selected = results.find((result) =>
+    attrs.entries.some(
+      (entry) => attrs.selectedEntryIds.has(entry.id) && entry.id === result.entryId,
+    ),
+  );
+  const coverage = presentation?.semanticCoverage;
+  const coverageLabel =
+    coverage === undefined
+      ? undefined
+      : t('search', 'semanticCoverage', {
+          indexed: coverage.indexed,
+          eligible: coverage.eligible,
+        });
+  if (selected === undefined) {
+    return coverageLabel === undefined
+      ? undefined
+      : m('.fm-semantic-evidence', { role: 'status' }, coverageLabel);
+  }
+
+  const entry = attrs.entries.find((candidate) => candidate.id === selected.entryId);
+  const evidence = [selected.bestEvidence, ...selected.additionalEvidence];
+  return m('.fm-semantic-evidence', [
+    coverageLabel === undefined ? undefined : m('div', { role: 'status' }, coverageLabel),
+    m('details', [
+      m(
+        'summary',
+        t('search', 'semanticEvidenceSummary', {
+          count: evidence.length,
+          score: selected.score.toFixed(2),
+        }),
+      ),
+      evidence.map((item) =>
+        m('.fm-semantic-evidence-item', [
+          m('p', item.excerpt),
+          m(
+            'small',
+            [
+              item.generated ? t('search', 'semanticGenerated') : undefined,
+              item.stale ? t('search', 'semanticStale') : undefined,
+              !item.available ? t('search', 'semanticUnavailable') : undefined,
+            ]
+              .filter((label): label is string => label !== undefined)
+              .join(' · '),
+          ),
+        ]),
+      ),
+      m('.fm-semantic-evidence-actions', [
+        m(
+          'button',
+          {
+            type: 'button',
+            disabled: entry === undefined,
+            onclick: () => {
+              if (entry !== undefined) void attrs.onOpenEntry(entry, selected.bestEvidence.excerpt);
+            },
+          },
+          t('search', 'openEvidence'),
+        ),
+        m(
+          'button',
+          {
+            type: 'button',
+            disabled: entry === undefined,
+            onclick: () => {
+              if (entry !== undefined) attrs.onDocumentSummary?.(entry);
+            },
+          },
+          t('documentSummary', 'generate'),
+        ),
+        m(
+          'button',
+          {
+            type: 'button',
+            onclick: () => recordSemanticFeedback(query, selected, true),
+          },
+          t('search', 'relevant'),
+        ),
+        m(
+          'button',
+          {
+            type: 'button',
+            onclick: () => recordSemanticFeedback(query, selected, false),
+          },
+          t('search', 'notRelevant'),
+        ),
+        m(
+          'button',
+          { type: 'button', onclick: exportSemanticEvaluationCases },
+          t('search', 'exportEvaluation'),
+        ),
+      ]),
+    ]),
+  ]);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -1558,6 +1663,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ),
             ),
           ]),
+          semanticEvidencePanel(attrs),
           (() => {
             const isGridView = attrs.tableConfig.viewMode === 'grid';
             const sharedListAttrs = {

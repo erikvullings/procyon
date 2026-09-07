@@ -16,5 +16,10 @@ use crate::state::AppState;
 pub(crate) async fn get_runtime_capabilities(
     State(state): State<AppState>,
 ) -> Json<RuntimeCapabilitiesDto> {
-    Json(state.service.runtime_capabilities())
+    Json(
+        state
+            .service
+            .runtime_capabilities_with_semantic_components()
+            .await,
+    )
 }

@@ -1,6 +1,6 @@
 # 0186 Grounded RAG Ask experience
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend, rag
 Depends on: 0183, 0184
@@ -65,3 +65,45 @@ scope, change instructions, request secrets, or invoke Procyon actions.
 
 - 2026-09-04: Split from 0176. Ask defaults to the entire library but always displays scope; it is
   grounded and read-only by default with an explicit model-knowledge toggle.
+- 2026-09-07: Implemented deterministic local retrieval with authoritative scope filters,
+  score thresholds, per-document diversity, adjacent structural expansion, complete-chunk token
+  packing, stale/unavailable evidence, and source-backed summary citations. Added host-owned,
+  injection-resistant prompt assembly and bounded server-owned multi-turn conversations.
+- 2026-09-07: Added equivalent REST, Tauri, and mock transports; an accessible inspect-before-
+  generate Ask dialog with all five scopes, locality and coverage disclosure, grounded/model-
+  knowledge modes, cancellation/error states, citation navigation, explicit save/delete with
+  storage reporting, and export/share preview. Ask is hidden unless both the semantic library and
+  a generation profile are available.
+- 2026-09-07: Verified retrieval budgets/diversity, prompt minimization and injection resistance,
+  model-knowledge/history bounds, tenant-isolated persistence/deletion, adapter parity, shell
+  integration, and keyboard/screen-reader semantics with focused Rust and frontend suites.
+- 2026-09-06: Fixed desktop/server composition so activating a semantic capability also activates
+  Ask retrieval over that same authenticated worker boundary. Worker search evidence is adapted
+  into the bounded host-owned RAG context with source restrictions, score thresholds,
+  per-document diversity, and the configured token budget; an empty match is reported as
+  insufficient evidence rather than capability failure.
+- 2026-09-06: Aligned desktop Ask and document-summary retrieval with the workspace-scoped worker
+  tenant used during ingestion, while preserving authenticated server tenant isolation. Ask
+  answers now render sanitized Markdown, and both selectable questions and answers provide
+  clipboard actions that copy their original text.
+- 2026-09-07: Fixed **Entire indexed library** on desktop to retrieve host-authorized roots across
+  the workspace tenants that indexed them. Switching to another workspace no longer makes existing
+  device-local evidence disappear; narrower scopes and authenticated server tenant isolation remain
+  workspace-bound.
+- 2026-09-06: Refined Ask for source-driven reading: decoded evidence titles, selectable evidence
+  and answers, reliable WebView clipboard fallback, clickable evidence and inline answer
+  references that navigate to and select the source, state restoration after navigation, and an
+  explicit New question reset. Moved privacy/profile/scope controls into the bottom options area,
+  simplified folder/model labels and actions, and aligned question/answer hierarchy, padding, and
+  body typography.
+- 2026-09-06: Calibrated Ask retrieval against the real multilingual-E5 TRIZ index. Replaced the
+  ineffective `0.25` floor with an absolute `0.84` floor plus a `0.02` strongest-candidate window:
+  the SU-fields query peaked at `0.872`, while an unrelated Mars/croissant negative control peaked
+  at `0.826`. This policy-only change requires no reindexing or storage migration. Ask now preserves
+  and displays section paths and cosine similarity, uses the lighter **Ask your files** workspace,
+  and joins folder indexing, model knowledge, and Options and privacy in one separator-free row.
+- 2026-09-06: Prevented reasoning-capable Ollama models from consuming the answer allowance on
+  hidden reasoning by using Ollama's native chat endpoint with thinking disabled. Length-limited
+  provider responses are rejected instead of being displayed as complete answers. Ask now formats
+  serialized source provenance as readable page/line/slide locations, aligns the selected scope
+  with the other bottom-row text, and uses regular font weight throughout its content.

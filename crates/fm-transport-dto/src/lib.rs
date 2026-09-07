@@ -12,18 +12,24 @@ pub mod comparison;
 pub mod connection;
 pub mod diagnostics;
 pub mod disk_usage;
+pub mod document_summary;
 pub mod entry;
 pub mod error;
 pub mod files;
 pub mod finder_tags;
 pub mod health;
+pub mod llm_profile;
 pub mod location;
 pub mod operation;
 pub mod plugin;
+pub mod rag;
 pub mod redaction;
 pub mod requests;
 pub mod runtime;
 pub mod search;
+pub mod semantic_components;
+pub mod semantic_library;
+pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
 pub mod system_location;
@@ -71,6 +77,11 @@ pub use disk_usage::{
     DiskUsageNodeDto, DiskUsageNodeKindDto, DiskUsageUnreadableEntryDto,
     DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto, ScanDiskUsageResponseDto,
 };
+pub use document_summary::{
+    DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummaryTargetDto,
+    GenerateDocumentSummaryRequestDto, GetDocumentSummaryRequestDto,
+    PreviewDocumentSummaryRequestDto, SummaryKeyPassageDto, SummaryProfileDisclosureDto,
+};
 pub use entry::{
     ArchiveInfoDto, EntryKindDto, EntryMetadataDto, EntrySummaryDto, ImageDimensionsDto,
     MediaMetadataDto, OwnershipInfoDto, PermissionsInfoDto,
@@ -96,6 +107,13 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
+pub use llm_profile::{
+    ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
+    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmPresetDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
+    SaveLlmProfileRequestDto,
+};
 pub use location::LocationDto;
 pub use operation::{
     ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, OperationConflictPolicyDto, OperationDto,
@@ -107,6 +125,13 @@ pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,
     PluginLogEntryDto, PluginPermissionsDto,
 };
+pub use rag::{
+    DeleteRagConversationRequestDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
+    ListSavedRagConversationsRequestDto, PreviewRagRequestDto, RagAnswerDto, RagAnswerEventDto,
+    RagCitationDto, RagCoverageDto, RagEvidenceDto, RagPreviewDto, RagScopeDto, RagScopeKindDto,
+    ResolveRagCitationRequestDto, ResolvedRagCitationDto, SaveRagConversationRequestDto,
+    SavedRagConversationDto, SavedRagTurnDto,
+};
 pub use redaction::{redact, redact_absolute_paths, redact_path};
 pub use requests::{
     EntryMetadataRequest, ListDirectoryChildrenRequest, ListDirectoryRequest, NavigateRequest,
@@ -114,10 +139,16 @@ pub use requests::{
 };
 pub use runtime::{PlatformKindDto, RuntimeCapabilitiesDto, RuntimeKindDto};
 pub use search::{
-    SearchContentPredicateDto, SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto,
+    ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchContentPredicateDto,
+    SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto, SearchModeDto,
     SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
-    SearchQueryDto, SearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
+    SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto, SemanticEvidenceDto,
+    SemanticSearchCoverageDto, SemanticSearchResultDto, SemanticSearchScopeDto,
+    StartSearchRequestDto, StartSearchResponseDto,
 };
+pub use semantic_components::*;
+pub use semantic_library::*;
+pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, LanguageDto,
     MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,

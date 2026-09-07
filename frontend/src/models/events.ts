@@ -146,6 +146,23 @@ export type BackendEventPayload =
       scanId: string;
       scannedEntries: number;
     }
+  | {
+      type: 'semantic.ingestionProgress';
+      jobId: string;
+      stage: string;
+      completed: number;
+      total: number;
+      errors: number;
+    }
+  | {
+      type: 'semantic.coverageChanged';
+      libraryId: string;
+      rootId: string;
+      eligible: number;
+      indexed: number;
+      stale: number;
+      available: boolean;
+    }
   | { type: 'connection.created'; connectionId: ConnectionId }
   | { type: 'connection.updated'; connectionId: ConnectionId }
   | { type: 'connection.statusChanged'; connectionId: ConnectionId; status: ConnectionStatus }

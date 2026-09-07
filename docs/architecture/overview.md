@@ -48,6 +48,81 @@ operations / providers / metadata / search → application services → Axum and
 `CRATE_LAYERS` table in `architecture.rs` linked above; see that file for the authoritative,
 per-crate layer assignment.
 
+The optional semantic subsystem sits beside this normal startup path. `fm-application` exposes a
+lazy `SemanticService` capability, `fm-semantic-protocol` owns its generated protobuf ABI, and
+`fm-semantic-worker` supplies a per-user process reached only through owner-protected Unix-domain
+sockets or Windows named pipes. The worker receives scoped opaque identifiers, metadata, and
+bounded byte streams, never filesystem paths or provider access. If it is absent or incompatible,
+the ordinary application-service path above remains available.
+
+Optional worker, runtime, and model packages are managed separately by
+`fm-semantic-components`. It verifies a signed catalog and artifact checksums, serializes lifecycle
+mutations across processes, performs resumable atomic installs, retains one working worker for
+rollback, and moves the semantic-data root through pause-copy-verify-switch. The application layer
+owns authority and consent: desktop builds may receive an explicitly injected managed capability,
+browser/server builds only report administrator-provisioned status, and normal construction remains
+inert. A production catalog and concrete default model stay disabled until the evaluation task has
+recorded retrieval quality, latency, licensing, package-size, and index-size measurements.
+
+`fm-semantic-library` owns the provider-neutral enrolment policy and authoritative occurrence
+catalog. Its settings-side policy stores stable root, library, and model identities without
+credentials; catalog and runtime state remain beneath the configurable semantic-data root. Reads
+and mutations share a cross-process lock, durable revision, and write-ahead journal spanning policy,
+catalog, and pause state. Exclusions deny query and worker-feed scope immediately, then delete
+occurrences, excerpts, summaries, labels, orphan vectors, and conversation pins through resumable
+idempotent plans. Procyon enumerates VFS providers and supplies verified stable filesystem
+identities; the semantic worker receives only approved opaque feed records and never follows paths.
+
+`fm-semantic-conversion` is a pure parsing and chunking engine below the application layer. It
+accepts bounded content streams and path-free trusted metadata, emits normalized structural units
+with best-available provenance and explicit partial-result omissions, and returns typed outcomes for
+unsupported, malformed, encrypted, scanned, cancelled, and over-budget input. Its versioned
+structural chunker includes only bounded section hierarchy and source content in embedding input,
+so moves and renames preserve reusable content fingerprints. `fm-application` supplies the narrow
+provider-neutral VFS bridge; task 0182 owns ingestion scheduling and persistence.
+
+The worker's semantic index has two deliberately separate authorities. The host-side
+`fm-semantic-library` catalog above decides consent and which opaque records may enter the worker.
+Inside the worker, SQLite is authoritative for index lifecycle: exact library manifests,
+documents, occurrences, jobs, component revisions, cached-vector references, and complete versus
+staging generations. Zvec contains only derived occurrence-level vectors and structured filter
+fields. Queries use Zvec for candidates, then re-authorize those IDs against one SQLite read
+snapshot, so publication is old-complete or new-complete and cached vectors never cross tenant
+boundaries. Superseded records are reclaimed only after active readers drain. The official
+`zvec-rust` dependency is optional and feature-gated because its build script downloads and
+dynamically links a native library; see
+[Zvec Rust SDK qualification](zvec-rust-sdk.md) for the pinned versions and packaging matrix.
+
+Incremental ingestion preserves the same authority split. The host coalesces provider events and
+performs startup, periodic (30-minute by default), or manual reconciliation; only a complete
+listing can prove deletion, while partial and unavailable roots retain evidence. Streamed content
+hashes, not provider timestamps, establish change. The worker persists each job stage in SQLite,
+converts and structurally chunks bounded bytes, embeds only global-cache misses, stages a complete
+generation, writes the derived index idempotently, and atomically changes SQLite visibility.
+`WorkerServer::with_ingestion_backend` injects that durable pipeline without changing the
+deterministic no-component worker used by tests and unavailable configurations. Progress and
+coverage use the shared `fm-events` model, so browser SSE and Tauri carry the same path-free,
+excerpt-free payloads.
+
+Semantic retrieval extends the ordinary search lifecycle rather than creating an AI-specific
+navigation stack. An explicit dense-only semantic predicate is embedded locally with the enrolled
+library model, queried against Zvec, and re-authorized against the worker's SQLite snapshot.
+Deterministic file-primary ranking selects the strongest extracted chunk and adds bounded section
+diversity; generated summaries remain secondary evidence. The application materializes authorized
+occurrences in the existing paged `search://` store and resolves opaque source IDs back through the
+host-only semantic catalog, so filesystem locations never enter the worker. Search responses carry
+bounded evidence, provenance, stale/availability state, and honest coverage. The frontend exposes
+that evidence beside the ordinary pane, opens its excerpt in the existing viewer, and stores
+explicit relevance judgements locally for user-triggered export only.
+
+Generation is an optional application capability independent from semantic indexing. Named
+OpenAI-compatible profiles are owned by `fm-application`, while `fm-credentials` retains their
+tokens and settings retain only opaque credential references. The capability supports local server
+presets and explicit cloud endpoints, normalizes bounded Chat Completions probes, and requires
+host-bound informed consent before activating a cloud profile. Axum, Tauri, and the mock adapter
+share the same transport-neutral client contract; server deployments deny loopback and all cloud
+hosts by default unless `PROCYON_LLM_ALLOWED_HOSTS` explicitly allow-lists them.
+
 ## Mandatory rules (spec §3)
 
 These ten rules govern every change to the frontend/backend boundary and the crate graph. They are

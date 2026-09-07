@@ -18,6 +18,17 @@ function uninstallAction(): ActionDescriptor {
   };
 }
 
+function documentSummaryAction(): ActionDescriptor {
+  return {
+    id: 'core.documentSummary',
+    title: 'Summarize document…',
+    category: 'fileOperations',
+    defaultShortcuts: [],
+    contextRequirements: { featureAvailable: true, requiresSingleSelection: true },
+    source: { kind: 'core' },
+  };
+}
+
 function bundleEntry(): EntrySummary {
   return {
     id: 'widget-app' as EntryId,
@@ -69,6 +80,7 @@ function fakeContext(
     findDuplicates: () => {},
     openDiskUsage: () => {},
     openPropertiesForActivePane: () => {},
+    openSemanticAssistant: () => {},
     uninstallApplication: () => {},
     toggleDirectoryTree: () => {},
     toggleOperationCentre: () => {},
@@ -78,6 +90,30 @@ function fakeContext(
 }
 
 describe('action-command-controller uninstallApplication wiring', () => {
+  it('opens the document-summary flow without invoking the synchronous backend action', () => {
+    const paneId = 'pane-1' as PaneId;
+    const file = bundleEntry();
+    const directory: PaneDirectoryView = {
+      state: { type: 'loaded' },
+      entries: [file],
+      hasMore: false,
+    };
+    const openDocumentSummary = vi.fn();
+    const context = fakeContext({
+      getRegisteredActions: () => [documentSummaryAction()],
+      getDirectories: () => new Map([[paneId, directory]]),
+      getActiveTabKey: () => paneId,
+      openDocumentSummary,
+    });
+
+    createActionCommandController(context).invokePaletteAction(documentSummaryAction(), undefined, {
+      paneId,
+      selectedEntryIds: [file.id],
+    });
+
+    expect(openDocumentSummary).toHaveBeenCalledWith(paneId, file);
+  });
+
   it('invokePaletteAction dispatches the real discovery flow instead of the generic backend invoke', () => {
     const paneId = 'pane-1' as PaneId;
     const bundle = bundleEntry();

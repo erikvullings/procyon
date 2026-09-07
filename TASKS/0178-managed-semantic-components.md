@@ -1,6 +1,6 @@
 # 0178 Managed semantic components and model packs
 
-Status: open
+Status: completed
 Priority: high
 Subsystem: desktop, packaging, settings
 Depends on: 0058, 0177
@@ -61,3 +61,24 @@ paths.
 
 - 2026-09-04: Split from 0176. Model identity is deliberately immutable for an existing library;
   changing it is a migration owned jointly with 0181/0182, never a settings-only switch.
+- 2026-09-05: Added `fm-semantic-components`, a signed-catalog component engine with validated
+  path-safe identifiers, atomic resumable installs, checksum verification, rollback retention,
+  cross-process mutation locking, durable recovery, profile-specific model selection, explicit
+  model migration state, per-category disk accounting, and verified pause-copy-switch data moves.
+- 2026-09-05: Added the optional `SemanticComponentService` capability and matching HTTP, Tauri,
+  mock, OpenAPI, and `FileManagerClient` surfaces. Browser/server mode is administrator-provisioned
+  and rejects lifecycle mutations before using caller paths. Destructive index removal uses an
+  authoritative inventory plan plus opaque confirmation ID instead of caller-supplied counts.
+- 2026-09-05: Added the Settings lifecycle UI with separate install/enable, pause/resume, remove
+  index, move data, model migration, and uninstall actions. First-install consent discloses signed
+  components, exact revisions, licenses, sizes, RAM, local-only processing, data root, and reserve.
+  Mock mode covers every lifecycle state.
+- 2026-09-05: Production desktop installation remains deliberately unavailable until task 0188
+  records the required multilingual retrieval, CPU latency, licensing, package-size, and index-size
+  measurements and supplies an evaluated signed catalog. No concrete default model was selected.
+  Externally supplied migration checkpoints/completion are denied until the trusted ingestion
+  coordinator from 0182 owns them.
+- 2026-09-06 (status follow-up): Component status now compares installed model identities with the
+  durable active selection instead of labelling every installed model as active, and includes
+  retained model revisions consistently with rollback workers. Settings shows only the active
+  worker/runtime/model by default and groups inactive recovery copies in a collapsed section.

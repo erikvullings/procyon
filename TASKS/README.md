@@ -91,21 +91,40 @@ releasable dependency chain, with ordinary file-manager behaviour remaining full
 semantic components are not installed.
 
 - [x] 0176 Semantic intelligence architecture epic *(implementation redirected to 0177–0189)*
-- [ ] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
-- [ ] 0178 Managed semantic components and model packs *(needs 0058, 0177)*
-- [ ] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
-- [ ] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
-- [ ] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180)*
-- [ ] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
-- [ ] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
-- [ ] 0184 OpenAI-compatible LLM connection profiles *(needs 0030, 0103)*
-- [ ] 0185 Representative document summaries *(needs 0182, 0184)*
-- [ ] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*
-- [ ] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
-- [ ] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
-- [ ] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
-- [ ] 0192 Docling.rs advanced PDF conversion *(needs 0189; evaluation-gated optional pack with the
-  current pure-Rust PDF converter retained as fallback)*
+- [x] 0177 Semantic worker and versioned IPC contract *(needs 0176)*
+- [x] 0178 Managed semantic components and model packs *(needs 0058, 0177; production catalog/model
+  activation remains measurement-gated by 0188)*
+- [x] 0179 Semantic library enrolment and consent policy *(needs 0020, 0030, 0177)*
+- [x] 0180 Rust document conversion and structural chunking *(needs 0171–0173, 0179)*
+- [x] 0181 Local embedding runtime and Zvec storage *(needs 0177, 0180; production model and
+  FLAT/HNSW threshold remain measurement-gated by 0188; upstream v0.7.0 has no macOS x64 artifact)*
+- [x] 0182 Incremental semantic ingestion and reconciliation *(needs 0179–0181)*
+- [x] 0183 Semantic search and virtual-folder integration *(needs 0162, 0166, 0182)*
+- [x] 0184 OpenAI-compatible LLM connection profiles *(needs 0030, 0103)*
+- [x] 0185 Representative document summaries *(needs 0182, 0184; production worker/model activation
+  remains measurement-gated by 0188)*
+- [x] 0186 Grounded RAG Ask experience *(needs 0183, 0184)*
+- [x] 0187 SKOS vocabularies and concept virtual folders *(needs 0162, 0182)*
+- [x] 0188 Semantic subsystem hardening and evaluation *(needs 0183, 0185–0187)*
+- [x] 0189 Advanced converters, acceleration and reranking *(needs 0188)*
+- [x] 0190 Local semantic developer bundle *(needs 0178, 0181–0183; explicitly
+  non-production and signed only by the public development key)*
+- [x] 0191 Real multilingual model in the semantic developer bundle *(needs 0178, 0181, 0190;
+  the quality profile installs a pinned, checksum-verified `multilingual-e5-small` pack while the
+  compact profiles keep the zero-download fixture; installed-profile switches stage the signed
+  target before activation, preserve the device library and folder consent, and automatically
+  reindex enrolled roots; the toolbar and command palette expose one context-aware Ask/include
+  action, and local roots retain stable filesystem identity)*
+- [x] 0192 Deterministic Docling.rs PDF conversion *(needs 0189; pure-Rust Docling-first extraction
+  with one-time reindex migration and baseline fallback)*
+- [x] 0193 Optional OCRmyPDF fallback *(needs 0192; explicit opt-in, never a mandatory dependency)*
+- [ ] 0194 Production semantic component catalog *(needs 0178, 0188, 0191, 0192; begin after the
+  semantic implementation branch is merged and green on main)*
+- [ ] 0195 Cross-platform semantic release artifacts *(needs 0063, 0194)*
+- [ ] 0196 Release desktop semantic activation *(needs 0194; can proceed alongside 0195)*
+- [ ] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
+  the first semantic release)*
+- [ ] 0198 Semantic release qualification *(needs 0195, 0196; gates the user-facing release)*
 
 ## File operations
 

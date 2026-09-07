@@ -124,6 +124,9 @@ mod tests {
                 extended_attributes: true,
                 finder_tags: true,
                 finder_aliases: false,
+                semantic_component_authority: crate::SemanticComponentAuthorityDto::DesktopManaged,
+                semantic_runtime_executable_download:
+                    crate::SemanticRuntimeExecutableDownloadDto::DirectDistribution,
             },
             connection_state: ConnectionStateDto {
                 connected: true,

@@ -1,6 +1,6 @@
 # 0188 Semantic subsystem hardening and evaluation
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: quality, security, performance
 Depends on: 0183, 0185, 0186, 0187
@@ -61,3 +61,18 @@ evaluation, backup, and cross-platform evidence beyond feature-level tests.
 
 - 2026-09-04: Split from 0176 as the release gate after semantic search, summaries, RAG, and SKOS.
   Optional advanced packs in 0189 depend on this stable, measurable baseline.
+- 2026-09-05 Copilot: Added the semantic threat model and operations guide; bounded,
+  privacy-safe diagnostic capture; configurable free-space admission; authoritative per-root and
+  per-format usage/cleanup reporting; complete catalog/backup/in-flight deletion proofs; and
+  versioned, checksummed whole-library export/import validation with explicit plaintext warnings.
+- 2026-09-05 Copilot: Added a local, atomic evaluation store and deterministic file/chunk recall,
+  MRR, and nDCG scoring. Change reports require comparable before/after evidence plus explicit
+  migration and storage impact. Repository fixtures cover multilingual, duplicate, boilerplate,
+  citation, edit, summary, scope, unavailable-source, and SKOS scenarios; browser feedback now
+  records both relevant file and chunk identities while migrating existing local judgments.
+- 2026-09-05 Copilot: Verified 14 new Rust hardening/evaluation tests and 1 new frontend migration
+  test, all 625 `fm-application` tests, 147 focused semantic frontend tests, full workspace lint,
+  the release server/frontend build, and the complete workspace suite (2,189 Rust, 1,777 frontend,
+  and 41 script tests). The cross-platform keyboard/screen-reader and installed/absent packaging
+  checks remain explicit manual release steps because this worktree can execute only the macOS
+  automated configuration and build coverage.

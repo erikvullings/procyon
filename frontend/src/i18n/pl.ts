@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Polish catalogue (task 0098). Keep the key set identical to `en`. */
@@ -221,6 +221,7 @@ export const pl = {
     unableToRun: 'Nie można wykonać polecenia.',
   },
   settings: {
+    ...en.settings,
     language: 'Język',
     languageEnglish: 'Angielski',
     languageDutch: 'Niderlandzki',
@@ -634,6 +635,7 @@ export const pl = {
     rename: 'Zmień nazwę',
   },
   search: {
+    ...en.search,
     unableToStart: 'Nie można rozpocząć wyszukiwania',
     refresh: 'Odśwież wyszukiwanie',
     filterLimitations: 'Nie udało się ocenić niektórych filtrów ({message}).',
@@ -847,7 +849,14 @@ export const pl = {
     message: 'Ten panel nie ma innych kart. Jego zamknięcie spowoduje opróżnienie panelu.',
     closeTab: 'Zamknij kartę',
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Kopiuj do zgłoszenia błędu',
     copyTitle: 'Kopiuj zredagowaną diagnostykę do zgłoszeń błędów',
     loading: 'Wczytywanie diagnostyki…',

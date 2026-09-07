@@ -73,6 +73,21 @@ pub struct ServerConfig {
     /// logged at startup, and impossible when binding to non-loopback addresses
     /// (task 0064).
     pub dev_mode_auth_disabled: bool,
+    /// Opaque tenant identifier of the single principal this server serves
+    /// semantic-library requests as (task 0179).
+    ///
+    /// Server mode is deliberately single-user: its session token proves *that*
+    /// a request is authenticated, not *who* sent it. The semantic principal is
+    /// therefore operator-owned server state, and every request is served as
+    /// exactly this identity. Nothing in a request — header, query, or body —
+    /// may influence it.
+    pub semantic_library_tenant_id: String,
+    /// Opaque user identifier of that same principal (task 0179).
+    ///
+    /// Point it at the administrator identity the semantic library was
+    /// provisioned with to serve the private library; leave it as any other
+    /// value and every semantic-library call is denied.
+    pub semantic_library_user_id: String,
 }
 
 impl Default for ServerConfig {
@@ -91,6 +106,8 @@ impl Default for ServerConfig {
                 .join("fm"),
             session_secret: SessionSecret::random(),
             dev_mode_auth_disabled: false,
+            semantic_library_tenant_id: "private".to_owned(),
+            semantic_library_user_id: "administrator".to_owned(),
         }
     }
 }
@@ -104,13 +121,15 @@ impl Default for ServerConfig {
 /// ```toml
 /// bind = "0.0.0.0"
 /// port = 8787
-/// cors_origins = ["https://files.example.com"]
+/// corsOrigins = ["https://files.example.com"]
 /// roots = ["/home/user/documents", "/mnt/shared/public"]
-/// max_body_bytes = 10485760
-/// max_mutations_per_second = 20
-/// dev_mode_auth_disabled = false
-/// tls_cert = "/etc/fm-server/cert.pem"
-/// tls_key = "/etc/fm-server/key.pem"
+/// maxBodyBytes = 10485760
+/// maxMutationsPerSecond = 20
+/// devModeAuthDisabled = false
+/// semanticLibraryTenantId = "private"
+/// semanticLibraryUserId = "administrator"
+/// tlsCert = "/etc/fm-server/cert.pem"
+/// tlsKey = "/etc/fm-server/key.pem"
 /// ```
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -131,6 +150,10 @@ pub struct ServerFileConfig {
     pub max_mutations_per_second: Option<u32>,
     /// See [`ServerConfig::dev_mode_auth_disabled`].
     pub dev_mode_auth_disabled: Option<bool>,
+    /// See [`ServerConfig::semantic_library_tenant_id`].
+    pub semantic_library_tenant_id: Option<String>,
+    /// See [`ServerConfig::semantic_library_user_id`].
+    pub semantic_library_user_id: Option<String>,
     /// PEM certificate chain path for direct TLS termination (task 0064).
     /// Requires `tls_key` to also be set.
     pub tls_cert: Option<PathBuf>,
@@ -221,6 +244,8 @@ mod tests {
             maxBodyBytes = 1048576
             maxMutationsPerSecond = 5
             devModeAuthDisabled = false
+            semanticLibraryTenantId = "private"
+            semanticLibraryUserId = "administrator"
             tlsCert = "/etc/fm-server/cert.pem"
             tlsKey = "/etc/fm-server/key.pem"
         "#;
@@ -238,6 +263,14 @@ mod tests {
         assert_eq!(config.max_body_bytes, Some(1_048_576));
         assert_eq!(config.max_mutations_per_second, Some(5));
         assert_eq!(config.dev_mode_auth_disabled, Some(false));
+        assert_eq!(
+            config.semantic_library_tenant_id,
+            Some("private".to_owned())
+        );
+        assert_eq!(
+            config.semantic_library_user_id,
+            Some("administrator".to_owned())
+        );
         assert_eq!(
             config.tls_cert,
             Some(PathBuf::from("/etc/fm-server/cert.pem"))

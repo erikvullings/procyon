@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -10,22 +11,36 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -37,14 +52,26 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -52,11 +79,17 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
+  PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -65,14 +98,41 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
+  ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticVocabulary,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -93,8 +153,10 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -138,6 +200,247 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async getRuntimeCapabilities(_signal?: AbortSignal): Promise<RuntimeCapabilities> {
     return invoke<RuntimeCapabilities>('get_runtime_capabilities');
+  }
+
+  async getSemanticComponentCapabilities(
+    _signal?: AbortSignal,
+  ): Promise<SemanticComponentCapabilities> {
+    return invoke<SemanticComponentCapabilities>('get_semantic_component_capabilities');
+  }
+
+  async getSemanticComponentStatus(_signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    return invoke<SemanticComponentStatus>('get_semantic_component_status');
+  }
+
+  async listSemanticComponentProfiles(_signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    return invoke<SemanticModelProfile[]>('list_semantic_component_profiles');
+  }
+
+  async createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    return invoke<SemanticInstallationOffer>('create_semantic_component_installation_offer', {
+      request,
+    });
+  }
+
+  async acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    return invoke<SemanticInstallReceipt>('accept_semantic_component_installation_offer', {
+      request,
+    });
+  }
+
+  async pauseSemanticComponentIndexing(_signal?: AbortSignal): Promise<void> {
+    return invoke<void>('pause_semantic_component_indexing');
+  }
+
+  async resumeSemanticComponentIndexing(_signal?: AbortSignal): Promise<void> {
+    return invoke<void>('resume_semantic_component_indexing');
+  }
+
+  async createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    return invoke<SemanticIndexRemovalPlan>('create_semantic_component_index_removal_plan', {
+      request,
+    });
+  }
+
+  async confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    return invoke<SemanticIndexRemovalReceipt>('confirm_semantic_component_index_removal', {
+      request,
+    });
+  }
+
+  async moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    return invoke<SemanticDataMoveReceipt>('move_semantic_component_data', { request });
+  }
+
+  async uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    return invoke<SemanticUninstallReceipt>('uninstall_semantic_components', { request });
+  }
+
+  async installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    return invoke<SemanticWorkerPatchResponse>('install_semantic_component_worker_patch', {
+      request,
+    });
+  }
+
+  async importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return invoke<SemanticModelMigrationPlan>('import_semantic_component_local_model', { request });
+  }
+
+  async planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return invoke<SemanticModelMigrationPlan>('plan_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return invoke<SemanticModelMigrationProgress>('confirm_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return invoke<SemanticModelMigrationProgress>('checkpoint_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    return invoke<SemanticModelSelection>('complete_semantic_component_model_migration', {
+      request,
+    });
+  }
+
+  async getSemanticLibraryCapabilities(
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryCapabilities> {
+    return invoke<SemanticLibraryCapabilities>('get_semantic_library_capabilities');
+  }
+
+  async getSemanticLibraryStatus(_signal?: AbortSignal): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('get_semantic_library_status');
+  }
+
+  async listSemanticVocabularies(_signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    return invoke<SemanticVocabulary[]>('list_semantic_vocabularies');
+  }
+
+  async importSemanticVocabulary(
+    skosJson: string,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('import_semantic_vocabulary', {
+      request: { skosJson },
+    });
+  }
+
+  async exportSemanticVocabulary(vocabularyId: string, _signal?: AbortSignal): Promise<string> {
+    const response = await invoke<{ skosJson: string }>('export_semantic_vocabulary', {
+      request: { vocabularyId },
+    });
+    return response.skosJson;
+  }
+
+  async attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('attach_semantic_vocabulary', { request });
+  }
+
+  async reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return invoke<SemanticVocabulary>('review_semantic_concept_candidate', { request });
+  }
+
+  async deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    _signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    return invoke<DeleteSemanticVocabularyImpact>('delete_semantic_vocabulary', {
+      request: { vocabularyId, confirmAffected },
+    });
+  }
+
+  async getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus> {
+    return invoke<SemanticFolderStatus>('get_semantic_folder_status', { request });
+  }
+
+  async previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview> {
+    return invoke<SemanticEnrolmentPreview>('preview_semantic_enrolment', { request });
+  }
+
+  async confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('confirm_semantic_enrolment', { request });
+  }
+
+  async planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan> {
+    return invoke<SemanticExclusionPlan>('plan_semantic_exclusion', { request });
+  }
+
+  async confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('confirm_semantic_exclusion', { request });
+  }
+
+  async resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('resume_semantic_cleanup', { request });
+  }
+
+  async pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('pause_semantic_library', { request });
+  }
+
+  async resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('resume_semantic_library', { request });
+  }
+
+  async updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('update_semantic_eligibility_overrides', { request });
   }
 
   async getDiagnostics(_signal?: AbortSignal): Promise<DiagnosticsResult> {
@@ -721,6 +1024,125 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  listLlmProfilePresets(_signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    return invoke<LlmProfilePreset[]>('list_llm_profile_presets');
+  }
+
+  listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
+    return invoke<LlmProfile[]>('list_llm_profiles');
+  }
+
+  createLlmProfile(request: SaveLlmProfileRequest, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('create_llm_profile', { request });
+  }
+
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return invoke<LlmProfile>('update_llm_profile', { profileId, request });
+  }
+
+  async deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    await invoke('delete_llm_profile', { profileId, request });
+  }
+
+  cloneLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('clone_llm_profile', { profileId });
+  }
+
+  exportLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfileExport> {
+    return invoke<LlmProfileExport>('export_llm_profile', { profileId });
+  }
+
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    _signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return invoke<LlmProfile>('activate_llm_profile', { profileId, consent });
+  }
+
+  testLlmProfile(profileId: string, _signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    return invoke<LlmProfileTestResult>('test_llm_profile', { profileId });
+  }
+
+  discoverLlmProfileModels(profileId: string, _signal?: AbortSignal): Promise<string[]> {
+    return invoke<string[]>('discover_llm_profile_models', { profileId });
+  }
+
+  discoverLlmProfileDraftModels(
+    request: SaveLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<string[]> {
+    return invoke<string[]>('discover_llm_profile_draft_models', { request });
+  }
+
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    return invoke<DocumentSummaryPreview>('preview_document_summary', { request });
+  }
+
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    return invoke<DocumentSummary>('generate_document_summary', { request });
+  }
+
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    _signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    return invoke<DocumentSummary | null>('get_document_summary', { request });
+  }
+
+  previewRag(request: PreviewRagRequest, _signal?: AbortSignal): Promise<RagPreview> {
+    return invoke<RagPreview>('preview_rag', { request });
+  }
+
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    _signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    return invoke<GenerateRagAnswerResponse>('generate_rag_answer', { request });
+  }
+
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    _signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    return invoke<SavedRagConversation>('save_rag_conversation', { request });
+  }
+
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    _signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    return invoke<SavedRagConversation[]>('list_saved_rag_conversations', { workspaceId });
+  }
+
+  deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('delete_rag_conversation', { request });
+  }
+
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    _signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    return invoke<ResolvedRagCitation>('resolve_rag_citation', { request });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

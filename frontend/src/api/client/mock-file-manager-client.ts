@@ -2,6 +2,7 @@ import actionFixtures from '../../../../fixtures/mock-responses/actions.json';
 import directoryFixtures from '../../../../fixtures/mock-responses/directories.json';
 import pluginFixtures from '../../../../fixtures/mock-responses/plugins.json';
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -9,10 +10,12 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumEntry,
   ChecksumFile,
@@ -22,14 +25,26 @@ import type {
   ComparisonEntrySide,
   ComparisonPage,
   ComparisonStatus,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -42,14 +57,26 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -57,11 +84,18 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
+  PreviewSemanticEnrolmentRequest,
+  RagAnswer,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -70,10 +104,17 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
+  ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   ScanDiskUsageResult,
   SearchInFileMatch,
@@ -81,6 +122,34 @@ import type {
   SearchInFileResult,
   SearchQuery,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentLifecycle,
+  SemanticComponentOperation,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticDeletionCategoryStatus,
+  SemanticDiskUse,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
+  SemanticIndexRecordCounts,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
+  SemanticModelIdentity,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticProfile,
+  SemanticRootStatus,
+  SemanticUninstallReceipt,
+  SemanticVocabulary,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -101,8 +170,10 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   VerificationResult,
@@ -150,6 +221,40 @@ const THUMBNAILABLE_MOCK_EXTENSIONS = new Set([
 
 export type MockClientMethod =
   | 'getRuntimeCapabilities'
+  | 'getSemanticComponentCapabilities'
+  | 'getSemanticComponentStatus'
+  | 'listSemanticComponentProfiles'
+  | 'createSemanticComponentInstallationOffer'
+  | 'acceptSemanticComponentInstallationOffer'
+  | 'pauseSemanticComponentIndexing'
+  | 'resumeSemanticComponentIndexing'
+  | 'createSemanticComponentIndexRemovalPlan'
+  | 'confirmSemanticComponentIndexRemoval'
+  | 'moveSemanticComponentData'
+  | 'uninstallSemanticComponents'
+  | 'installSemanticComponentWorkerPatch'
+  | 'importSemanticComponentLocalModel'
+  | 'planSemanticComponentModelMigration'
+  | 'confirmSemanticComponentModelMigration'
+  | 'checkpointSemanticComponentModelMigration'
+  | 'completeSemanticComponentModelMigration'
+  | 'getSemanticLibraryCapabilities'
+  | 'getSemanticLibraryStatus'
+  | 'listSemanticVocabularies'
+  | 'importSemanticVocabulary'
+  | 'exportSemanticVocabulary'
+  | 'attachSemanticVocabulary'
+  | 'reviewSemanticConceptCandidate'
+  | 'deleteSemanticVocabulary'
+  | 'getSemanticFolderStatus'
+  | 'previewSemanticEnrolment'
+  | 'confirmSemanticEnrolment'
+  | 'planSemanticExclusion'
+  | 'confirmSemanticExclusion'
+  | 'resumeSemanticCleanup'
+  | 'pauseSemanticLibrary'
+  | 'resumeSemanticLibrary'
+  | 'updateSemanticEligibilityOverrides'
   | 'getDiagnostics'
   | 'getSystemLocations'
   | 'getVolumes'
@@ -220,6 +325,26 @@ export type MockClientMethod =
   | 'startDuplicateScan'
   | 'getDuplicateScan'
   | 'cancelDuplicateScan'
+  | 'listLlmProfilePresets'
+  | 'listLlmProfiles'
+  | 'createLlmProfile'
+  | 'updateLlmProfile'
+  | 'deleteLlmProfile'
+  | 'cloneLlmProfile'
+  | 'exportLlmProfile'
+  | 'activateLlmProfile'
+  | 'testLlmProfile'
+  | 'discoverLlmProfileModels'
+  | 'discoverLlmProfileDraftModels'
+  | 'previewDocumentSummary'
+  | 'generateDocumentSummary'
+  | 'getDocumentSummary'
+  | 'previewRag'
+  | 'generateRagAnswer'
+  | 'saveRagConversation'
+  | 'listSavedRagConversations'
+  | 'deleteRagConversation'
+  | 'resolveRagCitation'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -236,6 +361,19 @@ export type MockClientMethod =
   | 'getOneDriveAuthorizationAttempt'
   | 'cancelOneDriveAuthorization';
 
+export type MockSemanticLifecycle =
+  | 'unavailable'
+  | 'absent'
+  | 'offered'
+  | 'downloadingResumable'
+  | 'installedEnabled'
+  | 'paused'
+  | 'migrating'
+  | 'updateFailedRolledBack'
+  | 'lowDisk'
+  | 'uninstalledRetain'
+  | 'uninstalledDelete';
+
 export interface MockFileManagerClientOptions {
   pageSize?: number;
   seed?: number;
@@ -243,6 +381,7 @@ export interface MockFileManagerClientOptions {
   latencyMs?: number;
   failures?: Partial<Record<MockClientMethod, Error>>;
   nativeIconExtensions?: readonly string[];
+  semanticLifecycle?: MockSemanticLifecycle;
 }
 
 function fixtureEntry(
@@ -684,6 +823,356 @@ function evaluateMockConnectionStatus(connection: Connection): Connection['statu
   return 'connected';
 }
 
+const SEMANTIC_OPERATIONS: readonly SemanticComponentOperation[] = [
+  'viewStatus',
+  'viewCatalog',
+  'createInstallationOffer',
+  'installOrEnable',
+  'installWorkerPatch',
+  'pauseIndexing',
+  'resumeIndexing',
+  'removeIndex',
+  'moveData',
+  'uninstallComponents',
+  'importLocalModel',
+  'planModelMigration',
+  'confirmModelMigration',
+  'checkpointModelMigration',
+  'completeModelMigration',
+];
+
+const MOCK_SEMANTIC_ENROLMENT_INVENTORY: Readonly<Record<string, SemanticIndexRecordCounts>> = {
+  'enrolment-1': {
+    indexRecords: 3,
+    extractedFiles: 2,
+    zvecVectors: 3,
+    cacheEntries: 1,
+    conversationEvidence: 2,
+  },
+  'library-1': {
+    indexRecords: 7,
+    extractedFiles: 6,
+    zvecVectors: 5,
+    cacheEntries: 4,
+    conversationEvidence: 3,
+  },
+};
+
+function sameSemanticIndexCounts(
+  left: SemanticIndexRecordCounts,
+  right: SemanticIndexRecordCounts,
+): boolean {
+  return (
+    left.indexRecords === right.indexRecords &&
+    left.extractedFiles === right.extractedFiles &&
+    left.zvecVectors === right.zvecVectors &&
+    left.cacheEntries === right.cacheEntries &&
+    left.conversationEvidence === right.conversationEvidence
+  );
+}
+
+function mockSemanticIdentity(profile: SemanticProfile): SemanticModelIdentity {
+  const suffix = {
+    compactMultilingual: 'compact-multilingual',
+    compactEnglish: 'compact-english',
+    multilingualQuality: 'multilingual-quality',
+  }[profile];
+  return {
+    modelId: `mock-${suffix}`,
+    revision: `mock-${suffix}-revision`,
+  };
+}
+
+function mockSemanticSelection(profile: SemanticProfile): SemanticModelSelection {
+  return { profile, identity: mockSemanticIdentity(profile) };
+}
+
+function mockSemanticProfiles(): SemanticModelProfile[] {
+  const profiles: readonly SemanticProfile[] = [
+    'compactMultilingual',
+    'compactEnglish',
+    'multilingualQuality',
+  ];
+  return profiles.map((profile) => {
+    const identity = mockSemanticIdentity(profile);
+    return {
+      profile,
+      recommended: profile === 'compactMultilingual',
+      explanation: `Deterministic ${profile} mock profile.`,
+      resolvedModel: identity,
+      metadata: {
+        identity,
+        license: {
+          spdx: 'MIT',
+          notice: 'Deterministic mock model; no package is downloaded.',
+        },
+        tokenizer: `mock-${profile}-tokenizer`,
+        dimensions: profile === 'multilingualQuality' ? 768 : 384,
+        normalization: 'unitLength',
+        runtimeComponentId: 'mock-runtime',
+        runtimeVersionRequirement: '^1.0',
+        languageCoverage: profile === 'compactEnglish' ? ['en'] : ['en', 'nl'],
+        estimatedDiskBytes: profile === 'multilingualQuality' ? 600 : 300,
+        estimatedRamBytes: profile === 'multilingualQuality' ? 800 : 400,
+      },
+    };
+  });
+}
+
+function mockSemanticInstalledComponents(): SemanticComponentStatus['components'] {
+  return [
+    {
+      artifactId: 'mock-worker-artifact',
+      componentId: 'mock-worker',
+      kind: 'worker',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 60,
+    },
+    {
+      artifactId: 'mock-runtime-artifact',
+      componentId: 'mock-runtime',
+      kind: 'runtime',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 70,
+    },
+    {
+      artifactId: 'mock-model-artifact',
+      componentId: 'mock-model',
+      kind: 'model',
+      version: '1.0.0',
+      state: 'active',
+      installedBytes: 300,
+    },
+  ];
+}
+
+function emptySemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 0 },
+      { category: 'extracted', bytes: 0 },
+      { category: 'zvec', bytes: 0 },
+      { category: 'embeddingCache', bytes: 0 },
+      { category: 'models', bytes: 0 },
+      { category: 'workers', bytes: 0 },
+    ],
+    totalBytes: 0,
+  };
+}
+
+function installedSemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 1 },
+      { category: 'extracted', bytes: 0 },
+      { category: 'zvec', bytes: 0 },
+      { category: 'embeddingCache', bytes: 0 },
+      { category: 'models', bytes: 300 },
+      { category: 'workers', bytes: 130 },
+    ],
+    totalBytes: 431,
+  };
+}
+
+function retainedSemanticDiskUse(): SemanticDiskUse {
+  return {
+    categories: [
+      { category: 'catalog', bytes: 1 },
+      { category: 'extracted', bytes: 10 },
+      { category: 'zvec', bytes: 30 },
+      { category: 'embeddingCache', bytes: 10 },
+      { category: 'models', bytes: 0 },
+      { category: 'workers', bytes: 0 },
+    ],
+    totalBytes: 51,
+  };
+}
+
+function mockSemanticMigrationProgress(
+  migrationId = 'mock-scenario-migration',
+  completedDocuments = 4,
+  estimate = { documents: 10, sourceBytes: 100 },
+  target = mockSemanticSelection('multilingualQuality'),
+  resumeCursor: string | null = 'mock-resume-cursor',
+): SemanticModelMigrationProgress {
+  return {
+    migrationId,
+    completedDocuments,
+    estimate,
+    target,
+    reason: { reason: 'modelChanged' },
+    resumeCursor,
+  };
+}
+
+function mockSemanticStatus(lifecycleName: MockSemanticLifecycle): SemanticComponentStatus {
+  const installed =
+    lifecycleName === 'installedEnabled' ||
+    lifecycleName === 'paused' ||
+    lifecycleName === 'migrating' ||
+    lifecycleName === 'updateFailedRolledBack';
+  const progress = lifecycleName === 'migrating' ? mockSemanticMigrationProgress() : undefined;
+  const lifecycle: SemanticComponentLifecycle = (() => {
+    switch (lifecycleName) {
+      case 'unavailable':
+        return { state: 'unavailable' };
+      case 'absent':
+        return { state: 'absent' };
+      case 'offered':
+        return { state: 'offered', offerId: 'mock-scenario-offer' };
+      case 'downloadingResumable':
+        return {
+          state: 'downloading',
+          downloadedBytes: 160,
+          totalBytes: 400,
+          resumable: true,
+        };
+      case 'installedEnabled':
+        return { state: 'installedEnabled' };
+      case 'paused':
+        return { state: 'paused' };
+      case 'migrating':
+        return { state: 'migrating', progress: progress as SemanticModelMigrationProgress };
+      case 'updateFailedRolledBack':
+        return {
+          state: 'updateFailedRolledBack',
+          failedVersion: '1.0.1',
+          activeVersion: '1.0.0',
+        };
+      case 'lowDisk':
+        return { state: 'lowDisk', availableBytes: 512, requiredBytes: 1_024 };
+      case 'uninstalledRetain':
+        return { state: 'uninstalled', indexDecision: 'retain' };
+      case 'uninstalledDelete':
+        return { state: 'uninstalled', indexDecision: 'delete' };
+    }
+  })();
+  const retainsIndex = lifecycleName === 'uninstalledRetain';
+  return {
+    lifecycle,
+    dataRoot: lifecycleName === 'unavailable' ? null : 'mock/semantic',
+    activeModel: installed || retainsIndex ? mockSemanticSelection('compactMultilingual') : null,
+    migration: progress ?? null,
+    components: installed ? mockSemanticInstalledComponents() : [],
+    diskUse: installed
+      ? installedSemanticDiskUse()
+      : retainsIndex
+        ? retainedSemanticDiskUse()
+        : emptySemanticDiskUse(),
+  };
+}
+
+function mockSemanticOffer(offerId: string, profile: SemanticProfile): SemanticInstallationOffer {
+  const resolvedModel = mockSemanticIdentity(profile);
+  const license = {
+    spdx: 'MIT',
+    notice: 'Deterministic mock component; no package is downloaded.',
+  };
+  return {
+    offerId,
+    catalogRevision: 'mock-signed-catalog-revision',
+    profile,
+    resolvedModel,
+    components: [
+      {
+        artifactId: 'mock-worker-artifact',
+        componentId: 'mock-worker',
+        kind: 'worker',
+        model: null,
+        version: '1.0.0',
+        license,
+        downloadBytes: 100,
+        estimatedInstalledBytes: 200,
+        estimatedRamBytes: 50,
+      },
+      {
+        artifactId: 'mock-runtime-artifact',
+        componentId: 'mock-runtime',
+        kind: 'runtime',
+        model: null,
+        version: '1.0.0',
+        license,
+        downloadBytes: 100,
+        estimatedInstalledBytes: 200,
+        estimatedRamBytes: 100,
+      },
+      {
+        artifactId: 'mock-model-artifact',
+        componentId: 'mock-model',
+        kind: 'model',
+        model: resolvedModel,
+        version: '1.0.0',
+        license,
+        downloadBytes: 200,
+        estimatedInstalledBytes: 300,
+        estimatedRamBytes: 400,
+      },
+    ],
+    embeddingsStayLocal: true,
+    localOnlyDisclosure: 'Embedding inference and semantic index data stay on this device.',
+    dataRoot: 'mock/semantic',
+    minimumFreeSpaceReserveBytes: 1_024,
+  };
+}
+
+const MOCK_SEMANTIC_DELETION_CATEGORIES = [
+  'occurrences',
+  'extractedContent',
+  'summaries',
+  'labels',
+  'orphanVectors',
+  'conversationEvidencePins',
+] as const;
+
+function mockSemanticLibraryStatus(): SemanticLibraryStatus {
+  return {
+    available: true,
+    revision: 1,
+    paused: false,
+    library: {
+      libraryId: '00000000-0000-0000-0000-000000000179',
+      model: {
+        modelId: 'mock-semantic-model',
+        revision: 'mock-revision-1',
+        dimensions: 384,
+        embeddingSpace: 'mock-embedding-space',
+      },
+    },
+    resourceProfile: {
+      kind: 'balanced',
+      budgets: {
+        maxDocuments: 1_000_000,
+        maxSourceBytesPerDocument: 512 * 1_024 * 1_024,
+        maxTotalSourceBytes: 4 * 1_024 * 1_024 * 1_024 * 1_024,
+        maxTotalExtractedBytes: 1_024 * 1_024 * 1_024 * 1_024,
+        maxTotalVectorBytes: 1_024 * 1_024 * 1_024 * 1_024,
+      },
+    },
+    reconciliationIntervalSeconds: 1_800,
+    roots: [],
+    normalizedExcerptsRetainedLocally: true,
+  };
+}
+
+function semanticLocationContains(root: Location, candidate: Location): boolean {
+  if (root.providerId !== candidate.providerId) return false;
+  if (root.uri === candidate.uri) return true;
+  const prefix = root.uri.endsWith('/') ? root.uri : `${root.uri}/`;
+  return candidate.uri.startsWith(prefix);
+}
+
+function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatus[] {
+  return MOCK_SEMANTIC_DELETION_CATEGORIES.map((category, index) => ({
+    category,
+    totalItems: index + 1,
+    completedItems: complete ? index + 1 : 0,
+    complete,
+    lastError: null,
+  }));
+}
+
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
@@ -704,6 +1193,30 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly latencyMs: number;
   private readonly failures: Partial<Record<MockClientMethod, Error>>;
   private readonly nativeIconExtensions: ReadonlySet<string>;
+  private semanticStatus: SemanticComponentStatus;
+  private semanticOfferSequence = 0;
+  private semanticIndexRemovalSequence = 0;
+  private semanticMigrationSequence = 0;
+  private readonly semanticOffers = new Map<string, SemanticInstallationOffer>();
+  private readonly semanticEnrolmentInventory = new Map(
+    Object.entries(MOCK_SEMANTIC_ENROLMENT_INVENTORY).map(([enrolmentId, counts]) => [
+      enrolmentId,
+      structuredClone(counts),
+    ]),
+  );
+  private readonly semanticIndexRemovalPlans = new Map<string, SemanticIndexRemovalPlan>();
+  private readonly semanticMigrationPlans = new Map<string, SemanticModelMigrationPlan>();
+  private semanticLibrary = mockSemanticLibraryStatus();
+  private semanticVocabularies: SemanticVocabulary[] = [];
+  private semanticLibrarySequence = 0;
+  private readonly semanticEnrolmentPreviews = new Map<
+    string,
+    PreviewSemanticEnrolmentRequest & { readonly policyRevision: number }
+  >();
+  private readonly semanticExclusionPlans = new Map<
+    string,
+    PlanSemanticExclusionRequest & { readonly rootId: string }
+  >();
   private readonly finderTagsByUri = new Map<string, FinderTags>();
   private readonly spotlightCommentsByUri = new Map<string, SpotlightComment>();
   private readonly listeners = new Set<(event: BackendEvent) => void>();
@@ -712,6 +1225,10 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly navigationHistory = new Map<string, { back: Location[]; forward: Location[] }>();
   private readonly workspaces = new Map<WorkspaceId, WorkspaceProjection>();
   private readonly connections = new Map<ConnectionId, Connection>();
+  private readonly llmProfiles = new Map<string, LlmProfile>();
+  private readonly documentSummaries = new Map<string, DocumentSummary>();
+  private readonly ragConversations = new Map<string, SavedRagConversation>();
+  private readonly ephemeralRagConversations = new Map<string, SavedRagConversation>();
   private readonly oneDriveAuthorizations = new Map<
     string,
     { readonly connectionId: ConnectionId; attempt: OneDriveAuthorizationAttempt }
@@ -748,6 +1265,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private tabSequence = 0;
   private workspaceSequence = 0;
   private connectionSequence = 0;
+  private llmProfileSequence = 0;
   private oneDriveAuthorizationSequence = 0;
   private searchSequence = 0;
   private eventSequence = 0;
@@ -810,6 +1328,29 @@ export class MockFileManagerClient implements FileManagerClient {
     this.nativeIconExtensions = new Set(
       options.nativeIconExtensions?.map((extension) => extension.toLowerCase()),
     );
+    const semanticLifecycle = options.semanticLifecycle ?? 'absent';
+    this.semanticStatus = mockSemanticStatus(semanticLifecycle);
+    if (semanticLifecycle === 'offered') {
+      this.semanticOffers.set(
+        'mock-scenario-offer',
+        mockSemanticOffer('mock-scenario-offer', 'compactMultilingual'),
+      );
+    }
+    if (semanticLifecycle === 'migrating') {
+      const progress = this.semanticStatus.migration;
+      if (progress !== null && progress !== undefined) {
+        this.semanticMigrationPlans.set(progress.migrationId, {
+          migrationId: progress.migrationId,
+          from: mockSemanticSelection('compactMultilingual'),
+          target: progress.target,
+          estimate: progress.estimate,
+          reason: progress.reason,
+          fullReindex: true,
+          requiresConfirmation: true,
+          resumable: true,
+        });
+      }
+    }
   }
 
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {
@@ -828,9 +1369,765 @@ export class MockFileManagerClient implements FileManagerClient {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority:
+        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'deterministicMock',
+      semanticRuntimeExecutableDownload:
+        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
       serverAdministration: false,
       systemTrash: false,
     }));
+  }
+
+  getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities> {
+    return this.perform('getSemanticComponentCapabilities', signal, () =>
+      this.semanticStatus.lifecycle.state === 'unavailable'
+        ? {
+            authority: 'unavailable',
+            operations: [],
+            runtimeExecutableDownload: 'unavailable',
+          }
+        : {
+            authority: 'deterministicMock',
+            operations: [...SEMANTIC_OPERATIONS],
+            runtimeExecutableDownload: 'simulated',
+          },
+    );
+  }
+
+  getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    return this.perform('getSemanticComponentStatus', signal, () =>
+      structuredClone(this.semanticStatus),
+    );
+  }
+
+  listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    return this.perform('listSemanticComponentProfiles', signal, () => {
+      this.requireSemanticAvailable();
+      return mockSemanticProfiles();
+    });
+  }
+
+  createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    return this.perform('createSemanticComponentInstallationOffer', signal, () => {
+      this.requireSemanticAvailable();
+      this.semanticOfferSequence += 1;
+      const offerId = `mock-offer-${this.semanticOfferSequence}`;
+      const offer = mockSemanticOffer(offerId, request.profile);
+      this.semanticOffers.set(offerId, offer);
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'offered', offerId },
+      };
+      return structuredClone(offer);
+    });
+  }
+
+  acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    return this.perform('acceptSemanticComponentInstallationOffer', signal, () => {
+      this.requireSemanticAvailable();
+      const offer = this.semanticOffers.get(request.offerId);
+      if (offer === undefined) {
+        throw new MockClientError('consentRequired', 'A reviewed installation offer is required');
+      }
+      this.semanticOffers.delete(request.offerId);
+      this.semanticStatus = {
+        lifecycle: { state: 'installedEnabled' },
+        dataRoot: offer.dataRoot,
+        activeModel: { profile: offer.profile, identity: offer.resolvedModel },
+        migration: null,
+        components: mockSemanticInstalledComponents(),
+        diskUse: installedSemanticDiskUse(),
+      };
+      return {
+        installedArtifactIds: offer.components.map(({ artifactId }) => artifactId),
+      };
+    });
+  }
+
+  pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    return this.perform('pauseSemanticComponentIndexing', signal, () => {
+      this.requireSemanticLifecycle('installedEnabled');
+      this.semanticStatus = { ...this.semanticStatus, lifecycle: { state: 'paused' } };
+    });
+  }
+
+  resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    return this.perform('resumeSemanticComponentIndexing', signal, () => {
+      this.requireSemanticLifecycle('paused');
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'installedEnabled' },
+      };
+    });
+  }
+
+  createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    return this.perform('createSemanticComponentIndexRemovalPlan', signal, () => {
+      this.requireSemanticAvailable();
+      if (!/^[A-Za-z0-9._-]+$/u.test(request.enrolmentId)) {
+        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is invalid');
+      }
+      const expected = this.semanticEnrolmentInventory.get(request.enrolmentId);
+      if (expected === undefined) {
+        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is unknown');
+      }
+      this.semanticIndexRemovalSequence += 1;
+      const plan: SemanticIndexRemovalPlan = {
+        planId: `mock-index-removal-${this.semanticIndexRemovalSequence}`,
+        enrolmentId: request.enrolmentId,
+        expected: structuredClone(expected),
+      };
+      this.semanticIndexRemovalPlans.set(plan.planId, plan);
+      return structuredClone(plan);
+    });
+  }
+
+  confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    return this.perform('confirmSemanticComponentIndexRemoval', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticIndexRemovalPlans.get(request.planId);
+      if (plan === undefined) {
+        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
+      }
+      this.semanticIndexRemovalPlans.delete(request.planId);
+      const inventory = this.semanticEnrolmentInventory.get(plan.enrolmentId);
+      if (inventory === undefined || !sameSemanticIndexCounts(inventory, plan.expected)) {
+        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
+      }
+      this.semanticEnrolmentInventory.delete(plan.enrolmentId);
+      for (const [planId, candidate] of this.semanticIndexRemovalPlans) {
+        if (candidate.enrolmentId === plan.enrolmentId) {
+          this.semanticIndexRemovalPlans.delete(planId);
+        }
+      }
+      return {
+        enrolmentId: plan.enrolmentId,
+        deleted: structuredClone(inventory),
+        conversationEvidenceDeleted: true,
+      };
+    });
+  }
+
+  moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    return this.perform('moveSemanticComponentData', signal, () => {
+      this.requireSemanticAvailable();
+      if (request.destination.trim().length === 0) {
+        throw new MockClientError('dataMigration', 'A destination is required');
+      }
+      const source = this.semanticStatus.dataRoot ?? 'mock/semantic';
+      this.semanticStatus = { ...this.semanticStatus, dataRoot: request.destination };
+      return {
+        source,
+        destination: request.destination,
+        verifiedBytes: this.semanticStatus.diskUse.totalBytes,
+        verifiedFileCount: this.semanticStatus.components.length,
+      };
+    });
+  }
+
+  uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    return this.perform('uninstallSemanticComponents', signal, () => {
+      this.requireSemanticAvailable();
+      const removedComponentCount = this.semanticStatus.components.length;
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'uninstalled', indexDecision: request.indexDecision },
+        components: [],
+        migration: null,
+        ...(request.indexDecision === 'delete'
+          ? { activeModel: null, diskUse: emptySemanticDiskUse() }
+          : { diskUse: retainedSemanticDiskUse() }),
+      };
+      return { indexDecision: request.indexDecision, removedComponentCount };
+    });
+  }
+
+  installSemanticComponentWorkerPatch(
+    _request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    return this.perform('installSemanticComponentWorkerPatch', signal, () => {
+      this.requireSemanticAvailable();
+      return { receipt: null };
+    });
+  }
+
+  importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return this.perform('importSemanticComponentLocalModel', signal, () => {
+      this.requireSemanticAvailable();
+      if (
+        request.sourcePath.trim().length === 0 ||
+        /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(request.sourcePath.trim()) ||
+        request.modelId.trim().length === 0 ||
+        request.upstreamRevision.trim().length === 0 ||
+        request.licenseSpdx.trim().length === 0 ||
+        request.licenseNotice.trim().length === 0 ||
+        request.tokenizer.trim().length === 0 ||
+        request.dimensions <= 0 ||
+        request.normalization == null ||
+        request.runtimeComponentId.trim().length === 0 ||
+        request.runtimeVersionRequirement.trim().length === 0 ||
+        request.languageCoverage.length === 0 ||
+        request.languageCoverage.some((language) => language.trim().length === 0) ||
+        request.estimatedDiskBytes <= 0 ||
+        request.estimatedRamBytes <= 0
+      ) {
+        throw new MockClientError(
+          'invalidLocalModelMetadata',
+          'Complete local model metadata is required',
+        );
+      }
+      return this.createSemanticMigrationPlan(
+        request.profile,
+        {
+          modelId: request.modelId,
+          revision: request.upstreamRevision,
+        },
+        request.estimate,
+      );
+    });
+  }
+
+  planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    return this.perform('planSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      return this.createSemanticMigrationPlan(
+        request.profile,
+        mockSemanticIdentity(request.profile),
+        request.estimate,
+      );
+    });
+  }
+
+  confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return this.perform('confirmSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      const progress = mockSemanticMigrationProgress(
+        plan.migrationId,
+        0,
+        plan.estimate,
+        plan.target,
+        null,
+      );
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'migrating', progress },
+        migration: progress,
+      };
+      return structuredClone(progress);
+    });
+  }
+
+  checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    return this.perform('checkpointSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      const previous = this.semanticStatus.migration;
+      if (
+        previous == null ||
+        previous.migrationId !== request.migrationId ||
+        request.completedDocuments < previous.completedDocuments ||
+        request.completedDocuments > plan.estimate.documents
+      ) {
+        throw new MockClientError('invalidMigrationProgress', 'Migration progress is invalid');
+      }
+      const progress = mockSemanticMigrationProgress(
+        plan.migrationId,
+        request.completedDocuments,
+        plan.estimate,
+        plan.target,
+        request.resumeCursor ?? null,
+      );
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'migrating', progress },
+        migration: progress,
+      };
+      return structuredClone(progress);
+    });
+  }
+
+  completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    return this.perform('completeSemanticComponentModelMigration', signal, () => {
+      this.requireSemanticAvailable();
+      const plan = this.semanticMigrationPlan(request.migrationId);
+      if (
+        this.semanticStatus.migration?.migrationId !== request.migrationId ||
+        this.semanticStatus.migration.completedDocuments < plan.estimate.documents
+      ) {
+        throw new MockClientError('invalidMigrationProgress', 'Migration is not complete');
+      }
+      this.semanticMigrationPlans.delete(request.migrationId);
+      this.semanticStatus = {
+        ...this.semanticStatus,
+        lifecycle: { state: 'installedEnabled' },
+        activeModel: plan.target,
+        migration: null,
+      };
+      return structuredClone(plan.target);
+    });
+  }
+
+  getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {
+    return this.perform('getSemanticLibraryCapabilities', signal, () => ({
+      authority: 'deterministicMock',
+      operations: [
+        'viewStatus',
+        'viewFolderStatus',
+        'previewEnrolment',
+        'enrol',
+        'planExclusion',
+        'confirmExclusion',
+        'resumeCleanup',
+        'pause',
+        'resume',
+        'updateEligibilityOverrides',
+      ],
+    }));
+  }
+
+  getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus> {
+    return this.perform('getSemanticLibraryStatus', signal, () =>
+      structuredClone(this.semanticLibrary),
+    );
+  }
+
+  listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    return this.perform('listSemanticVocabularies', signal, () =>
+      structuredClone(this.semanticVocabularies),
+    );
+  }
+
+  importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary> {
+    return this.perform('importSemanticVocabulary', signal, () => {
+      const parsed = JSON.parse(skosJson) as {
+        id: string;
+        name: string;
+        concepts?: SemanticVocabulary['concepts'];
+      };
+      const vocabulary: SemanticVocabulary = {
+        id: parsed.id,
+        name: parsed.name,
+        concepts: parsed.concepts ?? [],
+        workspaceIds: [],
+        rootIds: [],
+        reviewQueue: [],
+        revision: 0,
+      };
+      this.semanticVocabularies.push(vocabulary);
+      return structuredClone(vocabulary);
+    });
+  }
+
+  exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
+    return this.perform('exportSemanticVocabulary', signal, () => {
+      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
+      if (!vocabulary) throw new Error('Vocabulary not found');
+      return JSON.stringify({ format: 'procyon-skos-1', ...vocabulary });
+    });
+  }
+
+  attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return this.perform('attachSemanticVocabulary', signal, () => {
+      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
+      const current = this.semanticVocabularies[index];
+      if (!current) throw new Error('Vocabulary not found');
+      const updated: SemanticVocabulary = {
+        ...current,
+        workspaceIds: request.workspaceId
+          ? [...new Set([...current.workspaceIds, request.workspaceId])]
+          : current.workspaceIds,
+        rootIds: request.rootId
+          ? [...new Set([...current.rootIds, request.rootId])]
+          : current.rootIds,
+        revision: current.revision + 1,
+      };
+      this.semanticVocabularies[index] = updated;
+      return structuredClone(updated);
+    });
+  }
+
+  reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    return this.perform('reviewSemanticConceptCandidate', signal, () => {
+      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
+      const current = this.semanticVocabularies[index];
+      if (!current) throw new Error('Vocabulary not found');
+      const updated: SemanticVocabulary = {
+        ...current,
+        reviewQueue: current.reviewQueue.map((candidate) =>
+          candidate.id === request.candidateId
+            ? { ...candidate, status: request.action === 'reject' ? 'rejected' : 'accepted' }
+            : candidate,
+        ),
+        revision: current.revision + 1,
+      };
+      this.semanticVocabularies[index] = updated;
+      return structuredClone(updated);
+    });
+  }
+
+  deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    return this.perform('deleteSemanticVocabulary', signal, () => {
+      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
+      if (!vocabulary) throw new Error('Vocabulary not found');
+      const requiresConfirmation =
+        vocabulary.workspaceIds.length > 0 || vocabulary.rootIds.length > 0;
+      const deleted = confirmAffected || !requiresConfirmation;
+      if (deleted) {
+        this.semanticVocabularies = this.semanticVocabularies.filter(
+          ({ id }) => id !== vocabularyId,
+        );
+      }
+      return {
+        vocabularyId,
+        affectedWorkspaceIds: vocabulary.workspaceIds,
+        affectedRootIds: vocabulary.rootIds,
+        requiresConfirmation,
+        deleted,
+      };
+    });
+  }
+
+  getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus> {
+    return this.perform('getSemanticFolderStatus', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      const matchingExclusions = this.semanticLibrary.roots
+        .flatMap((root) =>
+          root.exclusions
+            .filter((exclusion) => semanticLocationContains(exclusion.location, request.location))
+            .map((exclusion) => ({ root, exclusion })),
+        )
+        .sort(
+          (left, right) => left.exclusion.location.uri.length - right.exclusion.location.uri.length,
+        );
+      const excluded = matchingExclusions.at(-1);
+      if (excluded !== undefined) {
+        return {
+          consent: 'excluded',
+          rootId: excluded.root.id,
+          exclusionId: excluded.exclusion.id,
+          workspaceReferenced: excluded.root.workspaceReferences.includes(request.workspaceId),
+          sourceAvailable: excluded.root.availability.state === 'available',
+          unavailableReason:
+            excluded.root.availability.state === 'temporarilyUnavailable'
+              ? excluded.root.availability.reason
+              : null,
+        };
+      }
+      const matchingRoots = this.semanticLibrary.roots
+        .filter(
+          (root) =>
+            root.location.providerId === request.location.providerId &&
+            (root.location.uri === request.location.uri ||
+              (root.recursive && semanticLocationContains(root.location, request.location))),
+        )
+        .sort((left, right) => left.location.uri.length - right.location.uri.length);
+      const root = matchingRoots.at(-1);
+      if (root === undefined) {
+        return {
+          consent: 'notIncluded',
+          rootId: null,
+          exclusionId: null,
+          workspaceReferenced: false,
+          sourceAvailable: true,
+          unavailableReason: null,
+        };
+      }
+      return {
+        consent:
+          root.location.uri === request.location.uri ? 'includedHere' : 'inheritedFromParent',
+        rootId: root.id,
+        exclusionId: null,
+        workspaceReferenced: root.workspaceReferences.includes(request.workspaceId),
+        sourceAvailable: root.availability.state === 'available',
+        unavailableReason:
+          root.availability.state === 'temporarilyUnavailable' ? root.availability.reason : null,
+      };
+    });
+  }
+
+  previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview> {
+    return this.perform('previewSemanticEnrolment', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.semanticLibrarySequence += 1;
+      const confirmationId = `mock-enrol-confirmation-${this.semanticLibrarySequence}`;
+      this.semanticEnrolmentPreviews.set(confirmationId, {
+        ...structuredClone(request),
+        policyRevision: this.semanticLibrary.revision,
+      });
+      return {
+        confirmationId,
+        policyRevision: this.semanticLibrary.revision,
+        location: structuredClone(request.location),
+        recursive: request.recursive,
+        normalizedExcerptsRetainedLocally: true,
+        estimate: {
+          completeness: 'partial',
+          estimatedFiles: 42,
+          estimatedSourceBytes: 4_200,
+          estimatedExtractedBytes: 1_200,
+          estimatedVectorBytes: 800,
+          estimatedAdditionalLocalBytes: 2_500,
+          missingModelDownloadBytes: 500,
+          skippedReasonCounts: [
+            { reason: 'hidden', count: 1 },
+            { reason: 'unsupportedMime', count: 1 },
+          ],
+          exceededBudgets: [],
+          unavailableReason: null,
+        },
+      };
+    });
+  }
+
+  confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('confirmSemanticEnrolment', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const preview = this.semanticEnrolmentPreviews.get(request.confirmationId);
+      if (
+        preview === undefined ||
+        preview.policyRevision !== request.policyRevision ||
+        preview.workspaceId !== request.workspaceId ||
+        preview.location.providerId !== request.location.providerId ||
+        preview.location.uri !== request.location.uri
+      ) {
+        throw new MockClientError(
+          'staleConfirmation',
+          'Semantic library confirmation is stale or invalid',
+        );
+      }
+      this.semanticEnrolmentPreviews.delete(request.confirmationId);
+      const existing = this.semanticLibrary.roots.find(
+        (root) =>
+          root.location.providerId === request.location.providerId &&
+          root.location.uri === request.location.uri,
+      );
+      if (existing === undefined) {
+        this.semanticLibrarySequence += 1;
+        this.semanticLibrary.roots.push({
+          id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+          location: structuredClone(request.location),
+          recursive: preview.recursive,
+          stableIdentityVerified: true,
+          workspaceReferences: [request.workspaceId],
+          eligibilityOverrides: [],
+          attachedVocabularyIds: [],
+          eligibilityReasonCounts: [
+            { reason: 'hidden', count: 1 },
+            { reason: 'unsupportedMime', count: 1 },
+          ],
+          ocrRequiredFiles: [],
+          availability: { state: 'available' },
+          reconciliationGeneration: 0,
+          indexedGeneration: 0,
+          exclusions: [],
+        });
+      } else if (!existing.workspaceReferences.includes(request.workspaceId)) {
+        existing.workspaceReferences.push(request.workspaceId);
+      }
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan> {
+    return this.perform('planSemanticExclusion', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const root = this.semanticRootFor(request.location);
+      if (root === undefined) {
+        throw new MockClientError('notEnrolled', 'The folder is not included');
+      }
+      if (!root.workspaceReferences.includes(request.workspaceId)) {
+        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+      }
+      this.semanticLibrarySequence += 1;
+      const confirmationId = `mock-exclusion-confirmation-${this.semanticLibrarySequence}`;
+      this.semanticExclusionPlans.set(confirmationId, {
+        ...structuredClone(request),
+        rootId: root.id,
+      });
+      return {
+        confirmationId,
+        policyRevision: request.policyRevision,
+        rootId: root.id,
+        location: structuredClone(request.location),
+        categories: mockCleanupCategories(false),
+      };
+    });
+  }
+
+  confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('confirmSemanticExclusion', signal, () => {
+      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const plan = this.semanticExclusionPlans.get(request.confirmationId);
+      if (
+        plan === undefined ||
+        plan.policyRevision !== request.policyRevision ||
+        plan.workspaceId !== request.workspaceId ||
+        plan.location.providerId !== request.location.providerId ||
+        plan.location.uri !== request.location.uri
+      ) {
+        throw new MockClientError(
+          'staleConfirmation',
+          'Semantic library confirmation is stale or invalid',
+        );
+      }
+      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === plan.rootId);
+      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
+      this.semanticLibrarySequence += 1;
+      root.exclusions.push({
+        id: `00000000-0000-0000-0001-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+        location: structuredClone(request.location),
+        cleanup: {
+          planId: `00000000-0000-0000-0002-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
+          status: 'complete',
+          categories: mockCleanupCategories(true),
+        },
+      });
+      this.semanticExclusionPlans.delete(request.confirmationId);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('resumeSemanticCleanup', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const cleanup = this.semanticLibrary.roots
+        .flatMap((root) => root.exclusions)
+        .map((exclusion) => exclusion.cleanup)
+        .find((candidate) => candidate.planId === request.planId);
+      if (cleanup === undefined) throw new MockClientError('notFound', 'Cleanup plan not found');
+      cleanup.status = 'complete';
+      cleanup.categories = mockCleanupCategories(true);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('pauseSemanticLibrary', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      this.semanticLibrary.paused = true;
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('resumeSemanticLibrary', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      this.semanticLibrary.paused = false;
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
+  }
+
+  updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('updateSemanticEligibilityOverrides', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === request.rootId);
+      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
+      if (!root.workspaceReferences.includes(request.workspaceId)) {
+        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+      }
+      const safeReasons = new Set([
+        'hidden',
+        'system',
+        'applicationOrPackageBundle',
+        'dependencyDirectory',
+        'buildDirectory',
+        'cacheDirectory',
+        'gitIgnored',
+      ]);
+      if (
+        request.overrides.some(
+          (override) => override.action === 'include' && !safeReasons.has(override.reason),
+        )
+      ) {
+        throw new MockClientError(
+          'unsafeEligibilityOverride',
+          'This eligibility reason cannot be overridden',
+        );
+      }
+      root.eligibilityOverrides = structuredClone(request.overrides);
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
   }
 
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
@@ -857,6 +2154,12 @@ export class MockFileManagerClient implements FileManagerClient {
         plugins: true,
         revealInSystemFileManager: false,
         runtime: 'mock',
+        semanticComponentAuthority:
+          this.semanticStatus.lifecycle.state === 'unavailable'
+            ? 'unavailable'
+            : 'deterministicMock',
+        semanticRuntimeExecutableDownload:
+          this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
         serverAdministration: false,
         systemTrash: false,
       },
@@ -1051,6 +2354,15 @@ export class MockFileManagerClient implements FileManagerClient {
         this.requireWorkspaceRevision(workspace, expectedRevision);
       }
       this.workspaces.delete(workspaceId);
+      let changed = false;
+      for (const root of this.semanticLibrary.roots) {
+        const remaining = root.workspaceReferences.filter((id) => id !== workspaceId);
+        if (remaining.length !== root.workspaceReferences.length) {
+          root.workspaceReferences = remaining;
+          changed = true;
+        }
+      }
+      if (changed) this.advanceSemanticLibraryRevision();
     });
   }
 
@@ -2021,7 +3333,10 @@ export class MockFileManagerClient implements FileManagerClient {
       const location: Location = { providerId: 'local', uri: `search://local/${searchId}` };
       const roots = request.structuredQuery?.scope.locations ?? request.roots;
       const filenameQuery = request.structuredQuery?.name?.pattern ?? request.query;
-      const contentQuery = request.structuredQuery?.content?.query ?? request.contentQuery;
+      const semanticQuery = request.structuredQuery?.semantic?.query;
+      const contentQuery =
+        request.structuredQuery?.content?.query ?? semanticQuery ?? request.contentQuery;
+      const semanticMode = request.structuredQuery?.mode === 'semantic';
       const entries = roots.flatMap((root) =>
         collectMatches(
           root.uri,
@@ -2050,7 +3365,7 @@ export class MockFileManagerClient implements FileManagerClient {
             entries,
             isComplete: true,
             warningsCount: 0,
-            executionMode: 'liveRecursive',
+            executionMode: semanticMode ? 'semantic' : 'liveRecursive',
           },
         });
       }, 0);
@@ -2068,7 +3383,50 @@ export class MockFileManagerClient implements FileManagerClient {
           unsupported.length === 0
             ? []
             : [{ providerId: 'local', unevaluatedPredicates: unsupported }],
-        executionMode: 'liveRecursive',
+        executionMode: semanticMode ? 'semantic' : 'liveRecursive',
+        ...(semanticMode
+          ? {
+              semanticResults: entries.map((entry, index) => ({
+                entryId: entry.id,
+                location: entry.location,
+                score: 1 - index * 0.05,
+                bestEvidence: {
+                  recordId: `mock-record-${index}`,
+                  sourceId: entry.id,
+                  score: 1 - index * 0.05,
+                  chunkKind: 'chunk',
+                  excerpt: contentQuery ?? '',
+                  provenanceJson: JSON.stringify({
+                    kind: 'exact',
+                    value: { kind: 'textLines', startLine: 1, endLine: 3 },
+                  }),
+                  indexedContentHash: `mock-hash-${entry.id}`,
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 0,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              })),
+            }
+          : {}),
+        ...(semanticMode
+          ? {
+              semanticCoverage: {
+                eligible: entries.length,
+                indexed: entries.length,
+                stale: 0,
+                pending: 0,
+                excluded: 0,
+                skipped: 0,
+                failed: 0,
+                unavailable: 0,
+                partial: false,
+              },
+            }
+          : {}),
       };
     });
   }
@@ -2480,6 +3838,480 @@ export class MockFileManagerClient implements FileManagerClient {
     }
   }
 
+  listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    return this.perform('listLlmProfilePresets', signal, () => {
+      const defaults: Pick<LlmProfilePreset, 'model' | 'advanced' | 'capabilities'> = {
+        model: '',
+        advanced: {
+          contextWindow: 8192,
+          maximumAnswerTokens: 1024,
+          temperature: 0.2,
+          timeoutSeconds: 30,
+          tlsPolicy: 'requireValidCertificate' as const,
+          customHeaders: {},
+        },
+        capabilities: ['chatCompletions', 'modelDiscovery'],
+      };
+      return [
+        {
+          ...defaults,
+          name: 'Ollama',
+          preset: 'ollama',
+          baseUrl: 'http://127.0.0.1:11434',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'LM Studio',
+          preset: 'lmStudio',
+          baseUrl: 'http://127.0.0.1:1234',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'vLLM',
+          preset: 'vllm',
+          baseUrl: 'http://127.0.0.1:8000',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'SGLang',
+          preset: 'sglang',
+          baseUrl: 'http://127.0.0.1:30000',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'OMLX',
+          preset: 'omlx',
+          baseUrl: 'http://127.0.0.1:8080',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
+          name: 'OpenAI-compatible',
+          preset: 'openAiCompatible',
+          baseUrl: 'https://api.openai.com',
+          redactFilenames: true,
+        },
+        {
+          ...defaults,
+          name: 'Azure OpenAI',
+          preset: 'azureOpenAi',
+          baseUrl: 'https://example.openai.azure.com',
+          apiVersion: '2024-10-21',
+          redactFilenames: true,
+        },
+      ];
+    });
+  }
+
+  listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
+    return this.perform('listLlmProfiles', signal, () =>
+      [...this.llmProfiles.values()].map((profile) => structuredClone(profile)),
+    );
+  }
+
+  createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.perform('createLlmProfile', signal, () => {
+      this.llmProfileSequence += 1;
+      const host = new URL(request.baseUrl).hostname.toLowerCase();
+      const profile: LlmProfile = {
+        ...structuredClone(request),
+        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
+        hasCredential: request.credential != null,
+        locality:
+          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
+        consentedHost: null,
+      };
+      this.llmProfiles.set(profile.id, profile);
+      return structuredClone(profile);
+    });
+  }
+
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return this.perform('updateLlmProfile', signal, () => {
+      const current = this.requireLlmProfile(profileId);
+      const host = new URL(request.baseUrl).hostname.toLowerCase();
+      const oldHost = new URL(current.baseUrl).hostname.toLowerCase();
+      const profile: LlmProfile = {
+        ...structuredClone(request),
+        id: profileId,
+        hasCredential: request.credential != null || current.hasCredential,
+        locality:
+          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
+        consentedHost: host === oldHost ? (current.consentedHost ?? null) : null,
+      };
+      this.llmProfiles.set(profileId, profile);
+      return structuredClone(profile);
+    });
+  }
+
+  deleteLlmProfile(
+    profileId: string,
+    _request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('deleteLlmProfile', signal, () => {
+      this.requireLlmProfile(profileId);
+      this.llmProfiles.delete(profileId);
+    });
+  }
+
+  cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.perform('cloneLlmProfile', signal, () => {
+      const source = this.requireLlmProfile(profileId);
+      this.llmProfileSequence += 1;
+      const clone: LlmProfile = {
+        ...structuredClone(source),
+        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
+        name: `${source.name} copy`,
+        hasCredential: false,
+        consentedHost: null,
+      };
+      this.llmProfiles.set(clone.id, clone);
+      return structuredClone(clone);
+    });
+  }
+
+  exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport> {
+    return this.perform('exportLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      return structuredClone({
+        name: profile.name,
+        preset: profile.preset,
+        baseUrl: profile.baseUrl,
+        deployment: profile.deployment ?? null,
+        apiVersion: profile.apiVersion ?? null,
+        model: profile.model,
+        advanced: profile.advanced,
+        capabilities: profile.capabilities,
+        redactFilenames: profile.redactFilenames,
+      });
+    });
+  }
+
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    return this.perform('activateLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      if (profile.locality === 'cloud' && !consent && profile.consentedHost == null) {
+        throw new MockClientError('invalidRequest', 'Cloud consent is required');
+      }
+      const activated: LlmProfile = {
+        ...profile,
+        consentedHost:
+          profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
+      };
+      this.llmProfiles.set(profileId, activated);
+      return structuredClone(activated);
+    });
+  }
+
+  testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    return this.perform('testLlmProfile', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      const success = profile.model.trim().length > 0;
+      const availableModels =
+        profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
+          ? [profile.model, 'model-b']
+          : null;
+      return {
+        profileId,
+        provider: profile.preset,
+        locality: profile.locality,
+        success,
+        category: success ? null : 'modelUnavailable',
+        durationMs: 1,
+        modelAvailable: success,
+        availableModels,
+        capabilities: [...profile.capabilities],
+      };
+    });
+  }
+
+  discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]> {
+    return this.perform('discoverLlmProfileModels', signal, () => {
+      const profile = this.requireLlmProfile(profileId);
+      return profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
+        ? [profile.model, 'model-b']
+        : [];
+    });
+  }
+
+  discoverLlmProfileDraftModels(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    return this.perform('discoverLlmProfileDraftModels', signal, () =>
+      request.capabilities.includes('modelDiscovery') && request.preset !== 'azureOpenAi'
+        ? ['model-a', 'model-b']
+        : [],
+    );
+  }
+
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    return this.perform('previewDocumentSummary', signal, () => {
+      const profile =
+        request.profileId == null ? undefined : this.requireLlmProfile(request.profileId);
+      return {
+        selectionFingerprint: `mock-summary-${request.target.entryId}`,
+        representativeTokens: Math.min(request.inputTokenBudget, 72),
+        keyPassages: [
+          {
+            label: 'S1',
+            chunkId: `mock-chunk-${request.target.entryId}`,
+            content: 'A representative passage from the selected document.',
+            sectionPath: ['Overview'],
+            provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
+            clusterPopulation: 1,
+            weight: 1,
+            structuralAnchor: true,
+          },
+        ],
+        profile:
+          profile === undefined
+            ? null
+            : {
+                profileId: profile.id,
+                profileName: profile.name,
+                modelId: profile.model,
+                locality: profile.locality,
+              },
+        reusedSelection: this.documentSummaries.has(request.target.entryId),
+      };
+    });
+  }
+
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    return this.perform('generateDocumentSummary', signal, () => {
+      const profile = this.requireLlmProfile(request.profileId);
+      const expected = `mock-summary-${request.target.entryId}`;
+      if (request.expectedSelectionFingerprint !== expected) {
+        throw new MockClientError('invalidRequest', 'Document summary confirmation is stale');
+      }
+      const summary: DocumentSummary = {
+        recordId: `mock-generated-${request.target.entryId}`,
+        sourceGeneration: 1,
+        profileId: profile.id,
+        modelId: profile.model,
+        supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
+        supportingWeights: [1],
+        createdAtMs: Date.now(),
+        brief: 'A concise representative summary.',
+        full: 'A fuller representative summary grounded in the selected key passage.',
+        stale: false,
+      };
+      this.documentSummaries.set(request.target.entryId, summary);
+      return structuredClone(summary);
+    });
+  }
+
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    return this.perform('getDocumentSummary', signal, () => {
+      const summary = this.documentSummaries.get(request.target.entryId);
+      return summary === undefined ? null : structuredClone(summary);
+    });
+  }
+
+  previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
+    return this.perform('previewRag', signal, () => ({
+      coverage: {
+        eligible: 3,
+        indexed: 3,
+        pending: 0,
+        failed: 0,
+        excluded: 0,
+        stale: 0,
+        unavailable: 0,
+      },
+      evidence: [
+        {
+          available: true,
+          excerpt: `Mock indexed evidence relevant to "${request.question}".`,
+          generated: false,
+          label: 'C1',
+          sourceId: 'mock-source-1',
+          provenance: 'section 1',
+          score: 0.91,
+          sectionPath: ['Overview'],
+          stale: false,
+          title: 'Example indexed document',
+        },
+      ],
+      evidenceTokens: 18,
+      insufficient: false,
+      locality: 'loopback',
+      profileId: request.profileId,
+      profileName: 'Local mock profile',
+      retrievalFingerprint: `mock-rag-${request.profileId}-${request.question}`,
+      scope: structuredClone(request.scope),
+    }));
+  }
+
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    return this.perform('generateRagAnswer', signal, () => {
+      const expectedFingerprint = `mock-rag-${request.profileId}-${request.question}`;
+      if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
+        throw new MockClientError('invalidRequest', 'Ask evidence confirmation is stale');
+      }
+      const preview: RagPreview = {
+        coverage: {
+          eligible: 3,
+          indexed: 3,
+          pending: 0,
+          failed: 0,
+          excluded: 0,
+          stale: 0,
+          unavailable: 0,
+        },
+        evidence: [
+          {
+            available: true,
+            excerpt: `Mock indexed evidence relevant to "${request.question}".`,
+            generated: false,
+            label: 'C1',
+            sourceId: 'mock-source-1',
+            provenance: 'section 1',
+            score: 0.91,
+            sectionPath: ['Overview'],
+            stale: false,
+            title: 'Example indexed document',
+          },
+        ],
+        evidenceTokens: 18,
+        insufficient: false,
+        locality: 'loopback',
+        profileId: request.profileId,
+        profileName: 'Local mock profile',
+        retrievalFingerprint: expectedFingerprint,
+        scope: structuredClone(request.scope),
+      };
+      const answer: RagAnswer = {
+        text: 'This answer is grounded in the selected local evidence [C1].',
+        citations: [
+          {
+            generated: false,
+            label: 'C1',
+            provenance: 'section 1',
+            sourceId: 'mock-source-1',
+            stale: false,
+            unavailable: false,
+          },
+        ],
+        modelKnowledgeAllowed: request.allowModelKnowledge,
+      };
+      const conversationId =
+        request.conversationId ?? `rag-${this.ephemeralRagConversations.size + 1}`;
+      const existing = this.ephemeralRagConversations.get(conversationId);
+      if (
+        existing !== undefined &&
+        (existing.profileId !== request.profileId ||
+          existing.scope.kind !== request.scope.kind ||
+          existing.modelKnowledgeAllowed !== request.allowModelKnowledge)
+      ) {
+        throw new MockClientError(
+          'invalidRequest',
+          'Conversation profile, scope, and knowledge mode cannot change',
+        );
+      }
+      this.ephemeralRagConversations.set(conversationId, {
+        id: conversationId,
+        modelKnowledgeAllowed: request.allowModelKnowledge,
+        profileId: request.profileId,
+        scope: structuredClone(request.scope),
+        storageBytes: 0,
+        turns: [...(existing?.turns ?? []), { question: request.question, answer }],
+      });
+      return {
+        conversationId,
+        events: [
+          { type: 'retrieval', preview },
+          { type: 'token', text: answer.text },
+          { type: 'done', answer },
+        ],
+      };
+    });
+  }
+
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    return this.perform('saveRagConversation', signal, () => {
+      const conversation = this.ephemeralRagConversations.get(request.conversationId);
+      if (conversation === undefined || conversation.scope.workspaceId !== request.workspaceId) {
+        throw new MockClientError('notFound', 'Ask conversation not found');
+      }
+      const saved = {
+        ...structuredClone(conversation),
+        storageBytes: JSON.stringify(conversation).length,
+      };
+      this.ragConversations.set(saved.id, saved);
+      return structuredClone(saved);
+    });
+  }
+
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    return this.perform('listSavedRagConversations', signal, () =>
+      [...this.ragConversations.values()]
+        .filter((conversation) => conversation.scope.workspaceId === workspaceId)
+        .map((conversation) => structuredClone(conversation)),
+    );
+  }
+
+  deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('deleteRagConversation', signal, () => {
+      const conversation = this.ragConversations.get(request.conversationId);
+      if (conversation === undefined) {
+        throw new MockClientError('notFound', 'Ask conversation not found');
+      }
+      this.ragConversations.delete(request.conversationId);
+    });
+  }
+
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    return this.perform('resolveRagCitation', signal, () => {
+      if (request.sourceId !== 'mock-source-1') {
+        throw new MockClientError('notFound', 'Citation not found');
+      }
+      return {
+        entryId: '11111111-1111-4111-8111-111111111111',
+        location: { providerId: 'local', uri: 'file:///documents/report.txt' },
+        available: true,
+      };
+    });
+  }
+
   listConnections(signal?: AbortSignal): Promise<Connection[]> {
     return this.perform('listConnections', signal, () =>
       [...this.connections.values()].map((connection) => structuredClone(connection)),
@@ -2679,6 +4511,14 @@ export class MockFileManagerClient implements FileManagerClient {
       throw new MockClientError('notFound', `No mock connection with id ${connectionId}`);
     }
     return connection;
+  }
+
+  private requireLlmProfile(profileId: string): LlmProfile {
+    const profile = this.llmProfiles.get(profileId);
+    if (profile === undefined) {
+      throw new MockClientError('notFound', `No mock LLM profile with id ${profileId}`);
+    }
+    return profile;
   }
 
   /** Returns the current in-memory state for a mock operation. */
@@ -2973,6 +4813,98 @@ export class MockFileManagerClient implements FileManagerClient {
       }
       return found;
     };
+  }
+
+  private requireActiveSemanticFolder(workspaceId: WorkspaceId, location: Location): void {
+    const workspace = this.workspaces.get(workspaceId);
+    const pane = workspace === undefined ? undefined : workspace.panesById[workspace.activePaneId];
+    const tab = pane === undefined ? undefined : pane.tabsById[pane.activeTabId];
+    if (
+      tab === undefined ||
+      tab.location.providerId !== location.providerId ||
+      tab.location.uri !== location.uri
+    ) {
+      throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
+    }
+  }
+
+  private requireSemanticLibraryRevision(expected: number): void {
+    if (this.semanticLibrary.revision !== expected) {
+      throw new MockClientError(
+        'staleRevision',
+        `Semantic policy changed from revision ${expected} to ${this.semanticLibrary.revision}`,
+      );
+    }
+  }
+
+  private semanticRootFor(location: Location): SemanticRootStatus | undefined {
+    const matching = this.semanticLibrary.roots
+      .filter(
+        (root) =>
+          root.location.providerId === location.providerId &&
+          (root.location.uri === location.uri ||
+            (root.recursive && semanticLocationContains(root.location, location))),
+      )
+      .sort((left, right) => left.location.uri.length - right.location.uri.length);
+    const root = matching.at(-1);
+    if (
+      root?.exclusions.some((exclusion) =>
+        semanticLocationContains(exclusion.location, location),
+      ) === true
+    ) {
+      throw new MockClientError('alreadyExcluded', 'The folder is already excluded');
+    }
+    return root;
+  }
+
+  private advanceSemanticLibraryRevision(): void {
+    this.semanticLibrary.revision += 1;
+    this.semanticEnrolmentPreviews.clear();
+    this.semanticExclusionPlans.clear();
+  }
+
+  private requireSemanticAvailable(): void {
+    if (this.semanticStatus.lifecycle.state === 'unavailable') {
+      throw new MockClientError('unavailable', 'Semantic components are unavailable');
+    }
+  }
+
+  private requireSemanticLifecycle(expected: SemanticComponentLifecycle['state']): void {
+    this.requireSemanticAvailable();
+    if (this.semanticStatus.lifecycle.state !== expected) {
+      throw new MockClientError(
+        'invalidLifecycle',
+        `Expected semantic lifecycle ${expected}, got ${this.semanticStatus.lifecycle.state}`,
+      );
+    }
+  }
+
+  private createSemanticMigrationPlan(
+    profile: SemanticProfile,
+    identity: SemanticModelIdentity,
+    estimate: SemanticModelMigrationPlan['estimate'],
+  ): SemanticModelMigrationPlan {
+    this.semanticMigrationSequence += 1;
+    const plan: SemanticModelMigrationPlan = {
+      migrationId: `mock-migration-${this.semanticMigrationSequence}`,
+      from: this.semanticStatus.activeModel ?? null,
+      target: { profile, identity },
+      estimate: structuredClone(estimate),
+      reason: { reason: 'modelChanged' },
+      fullReindex: true,
+      requiresConfirmation: true,
+      resumable: true,
+    };
+    this.semanticMigrationPlans.set(plan.migrationId, plan);
+    return structuredClone(plan);
+  }
+
+  private semanticMigrationPlan(migrationId: string): SemanticModelMigrationPlan {
+    const plan = this.semanticMigrationPlans.get(migrationId);
+    if (plan === undefined) {
+      throw new MockClientError('invalidMigrationPlan', 'The migration plan is no longer valid');
+    }
+    return plan;
   }
 
   private async perform<T>(

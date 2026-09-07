@@ -1,8 +1,10 @@
 //! The `FileManagerService` facade (specification §7).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use fm_archive::ArchiveFileSystemProvider;
 use fm_checksum::{ChecksumEngine, ChecksumResultsStore, DuplicateResultsStore};
@@ -24,21 +26,26 @@ use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, ChecksumFileDto, ChecksumPageDto, ComparisonPageDto,
-    ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DirectorySnapshotDto,
+    ConflictResolutionDto, ConnectionDto, CreateConnectionRequestDto, DeleteLlmProfileRequestDto,
+    DeleteRagConversationRequestDto, DirectorySnapshotDto,
     DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
-    FinderTagsDto, GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, InvokeActionRequestDto, ListDirectoryRequest, NavigateRequest,
-    OperationDto, PluginDescriptorDto, PluginLogEntryDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
-    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, RuntimeKindDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto,
-    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
-    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
-    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
-    StartSearchResponseDto, SyncPlanDto, UpdateConnectionRequestDto, VerificationReportDto,
-    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
+    GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
+    InvokeActionRequestDto, ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto,
+    LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest, OperationDto,
+    PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto, RagScopeDto,
+    RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
+    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
+    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
+    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
+    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
+    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto,
+    UpdateConnectionRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
@@ -51,21 +58,71 @@ use crate::checksum_coordinator::ChecksumCoordinator;
 use crate::connection_facade::ConnectionFacade;
 use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
+use crate::document_conversion::DocumentConversionService;
+use crate::document_summary::{
+    DocumentSummaryCapability, DocumentSummaryCoordinator, GenerateDocumentSummary,
+    UnavailableDocumentSummaryCapability,
+};
+use crate::document_summary_mapping::{
+    preview_to_dto, summary_error_to_application, summary_to_dto,
+};
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
+use crate::llm_profile_mapping::{
+    disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
+    profile_to_export_dto, test_result_to_dto,
+};
+use crate::llm_profiles::{LlmHostPolicy, LlmProfileService, ReqwestLlmProbeTransport};
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
 use crate::operation_requests::map_scheduler_error;
 use crate::operations_coordinator::OperationsCoordinator;
 use crate::platform_mapping::{
     self, action_capabilities_for_runtime, discover_system_locations, discover_volumes,
-    map_platform_error, runtime_capabilities_dto, volume_capacity,
+    map_platform_error, runtime_capabilities_dto, runtime_capabilities_dto_with_semantic,
+    volume_capacity,
 };
 use crate::plugin_manager::PluginManager;
 use crate::pptx_preview::PptxPreviewService;
+use crate::rag::{
+    AuthorizedRagRequest, GenerateRagAnswer, RagAnswerEvent, RagConversationStore, RagCoordinator,
+    RagCoverage, RagHistoryTurn, RagRetrievalCapability, RagSourceDisplay, SavedRagConversation,
+    SavedRagTurn, SemanticRagRetrievalCapability, UnavailableRagRetrievalCapability,
+};
+use crate::rag_mapping::{
+    events_to_dto, preview_to_dto as rag_preview_to_dto, rag_error_to_application, saved_to_dto,
+    scope_from_dto,
+};
 use crate::remote_terminal::RemoteTerminalService;
 use crate::search_comparison_coordinator::SearchComparisonCoordinator;
+use crate::semantic::{
+    DocumentIngestion, SemanticCapability, SemanticError, SemanticHealth, SemanticIngestionJob,
+    SemanticJobId, SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope,
+    SemanticSearchResult, SemanticService,
+};
+use crate::semantic_components::{
+    AdministratorProvisionedSemanticComponentCapability, FakeSemanticComponentCapability,
+    RemoveSemanticIndexRequest, SemanticComponentCapabilities, SemanticComponentCapability,
+    SemanticComponentError, SemanticComponentOperation, SemanticComponentService,
+    SemanticComponentStatus, SemanticDataMoveReceipt, SemanticIndexRemovalConfirmation,
+    SemanticIndexRemovalPlan, SemanticIndexRemovalReceipt, SemanticIndexRetentionDecision,
+    SemanticInstallReceipt, SemanticInstallationConsent, SemanticInstallationOffer,
+    SemanticLocalModelImportRequest, SemanticModelMigrationCheckpoint,
+    SemanticModelMigrationConfirmation, SemanticModelMigrationId, SemanticModelMigrationPlan,
+    SemanticModelMigrationProgress, SemanticModelProfile, SemanticModelSelection, SemanticProfile,
+    SemanticReindexEstimate, SemanticUninstallReceipt, SemanticWorkerPatchRequest,
+};
+use crate::semantic_indexing::{
+    SemanticIndexingError, SemanticIndexingReport, SemanticIndexingService,
+};
+use crate::semantic_library::SemanticLibraryComposition;
+use crate::semantic_library::{
+    RagScopeSelection, SemanticAccessContext, SemanticEnrolmentPreview, SemanticExclusionPlan,
+    SemanticFeedCandidate, SemanticFolderContext, SemanticFolderStatus,
+    SemanticLibraryCapabilities, SemanticLibraryError, SemanticLibraryOperation,
+    SemanticLibraryService, SemanticLibraryStatus, SemanticWorkerFeedPlan,
+};
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
@@ -87,11 +144,18 @@ pub struct FileManagerService {
     platform: Arc<dyn PlatformAdapter>,
     workspaces: WorkspaceService<JsonFileWorkspaceRepository>,
     connections: ConnectionFacade,
+    llm_profiles: LlmProfileService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
     editor: FileEditorService,
     docx_preview: DocxPreviewService,
+    document_conversion: DocumentConversionService,
+    document_summaries: DocumentSummaryCoordinator,
+    rag: RagCoordinator,
+    rag_conversation_path: PathBuf,
+    semantic_vocabulary_path: PathBuf,
+    rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
     providers: ProviderRegistry,
@@ -106,6 +170,10 @@ pub struct FileManagerService {
     checksums: ChecksumCoordinator,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
+    semantic: SemanticService,
+    semantic_indexing: SemanticIndexingService,
+    semantic_components: SemanticComponentService,
+    semantic_library: SemanticLibraryComposition,
 }
 
 impl FileManagerService {
@@ -245,6 +313,8 @@ impl FileManagerService {
         search_accelerator: Arc<dyn SearchAcceleration>,
     ) -> Self {
         let settings_directory = settings_directory.into();
+        let rag_conversation_path = settings_directory.join("rag-conversations.json");
+        let semantic_vocabulary_path = settings_directory.join("semantic-vocabularies.json");
         let credential_store: Arc<dyn CredentialStore> =
             Arc::new(SessionCredentialStore::new(credential_store));
         let mut providers = ProviderRegistry::new();
@@ -321,6 +391,44 @@ impl FileManagerService {
             )),
         );
         let settings_store = SettingsStore::new(&settings_directory);
+        let llm_transport = Arc::new(ReqwestLlmProbeTransport::new());
+        let llm_policy = match runtime {
+            RuntimeKindDto::BrowserServer => LlmHostPolicy::server(
+                std::env::var("PROCYON_LLM_ALLOWED_HOSTS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|host| !host.is_empty())
+                    .map(str::to_owned),
+            ),
+            RuntimeKindDto::Tauri | RuntimeKindDto::Mock => LlmHostPolicy::desktop(),
+        };
+        let llm_profiles = LlmProfileService::new(
+            settings_store.clone(),
+            credential_store.clone(),
+            llm_transport.clone(),
+            llm_policy.clone(),
+        )
+        .unwrap_or_else(|_| {
+            events.publish(
+                EventAudience::Global,
+                BackendEventPayload::NotificationCreated {
+                    notification: NotificationPayload {
+                        id: Uuid::new_v4().to_string(),
+                        level: NotificationLevelPayload::Warning,
+                        message:
+                            "LLM profiles could not be read. No generation profiles were loaded."
+                                .to_owned(),
+                    },
+                },
+            );
+            LlmProfileService::empty(
+                settings_store.clone(),
+                credential_store.clone(),
+                llm_transport,
+                llm_policy,
+            )
+        });
         let loaded = settings_store
             .load()
             .unwrap_or_else(|_| fm_settings::LoadOutcome {
@@ -362,8 +470,15 @@ impl FileManagerService {
             events.clone(),
             providers.clone(),
         );
-        let search_comparison =
-            SearchComparisonCoordinator::new(search, comparison, comparison_store, events.clone());
+        let semantic = SemanticService::unavailable();
+        let semantic_indexing = SemanticIndexingService::new(providers.clone());
+        let search_comparison = SearchComparisonCoordinator::new(
+            search,
+            comparison,
+            comparison_store,
+            events.clone(),
+            semantic.clone(),
+        );
         let checksum_store = Arc::new(ChecksumResultsStore::new());
         let duplicate_store = Arc::new(DuplicateResultsStore::new());
         let checksum = ChecksumEngine::new(
@@ -446,11 +561,20 @@ impl FileManagerService {
                 workspace_directory,
             )),
             connections: ConnectionFacade::new(connection_service, ssh_connections),
+            llm_profiles,
             onedrive,
             remote_terminals,
             directories,
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
             docx_preview: DocxPreviewService::new(providers.clone()),
+            document_conversion: DocumentConversionService::new(providers.clone()),
+            document_summaries: DocumentSummaryCoordinator::new(Arc::new(
+                UnavailableDocumentSummaryCapability,
+            )),
+            rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
+            rag_conversation_path,
+            semantic_vocabulary_path,
+            rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             providers,
@@ -470,7 +594,1317 @@ impl FileManagerService {
             checksums,
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
+            semantic,
+            semantic_indexing,
+            semantic_components: match runtime {
+                RuntimeKindDto::BrowserServer => SemanticComponentService::new(Arc::new(
+                    AdministratorProvisionedSemanticComponentCapability::new(
+                        SemanticComponentStatus::absent(None),
+                        Vec::new(),
+                    ),
+                )),
+                RuntimeKindDto::Mock => {
+                    SemanticComponentService::new(Arc::new(FakeSemanticComponentCapability::new()))
+                }
+                // Desktop management is injection-ready, but remains unavailable
+                // until the host supplies an evaluated signed catalog and real adapters.
+                RuntimeKindDto::Tauri => SemanticComponentService::unavailable(),
+            },
+            semantic_library: SemanticLibraryComposition::new(runtime, settings_directory),
         }
+    }
+
+    /// Converts one document into normalized structural units for semantic
+    /// retrieval (task 0180).
+    ///
+    /// Thin delegation to the conversion service: there is deliberately no
+    /// HTTP route or Tauri command behind this yet. Ingestion decides what to
+    /// convert and what to do with the result (task 0182).
+    pub async fn convert_document_for_semantics(
+        &self,
+        location: fm_domain::Location,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<fm_semantic_conversion::ConversionOutcome, ApplicationError> {
+        self.document_conversion
+            .convert(location, cancellation)
+            .await
+    }
+
+    /// Reports semantic-library authority and the operations this caller may
+    /// perform, without touching storage.
+    pub async fn semantic_library_capabilities(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> SemanticLibraryCapabilities {
+        self.semantic_library().await.capabilities(access)
+    }
+
+    /// Lists device-local vocabularies after applying the semantic-library authority check.
+    pub async fn list_semantic_vocabularies(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> Result<Vec<fm_transport_dto::SemanticVocabularyDto>, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .list()
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+                    .collect()
+            })
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Imports one validated deterministic SKOS JSON source.
+    pub async fn import_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ImportSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .import(&request.skos_json)
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Exports the authoritative source and accepted edits without derived annotations.
+    pub async fn export_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        vocabulary_id: &str,
+    ) -> Result<fm_transport_dto::ExportSemanticVocabularyResponseDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        let vocabulary =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+                .get(vocabulary_id)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        Ok(fm_transport_dto::ExportSemanticVocabularyResponseDto {
+            skos_json: crate::semantic_vocabulary::export_skos_json(&vocabulary)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?,
+        })
+    }
+
+    /// Attaches a vocabulary only to roots/workspaces already authorized for this caller.
+    pub async fn attach_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::AttachSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        let status = self
+            .semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        if request
+            .root_id
+            .as_ref()
+            .is_some_and(|root_id| !status.roots.iter().any(|root| root.id == *root_id))
+            || request.workspace_id.as_ref().is_some_and(|workspace_id| {
+                !status.roots.iter().any(|root| {
+                    root.workspace_references
+                        .iter()
+                        .any(|id| id.to_string() == *workspace_id)
+                })
+            })
+        {
+            return Err(ApplicationError::PermissionDenied);
+        }
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .update(&request.vocabulary_id, |vocabulary| {
+                vocabulary.attach(request.workspace_id, request.root_id)
+            })
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Applies an explicit accept/edit/reject decision to a review-only candidate.
+    pub async fn review_semantic_concept_candidate(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ReviewConceptCandidateRequestDto,
+    ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        use fm_transport_dto::ReviewConceptCandidateActionDto;
+        let decision = match request.action {
+            ReviewConceptCandidateActionDto::Accept => {
+                crate::semantic_vocabulary::ReviewDecision::Accept
+            }
+            ReviewConceptCandidateActionDto::Reject => {
+                crate::semantic_vocabulary::ReviewDecision::Reject
+            }
+            ReviewConceptCandidateActionDto::Edit => {
+                crate::semantic_vocabulary::ReviewDecision::AcceptEdited {
+                    concept_uri: request.concept_uri.ok_or_else(|| {
+                        ApplicationError::InvalidRequest("concept URI is required".into())
+                    })?,
+                    pref_label: request.preferred_label.ok_or_else(|| {
+                        ApplicationError::InvalidRequest("preferred label is required".into())
+                    })?,
+                }
+            }
+        };
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .update(&request.vocabulary_id, |vocabulary| {
+                vocabulary.review_candidate(&request.candidate_id, decision)
+            })
+            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+    }
+
+    /// Previews or confirms vocabulary deletion, reporting every affected attachment.
+    pub async fn delete_semantic_vocabulary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::DeleteSemanticVocabularyRequestDto,
+    ) -> Result<fm_transport_dto::DeleteSemanticVocabularyImpactDto, ApplicationError> {
+        self.semantic_library()
+            .await
+            .status(access)
+            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+        let store =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        let vocabulary = store
+            .get(&request.vocabulary_id)
+            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        let requires_confirmation =
+            !vocabulary.workspace_ids.is_empty() || !vocabulary.root_ids.is_empty();
+        let impact = fm_transport_dto::DeleteSemanticVocabularyImpactDto {
+            vocabulary_id: request.vocabulary_id.clone(),
+            affected_workspace_ids: vocabulary.workspace_ids.iter().cloned().collect(),
+            affected_root_ids: vocabulary.root_ids.iter().cloned().collect(),
+            requires_confirmation,
+            deleted: request.confirm_affected || !requires_confirmation,
+        };
+        if impact.deleted {
+            store
+                .delete(&request.vocabulary_id)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        }
+        Ok(impact)
+    }
+
+    pub(crate) async fn ensure_semantic_library_operation(
+        &self,
+        access: &SemanticAccessContext,
+        operation: SemanticLibraryOperation,
+    ) -> Result<(), SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .ensure_operation_allowed(access, operation)
+    }
+
+    /// Reports the safe semantic-library policy/catalog/state projection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, lock, or persistence failure.
+    pub async fn semantic_library_status(
+        &self,
+        access: &SemanticAccessContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let mut status = self.semantic_library().await.status(access)?;
+        for root in &mut status.roots {
+            if let Ok(root_id) = root.id.parse() {
+                root.ocr_required_files = self.semantic_indexing.ocr_required_files(root_id);
+            }
+        }
+        Ok(status)
+    }
+
+    /// Replaces the composed default with an explicitly configured library
+    /// service.
+    #[must_use]
+    pub fn with_semantic_library_service(
+        mut self,
+        semantic_library: SemanticLibraryService,
+    ) -> Self {
+        self.semantic_library = SemanticLibraryComposition::fixed(semantic_library);
+        self
+    }
+
+    /// Resolves the composed semantic-library capability.
+    ///
+    /// Desktop composition is deferred: a device-local library only exists once
+    /// managed components (task 0178) report an installed data root and an
+    /// active model, because only then are its roots and immutable embedding
+    /// identity known backend-authoritatively. Until then the capability is
+    /// explicitly unavailable rather than rooted at an invented path.
+    async fn semantic_library(&self) -> Arc<SemanticLibraryService> {
+        self.semantic_library
+            .resolve(&self.semantic_components)
+            .await
+    }
+
+    /// Reports effective consent for the verified active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_folder_status(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticFolderStatus, SemanticLibraryError> {
+        let status = self
+            .semantic_library()
+            .await
+            .folder_status(access, &context)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        Ok(status)
+    }
+
+    /// Creates an enrolment disclosure for the verified active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_preview_enrolment(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.preview_enrolment(access, context, recursive)
+    }
+
+    /// Confirms one live enrolment disclosure for the still-active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, stale-revision,
+    /// stale-confirmation, lock, or persistence failure.
+    pub async fn semantic_library_confirm_enrolment(
+        &self,
+        access: &SemanticAccessContext,
+        confirmation_id: &str,
+        expected_revision: u64,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::Enrol)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.confirm_enrolment(access, confirmation_id, expected_revision, &context)
+    }
+
+    /// Creates an authoritative destructive exclusion plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, consent-state,
+    /// stale-revision, lock, or persistence failure.
+    pub async fn semantic_library_plan_exclusion(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        expected_revision: u64,
+    ) -> Result<SemanticExclusionPlan, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::PlanExclusion)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.plan_exclusion(access, context, expected_revision)
+    }
+
+    /// Confirms one exclusion plan for the still-active folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, stale-revision,
+    /// stale-confirmation, lock, or persistence failure.
+    pub async fn semantic_library_confirm_exclusion(
+        &self,
+        access: &SemanticAccessContext,
+        confirmation_id: &str,
+        expected_revision: u64,
+        context: SemanticFolderContext,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::ConfirmExclusion)?;
+        self.ensure_active_semantic_folder(&context).await?;
+        library.confirm_exclusion(access, confirmation_id, expected_revision, &context)
+    }
+
+    /// Resumes one authoritative cleanup plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, not-found, stale-revision, lock,
+    /// or persistence failure.
+    pub async fn semantic_library_resume_cleanup(
+        &self,
+        access: &SemanticAccessContext,
+        plan_id: fm_semantic_library::DeletionPlanId,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .resume_cleanup(access, plan_id, expected_revision)
+    }
+
+    /// Pauses ingestion while preserving consent and indexed data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, stale-revision, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_pause(
+        &self,
+        access: &SemanticAccessContext,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .pause(access, expected_revision)
+    }
+
+    /// Resumes semantic ingestion.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, stale-revision, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_resume(
+        &self,
+        access: &SemanticAccessContext,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .resume(access, expected_revision)
+    }
+
+    /// Replaces fixed, safe eligibility overrides for an attached root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, unsafe-override,
+    /// not-found, stale-revision, lock, or persistence failure.
+    pub async fn semantic_library_update_eligibility_overrides(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        workspace_id: fm_domain::WorkspaceId,
+        expected_revision: u64,
+        overrides: std::collections::BTreeMap<
+            fm_semantic_library::EligibilityReason,
+            fm_semantic_library::EligibilityOverride,
+        >,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(
+            access,
+            SemanticLibraryOperation::UpdateEligibilityOverrides,
+        )?;
+        self.workspaces
+            .load(workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        library.update_eligibility_overrides(
+            access,
+            root_id,
+            workspace_id,
+            expected_revision,
+            overrides,
+        )
+    }
+
+    /// Records that an enrolled semantic root is temporarily unreachable.
+    ///
+    /// This is an internal reconciliation capability for watchers and the
+    /// incremental ingestion scheduler of task 0182, not a user mutation:
+    /// consent and every indexed generation survive untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, not-found, lock, or persistence failure.
+    pub async fn semantic_library_mark_root_unavailable(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        reason: fm_semantic_library::RootUnavailabilityReason,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .mark_root_unavailable(access, root_id, reason)
+    }
+
+    /// Applies provider observations to an enrolled semantic root, following a
+    /// move and restoring availability only when stable identity proves it.
+    ///
+    /// This is the only way a quarantined root becomes available again. The
+    /// observations must come from a provider capability that exposes a
+    /// verified stable entry and volume identity; an observation without one
+    /// leaves the root exactly as unavailable as it was.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, lock, or persistence failure.
+    pub async fn semantic_library_observe_root_identity(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        observations: &[fm_semantic_library::ObservedRootIdentity],
+    ) -> Result<fm_semantic_library::RootMoveResolution, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .observe_root_identity(access, root_id, observations)
+    }
+
+    /// Commits one complete successful reconciliation of a semantic root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, lock, or persistence failure.
+    pub async fn semantic_library_complete_reconciliation(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        observed_occurrences: &std::collections::BTreeSet<fm_semantic_library::OccurrenceId>,
+    ) -> Result<u64, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .complete_reconciliation(access, root_id, observed_occurrences)
+    }
+
+    /// Returns provider-neutral worker feed decisions and curated eligibility
+    /// verdicts for host-enumerated candidates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authorization, invalid-request, not-found, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_worker_feed_plan(
+        &self,
+        access: &SemanticAccessContext,
+        candidates: &[SemanticFeedCandidate],
+    ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        self.semantic_library()
+            .await
+            .worker_feed_plan(access, candidates)
+    }
+
+    /// Records that an enrolled semantic root could not be reached at its own
+    /// location.
+    ///
+    /// This direction is safe without identity proof because it only ever
+    /// *reduces* what the library will do: consent, evidence, and generations
+    /// survive, ingestion stops, and source links show as unavailable. The
+    /// opposite direction is not symmetric and is deliberately absent —
+    /// restoring availability requires
+    /// [`semantic_library_observe_root_identity`](Self::semantic_library_observe_root_identity)
+    /// and a provider-verified stable identity, because a readable path is not
+    /// proof that it is still the same directory.
+    ///
+    /// Absence is never deletion — only
+    /// [`semantic_library_complete_reconciliation`](Self::semantic_library_complete_reconciliation)
+    /// may remove missing documents. Scheduling a periodic identity-proving
+    /// crawl at the policy cadence remains task 0182's responsibility.
+    pub async fn semantic_library_quarantine_unreachable_root(
+        &self,
+        location: &fm_domain::Location,
+    ) {
+        let library = self.semantic_library().await;
+        let access = SemanticAccessContext::Host;
+        let Ok(Some(root_id)) = library.enrolled_root_at(&access, location) else {
+            return;
+        };
+        let _ = library.mark_root_unavailable(
+            &access,
+            root_id,
+            fm_semantic_library::RootUnavailabilityReason::Missing,
+        );
+    }
+
+    async fn ensure_active_semantic_folder(
+        &self,
+        context: &SemanticFolderContext,
+    ) -> Result<(), SemanticLibraryError> {
+        let workspace = self
+            .workspaces
+            .load(context.workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        let active = workspace
+            .panes
+            .iter()
+            .find(|pane| pane.id == workspace.active_pane_id)
+            .and_then(|pane| pane.tabs.iter().find(|tab| tab.id == pane.active_tab_id))
+            .map(|tab| &tab.location);
+        if active == Some(&context.location) {
+            Ok(())
+        } else {
+            Err(SemanticLibraryError::WorkspaceRequired)
+        }
+    }
+
+    /// Reports semantic component authority and lifecycle operations.
+    pub async fn semantic_component_capabilities(&self) -> SemanticComponentCapabilities {
+        if self.runtime == RuntimeKindDto::BrowserServer {
+            return SemanticComponentCapabilities::administrator_provisioned();
+        }
+        self.semantic_components.capabilities().await
+    }
+
+    /// Reports semantic component lifecycle and disk-use state.
+    pub async fn semantic_component_status(
+        &self,
+    ) -> Result<SemanticComponentStatus, SemanticComponentError> {
+        self.semantic_components.status().await
+    }
+
+    /// Replaces the inert default with a host-provided component capability.
+    #[must_use]
+    pub fn with_semantic_component_capability(
+        mut self,
+        capability: Arc<dyn SemanticComponentCapability>,
+    ) -> Self {
+        self.semantic_components = SemanticComponentService::new(capability);
+        self
+    }
+
+    /// Returns catalog-backed profiles and exact model revisions.
+    pub async fn semantic_component_catalog_profiles(
+        &self,
+    ) -> Result<Vec<SemanticModelProfile>, SemanticComponentError> {
+        self.semantic_components.catalog_profiles().await
+    }
+
+    /// Creates a complete component installation disclosure.
+    pub async fn semantic_component_installation_offer(
+        &self,
+        profile: SemanticProfile,
+    ) -> Result<SemanticInstallationOffer, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CreateInstallationOffer,
+        )?;
+        self.semantic_components.installation_offer(profile).await
+    }
+
+    /// Installs or enables exactly one explicitly accepted offer.
+    pub async fn semantic_component_install_or_enable(
+        &self,
+        consent: SemanticInstallationConsent,
+    ) -> Result<SemanticInstallReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::InstallOrEnable)?;
+        self.semantic_components.install_or_enable(consent).await
+    }
+
+    /// Applies the newest compatible signed worker patch, if available.
+    pub async fn semantic_component_install_compatible_worker_patch(
+        &self,
+        request: SemanticWorkerPatchRequest,
+    ) -> Result<Option<SemanticInstallReceipt>, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::InstallWorkerPatch)?;
+        self.semantic_components
+            .install_compatible_worker_patch(request)
+            .await
+    }
+
+    /// Pauses semantic indexing without uninstalling components.
+    pub async fn semantic_component_pause_indexing(&self) -> Result<(), SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::PauseIndexing)?;
+        self.semantic_components.pause_indexing().await
+    }
+
+    /// Resumes explicitly paused semantic indexing.
+    pub async fn semantic_component_resume_indexing(&self) -> Result<(), SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ResumeIndexing)?;
+        self.semantic_components.resume_indexing().await
+    }
+
+    /// Removes every record derived from one semantic enrolment.
+    pub async fn semantic_component_remove_index(
+        &self,
+        request: RemoveSemanticIndexRequest,
+    ) -> Result<SemanticIndexRemovalReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components.remove_index(request).await
+    }
+
+    /// Inventories enrolment-derived data and returns an opaque confirmation plan.
+    pub async fn semantic_component_plan_index_removal(
+        &self,
+        enrolment_id: String,
+    ) -> Result<SemanticIndexRemovalPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components
+            .plan_index_removal(enrolment_id)
+            .await
+    }
+
+    /// Confirms one live authoritative enrolment-removal plan.
+    pub async fn semantic_component_confirm_index_removal(
+        &self,
+        confirmation: SemanticIndexRemovalConfirmation,
+    ) -> Result<SemanticIndexRemovalReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::RemoveIndex)?;
+        self.semantic_components
+            .confirm_index_removal(confirmation)
+            .await
+    }
+
+    /// Moves semantic data through pause-copy-verify-switch.
+    pub async fn semantic_component_move_data(
+        &self,
+        destination: PathBuf,
+    ) -> Result<SemanticDataMoveReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::MoveData)?;
+        self.semantic_components.move_data(destination).await
+    }
+
+    /// Uninstalls semantic components using an explicit index decision.
+    pub async fn semantic_component_uninstall(
+        &self,
+        index_decision: SemanticIndexRetentionDecision,
+    ) -> Result<SemanticUninstallReceipt, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::UninstallComponents)?;
+        self.semantic_components
+            .uninstall_components(index_decision)
+            .await
+    }
+
+    /// Validates an expert local model and returns a confirmation-gated migration.
+    pub async fn semantic_component_import_local_model(
+        &self,
+        request: SemanticLocalModelImportRequest,
+        profile: SemanticProfile,
+        estimate: SemanticReindexEstimate,
+    ) -> Result<SemanticModelMigrationPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ImportLocalModel)?;
+        self.semantic_components
+            .import_local_model(request, profile, estimate)
+            .await
+    }
+
+    /// Plans migration to a signed catalog model resolution.
+    pub async fn semantic_component_plan_model_migration(
+        &self,
+        profile: SemanticProfile,
+        estimate: SemanticReindexEstimate,
+    ) -> Result<SemanticModelMigrationPlan, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::PlanModelMigration)?;
+        self.semantic_components
+            .plan_model_migration(profile, estimate)
+            .await
+    }
+
+    /// Confirms and begins a model migration.
+    pub async fn semantic_component_confirm_model_migration(
+        &self,
+        confirmation: SemanticModelMigrationConfirmation,
+    ) -> Result<SemanticModelMigrationProgress, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(SemanticComponentOperation::ConfirmModelMigration)?;
+        self.semantic_components
+            .confirm_model_migration(confirmation)
+            .await
+    }
+
+    /// Persists a resumable model migration checkpoint.
+    pub async fn semantic_component_checkpoint_model_migration(
+        &self,
+        checkpoint: SemanticModelMigrationCheckpoint,
+    ) -> Result<SemanticModelMigrationProgress, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CheckpointModelMigration,
+        )?;
+        self.semantic_components
+            .checkpoint_model_migration(checkpoint)
+            .await
+    }
+
+    /// Activates a fully reindexed model migration target.
+    pub async fn semantic_component_complete_model_migration(
+        &self,
+        migration_id: SemanticModelMigrationId,
+    ) -> Result<SemanticModelSelection, SemanticComponentError> {
+        self.ensure_semantic_component_mutation(
+            SemanticComponentOperation::CompleteModelMigration,
+        )?;
+        self.semantic_components
+            .complete_model_migration(migration_id)
+            .await
+    }
+
+    fn ensure_semantic_component_mutation(
+        &self,
+        operation: SemanticComponentOperation,
+    ) -> Result<(), SemanticComponentError> {
+        if self.runtime == RuntimeKindDto::BrowserServer {
+            return Err(SemanticComponentError::AuthorityDenied {
+                authority:
+                    crate::semantic_components::SemanticComponentAuthority::AdministratorProvisioned,
+                operation,
+            });
+        }
+        Ok(())
+    }
+
+    /// Reports the optional semantic capability's current health.
+    pub async fn semantic_health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.semantic.health().await
+    }
+
+    /// Replaces the unavailable default with a host-provided semantic capability.
+    #[must_use]
+    pub fn with_semantic_capability(mut self, capability: Arc<dyn SemanticCapability>) -> Self {
+        let semantic = SemanticService::new(capability);
+        self.search_comparison.set_semantic(semantic.clone());
+        self.semantic_indexing.set_semantic(semantic.clone());
+        self.rag = RagCoordinator::new(Arc::new(SemanticRagRetrievalCapability::new(
+            semantic.clone(),
+        )));
+        self.semantic = semantic;
+        self
+    }
+
+    /// Reconciles one explicitly enrolled root into the active semantic worker.
+    ///
+    /// This is opt-in application orchestration for a trusted host command. It
+    /// is never triggered by ordinary HTTP or library-enrolment methods.
+    pub async fn semantic_reconcile_enrolled_root(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
+        self.semantic_indexing
+            .reconcile(self.semantic_library().await, access, root_id, cancellation)
+            .await
+    }
+
+    /// Reconciles every available enrolled root into the active semantic worker.
+    ///
+    /// Trusted hosts invoke this at startup so interrupted or previously failed
+    /// enrolment work is repaired without requiring the user to enrol again.
+    pub async fn semantic_reconcile_all_enrolled_roots(
+        &self,
+        access: &SemanticAccessContext,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        crate::semantic_model_change::reconcile_enrolled_roots(
+            &self.semantic_indexing,
+            self.semantic_library().await,
+            access,
+            cancellation,
+            None,
+        )
+        .await
+    }
+
+    /// Rebuilds every enrolled root's index after the active model changed.
+    ///
+    /// This is opt-in application orchestration for a trusted host command,
+    /// invoked once model activation is already durable. It is never triggered
+    /// by ordinary HTTP or library-enrolment methods. A failed pass is
+    /// reported, never rolled back into consent or model state.
+    pub async fn semantic_reindex_after_model_change(
+        &self,
+        access: &SemanticAccessContext,
+        grace: Duration,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        crate::semantic_model_change::reindex_after_model_change(
+            &self.semantic,
+            &self.semantic_indexing,
+            self.semantic_library().await,
+            access,
+            grace,
+            cancellation,
+        )
+        .await
+    }
+
+    /// Replaces the unavailable default with a worker-backed summary capability.
+    #[must_use]
+    pub fn with_document_summary_capability(
+        mut self,
+        capability: Arc<dyn DocumentSummaryCapability>,
+    ) -> Self {
+        self.document_summaries = DocumentSummaryCoordinator::new(capability);
+        self
+    }
+
+    /// Replaces the unavailable default with a worker-backed Ask retriever.
+    #[must_use]
+    pub fn with_rag_retrieval_capability(
+        mut self,
+        capability: Arc<dyn RagRetrievalCapability>,
+    ) -> Self {
+        self.rag = RagCoordinator::new(capability);
+        self
+    }
+
+    /// Prepares bounded key passages and the disclosure required before generation.
+    pub async fn preview_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::PreviewDocumentSummaryRequestDto,
+    ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, request.input_token_budget)
+            .await?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        self.document_summaries
+            .preview(
+                worker_request,
+                request.profile_id,
+                &self.llm_profiles,
+                &cancellation,
+            )
+            .await
+            .map(preview_to_dto)
+            .map_err(summary_error_to_application)
+    }
+
+    /// Generates and publishes a summary after revalidating the preview fingerprint.
+    pub async fn generate_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GenerateDocumentSummaryRequestDto,
+    ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, request.input_token_budget)
+            .await?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        self.document_summaries
+            .generate(
+                GenerateDocumentSummary {
+                    request: worker_request,
+                    expected_selection_fingerprint: request.expected_selection_fingerprint,
+                    profile_id: request.profile_id,
+                },
+                &self.llm_profiles,
+                &cancellation,
+            )
+            .await
+            .map(|summary| summary_to_dto(summary, false))
+            .map_err(summary_error_to_application)
+    }
+
+    /// Returns the current generated summary, including stale-source state.
+    pub async fn get_document_summary(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GetDocumentSummaryRequestDto,
+    ) -> Result<Option<fm_transport_dto::DocumentSummaryDto>, ApplicationError> {
+        let worker_request = self
+            .resolve_document_summary_request(access, request.target, 1)
+            .await?;
+        self.document_summaries
+            .current(&worker_request)
+            .await
+            .map(|summary| summary.map(|(stored, stale)| summary_to_dto(stored, stale)))
+            .map_err(summary_error_to_application)
+    }
+
+    async fn resolve_document_summary_request(
+        &self,
+        access: &SemanticAccessContext,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+    ) -> Result<fm_semantic_worker::document_summary::PrepareDocumentSummary, ApplicationError>
+    {
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
+            return Err(ApplicationError::InvalidRequest(
+                "summary input token budget is outside the supported range".into(),
+            ));
+        }
+        let library = self.semantic_library().await;
+        let resolved = library
+            .resolve_summary_document(
+                access,
+                target.workspace_id.into(),
+                target.entry_id.into(),
+                &target.location.into(),
+            )
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                SemanticLibraryError::NotFound | SemanticLibraryError::NotEnrolled => {
+                    ApplicationError::NotFound
+                }
+                _ => ApplicationError::Internal,
+            })?
+            .ok_or(ApplicationError::NotFound)?;
+        Ok(
+            fm_semantic_worker::document_summary::PrepareDocumentSummary {
+                tenant_id: resolved.tenant_id,
+                library_id: resolved.library_id,
+                document_id: resolved.document_id,
+                input_token_budget: usize::try_from(input_token_budget)
+                    .map_err(|_| ApplicationError::InvalidRequest("invalid token budget".into()))?,
+            },
+        )
+    }
+
+    /// Retrieves inspectable evidence before any generation request.
+    pub async fn preview_rag(
+        &self,
+        access: &SemanticAccessContext,
+        request: PreviewRagRequestDto,
+    ) -> Result<RagPreviewDto, ApplicationError> {
+        let scope = request.scope.clone();
+        let authorized = self
+            .resolve_rag_request(access, request.question, &scope)
+            .await?;
+        self.rag
+            .preview(
+                authorized,
+                request.profile_id,
+                &self.llm_profiles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .map(|preview| rag_preview_to_dto(preview, scope))
+            .map_err(rag_error_to_application)
+    }
+
+    /// Generates one read-only answer after revalidating inspected evidence.
+    pub async fn generate_rag_answer(
+        &self,
+        access: &SemanticAccessContext,
+        request: GenerateRagAnswerRequestDto,
+    ) -> Result<GenerateRagAnswerResponseDto, ApplicationError> {
+        let scope = request.scope.clone();
+        let authorized = self
+            .resolve_rag_request(access, request.question.clone(), &scope)
+            .await?;
+        let tenant_id = authorized.retrieval.filters.tenant_id.clone();
+        let internal_scope = authorized.scope.clone();
+        let conversation_id = request.conversation_id.unwrap_or_else(Uuid::new_v4);
+        let existing = self
+            .rag_ephemeral
+            .lock()
+            .map_err(|_| ApplicationError::Internal)?
+            .get(&conversation_id)
+            .cloned();
+        let history = if let Some(conversation) = &existing {
+            if conversation.tenant_id != tenant_id {
+                return Err(ApplicationError::PermissionDenied);
+            }
+            if conversation.profile_id != request.profile_id
+                || conversation.scope != internal_scope
+                || conversation.model_knowledge_allowed != request.allow_model_knowledge
+            {
+                return Err(ApplicationError::InvalidRequest(
+                    "conversation profile, scope, and knowledge mode cannot change".into(),
+                ));
+            }
+            conversation
+                .turns
+                .iter()
+                .map(|turn| RagHistoryTurn {
+                    question: turn.question.clone(),
+                    answer: turn.answer.text.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let events = self
+            .rag
+            .generate(
+                GenerateRagAnswer {
+                    authorized,
+                    expected_retrieval_fingerprint: request.expected_retrieval_fingerprint,
+                    profile_id: request.profile_id,
+                    allow_model_knowledge: request.allow_model_knowledge,
+                    history,
+                },
+                &self.llm_profiles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .map_err(rag_error_to_application)?;
+        let answer = events.iter().find_map(|event| match event {
+            RagAnswerEvent::Done { answer } => Some(answer.clone()),
+            RagAnswerEvent::Retrieval { .. } | RagAnswerEvent::Token { .. } => None,
+        });
+        if let Some(answer) = answer {
+            let mut conversation = existing.unwrap_or(SavedRagConversation {
+                id: conversation_id,
+                tenant_id,
+                profile_id: request.profile_id,
+                scope: internal_scope,
+                model_knowledge_allowed: request.allow_model_knowledge,
+                turns: Vec::new(),
+                storage_bytes: 0,
+            });
+            conversation.turns.push(SavedRagTurn {
+                question: request.question,
+                answer,
+            });
+            self.rag_ephemeral
+                .lock()
+                .map_err(|_| ApplicationError::Internal)?
+                .insert(conversation_id, conversation);
+        }
+        Ok(GenerateRagAnswerResponseDto {
+            conversation_id,
+            events: events_to_dto(events, &scope),
+        })
+    }
+
+    /// Persists an explicitly saved, server-authored conversation.
+    pub fn save_rag_conversation(
+        &self,
+        access: &SemanticAccessContext,
+        request: SaveRagConversationRequestDto,
+    ) -> Result<SavedRagConversationDto, ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        let conversation = self
+            .rag_ephemeral
+            .lock()
+            .map_err(|_| ApplicationError::Internal)?
+            .get(&request.conversation_id)
+            .filter(|conversation| conversation.tenant_id == tenant_id)
+            .cloned()
+            .ok_or(ApplicationError::NotFound)?;
+        let store = RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?;
+        store
+            .save(conversation)
+            .map(|saved| saved_to_dto(saved, request.workspace_id))
+            .map_err(rag_error_to_application)
+    }
+
+    /// Lists explicitly saved conversations inside the caller's tenant.
+    pub fn list_saved_rag_conversations(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<SavedRagConversationDto>, ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?
+            .list(&tenant_id)
+            .map(|saved| {
+                saved
+                    .into_iter()
+                    .map(|conversation| saved_to_dto(conversation, workspace_id))
+                    .collect()
+            })
+            .map_err(rag_error_to_application)
+    }
+
+    /// Deletes one caller-owned saved conversation.
+    pub fn delete_rag_conversation(
+        &self,
+        access: &SemanticAccessContext,
+        request: DeleteRagConversationRequestDto,
+    ) -> Result<(), ApplicationError> {
+        let tenant_id = access
+            .tenant_id()
+            .map_err(|_| ApplicationError::PermissionDenied)?;
+        let removed = RagConversationStore::open(&self.rag_conversation_path)
+            .map_err(rag_error_to_application)?
+            .delete(&tenant_id, request.conversation_id)
+            .map_err(rag_error_to_application)?;
+        if removed {
+            Ok(())
+        } else {
+            Err(ApplicationError::NotFound)
+        }
+    }
+
+    /// Resolves a citation against current workspace authorization and availability.
+    pub async fn resolve_rag_citation(
+        &self,
+        access: &SemanticAccessContext,
+        request: ResolveRagCitationRequestDto,
+    ) -> Result<ResolvedRagCitationDto, ApplicationError> {
+        let occurrence = self
+            .semantic_library()
+            .await
+            .resolve_occurrence(access, request.workspace_id.into(), &request.source_id)
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                _ => ApplicationError::InvalidRequest(error.to_string()),
+            })?
+            .ok_or(ApplicationError::NotFound)?;
+        Ok(ResolvedRagCitationDto {
+            entry_id: occurrence.entry_id.into_inner(),
+            location: occurrence.location.into(),
+            available: occurrence.available,
+        })
+    }
+
+    async fn resolve_rag_request(
+        &self,
+        access: &SemanticAccessContext,
+        question: String,
+        scope: &RagScopeDto,
+    ) -> Result<AuthorizedRagRequest, ApplicationError> {
+        let selection = match scope.kind {
+            RagScopeKindDto::EntireLibrary => RagScopeSelection::EntireLibrary,
+            RagScopeKindDto::SelectedFiles => {
+                if scope.selected_files.is_empty()
+                    || scope
+                        .selected_files
+                        .iter()
+                        .any(|target| target.workspace_id != scope.workspace_id)
+                {
+                    return Err(ApplicationError::InvalidRequest(
+                        "selected-file Ask scope is invalid".into(),
+                    ));
+                }
+                RagScopeSelection::SelectedFiles(
+                    scope
+                        .selected_files
+                        .iter()
+                        .map(|target| (target.entry_id.into(), target.location.clone().into()))
+                        .collect(),
+                )
+            }
+            RagScopeKindDto::CurrentFolder => RagScopeSelection::CurrentFolder(
+                scope
+                    .folder
+                    .clone()
+                    .ok_or_else(|| {
+                        ApplicationError::InvalidRequest(
+                            "current-folder Ask scope requires a folder".into(),
+                        )
+                    })?
+                    .into(),
+            ),
+            RagScopeKindDto::SemanticResults => {
+                if scope.semantic_source_ids.is_empty() {
+                    return Err(ApplicationError::InvalidRequest(
+                        "semantic-result Ask scope is empty".into(),
+                    ));
+                }
+                RagScopeSelection::SemanticResults(scope.semantic_source_ids.clone())
+            }
+            RagScopeKindDto::EnrolledRoots => {
+                if scope.enrolled_root_ids.is_empty() {
+                    return Err(ApplicationError::InvalidRequest(
+                        "enrolled-root Ask scope is empty".into(),
+                    ));
+                }
+                RagScopeSelection::EnrolledRoots(
+                    scope
+                        .enrolled_root_ids
+                        .iter()
+                        .map(|value| crate::semantic_library::parse_semantic_root_id(value))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| ApplicationError::InvalidRequest("invalid root id".into()))?,
+                )
+            }
+        };
+        let resolved = self
+            .semantic_library()
+            .await
+            .resolve_rag_scope(
+                access,
+                scope.workspace_id.into(),
+                &selection,
+                question.clone(),
+                fm_semantic_worker::rag_retrieval::RagRetrievalPolicy::default_ask(),
+            )
+            .map_err(|error| match error {
+                SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
+                SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
+                _ => ApplicationError::InvalidRequest(error.to_string()),
+            })?;
+        if resolved
+            .retrieval
+            .source_restriction
+            .allowed_source_ids
+            .is_empty()
+        {
+            return Err(ApplicationError::NotFound);
+        }
+        let indexed = resolved.eligible.saturating_sub(resolved.unavailable);
+        Ok(AuthorizedRagRequest {
+            question,
+            scope: scope_from_dto(scope),
+            retrieval: resolved.retrieval,
+            coverage: RagCoverage {
+                eligible: resolved.eligible,
+                indexed,
+                unavailable: resolved.unavailable,
+                ..RagCoverage::default()
+            },
+            display: RagSourceDisplay {
+                titles: resolved.titles,
+            },
+        })
+    }
+
+    /// Streams a provider-neutral document into the semantic capability.
+    pub async fn semantic_ingest(
+        &self,
+        ingestion: DocumentIngestion,
+    ) -> Result<SemanticJobId, SemanticError> {
+        self.semantic.ingest(ingestion).await
+    }
+
+    /// Executes a scoped semantic query.
+    pub async fn semantic_query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.semantic.query(query).await
+    }
+
+    /// Reads one scoped semantic ingestion job.
+    pub async fn semantic_ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.semantic.ingestion_job(scope, job_id).await
+    }
+
+    /// Reads a scoped snapshot of semantic progress events.
+    pub async fn semantic_events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.semantic.events(scope).await
+    }
+
+    /// Requests cancellation of an opaque semantic operation.
+    pub async fn semantic_cancel(
+        &self,
+        operation_id: SemanticOperationId,
+    ) -> Result<bool, SemanticError> {
+        self.semantic.cancel(operation_id).await
+    }
+
+    /// Requests bounded graceful shutdown of the semantic capability.
+    pub async fn semantic_shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.semantic.shutdown(grace).await
     }
 
     /// Generates (or reuses a cached) downscaled preview for an image or
@@ -709,6 +2143,17 @@ impl FileManagerService {
     }
 
     /// Lists one page of a directory.
+    ///
+    /// Listing deliberately reports *nothing* to the semantic library. A
+    /// successful listing proves only that a path can be read, and a path is
+    /// not an identity: after a directory is deleted and another one is
+    /// created at the same place, listing it succeeds exactly as before. A
+    /// quarantined root must therefore stay quarantined until a provider
+    /// capability supplies a verified stable entry and volume identity, which
+    /// the directory APIs do not yet expose. Task 0182 owns that scheduled
+    /// reconciliation and calls
+    /// [`semantic_library_observe_root_identity`](Self::semantic_library_observe_root_identity)
+    /// with real observations.
     pub async fn list_directory(
         &self,
         request: ListDirectoryRequest,
@@ -1073,11 +2518,17 @@ impl FileManagerService {
     /// Starts a cancellable recursive filename search over one or more
     /// roots, streaming matches to `request.workspace_id` over the event
     /// bus as they are found (spec §24, task 0068).
-    pub fn start_search(
+    pub async fn start_search(
         &self,
         request: StartSearchRequestDto,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
-        self.search_comparison.start_search(request)
+        let semantic_library = self.semantic_library().await;
+        let vocabulary_store =
+            crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+        self.search_comparison
+            .start_search(request, Some(&semantic_library), Some(&vocabulary_store))
+            .await
     }
 
     /// Cancels a running search, stopping its traversal promptly.
@@ -1246,6 +2697,18 @@ impl FileManagerService {
         runtime_capabilities_dto(self.runtime, self.platform.capabilities())
     }
 
+    /// Reports runtime capabilities including the active semantic component
+    /// authority and executable-download policy.
+    pub async fn runtime_capabilities_with_semantic_components(&self) -> RuntimeCapabilitiesDto {
+        let semantic = self.semantic_component_capabilities_dto().await;
+        runtime_capabilities_dto_with_semantic(
+            self.runtime,
+            self.platform.capabilities(),
+            semantic.authority,
+            semantic.runtime_executable_download,
+        )
+    }
+
     /// Returns the active platform adapter's PNG icon for one sample entry.
     /// The adapter owns extension-level caching; this service deliberately
     /// adds no second cache layer (task 0091).
@@ -1338,12 +2801,38 @@ impl FileManagerService {
     }
 
     /// Deletes a workspace (spec §5.3.12 `deleteWorkspace`).
+    ///
+    /// Semantic detachment runs *before* the repository delete and must
+    /// succeed. The ordering is deliberate: detaching only removes a
+    /// workspace's authorization references from globally enrolled roots, so if
+    /// the repository delete then fails the workspace survives with a strictly
+    /// narrower semantic scope — never with dangling scopes naming a workspace
+    /// that no longer exists. Narrowing can only deny access, and re-enrolling
+    /// the folder from the surviving workspace restores it; the reverse
+    /// ordering would leave revoked-workspace scopes behind whenever
+    /// detachment failed. Detachment is idempotent, so a retried delete is
+    /// safe. When no semantic capability is configured, or the library is a
+    /// read-only administrator-provisioned server library, detachment is a
+    /// no-op and workspace deletion is unaffected.
+    /// Deletes a workspace and then drops the semantic references that named
+    /// it (spec §5.3.12 `deleteWorkspace`).
+    ///
+    /// The order is deliberate. The workspace repository is authoritative, and
+    /// it and the semantic library are two independent stores that cannot
+    /// commit atomically; sequencing the semantic mutation first would revoke
+    /// the references of a workspace that a stale revision, a missing
+    /// workspace, or a repository I/O failure then left alive. Deleting first
+    /// means a semantic failure can only leave *extra* references behind, and
+    /// those are unreachable because every semantic call validates that the
+    /// workspace still exists. The detachment is idempotent and stays queued,
+    /// so the next semantic operation completes it.
     pub async fn delete_workspace(
         &self,
         id: Uuid,
         expected_revision: Option<u64>,
     ) -> Result<(), ApplicationError> {
         self.workspaces.delete(id.into(), expected_revision).await?;
+        let _ = self.semantic_library().await.detach_workspace(id.into());
         Ok(())
     }
 
@@ -1389,6 +2878,113 @@ impl FileManagerService {
     ) -> Result<WorkspaceDto, ApplicationError> {
         let workspace = self.workspaces.apply_command(command.into()).await?;
         Ok(workspace.into())
+    }
+
+    /// Returns safe defaults for every supported generation provider.
+    pub fn list_llm_profile_presets(&self) -> Vec<LlmProfilePresetDto> {
+        LlmProfileService::presets()
+            .into_iter()
+            .map(preset_to_profile_dto)
+            .collect()
+    }
+
+    /// Lists saved generation profiles without exposing credential IDs.
+    pub fn list_llm_profiles(&self) -> Result<Vec<LlmProfileDto>, ApplicationError> {
+        self.llm_profiles
+            .list()?
+            .into_iter()
+            .map(profile_to_dto)
+            .collect::<Result<_, _>>()
+            .map_err(Into::into)
+    }
+
+    /// Creates a named generation profile and stores its optional key in the
+    /// protected credential service.
+    pub async fn create_llm_profile(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.create(draft_from_dto(request)).await?).map_err(Into::into)
+    }
+
+    /// Updates a generation profile, preserving its credential when no new
+    /// write-only key is supplied.
+    pub async fn update_llm_profile(
+        &self,
+        id: Uuid,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(
+            self.llm_profiles
+                .update(id, draft_from_dto(request))
+                .await?,
+        )
+        .map_err(Into::into)
+    }
+
+    /// Deletes a profile with an explicit credential-retention choice.
+    pub async fn delete_llm_profile(
+        &self,
+        id: Uuid,
+        request: DeleteLlmProfileRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.llm_profiles
+            .delete(id, disposition_from_dto(request.credential_disposition))
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Persists a credential-free clone of a generation profile.
+    pub fn clone_llm_profile(&self, id: Uuid) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.clone_profile(id)?).map_err(Into::into)
+    }
+
+    /// Exports only non-secret reusable configuration.
+    pub fn export_llm_profile(&self, id: Uuid) -> Result<LlmProfileExportDto, ApplicationError> {
+        Ok(profile_to_export_dto(self.llm_profiles.export_profile(id)?))
+    }
+
+    /// Activates a profile, recording explicit consent for its normalized
+    /// cloud host when required.
+    pub fn activate_llm_profile(
+        &self,
+        id: Uuid,
+        consent: bool,
+    ) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.activate(id, consent)?).map_err(Into::into)
+    }
+
+    /// Runs the bounded synthetic compatibility probe and returns only
+    /// normalized, content-free diagnostics.
+    pub async fn test_llm_profile(
+        &self,
+        id: Uuid,
+    ) -> Result<LlmProfileTestResultDto, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(test_result_to_dto(
+            self.llm_profiles.test(id, &cancellation).await?,
+        ))
+    }
+
+    /// Discovers bounded provider model identifiers without running generation.
+    pub async fn discover_llm_profile_models(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(self.llm_profiles.discover_models(id, &cancellation).await?)
+    }
+
+    /// Discovers bounded model identifiers for an unsaved provider draft.
+    pub async fn discover_llm_profile_draft_models(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(self
+            .llm_profiles
+            .discover_draft_models(draft_from_dto(request), &cancellation)
+            .await?)
     }
 
     /// Lists every stored connection profile with its current runtime status

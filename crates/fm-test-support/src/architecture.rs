@@ -27,8 +27,10 @@ use serde::Deserialize;
 /// sharing a layer are deliberately kept independent of one another, which is
 /// what allows them to be built and tested in isolation.
 const CRATE_LAYERS: &[(&str, u8)] = &[
-    // Layer 0 - the domain model, dependent on nothing in the workspace.
+    // Layer 0 - foundational models and wire contracts, dependent on nothing
+    // else in the workspace.
     ("fm-domain", 0),
+    ("fm-semantic-protocol", 0),
     // Layer 1 - contracts expressed in terms of the domain model.
     ("fm-auth-oauth", 1),
     ("fm-credentials", 1),
@@ -57,6 +59,11 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-plugin-runtime", 2),
     ("fm-pptx-renderer", 2),
     ("fm-search", 2),
+    ("fm-semantic-components", 2),
+    // `fm-semantic-conversion` is a self-contained parsing engine: it accepts
+    // bounded bytes plus trusted metadata and never touches the VFS, transport
+    // DTOs or a host runtime, so it sits with the other primitive engines.
+    ("fm-semantic-conversion", 2),
     ("fm-settings", 2),
     ("fm-vcs-status", 2),
     ("fm-vfs-local", 2),
@@ -67,6 +74,13 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-vfs-webdav", 2),
     // Layer 3 - composite engines built from the layer-2 primitives.
     ("fm-comparison", 3),
+    // `fm-semantic-library` persists low-volume consent policy through the
+    // `fm-settings` migration machinery (task 0179), so it must sit strictly
+    // above it rather than beside it.
+    ("fm-semantic-library", 3),
+    // The semantic worker composes conversion, embedding and durable storage
+    // engines behind the IPC boundary.
+    ("fm-semantic-worker", 3),
     // Layer 4 - application services, plus the test-support crate which may
     // build fixtures out of anything below it.
     ("fm-application", 4),
@@ -398,6 +412,10 @@ mod tests {
     #[test]
     fn assigns_the_domain_crate_to_the_lowest_layer() {
         assert_eq!(layer_of("fm-domain"), Some(0));
+        assert_eq!(layer_of("fm-semantic-protocol"), Some(0));
+        assert_eq!(layer_of("fm-semantic-worker"), Some(3));
+        assert_eq!(layer_of("fm-semantic-components"), Some(2));
+        assert_eq!(layer_of("fm-semantic-library"), Some(3));
         assert!(layer_of("fm-application") > layer_of("fm-vfs"));
         assert!(layer_of("fm-server") > layer_of("fm-application"));
         assert_eq!(layer_of("serde"), None);

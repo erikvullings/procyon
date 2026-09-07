@@ -28,8 +28,9 @@ pub use ids::{
 pub use location::{Location, LocationError};
 pub use menu::{NativeMenu, NativeMenuItem, NativeMenuRole, NativeMenuSpec};
 pub use search::{
-    SEARCH_QUERY_SCHEMA_VERSION, SavedSearch, SearchContentPredicate, SearchEntryKind,
-    SearchNameMode, SearchNamePredicate, SearchQuery, SearchScope,
+    ConceptHierarchyScope, SEARCH_QUERY_SCHEMA_VERSION, SavedSearch, SearchConceptPredicate,
+    SearchContentPredicate, SearchEntryKind, SearchMode, SearchNameMode, SearchNamePredicate,
+    SearchQuery, SearchScope, SearchSemanticPredicate, SemanticSearchScope,
 };
 pub use snapshot::{DirectoryDelta, DirectorySnapshot, LoadingState};
 pub use workspace::{

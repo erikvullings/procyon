@@ -128,6 +128,11 @@ crates/
   fm-platform-windows/  Windows implementation (Explorer reveal, Recycle Bin, drives, terminal)
   fm-plugin-api/        plugin manifest, permissions, contribution types
   fm-plugin-runtime/    restricted Lua sandbox and plugin lifecycle
+  fm-semantic-components/ signed catalogs, optional component/model lifecycle, and data-root moves
+  fm-semantic-conversion/ bounded document conversion and deterministic structural chunking
+  fm-semantic-library/  durable enrolment consent, scoped catalog policy, and cleanup coordination
+  fm-semantic-protocol/ generated, versioned protobuf contract for the optional semantic worker
+  fm-semantic-worker/   local-only semantic worker binary, IPC client, and lifecycle coordinator
   fm-transport-dto/     OpenAPI-serialisable DTOs shared by server and client
   fm-vfs/               VFS provider trait and capability flags
   fm-vfs-local/         local filesystem provider
@@ -159,6 +164,10 @@ docs/
 plugins/                Bundled sample plugins (Lua)
 TASKS/                  Per-task implementation files (task tracker)
 ```
+
+Semantic deployment, privacy, recovery, backup, deletion, and evaluation requirements are recorded
+in [`docs/semantic-operations.md`](docs/semantic-operations.md), with the subsystem trust boundaries
+and mitigations in [`docs/semantic-threat-model.md`](docs/semantic-threat-model.md).
 
 ## Development
 
@@ -521,6 +530,14 @@ OneDrive accounts appear under `CLOUD` beside OS-discovered cloud folders. A con
 passphrase or token directly - only an opaque reference into a `CredentialStore`, backed by the
 macOS Keychain or Windows Credential Manager (an in-memory store is used on other hosts and in
 tests only).
+
+Optional generation services use separate named OpenAI-compatible profiles because they are not
+filesystems. Settings include presets for common local servers, generic compatible endpoints, and
+Azure OpenAI, but API keys remain in the same credential service and are omitted from profile
+exports. Cloud activation requires informed consent bound to the normalized endpoint host. The
+browser/server runtime denies loopback destinations and all cloud hosts by default; administrators
+must explicitly allow cloud endpoints with a comma-separated `PROCYON_LLM_ALLOWED_HOSTS` value
+(for example, `llm.example.com,tenant.openai.azure.com`).
 
 Native OneDrive access uses Microsoft Graph rather than an OS-mounted sync folder. The connection
 editor opens Authorization Code + PKCE sign-in in the system browser for an existing personal,

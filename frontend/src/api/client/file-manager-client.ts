@@ -1,4 +1,5 @@
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -6,22 +7,36 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -33,14 +48,26 @@ import type {
   EntrySummary,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
   Location,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -48,11 +75,17 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
+  PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -61,14 +94,41 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
+  ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticVocabulary,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -89,8 +149,10 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -128,6 +190,113 @@ export interface NativeFileDrop {
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities>;
+  getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities>;
+  getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus>;
+  listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]>;
+  createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer>;
+  acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt>;
+  pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void>;
+  resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void>;
+  createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan>;
+  confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt>;
+  moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt>;
+  uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt>;
+  installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse>;
+  importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan>;
+  planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan>;
+  confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress>;
+  checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress>;
+  completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection>;
+  getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
+  getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
+  listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]>;
+  importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary>;
+  exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string>;
+  attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary>;
+  reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary>;
+  deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact>;
+  getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus>;
+  previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview>;
+  confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan>;
+  confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+  updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]>;
   getVolumes(signal?: AbortSignal): Promise<Volume[]>;
   /** The current user's home directory as a native path, for expanding a leading `~` typed
@@ -482,6 +651,63 @@ export interface FileManagerClient {
   onResynchronise(listener: () => void): Unsubscribe;
 
   disconnect(): void;
+
+  listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]>;
+  listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;
+  createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile>;
+  updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile>;
+  deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile>;
+  exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport>;
+  activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile>;
+  testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult>;
+  discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]>;
+  discoverLlmProfileDraftModels(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<string[]>;
+  previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview>;
+  generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary>;
+  getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null>;
+  previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview>;
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse>;
+  saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation>;
+  listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]>;
+  deleteRagConversation(request: DeleteRagConversationRequest, signal?: AbortSignal): Promise<void>;
+  resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation>;
 
   /** Lists every stored connection profile with its current runtime status (task 0103). */
   listConnections(signal?: AbortSignal): Promise<Connection[]>;

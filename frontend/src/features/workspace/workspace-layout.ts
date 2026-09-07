@@ -109,7 +109,8 @@ export interface WorkspacePaneContent {
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
-  readonly onOpenEntry: (entry: EntrySummary) => void | Promise<void>;
+  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onDocumentSummary?: (entry: EntrySummary) => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;
@@ -634,6 +635,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           : { keybindingOverrides: content.keybindingOverrides }),
         ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
         onOpenEntry: content.onOpenEntry,
+        ...(content.onDocumentSummary === undefined
+          ? {}
+          : { onDocumentSummary: content.onDocumentSummary }),
         onSelectionAction: content.onSelectionAction,
         onRetry: content.onRetry,
         onLoadNextPage: content.onLoadNextPage,

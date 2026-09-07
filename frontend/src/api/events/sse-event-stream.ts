@@ -37,6 +37,8 @@ const EVENT_TYPES = [
   'diskUsage.progress',
   'diskUsage.finalizing',
   'diskUsage.failed',
+  'semantic.ingestionProgress',
+  'semantic.coverageChanged',
 ] as const;
 
 const HIGH_FREQUENCY_TYPES = new Set<string>([
@@ -45,6 +47,8 @@ const HIGH_FREQUENCY_TYPES = new Set<string>([
   'search.resultsBatch',
   'comparison.resultsBatch',
   'diskUsage.progress',
+  'semantic.ingestionProgress',
+  'semantic.coverageChanged',
 ]);
 
 interface EventSourceLike extends EventTarget {

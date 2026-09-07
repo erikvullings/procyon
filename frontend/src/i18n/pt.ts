@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Portuguese (European) catalogue (task 0098). Keep the key set identical to `en`. */
@@ -223,6 +223,7 @@ export const pt = {
     unableToRun: 'Não é possível executar o comando.',
   },
   settings: {
+    ...en.settings,
     language: 'Idioma',
     languageEnglish: 'Inglês',
     languageDutch: 'Neerlandês',
@@ -638,6 +639,7 @@ export const pt = {
     rename: 'Renomear',
   },
   search: {
+    ...en.search,
     unableToStart: 'Não é possível iniciar a pesquisa',
     refresh: 'Atualizar pesquisa',
     filterLimitations: 'Não foi possível avaliar alguns filtros ({message}).',
@@ -852,7 +854,14 @@ export const pt = {
     message: 'Este painel não tem outros separadores. Ao fechá-lo, o painel ficará vazio.',
     closeTab: 'Fechar separador',
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Copiar para relatório de erro',
     copyTitle: 'Copiar diagnósticos redigidos para relatórios de erro',
     loading: 'A carregar diagnósticos…',

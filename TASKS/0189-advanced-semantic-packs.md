@@ -1,6 +1,6 @@
 # 0189 Advanced converters, acceleration and reranking
 
-Status: open
+Status: done
 Priority: low
 Subsystem: backend, search, packaging
 Depends on: 0188
@@ -49,3 +49,16 @@ Add these only as independently measurable optional capabilities after the basel
 ## Agent Notes
 
 - 2026-09-04: Split from 0176 and intentionally deferred until 0188 establishes a stable baseline.
+- 2026-09-05: Added baseline-first isolated advanced conversion with bounded byte-only input,
+  provenance precision, typed omissions, cancellation/time limits, malformed-output rejection, and
+  safe removal. Added CPU-fallback acceleration with parity proof or explicit model-space migration,
+  a bounded quality-gated local reranker with measured cost, and a separately named deterministic
+  Hybrid mode using weighted reciprocal-rank fusion after filters and tenant/library enforcement.
+- 2026-09-05: Added independently signed converter/acceleration/reranker manifests with target,
+  protocol and index compatibility, checksums, resource disclosures, administrator policy,
+  evaluation measurements for all nine required fixture dimensions, one-version rollback, and
+  isolated family removal. Focused suites passed 261 tests; workspace validation passed 2,199 Rust
+  tests (5 skipped), 1,777 frontend tests, 41 script tests, full lint, and the production build.
+  Concrete optional pack binaries are intentionally not selected by this product-boundary task;
+  real GPU/driver execution and Windows/Linux artifact smoke tests remain release checks for each
+  future pack.

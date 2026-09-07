@@ -87,6 +87,8 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
       openTerminal: false,
       clipboard: false,
       plugins: false,
+      semanticComponentAuthority: 'unavailable',
+      semanticRuntimeExecutableDownload: 'unavailable',
       serverAdministration: false,
       extendedAttributes: false,
       finderAliases: false,

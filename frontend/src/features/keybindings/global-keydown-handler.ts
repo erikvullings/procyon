@@ -172,6 +172,8 @@ export interface GlobalKeydownContext {
   findDuplicates(): void;
   /** Opens a disk-usage treemap for the active local directory in a new tab (task 0118). */
   openDiskUsage(): void;
+  /** Opens Ask across the indexed semantic library. */
+  openSemanticAssistant(): void;
   /** Opens the Settings dialog (Cmd+,/Ctrl+,) - a no-op if already open. */
   openSettingsDialog(): void;
 }
@@ -1245,6 +1247,17 @@ const ACTION_KEYDOWN_ROUTES = [
       if (state.dispatchedAction === 'client.diskUsage') {
         event.preventDefault();
         context.openDiskUsage();
+        return;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'client.semanticAssistant',
+    tryHandle: (context, event, state) => {
+      if (state.dispatchedAction === 'client.semanticAssistant') {
+        event.preventDefault();
+        context.openSemanticAssistant();
         return;
       }
       return false;

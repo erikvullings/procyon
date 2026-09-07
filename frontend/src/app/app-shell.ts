@@ -16,6 +16,7 @@ import {
   cornerLeftUpIcon,
   layoutGridIcon,
   listIcon,
+  messageCircleIcon,
   searchIcon,
   settingsIcon,
 } from '../components/tabler-icons';
@@ -142,6 +143,7 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
+import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
   createSettingsController,
   type SettingsController,
@@ -388,6 +390,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connections: readonly Connection[] = [];
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
+  let semanticAssistantAvailable = false;
+  let semanticEnrolmentRequest:
+    | { readonly workspaceId: WorkspaceId; readonly location: Location }
+    | undefined;
+  let semanticEnrolmentReturnToAsk = false;
   let functionKeyModifiers: FunctionKeyModifiers = {};
   /** Last non-empty Quick Filter query per tab key, for the Ctrl+Shift+S "reactivate" shortcut. */
   const lastQuickFilterQueryByTabKey = new Map<string, string>();
@@ -460,6 +467,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         contextRequirements: {},
         source: { kind: 'core' },
       },
+      ...(semanticAssistantAvailable
+        ? [
+            {
+              id: 'client.semanticAssistant',
+              title: t('ragAsk', 'title'),
+              description: t('ragAsk', 'openAssistant'),
+              category: 'tools',
+              defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+          ]
+        : []),
     ];
   }
 
@@ -1774,6 +1794,54 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
   }
 
+  function openRagAsk(): void {
+    const active = activeDirectory();
+    if (workspace === undefined || active === undefined) return;
+    const key = activeTabKey(active.paneId);
+    const directory = directories.get(key);
+    const selectedIds = new Set(selections.get(key)?.selectedEntryIds ?? []);
+    const presentation = findFilesPresentationsByLocationUri.get(active.location.uri);
+    const semanticSourceIds = [
+      ...new Set(
+        (presentation?.semanticResults ?? []).flatMap((result) => [
+          result.bestEvidence.sourceId,
+          ...result.additionalSourceIds,
+        ]),
+      ),
+    ];
+    dialogs.openRagAskDialog({
+      workspaceId: workspace.id,
+      currentFolder: active.location,
+      selectedEntries:
+        directory?.entries.filter((entry) => selectedIds.has(entry.id) && entry.kind === 'file') ??
+        [],
+      semanticSourceIds,
+    });
+  }
+
+  async function refreshSemanticAssistantAvailability(): Promise<void> {
+    try {
+      const [components, library, profiles] = await Promise.all([
+        attrsClient.getSemanticComponentStatus(),
+        attrsClient.getSemanticLibraryStatus(),
+        attrsClient.listLlmProfiles(),
+      ]);
+      semanticAssistantAvailable =
+        components.lifecycle.state === 'installedEnabled' &&
+        components.activeModel != null &&
+        library.available &&
+        profiles.length > 0;
+    } catch {
+      semanticAssistantAvailable = false;
+    }
+    m.redraw();
+  }
+
+  function openSemanticAssistant(): void {
+    if (!semanticAssistantAvailable) return;
+    openRagAsk();
+  }
+
   /** The composite `paneId:tabId` key of the active pane's active tab, for terminal binding. */
   function activeTerminalTabKey(): string | undefined {
     const active = activeDirectory();
@@ -2633,6 +2701,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
+    openSemanticAssistant,
     openSettingsDialog,
   };
 
@@ -2770,6 +2839,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
+    openDocumentSummary: (_paneId, entry) => {
+      if (workspace === undefined) return;
+      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      m.redraw();
+    },
+    openSemanticAssistant,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     toggleDirectoryTree,
@@ -2869,6 +2944,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
     closeViewer,
+    openDocumentSummary: (_paneId, entry) => {
+      if (workspace === undefined) return;
+      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      m.redraw();
+    },
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
@@ -3091,13 +3171,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getOpsController: () => opsController,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
     getActivePaneId: () => activeDirectory()?.paneId,
-    navigateActiveLocation: async (location) => {
+    navigateActiveLocation: async (location, preferredCursorName) => {
       const paneId = activeDirectory()?.paneId;
-      if (paneId !== undefined) await navigation.navigate(paneId, location);
+      if (paneId !== undefined) await navigation.navigate(paneId, location, preferredCursorName);
     },
     getFocusPane: () => focusPane,
     getSettings: () => currentSettings,
     updateSettings: (update) => updateLocationSettings(attrsClient, update),
+    includeCurrentSemanticFolder: (workspaceId, location) => {
+      semanticEnrolmentRequest = { workspaceId, location };
+      semanticEnrolmentReturnToAsk = true;
+      m.redraw();
+    },
     openEditorForCreatedFile: (location, name) => {
       const active = activeDirectory();
       if (active === undefined) return;
@@ -3124,6 +3209,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   return {
     oninit: ({ attrs }) => {
       attrsClient = attrs.client;
+      void refreshSemanticAssistantAvailability();
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
@@ -3525,6 +3611,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 searchIcon(),
               ),
             ),
+            semanticAssistantAvailable
+              ? tooltip(
+                  t('ragAsk', 'openAssistant'),
+                  m(
+                    IconButton,
+                    {
+                      className: 'fm-rag-ask-trigger',
+                      disabled: activeDirectory() === undefined,
+                      'aria-label': t('ragAsk', 'openAssistant'),
+                      onclick: openSemanticAssistant,
+                    },
+                    messageCircleIcon(),
+                  ),
+                )
+              : undefined,
             tooltip(
               t('shell', 'comparePanes'),
               m(
@@ -3769,6 +3870,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   settingsDialogOpen = open;
                   if (!open && currentSettings !== undefined) {
                     applyAppearance(currentSettings);
+                    void refreshSemanticAssistantAvailability();
                   }
                   m.redraw();
                 },
@@ -3804,7 +3906,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         ? m('p', t('shell', 'loading'))
                         : settingsDialogOpen
                           ? m(SettingsEditor, {
+                              client: attrs.client,
                               settings: currentSettings,
+                              ...(workspace === undefined
+                                ? {}
+                                : { activeWorkspaceId: workspace.id }),
+                              ...(activeDirectory()?.location === undefined
+                                ? {}
+                                : { activeLocation: activeDirectory()?.location }),
                               actions: localisedRegisteredActions(),
                               platform,
                               runtime: keybindingRuntime,
@@ -4020,6 +4129,37 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               commandPaletteOpen = false;
             },
             onInvoke: actionCommandController.invokePaletteAction,
+          }),
+          m(ModalPanel, {
+            title: t('ragAsk', 'includeFolderTitle'),
+            className: 'fm-dense-modal fm-semantic-enrolment-modal',
+            isOpen: semanticEnrolmentRequest !== undefined,
+            closeOnEsc: true,
+            onToggle: (open: boolean) => {
+              if (!open) {
+                const returnToAsk = semanticEnrolmentReturnToAsk;
+                semanticEnrolmentRequest = undefined;
+                semanticEnrolmentReturnToAsk = false;
+                if (returnToAsk) openRagAsk();
+              }
+            },
+            ...(semanticEnrolmentRequest === undefined
+              ? {}
+              : {
+                  description: m(
+                    '.fm-semantic-enrolment-content',
+                    m(SemanticFolderEnrolmentPrompt, {
+                      client: attrs.client,
+                      workspaceId: semanticEnrolmentRequest.workspaceId,
+                      location: semanticEnrolmentRequest.location,
+                      onEnrolled: () => {
+                        semanticEnrolmentRequest = undefined;
+                        semanticEnrolmentReturnToAsk = false;
+                        openRagAsk();
+                      },
+                    }),
+                  ),
+                }),
           }),
           m(DirectoryContextMenu, {
             open: contextMenu !== undefined,

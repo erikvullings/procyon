@@ -1,6 +1,7 @@
 //! Tauri commands: thin wrappers over `FileManagerService`, mirroring the
 //! semantic REST API rather than reproducing HTTP concepts (spec §11).
 //!
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -9,38 +10,63 @@ use tauri::utils::config::WindowConfig;
 use tauri::{AppHandle, Manager, Runtime, State, Window};
 use uuid::Uuid;
 
+use fm_application::semantic_component_mapping::semantic_component_error_to_dto;
+use fm_application::semantic_library_mapping::semantic_library_error_to_dto;
 use fm_domain::OperationId;
 use fm_transport_dto::{
-    AcceptSshHostKeyRequestDto, ActionDescriptorDto, ActionResultDto, ApplicationErrorDto,
-    ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveCredentialRequestDto,
-    ArchiveSummaryRequestDto, ArchiveSummaryResponseDto, BeginOneDriveAuthorizationResponseDto,
-    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, ChecksumFileDto,
-    ChecksumPageDto, ComparisonPageDto, ConnectionDto, ConnectionStateDto,
-    CreateConnectionRequestDto, CreateWorkspaceRequestDto, DiagnosticErrorDto, DiagnosticsDto,
-    DirectorySnapshotDto, DiscoverApplicationUninstallCandidatesRequestDto,
-    DiscoverApplicationUninstallCandidatesResponseDto, DocxPreviewSessionRequestDto,
-    DuplicatePageDto, EntryMetadataDto, EntryMetadataRequest, EntrySummaryDto, FinderTagsDto,
-    GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    HostKeyProbeDto, InvokeActionRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest,
-    LocationDto, NavigateRequest, OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto,
-    OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
-    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, OperationDto,
-    OperationQueueStatusDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
-    PptxPreviewSessionRequestDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    AcceptSemanticInstallationOfferRequestDto, AcceptSshHostKeyRequestDto, ActionDescriptorDto,
+    ActionResultDto, ApplicationErrorDto, ApplySyncPlanRequestDto, ApplySyncPlanResponseDto,
+    ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
+    AttachSemanticVocabularyRequestDto, BeginOneDriveAuthorizationResponseDto,
+    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
+    CheckpointSemanticModelMigrationRequestDto, ChecksumFileDto, ChecksumPageDto,
+    ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
+    ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
+    ConfirmSemanticIndexRemovalRequestDto, ConfirmSemanticModelMigrationRequestDto, ConnectionDto,
+    ConnectionStateDto, CreateConnectionRequestDto, CreateSemanticIndexRemovalPlanRequestDto,
+    CreateSemanticInstallationOfferRequestDto, CreateWorkspaceRequestDto,
+    DeleteLlmProfileRequestDto, DeleteSemanticVocabularyImpactDto,
+    DeleteSemanticVocabularyRequestDto, DiagnosticErrorDto, DiagnosticsDto, DirectorySnapshotDto,
+    DiscoverApplicationUninstallCandidatesRequestDto,
+    DiscoverApplicationUninstallCandidatesResponseDto, DocumentSummaryDto,
+    DocumentSummaryPreviewDto, DocxPreviewSessionRequestDto, DuplicatePageDto, EntryMetadataDto,
+    EntryMetadataRequest, EntrySummaryDto, ExportSemanticVocabularyResponseDto, FinderTagsDto,
+    GenerateDocumentSummaryRequestDto, GenerateSyncPlanRequestDto, GetDocumentSummaryRequestDto,
+    GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
+    HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
+    InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, ListDirectoryChildrenRequest,
+    ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
+    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
+    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
+    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
+    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
-    SaveChecksumFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
-    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
-    SetPaneActivityRequest, SettingsDto, SpotlightCommentDto, StartChecksumRequestDto,
-    StartChecksumResponseDto, StartComparisonRequestDto, StartComparisonResponseDto,
-    StartDuplicateScanRequestDto, StartDuplicateScanResponseDto, StartOperationRequestDto,
-    StartSearchRequestDto, StartSearchResponseDto, StructuredViewSessionRequestDto,
-    StructuredViewStatusDto, SyncPlanDto, UpdateConnectionRequestDto,
-    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, ResumeSemanticCleanupRequestDto,
+    ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
+    SaveChecksumFileResponseDto, SaveLlmProfileRequestDto, ScanDiskUsageRequestDto,
+    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
+    SearchStructuredRowsResponseDto, SemanticComponentCapabilitiesDto, SemanticComponentErrorDto,
+    SemanticComponentStatusDto, SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto,
+    SemanticExclusionPlanDto, SemanticFolderStatusDto, SemanticIndexRemovalPlanDto,
+    SemanticIndexRemovalReceiptDto, SemanticInstallReceiptDto, SemanticInstallationOfferDto,
+    SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
+    SemanticLibraryStatusDto, SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto,
+    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticUninstallReceiptDto,
+    SemanticVocabularyDto, SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SettingsDto,
+    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
+    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
+    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
+    StartSearchResponseDto, StructuredViewSessionRequestDto, StructuredViewStatusDto, SyncPlanDto,
+    UninstallSemanticComponentsRequestDto, UpdateConnectionRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
+    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
     WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
@@ -346,7 +372,9 @@ pub(crate) fn set_window_decorations<R: Runtime>(window: Window<R>, decorations:
 
 /// Returns the desktop diagnostics snapshot without requiring an HTTP server in the Tauri host.
 #[tauri::command]
-pub(crate) fn get_diagnostics(state: State<'_, AppState>) -> DiagnosticsDto {
+pub(crate) async fn get_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<DiagnosticsDto, ApplicationErrorDto> {
     let plugins = state.service.list_plugins();
     let operations = state.service.list_operations();
     let mut queued_count = 0;
@@ -368,12 +396,15 @@ pub(crate) fn get_diagnostics(state: State<'_, AppState>) -> DiagnosticsDto {
             _ => {}
         }
     }
-    DiagnosticsDto {
+    Ok(DiagnosticsDto {
         frontend_version: env!("CARGO_PKG_VERSION").to_owned(),
         backend_version: env!("CARGO_PKG_VERSION").to_owned(),
         tauri_version: None,
         platform: "Windows".to_owned(),
-        runtime_capabilities: state.service.runtime_capabilities(),
+        runtime_capabilities: state
+            .service
+            .runtime_capabilities_with_semantic_components()
+            .await,
         connection_state: ConnectionStateDto {
             connected: true,
             last_event_received: None,
@@ -399,7 +430,7 @@ pub(crate) fn get_diagnostics(state: State<'_, AppState>) -> DiagnosticsDto {
             completed_count,
             total_pending_size: 0,
         },
-    }
+    })
 }
 
 /// Converts a `#rgb`/`#rrggbb` CSS colour into a Win32 `COLORREF` (`0x00bbggrr`).
@@ -458,8 +489,619 @@ pub(crate) fn unsubscribe_events(
 /// Reports the capabilities available for the current runtime and platform
 /// (spec §21), identical in shape to `GET /api/v1/runtime`.
 #[tauri::command]
-pub(crate) fn get_runtime_capabilities(state: State<'_, AppState>) -> RuntimeCapabilitiesDto {
-    state.service.runtime_capabilities()
+pub(crate) async fn get_runtime_capabilities(
+    state: State<'_, AppState>,
+) -> Result<RuntimeCapabilitiesDto, ApplicationErrorDto> {
+    Ok(state
+        .service
+        .runtime_capabilities_with_semantic_components()
+        .await)
+}
+
+fn semantic_component_error(
+    error: fm_application::semantic_components::SemanticComponentError,
+) -> SemanticComponentErrorDto {
+    semantic_component_error_to_dto(error, Uuid::new_v4())
+}
+
+/// Reports semantic component authority and supported operations.
+#[tauri::command]
+pub(crate) async fn get_semantic_component_capabilities(
+    state: State<'_, AppState>,
+) -> Result<SemanticComponentCapabilitiesDto, SemanticComponentErrorDto> {
+    Ok(state.service.semantic_component_capabilities_dto().await)
+}
+
+/// Reports semantic component lifecycle, installed versions, and disk use.
+#[tauri::command]
+pub(crate) async fn get_semantic_component_status(
+    state: State<'_, AppState>,
+) -> Result<SemanticComponentStatusDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .semantic_component_status_dto()
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Lists curated semantic model profiles and their exact catalog revisions.
+#[tauri::command]
+pub(crate) async fn list_semantic_component_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<SemanticModelProfileDto>, SemanticComponentErrorDto> {
+    state
+        .service
+        .semantic_component_catalog_profiles_dto()
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Creates a complete signed installation disclosure before consent.
+#[tauri::command]
+pub(crate) async fn create_semantic_component_installation_offer(
+    state: State<'_, AppState>,
+    request: CreateSemanticInstallationOfferRequestDto,
+) -> Result<SemanticInstallationOfferDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .create_semantic_component_installation_offer(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Explicitly accepts and installs one previously disclosed offer.
+#[tauri::command]
+pub(crate) async fn accept_semantic_component_installation_offer(
+    state: State<'_, AppState>,
+    request: AcceptSemanticInstallationOfferRequestDto,
+) -> Result<SemanticInstallReceiptDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .accept_semantic_component_installation_offer(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Pauses semantic indexing without uninstalling components.
+#[tauri::command]
+pub(crate) async fn pause_semantic_component_indexing(
+    state: State<'_, AppState>,
+) -> Result<(), SemanticComponentErrorDto> {
+    state
+        .service
+        .semantic_component_pause_indexing()
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Resumes explicitly paused semantic indexing.
+#[tauri::command]
+pub(crate) async fn resume_semantic_component_indexing(
+    state: State<'_, AppState>,
+) -> Result<(), SemanticComponentErrorDto> {
+    state
+        .service
+        .semantic_component_resume_indexing()
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Inventories every index record derived from one semantic enrolment.
+#[tauri::command]
+pub(crate) async fn create_semantic_component_index_removal_plan(
+    state: State<'_, AppState>,
+    request: CreateSemanticIndexRemovalPlanRequestDto,
+) -> Result<SemanticIndexRemovalPlanDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .create_semantic_component_index_removal_plan(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Confirms one live authoritative semantic-index removal plan.
+#[tauri::command]
+pub(crate) async fn confirm_semantic_component_index_removal(
+    state: State<'_, AppState>,
+    request: ConfirmSemanticIndexRemovalRequestDto,
+) -> Result<SemanticIndexRemovalReceiptDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .confirm_semantic_component_index_removal(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Moves the semantic-data root through pause-copy-verify-switch.
+#[tauri::command]
+pub(crate) async fn move_semantic_component_data(
+    state: State<'_, AppState>,
+    request: MoveSemanticDataRequestDto,
+) -> Result<SemanticDataMoveReceiptDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .move_semantic_component_data(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Uninstalls semantic components with an explicit index-data decision.
+#[tauri::command]
+pub(crate) async fn uninstall_semantic_components(
+    state: State<'_, AppState>,
+    request: UninstallSemanticComponentsRequestDto,
+) -> Result<SemanticUninstallReceiptDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .uninstall_semantic_components(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Installs the newest compatible signed worker patch, when available.
+#[tauri::command]
+pub(crate) async fn install_semantic_component_worker_patch(
+    state: State<'_, AppState>,
+    request: InstallSemanticWorkerPatchRequestDto,
+) -> Result<SemanticWorkerPatchResponseDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .install_semantic_component_worker_patch(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Validates an expert local model and creates a confirmation-gated migration.
+#[tauri::command]
+pub(crate) async fn import_semantic_component_local_model(
+    state: State<'_, AppState>,
+    request: ImportSemanticLocalModelRequestDto,
+) -> Result<SemanticModelMigrationPlanDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .import_semantic_component_local_model(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Plans migration to a signed-catalog model resolution.
+#[tauri::command]
+pub(crate) async fn plan_semantic_component_model_migration(
+    state: State<'_, AppState>,
+    request: PlanSemanticModelMigrationRequestDto,
+) -> Result<SemanticModelMigrationPlanDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .plan_semantic_component_model_migration(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Confirms and begins one previously returned model migration plan.
+#[tauri::command]
+pub(crate) async fn confirm_semantic_component_model_migration(
+    state: State<'_, AppState>,
+    request: ConfirmSemanticModelMigrationRequestDto,
+) -> Result<SemanticModelMigrationProgressDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .confirm_semantic_component_model_migration(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Persists a resumable model migration checkpoint.
+#[tauri::command]
+pub(crate) async fn checkpoint_semantic_component_model_migration(
+    state: State<'_, AppState>,
+    request: CheckpointSemanticModelMigrationRequestDto,
+) -> Result<SemanticModelMigrationProgressDto, SemanticComponentErrorDto> {
+    state
+        .service
+        .checkpoint_semantic_component_model_migration(request)
+        .await
+        .map_err(semantic_component_error)
+}
+
+/// Completes and activates one fully reindexed model migration.
+#[tauri::command]
+pub(crate) async fn complete_semantic_component_model_migration(
+    state: State<'_, AppState>,
+    request: CompleteSemanticModelMigrationRequestDto,
+) -> Result<SemanticModelSelectionDto, SemanticComponentErrorDto> {
+    if let Some(marker) = state.semantic_reindex_pending_marker.as_deref() {
+        persist_semantic_reindex_pending(marker)?;
+    }
+    let selection = state
+        .service
+        .complete_semantic_component_model_migration(request)
+        .await
+        .map_err(semantic_component_error)?;
+    if state.semantic_developer_bundle {
+        reindex_enrolled_roots_for_the_new_model(
+            Arc::clone(&state.service),
+            state.semantic_reindex_pending_marker.as_deref(),
+        )
+        .await;
+    }
+    Ok(selection)
+}
+
+/// Feeds every enrolled root to the model that was just activated.
+///
+/// The newly activated model owns its own empty index, so without this the
+/// library would report enrolled roots that no longer answer any query.
+/// Activation is already durable here: failures are logged with the same
+/// visibility as post-enrolment indexing rather than undone.
+async fn reindex_enrolled_roots_for_the_new_model(
+    service: Arc<fm_application::FileManagerService>,
+    pending_marker: Option<&Path>,
+) {
+    let report = service
+        .semantic_reindex_after_model_change(
+            &desktop_semantic_access(),
+            MODEL_CHANGE_WORKER_SHUTDOWN_GRACE,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+    if let Some(failure) = &report.restart_failure {
+        tracing::error!(
+            error = %failure,
+            "semantic developer worker holding the previous model could not be stopped"
+        );
+    }
+    for root in &report.unavailable_roots {
+        tracing::warn!(
+            root_id = %root,
+            "semantic developer reindex skipped an unreachable enrolled root after the model change"
+        );
+    }
+    for failure in &report.failures {
+        tracing::error!(
+            root_id = %failure.root_id,
+            error = %failure.reason,
+            "semantic developer reindex failed after the model change"
+        );
+    }
+    if report.is_complete() {
+        if let Some(marker) = pending_marker
+            && let Err(error) = std::fs::remove_file(marker)
+        {
+            tracing::error!(
+                path = %marker.display(),
+                error = %error,
+                "semantic model reindex completed but its pending marker could not be cleared"
+            );
+            return;
+        }
+        tracing::info!(
+            roots = report.reindexed_roots.len(),
+            occurrences = report.ingested_occurrences,
+            failed_occurrences = report.failed_occurrences,
+            "semantic developer reindex rebuilt enrolled roots for the newly active model"
+        );
+    }
+}
+
+pub(crate) async fn resume_pending_semantic_model_reindex(
+    service: Arc<fm_application::FileManagerService>,
+    marker: PathBuf,
+) {
+    reindex_enrolled_roots_for_the_new_model(service, Some(&marker)).await;
+}
+
+pub(crate) async fn reconcile_semantic_library_on_startup(
+    service: Arc<fm_application::FileManagerService>,
+) {
+    let report = service
+        .semantic_reconcile_all_enrolled_roots(
+            &desktop_semantic_access(),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+    for root in &report.unavailable_roots {
+        tracing::warn!(
+            root_id = %root,
+            "semantic startup reconciliation skipped an unreachable enrolled root"
+        );
+    }
+    for failure in &report.failures {
+        tracing::error!(
+            root_id = %failure.root_id,
+            error = %failure.reason,
+            "semantic startup reconciliation failed"
+        );
+    }
+    if report.is_complete() {
+        tracing::info!(
+            roots = report.reindexed_roots.len(),
+            occurrences = report.ingested_occurrences,
+            failed_occurrences = report.failed_occurrences,
+            "semantic startup reconciliation completed"
+        );
+    }
+}
+
+fn persist_semantic_reindex_pending(marker: &Path) -> Result<(), SemanticComponentErrorDto> {
+    if let Some(parent) = marker.parent() {
+        std::fs::create_dir_all(parent).map_err(semantic_reindex_marker_error)?;
+    }
+    let generation = format!("{}\n", Uuid::new_v4());
+    std::fs::write(marker, generation).map_err(semantic_reindex_marker_error)
+}
+
+fn semantic_reindex_marker_error(error: std::io::Error) -> SemanticComponentErrorDto {
+    SemanticComponentErrorDto {
+        code: fm_transport_dto::SemanticComponentErrorCodeDto::Filesystem,
+        message: format!("semantic model reindex state could not be persisted: {error}"),
+        request_id: Uuid::new_v4(),
+        details: None,
+    }
+}
+
+fn semantic_library_error(
+    error: fm_application::semantic_library::SemanticLibraryError,
+) -> SemanticLibraryErrorDto {
+    semantic_library_error_to_dto(error, Uuid::new_v4())
+}
+
+/// Authority of every desktop semantic-library call.
+///
+/// A Tauri command already runs as the signed-in local user of this device, so
+/// the host itself is the principal. Nothing in the invoke payload contributes
+/// to it.
+/// Bounded grace given to the previously active worker before reindexing.
+const MODEL_CHANGE_WORKER_SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
+const fn desktop_semantic_access() -> fm_application::semantic_library::SemanticAccessContext {
+    fm_application::semantic_library::SemanticAccessContext::Host
+}
+
+/// Reports semantic-library authority and operations.
+#[tauri::command]
+pub(crate) async fn get_semantic_library_capabilities(
+    state: State<'_, AppState>,
+) -> Result<SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto> {
+    Ok(state
+        .service
+        .semantic_library_capabilities_dto(&desktop_semantic_access())
+        .await)
+}
+
+/// Reports safe semantic-library policy, catalog, and runtime state.
+#[tauri::command]
+pub(crate) async fn get_semantic_library_status(
+    state: State<'_, AppState>,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .semantic_library_status_dto(&desktop_semantic_access())
+        .await
+        .map_err(semantic_library_error)
+}
+
+#[tauri::command]
+pub(crate) async fn list_semantic_vocabularies(
+    state: State<'_, AppState>,
+) -> Result<Vec<SemanticVocabularyDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_semantic_vocabularies(&desktop_semantic_access())
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn import_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: ImportSemanticVocabularyRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .import_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn export_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: VocabularyIdRequestDto,
+) -> Result<ExportSemanticVocabularyResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .export_semantic_vocabulary(&desktop_semantic_access(), &request.vocabulary_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: AttachSemanticVocabularyRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .attach_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn review_semantic_concept_candidate(
+    state: State<'_, AppState>,
+    request: ReviewConceptCandidateRequestDto,
+) -> Result<SemanticVocabularyDto, ApplicationErrorDto> {
+    state
+        .service
+        .review_semantic_concept_candidate(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_semantic_vocabulary(
+    state: State<'_, AppState>,
+    request: DeleteSemanticVocabularyRequestDto,
+) -> Result<DeleteSemanticVocabularyImpactDto, ApplicationErrorDto> {
+    state
+        .service
+        .delete_semantic_vocabulary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reports consent for the active workspace folder.
+#[tauri::command]
+pub(crate) async fn get_semantic_folder_status(
+    state: State<'_, AppState>,
+    request: GetSemanticFolderStatusRequestDto,
+) -> Result<SemanticFolderStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .semantic_folder_status_dto(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Creates a bounded enrolment disclosure.
+#[tauri::command]
+pub(crate) async fn preview_semantic_enrolment(
+    state: State<'_, AppState>,
+    request: PreviewSemanticEnrolmentRequestDto,
+) -> Result<SemanticEnrolmentPreviewDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .preview_semantic_enrolment(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Confirms one live enrolment disclosure.
+#[tauri::command]
+pub(crate) async fn confirm_semantic_enrolment(
+    state: State<'_, AppState>,
+    request: ConfirmSemanticEnrolmentRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    let location = request.location.clone();
+    let status = state
+        .service
+        .confirm_semantic_enrolment(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)?;
+    if !state.semantic_developer_bundle {
+        return Ok(status);
+    }
+    let Some(root_id) = status
+        .roots
+        .iter()
+        .find(|root| root.location == location)
+        .and_then(|root| root.id.parse().ok())
+    else {
+        tracing::error!(
+            "semantic developer indexing could not resolve the newly enrolled root identity"
+        );
+        return Ok(status);
+    };
+    if let Err(error) = state
+        .service
+        .semantic_reconcile_enrolled_root(
+            &desktop_semantic_access(),
+            root_id,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    {
+        tracing::error!(
+            root_id = %root_id,
+            error = %error,
+            "semantic developer indexing failed after enrolment"
+        );
+        return Ok(status);
+    }
+    state
+        .service
+        .semantic_library_status_dto(&desktop_semantic_access())
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Creates an authoritative destructive exclusion plan.
+#[tauri::command]
+pub(crate) async fn plan_semantic_exclusion(
+    state: State<'_, AppState>,
+    request: PlanSemanticExclusionRequestDto,
+) -> Result<SemanticExclusionPlanDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .plan_semantic_exclusion(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Confirms one live exclusion plan.
+#[tauri::command]
+pub(crate) async fn confirm_semantic_exclusion(
+    state: State<'_, AppState>,
+    request: ConfirmSemanticExclusionRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .confirm_semantic_exclusion(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Resumes incomplete or failed cleanup.
+#[tauri::command]
+pub(crate) async fn resume_semantic_cleanup(
+    state: State<'_, AppState>,
+    request: ResumeSemanticCleanupRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .resume_semantic_cleanup(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Pauses ingestion without removing consent or indexed data.
+#[tauri::command]
+pub(crate) async fn pause_semantic_library(
+    state: State<'_, AppState>,
+    request: SemanticLibraryRevisionRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .pause_semantic_library(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Resumes semantic ingestion.
+#[tauri::command]
+pub(crate) async fn resume_semantic_library(
+    state: State<'_, AppState>,
+    request: SemanticLibraryRevisionRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .resume_semantic_library(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
+}
+
+/// Replaces fixed reason-based root eligibility overrides.
+#[tauri::command]
+pub(crate) async fn update_semantic_eligibility_overrides(
+    state: State<'_, AppState>,
+    request: UpdateSemanticEligibilityOverridesRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .update_semantic_eligibility_overrides(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)
 }
 
 /// Lists OS-managed filesystem locations through the shared application service.
@@ -1422,6 +2064,7 @@ pub(crate) async fn start_search(
     state
         .service
         .start_search(request)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
@@ -1644,6 +2287,254 @@ pub(crate) fn cancel_duplicate_scan(
     state
         .service
         .cancel_duplicate_scan(scan_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Returns safe generation-provider defaults, equivalent to the HTTP API.
+#[tauri::command]
+pub(crate) fn list_llm_profile_presets(state: State<'_, AppState>) -> Vec<LlmProfilePresetDto> {
+    state.service.list_llm_profile_presets()
+}
+
+/// Lists saved generation profiles without credential identifiers.
+#[tauri::command]
+pub(crate) fn list_llm_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<LlmProfileDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_llm_profiles()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Creates a named generation profile.
+#[tauri::command]
+pub(crate) async fn create_llm_profile(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .create_llm_profile(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Updates a named generation profile.
+#[tauri::command]
+pub(crate) async fn update_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .update_llm_profile(profile_id, request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Deletes a profile with explicit credential handling.
+#[tauri::command]
+pub(crate) async fn delete_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    request: DeleteLlmProfileRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_llm_profile(profile_id, request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Persists a credential-free profile clone.
+#[tauri::command]
+pub(crate) fn clone_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .clone_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Returns non-secret export configuration.
+#[tauri::command]
+pub(crate) fn export_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileExportDto, ApplicationErrorDto> {
+    state
+        .service
+        .export_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Activates a profile and records informed cloud consent when supplied.
+#[tauri::command]
+pub(crate) fn activate_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+    consent: bool,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .activate_llm_profile(profile_id, consent)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Runs the bounded synthetic compatibility probe.
+#[tauri::command]
+pub(crate) async fn test_llm_profile(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileTestResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .test_llm_profile(profile_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Discovers provider model identifiers without sending a generation prompt.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_models(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<Vec<String>, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_models(profile_id)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Discovers provider models for an unsaved profile draft.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_draft_models(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<Vec<String>, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_draft_models(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Prepares representative key passages without contacting a generation endpoint.
+#[tauri::command]
+pub(crate) async fn preview_document_summary(
+    state: State<'_, AppState>,
+    request: PreviewDocumentSummaryRequestDto,
+) -> Result<DocumentSummaryPreviewDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_document_summary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Generates and publishes a confirmed representative summary.
+#[tauri::command]
+pub(crate) async fn generate_document_summary(
+    state: State<'_, AppState>,
+    request: GenerateDocumentSummaryRequestDto,
+) -> Result<DocumentSummaryDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_document_summary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads the current generated summary for one authorized occurrence.
+#[tauri::command]
+pub(crate) async fn get_document_summary(
+    state: State<'_, AppState>,
+    request: GetDocumentSummaryRequestDto,
+) -> Result<Option<DocumentSummaryDto>, ApplicationErrorDto> {
+    state
+        .service
+        .get_document_summary(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Previews authorized local evidence before grounded generation.
+#[tauri::command]
+pub(crate) async fn preview_rag(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PreviewRagRequestDto,
+) -> Result<fm_transport_dto::RagPreviewDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_rag(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Generates one read-only grounded answer.
+#[tauri::command]
+pub(crate) async fn generate_rag_answer(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GenerateRagAnswerRequestDto,
+) -> Result<fm_transport_dto::GenerateRagAnswerResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_rag_answer(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Persists one server-authored ephemeral Ask conversation.
+#[tauri::command]
+pub(crate) async fn save_rag_conversation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SaveRagConversationRequestDto,
+) -> Result<fm_transport_dto::SavedRagConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .save_rag_conversation(&desktop_semantic_access(), request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists caller-owned saved Ask conversations.
+#[tauri::command]
+pub(crate) async fn list_saved_rag_conversations(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+) -> Result<Vec<fm_transport_dto::SavedRagConversationDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_saved_rag_conversations(&desktop_semantic_access(), workspace_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Deletes one caller-owned saved Ask conversation.
+#[tauri::command]
+pub(crate) async fn delete_rag_conversation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::DeleteRagConversationRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_rag_conversation(&desktop_semantic_access(), request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Resolves one opaque citation against current local authorization.
+#[tauri::command]
+pub(crate) async fn resolve_rag_citation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ResolveRagCitationRequestDto,
+) -> Result<fm_transport_dto::ResolvedRagCitationDto, ApplicationErrorDto> {
+    state
+        .service
+        .resolve_rag_citation(&desktop_semantic_access(), request)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

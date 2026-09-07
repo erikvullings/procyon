@@ -25,6 +25,8 @@ describe('Diagnostics', () => {
           openTerminal: true,
           clipboard: true,
           plugins: true,
+          semanticComponentAuthority: 'desktopManaged',
+          semanticRuntimeExecutableDownload: 'directDistribution',
           serverAdministration: false,
           extendedAttributes: true,
           finderAliases: false,
@@ -69,6 +71,10 @@ describe('Diagnostics', () => {
       expect(result.backendVersion).toBe('0.1.0');
       expect(result.tauriVersion).toBe('2.0.0');
       expect(result.platform).toBe('macOS');
+      expect(result.runtimeCapabilities.semanticComponentAuthority).toBe('desktopManaged');
+      expect(result.runtimeCapabilities.semanticRuntimeExecutableDownload).toBe(
+        'directDistribution',
+      );
       expect(result.connectionState.connected).toBe(true);
       expect(result.connectionState.eventsReceived).toBe(42);
       expect(result.loadedPlugins).toHaveLength(1);
@@ -128,6 +134,8 @@ describe('Diagnostics', () => {
           openTerminal: false,
           clipboard: true,
           plugins: false,
+          semanticComponentAuthority: 'administratorProvisioned',
+          semanticRuntimeExecutableDownload: 'administratorProvisioned',
           serverAdministration: false,
           extendedAttributes: false,
           finderAliases: false,

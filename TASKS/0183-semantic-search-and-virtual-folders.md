@@ -1,6 +1,6 @@
 # 0183 Semantic search and virtual-folder integration
 
-Status: open
+Status: done
 Priority: high
 Subsystem: frontend, backend, search
 Depends on: 0162, 0166, 0182
@@ -57,3 +57,15 @@ the evidence without flooding the pane with duplicate rows.
 
 - 2026-09-04: Split from 0176. Semantic search is explicitly dense-only v1, file-primary with
   expandable chunks, current-folder scoped by default, and honest about partial indexing.
+- 2026-09-05: Implemented explicit versioned Name, Content, and Semantic search modes with
+  current-folder or entire-library semantic scope, saved-search migration, local exact-query
+  embedding, filtered Zvec retrieval, authoritative SQLite re-authorization, deterministic
+  file-primary grouping, paging/cancellation, and bounded typed evidence with coverage and
+  stale/unavailable/generated state.
+- 2026-09-05: Reused the existing `search://` result store and pane lifecycle across HTTP, Tauri,
+  and mock adapters. Opaque worker source IDs are re-authorized and resolved through the host-only
+  semantic catalog before filesystem locations become actionable. The pane exposes evidence,
+  excerpt-based viewer activation, local relevance feedback, and explicit JSON export; enrolment
+  remains the separate confirmed Semantic Library action.
+- 2026-09-05: Verified all 2,133 Rust tests, 1,767 frontend tests, 41 script tests, full workspace
+  lint, generated API stability, and the real feature-gated Zvec suite.

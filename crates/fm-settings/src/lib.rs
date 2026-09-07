@@ -3,14 +3,21 @@
 //! Settings are versioned and migrated rather than discarded when the schema
 //! changes (specification §26), and are written atomically so a crash cannot
 //! leave a half-written configuration behind.
+//!
+//! The same machinery is reusable by other crates through
+//! [`VersionedDocument`]: an independently versioned sidecar document stored
+//! beside `settings.json` gets strict schema-version reading, migration,
+//! validation, and atomic writes without this crate depending on the types it
+//! stores.
 
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fm_domain::{Location, SavedSearch};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -355,12 +362,12 @@ impl SettingsStore {
     }
 
     /// Atomically persists settings using a temporary sibling and rename.
+    ///
+    /// Only the settings document is rewritten. Independently versioned
+    /// sidecar documents in the same directory — such as semantic-library
+    /// consent — are never touched, so a stale client cannot revoke or
+    /// resurrect consent by replaying an old settings payload.
     pub fn save(&self, settings: &Settings) -> Result<(), SettingsError> {
-        fs::create_dir_all(&self.directory)?;
-        let path = self.path();
-        let temporary = self
-            .directory
-            .join(format!(".{SETTINGS_FILE_NAME}.{}.tmp", std::process::id()));
         let mut current = settings.clone();
         current.schema_version = CURRENT_SCHEMA_VERSION;
         for saved in &mut current.saved_searches {
@@ -369,35 +376,63 @@ impl SettingsStore {
             }
         }
         let bytes = serde_json::to_vec_pretty(&current)?;
-        {
-            let mut file = fs::File::create(&temporary)?;
-            file.write_all(&bytes)?;
-            file.sync_all()?;
-        }
+        atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
+        Ok(())
+    }
 
-        fn sanitize_persisted_location(uri: &str) -> String {
-            let without_transient = uri.split(['?', '#']).next().unwrap_or(uri);
-            let Some((scheme, remainder)) = without_transient.split_once("://") else {
-                return without_transient.to_owned();
-            };
-            let authority_end = remainder.find('/').unwrap_or(remainder.len());
-            let (authority, path) = remainder.split_at(authority_end);
-            let sanitized_authority = authority.rsplit_once('@').map_or_else(
-                || authority.to_owned(),
-                |(userinfo, host)| {
-                    let username = userinfo
-                        .split_once(':')
-                        .map_or(userinfo, |(username, _)| username);
-                    if username.is_empty() {
-                        host.to_owned()
-                    } else {
-                        format!("{username}@{host}")
-                    }
+    /// Returns the absolute path of an independently versioned sidecar document.
+    #[must_use]
+    pub fn document_path<D: VersionedDocument>(&self) -> PathBuf {
+        self.directory.join(D::FILE_NAME)
+    }
+
+    /// Loads a sidecar document through the shared migration machinery.
+    ///
+    /// Returns `Ok(None)` when the document was never written. Unlike
+    /// [`Self::load`], a malformed or unsupported document is a typed failure
+    /// rather than a silent reset: sidecar documents may carry durable
+    /// consent, which must never be discarded by recovery.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed schema-version, migration, JSON, or filesystem failure.
+    pub fn load_document<D: VersionedDocument>(
+        &self,
+    ) -> Result<Option<D>, DocumentError<D::MigrationError>> {
+        let path = self.document_path::<D>();
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(DocumentError::Io(error)),
+        };
+        let value: Value = serde_json::from_slice(&bytes)?;
+        let version = schema_version(&value)?;
+        if version == 0 || version > D::CURRENT_SCHEMA_VERSION {
+            return Err(DocumentError::SchemaVersion(
+                SchemaVersionError::Unsupported {
+                    found: version,
+                    current: D::CURRENT_SCHEMA_VERSION,
                 },
-            );
-            format!("{scheme}://{sanitized_authority}{path}")
+            ));
         }
-        fs::rename(&temporary, path)?;
+        let migrated = D::migrate(value, version).map_err(DocumentError::Migration)?;
+        let document: D = serde_json::from_value(migrated)?;
+        document.validate().map_err(DocumentError::Migration)?;
+        Ok(Some(document))
+    }
+
+    /// Validates and atomically persists a sidecar document.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, JSON, or filesystem failure.
+    pub fn save_document<D: VersionedDocument>(
+        &self,
+        document: &D,
+    ) -> Result<(), DocumentError<D::MigrationError>> {
+        document.validate().map_err(DocumentError::Migration)?;
+        let bytes = serde_json::to_vec_pretty(document)?;
+        atomic_write(&self.directory, D::FILE_NAME, &bytes)?;
         Ok(())
     }
 
@@ -406,8 +441,176 @@ impl SettingsStore {
     }
 }
 
+fn sanitize_persisted_location(uri: &str) -> String {
+    let without_transient = uri.split(['?', '#']).next().unwrap_or(uri);
+    let Some((scheme, remainder)) = without_transient.split_once("://") else {
+        return without_transient.to_owned();
+    };
+    let authority_end = remainder.find('/').unwrap_or(remainder.len());
+    let (authority, path) = remainder.split_at(authority_end);
+    let sanitized_authority = authority.rsplit_once('@').map_or_else(
+        || authority.to_owned(),
+        |(userinfo, host)| {
+            let username = userinfo
+                .split_once(':')
+                .map_or(userinfo, |(username, _)| username);
+            if username.is_empty() {
+                host.to_owned()
+            } else {
+                format!("{username}@{host}")
+            }
+        },
+    );
+    format!("{scheme}://{sanitized_authority}{path}")
+}
+
+/// Writes `bytes` to `directory/file_name` through a temporary sibling so an
+/// interrupted write can never leave a partial document behind.
+///
+/// # Errors
+///
+/// Returns the underlying filesystem failure.
+pub fn atomic_write(directory: &Path, file_name: &str, bytes: &[u8]) -> Result<(), std::io::Error> {
+    fs::create_dir_all(directory)?;
+    let temporary = directory.join(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        unix_nanos()
+    ));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        fs::rename(&temporary, directory.join(file_name))?;
+        sync_directory(directory)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+/// Flushes a directory entry so a rename inside it survives a crash.
+///
+/// # Errors
+///
+/// Returns the underlying filesystem failure.
+#[cfg(windows)]
+pub fn sync_directory(directory: &Path) -> Result<(), std::io::Error> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(directory)?
+        .sync_all()
+}
+
+/// Flushes a directory entry so a rename inside it survives a crash.
+///
+/// # Errors
+///
+/// Returns the underlying filesystem failure.
+#[cfg(not(windows))]
+pub fn sync_directory(directory: &Path) -> Result<(), std::io::Error> {
+    fs::File::open(directory)?.sync_all()
+}
+
+/// Reads a document's `schemaVersion` without accepting a substitute.
+///
+/// Sidecar documents have no legacy unversioned format, so a missing,
+/// textual, negative, or fractional version is a hard failure rather than an
+/// assumed version one.
+///
+/// # Errors
+///
+/// Returns the exact reason the version could not be trusted.
+pub fn schema_version(value: &Value) -> Result<u32, SchemaVersionError> {
+    let version = value
+        .get("schemaVersion")
+        .ok_or(SchemaVersionError::Missing)?;
+    let number = version.as_u64().ok_or(SchemaVersionError::NotAnInteger)?;
+    u32::try_from(number).map_err(|_| SchemaVersionError::NotAnInteger)
+}
+
+/// Independently versioned JSON document stored beside `settings.json`.
+///
+/// Implementors reuse the settings migration machinery — strict version
+/// reading, migration, validation, and atomic writes — without their types
+/// having to live in this crate, which keeps the dependency direction
+/// one-way.
+pub trait VersionedDocument: Serialize + DeserializeOwned + Sized {
+    /// Typed migration/validation failure owned by the implementing crate.
+    type MigrationError: std::error::Error + Send + Sync + 'static;
+
+    /// Stable file name within the configuration directory.
+    const FILE_NAME: &'static str;
+
+    /// Schema version written by this build.
+    const CURRENT_SCHEMA_VERSION: u32;
+
+    /// Upgrades a strictly versioned JSON document to the current schema.
+    ///
+    /// `version` is always within `1..=CURRENT_SCHEMA_VERSION`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the implementor's typed migration failure.
+    fn migrate(value: Value, version: u32) -> Result<Value, Self::MigrationError>;
+
+    /// Rejects a structurally invalid document before it is written or used.
+    ///
+    /// # Errors
+    ///
+    /// Returns the implementor's typed validation failure.
+    fn validate(&self) -> Result<(), Self::MigrationError>;
+}
+
+/// On-disk schema version that cannot be trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum SchemaVersionError {
+    /// The document has no `schemaVersion` member.
+    #[error("document has no schemaVersion")]
+    Missing,
+    /// The version is not a non-negative whole number.
+    #[error("document schemaVersion is not a non-negative integer")]
+    NotAnInteger,
+    /// The version is zero or newer than this build understands.
+    #[error("document schemaVersion {found} is unsupported by schema version {current}")]
+    Unsupported {
+        /// Version found on disk.
+        found: u32,
+        /// Version written by this build.
+        current: u32,
+    },
+}
+
+/// Sidecar document persistence failure.
+#[derive(Debug, Error)]
+pub enum DocumentError<E: std::error::Error + Send + Sync + 'static> {
+    /// The persisted schema version could not be trusted.
+    #[error(transparent)]
+    SchemaVersion(#[from] SchemaVersionError),
+    /// The document failed its owner's migration or validation.
+    #[error(transparent)]
+    Migration(E),
+    /// A filesystem operation failed.
+    #[error("configuration document filesystem operation failed: {0}")]
+    Io(#[from] std::io::Error),
+    /// JSON serialization or deserialization failed.
+    #[error("configuration document JSON operation failed: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
 fn migrate(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
     let mut value: Value = serde_json::from_slice(bytes)?;
+    // `settings.json` predates versioning, so an absent version is a documented
+    // legacy format and is read as version one. Sidecar documents have no such
+    // history and use the strict [`schema_version`] reader instead.
     let version = value
         .get("schemaVersion")
         .and_then(Value::as_u64)
@@ -443,6 +646,13 @@ fn unix_timestamp() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+fn unix_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
 }
 
 #[cfg(test)]
@@ -663,6 +873,7 @@ mod tests {
             pinned: true,
             query: fm_domain::SearchQuery {
                 schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
+                mode: fm_domain::SearchMode::Name,
                 scope: fm_domain::SearchScope {
                     locations: vec![Location::new(
                         fm_domain::ProviderId::new("sftp"),
@@ -679,6 +890,8 @@ mod tests {
                 modified_after: None,
                 modified_before: None,
                 content: None,
+                semantic: None,
+                concept: None,
                 git_statuses: Vec::new(),
                 tags: Vec::new(),
                 metadata: BTreeMap::new(),
@@ -737,5 +950,141 @@ mod tests {
             .count();
         assert_eq!(backups, 1);
         assert!(!directory.path().join(SETTINGS_FILE_NAME).exists());
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SampleDocument {
+        schema_version: u32,
+        consented: bool,
+    }
+
+    #[derive(Debug, Error, PartialEq, Eq)]
+    enum SampleError {
+        #[error("sample document schema version {0} is unsupported")]
+        UnsupportedSchema(u32),
+        #[error("sample document is invalid")]
+        Invalid,
+    }
+
+    impl VersionedDocument for SampleDocument {
+        type MigrationError = SampleError;
+
+        const FILE_NAME: &'static str = "sample-document.json";
+        const CURRENT_SCHEMA_VERSION: u32 = 2;
+
+        fn migrate(mut value: Value, version: u32) -> Result<Value, SampleError> {
+            match version {
+                1 => {
+                    value["schemaVersion"] = Value::from(Self::CURRENT_SCHEMA_VERSION);
+                    value["consented"] = Value::from(false);
+                    Ok(value)
+                }
+                2 => Ok(value),
+                unsupported => Err(SampleError::UnsupportedSchema(unsupported)),
+            }
+        }
+
+        fn validate(&self) -> Result<(), SampleError> {
+            if self.schema_version == Self::CURRENT_SCHEMA_VERSION {
+                Ok(())
+            } else {
+                Err(SampleError::Invalid)
+            }
+        }
+    }
+
+    #[test]
+    fn a_sidecar_document_round_trips_and_migrates_through_the_shared_machinery() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let document = SampleDocument {
+            schema_version: 2,
+            consented: true,
+        };
+
+        store.save_document(&document).expect("save document");
+
+        assert_eq!(store.load_document().expect("load"), Some(document));
+        assert_eq!(
+            store.document_path::<SampleDocument>(),
+            directory.path().join("sample-document.json")
+        );
+
+        fs::write(
+            store.document_path::<SampleDocument>(),
+            br#"{"schemaVersion":1}"#,
+        )
+        .expect("write v1 document");
+
+        assert_eq!(
+            store.load_document::<SampleDocument>().expect("migrate"),
+            Some(SampleDocument {
+                schema_version: 2,
+                consented: false,
+            })
+        );
+    }
+
+    #[test]
+    fn a_missing_sidecar_document_is_absent_rather_than_defaulted() {
+        let directory = tempdir().expect("temp directory");
+
+        assert_eq!(
+            SettingsStore::new(directory.path())
+                .load_document::<SampleDocument>()
+                .expect("absent document"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_sidecar_schema_version_is_never_assumed() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let cases: [(&str, SchemaVersionError); 6] = [
+            (r#"{"consented":true}"#, SchemaVersionError::Missing),
+            (r#"{"schemaVersion":"2"}"#, SchemaVersionError::NotAnInteger),
+            (r#"{"schemaVersion":-1}"#, SchemaVersionError::NotAnInteger),
+            (r#"{"schemaVersion":1.5}"#, SchemaVersionError::NotAnInteger),
+            (
+                r#"{"schemaVersion":0}"#,
+                SchemaVersionError::Unsupported {
+                    found: 0,
+                    current: 2,
+                },
+            ),
+            (
+                r#"{"schemaVersion":3}"#,
+                SchemaVersionError::Unsupported {
+                    found: 3,
+                    current: 2,
+                },
+            ),
+        ];
+
+        for (json, expected) in cases {
+            fs::write(store.document_path::<SampleDocument>(), json).expect("write document");
+
+            match store.load_document::<SampleDocument>() {
+                Err(DocumentError::SchemaVersion(actual)) => assert_eq!(actual, expected, "{json}"),
+                other => panic!("{json} produced {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn saving_settings_never_rewrites_a_sidecar_document() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let document = SampleDocument {
+            schema_version: 2,
+            consented: true,
+        };
+        store.save_document(&document).expect("save document");
+
+        store.save(&Settings::default()).expect("save settings");
+
+        assert_eq!(store.load_document().expect("load"), Some(document));
     }
 }

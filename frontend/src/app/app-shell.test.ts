@@ -141,6 +141,15 @@ async function openAppearanceSettings(container: HTMLElement = root): Promise<vo
   await vi.waitFor(() => expect(container.querySelector('.theme-switcher')).not.toBeNull());
 }
 
+function openSettingsSection(label: string, container: HTMLElement = root): void {
+  const button = [
+    ...container.querySelectorAll<HTMLButtonElement>('.fm-settings-section-button'),
+  ].find((candidate) => candidate.textContent?.trim() === label);
+  if (!button) throw new Error(`no settings section labelled "${label}"`);
+  button.click();
+  m.redraw.sync();
+}
+
 /** Opens the workspace switcher disclosure in the toolbar (task 0084). */
 async function openWorkspaceSwitcher(container: HTMLElement = root): Promise<void> {
   container.querySelector<HTMLElement>('.fm-workspace-switcher-button')?.click();
@@ -1919,15 +1928,16 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
     );
     m.redraw.sync();
-    const filenameInput = root.querySelector<HTMLInputElement>('#find-files-query');
-    const contentInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(
-      (input) => input.placeholder === 'Text or regex to find in files',
-    );
-    if (filenameInput === null || contentInput === undefined) {
-      throw new Error('find files inputs missing');
+    const contentMode = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button'),
+    ].find((button) => button.textContent === 'Content');
+    if (contentMode === undefined) {
+      throw new Error('content search mode missing');
     }
-    filenameInput.value = '';
-    filenameInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    contentMode.click();
+    m.redraw.sync();
+    const contentInput = root.querySelector<HTMLInputElement>('#find-files-query');
+    if (contentInput === null) throw new Error('find files input missing');
     contentInput.value = 'ERROR';
     contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
     contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -2240,6 +2250,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -3025,9 +3037,128 @@ describe('AppShell', () => {
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
     expect(root.querySelector('.fm-settings-editor')?.getAttribute('role')).toBe('dialog');
     expect(root.querySelector('.theme-switcher')).not.toBeNull();
+  });
+
+  it('wires the runtime client into semantic settings without starting an action', async () => {
+    const client = new MockFileManagerClient();
+    const status = vi.spyOn(client, 'getSemanticComponentStatus');
+    const createOffer = vi.spyOn(client, 'createSemanticComponentInstallationOffer');
+    const acceptOffer = vi.spyOn(client, 'acceptSemanticComponentInstallationOffer');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await openAppearanceSettings();
     expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
+    openSettingsSection('Semantic');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
+    );
+
+    expect(status).toHaveBeenCalledTimes(2);
+    expect(createOffer).not.toHaveBeenCalled();
+    expect(acceptOffer).not.toHaveBeenCalled();
+  });
+
+  it('hides semantic chat while semantic components are inactive', async () => {
+    m.mount(root, {
+      view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
+    });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
+
+    const paletteButton = await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]');
+      expect(button).not.toBeNull();
+      return button as HTMLButtonElement;
+    });
+    paletteButton.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
+    expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
+      'Ask your files',
+    );
+  });
+
+  it('opens Ask immediately and offers to include an unenrolled active folder', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'ask-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Ask your files"]');
+      expect(button).not.toBeNull();
+      expect(button?.textContent).toBe('');
+    });
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Ask your files'),
+    );
+    const askPaletteEntry = [...root.querySelectorAll<HTMLElement>('.fm-command-palette li')].find(
+      (entry) => entry.textContent?.includes('Ask your files'),
+    );
+    expect(askPaletteEntry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+f');
+    root
+      .querySelector<HTMLElement>('.fm-command-palette-backdrop')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    m.redraw.sync();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
+        'Index current folder',
+      ),
+    );
+    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
+      .find((label) => label.textContent?.trim() === 'Index current folder')
+      ?.querySelector<HTMLInputElement>('input')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
+      .find((button) => button.textContent?.trim() === 'Close')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
+        'Index current folder',
+      ),
+    );
+    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
+      .find((label) => label.textContent?.trim() === 'Index current folder')
+      ?.querySelector<HTMLInputElement>('input')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).not.toBeNull(),
+    );
+    root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')?.click();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Include and index folder')
+      ?.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain('Ask is read-only'),
+    );
   });
 
   it('renders settings content when the native disclosure state opens', async () => {
@@ -3071,6 +3202,7 @@ describe('AppShell', () => {
     const listDirectory = vi.spyOn(client, 'listDirectory');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openAppearanceSettings();
+    openSettingsSection('Files & operations');
     listDirectory.mockClear();
 
     const hiddenFilesLabel = [...root.querySelectorAll<HTMLElement>('label.switch-label')].find(
@@ -3146,6 +3278,7 @@ describe('AppShell', () => {
     const listDirectory = vi.spyOn(client, 'listDirectory');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await openAppearanceSettings();
+    openSettingsSection('Files & operations');
 
     const hiddenFilesLabel = [...root.querySelectorAll<HTMLElement>('label.switch-label')].find(
       (label) => label.textContent?.includes('Show hidden files'),
@@ -3222,6 +3355,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
     expect(root.querySelector('.fm-plugin-row strong')?.textContent).toBe('Mock Archive');
@@ -3232,6 +3366,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
 
     client.emit({
@@ -3254,6 +3389,7 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await openAppearanceSettings();
+    openSettingsSection('Plugins');
     await vi.waitFor(() => expect(root.querySelector('.fm-plugin-row')).not.toBeNull());
     const callsBeforeEvent = listPlugins.mock.calls.length;
 
@@ -3851,6 +3987,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'tauri',
+      semanticComponentAuthority: 'desktopManaged',
+      semanticRuntimeExecutableDownload: 'directDistribution',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -3908,6 +4046,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -4651,6 +4791,8 @@ describe('tabs per pane (task 0069)', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });

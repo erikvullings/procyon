@@ -1,0 +1,23 @@
+[package]
+name = "fm-semantic-library"
+description = "Provider-neutral semantic library consent policy and catalog core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+fm-domain.workspace = true
+fm-settings.workspace = true
+fs2.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

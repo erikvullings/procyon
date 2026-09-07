@@ -1,6 +1,6 @@
 # 0187 SKOS vocabularies and concept virtual folders
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend, metadata
 Depends on: 0162, 0182
@@ -62,3 +62,13 @@ without changing document embeddings or reprocessing source files.
 
 - 2026-09-04: Split from 0176. Agreed policy is named attachable vocabularies, curated authority,
   reviewed machine suggestions, and automatic replaceable post-index labels.
+- 2026-09-08: Implemented the documented `procyon-skos-1` interchange with deterministic
+  round-tripping, multilingual labels, bounded namespaced extensions, relationship validation,
+  durable device-local sources/reviews/attachments, and explicit candidate accept/edit/reject.
+- 2026-09-08: Added separate bounded concept/chunk-vector matching, review-only low-confidence
+  suggestions, generation-published many-to-many chunk annotations with evidence, deletion
+  cascading, and stable tenant/root/workspace-scoped concept queries over the worker IPC boundary.
+- 2026-09-08: Added schema-v3 stable concept saved searches, hierarchy expansion, existing
+  virtual-location paging, REST/Tauri/mock parity, and accessible vocabulary import, attachment,
+  review, folder creation, and confirmation-gated deletion UI. Verified the workspace lint and
+  full Rust, frontend, and script test suites.

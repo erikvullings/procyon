@@ -29,6 +29,12 @@ fm-plugin-runtime.workspace = true
 fm-pptx-renderer.workspace = true
 fm-search.workspace = true
 fm-search-acceleration.workspace = true
+fm-semantic-components.workspace = true
+fm-semantic-conversion.workspace = true
+fm-semantic-docling.workspace = true
+fm-semantic-library.workspace = true
+fm-semantic-protocol.workspace = true
+fm-semantic-worker.workspace = true
 fm-settings.workspace = true
 fm-ssh.workspace = true
 fm-transport-dto.workspace = true
@@ -43,11 +49,13 @@ fm-vfs-webdav.workspace = true
 futures.workspace = true
 image.workspace = true
 parallel-disk-usage.workspace = true
+percent-encoding.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 quick-xml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "sync", "time"] }
@@ -63,6 +71,7 @@ workspace = true
 
 [dev-dependencies]
 base64.workspace = true
+ed25519-dalek.workspace = true
 fm-ssh.workspace = true
 git2.workspace = true
 lopdf.workspace = true

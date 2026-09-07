@@ -47,6 +47,96 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::runtime::get_runtime_capabilities
         ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::get_semantic_component_capabilities
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::get_semantic_component_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::list_semantic_component_profiles
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::create_semantic_component_installation_offer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::accept_semantic_component_installation_offer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::pause_semantic_component_indexing
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::resume_semantic_component_indexing
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::create_semantic_component_index_removal_plan
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::confirm_semantic_component_index_removal
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::move_semantic_component_data
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::uninstall_semantic_components
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::install_semantic_component_worker_patch
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::import_semantic_component_local_model
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::plan_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::confirm_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::checkpoint_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_components::complete_semantic_component_model_migration
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_library_capabilities
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_library_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::get_semantic_folder_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::preview_semantic_enrolment
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::confirm_semantic_enrolment
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::plan_semantic_exclusion
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::confirm_semantic_exclusion
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::resume_semantic_cleanup
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::pause_semantic_library
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::resume_semantic_library
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::update_semantic_eligibility_overrides
+        ))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::list))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::import))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::export))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::attach))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::review))
+        .routes(utoipa_axum::routes!(routes::semantic_vocabulary::delete))
         .routes(utoipa_axum::routes!(routes::settings::get_settings))
         .routes(utoipa_axum::routes!(
             routes::system_location::get_system_locations
@@ -169,6 +259,50 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::connection::accept_ssh_host_key
         ))
         .routes(utoipa_axum::routes!(
+            routes::llm_profile::list_llm_profile_presets
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::list_llm_profiles))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::create_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::update_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::delete_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::clone_llm_profile))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::export_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::activate_llm_profile
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::test_llm_profile))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::discover_llm_profile_models
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::discover_llm_profile_draft_models
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::document_summary::preview_document_summary
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::document_summary::generate_document_summary
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::document_summary::get_document_summary
+        ))
+        .routes(utoipa_axum::routes!(routes::rag::preview_rag))
+        .routes(utoipa_axum::routes!(routes::rag::generate_rag_answer))
+        .routes(utoipa_axum::routes!(routes::rag::save_rag_conversation))
+        .routes(utoipa_axum::routes!(
+            routes::rag::list_saved_rag_conversations
+        ))
+        .routes(utoipa_axum::routes!(routes::rag::delete_rag_conversation))
+        .routes(utoipa_axum::routes!(routes::rag::resolve_rag_citation))
+        .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))
         .routes(utoipa_axum::routes!(
@@ -264,6 +398,13 @@ pub fn build_router_with_service_and_session(
         )),
         accessible_roots: Arc::from(config.roots.clone()),
         mutation_limiter: rate_limit::build_limiter(config.max_mutations_per_second),
+        semantic_access: Arc::new(
+            fm_application::semantic_library::SemanticAccessContext::server(
+                config.semantic_library_tenant_id.clone(),
+                config.semantic_library_user_id.clone(),
+            )
+            .unwrap_or(fm_application::semantic_library::SemanticAccessContext::Anonymous),
+        ),
     };
 
     let (router, api) = api_router().split_for_parts();

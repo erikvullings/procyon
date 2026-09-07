@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use fm_application::FileManagerService;
+use fm_application::semantic_library::SemanticAccessContext;
 use fm_transport_dto::DiagnosticErrorDto;
 use tokio_util::sync::CancellationToken;
 
@@ -146,6 +147,23 @@ pub(crate) struct AppState {
     pub(crate) accessible_roots: Arc<[std::path::PathBuf]>,
     /// Shared token bucket throttling mutating requests (task 0064).
     pub(crate) mutation_limiter: Arc<MutationLimiter>,
+    /// Semantic-library principal this server serves every request as
+    /// (task 0179).
+    ///
+    /// Built once, from operator-owned server configuration, and never from
+    /// request data. Server mode is single-user, so a valid session token means
+    /// "this server's configured principal" and nothing more; a crafted header,
+    /// query parameter, or request body cannot select another tenant, user, or
+    /// library. `Anonymous` when the configured values are structurally
+    /// invalid, which denies every semantic-library call.
+    pub(crate) semantic_access: Arc<SemanticAccessContext>,
+}
+
+impl AppState {
+    /// Returns the trusted semantic principal for one request.
+    pub(crate) fn semantic_access(&self) -> &SemanticAccessContext {
+        &self.semantic_access
+    }
 }
 
 impl axum::extract::FromRef<AppState> for Arc<SessionManager> {

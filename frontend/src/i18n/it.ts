@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Italian catalogue (task 0098). Keep the key set identical to `en`. */
@@ -221,6 +221,7 @@ export const it = {
     unableToRun: 'Impossibile eseguire il comando.',
   },
   settings: {
+    ...en.settings,
     language: 'Lingua',
     languageEnglish: 'Inglese',
     languageDutch: 'Olandese',
@@ -633,6 +634,7 @@ export const it = {
     rename: 'Rinomina',
   },
   search: {
+    ...en.search,
     unableToStart: 'Impossibile avviare la ricerca',
     refresh: 'Aggiorna ricerca',
     filterLimitations: 'Alcuni filtri non è stato possibile valutarli ({message}).',
@@ -845,7 +847,14 @@ export const it = {
     message: 'Questo riquadro non ha altre schede. Chiuderla lascerà il riquadro vuoto.',
     closeTab: 'Chiudi scheda',
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Copia per segnalazione bug',
     copyTitle: 'Copia diagnostica redatta per segnalazioni di bug',
     loading: 'Caricamento diagnostica…',

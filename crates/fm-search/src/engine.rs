@@ -90,6 +90,7 @@ pub struct ProviderSearchLimitation {
 
 /// Starts and cancels recursive searches (filename and/or content), streaming
 /// matches over the event bus as they are found.
+#[derive(Clone)]
 pub struct SearchEngine {
     store: Arc<SearchResultsStore>,
     events: EventBus,
@@ -176,6 +177,27 @@ impl SearchEngine {
             providers,
             accelerator,
         }
+    }
+
+    /// Registers an already ranked result page in the ordinary `search://`
+    /// store. Semantic retrieval uses this seam so panes, paging, cancellation,
+    /// and stable entry navigation do not need a second result system.
+    #[must_use]
+    pub fn start_materialized(&self, search_id: Uuid, entries: Vec<EntrySummary>) -> SearchStart {
+        self.store.register(search_id, CancellationToken::new());
+        self.store.append(search_id, entries, 0);
+        SearchStart {
+            location: Location::new(
+                ProviderId::new("search"),
+                format!("search://local/{search_id}"),
+            ),
+            execution_mode: SearchExecutionModePayload::Semantic,
+        }
+    }
+
+    /// Appends ranked entries produced by an external search capability.
+    pub fn append_materialized(&self, search_id: Uuid, entries: Vec<EntrySummary>) {
+        self.store.append(search_id, entries, 0);
     }
 
     /// Starts a new cancellable search over `roots` with `options`, publishing

@@ -1,4 +1,5 @@
 import type {
+  AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
   ApplySyncPlanRequest,
@@ -6,22 +7,36 @@ import type {
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
+  AttachSemanticVocabularyRequest,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
   ChecksumPage,
   ComparisonPage,
+  CompleteSemanticModelMigrationRequest,
+  ConfirmSemanticEnrolmentRequest,
+  ConfirmSemanticExclusionRequest,
+  ConfirmSemanticIndexRemovalRequest,
+  ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
   CreateConnectionRequest,
+  CreateSemanticIndexRemovalPlanRequest,
+  CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  DeleteLlmProfileRequest,
+  DeleteRagConversationRequest,
+  DeleteSemanticVocabularyImpact,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
   DiscoverApplicationUninstallCandidatesResult,
+  DocumentSummary,
+  DocumentSummaryPreview,
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
@@ -34,13 +49,25 @@ import type {
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
+  GenerateDocumentSummaryRequest,
+  GenerateRagAnswerRequest,
+  GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GetDocumentSummaryRequest,
+  GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImportSemanticLocalModelRequest,
+  InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   ListDirectoryRequest,
+  LlmProfile,
+  LlmProfileExport,
+  LlmProfilePreset,
+  LlmProfileTestResult,
   LoadEditableFileRequest,
+  MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -48,12 +75,18 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  PlanSemanticExclusionRequest,
+  PlanSemanticModelMigrationRequest,
   PluginDescriptor,
   PluginIconTheme,
   PluginId,
   PluginLogEntry,
   PptxPreview,
   PptxPreviewSessionRequest,
+  PreviewDocumentSummaryRequest,
+  PreviewRagRequest,
+  PreviewSemanticEnrolmentRequest,
+  RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
   ReadPptxPreviewPdfRequest,
@@ -62,14 +95,41 @@ import type {
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
+  ResolvedRagCitation,
+  ResolveRagCitationRequest,
+  ResumeSemanticCleanupRequest,
+  ReviewConceptCandidateRequest,
   RuntimeCapabilities,
   SaveChecksumFileRequest,
   SavedChecksumFile,
+  SavedRagConversation,
   SaveEditableFileRequest,
+  SaveLlmProfileRequest,
+  SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
   SearchStructuredRowsRequest,
+  SemanticComponentCapabilities,
+  SemanticComponentStatus,
+  SemanticDataMoveReceipt,
+  SemanticEnrolmentPreview,
+  SemanticExclusionPlan,
+  SemanticFolderStatus,
+  SemanticIndexRemovalPlan,
+  SemanticIndexRemovalReceipt,
+  SemanticInstallationOffer,
+  SemanticInstallReceipt,
+  SemanticLibraryCapabilities,
+  SemanticLibraryRevisionRequest,
+  SemanticLibraryStatus,
+  SemanticModelMigrationPlan,
+  SemanticModelMigrationProgress,
+  SemanticModelProfile,
+  SemanticModelSelection,
+  SemanticUninstallReceipt,
+  SemanticVocabulary,
+  SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
@@ -90,8 +150,10 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -141,6 +203,9 @@ import {
   listDirectoryChildren as requestDirectoryChildren,
   cancelDiskUsage as requestDiskUsageCancel,
   scanDiskUsage as requestDiskUsageScan,
+  generateDocumentSummary as requestDocumentSummaryGeneration,
+  getDocumentSummary as requestDocumentSummaryGet,
+  previewDocumentSummary as requestDocumentSummaryPreview,
   closeDocxPreview as requestDocxPreviewClose,
   openDocxPreview as requestDocxPreviewOpen,
   readDocxPreviewResource as requestDocxPreviewResource,
@@ -153,6 +218,17 @@ import {
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
   getFileGitHistory as requestGitFileHistory,
+  activateLlmProfile as requestLlmProfileActivation,
+  cloneLlmProfile as requestLlmProfileClone,
+  createLlmProfile as requestLlmProfileCreation,
+  deleteLlmProfile as requestLlmProfileDeletion,
+  discoverLlmProfileDraftModels as requestLlmProfileDraftModelDiscovery,
+  exportLlmProfile as requestLlmProfileExport,
+  discoverLlmProfileModels as requestLlmProfileModelDiscovery,
+  listLlmProfilePresets as requestLlmProfilePresets,
+  listLlmProfiles as requestLlmProfiles,
+  testLlmProfile as requestLlmProfileTest,
+  updateLlmProfile as requestLlmProfileUpdate,
   loadEditableFile as requestLoadEditableFile,
   navigatePane as requestNavigation,
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
@@ -174,12 +250,52 @@ import {
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  resolveRagCitation as requestRagCitationResolution,
+  deleteRagConversation as requestRagConversationDeletion,
+  listSavedRagConversations as requestRagConversationList,
+  saveRagConversation as requestRagConversationSave,
+  generateRagAnswer as requestRagGeneration,
+  previewRag as requestRagPreview,
   readFileRange as requestReadFileRange,
   getRuntimeCapabilities as requestRuntimeCapabilities,
   saveEditableFile as requestSaveEditableFile,
   cancelSearch as requestSearchCancel,
   searchInFile as requestSearchInFile,
   startSearch as requestSearchStart,
+  resumeSemanticCleanup as requestSemanticCleanupResume,
+  getSemanticComponentCapabilities as requestSemanticComponentCapabilities,
+  moveSemanticComponentData as requestSemanticComponentDataMove,
+  pauseSemanticComponentIndexing as requestSemanticComponentIndexingPause,
+  resumeSemanticComponentIndexing as requestSemanticComponentIndexingResume,
+  confirmSemanticComponentIndexRemoval as requestSemanticComponentIndexRemovalConfirmation,
+  createSemanticComponentIndexRemovalPlan as requestSemanticComponentIndexRemovalPlanCreation,
+  getSemanticComponentStatus as requestSemanticComponentStatus,
+  installSemanticComponentWorkerPatch as requestSemanticComponentWorkerPatch,
+  updateSemanticEligibilityOverrides as requestSemanticEligibilityOverridesUpdate,
+  confirmSemanticEnrolment as requestSemanticEnrolmentConfirmation,
+  previewSemanticEnrolment as requestSemanticEnrolmentPreview,
+  confirmSemanticExclusion as requestSemanticExclusionConfirmation,
+  planSemanticExclusion as requestSemanticExclusionPlan,
+  getSemanticFolderStatus as requestSemanticFolderStatus,
+  acceptSemanticComponentInstallationOffer as requestSemanticInstallationOfferAcceptance,
+  createSemanticComponentInstallationOffer as requestSemanticInstallationOfferCreation,
+  getSemanticLibraryCapabilities as requestSemanticLibraryCapabilities,
+  pauseSemanticLibrary as requestSemanticLibraryPause,
+  resumeSemanticLibrary as requestSemanticLibraryResume,
+  getSemanticLibraryStatus as requestSemanticLibraryStatus,
+  importSemanticComponentLocalModel as requestSemanticLocalModelImport,
+  checkpointSemanticComponentModelMigration as requestSemanticModelMigrationCheckpoint,
+  completeSemanticComponentModelMigration as requestSemanticModelMigrationCompletion,
+  confirmSemanticComponentModelMigration as requestSemanticModelMigrationConfirmation,
+  planSemanticComponentModelMigration as requestSemanticModelMigrationPlan,
+  listSemanticComponentProfiles as requestSemanticProfiles,
+  uninstallSemanticComponents as requestSemanticUninstall,
+  listSemanticVocabularies as requestSemanticVocabularies,
+  attachSemanticVocabulary as requestSemanticVocabularyAttachment,
+  deleteSemanticVocabulary as requestSemanticVocabularyDelete,
+  exportSemanticVocabulary as requestSemanticVocabularyExport,
+  importSemanticVocabulary as requestSemanticVocabularyImport,
+  reviewSemanticConceptCandidate as requestSemanticVocabularyReview,
   getSettings as requestSettings,
   updateSettings as requestSettingsUpdate,
   getSpotlightComment as requestSpotlightComment,
@@ -266,6 +382,462 @@ export class HttpFileManagerClient implements FileManagerClient {
     const response = await requestRuntimeCapabilities(
       signal !== undefined ? { signal } : undefined,
     );
+    return response.data;
+  }
+
+  async getSemanticComponentCapabilities(
+    signal?: AbortSignal,
+  ): Promise<SemanticComponentCapabilities> {
+    const response = await requestSemanticComponentCapabilities(
+      signal === undefined ? undefined : { signal },
+    );
+    return response.data;
+  }
+
+  async getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
+    const response = await requestSemanticComponentStatus(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getSemanticComponentStatus response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
+    const response = await requestSemanticProfiles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected listSemanticComponentProfiles response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async createSemanticComponentInstallationOffer(
+    request: CreateSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallationOffer> {
+    const response = await requestSemanticInstallationOfferCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected createSemanticComponentInstallationOffer response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async acceptSemanticComponentInstallationOffer(
+    request: AcceptSemanticInstallationOfferRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticInstallReceipt> {
+    const response = await requestSemanticInstallationOfferAcceptance(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected acceptSemanticComponentInstallationOffer response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    const response = await requestSemanticComponentIndexingPause(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(
+        `Unexpected pauseSemanticComponentIndexing response status: ${response.status}`,
+      );
+    }
+  }
+
+  async resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
+    const response = await requestSemanticComponentIndexingResume(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(
+        `Unexpected resumeSemanticComponentIndexing response status: ${response.status}`,
+      );
+    }
+  }
+
+  async createSemanticComponentIndexRemovalPlan(
+    request: CreateSemanticIndexRemovalPlanRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalPlan> {
+    const response = await requestSemanticComponentIndexRemovalPlanCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected createSemanticComponentIndexRemovalPlan response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async confirmSemanticComponentIndexRemoval(
+    request: ConfirmSemanticIndexRemovalRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticIndexRemovalReceipt> {
+    const response = await requestSemanticComponentIndexRemovalConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected confirmSemanticComponentIndexRemoval response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async moveSemanticComponentData(
+    request: MoveSemanticDataRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticDataMoveReceipt> {
+    const response = await requestSemanticComponentDataMove(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected moveSemanticComponentData response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async uninstallSemanticComponents(
+    request: UninstallSemanticComponentsRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticUninstallReceipt> {
+    const response = await requestSemanticUninstall(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected uninstallSemanticComponents response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async installSemanticComponentWorkerPatch(
+    request: InstallSemanticWorkerPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticWorkerPatchResponse> {
+    const response = await requestSemanticComponentWorkerPatch(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected installSemanticComponentWorkerPatch response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async importSemanticComponentLocalModel(
+    request: ImportSemanticLocalModelRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    const response = await requestSemanticLocalModelImport(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected importSemanticComponentLocalModel response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async planSemanticComponentModelMigration(
+    request: PlanSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationPlan> {
+    const response = await requestSemanticModelMigrationPlan(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected planSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async confirmSemanticComponentModelMigration(
+    request: ConfirmSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    const response = await requestSemanticModelMigrationConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected confirmSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async checkpointSemanticComponentModelMigration(
+    request: CheckpointSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelMigrationProgress> {
+    const response = await requestSemanticModelMigrationCheckpoint(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected checkpointSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async completeSemanticComponentModelMigration(
+    request: CompleteSemanticModelMigrationRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticModelSelection> {
+    const response = await requestSemanticModelMigrationCompletion(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected completeSemanticComponentModelMigration response status: ${response.status}`,
+      );
+    }
+    return response.data;
+  }
+
+  async getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {
+    const response = await requestSemanticLibraryCapabilities(
+      signal === undefined ? undefined : { signal },
+    );
+    return response.data;
+  }
+
+  async getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticLibraryStatus(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getSemanticLibraryStatus response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
+    const response = await requestSemanticVocabularies(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async importSemanticVocabulary(
+    skosJson: string,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyImport(
+      { skosJson },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
+    const response = await requestSemanticVocabularyExport(
+      { vocabularyId },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data.skosJson;
+  }
+
+  async attachSemanticVocabulary(
+    request: AttachSemanticVocabularyRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyAttachment(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async reviewSemanticConceptCandidate(
+    request: ReviewConceptCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticVocabulary> {
+    const response = await requestSemanticVocabularyReview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteSemanticVocabulary(
+    vocabularyId: string,
+    confirmAffected: boolean,
+    signal?: AbortSignal,
+  ): Promise<DeleteSemanticVocabularyImpact> {
+    const response = await requestSemanticVocabularyDelete(
+      { vocabularyId, confirmAffected },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+    return response.data;
+  }
+
+  async getSemanticFolderStatus(
+    request: GetSemanticFolderStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticFolderStatus> {
+    const response = await requestSemanticFolderStatus(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getSemanticFolderStatus response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async previewSemanticEnrolment(
+    request: PreviewSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticEnrolmentPreview> {
+    const response = await requestSemanticEnrolmentPreview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected previewSemanticEnrolment response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async confirmSemanticEnrolment(
+    request: ConfirmSemanticEnrolmentRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticEnrolmentConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected confirmSemanticEnrolment response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async planSemanticExclusion(
+    request: PlanSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticExclusionPlan> {
+    const response = await requestSemanticExclusionPlan(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected planSemanticExclusion response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async confirmSemanticExclusion(
+    request: ConfirmSemanticExclusionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticExclusionConfirmation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected confirmSemanticExclusion response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async resumeSemanticCleanup(
+    request: ResumeSemanticCleanupRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticCleanupResume(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected resumeSemanticCleanup response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async pauseSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticLibraryPause(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected pauseSemanticLibrary response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async resumeSemanticLibrary(
+    request: SemanticLibraryRevisionRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticLibraryResume(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected resumeSemanticLibrary response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async updateSemanticEligibilityOverrides(
+    request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticEligibilityOverridesUpdate(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Unexpected updateSemanticEligibilityOverrides response status: ${response.status}`,
+      );
+    }
     return response.data;
   }
 
@@ -991,6 +1563,22 @@ export class HttpFileManagerClient implements FileManagerClient {
                 gitStatuses: [...request.structuredQuery.gitStatuses],
                 tags: [...request.structuredQuery.tags],
                 metadata: { ...request.structuredQuery.metadata },
+                ...(request.structuredQuery.semantic === undefined
+                  ? {}
+                  : {
+                      semantic: {
+                        ...request.structuredQuery.semantic,
+                        enrolledRootIds: [...request.structuredQuery.semantic.enrolledRootIds],
+                      },
+                    }),
+                ...(request.structuredQuery.concept === undefined
+                  ? {}
+                  : {
+                      concept: {
+                        ...request.structuredQuery.concept,
+                        enrolledRootIds: [...request.structuredQuery.concept.enrolledRootIds],
+                      },
+                    }),
               },
             }),
         workspaceId: request.workspaceId,
@@ -1005,6 +1593,12 @@ export class HttpFileManagerClient implements FileManagerClient {
       location: response.data.location,
       limitations: response.data.limitations,
       executionMode: response.data.executionMode,
+      ...(response.data.semanticResults === undefined || response.data.semanticResults.length === 0
+        ? {}
+        : { semanticResults: response.data.semanticResults }),
+      ...(response.data.semanticCoverage == null
+        ? {}
+        : { semanticCoverage: response.data.semanticCoverage }),
     };
   }
 
@@ -1350,6 +1944,245 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  async listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
+    const response = await requestLlmProfilePresets(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw new Error(`Unexpected listLlmProfilePresets response status: ${response.status}`);
+    return response.data;
+  }
+
+  async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
+    const response = await requestLlmProfiles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw new Error(`Unexpected listLlmProfiles response status: ${response.status}`);
+    return response.data;
+  }
+
+  async createLlmProfile(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileCreation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected createLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async updateLlmProfile(
+    profileId: string,
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileUpdate(
+      profileId,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected updateLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteLlmProfile(
+    profileId: string,
+    request: DeleteLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestLlmProfileDeletion(
+      profileId,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected deleteLlmProfile response status: ${response.status}`);
+  }
+
+  async cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    const response = await requestLlmProfileClone(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201)
+      throw new Error(`Unexpected cloneLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport> {
+    const response = await requestLlmProfileExport(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected exportLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async activateLlmProfile(
+    profileId: string,
+    consent: boolean,
+    signal?: AbortSignal,
+  ): Promise<LlmProfile> {
+    const response = await requestLlmProfileActivation(
+      profileId,
+      { consent },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected activateLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult> {
+    const response = await requestLlmProfileTest(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected testLlmProfile response status: ${response.status}`);
+    return response.data;
+  }
+
+  async discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]> {
+    const response = await requestLlmProfileModelDiscovery(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected discoverLlmProfileModels response status: ${response.status}`);
+    return response.data;
+  }
+
+  async discoverLlmProfileDraftModels(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const response = await requestLlmProfileDraftModelDiscovery(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(
+        `Unexpected discoverLlmProfileDraftModels response status: ${response.status}`,
+      );
+    return response.data;
+  }
+
+  async previewDocumentSummary(
+    request: PreviewDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummaryPreview> {
+    const response = await requestDocumentSummaryPreview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected previewDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async generateDocumentSummary(
+    request: GenerateDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary> {
+    const response = await requestDocumentSummaryGeneration(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected generateDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async getDocumentSummary(
+    request: GetDocumentSummaryRequest,
+    signal?: AbortSignal,
+  ): Promise<DocumentSummary | null> {
+    const response = await requestDocumentSummaryGet(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected getDocumentSummary response status: ${response.status}`);
+    return response.data;
+  }
+
+  async previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
+    const response = await requestRagPreview(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected previewRag response status: ${response.status}`);
+    return response.data;
+  }
+
+  async generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    const response = await requestRagGeneration(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected generateRagAnswer response status: ${response.status}`);
+    return response.data;
+  }
+
+  async saveRagConversation(
+    request: SaveRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation> {
+    const response = await requestRagConversationSave(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected saveRagConversation response status: ${response.status}`);
+    return response.data;
+  }
+
+  async listSavedRagConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<SavedRagConversation[]> {
+    const response = await requestRagConversationList(
+      { workspaceId },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected listSavedRagConversations response status: ${response.status}`);
+    return response.data;
+  }
+
+  async deleteRagConversation(
+    request: DeleteRagConversationRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestRagConversationDeletion(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected deleteRagConversation response status: ${response.status}`);
+  }
+
+  async resolveRagCitation(
+    request: ResolveRagCitationRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRagCitation> {
+    const response = await requestRagCitationResolution(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected resolveRagCitation response status: ${response.status}`);
+    return response.data;
   }
 
   async listConnections(signal?: AbortSignal): Promise<Connection[]> {

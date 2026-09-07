@@ -1,6 +1,6 @@
 # 0180 Rust document conversion and structural chunking
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, preview, search
 Depends on: 0171, 0172, 0173, 0179
@@ -58,3 +58,10 @@ optional advanced converters and must not block useful local semantic search.
 
 - 2026-09-04: Split from 0176. The agreed quality boundary is a useful Rust baseline plus a future
   optional advanced pack; Docling-class dependencies are not required for initial semantic search.
+- 2026-09-05: Implemented the pure `fm-semantic-conversion` engine and the application-layer VFS
+  bridge. The versioned baseline converts bounded text, source, Markdown, HTML, DOCX, PPTX,
+  XLSX/CSV, and text-layer PDF input into sanitized structural units with typed failures,
+  omissions, cancellation, and best-available provenance. Added deterministic structural chunking
+  with hierarchy-aware hard token limits, bounded overlap, display excerpts, and versioned BLAKE3
+  fingerprints that exclude path metadata. Verified 114 crate tests, 6 application bridge tests,
+  the workspace architecture test, and the full Rust/Biome lint gate.

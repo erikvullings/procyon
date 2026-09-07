@@ -11,7 +11,7 @@
    * or not filtering is active.
    */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
   /* border: 1px solid var(--fm-border); */
   background: var(--fm-surface);
@@ -27,11 +27,40 @@
 
 .fm-pane > .fm-directory-table,
 .fm-pane > .fm-directory-state {
-  grid-row: 3;
+  grid-row: 4;
 }
 
 .fm-pane-status {
-  grid-row: 4;
+  grid-row: 5;
+}
+
+.fm-semantic-evidence {
+  grid-row: 3;
+  padding: 0.35rem 0.6rem;
+  border-block-end: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.85rem;
+}
+
+.fm-semantic-evidence summary {
+  cursor: pointer;
+}
+
+.fm-semantic-evidence-item {
+  margin-block: 0.4rem;
+  padding-inline-start: 0.5rem;
+  border-inline-start: 2px solid var(--fm-border);
+}
+
+.fm-semantic-evidence-item p {
+  margin: 0;
+}
+
+.fm-semantic-evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-block-start: 0.5rem;
 }
 
 .fm-pane-viewer {

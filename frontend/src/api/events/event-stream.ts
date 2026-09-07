@@ -112,6 +112,8 @@ const KNOWN_EVENT_TYPES = new Set([
   'diskUsage.progress',
   'diskUsage.finalizing',
   'diskUsage.failed',
+  'semantic.ingestionProgress',
+  'semantic.coverageChanged',
 ]);
 const loggedUnknownEventTypes = new Set<string>();
 

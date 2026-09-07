@@ -186,6 +186,7 @@ export interface PaneContentContext {
     openMetadata?: boolean,
   ): void;
   closeViewer(paneId: PaneId): void;
+  openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -477,14 +478,22 @@ export function createPaneContentBuilder(
         tab?.location.uri.startsWith('search://')
           ? context.getNavigation().back(paneId)
           : context.getNavigation().parent(paneId),
-      onOpenEntry: (entry) => {
+      onOpenEntry: (entry, evidenceQuery) => {
         if (isParentEntry(entry.id)) {
           return tab?.location.uri.startsWith('search://')
             ? context.getNavigation().back(paneId)
             : context.getNavigation().parent(paneId);
         }
         if (tab?.location.uri.startsWith('search://')) {
-          const initialSearch = context.contentSearchInitialQuery(tab.location.uri, entry);
+          const initialSearch =
+            evidenceQuery === undefined
+              ? context.contentSearchInitialQuery(tab.location.uri, entry)
+              : {
+                  query: evidenceQuery,
+                  regex: false,
+                  caseSensitive: false,
+                  wholeWord: false,
+                };
           if (initialSearch !== undefined) {
             const otherPaneId = workspace?.paneOrder.find(
               (candidatePaneId) => candidatePaneId !== paneId,
@@ -514,6 +523,7 @@ export function createPaneContentBuilder(
           { paneId, selectedEntryIds: [entry.id], cursorEntryId: entry.id },
         );
       },
+      onDocumentSummary: (entry) => context.openDocumentSummary?.(paneId, entry),
       onSelectionAction: (action: SelectionAction) => {
         if (key === undefined) return;
         if (action.type === 'moveCursorTo' && action.edge === 'last' && directory.hasMore) {
@@ -926,6 +936,8 @@ export function createPaneContentBuilder(
                           cursorEntryId: viewer.state.entry.id,
                         },
                       ),
+                    onDocumentSummary: () =>
+                      context.openDocumentSummary?.(paneId, viewer.state.entry),
                     onClose: () => context.closeViewer(paneId),
                   });
                 })(),

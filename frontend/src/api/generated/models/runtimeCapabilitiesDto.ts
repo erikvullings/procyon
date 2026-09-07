@@ -4,6 +4,8 @@
  */
 import type { PlatformKindDto } from './platformKindDto.ts';
 import type { RuntimeKindDto } from './runtimeKindDto.ts';
+import type { SemanticComponentAuthorityDto } from './semanticComponentAuthorityDto.ts';
+import type { SemanticRuntimeExecutableDownloadDto } from './semanticRuntimeExecutableDownloadDto.ts';
 
 /**
  * Capabilities the current runtime and platform support, so the frontend can
@@ -42,6 +44,10 @@ export interface RuntimeCapabilitiesDto {
   revealInSystemFileManager: boolean;
   /** Which host is serving the application. */
   runtime: RuntimeKindDto;
+  /** Principal that owns semantic component lifecycle changes. */
+  semanticComponentAuthority: SemanticComponentAuthorityDto;
+  /** Executable semantic component download policy for this distribution. */
+  semanticRuntimeExecutableDownload: SemanticRuntimeExecutableDownloadDto;
   /** Whether server administration endpoints are available. */
   serverAdministration: boolean;
   /** Whether deleting sends to the system trash/recycle bin. */

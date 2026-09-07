@@ -5,6 +5,8 @@
 import type { LocationDto } from './locationDto.ts';
 import type { SearchExecutionModeDto } from './searchExecutionModeDto.ts';
 import type { SearchProviderLimitationDto } from './searchProviderLimitationDto.ts';
+import type { SemanticSearchCoverageDto } from './semanticSearchCoverageDto.ts';
+import type { SemanticSearchResultDto } from './semanticSearchResultDto.ts';
 
 /**
  * Identifies a started search and its virtual result location.
@@ -25,4 +27,7 @@ export interface StartSearchResponseDto {
   location: LocationDto;
   /** The started search's identifier, used to cancel it. */
   searchId: string;
+  semanticCoverage?: null | SemanticSearchCoverageDto;
+  /** File-primary evidence returned only for semantic mode. */
+  semanticResults?: SemanticSearchResultDto[];
 }

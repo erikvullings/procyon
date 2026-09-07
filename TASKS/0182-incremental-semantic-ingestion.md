@@ -1,6 +1,6 @@
 # 0182 Incremental semantic ingestion and reconciliation
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, search, events
 Depends on: 0179, 0180, 0181
@@ -63,3 +63,24 @@ application closes rather than installing an always-running login service.
 
 - 2026-09-04: Split from 0176. The required freshness policy is watch + startup/30-minute
   reconciliation, content-hash verification, and chunk-level vector reuse.
+- 2026-09-05: Implemented the worker-owned persisted state machine and convert/chunk/cache/embed/
+  stage/publish pipeline. SQLite remains visibility authority and Zvec remains derived; failed
+  publication leaves the prior complete generation searchable, retries reuse staging/cache state,
+  and occurrence deletion removes authoritative references before idempotent derived cleanup.
+- 2026-09-05: Added an injectable IPC ingestion backend with durable scoped job registration while
+  retaining the deterministic in-memory worker constructor. Added bounded retry backoff and
+  exhaustion, explicit failed-job Skip, cancellation, disk/battery/thermal pauses, and interactive
+  query priority.
+- 2026-09-05: Added host-side provider-event coalescing, content-hash truth, metadata-only move
+  planning, complete/partial/offline listing semantics, startup/periodic/manual scheduling, stale
+  evidence assessment, and shared path-free progress/coverage events with SSE/Tauri parity.
+- 2026-09-05: Tests cover localized cache reuse, retry exhaustion and Skip, deletion, resource
+  pauses, cancellation, scope isolation, timestamp lies, missed-event reconciliation, moves,
+  partial/offline roots, startup/manual cadence, and replay from every persisted stage. Concrete
+  model activation and production index thresholds remain intentionally gated by task 0188.
+- 2026-09-06: Desktop startup now reconciles every enrolled root, including roots whose initial
+  enrolment occurred while the worker was unavailable. Developer startup resolves worker/runtime
+  paths from durable installed-component state rather than a subsequently rebuilt bundle catalog.
+  Failed conversion jobs and oversized documents are isolated per document, allowing the complete
+  root listing to commit while reporting failed and skipped occurrences. Developer index storage
+  now uses the official Zvec category counted by Settings.

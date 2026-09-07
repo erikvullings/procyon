@@ -36,6 +36,7 @@ pub(crate) async fn start_search(
     state
         .service
         .start_search(request)
+        .await
         .map(|response| (StatusCode::CREATED, Json(response)))
         .map_err(|error| ApiError::new(error, correlation_id))
 }

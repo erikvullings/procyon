@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Spanish catalogue (task 0098). Keep the key set identical to `en`. */
@@ -221,6 +221,7 @@ export const es = {
     unableToRun: 'No se puede ejecutar el comando.',
   },
   settings: {
+    ...en.settings,
     language: 'Idioma',
     languageEnglish: 'Inglés',
     languageDutch: 'Neerlandés',
@@ -635,6 +636,7 @@ export const es = {
     rename: 'Renombrar',
   },
   search: {
+    ...en.search,
     unableToStart: 'No se puede iniciar la búsqueda',
     refresh: 'Actualizar búsqueda',
     filterLimitations: 'Algunos filtros no se pudieron evaluar ({message}).',
@@ -849,7 +851,14 @@ export const es = {
     message: 'Este panel no tiene otras pestañas. Al cerrarla, el panel quedará vacío.',
     closeTab: 'Cerrar pestaña',
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Copiar para informe de error',
     copyTitle: 'Copiar diagnósticos redactados para informes de errores',
     loading: 'Cargando diagnósticos…',

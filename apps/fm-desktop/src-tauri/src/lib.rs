@@ -9,6 +9,8 @@ mod credentials;
 mod event_stream;
 mod native_menu;
 mod platform;
+#[cfg(debug_assertions)]
+mod semantic_developer;
 mod terminal;
 
 use std::sync::Arc;
@@ -26,6 +28,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// service).
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
+    pub(crate) semantic_developer_bundle: bool,
+    pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
 }
 
 /// True once the whole app has started quitting (`RunEvent::ExitRequested`/`Exit`), checked by
@@ -75,25 +79,92 @@ pub fn run() {
             // bundle; only plausible for an unbundled `cargo tauri dev`/test run) leaves the
             // compile-time-default bundled directory in place rather than panicking - one
             // missing plugin source is not worth aborting startup over.
+            let workspace_directory =
+                fm_application::workspace::JsonFileWorkspaceRepository::default_directory();
+            let app_data_directory = workspace_directory
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
+                .to_path_buf();
+            #[cfg(not(debug_assertions))]
+            if std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE").is_some() {
+                return Err(std::io::Error::other(
+                    "semantic developer bundles are rejected by release builds",
+                )
+                .into());
+            }
             let mut service =
                 FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
                 RuntimeKindDto::Tauri,
-                fm_application::workspace::JsonFileWorkspaceRepository::default_directory(),
-                fm_application::workspace::JsonFileWorkspaceRepository::default_directory()
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
-                    .to_path_buf(),
+                workspace_directory,
+                app_data_directory.clone(),
                 EventBus::default(),
                 platform::build_platform_adapter(),
                 credentials::build_credential_store(),
                 platform::build_search_accelerator(),
             );
+            #[cfg(debug_assertions)]
+            let mut semantic_developer_bundle = false;
+            #[cfg(debug_assertions)]
+            let mut semantic_reindex_pending_marker = None;
+            #[cfg(not(debug_assertions))]
+            let semantic_developer_bundle = false;
+            #[cfg(not(debug_assertions))]
+            let semantic_reindex_pending_marker = None;
+            #[cfg(debug_assertions)]
+            if let Some(bundle_directory) =
+                std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE")
+            {
+                semantic_developer_bundle = true;
+                let bundle = semantic_developer::DeveloperSemanticBundle::load(
+                    std::path::Path::new(&bundle_directory),
+                    &app_data_directory,
+                    &app_data_directory,
+                )
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+                let semantic =
+                    fm_application::semantic::IpcSemanticCapability::desktop_developer_bundle(
+                    &bundle.runtime_directory,
+                    &bundle.installed_worker,
+                    &bundle.worker_data_directory,
+                    &bundle.native_library_directory,
+                    Some(Arc::clone(&bundle.active_model_pack)),
+                );
+                service = service
+                    .with_semantic_component_capability(bundle.components)
+                    .with_semantic_capability(Arc::new(semantic));
+                semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
+            } else if std::env::var("PROCYON_SEMANTIC_COMPONENTS").as_deref() == Ok("mock") {
+                service = service.with_semantic_component_capability(Arc::new(
+                    fm_application::semantic_components::FakeSemanticComponentCapability::new(),
+                ));
+            }
             if let Ok(resource_dir) = app.path().resource_dir() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
+            let service = Arc::new(service);
             app.manage(AppState {
-                service: Arc::new(service),
+                service: Arc::clone(&service),
+                semantic_developer_bundle,
+                semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
             });
+            if let Err(error) = tauri::async_runtime::block_on(service.semantic_library_status(
+                &fm_application::semantic_library::SemanticAccessContext::Host,
+            )) {
+                tracing::warn!(%error, "semantic library startup reconciliation failed");
+            }
+            if semantic_developer_bundle {
+                if let Some(marker) =
+                    semantic_reindex_pending_marker.filter(|marker| marker.is_file())
+                {
+                    tauri::async_runtime::spawn(commands::resume_pending_semantic_model_reindex(
+                        service, marker,
+                    ));
+                } else {
+                    tauri::async_runtime::spawn(commands::reconcile_semantic_library_on_startup(
+                        service,
+                    ));
+                }
+            }
 
             // Dock icon right/long-click "New Window" item, mirroring the File menu's own item
             // (task 0133) - sends the frontend's `NEW_WORKSPACE_WINDOW_MENU_ID` through the same
@@ -183,6 +254,40 @@ pub fn run() {
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
+            commands::get_semantic_component_capabilities,
+            commands::get_semantic_component_status,
+            commands::list_semantic_component_profiles,
+            commands::create_semantic_component_installation_offer,
+            commands::accept_semantic_component_installation_offer,
+            commands::pause_semantic_component_indexing,
+            commands::resume_semantic_component_indexing,
+            commands::create_semantic_component_index_removal_plan,
+            commands::confirm_semantic_component_index_removal,
+            commands::move_semantic_component_data,
+            commands::uninstall_semantic_components,
+            commands::install_semantic_component_worker_patch,
+            commands::import_semantic_component_local_model,
+            commands::plan_semantic_component_model_migration,
+            commands::confirm_semantic_component_model_migration,
+            commands::checkpoint_semantic_component_model_migration,
+            commands::complete_semantic_component_model_migration,
+            commands::get_semantic_library_capabilities,
+            commands::get_semantic_library_status,
+            commands::list_semantic_vocabularies,
+            commands::import_semantic_vocabulary,
+            commands::export_semantic_vocabulary,
+            commands::attach_semantic_vocabulary,
+            commands::review_semantic_concept_candidate,
+            commands::delete_semantic_vocabulary,
+            commands::get_semantic_folder_status,
+            commands::preview_semantic_enrolment,
+            commands::confirm_semantic_enrolment,
+            commands::plan_semantic_exclusion,
+            commands::confirm_semantic_exclusion,
+            commands::resume_semantic_cleanup,
+            commands::pause_semantic_library,
+            commands::resume_semantic_library,
+            commands::update_semantic_eligibility_overrides,
             commands::get_system_locations,
             commands::get_volumes,
             commands::get_home_directory,
@@ -268,6 +373,26 @@ pub fn run() {
             commands::start_duplicate_scan,
             commands::get_duplicate_scan,
             commands::cancel_duplicate_scan,
+            commands::list_llm_profile_presets,
+            commands::list_llm_profiles,
+            commands::create_llm_profile,
+            commands::update_llm_profile,
+            commands::delete_llm_profile,
+            commands::clone_llm_profile,
+            commands::export_llm_profile,
+            commands::activate_llm_profile,
+            commands::discover_llm_profile_models,
+            commands::discover_llm_profile_draft_models,
+            commands::test_llm_profile,
+            commands::preview_document_summary,
+            commands::generate_document_summary,
+            commands::get_document_summary,
+            commands::preview_rag,
+            commands::generate_rag_answer,
+            commands::save_rag_conversation,
+            commands::list_saved_rag_conversations,
+            commands::delete_rag_conversation,
+            commands::resolve_rag_citation,
             commands::list_connections,
             commands::create_connection,
             commands::get_connection,
@@ -379,6 +504,13 @@ mod tests {
     use super::*;
 
     fn create_app<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::App<R> {
+        create_app_with_semantic_developer_bundle(builder, false)
+    }
+
+    fn create_app_with_semantic_developer_bundle<R: tauri::Runtime>(
+        builder: tauri::Builder<R>,
+        semantic_developer_bundle: bool,
+    ) -> tauri::App<R> {
         let workspace_directory =
             tempfile::tempdir().expect("must create a temp workspace directory");
         let settings_directory = workspace_directory.path().join("settings");
@@ -394,8 +526,16 @@ mod tests {
                         platform::build_platform_adapter(),
                         credentials::build_credential_store(),
                         platform::build_search_accelerator(),
+                    )
+                    .with_semantic_component_capability(Arc::new(
+                        fm_application::semantic_components::FakeSemanticComponentCapability::new(),
+                    ))
+                    .with_semantic_library_service(
+                        fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
                     ),
                 ),
+                semantic_developer_bundle,
+                semantic_reindex_pending_marker: None,
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
             .manage(native_menu::NativeMenuActionChannel::default())
@@ -403,6 +543,40 @@ mod tests {
                 commands::subscribe_events,
                 commands::unsubscribe_events,
                 commands::get_runtime_capabilities,
+                commands::get_semantic_component_capabilities,
+                commands::get_semantic_component_status,
+                commands::list_semantic_component_profiles,
+                commands::create_semantic_component_installation_offer,
+                commands::accept_semantic_component_installation_offer,
+                commands::pause_semantic_component_indexing,
+                commands::resume_semantic_component_indexing,
+                commands::create_semantic_component_index_removal_plan,
+                commands::confirm_semantic_component_index_removal,
+                commands::move_semantic_component_data,
+                commands::uninstall_semantic_components,
+                commands::install_semantic_component_worker_patch,
+                commands::import_semantic_component_local_model,
+                commands::plan_semantic_component_model_migration,
+                commands::confirm_semantic_component_model_migration,
+                commands::checkpoint_semantic_component_model_migration,
+                commands::complete_semantic_component_model_migration,
+                commands::get_semantic_library_capabilities,
+                commands::get_semantic_library_status,
+                commands::list_semantic_vocabularies,
+                commands::import_semantic_vocabulary,
+                commands::export_semantic_vocabulary,
+                commands::attach_semantic_vocabulary,
+                commands::review_semantic_concept_candidate,
+                commands::delete_semantic_vocabulary,
+                commands::get_semantic_folder_status,
+                commands::preview_semantic_enrolment,
+                commands::confirm_semantic_enrolment,
+                commands::plan_semantic_exclusion,
+                commands::confirm_semantic_exclusion,
+                commands::resume_semantic_cleanup,
+                commands::pause_semantic_library,
+                commands::resume_semantic_library,
+                commands::update_semantic_eligibility_overrides,
                 commands::get_system_locations,
                 commands::get_volumes,
                 commands::get_home_directory,
@@ -486,6 +660,26 @@ mod tests {
                 commands::start_duplicate_scan,
                 commands::get_duplicate_scan,
                 commands::cancel_duplicate_scan,
+                commands::list_llm_profile_presets,
+                commands::list_llm_profiles,
+                commands::create_llm_profile,
+                commands::update_llm_profile,
+                commands::delete_llm_profile,
+                commands::clone_llm_profile,
+                commands::export_llm_profile,
+                commands::activate_llm_profile,
+                commands::discover_llm_profile_models,
+                commands::discover_llm_profile_draft_models,
+                commands::test_llm_profile,
+                commands::preview_document_summary,
+                commands::generate_document_summary,
+                commands::get_document_summary,
+                commands::preview_rag,
+                commands::generate_rag_answer,
+                commands::save_rag_conversation,
+                commands::list_saved_rag_conversations,
+                commands::delete_rag_conversation,
+                commands::resolve_rag_citation,
                 commands::list_connections,
                 commands::create_connection,
                 commands::get_connection,
@@ -824,5 +1018,436 @@ mod tests {
         .deserialize::<fm_transport_dto::OneDriveAuthorizationAttemptDto>()
         .expect("response must deserialize");
         assert_eq!(cancelled.id, begin.attempt_id);
+    }
+
+    #[tokio::test]
+    async fn llm_profile_commands_round_trip_through_the_shared_service() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        macro_rules! invoke {
+            ($command:literal, $body:expr) => {
+                get_ipc_response(
+                    &webview,
+                    InvokeRequest {
+                        cmd: $command.into(),
+                        callback: CallbackFn(0),
+                        error: CallbackFn(1),
+                        url: local_protocol_url(),
+                        body: InvokeBody::Json($body),
+                        headers: Default::default(),
+                        invoke_key: INVOKE_KEY.to_string(),
+                    },
+                )
+            };
+        }
+
+        let presets = invoke!("list_llm_profile_presets", serde_json::json!({}))
+            .expect("profile presets command must succeed")
+            .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
+            .expect("presets response must deserialize");
+        assert_eq!(presets.len(), 7);
+
+        let created = invoke!(
+            "create_llm_profile",
+            serde_json::json!({
+                "request": {
+                    "name": "Local generation",
+                    "preset": "ollama",
+                    "baseUrl": "http://127.0.0.1:1",
+                    "deployment": null,
+                    "apiVersion": null,
+                    "model": "model-a",
+                    "credential": null,
+                    "advanced": {
+                        "contextWindow": 8192,
+                        "maximumAnswerTokens": 1024,
+                        "temperature": 0.2,
+                        "timeoutSeconds": 1,
+                        "tlsPolicy": "requireValidCertificate",
+                        "customHeaders": {}
+                    },
+                    "capabilities": ["chatCompletions"],
+                    "redactFilenames": true
+                }
+            })
+        )
+        .expect("create profile command must succeed")
+        .deserialize::<fm_transport_dto::LlmProfileDto>()
+        .expect("profile response must deserialize");
+        assert!(!created.has_credential);
+
+        let listed = invoke!("list_llm_profiles", serde_json::json!({}))
+            .expect("list profiles command must succeed")
+            .deserialize::<Vec<fm_transport_dto::LlmProfileDto>>()
+            .expect("profiles response must deserialize");
+        assert_eq!(listed.len(), 1);
+
+        let tested = invoke!(
+            "test_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("test profile command must return a normalized result")
+        .deserialize::<fm_transport_dto::LlmProfileTestResultDto>()
+        .expect("test response must deserialize");
+        assert!(!tested.success);
+
+        let cloned = invoke!(
+            "clone_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("clone profile command must succeed")
+        .deserialize::<fm_transport_dto::LlmProfileDto>()
+        .expect("clone response must deserialize");
+        assert!(!cloned.has_credential);
+
+        let exported = invoke!(
+            "export_llm_profile",
+            serde_json::json!({ "profileId": created.id })
+        )
+        .expect("export profile command must succeed")
+        .deserialize::<serde_json::Value>()
+        .expect("export response must deserialize");
+        let exported = exported.to_string().to_ascii_lowercase();
+        assert!(!exported.contains("credential"));
+        assert!(!exported.contains("consent"));
+
+        invoke!(
+            "delete_llm_profile",
+            serde_json::json!({
+                "profileId": created.id,
+                "request": { "credentialDisposition": "retain" }
+            })
+        )
+        .expect("delete profile command must succeed");
+    }
+
+    #[tokio::test]
+    async fn semantic_component_commands_round_trip_through_the_shared_service() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        macro_rules! invoke {
+            ($command:literal, $body:expr) => {
+                get_ipc_response(
+                    &webview,
+                    InvokeRequest {
+                        cmd: $command.into(),
+                        callback: CallbackFn(0),
+                        error: CallbackFn(1),
+                        url: local_protocol_url(),
+                        body: InvokeBody::Json($body),
+                        headers: Default::default(),
+                        invoke_key: INVOKE_KEY.to_string(),
+                    },
+                )
+            };
+        }
+
+        let capabilities = invoke!("get_semantic_component_capabilities", serde_json::json!({}))
+            .expect("semantic capabilities command must succeed")
+            .deserialize::<fm_transport_dto::SemanticComponentCapabilitiesDto>()
+            .expect("capabilities response must deserialize");
+        assert_eq!(
+            capabilities.authority,
+            fm_transport_dto::SemanticComponentAuthorityDto::DeterministicMock
+        );
+        assert_eq!(capabilities.operations.len(), 15);
+
+        let status = invoke!("get_semantic_component_status", serde_json::json!({}))
+            .expect("semantic status command must succeed")
+            .deserialize::<fm_transport_dto::SemanticComponentStatusDto>()
+            .expect("status response must deserialize");
+        assert_eq!(
+            status.lifecycle,
+            fm_transport_dto::SemanticComponentLifecycleDto::Absent
+        );
+
+        let profiles = invoke!("list_semantic_component_profiles", serde_json::json!({}))
+            .expect("semantic profiles command must succeed")
+            .deserialize::<Vec<fm_transport_dto::SemanticModelProfileDto>>()
+            .expect("profiles response must deserialize");
+        assert_eq!(profiles.len(), 3);
+
+        let offer = invoke!(
+            "create_semantic_component_installation_offer",
+            serde_json::json!({
+                "request": { "profile": "compactMultilingual" }
+            })
+        )
+        .expect("semantic installation offer command must succeed")
+        .deserialize::<fm_transport_dto::SemanticInstallationOfferDto>()
+        .expect("installation offer response must deserialize");
+        assert!(offer.embeddings_stay_local);
+
+        let install = invoke!(
+            "accept_semantic_component_installation_offer",
+            serde_json::json!({
+                "request": { "offerId": offer.offer_id }
+            })
+        )
+        .expect("semantic installation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticInstallReceiptDto>()
+        .expect("installation response must deserialize");
+        assert_eq!(install.installed_artifact_ids.len(), 3);
+
+        invoke!("pause_semantic_component_indexing", serde_json::json!({}))
+            .expect("pause semantic indexing command must succeed");
+        invoke!("resume_semantic_component_indexing", serde_json::json!({}))
+            .expect("resume semantic indexing command must succeed");
+
+        let removal_plan = invoke!(
+            "create_semantic_component_index_removal_plan",
+            serde_json::json!({
+                "request": {
+                    "enrolmentId": "enrolment-1"
+                }
+            })
+        )
+        .expect("semantic index removal plan command must succeed")
+        .deserialize::<fm_transport_dto::SemanticIndexRemovalPlanDto>()
+        .expect("index removal plan response must deserialize");
+        assert_eq!(removal_plan.expected.conversation_evidence, 2);
+
+        let removed = invoke!(
+            "confirm_semantic_component_index_removal",
+            serde_json::json!({
+                "request": {
+                    "planId": removal_plan.plan_id
+                }
+            })
+        )
+        .expect("semantic index removal confirmation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticIndexRemovalReceiptDto>()
+        .expect("index removal response must deserialize");
+        assert!(removed.conversation_evidence_deleted);
+
+        let moved = invoke!(
+            "move_semantic_component_data",
+            serde_json::json!({
+                "request": { "destination": "mock/moved-semantic" }
+            })
+        )
+        .expect("semantic data move command must succeed")
+        .deserialize::<fm_transport_dto::SemanticDataMoveReceiptDto>()
+        .expect("data move response must deserialize");
+        assert_eq!(moved.destination, "mock/moved-semantic");
+
+        let patch = invoke!(
+            "install_semantic_component_worker_patch",
+            serde_json::json!({
+                "request": {
+                    "componentId": "fake-worker"
+                }
+            })
+        )
+        .expect("semantic worker patch command must succeed")
+        .deserialize::<fm_transport_dto::SemanticWorkerPatchResponseDto>()
+        .expect("worker patch response must deserialize");
+        assert!(patch.receipt.is_none());
+
+        let imported = invoke!(
+            "import_semantic_component_local_model",
+            serde_json::json!({
+                "request": {
+                    "sourcePath": "mock/local-model",
+                    "modelId": "expert.local",
+                    "upstreamRevision": "revision-1",
+                    "licenseSpdx": "Apache-2.0",
+                    "licenseNotice": "Local model",
+                    "tokenizer": "tokenizer-1",
+                    "dimensions": 384,
+                    "normalization": "unitLength",
+                    "runtimeComponentId": "fake-runtime",
+                    "runtimeVersionRequirement": "^1.0",
+                    "languageCoverage": ["en"],
+                    "estimatedDiskBytes": 100,
+                    "estimatedRamBytes": 200,
+                    "profile": "compactEnglish",
+                    "estimate": { "documents": 1, "sourceBytes": 10 }
+                }
+            })
+        )
+        .expect("local semantic model import command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationPlanDto>()
+        .expect("local model import response must deserialize");
+        assert!(imported.requires_confirmation);
+
+        let plan = invoke!(
+            "plan_semantic_component_model_migration",
+            serde_json::json!({
+                "request": {
+                    "profile": "multilingualQuality",
+                    "estimate": { "documents": 2, "sourceBytes": 20 }
+                }
+            })
+        )
+        .expect("semantic model migration plan command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationPlanDto>()
+        .expect("model migration plan response must deserialize");
+
+        let progress = invoke!(
+            "confirm_semantic_component_model_migration",
+            serde_json::json!({
+                "request": { "migrationId": plan.migration_id }
+            })
+        )
+        .expect("semantic model migration confirmation command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationProgressDto>()
+        .expect("model migration confirmation response must deserialize");
+        assert_eq!(progress.completed_documents, 0);
+
+        let progress = invoke!(
+            "checkpoint_semantic_component_model_migration",
+            serde_json::json!({
+                "request": {
+                    "migrationId": progress.migration_id,
+                    "completedDocuments": 2,
+                    "resumeCursor": "cursor-2"
+                }
+            })
+        )
+        .expect("semantic model migration checkpoint command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelMigrationProgressDto>()
+        .expect("model migration checkpoint response must deserialize");
+        assert_eq!(progress.completed_documents, 2);
+
+        let selection = invoke!(
+            "complete_semantic_component_model_migration",
+            serde_json::json!({
+                "request": { "migrationId": progress.migration_id }
+            })
+        )
+        .expect("semantic model migration completion command must succeed")
+        .deserialize::<fm_transport_dto::SemanticModelSelectionDto>()
+        .expect("model migration completion response must deserialize");
+        assert_eq!(
+            selection.profile,
+            fm_transport_dto::SemanticProfileDto::MultilingualQuality
+        );
+
+        let uninstall = invoke!(
+            "uninstall_semantic_components",
+            serde_json::json!({
+                "request": { "indexDecision": "delete" }
+            })
+        )
+        .expect("semantic component uninstall command must succeed")
+        .deserialize::<fm_transport_dto::SemanticUninstallReceiptDto>()
+        .expect("semantic component uninstall response must deserialize");
+        assert_eq!(
+            uninstall.index_decision,
+            fm_transport_dto::SemanticIndexRetentionDecisionDto::Delete
+        );
+    }
+
+    #[tokio::test]
+    async fn semantic_library_commands_round_trip_through_the_shared_service() {
+        let app = create_app_with_semantic_developer_bundle(mock_builder(), true);
+        let workspace = app
+            .state::<AppState>()
+            .service
+            .start_workspace(None)
+            .await
+            .expect("start workspace");
+        let pane = workspace
+            .panes
+            .iter()
+            .find(|pane| pane.id == workspace.active_pane_id)
+            .expect("active pane");
+        let tab = pane
+            .tabs
+            .iter()
+            .find(|tab| tab.id == pane.active_tab_id)
+            .expect("active tab");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let invoke = |command: &'static str, request: serde_json::Value| {
+            get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: local_protocol_url(),
+                    body: InvokeBody::Json(request),
+                    headers: Default::default(),
+                    invoke_key: INVOKE_KEY.to_string(),
+                },
+            )
+        };
+
+        let capabilities = invoke("get_semantic_library_capabilities", serde_json::json!({}))
+            .expect("library capabilities")
+            .deserialize::<fm_transport_dto::SemanticLibraryCapabilitiesDto>()
+            .expect("capabilities DTO");
+        assert_eq!(
+            capabilities.authority,
+            fm_transport_dto::SemanticLibraryAuthorityDto::DeterministicMock
+        );
+
+        let preview = invoke(
+            "preview_semantic_enrolment",
+            serde_json::json!({
+                "request": {
+                    "workspaceId": workspace.id,
+                    "location": tab.location,
+                    "recursive": true
+                }
+            }),
+        )
+        .expect("enrolment preview")
+        .deserialize::<fm_transport_dto::SemanticEnrolmentPreviewDto>()
+        .expect("preview DTO");
+        assert!(preview.normalized_excerpts_retained_locally);
+
+        let status = invoke(
+            "confirm_semantic_enrolment",
+            serde_json::json!({
+                "request": {
+                    "confirmationId": preview.confirmation_id,
+                    "policyRevision": preview.policy_revision,
+                    "workspaceId": workspace.id,
+                    "location": tab.location
+                }
+            }),
+        )
+        .expect("confirm enrolment")
+        .deserialize::<fm_transport_dto::SemanticLibraryStatusDto>()
+        .expect("status DTO");
+        assert_eq!(status.roots.len(), 1);
+    }
+
+    #[test]
+    fn semantic_component_commands_return_the_shared_typed_error() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "accept_semantic_component_installation_offer".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "offerId": "unknown-offer" }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("unknown offer must reject the command");
+
+        assert!(error.to_string().contains("consentRequired"));
+        assert!(error.to_string().contains("requestId"));
     }
 }

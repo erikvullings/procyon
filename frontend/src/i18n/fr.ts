@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** French catalogue (task 0098). Keep the key set identical to `en`. */
@@ -223,6 +223,7 @@ export const fr = {
     unableToRun: "Impossible d'exécuter la commande.",
   },
   settings: {
+    ...en.settings,
     language: 'Langue',
     languageEnglish: 'Anglais',
     languageDutch: 'Néerlandais',
@@ -638,6 +639,7 @@ export const fr = {
     rename: 'Renommer',
   },
   search: {
+    ...en.search,
     unableToStart: 'Impossible de démarrer la recherche',
     refresh: 'Actualiser la recherche',
     filterLimitations: "Certains filtres n'ont pas pu être évalués ({message}).",
@@ -851,7 +853,14 @@ export const fr = {
     message: "Ce panneau n'a pas d'autres onglets. Le fermer laissera le panneau vide.",
     closeTab: "Fermer l'onglet",
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Copier pour le rapport de bogue',
     copyTitle: 'Copier les diagnostics anonymisés pour les rapports de bogue',
     loading: 'Chargement des diagnostics…',

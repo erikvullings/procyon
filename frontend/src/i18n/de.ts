@@ -1,4 +1,4 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** German catalogue (task 0098). Keep the key set identical to `en`. */
@@ -224,6 +224,7 @@ export const de = {
     unableToRun: 'Befehl kann nicht ausgeführt werden.',
   },
   settings: {
+    ...en.settings,
     language: 'Sprache',
     languageEnglish: 'Englisch',
     languageDutch: 'Niederländisch',
@@ -639,6 +640,7 @@ export const de = {
     rename: 'Umbenennen',
   },
   search: {
+    ...en.search,
     unableToStart: 'Suche kann nicht gestartet werden',
     refresh: 'Suche aktualisieren',
     filterLimitations: 'Einige Filter konnten nicht ausgewertet werden ({message}).',
@@ -858,7 +860,14 @@ export const de = {
     message: 'Dieser Bereich hat keine weiteren Tabs. Beim Schließen bleibt der Bereich leer.',
     closeTab: 'Tab schließen',
   },
+  semanticComponents: en.semanticComponents,
+  semanticLibrary: en.semanticLibrary,
+  semanticVocabulary: en.semanticVocabulary,
+  llmProfiles: en.llmProfiles,
+  documentSummary: en.documentSummary,
+  ragAsk: en.ragAsk,
   diagnostics: {
+    ...en.diagnostics,
     copyForBugReport: 'Für Fehlerbericht kopieren',
     copyTitle: 'Geschwärzte Diagnosedaten für Fehlerberichte kopieren',
     loading: 'Diagnose wird geladen…',
