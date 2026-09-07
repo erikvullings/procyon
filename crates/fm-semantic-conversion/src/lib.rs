@@ -45,6 +45,7 @@ pub use budget::{BudgetKind, Clock, ConversionBudgets, ManualClock, SystemClock}
 pub use cancellation::{Cancellation, CancellationFlag, CancellationSignal};
 pub use chunk::{
     Chunk, ChunkPart, ChunkProvenance, Chunker, ChunkerOptions, InvalidChunkerOptions,
+    STRUCTURAL_CHUNKER_VERSION,
 };
 pub use converter::{
     BASELINE_CONVERTER_VERSION, BaselineConverter, ConversionContext, ConversionError,

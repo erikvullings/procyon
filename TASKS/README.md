@@ -118,8 +118,8 @@ semantic components are not installed.
 - [x] 0192 Deterministic Docling.rs PDF conversion *(needs 0189; pure-Rust Docling-first extraction
   with one-time reindex migration and baseline fallback)*
 - [x] 0193 Optional OCRmyPDF fallback *(needs 0192; explicit opt-in, never a mandatory dependency)*
-- [ ] 0194 Production semantic component catalog *(needs 0178, 0188, 0191, 0192; begin after the
-  semantic implementation branch is merged and green on main)*
+- [x] 0194 Production semantic component catalog *(needs 0178, 0188, 0191, 0192; began after the
+  semantic implementation branch was merged and green on main)*
 - [ ] 0195 Cross-platform semantic release artifacts *(needs 0063, 0194)*
 - [ ] 0196 Release desktop semantic activation *(needs 0194; can proceed alongside 0195)*
 - [ ] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block

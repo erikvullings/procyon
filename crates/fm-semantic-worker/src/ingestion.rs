@@ -658,7 +658,7 @@ impl IngestionCoordinator {
                     &chunk.embedding_input,
                     identity,
                     identity.tokenizer.as_str(),
-                    "structural/2",
+                    &fm_semantic_conversion::STRUCTURAL_CHUNKER_VERSION.to_string(),
                 )
             })
             .collect::<Vec<_>>();

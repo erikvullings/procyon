@@ -28,7 +28,7 @@ use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
 use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
-const CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 2);
+pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 2);
 
 /// Domain separator, so a fingerprint cannot collide with any other BLAKE3 use
 /// in the workspace.
@@ -163,7 +163,7 @@ impl Chunker {
     /// The version of the packing rules, which participates in fingerprints.
     #[must_use]
     pub fn version(&self) -> ComponentVersion {
-        CHUNKER_VERSION
+        STRUCTURAL_CHUNKER_VERSION
     }
 
     /// The options in force.

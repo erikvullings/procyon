@@ -41,6 +41,17 @@ fn revalidate_opaque_identifier(value: &str, field: &'static str) -> Result<(), 
     validate_opaque_identifier(value.to_owned(), field).map(drop)
 }
 
+fn validate_pipeline_identity(value: &str, field: &'static str) -> Result<(), CatalogError> {
+    if value.is_empty()
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/' | b'+' | b':')
+        })
+    {
+        return Err(CatalogError::InvalidPipelineIdentity { field });
+    }
+    Ok(())
+}
+
 macro_rules! opaque_identifier {
     ($name:ident, $description:literal, $field:literal) => {
         #[doc = $description]
@@ -903,6 +914,18 @@ impl CatalogManifest {
         &self.revision
     }
 
+    /// Returns every artifact in manifest order.
+    #[must_use]
+    pub fn artifacts(&self) -> &[CatalogArtifact] {
+        &self.artifacts
+    }
+
+    /// Returns every model record in manifest order.
+    #[must_use]
+    pub fn models(&self) -> &[ModelManifest] {
+        &self.models
+    }
+
     /// Returns RFC 8785 JSON Canonicalization Scheme bytes covered by the signature.
     ///
     /// # Errors
@@ -1061,6 +1084,351 @@ impl CatalogManifest {
         }
         Ok(())
     }
+
+    fn normalize_for_production(&mut self) {
+        self.artifacts.sort_by(|left, right| left.id.cmp(&right.id));
+        self.models.sort_by(|left, right| {
+            left.metadata
+                .identity
+                .cmp(&right.metadata.identity)
+                .then_with(|| left.artifact_id.cmp(&right.artifact_id))
+        });
+    }
+}
+
+/// Immutable converter, chunker, tokenizer, and model-space contract for a release catalog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductionPipelineIdentity {
+    worker_protocol_version: u32,
+    index_schema_version: u32,
+    converter: String,
+    chunker: String,
+    tokenizer: TokenizerId,
+    model: ModelIdentity,
+}
+
+impl ProductionPipelineIdentity {
+    /// Creates the exact semantic pipeline identity shared by release artifacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation error for zero protocol/schema versions or
+    /// unsafe converter/chunker identities.
+    pub fn new(
+        worker_protocol_version: u32,
+        index_schema_version: u32,
+        converter: impl Into<String>,
+        chunker: impl Into<String>,
+        tokenizer: TokenizerId,
+        model: ModelIdentity,
+    ) -> Result<Self, CatalogError> {
+        if worker_protocol_version == 0 {
+            return Err(CatalogError::InvalidProtocolRange {
+                minimum: 0,
+                maximum: 0,
+            });
+        }
+        if index_schema_version == 0 {
+            return Err(CatalogError::InvalidSchemaVersion);
+        }
+        let converter = converter.into();
+        let chunker = chunker.into();
+        validate_pipeline_identity(&converter, "converter")?;
+        validate_pipeline_identity(&chunker, "chunker")?;
+        Ok(Self {
+            worker_protocol_version,
+            index_schema_version,
+            converter,
+            chunker,
+            tokenizer,
+            model,
+        })
+    }
+
+    /// Returns the worker protocol version required by this release.
+    #[must_use]
+    pub const fn worker_protocol_version(&self) -> u32 {
+        self.worker_protocol_version
+    }
+
+    /// Returns the durable index schema version.
+    #[must_use]
+    pub const fn index_schema_version(&self) -> u32 {
+        self.index_schema_version
+    }
+
+    /// Returns the exact converter pipeline identity.
+    #[must_use]
+    pub fn converter(&self) -> &str {
+        &self.converter
+    }
+
+    /// Returns the exact structural chunker identity.
+    #[must_use]
+    pub fn chunker(&self) -> &str {
+        &self.chunker
+    }
+
+    /// Returns the exact tokenizer identity.
+    #[must_use]
+    pub const fn tokenizer(&self) -> &TokenizerId {
+        &self.tokenizer
+    }
+
+    /// Returns the exact embedding model and immutable upstream revision.
+    #[must_use]
+    pub const fn model(&self) -> &ModelIdentity {
+        &self.model
+    }
+
+    fn validate(&self) -> Result<(), CatalogError> {
+        Self::new(
+            self.worker_protocol_version,
+            self.index_schema_version,
+            self.converter.clone(),
+            self.chunker.clone(),
+            self.tokenizer.clone(),
+            self.model.clone(),
+        )
+        .map(drop)
+    }
+}
+
+/// Auditable upstream source for one immutable production payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductionArtifactProvenance {
+    artifact_id: ArtifactId,
+    source: ArtifactLocation,
+    source_revision: ManifestRevision,
+}
+
+impl ProductionArtifactProvenance {
+    /// Associates an artifact with a credential-free source and immutable revision.
+    #[must_use]
+    pub const fn new(
+        artifact_id: ArtifactId,
+        source: ArtifactLocation,
+        source_revision: ManifestRevision,
+    ) -> Self {
+        Self {
+            artifact_id,
+            source,
+            source_revision,
+        }
+    }
+
+    /// Returns the catalog artifact this record describes.
+    #[must_use]
+    pub const fn artifact_id(&self) -> &ArtifactId {
+        &self.artifact_id
+    }
+
+    /// Returns the public upstream source.
+    #[must_use]
+    pub const fn source(&self) -> &ArtifactLocation {
+        &self.source
+    }
+
+    /// Returns the immutable upstream revision.
+    #[must_use]
+    pub const fn source_revision(&self) -> &ManifestRevision {
+        &self.source_revision
+    }
+
+    fn validate(&self) -> Result<(), CatalogError> {
+        revalidate_opaque_identifier(self.artifact_id.as_str(), "artifact identifier")?;
+        ArtifactLocation::new(self.source.as_str()).map(drop)?;
+        revalidate_opaque_identifier(self.source_revision.as_str(), "source revision")
+    }
+}
+
+/// Versioned production wrapper covering the catalog, provenance, and pipeline identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductionCatalogManifest {
+    format_version: u32,
+    catalog: CatalogManifest,
+    pipeline: ProductionPipelineIdentity,
+    provenance: Vec<ProductionArtifactProvenance>,
+}
+
+impl ProductionCatalogManifest {
+    /// Creates a normalized production catalog manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation error when provenance is incomplete or the
+    /// pipeline identity disagrees with the embedded catalog.
+    pub fn new(
+        mut catalog: CatalogManifest,
+        pipeline: ProductionPipelineIdentity,
+        mut provenance: Vec<ProductionArtifactProvenance>,
+    ) -> Result<Self, CatalogError> {
+        catalog.normalize_for_production();
+        provenance.sort_by(|left, right| left.artifact_id.cmp(&right.artifact_id));
+        let manifest = Self {
+            format_version: 1,
+            catalog,
+            pipeline,
+            provenance,
+        };
+        manifest.validate()?;
+        Ok(manifest)
+    }
+
+    /// Returns the normalized managed-component catalog.
+    #[must_use]
+    pub const fn catalog(&self) -> &CatalogManifest {
+        &self.catalog
+    }
+
+    /// Returns the exact semantic pipeline identity.
+    #[must_use]
+    pub const fn pipeline(&self) -> &ProductionPipelineIdentity {
+        &self.pipeline
+    }
+
+    /// Returns sorted upstream provenance for every payload.
+    #[must_use]
+    pub fn provenance(&self) -> &[ProductionArtifactProvenance] {
+        &self.provenance
+    }
+
+    /// Returns RFC 8785 canonical bytes covered by the release signature.
+    ///
+    /// # Errors
+    ///
+    /// Returns a serialization error if the typed manifest cannot be encoded.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, CatalogError> {
+        serde_json_canonicalizer::to_vec(self).map_err(CatalogError::Serialize)
+    }
+
+    /// Revalidates all signed production invariants after deserialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog error for malformed, incomplete, duplicated, or
+    /// incompatible signed data.
+    pub fn validate(&self) -> Result<(), CatalogError> {
+        if self.format_version != 1 {
+            return Err(CatalogError::UnsupportedProductionFormatVersion {
+                version: self.format_version,
+            });
+        }
+        self.catalog.validate()?;
+        self.pipeline.validate()?;
+
+        if !self
+            .catalog
+            .artifacts
+            .windows(2)
+            .all(|pair| pair[0].id < pair[1].id)
+            || !self
+                .catalog
+                .models
+                .windows(2)
+                .all(|pair| pair[0].metadata.identity < pair[1].metadata.identity)
+            || !self
+                .provenance
+                .windows(2)
+                .all(|pair| pair[0].artifact_id < pair[1].artifact_id)
+        {
+            return Err(CatalogError::NonCanonicalProductionManifest);
+        }
+
+        let mut provenance = BTreeMap::new();
+        for record in &self.provenance {
+            record.validate()?;
+            if provenance.insert(&record.artifact_id, record).is_some() {
+                return Err(CatalogError::DuplicateProductionProvenance {
+                    id: record.artifact_id.clone(),
+                });
+            }
+            if !self
+                .catalog
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.id() == record.artifact_id())
+            {
+                return Err(CatalogError::UnknownProductionProvenance {
+                    id: record.artifact_id.clone(),
+                });
+            }
+        }
+        for artifact in &self.catalog.artifacts {
+            if !provenance.contains_key(artifact.id()) {
+                return Err(CatalogError::MissingProductionProvenance {
+                    id: artifact.id().clone(),
+                });
+            }
+            if artifact.compatibility().index_schema_version() != self.pipeline.index_schema_version
+            {
+                return Err(CatalogError::ProductionCompatibilityMismatch {
+                    field: "index schema",
+                });
+            }
+            if matches!(artifact.kind(), ArtifactKind::Worker)
+                && !artifact
+                    .compatibility()
+                    .protocol()
+                    .is_some_and(|range| range.contains(self.pipeline.worker_protocol_version))
+            {
+                return Err(CatalogError::ProductionCompatibilityMismatch {
+                    field: "worker protocol",
+                });
+            }
+        }
+
+        let model = self
+            .catalog
+            .models
+            .iter()
+            .find(|model| model.metadata.identity() == &self.pipeline.model)
+            .ok_or(CatalogError::ProductionCompatibilityMismatch { field: "model" })?;
+        if model.metadata.tokenizer() != &self.pipeline.tokenizer {
+            return Err(CatalogError::ProductionCompatibilityMismatch { field: "tokenizer" });
+        }
+        if self
+            .catalog
+            .profile_resolutions
+            .values()
+            .any(|identity| identity != &self.pipeline.model)
+        {
+            return Err(CatalogError::ProductionCompatibilityMismatch {
+                field: "profile model",
+            });
+        }
+        Ok(())
+    }
+}
+
+/// A production catalog plus its detached Ed25519 signature.
+#[derive(Debug, Clone)]
+pub struct SignedProductionCatalogManifest {
+    manifest: ProductionCatalogManifest,
+    signature: [u8; 64],
+}
+
+impl SignedProductionCatalogManifest {
+    /// Associates canonical production catalog data with its detached signature.
+    #[must_use]
+    pub const fn new(manifest: ProductionCatalogManifest, signature: [u8; 64]) -> Self {
+        Self {
+            manifest,
+            signature,
+        }
+    }
+
+    /// Returns the signed production manifest.
+    #[must_use]
+    pub const fn manifest(&self) -> &ProductionCatalogManifest {
+        &self.manifest
+    }
+
+    /// Returns the raw detached Ed25519 signature.
+    #[must_use]
+    pub const fn signature(&self) -> &[u8; 64] {
+        &self.signature
+    }
 }
 
 /// A catalog plus its detached Ed25519 signature.
@@ -1104,10 +1472,81 @@ impl TrustedCatalog {
         })
     }
 
+    /// Verifies a production signature and every provenance/pipeline invariant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError::InvalidSignature`] when verification fails, or
+    /// another typed catalog error when signed production data is inconsistent.
+    pub fn verify_production(
+        signed: SignedProductionCatalogManifest,
+        key: &VerifyingKey,
+    ) -> Result<Self, CatalogError> {
+        let manifest = Self::verify_production_manifest(signed, key)?;
+        Ok(Self {
+            manifest: manifest.catalog,
+        })
+    }
+
+    /// Verifies production data against the pipeline identity compiled into the host.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed compatibility error when a correctly signed catalog
+    /// targets a different converter, chunker, tokenizer, model, protocol, or
+    /// index schema than this host supports.
+    pub fn verify_production_for_pipeline(
+        signed: SignedProductionCatalogManifest,
+        key: &VerifyingKey,
+        expected: &ProductionPipelineIdentity,
+    ) -> Result<Self, CatalogError> {
+        let manifest = Self::verify_production_manifest(signed, key)?;
+        let actual = &manifest.pipeline;
+        if actual != expected {
+            return Err(CatalogError::ProductionCompatibilityMismatch {
+                field: Self::production_pipeline_mismatch(actual, expected),
+            });
+        }
+        Ok(Self {
+            manifest: manifest.catalog,
+        })
+    }
+
+    fn verify_production_manifest(
+        signed: SignedProductionCatalogManifest,
+        key: &VerifyingKey,
+    ) -> Result<ProductionCatalogManifest, CatalogError> {
+        let bytes = signed.manifest.canonical_bytes()?;
+        let signature = Signature::from_bytes(&signed.signature);
+        key.verify_strict(&bytes, &signature)
+            .map_err(|_| CatalogError::InvalidSignature)?;
+        signed.manifest.validate()?;
+        Ok(signed.manifest)
+    }
+
     /// Returns the immutable signed catalog revision.
     #[must_use]
     pub const fn revision(&self) -> &ManifestRevision {
         self.manifest.revision()
+    }
+
+    fn production_pipeline_mismatch(
+        actual: &ProductionPipelineIdentity,
+        expected: &ProductionPipelineIdentity,
+    ) -> &'static str {
+        if actual.worker_protocol_version != expected.worker_protocol_version {
+            "worker protocol"
+        } else if actual.index_schema_version != expected.index_schema_version {
+            "index schema"
+        } else if actual.converter != expected.converter {
+            "converter"
+        } else if actual.chunker != expected.chunker {
+            "chunker"
+        } else if actual.tokenizer != expected.tokenizer {
+            "tokenizer"
+        } else {
+            "model"
+        }
     }
 
     /// Returns a verified artifact by its opaque catalog identifier.
@@ -1585,10 +2024,49 @@ pub enum CatalogError {
         /// Unsupported format number.
         version: u32,
     },
+    /// The production wrapper uses a format this build does not understand.
+    #[error("unsupported production semantic catalog format version {version}")]
+    UnsupportedProductionFormatVersion {
+        /// Unsupported format number.
+        version: u32,
+    },
     /// An opaque identifier was empty or unsafe.
     #[error("{field} must be a portable opaque identifier")]
     InvalidIdentifier {
         /// Name of the invalid field.
+        field: &'static str,
+    },
+    /// A converter or chunker identity was empty or unsafe.
+    #[error("production {field} identity contains unsupported characters")]
+    InvalidPipelineIdentity {
+        /// Pipeline field that failed validation.
+        field: &'static str,
+    },
+    /// Production records were not sorted in canonical identity order.
+    #[error("production semantic catalog records are not in canonical order")]
+    NonCanonicalProductionManifest,
+    /// A catalog artifact omitted its auditable upstream provenance.
+    #[error("production artifact `{}` has no source provenance", id.as_str())]
+    MissingProductionProvenance {
+        /// Artifact lacking provenance.
+        id: ArtifactId,
+    },
+    /// Provenance referred to an artifact absent from the embedded catalog.
+    #[error("production provenance refers to unknown artifact `{}`", id.as_str())]
+    UnknownProductionProvenance {
+        /// Unknown artifact.
+        id: ArtifactId,
+    },
+    /// Two provenance records described one artifact.
+    #[error("duplicate production provenance for `{}`", id.as_str())]
+    DuplicateProductionProvenance {
+        /// Duplicated artifact.
+        id: ArtifactId,
+    },
+    /// A signed artifact contract disagreed with the production pipeline.
+    #[error("production semantic catalog has incompatible {field}")]
+    ProductionCompatibilityMismatch {
+        /// Compatibility dimension that drifted.
         field: &'static str,
     },
     /// Distinct signed identifiers collapse to one path on common filesystems.

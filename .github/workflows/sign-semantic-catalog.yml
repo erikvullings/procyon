@@ -1,0 +1,64 @@
+name: Sign semantic component catalog
+
+on:
+  workflow_call:
+    inputs:
+      release-input-artifact:
+        description: Artifact containing catalog-input.json and artifacts/
+        required: true
+        type: string
+      signed-catalog-artifact:
+        description: Name of the signed catalog workflow artifact
+        required: false
+        default: semantic-production-catalog
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: Sign and verify semantic catalog
+    runs-on: ubuntu-latest
+    environment: desktop-release
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v5
+        with:
+          name: ${{ inputs.release-input-artifact }}
+          path: semantic-release-input
+      - name: Prepare temporary catalog keys
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SEMANTIC_CATALOG_SIGNING_KEY_BASE64 }}
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: |
+          test -n "$SIGNING_KEY_BASE64"
+          test -n "$VERIFYING_KEY_BASE64"
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/semantic-catalog.key"
+          printf '%s' "$VERIFYING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/semantic-catalog.pub"
+          chmod 600 "$RUNNER_TEMP/semantic-catalog.key"
+          chmod 644 "$RUNNER_TEMP/semantic-catalog.pub"
+      - name: Sign canonical semantic catalog
+        env:
+          PROCYON_SEMANTIC_CATALOG_SIGNING_KEY_FILE: ${{ runner.temp }}/semantic-catalog.key
+        run: |
+          cargo run --quiet -p fm-semantic-components \
+            --example semantic_production_catalog -- \
+            sign semantic-release-input/catalog-input.json \
+            semantic-release-input/artifacts semantic-signed-catalog
+      - name: Verify signature and every payload
+        run: |
+          cargo run --quiet -p fm-semantic-components \
+            --example semantic_production_catalog -- \
+            verify semantic-signed-catalog/catalog.json \
+            semantic-signed-catalog/catalog.sig \
+            semantic-release-input/artifacts \
+            "$RUNNER_TEMP/semantic-catalog.pub"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.signed-catalog-artifact }}
+          path: semantic-signed-catalog/
+          if-no-files-found: error
+      - name: Remove temporary catalog credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/semantic-catalog.key" "$RUNNER_TEMP/semantic-catalog.pub"

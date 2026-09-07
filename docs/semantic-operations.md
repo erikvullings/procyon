@@ -143,32 +143,92 @@ installed and activated rather than a fixed one.
 
 ### Publishing a production component pack
 
+The common production catalog contract is implemented; target payload production and desktop
+activation remain tasks 0195 and 0196. A release input artifact has this fixed layout:
+
+```text
+catalog-input.json
+artifacts/
+  <content-addressed worker artifact ID>
+  <content-addressed Zvec runtime artifact ID>
+  <content-addressed model artifact ID>
+```
+
+`catalog-input.json` is a `ProductionCatalogManifest`. Its embedded managed-component catalog
+records each payload's credential-free HTTPS distribution location, SPDX license and notice, exact
+download/installed/RAM bytes, SHA-256, target, protocol, runtime requirements, and index schema.
+The production wrapper adds an immutable public source URL and source revision for every artifact,
+plus one exact worker-protocol/index-schema/converter/chunker/tokenizer/model identity. Production
+IDs use the `procyon.semantic.*` component namespaces and include target, package version, and a
+SHA-256 prefix; development IDs and the public developer key are never accepted as release trust.
+
 1. Build worker/runtime artifacts for each supported target and publish immutable payloads through
    a catalog-ID-only artifact source. Do not accept user-supplied download URLs.
-2. Evaluate the exact model revision and package set against the task-0188 baseline, then record
-   license, tokenizer, dimensions, normalization, language coverage, download/disk/RAM estimates,
-   protocol compatibility, and checksums in the catalog.
-3. Canonicalize and sign the catalog with the release signing key. Ship only the trusted verifying
-   key and catalog revision with Procyon; host adapters verify the signature and every artifact
-   checksum before activation.
-4. Construct `ComponentManager` with the platform app-data root and inject
+2. Evaluate the exact model revision and package set against the task-0188 baseline, then assemble
+   `catalog-input.json` from the build outputs. The release tool enumerates the exact payload set
+   and recomputes each file's length and SHA-256 before signing, so an unknown, missing, truncated,
+   oversized, or changed file fails closed.
+3. Invoke the reusable `.github/workflows/sign-semantic-catalog.yml` workflow from the release
+   payload job. Store the base64-encoded raw 32-byte Ed25519 seed only as the protected
+   `desktop-release` environment secret `SEMANTIC_CATALOG_SIGNING_KEY_BASE64`. Store the matching
+   public key as `SEMANTIC_CATALOG_VERIFYING_KEY_BASE64`; release builds convert that public value
+   to `PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX`. The workflow writes both keys only below
+   `RUNNER_TEMP`, restricts the private file to mode 0600, never places key material in command
+   arguments or generated files, and removes the files in an `always()` step.
+4. The signing job runs `pnpm semantic:catalog -- sign <input> <artifacts> <output>`, then performs
+   an independent public-key-only
+   `pnpm semantic:catalog -- verify <catalog> <signature> <artifacts> <public-key>` pass. Signatures
+   cover RFC 8785 canonical JSON even though `catalog.json` is emitted as stable pretty JSON.
+5. Construct `ComponentManager` with the platform app-data root and inject
    `ManagedSemanticComponentAdapters` for artifact reads, free-space checks, activation probing,
    indexing pause, worker quiescence, and authoritative index removal. Pass the resulting
    `ManagedSemanticComponentCapability` to `FileManagerService::with_semantic_component_capability`
    in the desktop host.
-5. Publish the platform payloads alongside a direct-distribution release and run installed/absent,
+6. Publish the platform payloads alongside a direct-distribution release and run installed/absent,
    rollback, tamper, low-disk, and hardware smoke tests. Mac App Store builds must bundle executable
    capabilities or keep them unavailable; they may not download executable packs at runtime.
 
-No production model pack or release catalog is currently selected or shipped. The developer bundle
-packs a real multilingual model for local testing, but that model has not been evaluated against
-the task-0188 baseline and the bundle remains development-only. The developer bundle
+The production identity contract pins `intfloat/multilingual-e5-small` at revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
+`xlm-roberta-sentencepiece.614241f6`, converter
+`docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 1.
+No production payload set or release catalog is shipped yet; task 0195 produces the platform
+artifacts, task 0196 embeds the matching public key and activates the desktop host, and task 0198
+qualifies the installed result. The developer bundle
+packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point
 `PROCYON_SEMANTIC_DEVELOPER_BUNDLE` at that directory. Its signing key is public, so the signature
 only tests catalog verification; it establishes no publisher trust. Never redistribute it as a
 production component pack. Remove it by uninstalling the semantic components in Settings and
 deleting the copied bundle directory after the app exits.
+
+#### Rotation, retention, rollback, and revocation
+
+- **Routine rotation:** generate a new Ed25519 key offline, place only its base64 public key in the
+  protected environment variable, and release an application that trusts it before using the new
+  private seed. During a planned overlap, publish catalogs signed by both generations as separate
+  immutable release assets; never overwrite a catalog or reuse a revision. Remove old trust only
+  after every supported application line has an upgrade path.
+- **Artifact retention:** retain every payload referenced by the current catalog and the immediately
+  preceding catalog for at least the full supported rollback window. Content-addressed IDs make
+  retention unambiguous. Garbage-collect only payloads absent from both retained catalogs and from
+  supported installed states.
+- **Rollback:** republish or select the previous immutable catalog and its unchanged payloads. The
+  managed installer verifies the old signature and checksums and retains the last working worker
+  during activation. Never edit a signed catalog in place; a metadata correction is a new revision.
+- **Emergency revocation:** remove the compromised payload and catalog from distribution, disable
+  semantic installation in the release channel, and publish a new application/catalog revision
+  that omits the revoked artifact ID. If the signing seed may be compromised, rotate the embedded
+  public key and ship that application update before resuming distribution. Existing signed
+  catalogs are intentionally immutable and cannot be remotely rewritten, so the incident record
+  must list affected catalog revisions and minimum safe application versions.
+- **Reproducible local verification:** download `catalog.json`, `catalog.sig`, the `artifacts/`
+  directory, and the 32-byte public key from independently authenticated release sources. Run
+  `pnpm semantic:catalog -- verify catalog.json catalog.sig artifacts public-key.bin`. Success
+  prints only the catalog revision; any signature, compatibility, file-set, length, or SHA-256
+  mismatch exits non-zero. Re-running `sign` with the same manifest, payloads, and protected seed
+  produces byte-identical `catalog.json` and `catalog.sig`.
 
 ## Diagnostics and privacy
 

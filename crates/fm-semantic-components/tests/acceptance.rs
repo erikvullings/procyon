@@ -22,9 +22,13 @@ use fm_semantic_components::{
     IndexingController, IndexingPauseGuard, InstallEnvironment, InstallError, LicenseInfo,
     LocalModelImport, LocalModelImportRequest, ManifestRevision, ModelId, ModelIdentity,
     ModelImportError, ModelImportField, ModelManifest, ModelMetadata, ModelRevision, PauseError,
-    ProtocolRange, QuiesceError, ReindexEstimate, ReindexReason, RuntimeCompatibility,
-    SemanticDataRoot, SemanticStateError, SemanticStateStore, Sha256Digest, SignedCatalogManifest,
-    TargetTriple, TokenizerId, TrustedCatalog, UninstallIndexDecision,
+    ProductionArtifactProvenance, ProductionCatalogError, ProductionCatalogManifest,
+    ProductionPipelineIdentity, ProtocolRange, QuiesceError, ReindexEstimate, ReindexReason,
+    RuntimeCompatibility, SemanticDataRoot, SemanticStateError, SemanticStateStore, Sha256Digest,
+    SignedCatalogManifest, SignedProductionCatalogManifest, TargetTriple, TokenizerId,
+    TrustedCatalog, UninstallIndexDecision, production_artifact_id, sign_production_catalog,
+    verify_production_payloads, verify_serialized_production_catalog,
+    write_signed_production_catalog,
 };
 use semver::{Version, VersionReq};
 use tempfile::TempDir;
@@ -354,6 +358,273 @@ fn fixture_catalog_manifest() -> CatalogManifest {
         profiles,
     )
     .expect("valid complete manifest")
+}
+
+fn fixture_production_manifest(
+    reverse_provenance: bool,
+) -> Result<ProductionCatalogManifest, CatalogError> {
+    let model = fixture_model_metadata();
+    let pipeline = ProductionPipelineIdentity::new(
+        1,
+        7,
+        "docling-pdf/1036000+baseline/1",
+        "structural/2",
+        model.tokenizer().clone(),
+        model.identity().clone(),
+    )?;
+    let mut provenance = vec![
+        ProductionArtifactProvenance::new(
+            ArtifactId::new("fixture.worker.macos-aarch64.1-2-0")?,
+            ArtifactLocation::new("https://github.com/example/procyon")?,
+            ManifestRevision::new("commit-worker-deadbeef")?,
+        ),
+        ProductionArtifactProvenance::new(
+            ArtifactId::new("fixture.runtime.macos-aarch64.1-4-0")?,
+            ArtifactLocation::new("https://github.com/example/zvec")?,
+            ManifestRevision::new("tag-zvec-1-4-0")?,
+        ),
+        ProductionArtifactProvenance::new(
+            ArtifactId::new("fixture.model.multilingual.deadbeef")?,
+            ArtifactLocation::new("https://huggingface.co/example/model")?,
+            ManifestRevision::new("commit-model-deadbeef")?,
+        ),
+    ];
+    if reverse_provenance {
+        provenance.reverse();
+    }
+    ProductionCatalogManifest::new(fixture_catalog_manifest(), pipeline, provenance)
+}
+
+#[test]
+fn production_catalog_generation_is_deterministic_and_records_pipeline_provenance() {
+    let first = fixture_production_manifest(false).expect("production manifest");
+    let reordered = fixture_production_manifest(true).expect("production manifest");
+
+    assert_eq!(
+        first.canonical_bytes().expect("canonical catalog"),
+        reordered.canonical_bytes().expect("canonical catalog")
+    );
+    assert_eq!(
+        first.pipeline().converter(),
+        "docling-pdf/1036000+baseline/1"
+    );
+    assert_eq!(first.pipeline().chunker(), "structural/2");
+    assert_eq!(first.provenance().len(), 3);
+}
+
+#[test]
+fn production_catalog_signature_covers_provenance_and_pipeline_compatibility() {
+    let signing_key = SigningKey::from_bytes(&[23_u8; 32]);
+    let manifest = fixture_production_manifest(false).expect("production manifest");
+    let signature = signing_key.sign(&manifest.canonical_bytes().expect("canonical catalog"));
+    let signed = SignedProductionCatalogManifest::new(manifest.clone(), signature.to_bytes());
+
+    let trusted = TrustedCatalog::verify_production(signed, &signing_key.verifying_key())
+        .expect("valid production catalog");
+    assert_eq!(trusted.revision(), manifest.catalog().revision());
+
+    let mut altered = serde_json::to_value(manifest).expect("serialize production manifest");
+    altered["pipeline"]["chunker"] = "structural/3".into();
+    let altered = serde_json::from_value(altered).expect("deserialize altered manifest");
+    let signed = SignedProductionCatalogManifest::new(altered, signature.to_bytes());
+    assert!(matches!(
+        TrustedCatalog::verify_production(signed, &signing_key.verifying_key()),
+        Err(CatalogError::InvalidSignature)
+    ));
+}
+
+#[test]
+fn production_catalog_rejects_incomplete_provenance_and_identity_drift() {
+    let manifest = fixture_production_manifest(false).expect("production manifest");
+    let value = serde_json::to_value(&manifest).expect("serialize production manifest");
+
+    let mut missing_source = value.clone();
+    missing_source["provenance"].as_array_mut().unwrap().pop();
+    let missing_source: ProductionCatalogManifest =
+        serde_json::from_value(missing_source).expect("structurally valid manifest");
+    assert!(matches!(
+        missing_source.validate(),
+        Err(CatalogError::MissingProductionProvenance { .. })
+    ));
+
+    let mut wrong_tokenizer = value.clone();
+    wrong_tokenizer["pipeline"]["tokenizer"] = "different-tokenizer".into();
+    let wrong_tokenizer: ProductionCatalogManifest =
+        serde_json::from_value(wrong_tokenizer).expect("structurally valid manifest");
+    assert!(matches!(
+        wrong_tokenizer.validate(),
+        Err(CatalogError::ProductionCompatibilityMismatch { field: "tokenizer" })
+    ));
+
+    let mut wrong_schema = value;
+    wrong_schema["pipeline"]["index_schema_version"] = 8.into();
+    let wrong_schema: ProductionCatalogManifest =
+        serde_json::from_value(wrong_schema).expect("structurally valid manifest");
+    assert!(matches!(
+        wrong_schema.validate(),
+        Err(CatalogError::ProductionCompatibilityMismatch {
+            field: "index schema"
+        })
+    ));
+}
+
+#[test]
+fn production_catalog_rejects_a_signed_converter_or_chunker_for_another_host_pipeline() {
+    let signing_key = SigningKey::from_bytes(&[29_u8; 32]);
+    let manifest = fixture_production_manifest(false).expect("production manifest");
+    let expected_model = fixture_model_metadata();
+    for (converter, chunker, expected_field) in [
+        (
+            "docling-pdf/1036001+baseline/1",
+            "structural/2",
+            "converter",
+        ),
+        ("docling-pdf/1036000+baseline/1", "structural/3", "chunker"),
+    ] {
+        let incompatible = ProductionPipelineIdentity::new(
+            1,
+            7,
+            converter,
+            chunker,
+            expected_model.tokenizer().clone(),
+            expected_model.identity().clone(),
+        )
+        .unwrap();
+        let signature = signing_key.sign(&manifest.canonical_bytes().unwrap());
+        let signed = SignedProductionCatalogManifest::new(manifest.clone(), signature.to_bytes());
+        assert!(matches!(
+            TrustedCatalog::verify_production_for_pipeline(
+                signed,
+                &signing_key.verifying_key(),
+                &incompatible,
+            ),
+            Err(CatalogError::ProductionCompatibilityMismatch { field })
+                if field == expected_field
+        ));
+    }
+}
+
+#[test]
+fn production_catalog_signing_verifies_exact_payloads_and_writes_repeatable_outputs() {
+    let directory = project_temp_dir("production-catalog-");
+    let artifacts = directory.path().join("artifacts");
+    std::fs::create_dir_all(&artifacts).unwrap();
+    for (id, bytes) in [
+        (
+            "fixture.worker.macos-aarch64.1-2-0",
+            b"fixture worker".as_slice(),
+        ),
+        (
+            "fixture.runtime.macos-aarch64.1-4-0",
+            b"fixture runtime".as_slice(),
+        ),
+        (
+            "fixture.model.multilingual.deadbeef",
+            b"fixture model".as_slice(),
+        ),
+    ] {
+        std::fs::write(artifacts.join(id), bytes).unwrap();
+    }
+    let manifest = fixture_production_manifest(false).expect("production manifest");
+    verify_production_payloads(&manifest, &artifacts).expect("exact payload set");
+
+    let signing_key = SigningKey::from_bytes(&[31_u8; 32]);
+    let signed = sign_production_catalog(manifest, &signing_key).expect("sign catalog");
+    let first = directory.path().join("first");
+    let second = directory.path().join("second");
+    write_signed_production_catalog(&signed, &first).expect("first output");
+    write_signed_production_catalog(&signed, &second).expect("second output");
+    assert_eq!(
+        std::fs::read(first.join("catalog.json")).unwrap(),
+        std::fs::read(second.join("catalog.json")).unwrap()
+    );
+    assert_eq!(
+        std::fs::read(first.join("catalog.sig")).unwrap(),
+        std::fs::read(second.join("catalog.sig")).unwrap()
+    );
+    verify_serialized_production_catalog(
+        &std::fs::read(first.join("catalog.json")).unwrap(),
+        &std::fs::read(first.join("catalog.sig")).unwrap(),
+        &signing_key.verifying_key(),
+    )
+    .expect("public-key verification");
+
+    std::fs::write(
+        artifacts.join("fixture.model.multilingual.deadbeef"),
+        b"tampered mode",
+    )
+    .unwrap();
+    assert!(matches!(
+        verify_production_payloads(signed.manifest(), &artifacts),
+        Err(ProductionCatalogError::PayloadChecksumMismatch { .. })
+    ));
+}
+
+#[test]
+fn production_payload_verification_rejects_truncated_and_unknown_files() {
+    let directory = project_temp_dir("production-payload-rejection-");
+    let artifacts = directory.path().join("artifacts");
+    std::fs::create_dir_all(&artifacts).unwrap();
+    for (id, bytes) in [
+        (
+            "fixture.worker.macos-aarch64.1-2-0",
+            b"fixture worker".as_slice(),
+        ),
+        (
+            "fixture.runtime.macos-aarch64.1-4-0",
+            b"fixture runtime".as_slice(),
+        ),
+        (
+            "fixture.model.multilingual.deadbeef",
+            b"fixture mode".as_slice(),
+        ),
+    ] {
+        std::fs::write(artifacts.join(id), bytes).unwrap();
+    }
+    let manifest = fixture_production_manifest(false).expect("production manifest");
+    assert!(matches!(
+        verify_production_payloads(&manifest, &artifacts),
+        Err(ProductionCatalogError::PayloadSizeMismatch { .. })
+    ));
+
+    std::fs::write(
+        artifacts.join("fixture.model.multilingual.deadbeef"),
+        b"fixture model",
+    )
+    .unwrap();
+    std::fs::write(artifacts.join("not-in-catalog"), b"unknown").unwrap();
+    assert!(matches!(
+        verify_production_payloads(&manifest, &artifacts),
+        Err(ProductionCatalogError::UnknownPayload { .. })
+    ));
+}
+
+#[test]
+fn production_artifact_ids_bind_component_target_version_and_payload() {
+    let component = ComponentId::new("procyon.semantic.worker").unwrap();
+    let target = TargetTriple::new("linux", "x86_64").unwrap();
+    let version = Version::parse("0.1.0-23").unwrap();
+    let first = production_artifact_id(
+        &component,
+        Some(&target),
+        &version,
+        Sha256Digest::calculate(b"worker-a"),
+    )
+    .unwrap();
+    let second = production_artifact_id(
+        &component,
+        Some(&target),
+        &version,
+        Sha256Digest::calculate(b"worker-b"),
+    )
+    .unwrap();
+
+    assert!(
+        first
+            .as_str()
+            .starts_with("procyon.semantic.worker.linux-x86_64.0.1.0.23.")
+    );
+    assert_ne!(first, second);
 }
 
 fn signed_fixture_catalog() -> TrustedCatalog {
@@ -2268,6 +2539,55 @@ fn tampered_artifact_is_rejected_and_removed_before_activation() {
             .join("catalog/downloads/fixture.worker.macos-aarch64.1-2-0.partial")
             .exists()
     );
+}
+
+#[test]
+fn truncated_artifact_is_rejected_by_the_managed_component_installer() {
+    let directory = project_temp_dir("truncated-");
+    let app_data = directory.path().join("app-data");
+    let root = app_data.join("semantic");
+    let catalog = signed_fixture_catalog();
+    let source = ResumableMemorySource {
+        artifacts: [(
+            ArtifactId::new("fixture.worker.macos-aarch64.1-2-0").unwrap(),
+            b"short".to_vec(),
+        )]
+        .into(),
+        requests: Mutex::new(Vec::new()),
+        interrupt_worker_once: AtomicBool::new(false),
+    };
+    let manager = ComponentManager::new(
+        SemanticStateStore::new(directory.path().join("config")),
+        &app_data,
+    );
+
+    let error = manager
+        .install(
+            fixture_install_offer(&catalog, &root).consent(),
+            &catalog,
+            &InstallEnvironment::new(
+                TargetTriple::new("macos", "aarch64").unwrap(),
+                1,
+                BTreeMap::new(),
+            ),
+            &source,
+            &FixedFreeSpace(u64::MAX),
+            &AcceptActivation,
+        )
+        .expect_err("truncated worker must be rejected");
+
+    assert!(matches!(error, InstallError::ArtifactSizeMismatch { .. }));
+}
+
+#[test]
+fn unknown_artifact_cannot_enter_a_managed_installation_plan() {
+    let catalog = signed_fixture_catalog();
+    let unknown = ArtifactId::new("procyon.semantic.worker.unknown").unwrap();
+
+    assert!(matches!(
+        catalog.installation_artifacts(SemanticProfile::CompactMultilingual, &[unknown]),
+        Err(CatalogError::UnknownArtifact { .. })
+    ));
 }
 
 #[test]

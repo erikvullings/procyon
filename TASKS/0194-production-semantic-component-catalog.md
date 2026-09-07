@@ -1,6 +1,6 @@
 # 0194 Production semantic component catalog
 
-Status: open
+Status: done
 Priority: high
 Subsystem: backend, release
 Depends on: 0178, 0188, 0191, 0192
@@ -46,3 +46,15 @@ its integration CI is green. The branch merge itself is not part of this task.
 - 2026-09-07 Copilot: Created after confirming that merge-to-main alone cannot enable semantic
   features in release builds. Start only after the semantic implementation branch is merged and
   green on `main`.
+- 2026-09-07 Copilot: Implementation started after PR #35 merged as `6f6f3bc` and the exact
+  post-merge `main` CI run completed successfully on Linux, macOS, and Windows, including desktop
+  packaging.
+- 2026-09-07 Copilot: Added a canonical signed production wrapper around the existing managed
+  catalog with auditable source provenance and exact protocol, index-schema, converter, chunker,
+  tokenizer, and model identities. Added content-addressed `procyon.semantic.*` artifact IDs,
+  exact payload-set/size/SHA-256 verification, redaction-safe external-key signing, embedded
+  public-key loading, a public-key-only verifier CLI, and a reusable protected release workflow.
+  Documented rotation, retention, rollback, emergency revocation, and local verification. Added
+  nine acceptance tests, two key-redaction unit tests, and three workflow tests; the full
+  `fm-semantic-components` suite, script suite, affected-crate Windows Clippy, and repository lint
+  pass. Target payload creation and desktop activation remain scoped to 0195 and 0196.

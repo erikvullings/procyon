@@ -8,6 +8,7 @@ mod installer;
 mod model_migration;
 mod model_pack;
 mod optional_pack;
+mod production;
 mod report;
 mod state;
 
@@ -15,9 +16,10 @@ pub use catalog::{
     ArtifactCompatibility, ArtifactId, ArtifactKind, ArtifactLocation, CatalogArtifact,
     CatalogError, CatalogManifest, ComponentDisclosure, ComponentId, ComponentResources,
     EmbeddingNormalization, InstallationOffer, LicenseInfo, LocalOnlyDisclosure, ManifestRevision,
-    ModelField, ModelId, ModelIdentity, ModelManifest, ModelMetadata, ModelRevision, ProtocolRange,
-    RuntimeCompatibility, Sha256Digest, SignedCatalogManifest, TargetTriple, TokenizerId,
-    TrustedCatalog,
+    ModelField, ModelId, ModelIdentity, ModelManifest, ModelMetadata, ModelRevision,
+    ProductionArtifactProvenance, ProductionCatalogManifest, ProductionPipelineIdentity,
+    ProtocolRange, RuntimeCompatibility, Sha256Digest, SignedCatalogManifest,
+    SignedProductionCatalogManifest, TargetTriple, TokenizerId, TrustedCatalog,
 };
 pub use data_root::{DataCategory, DataRootError, SemanticDataRoot};
 pub use data_root::{
@@ -51,6 +53,14 @@ pub use optional_pack::{
     AdvancedPackActivationPlan, AdvancedPackDependency, AdvancedPackError, AdvancedPackKind,
     AdvancedPackManifest, AdvancedPackRegistry, AdvancedPackResources, AdvancedPackStatus,
     SignedAdvancedPackManifest, TrustedAdvancedPack,
+};
+pub use production::{
+    PRODUCTION_MODEL_COMPONENT_ID, PRODUCTION_MODEL_ID, PRODUCTION_MODEL_REVISION,
+    PRODUCTION_SIGNING_KEY_FILE_ENV, PRODUCTION_TOKENIZER_ID, PRODUCTION_VERIFYING_KEY_HEX_ENV,
+    PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID, ProductionCatalogError,
+    embedded_production_verifying_key, load_production_signing_key, production_artifact_id,
+    sign_production_catalog, verify_production_payloads, verify_serialized_production_catalog,
+    write_signed_production_catalog,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,

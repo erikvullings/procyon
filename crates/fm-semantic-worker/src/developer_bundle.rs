@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fm_semantic_components::{ModelPack, ModelPackKind};
-use fm_semantic_conversion::ConversionBudgets;
+use fm_semantic_conversion::{ConversionBudgets, STRUCTURAL_CHUNKER_VERSION};
 use fm_semantic_docling::{
     DEFAULT_CONVERTER_PIPELINE_VERSION, OcrMyPdfConfiguration, converter_with_optional_ocr,
 };
@@ -207,7 +207,7 @@ fn developer_manifest(identity: &EmbeddingModelIdentity) -> LibraryIndexManifest
         model_revision: identity.model_revision.clone(),
         tokenizer: identity.tokenizer.clone(),
         converter_version: DEFAULT_CONVERTER_PIPELINE_VERSION.into(),
-        chunker_version: "structural/2".into(),
+        chunker_version: STRUCTURAL_CHUNKER_VERSION.to_string(),
         normalization: VectorNormalization::L2,
     }
 }
