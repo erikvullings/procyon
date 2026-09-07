@@ -51,18 +51,48 @@ export function isCutLocation(clipboard: ClipboardState, location: Location): bo
   );
 }
 
+function isSameUrlEndpoint(source: URL, destination: URL): boolean {
+  return source.protocol === destination.protocol && source.host === destination.host;
+}
+
 function isSameOrDescendant(source: Location, destination: Location): boolean {
   if (source.providerId !== destination.providerId) return false;
   try {
     const sourceUrl = new URL(source.uri);
     const destinationUrl = new URL(destination.uri);
-    if (sourceUrl.origin !== destinationUrl.origin) return false;
+    if (!isSameUrlEndpoint(sourceUrl, destinationUrl)) return false;
     const root = sourceUrl.pathname.replace(/\/+$/u, '');
     const target = destinationUrl.pathname.replace(/\/+$/u, '');
     return target === root || target.startsWith(`${root}/`);
   } catch {
     return source.uri === destination.uri || destination.uri.startsWith(`${source.uri}/`);
   }
+}
+
+function hasParent(source: Location, destination: Location): boolean {
+  if (source.providerId !== destination.providerId) return false;
+  try {
+    const sourceUrl = new URL(source.uri);
+    const destinationUrl = new URL(destination.uri);
+    if (!isSameUrlEndpoint(sourceUrl, destinationUrl)) return false;
+    const sourcePath = sourceUrl.pathname.replace(/\/+$/u, '');
+    const separator = sourcePath.lastIndexOf('/');
+    const parentPath = sourcePath.slice(0, Math.max(separator, 0)) || '/';
+    return destinationUrl.pathname.replace(/\/+$/u, '') === parentPath.replace(/\/+$/u, '');
+  } catch {
+    const sourceUri = source.uri.replace(/\/+$/u, '');
+    const separator = sourceUri.lastIndexOf('/');
+    return destination.uri.replace(/\/+$/u, '') === sourceUri.slice(0, Math.max(separator, 0));
+  }
+}
+
+/** True when a copied selection is being pasted back into its source directory. */
+export function isSameFolderPaste(clipboard: ClipboardState, destination: Location): boolean {
+  return (
+    clipboard.mode === 'copy' &&
+    clipboard.locations.length > 0 &&
+    clipboard.locations.every((source) => hasParent(source, destination))
+  );
 }
 
 /** Validates a visible destination before submitting an operation to the engine. */

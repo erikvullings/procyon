@@ -1,5 +1,7 @@
 import { t } from '../../i18n';
 import type { EntrySummary, Location, OperationKind, RuntimeCapabilities } from '../../models';
+import { parentLocation } from '../navigation/navigation';
+import { isParentEntry } from '../panes/parent-entry';
 
 export interface DropModifiers {
   readonly altKey: boolean;
@@ -17,6 +19,7 @@ export type DropValidation =
 
 /** A directory row receives the drop; files and empty space resolve to the pane directory. */
 export function resolveDropTarget(paneLocation: Location, row: EntrySummary | undefined): Location {
+  if (isParentEntry(row?.id)) return parentLocation(paneLocation);
   return row?.kind === 'directory' ? row.location : paneLocation;
 }
 

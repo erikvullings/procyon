@@ -1718,6 +1718,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text);
 }
 
+.fm-operation-centre-show-all:disabled {
+  color: var(--fm-text-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
 .fm-operation {
   display: flex;
   flex-direction: column;
@@ -1786,6 +1792,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   border-radius: var(--fm-radius);
   background: var(--fm-surface);
   color: var(--fm-text);
+}
+
+.fm-operation-controls button:disabled {
+  color: var(--fm-text-muted);
+  cursor: default;
+  opacity: 0.6;
 }
 
 .fm-operation-controls {

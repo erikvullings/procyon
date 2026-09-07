@@ -20,6 +20,10 @@ function modifiers(event: PointerEvent): DropModifiers {
   return { altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey };
 }
 
+function keyboardModifiers(event: KeyboardEvent): DropModifiers {
+  return { altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey };
+}
+
 function targetAt(
   x: number,
   y: number,
@@ -58,10 +62,29 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   const pointerId = event.pointerId;
   let started = false;
   let highlighted: HTMLElement | undefined;
+  let lastX = startX;
+  let lastY = startY;
+  let lastModifiers = modifiers(event);
+  let effectIndicator: HTMLSpanElement | undefined;
 
   const setEffect = (effect?: 'copy' | 'move' | 'none'): void => {
-    if (effect === undefined) delete document.documentElement.dataset.fileDragEffect;
-    else document.documentElement.dataset.fileDragEffect = effect;
+    if (effect === undefined) {
+      delete document.documentElement.dataset.fileDragEffect;
+      effectIndicator?.remove();
+      effectIndicator = undefined;
+      return;
+    }
+    document.documentElement.dataset.fileDragEffect = effect;
+    if (effect === 'none') {
+      effectIndicator?.remove();
+      effectIndicator = undefined;
+      return;
+    }
+    effectIndicator ??= document.body.appendChild(document.createElement('span'));
+    effectIndicator.className = `fm-file-drag-effect fm-file-drag-effect-${effect}`;
+    effectIndicator.textContent = effect === 'copy' ? '+' : '-';
+    effectIndicator.style.left = `${lastX + 4}px`;
+    effectIndicator.style.top = `${lastY + 4}px`;
   };
 
   const highlight = (element?: HTMLElement): void => {
@@ -79,6 +102,8 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     window.removeEventListener('pointercancel', cancel);
     window.removeEventListener('pointerout', leaveWindow);
     window.removeEventListener('blur', leaveWindow);
+    window.removeEventListener('keydown', modifierChange);
+    window.removeEventListener('keyup', modifierChange);
     if (activeCleanup === cleanup) activeCleanup = undefined;
   };
   const start = (current: PointerEvent): boolean => {
@@ -89,23 +114,28 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     document.documentElement.classList.add('fm-pointer-file-dragging');
     return true;
   };
-  const move = (current: PointerEvent): void => {
-    if (current.pointerId !== pointerId || !start(current)) return;
-    current.preventDefault();
-    if (
-      current.clientX < 0 ||
-      current.clientY < 0 ||
-      current.clientX >= window.innerWidth ||
-      current.clientY >= window.innerHeight
-    ) {
+  const updateFeedback = (currentModifiers: DropModifiers): void => {
+    if (lastX < 0 || lastY < 0 || lastX >= window.innerWidth || lastY >= window.innerHeight) {
       handOffToNative();
       return;
     }
-    const resolved = targetAt(current.clientX, current.clientY);
-    const currentModifiers = modifiers(current);
+    const resolved = targetAt(lastX, lastY);
     const valid = resolved?.target.onDragOver(resolved.index, currentModifiers) === true;
     highlight(valid ? resolved?.element : undefined);
     setEffect(valid ? (source.effectForModifiers?.(currentModifiers) ?? 'move') : 'none');
+  };
+  const move = (current: PointerEvent): void => {
+    if (current.pointerId !== pointerId || !start(current)) return;
+    current.preventDefault();
+    lastX = current.clientX;
+    lastY = current.clientY;
+    lastModifiers = modifiers(current);
+    updateFeedback(lastModifiers);
+  };
+  const modifierChange = (current: KeyboardEvent): void => {
+    if (!started) return;
+    lastModifiers = keyboardModifiers(current);
+    updateFeedback(lastModifiers);
   };
   const end = (current: PointerEvent): void => {
     if (current.pointerId !== pointerId) return;
@@ -142,6 +172,8 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   window.addEventListener('pointercancel', cancel);
   window.addEventListener('pointerout', leaveWindow);
   window.addEventListener('blur', leaveWindow);
+  window.addEventListener('keydown', modifierChange);
+  window.addEventListener('keyup', modifierChange);
 }
 
 export function consumePointerFileDragClick(): boolean {

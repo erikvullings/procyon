@@ -17,7 +17,7 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
     fs::write(directory.join("child.txt"), b"child").unwrap();
     let file = root.path().join("archive.tar.gz");
     fs::write(&file, b"archive").unwrap();
-    fs::write(root.path().join("archive copy.tar.gz"), b"existing").unwrap();
+    fs::write(root.path().join("archive.tar.gz (1)"), b"existing").unwrap();
     let dotfile = root.path().join(".env");
     fs::write(&dotfile, b"readonly").unwrap();
     let mut permissions = fs::metadata(&dotfile).unwrap().permissions();
@@ -68,19 +68,16 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
     };
     assert_eq!(result.state, OperationStateDto::Completed, "{result:?}");
     assert_eq!(
-        fs::read(root.path().join("archive copy 2.tar.gz")).unwrap(),
+        fs::read(root.path().join("archive.tar.gz (2)")).unwrap(),
         b"archive"
     );
     assert_eq!(
-        fs::read(root.path().join("folder copy/child.txt")).unwrap(),
+        fs::read(root.path().join("folder (1)/child.txt")).unwrap(),
         b"child"
     );
+    assert_eq!(fs::read(root.path().join(".env (1)")).unwrap(), b"readonly");
     assert_eq!(
-        fs::read(root.path().join(".env copy")).unwrap(),
-        b"readonly"
-    );
-    assert_eq!(
-        fs::read(root.path().join("résumé copy.txt")).unwrap(),
+        fs::read(root.path().join("résumé.txt (1)")).unwrap(),
         b"unicode"
     );
     assert_eq!(result.progress.total_bytes, Some(27));

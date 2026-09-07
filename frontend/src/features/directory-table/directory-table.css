@@ -89,6 +89,28 @@
   user-select: none;
 }
 
+.fm-file-drag-effect {
+  position: fixed;
+  z-index: 10000;
+  display: grid;
+  width: 1.1rem;
+  height: 1.1rem;
+  place-items: center;
+  border: 1px solid var(--fm-border);
+  border-radius: 50%;
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+  color: var(--fm-text);
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.fm-file-drag-effect-copy {
+  background: var(--fm-accent);
+  color: var(--fm-background);
+}
+
 .fm-directory-header {
   flex: 0 0 auto;
   height: var(--fm-row-height);

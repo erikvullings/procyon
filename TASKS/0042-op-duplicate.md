@@ -15,8 +15,8 @@ operation set).
 - `OperationKind::Duplicate` copies the selection into the same directory with a generated
   non-colliding name.
 - Naming scheme is deterministic, documented and collision-safe (e.g. `report.pdf` →
-  `report copy.pdf` → `report copy 2.pdf`), preserving the extension and handling dotfiles and
-  multi-part extensions (`archive.tar.gz`).
+  `report.pdf (1)` → `report.pdf (2)`), preserving the complete original name and handling
+  dotfiles and multi-part extensions (`archive.tar.gz`).
 - Works for both files and directory trees, reusing 0039/0040.
 - Duplicating a large selection reports aggregate progress as one operation.
 - Integration tests: file, directory, existing `copy` names, dotfile, `.tar.gz`, Unicode name,
@@ -31,3 +31,5 @@ operation set).
 - 2026-07-31: Added aggregate multi-selection duplicate through the shared recursive-copy executor.
   The pure naming function handles collisions, dotfiles, full multipart extensions, and Unicode;
   integration coverage includes files, trees, an existing copy, and a read-only source.
+- 2026-09-06: Same-folder clipboard paste now uses duplicate semantics and numbered ` (n)` suffixes;
+  pasting into another folder remains an ordinary copy and preserves the original name.

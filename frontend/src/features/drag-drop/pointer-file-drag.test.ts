@@ -71,9 +71,50 @@ describe('pointer file drag', () => {
       new PointerEvent('pointermove', { clientX: 30, clientY: 10, ctrlKey: true, pointerId: 2 }),
     );
     expect(document.documentElement.dataset.fileDragEffect).toBe('none');
+    expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
     window.dispatchEvent(
       new PointerEvent('pointermove', { clientX: -1, clientY: 10, pointerId: 2 }),
     );
     expect(onNativeDragOut).toHaveBeenCalledWith(0);
+  });
+
+  it('updates operation feedback when a modifier changes without mouse movement', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    registerPointerFileDropTarget(root, {
+      onDragOver: () => true,
+      onDrop: vi.fn(),
+    });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => root),
+    });
+
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 3 }),
+      {
+        index: 0,
+        onStart: vi.fn(),
+        onNativeDragOut: vi.fn(),
+        effectForModifiers: (state) => (state.altKey ? 'copy' : 'move'),
+      },
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 3 }),
+    );
+
+    expect(document.documentElement.dataset.fileDragEffect).toBe('move');
+    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { altKey: true, key: 'Alt' }));
+    expect(document.documentElement.dataset.fileDragEffect).toBe('copy');
+    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('+');
+
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt' }));
+    expect(document.documentElement.dataset.fileDragEffect).toBe('move');
+    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
+    expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
   });
 });

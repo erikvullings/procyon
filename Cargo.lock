@@ -2237,8 +2237,6 @@ dependencies = [
 [[package]]
 name = "drag"
 version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e90b4a25ace5ce0561534b073943594cbcd21af936e64d09aec444568411f8c"
 dependencies = [
  "core-graphics 0.24.0",
  "dunce",
@@ -2769,7 +2767,7 @@ dependencies = [
 
 [[package]]
 name = "fm-application"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2842,7 +2840,7 @@ dependencies = [
 
 [[package]]
 name = "fm-archive"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "bzip2",
@@ -2866,7 +2864,7 @@ dependencies = [
 
 [[package]]
 name = "fm-auth-oauth"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "base64 0.22.1",
  "rand 0.10.2",
@@ -2883,7 +2881,7 @@ dependencies = [
 
 [[package]]
 name = "fm-checksum"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "blake3",
  "crc32fast",
@@ -2905,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "fm-cli"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "anyhow",
  "clap",
@@ -2916,7 +2914,7 @@ dependencies = [
 
 [[package]]
 name = "fm-comparison"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "fm-checksum",
@@ -2934,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "fm-connections"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2950,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "serde",
@@ -2963,7 +2961,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-macos"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -2974,7 +2972,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-windows"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -2985,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "fm-desktop"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "dirs",
@@ -3028,7 +3026,7 @@ dependencies = [
 
 [[package]]
 name = "fm-domain"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "criterion",
@@ -3041,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "fm-events"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3053,7 +3051,7 @@ dependencies = [
 
 [[package]]
 name = "fm-metadata"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "flate2",
  "image",
@@ -3067,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "fm-operations"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3085,7 +3083,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "bitflags 2.13.1",
  "fm-domain",
@@ -3094,7 +3092,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-macos"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "block2",
  "dirs",
@@ -3114,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-windows"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "fm-domain",
  "fm-platform",
@@ -3128,7 +3126,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-api"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "serde",
  "serde_json",
@@ -3138,7 +3136,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-runtime"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "fm-plugin-api",
  "mlua",
@@ -3151,7 +3149,7 @@ dependencies = [
 
 [[package]]
 name = "fm-pptx-renderer"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "ooxmlsdk-pdf",
  "thiserror 2.0.20",
@@ -3160,7 +3158,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3178,7 +3176,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search-acceleration"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "thiserror 2.0.20",
  "tokio-util",
@@ -3287,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "fm-server"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "axum",
  "axum-server",
@@ -3332,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "fm-settings"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "dirs",
  "fm-domain",
@@ -3344,7 +3342,7 @@ dependencies = [
 
 [[package]]
 name = "fm-ssh"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3364,7 +3362,7 @@ dependencies = [
 
 [[package]]
 name = "fm-test-support"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "serde",
  "serde_json",
@@ -3372,7 +3370,7 @@ dependencies = [
 
 [[package]]
 name = "fm-transport-dto"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3385,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vcs-status"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "chrono",
  "dunce",
@@ -3397,7 +3395,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "bitflags 2.13.1",
@@ -3413,7 +3411,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-ftp"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "fm-domain",
@@ -3429,7 +3427,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-local"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3447,7 +3445,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-onedrive"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3467,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-s3"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3483,7 +3481,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-sftp"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3500,7 +3498,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-webdav"
-version = "0.1.0-21"
+version = "0.1.0-23"
 dependencies = [
  "async-trait",
  "base64 0.22.1",

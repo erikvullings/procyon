@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EntrySummary, Location } from '../../models';
+import { withParentEntry } from '../panes/parent-entry';
 import { operationForDrop, resolveDropTarget, validateDropTarget } from './drag-drop';
 
 const pane: Location = { providerId: 'file', uri: 'file:///home/user/Documents' };
@@ -25,6 +26,15 @@ describe('drag and drop targets', () => {
     expect(resolveDropTarget(pane, entry('file', 'file:///home/user/Documents/photo.jpg'))).toEqual(
       pane,
     );
+  });
+
+  it('targets the parent directory for the synthetic parent row', () => {
+    const parent = withParentEntry('/home/user/Documents', [])[0];
+
+    expect(resolveDropTarget(pane, parent)).toEqual({
+      providerId: 'file',
+      uri: 'file:///home/user',
+    });
   });
 
   it('rejects read-only, unavailable, and source-subtree targets before drop', () => {
