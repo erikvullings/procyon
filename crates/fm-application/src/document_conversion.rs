@@ -404,7 +404,7 @@ mod tests {
         file.write_all(b"# Title\n\nBody paragraph.\n")
             .expect("write");
         drop(file);
-        let location = Location::parse(&format!("file://{}", path.display())).expect("location");
+        let location = Location::from_native_path(&path).expect("location");
         let outcome = local_service()
             .convert(location, CancellationToken::new())
             .await
@@ -420,8 +420,7 @@ mod tests {
     #[tokio::test]
     async fn a_directory_is_rejected_as_an_invalid_request() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let location =
-            Location::parse(&format!("file://{}", directory.path().display())).expect("location");
+        let location = Location::from_native_path(directory.path()).expect("location");
         let error = local_service()
             .convert(location, CancellationToken::new())
             .await
