@@ -284,6 +284,30 @@ describe('OperationCentre states', () => {
     );
   });
 
+  it('uses the singular item label for a one-item operation', () => {
+    const completed: Operation = {
+      ...operation('completed'),
+      progress: {
+        ...operation('completed').progress,
+        completedItems: 1,
+        totalItems: 1,
+      },
+    };
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([completed]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(root.querySelector('.fm-operation-summary')?.textContent).toContain('1 item');
+    expect(root.querySelector('.fm-operation-summary')?.textContent).not.toContain('1 items');
+  });
+
   it('renders an empty state when there are no operations', () => {
     m.mount(root, {
       view: () =>
@@ -297,7 +321,13 @@ describe('OperationCentre states', () => {
     });
 
     expect(root.querySelector('.fm-operation-centre')).not.toBeNull();
-    expect(root.textContent).toBe('No operations to show.');
+    expect(root.textContent).toContain('No operations to show.');
+    expect(
+      root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all')?.textContent,
+    ).toBe('Show all');
+    expect(root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all')?.disabled).toBe(
+      true,
+    );
   });
 
   it('shows the most recent operation first', () => {
@@ -339,6 +369,28 @@ describe('OperationCentre states', () => {
 
     root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all')?.click();
     expect(onShowAll).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses every visible operation through Dismiss all', () => {
+    const onDismiss = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([
+            operation('completed', 'first'),
+            operation('failed', 'second'),
+          ]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss,
+        }),
+    });
+
+    const dismissAll = root.querySelector<HTMLButtonElement>('.fm-operation-centre-show-all');
+    expect(dismissAll?.textContent).toBe('Dismiss all');
+    dismissAll?.click();
+    expect(onDismiss.mock.calls).toEqual([['first'], ['second']]);
   });
 
   it('shows a match count instead of the current-entry filename for a running search', () => {
@@ -483,13 +535,28 @@ describe('OperationCentre states', () => {
     expect(root.querySelector('[data-operation-id="undoable"] .fm-operation-result')).toBeNull();
     expect(
       root.querySelector('[data-operation-id="irreversible"] [data-action="undo"]'),
-    ).toBeNull();
+    ).toHaveProperty('disabled', true);
     expect(
       root.querySelector('[data-operation-id="irreversible"] [data-action="dismiss"]'),
     ).not.toBeNull();
     expect(
-      root.querySelector('[data-operation-id="irreversible"] .fm-operation-undo-reason')
-        ?.textContent,
+      root
+        .querySelector('[data-operation-id="irreversible"] [data-action="undo"]')
+        ?.getAttribute('title'),
     ).toBe('Permanent delete cannot be undone.');
+    expect(
+      [
+        ...root.querySelectorAll<HTMLButtonElement>(
+          '[data-operation-id="undoable"] .fm-operation-controls button',
+        ),
+      ].map((control) => control.textContent),
+    ).toEqual(['Dismiss', 'Undo']);
+    expect(
+      [
+        ...root.querySelectorAll<HTMLButtonElement>(
+          '[data-operation-id="irreversible"] .fm-operation-controls button',
+        ),
+      ].map((control) => control.textContent),
+    ).toEqual(['Dismiss', 'Undo']);
   });
 });

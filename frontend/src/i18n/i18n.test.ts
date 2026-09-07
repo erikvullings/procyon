@@ -106,6 +106,11 @@ describe('i18n', () => {
     it('falls back to the n form', () => {
       expect(t('shell', 'operationsCount', 5)).toBe('5 operations');
     });
+
+    it('pluralises operation item totals', () => {
+      expect(t('operation', 'itemsProgress', 1)).toBe('1 item');
+      expect(t('operation', 'itemsProgress', 2)).toBe('2 items');
+    });
   });
 
   describe('missing-key behaviour', () => {

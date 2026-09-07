@@ -170,8 +170,31 @@ function operationStateLabel(state: OperationState): string {
   }
 }
 
-function button(label: string, action: string, onclick: () => void) {
-  return m('button', { type: 'button', 'data-action': action, onclick }, label);
+function button(label: string, action: string, onclick?: () => void, unavailableReason?: string) {
+  return m(
+    'button',
+    {
+      type: 'button',
+      'data-action': action,
+      onclick,
+      disabled: onclick === undefined,
+      title: unavailableReason,
+      'aria-label': unavailableReason === undefined ? undefined : `${label}: ${unavailableReason}`,
+    },
+    label,
+  );
+}
+
+function itemProgressSummary(operation: Operation): string {
+  const { completedItems, totalItems } = operation.progress;
+  const completedSuccessfully =
+    operation.state === 'completed' || operation.state === 'completedWithWarnings';
+  const count = hasValue(totalItems) ? totalItems : completedItems;
+  const displayedCount =
+    completedSuccessfully || !hasValue(totalItems)
+      ? String(count)
+      : `${completedItems} / ${totalItems}`;
+  return t('operation', 'itemsProgress', count).replace(String(count), displayedCount);
 }
 
 /** Compact event-driven queue shown below the workspace panes. */
@@ -236,18 +259,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                     !terminal && !hidesByteProgress && currentEntryName(operation) !== undefined
                       ? m('span', currentEntryName(operation))
                       : undefined,
-                    hidesByteProgress
-                      ? undefined
-                      : m(
-                          'span',
-                          t('operation', 'itemsProgress', {
-                            items: completedSuccessfully
-                              ? hasValue(progress.totalItems)
-                                ? progress.totalItems
-                                : progress.completedItems
-                              : `${progress.completedItems}${hasValue(progress.totalItems) ? ` / ${progress.totalItems}` : ''}`,
-                          }),
-                        ),
+                    hidesByteProgress ? undefined : m('span', itemProgressSummary(operation)),
                     hidesByteProgress
                       ? undefined
                       : m(
@@ -347,15 +359,21 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                           ),
                         ]),
                       ]),
-                  terminal &&
-                  operation.kind !== 'undo' &&
-                  operation.undo?.available === false &&
-                  operation.undo.reason !== undefined
-                    ? m('.fm-operation-undo-reason', operation.undo.reason)
-                    : undefined,
                   m('.fm-operation-controls', [
-                    operation.undo?.available === true
-                      ? button(t('button', 'undo'), 'undo', () => attrs.onUndo?.(operation.id))
+                    terminal
+                      ? button(t('button', 'dismiss'), 'dismiss', () =>
+                          attrs.onDismiss(operation.id),
+                        )
+                      : undefined,
+                    terminal
+                      ? operation.undo?.available === true
+                        ? button(t('button', 'undo'), 'undo', () => attrs.onUndo?.(operation.id))
+                        : button(
+                            t('button', 'undo'),
+                            'undo',
+                            undefined,
+                            operation.undo?.reason ?? t('operation', 'undoUnavailable'),
+                          )
                       : undefined,
                     operation.state === 'queued' ||
                     operation.state === 'planning' ||
@@ -367,11 +385,6 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                       : undefined,
                     operation.state === 'paused'
                       ? button(t('button', 'resume'), 'resume', () => attrs.onResume(operation.id))
-                      : undefined,
-                    terminal
-                      ? button(t('button', 'dismiss'), 'dismiss', () =>
-                          attrs.onDismiss(operation.id),
-                        )
                       : undefined,
                   ]),
                 ],
@@ -390,16 +403,22 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
             },
             closeIcon({ size: 13 }),
           ),
-      attrs.hasDismissedOperations !== true || attrs.onShowAll === undefined
-        ? undefined
-        : m(
-            'button.fm-operation-centre-show-all',
-            {
+      m(
+        'button.fm-operation-centre-show-all',
+        operations.length > 0
+          ? {
+              type: 'button',
+              onclick: () => {
+                for (const operation of operations) attrs.onDismiss(operation.id);
+              },
+            }
+          : {
               type: 'button',
               onclick: attrs.onShowAll,
+              disabled: attrs.hasDismissedOperations !== true || attrs.onShowAll === undefined,
             },
-            t('operation', 'showAll'),
-          ),
+        operations.length > 0 ? t('operation', 'dismissAll') : t('operation', 'showAll'),
+      ),
     ]);
   },
 };
