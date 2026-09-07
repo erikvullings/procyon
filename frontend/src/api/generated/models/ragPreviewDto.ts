@@ -5,12 +5,16 @@
 import type { LlmEndpointLocalityDto } from './llmEndpointLocalityDto.ts';
 import type { RagCoverageDto } from './ragCoverageDto.ts';
 import type { RagEvidenceDto } from './ragEvidenceDto.ts';
+import type { RagPlanningFallbackReasonDto } from './ragPlanningFallbackReasonDto.ts';
+import type { RagRetrievalStrategyDto } from './ragRetrievalStrategyDto.ts';
 import type { RagScopeDto } from './ragScopeDto.ts';
 
 /**
  * Inspectable retrieval preview shown before generation.
  */
 export interface RagPreviewDto {
+  /** Strategy that produced this evidence. */
+  appliedStrategy: RagRetrievalStrategyDto;
   /** Honest requested-scope coverage. */
   coverage: RagCoverageDto;
   /** Retrieved evidence. */
@@ -20,14 +24,29 @@ export interface RagPreviewDto {
      * @minimum 0
      */
   evidenceTokens: number;
+  fallbackReason?: null | RagPlanningFallbackReasonDto;
+  /**
+     * Fusion contract version when fusion was applied.
+     * @nullable
+     */
+  fusionVersion?: string | null;
   /** Whether evidence cannot support a grounded answer. */
   insufficient: boolean;
   /** Local or cloud classification. */
   locality: LlmEndpointLocalityDto;
+  /** Bounded local retrieval queries, including the original question. */
+  plannedQueries: string[];
+  /**
+     * Planner contract version when planning was requested.
+     * @nullable
+     */
+  plannerVersion?: string | null;
   /** Selected profile. */
   profileId: string;
   /** User-visible profile name. */
   profileName: string;
+  /** Strategy requested by the caller. */
+  requestedStrategy: RagRetrievalStrategyDto;
   /** Fingerprint required to confirm this evidence set. */
   retrievalFingerprint: string;
   /** Visible scope. */

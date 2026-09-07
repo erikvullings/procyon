@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::utils::config::WindowConfig;
 use tauri::{AppHandle, Manager, Runtime, State, Window};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fm_application::semantic_component_mapping::semantic_component_error_to_dto;
@@ -2468,12 +2469,29 @@ pub(crate) async fn get_document_summary(
 pub(crate) async fn preview_rag(
     state: State<'_, AppState>,
     request: fm_transport_dto::PreviewRagRequestDto,
+    operation_id: Uuid,
 ) -> Result<fm_transport_dto::RagPreviewDto, ApplicationErrorDto> {
-    state
+    let cancellation = CancellationToken::new();
+    let cancelled_before_registration = state
+        .rag_cancellations
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(operation_id, Some(cancellation.clone()))
+        .is_some_and(|registered| registered.is_none());
+    if cancelled_before_registration {
+        cancellation.cancel();
+    }
+    let result = state
         .service
-        .preview_rag(&desktop_semantic_access(), request)
+        .preview_rag_with_cancellation(&desktop_semantic_access(), request, &cancellation)
         .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .map_err(|error| error.into_dto(Uuid::new_v4()));
+    state
+        .rag_cancellations
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&operation_id);
+    result
 }
 
 /// Generates one read-only grounded answer.
@@ -2481,12 +2499,44 @@ pub(crate) async fn preview_rag(
 pub(crate) async fn generate_rag_answer(
     state: State<'_, AppState>,
     request: fm_transport_dto::GenerateRagAnswerRequestDto,
+    operation_id: Uuid,
 ) -> Result<fm_transport_dto::GenerateRagAnswerResponseDto, ApplicationErrorDto> {
-    state
+    let cancellation = CancellationToken::new();
+    let cancelled_before_registration = state
+        .rag_cancellations
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(operation_id, Some(cancellation.clone()))
+        .is_some_and(|registered| registered.is_none());
+    if cancelled_before_registration {
+        cancellation.cancel();
+    }
+    let result = state
         .service
-        .generate_rag_answer(&desktop_semantic_access(), request)
+        .generate_rag_answer_with_cancellation(&desktop_semantic_access(), request, &cancellation)
         .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .map_err(|error| error.into_dto(Uuid::new_v4()));
+    state
+        .rag_cancellations
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&operation_id);
+    result
+}
+
+/// Cancels a running grounded Ask preview or generation operation.
+#[tauri::command]
+pub(crate) fn cancel_rag(state: State<'_, AppState>, operation_id: Uuid) {
+    let mut registry = state
+        .rag_cancellations
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(Some(cancellation)) = registry.get(&operation_id) {
+        cancellation.cancel();
+    }
+    if registry.contains_key(&operation_id) || registry.len() < 256 {
+        registry.insert(operation_id, None);
+    }
 }
 
 /// Persists one server-authored ephemeral Ask conversation.

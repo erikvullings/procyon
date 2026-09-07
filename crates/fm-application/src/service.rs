@@ -92,7 +92,7 @@ use crate::rag::{
 };
 use crate::rag_mapping::{
     events_to_dto, preview_to_dto as rag_preview_to_dto, rag_error_to_application, saved_to_dto,
-    scope_from_dto,
+    scope_from_dto, strategy_from_dto,
 };
 use crate::remote_terminal::RemoteTerminalService;
 use crate::search_comparison_coordinator::SearchComparisonCoordinator;
@@ -1568,16 +1568,36 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: PreviewRagRequestDto,
     ) -> Result<RagPreviewDto, ApplicationError> {
+        self.preview_rag_with_cancellation(
+            access,
+            request,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
+    /// Retrieves inspectable evidence using a host-owned cancellation token.
+    pub async fn preview_rag_with_cancellation(
+        &self,
+        access: &SemanticAccessContext,
+        request: PreviewRagRequestDto,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<RagPreviewDto, ApplicationError> {
         let scope = request.scope.clone();
         let authorized = self
-            .resolve_rag_request(access, request.question, &scope)
+            .resolve_rag_request(
+                access,
+                request.question,
+                &scope,
+                strategy_from_dto(request.retrieval_strategy),
+            )
             .await?;
         self.rag
             .preview(
                 authorized,
                 request.profile_id,
                 &self.llm_profiles,
-                &tokio_util::sync::CancellationToken::new(),
+                cancellation,
             )
             .await
             .map(|preview| rag_preview_to_dto(preview, scope))
@@ -1590,9 +1610,29 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: GenerateRagAnswerRequestDto,
     ) -> Result<GenerateRagAnswerResponseDto, ApplicationError> {
+        self.generate_rag_answer_with_cancellation(
+            access,
+            request,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
+    /// Generates one grounded answer using a host-owned cancellation token.
+    pub async fn generate_rag_answer_with_cancellation(
+        &self,
+        access: &SemanticAccessContext,
+        request: GenerateRagAnswerRequestDto,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<GenerateRagAnswerResponseDto, ApplicationError> {
         let scope = request.scope.clone();
         let authorized = self
-            .resolve_rag_request(access, request.question.clone(), &scope)
+            .resolve_rag_request(
+                access,
+                request.question.clone(),
+                &scope,
+                strategy_from_dto(request.retrieval_strategy),
+            )
             .await?;
         let tenant_id = authorized.retrieval.filters.tenant_id.clone();
         let internal_scope = authorized.scope.clone();
@@ -1610,6 +1650,7 @@ impl FileManagerService {
             if conversation.profile_id != request.profile_id
                 || conversation.scope != internal_scope
                 || conversation.model_knowledge_allowed != request.allow_model_knowledge
+                || conversation.retrieval_strategy != strategy_from_dto(request.retrieval_strategy)
             {
                 return Err(ApplicationError::InvalidRequest(
                     "conversation profile, scope, and knowledge mode cannot change".into(),
@@ -1637,7 +1678,7 @@ impl FileManagerService {
                     history,
                 },
                 &self.llm_profiles,
-                &tokio_util::sync::CancellationToken::new(),
+                cancellation,
             )
             .await
             .map_err(rag_error_to_application)?;
@@ -1652,6 +1693,7 @@ impl FileManagerService {
                 profile_id: request.profile_id,
                 scope: internal_scope,
                 model_knowledge_allowed: request.allow_model_knowledge,
+                retrieval_strategy: strategy_from_dto(request.retrieval_strategy),
                 turns: Vec::new(),
                 storage_bytes: 0,
             });
@@ -1764,6 +1806,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         question: String,
         scope: &RagScopeDto,
+        retrieval_strategy: crate::rag::RagRetrievalStrategy,
     ) -> Result<AuthorizedRagRequest, ApplicationError> {
         let selection = match scope.kind {
             RagScopeKindDto::EntireLibrary => RagScopeSelection::EntireLibrary,
@@ -1858,6 +1901,7 @@ impl FileManagerService {
             display: RagSourceDisplay {
                 titles: resolved.titles,
             },
+            retrieval_strategy,
         })
     }
 

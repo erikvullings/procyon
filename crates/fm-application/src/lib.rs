@@ -37,6 +37,7 @@ mod plugin_manager;
 mod pptx_preview;
 pub mod rag;
 mod rag_mapping;
+mod rag_query_planning;
 mod remote_terminal;
 mod s3;
 mod search_comparison_coordinator;

@@ -4140,50 +4140,18 @@ export class MockFileManagerClient implements FileManagerClient {
   }
 
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
-    return this.perform('previewRag', signal, () => ({
-      coverage: {
-        eligible: 3,
-        indexed: 3,
-        pending: 0,
-        failed: 0,
-        excluded: 0,
-        stale: 0,
-        unavailable: 0,
-      },
-      evidence: [
-        {
-          available: true,
-          excerpt: `Mock indexed evidence relevant to "${request.question}".`,
-          generated: false,
-          label: 'C1',
-          sourceId: 'mock-source-1',
-          provenance: 'section 1',
-          score: 0.91,
-          sectionPath: ['Overview'],
-          stale: false,
-          title: 'Example indexed document',
-        },
-      ],
-      evidenceTokens: 18,
-      insufficient: false,
-      locality: 'loopback',
-      profileId: request.profileId,
-      profileName: 'Local mock profile',
-      retrievalFingerprint: `mock-rag-${request.profileId}-${request.question}`,
-      scope: structuredClone(request.scope),
-    }));
-  }
-
-  generateRagAnswer(
-    request: GenerateRagAnswerRequest,
-    signal?: AbortSignal,
-  ): Promise<GenerateRagAnswerResponse> {
-    return this.perform('generateRagAnswer', signal, () => {
-      const expectedFingerprint = `mock-rag-${request.profileId}-${request.question}`;
-      if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
-        throw new MockClientError('invalidRequest', 'Ask evidence confirmation is stale');
-      }
-      const preview: RagPreview = {
+    return this.perform('previewRag', signal, () => {
+      const requestedStrategy = request.retrievalStrategy ?? 'singleQuery';
+      const plannedQueries =
+        requestedStrategy === 'multiQuery'
+          ? [
+              request.question,
+              `${request.question} key facts`,
+              `${request.question} supporting details`,
+            ]
+          : [request.question];
+      return {
+        appliedStrategy: requestedStrategy,
         coverage: {
           eligible: 3,
           indexed: 3,
@@ -4208,10 +4176,73 @@ export class MockFileManagerClient implements FileManagerClient {
           },
         ],
         evidenceTokens: 18,
+        fallbackReason: null,
+        fusionVersion: requestedStrategy === 'multiQuery' ? 'reciprocal-rank-fusion/1' : null,
         insufficient: false,
         locality: 'loopback',
+        plannedQueries,
+        plannerVersion: requestedStrategy === 'multiQuery' ? 'grounded-rag-query-planner/1' : null,
         profileId: request.profileId,
         profileName: 'Local mock profile',
+        requestedStrategy,
+        retrievalFingerprint: `mock-rag-${request.profileId}-${requestedStrategy}-${request.question}`,
+        scope: structuredClone(request.scope),
+      };
+    });
+  }
+
+  generateRagAnswer(
+    request: GenerateRagAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<GenerateRagAnswerResponse> {
+    return this.perform('generateRagAnswer', signal, () => {
+      const requestedStrategy = request.retrievalStrategy ?? 'singleQuery';
+      const expectedFingerprint = `mock-rag-${request.profileId}-${requestedStrategy}-${request.question}`;
+      if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
+        throw new MockClientError('invalidRequest', 'Ask evidence confirmation is stale');
+      }
+      const preview: RagPreview = {
+        appliedStrategy: requestedStrategy,
+        coverage: {
+          eligible: 3,
+          indexed: 3,
+          pending: 0,
+          failed: 0,
+          excluded: 0,
+          stale: 0,
+          unavailable: 0,
+        },
+        evidence: [
+          {
+            available: true,
+            excerpt: `Mock indexed evidence relevant to "${request.question}".`,
+            generated: false,
+            label: 'C1',
+            sourceId: 'mock-source-1',
+            provenance: 'section 1',
+            score: 0.91,
+            sectionPath: ['Overview'],
+            stale: false,
+            title: 'Example indexed document',
+          },
+        ],
+        evidenceTokens: 18,
+        fallbackReason: null,
+        fusionVersion: requestedStrategy === 'multiQuery' ? 'reciprocal-rank-fusion/1' : null,
+        insufficient: false,
+        locality: 'loopback',
+        plannedQueries:
+          requestedStrategy === 'multiQuery'
+            ? [
+                request.question,
+                `${request.question} key facts`,
+                `${request.question} supporting details`,
+              ]
+            : [request.question],
+        plannerVersion: requestedStrategy === 'multiQuery' ? 'grounded-rag-query-planner/1' : null,
+        profileId: request.profileId,
+        profileName: 'Local mock profile',
+        requestedStrategy,
         retrievalFingerprint: expectedFingerprint,
         scope: structuredClone(request.scope),
       };
@@ -4236,7 +4267,8 @@ export class MockFileManagerClient implements FileManagerClient {
         existing !== undefined &&
         (existing.profileId !== request.profileId ||
           existing.scope.kind !== request.scope.kind ||
-          existing.modelKnowledgeAllowed !== request.allowModelKnowledge)
+          existing.modelKnowledgeAllowed !== request.allowModelKnowledge ||
+          existing.retrievalStrategy !== requestedStrategy)
       ) {
         throw new MockClientError(
           'invalidRequest',
@@ -4247,6 +4279,7 @@ export class MockFileManagerClient implements FileManagerClient {
         id: conversationId,
         modelKnowledgeAllowed: request.allowModelKnowledge,
         profileId: request.profileId,
+        retrievalStrategy: requestedStrategy,
         scope: structuredClone(request.scope),
         storageBytes: 0,
         turns: [...(existing?.turns ?? []), { question: request.question, answer }],

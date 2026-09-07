@@ -1,13 +1,41 @@
 use fm_transport_dto::{
-    RagAnswerDto, RagAnswerEventDto, RagCitationDto, RagCoverageDto, RagEvidenceDto, RagPreviewDto,
-    RagScopeDto, RagScopeKindDto, SavedRagConversationDto, SavedRagTurnDto,
+    RagAnswerDto, RagAnswerEventDto, RagCitationDto, RagCoverageDto, RagEvidenceDto,
+    RagPlanningFallbackReasonDto, RagPreviewDto, RagRetrievalStrategyDto, RagScopeDto,
+    RagScopeKindDto, SavedRagConversationDto, SavedRagTurnDto,
 };
 
 use crate::error::ApplicationError;
 use crate::llm_profile_mapping::locality_to_dto;
 use crate::rag::{
-    RagAnswer, RagAnswerEvent, RagError, RagPreview, RagScope, SavedRagConversation, SavedRagTurn,
+    RagAnswer, RagAnswerEvent, RagError, RagPlanningFallbackReason, RagPreview,
+    RagRetrievalStrategy, RagScope, SavedRagConversation, SavedRagTurn,
 };
+
+pub(crate) const fn strategy_from_dto(strategy: RagRetrievalStrategyDto) -> RagRetrievalStrategy {
+    match strategy {
+        RagRetrievalStrategyDto::SingleQuery => RagRetrievalStrategy::SingleQuery,
+        RagRetrievalStrategyDto::MultiQuery => RagRetrievalStrategy::MultiQuery,
+    }
+}
+
+const fn strategy_to_dto(strategy: RagRetrievalStrategy) -> RagRetrievalStrategyDto {
+    match strategy {
+        RagRetrievalStrategy::SingleQuery => RagRetrievalStrategyDto::SingleQuery,
+        RagRetrievalStrategy::MultiQuery => RagRetrievalStrategyDto::MultiQuery,
+    }
+}
+
+const fn fallback_to_dto(reason: RagPlanningFallbackReason) -> RagPlanningFallbackReasonDto {
+    match reason {
+        RagPlanningFallbackReason::Empty => RagPlanningFallbackReasonDto::Empty,
+        RagPlanningFallbackReason::DuplicateOnly => RagPlanningFallbackReasonDto::DuplicateOnly,
+        RagPlanningFallbackReason::Refused => RagPlanningFallbackReasonDto::Refused,
+        RagPlanningFallbackReason::Malformed => RagPlanningFallbackReasonDto::Malformed,
+        RagPlanningFallbackReason::TimedOut => RagPlanningFallbackReasonDto::TimedOut,
+        RagPlanningFallbackReason::Unavailable => RagPlanningFallbackReasonDto::Unavailable,
+        RagPlanningFallbackReason::Failed => RagPlanningFallbackReasonDto::Failed,
+    }
+}
 
 pub(crate) fn scope_from_dto(scope: &RagScopeDto) -> RagScope {
     match scope.kind {
@@ -82,6 +110,12 @@ pub(crate) fn preview_to_dto(preview: RagPreview, scope: RagScopeDto) -> RagPrev
             unavailable: preview.coverage.unavailable,
         },
         insufficient: preview.insufficient,
+        requested_strategy: strategy_to_dto(preview.requested_strategy),
+        applied_strategy: strategy_to_dto(preview.applied_strategy),
+        planned_queries: preview.planned_queries,
+        planner_version: preview.planner_version,
+        fusion_version: preview.fusion_version,
+        fallback_reason: preview.fallback_reason.map(fallback_to_dto),
     }
 }
 
@@ -112,7 +146,7 @@ pub(crate) fn events_to_dto(
         .into_iter()
         .map(|event| match event {
             RagAnswerEvent::Retrieval { preview } => RagAnswerEventDto::Retrieval {
-                preview: Box::new(preview_to_dto(preview, scope.clone())),
+                preview: Box::new(preview_to_dto(*preview, scope.clone())),
             },
             RagAnswerEvent::Token { text } => RagAnswerEventDto::Token { text },
             RagAnswerEvent::Done { answer } => RagAnswerEventDto::Done {
@@ -131,6 +165,7 @@ pub(crate) fn saved_to_dto(
         profile_id: saved.profile_id,
         scope: scope_to_dto(saved.scope, workspace_id),
         model_knowledge_allowed: saved.model_knowledge_allowed,
+        retrieval_strategy: strategy_to_dto(saved.retrieval_strategy),
         turns: saved
             .turns
             .into_iter()

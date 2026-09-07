@@ -128,9 +128,10 @@ pub use plugin::{
 pub use rag::{
     DeleteRagConversationRequestDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     ListSavedRagConversationsRequestDto, PreviewRagRequestDto, RagAnswerDto, RagAnswerEventDto,
-    RagCitationDto, RagCoverageDto, RagEvidenceDto, RagPreviewDto, RagScopeDto, RagScopeKindDto,
-    ResolveRagCitationRequestDto, ResolvedRagCitationDto, SaveRagConversationRequestDto,
-    SavedRagConversationDto, SavedRagTurnDto,
+    RagCitationDto, RagCoverageDto, RagEvidenceDto, RagPlanningFallbackReasonDto, RagPreviewDto,
+    RagRetrievalStrategyDto, RagScopeDto, RagScopeKindDto, ResolveRagCitationRequestDto,
+    ResolvedRagCitationDto, SaveRagConversationRequestDto, SavedRagConversationDto,
+    SavedRagTurnDto,
 };
 pub use redaction::{redact, redact_absolute_paths, redact_path};
 pub use requests::{

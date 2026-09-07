@@ -132,14 +132,16 @@ describe('RagAskDialog', () => {
     const preferenceRow = preferences?.querySelector('.fm-rag-preference-row');
     expect(preferenceRow?.querySelector('.fm-rag-options')).not.toBeNull();
     const checkboxes = preferences?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes).toHaveLength(3);
     const includeFolder = checkboxes?.item(0);
     expect(includeFolder?.checked).toBe(false);
     if (includeFolder === undefined) throw new Error('folder inclusion checkbox not rendered');
     includeFolder.checked = true;
     includeFolder.dispatchEvent(new Event('change', { bubbles: true }));
     expect(includeCurrentFolder).toHaveBeenCalledOnce();
-    const modelKnowledge = checkboxes?.item(1);
+    const retrievalStrategy = checkboxes?.item(1);
+    expect(retrievalStrategy?.checked).toBe(false);
+    const modelKnowledge = checkboxes?.item(2);
     expect(modelKnowledge?.checked).toBe(false);
     expect(root.textContent).toContain('read-only');
     expect(root.textContent).toContain('Index current folder');
@@ -161,6 +163,7 @@ describe('RagAskDialog', () => {
           onClose: vi.fn(),
         }),
     });
+
     await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
 
     const question = root.querySelector<HTMLTextAreaElement>('textarea');
@@ -204,6 +207,50 @@ describe('RagAskDialog', () => {
 
     button('Delete')?.click();
     await vi.waitFor(() => expect(root.textContent).not.toContain('Saved conversations'));
+  });
+
+  it('keeps single-query retrieval by default and discloses opted-in query planning', async () => {
+    const client = await configuredClient();
+    const preview = vi.spyOn(client, 'previewRag');
+    m.mount(root, {
+      view: () =>
+        m(RagAskDialog, {
+          open: true,
+          client,
+          workspaceId,
+          currentFolder: { providerId: 'local', uri: 'file:///documents' },
+          selectedEntries: [entry],
+          semanticSourceIds: ['source-1'],
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
+
+    const strategy = root.querySelector<HTMLInputElement>('#fm-rag-multi-query');
+    expect(strategy?.checked).toBe(false);
+    expect(root.textContent).toContain(
+      'Sends the question to the selected profile before retrieval',
+    );
+    if (strategy === null) throw new Error('retrieval strategy control not rendered');
+    strategy.checked = true;
+    strategy.dispatchEvent(new Event('change', { bubbles: true }));
+    const question = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (question === null) throw new Error('question input not rendered');
+    question.value = 'Compare the alpha and beta designs';
+    question.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((item) => item.textContent?.includes('Preview evidence'))
+      ?.click();
+
+    await vi.waitFor(() =>
+      expect(preview).toHaveBeenCalledWith(
+        expect.objectContaining({ retrievalStrategy: 'multiQuery' }),
+        expect.any(AbortSignal),
+      ),
+    );
+    await vi.waitFor(() => expect(root.textContent).toContain('3 retrieval queries'));
   });
 
   it('submits with Enter and preserves Shift+Enter for a newline', async () => {

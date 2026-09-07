@@ -12,6 +12,7 @@ import type {
   RagAnswer,
   RagCitation,
   RagPreview,
+  RagRetrievalStrategy,
   RagScope,
   RagScopeKind,
   SavedRagConversation,
@@ -184,6 +185,8 @@ function formatCitationProvenance(provenance: string): string {
 }
 
 export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
+  const multiQueryExperimentEnabled =
+    import.meta.env.MODE === 'test' || import.meta.env.VITE_ENABLE_MULTI_QUERY_RAG === 'true';
   let wasOpen = false;
   let focusQuestionOnReady = false;
   let busy: 'loading' | 'retrieving' | 'generating' | 'saving' | undefined;
@@ -196,6 +199,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let selectedScope: RagScopeKind = 'entireLibrary';
   let question = '';
   let allowModelKnowledge = false;
+  let retrievalStrategy: RagRetrievalStrategy = 'singleQuery';
   let preview: RagPreview | undefined;
   let answer: RagAnswer | undefined;
   let streamedText = '';
@@ -252,6 +256,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
     abortController?.abort();
     error = undefined;
     question = '';
+    retrievalStrategy = 'singleQuery';
     resetRetrieval(true);
     queueMicrotask(() =>
       document.querySelector<HTMLTextAreaElement>('#fm-rag-question-input')?.focus(),
@@ -281,6 +286,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
         {
           profileId: selectedProfileId,
           question: question.trim(),
+          retrievalStrategy,
           scope: buildScope(attrs, selectedScope, roots),
         },
         abortController.signal,
@@ -310,6 +316,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
         {
           profileId: selectedProfileId,
           question: question.trim(),
+          retrievalStrategy: preview.requestedStrategy,
           scope: preview.scope,
           expectedRetrievalFingerprint: preview.retrievalFingerprint,
           allowModelKnowledge,
@@ -491,6 +498,18 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                       ? t('ragAsk', 'cloudDisclosure', { tokens: preview.evidenceTokens })
                       : t('ragAsk', 'localDisclosure', { tokens: preview.evidenceTokens }),
                   ),
+                  m(
+                    'p.fm-rag-query-plan',
+                    t('ragAsk', 'queryPlanCount', { count: preview.plannedQueries.length }),
+                  ),
+                  preview.fallbackReason === null || preview.fallbackReason === undefined
+                    ? undefined
+                    : m(
+                        'p.fm-rag-warning',
+                        t('ragAsk', 'queryPlanFallback', {
+                          reason: preview.fallbackReason,
+                        }),
+                      ),
                   m('p', { role: 'status' }, coverageText(preview)),
                   preview.insufficient
                     ? m('p.fm-rag-warning', t('ragAsk', 'insufficient'))
@@ -643,6 +662,17 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                       answer,
                       profile: preview?.profileName,
                       scope: preview?.scope.label,
+                      retrieval:
+                        preview === undefined
+                          ? undefined
+                          : {
+                              requestedStrategy: preview.requestedStrategy,
+                              appliedStrategy: preview.appliedStrategy,
+                              plannedQueries: preview.plannedQueries,
+                              plannerVersion: preview.plannerVersion,
+                              fusionVersion: preview.fusionVersion,
+                              fallbackReason: preview.fallbackReason,
+                            },
                       sources: answer?.citations.map(({ label, provenance, generated, stale }) => ({
                         label,
                         provenance,
@@ -701,6 +731,32 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                     }),
                     m('span', t('ragAsk', 'includeCurrentFolder')),
                   ]),
+              multiQueryExperimentEnabled
+                ? m('.fm-rag-strategy', [
+                    m('label', [
+                      m('input', {
+                        id: 'fm-rag-multi-query',
+                        type: 'checkbox',
+                        checked: retrievalStrategy === 'multiQuery',
+                        disabled: busy !== undefined,
+                        onchange: (event: Event) => {
+                          retrievalStrategy = (event.currentTarget as HTMLInputElement).checked
+                            ? 'multiQuery'
+                            : 'singleQuery';
+                          resetRetrieval(true);
+                        },
+                      }),
+                      m('span', t('ragAsk', 'multiQuery')),
+                    ]),
+                    m(
+                      'small.fm-rag-disclosure',
+                      `${
+                        profiles.find((profile) => profile.id === selectedProfileId)?.locality ??
+                        'unknown'
+                      } · ${t('ragAsk', 'queryPlanningDisclosure')}`,
+                    ),
+                  ])
+                : undefined,
               m('label', [
                 m('input', {
                   type: 'checkbox',

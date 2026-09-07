@@ -14,13 +14,15 @@ mod semantic_developer;
 mod semantic_production;
 mod terminal;
 
-use std::sync::Arc;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use fm_application::FileManagerService;
 use fm_events::EventBus;
 use fm_transport_dto::RuntimeKindDto;
 use tauri::Manager;
+use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -29,6 +31,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// service).
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
+    pub(crate) rag_cancellations: Mutex<HashMap<uuid::Uuid, Option<CancellationToken>>>,
     pub(crate) semantic_managed_components: bool,
     pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
 }
@@ -163,6 +166,7 @@ pub fn run() {
             let service = Arc::new(service);
             app.manage(AppState {
                 service: Arc::clone(&service),
+                rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
             });
@@ -408,6 +412,7 @@ pub fn run() {
             commands::get_document_summary,
             commands::preview_rag,
             commands::generate_rag_answer,
+            commands::cancel_rag,
             commands::save_rag_conversation,
             commands::list_saved_rag_conversations,
             commands::delete_rag_conversation,
@@ -553,6 +558,7 @@ mod tests {
                         fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
                     ),
                 ),
+                rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components: semantic_developer_bundle,
                 semantic_reindex_pending_marker: None,
             })
@@ -695,6 +701,7 @@ mod tests {
                 commands::get_document_summary,
                 commands::preview_rag,
                 commands::generate_rag_answer,
+                commands::cancel_rag,
                 commands::save_rag_conversation,
                 commands::list_saved_rag_conversations,
                 commands::delete_rag_conversation,

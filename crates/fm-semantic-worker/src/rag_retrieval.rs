@@ -191,6 +191,20 @@ impl RagRetrievalService {
         request: RagRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<RagContext, RagRetrievalError> {
+        let candidates = self.retrieve_candidates(&request, cancellation)?;
+        self.pack_candidates(candidates, &request)
+    }
+
+    /// Retrieves score-qualified primary candidates before diversity and context packing.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed validation, cancellation, embedding, index, or catalog failures.
+    pub fn retrieve_candidates(
+        &self,
+        request: &RagRetrievalRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<RagCandidate>, RagRetrievalError> {
         if request.question.trim().is_empty() || !request.policy.valid() {
             return Err(RagRetrievalError::InvalidPolicy);
         }
@@ -226,7 +240,7 @@ impl RagRetrievalService {
             .collect::<Vec<_>>();
         let reader = self.catalog.begin_read();
         let visible = reader.filter_visible_candidates(&ids, &request.filters)?;
-        let primaries = plan_primary_evidence(
+        threshold_primary_evidence(
             visible
                 .into_iter()
                 .map(|evidence| RagCandidate {
@@ -236,9 +250,45 @@ impl RagRetrievalService {
                 .collect(),
             &request.source_restriction,
             request.policy,
-        )?;
+        )
+    }
+
+    /// Applies final diversity, adjacency expansion, and context packing once.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed policy or catalog failures.
+    pub fn pack_candidates(
+        &self,
+        candidates: Vec<RagCandidate>,
+        request: &RagRetrievalRequest,
+    ) -> Result<RagContext, RagRetrievalError> {
+        let primaries = select_primary_evidence(candidates, request.policy)?;
+        self.pack_primaries(&primaries, request)
+    }
+
+    /// Packs already-ranked fused candidates without replacing their rank order.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed policy or catalog failures.
+    pub fn pack_ranked_candidates(
+        &self,
+        candidates: Vec<RagCandidate>,
+        request: &RagRetrievalRequest,
+    ) -> Result<RagContext, RagRetrievalError> {
+        let primaries = select_ranked_primary_evidence(candidates, request.policy)?;
+        self.pack_primaries(&primaries, request)
+    }
+
+    fn pack_primaries(
+        &self,
+        primaries: &[RagCandidate],
+        request: &RagRetrievalRequest,
+    ) -> Result<RagContext, RagRetrievalError> {
+        let reader = self.catalog.begin_read();
         let mut adjacent_by_primary = HashMap::new();
-        for primary in &primaries {
+        for primary in primaries {
             let adjacent = if primary.evidence.generated {
                 vec![primary.evidence.clone()]
             } else {
@@ -250,7 +300,7 @@ impl RagRetrievalService {
             };
             adjacent_by_primary.insert(primary.evidence.record_id.clone(), adjacent);
         }
-        let mut context = pack_context(&primaries, &adjacent_by_primary, request.policy)?;
+        let mut context = pack_context(primaries, &adjacent_by_primary, request.policy)?;
         for chunk in &mut context.chunks {
             chunk.stale = request
                 .current_hashes
@@ -281,6 +331,18 @@ pub fn plan_primary_evidence(
     restriction: &RagSourceRestriction,
     policy: RagRetrievalPolicy,
 ) -> Result<Vec<RagCandidate>, RagRetrievalError> {
+    select_primary_evidence(
+        threshold_primary_evidence(candidates, restriction, policy)?,
+        policy,
+    )
+}
+
+/// Applies source restrictions plus absolute and strongest-hit score thresholds.
+pub fn threshold_primary_evidence(
+    candidates: Vec<RagCandidate>,
+    restriction: &RagSourceRestriction,
+    policy: RagRetrievalPolicy,
+) -> Result<Vec<RagCandidate>, RagRetrievalError> {
     if !policy.valid() {
         return Err(RagRetrievalError::InvalidPolicy);
     }
@@ -297,14 +359,26 @@ pub fn plan_primary_evidence(
             .filter(|candidate| !has_extracted || !candidate.evidence.generated)
             .map(|candidate| candidate.score),
     );
+    Ok(candidates
+        .into_iter()
+        .filter(|candidate| candidate.score >= minimum_score)
+        .collect())
+}
+
+fn select_primary_evidence(
+    candidates: Vec<RagCandidate>,
+    policy: RagRetrievalPolicy,
+) -> Result<Vec<RagCandidate>, RagRetrievalError> {
+    if !policy.valid() {
+        return Err(RagRetrievalError::InvalidPolicy);
+    }
+
     let mut by_document = HashMap::<String, Vec<RagCandidate>>::new();
     for candidate in candidates {
-        if candidate.score >= minimum_score {
-            by_document
-                .entry(candidate.evidence.document_id.clone())
-                .or_default()
-                .push(candidate);
-        }
+        by_document
+            .entry(candidate.evidence.document_id.clone())
+            .or_default()
+            .push(candidate);
     }
     for candidates in by_document.values_mut() {
         candidates.sort_by(|left, right| {
@@ -337,6 +411,34 @@ pub fn plan_primary_evidence(
                 selected.push(candidate.clone());
             }
         }
+    }
+    Ok(selected)
+}
+
+fn select_ranked_primary_evidence(
+    candidates: Vec<RagCandidate>,
+    policy: RagRetrievalPolicy,
+) -> Result<Vec<RagCandidate>, RagRetrievalError> {
+    if !policy.valid() {
+        return Err(RagRetrievalError::InvalidPolicy);
+    }
+    let mut selected = Vec::new();
+    let mut documents = HashSet::new();
+    let mut chunks_per_document = HashMap::<String, usize>::new();
+    for candidate in candidates {
+        let document_id = &candidate.evidence.document_id;
+        let existing_for_document = chunks_per_document
+            .get(document_id)
+            .copied()
+            .unwrap_or_default();
+        if existing_for_document >= policy.maximum_chunks_per_document
+            || (!documents.contains(document_id) && documents.len() >= policy.maximum_documents)
+        {
+            continue;
+        }
+        documents.insert(document_id.clone());
+        chunks_per_document.insert(document_id.clone(), existing_for_document + 1);
+        selected.push(candidate);
     }
     Ok(selected)
 }
@@ -527,6 +629,39 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["best", "close"]
         );
+    }
+
+    #[test]
+    fn thresholding_preserves_candidates_until_final_diversity_selection() {
+        let candidates = (0..10)
+            .map(|index| RagCandidate {
+                evidence: evidence(
+                    &format!("record-{index}"),
+                    &format!("doc-{index}"),
+                    &format!("source-{index}"),
+                    0,
+                    5,
+                    false,
+                ),
+                score: 0.90,
+            })
+            .collect::<Vec<_>>();
+        let policy = RagRetrievalPolicy {
+            maximum_documents: 2,
+            ..RagRetrievalPolicy::default_ask()
+        };
+
+        let thresholded = threshold_primary_evidence(
+            candidates.clone(),
+            &RagSourceRestriction::default(),
+            policy,
+        )
+        .unwrap();
+        let selected =
+            plan_primary_evidence(candidates, &RagSourceRestriction::default(), policy).unwrap();
+
+        assert_eq!(thresholded.len(), 10);
+        assert_eq!(selected.len(), 2);
     }
 
     #[test]

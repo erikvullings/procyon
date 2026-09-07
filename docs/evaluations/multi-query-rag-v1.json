@@ -1,0 +1,61 @@
+{
+  "reportVersion": 1,
+  "baselineFingerprint": "single-query-control-v1",
+  "candidateFingerprint": "bounded-multi-query-v1",
+  "plannerVersion": "grounded-rag-query-planner/1",
+  "fusionVersion": "reciprocal-rank-fusion/1",
+  "benchmarkHardware": "Deterministic repository fixture runner; normalized fixture milliseconds, not production hardware timings",
+  "migrationImpact": "No index, embedding-space, converter, or retained-vector migration",
+  "storageImpactBytes": 0,
+  "comparison": {
+    "baseline": {
+      "retrieval": {
+        "evaluatedCases": 12,
+        "cutoff": 10,
+        "fileRecallAtK": 0.9583333333333334,
+        "chunkRecallAtK": 0.9583333333333334,
+        "meanReciprocalRank": 0.9166666666666666,
+        "ndcgAtK": 0.9677622660637882
+      },
+      "multiFacetFileRecallAtK": 0.5,
+      "noAnswerFalsePositiveRate": 0.0,
+      "duplicateRate": 0.0,
+      "averageQueryCount": 1.0,
+      "averageEmbeddingCount": 1.0,
+      "averageSelectedContextTokens": 117.33333333333333,
+      "averagePlannerInputTokens": 0.0,
+      "averagePlannerOutputTokens": 0.0,
+      "p50PlanningPlusRetrievalLatencyMs": 20,
+      "p95PlanningPlusRetrievalLatencyMs": 20,
+      "maximumQueryCount": 1,
+      "maximumEmbeddingCount": 1,
+      "scopeViolations": 0
+    },
+    "candidate": {
+      "retrieval": {
+        "evaluatedCases": 12,
+        "cutoff": 10,
+        "fileRecallAtK": 1.0,
+        "chunkRecallAtK": 1.0,
+        "meanReciprocalRank": 0.9166666666666666,
+        "ndcgAtK": 1.0
+      },
+      "multiFacetFileRecallAtK": 1.0,
+      "noAnswerFalsePositiveRate": 0.0,
+      "duplicateRate": 0.0,
+      "averageQueryCount": 3.0,
+      "averageEmbeddingCount": 3.0,
+      "averageSelectedContextTokens": 117.33333333333333,
+      "averagePlannerInputTokens": 20.0,
+      "averagePlannerOutputTokens": 12.0,
+      "p50PlanningPlusRetrievalLatencyMs": 50,
+      "p95PlanningPlusRetrievalLatencyMs": 50,
+      "maximumQueryCount": 3,
+      "maximumEmbeddingCount": 3,
+      "scopeViolations": 0
+    },
+    "maximumP95LatencyMs": 100,
+    "productionMeasurement": false,
+    "decision": "noGo"
+  }
+}

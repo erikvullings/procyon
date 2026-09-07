@@ -741,6 +741,11 @@ export const nl = {
     copyEvidence: 'Bewijs {label} kopiëren',
     copyFailed: 'De tekst kon niet worden gekopieerd.',
     allowModelKnowledge: 'Modelkennis toestaan',
+    multiQuery: 'Zoekopdracht verbreden met queryplanning',
+    queryPlanningDisclosure:
+      'Stuurt de vraag vóór het ophalen naar het geselecteerde profiel. Geplande zoekvragen kunnen het gekozen bewijsbereik niet wijzigen.',
+    queryPlanCount: '{count} zoekvragen',
+    queryPlanFallback: 'Queryplanning gebruikte de terugval naar één zoekvraag ({reason}).',
     evidence: 'Opgehaald bewijs',
     similarityScore: 'Gelijkenis {score}',
     similarityDescription: 'Cosinusgelijkenis {score}; hoger is dichterbij',

@@ -60,6 +60,47 @@ describe('TauriFileManagerClient', () => {
     expect(openUrl).toHaveBeenCalledWith('https://example.com/read');
   });
 
+  it('propagates Ask cancellation to the desktop host', async () => {
+    let rejectPreview: ((reason: Error) => void) | undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === 'preview_rag') {
+        return new Promise((_resolve, reject) => {
+          rejectPreview = reject;
+        });
+      }
+      if (command === 'cancel_rag') {
+        rejectPreview?.(new Error('cancelled'));
+        return Promise.resolve();
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+    const controller = new AbortController();
+    const preview = new TauriFileManagerClient().previewRag(
+      {
+        profileId: 'profile-a',
+        question: 'Compare alpha and beta',
+        retrievalStrategy: 'multiQuery',
+        scope: {
+          enrolledRootIds: ['root-a'],
+          folder: null,
+          kind: 'entireLibrary',
+          label: 'Library',
+          selectedFiles: [],
+          semanticSourceIds: [],
+          workspaceId: 'workspace-a',
+        },
+      },
+      controller.signal,
+    );
+
+    controller.abort();
+
+    await expect(preview).rejects.toMatchObject({ name: 'AbortError' });
+    const operationId = invoke.mock.calls[0]?.[1]?.operationId;
+    expect(operationId).toEqual(expect.any(String));
+    expect(invoke).toHaveBeenNthCalledWith(2, 'cancel_rag', { operationId });
+  });
+
   describe('operation transport', () => {
     it('maps the Tauri operation discriminator to the frontend kind', async () => {
       invoke.mockResolvedValue([

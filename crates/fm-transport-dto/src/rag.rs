@@ -22,6 +22,37 @@ pub enum RagScopeKindDto {
     EnrolledRoots,
 }
 
+/// Retrieval strategy for one grounded Ask turn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RagRetrievalStrategyDto {
+    /// Retrieve only with the exact user question.
+    #[default]
+    SingleQuery,
+    /// Plan bounded rewrites and deterministically fuse local retrieval results.
+    MultiQuery,
+}
+
+/// Sanitized reason an opted-in request used the single-query control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RagPlanningFallbackReasonDto {
+    /// Planner returned no queries.
+    Empty,
+    /// Planner returned only the unchanged question.
+    DuplicateOnly,
+    /// Planner explicitly declined the request.
+    Refused,
+    /// Planner output violated the bounded schema.
+    Malformed,
+    /// Planner exceeded the profile timeout.
+    TimedOut,
+    /// The configured planning model was unavailable.
+    Unavailable,
+    /// Planning failed for another sanitized reason.
+    Failed,
+}
+
 /// Scope selection for one grounded Ask conversation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +83,9 @@ pub struct PreviewRagRequestDto {
     pub profile_id: Uuid,
     /// Visible authorized evidence scope.
     pub scope: RagScopeDto,
+    /// Explicit retrieval strategy; omitted legacy requests use the control.
+    #[serde(default)]
+    pub retrieval_strategy: RagRetrievalStrategyDto,
 }
 
 /// Honest coverage for an Ask scope.
@@ -122,6 +156,18 @@ pub struct RagPreviewDto {
     pub coverage: RagCoverageDto,
     /// Whether evidence cannot support a grounded answer.
     pub insufficient: bool,
+    /// Strategy requested by the caller.
+    pub requested_strategy: RagRetrievalStrategyDto,
+    /// Strategy that produced this evidence.
+    pub applied_strategy: RagRetrievalStrategyDto,
+    /// Bounded local retrieval queries, including the original question.
+    pub planned_queries: Vec<String>,
+    /// Planner contract version when planning was requested.
+    pub planner_version: Option<String>,
+    /// Fusion contract version when fusion was applied.
+    pub fusion_version: Option<String>,
+    /// Sanitized reason the single-query control was used.
+    pub fallback_reason: Option<RagPlanningFallbackReasonDto>,
 }
 
 /// Confirms generation against an inspected evidence set.
@@ -140,6 +186,9 @@ pub struct GenerateRagAnswerRequestDto {
     pub allow_model_knowledge: bool,
     /// Server-issued ephemeral conversation to continue.
     pub conversation_id: Option<Uuid>,
+    /// Retrieval strategy confirmed during preview.
+    #[serde(default)]
+    pub retrieval_strategy: RagRetrievalStrategyDto,
 }
 
 /// One locally resolved citation.
@@ -263,6 +312,8 @@ pub struct SavedRagConversationDto {
     pub scope: RagScopeDto,
     /// Whether model knowledge was allowed.
     pub model_knowledge_allowed: bool,
+    /// Retrieval strategy fixed for this conversation.
+    pub retrieval_strategy: RagRetrievalStrategyDto,
     /// Persisted question/answer turns.
     pub turns: Vec<SavedRagTurnDto>,
     /// Approximate serialized storage use.
@@ -277,4 +328,32 @@ pub struct SavedRagTurnDto {
     pub question: String,
     /// Generated answer.
     pub answer: RagAnswerDto,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_requests_default_to_single_query_retrieval() {
+        let request: PreviewRagRequestDto = serde_json::from_value(serde_json::json!({
+            "question": "What changed?",
+            "profileId": Uuid::nil(),
+            "scope": {
+                "kind": "entireLibrary",
+                "workspaceId": Uuid::nil(),
+                "label": "Entire indexed library",
+                "selectedFiles": [],
+                "folder": null,
+                "semanticSourceIds": [],
+                "enrolledRootIds": []
+            }
+        }))
+        .expect("legacy request");
+
+        assert_eq!(
+            request.retrieval_strategy,
+            RagRetrievalStrategyDto::SingleQuery
+        );
+    }
 }

@@ -181,6 +181,31 @@ import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
 import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
 
+async function invokeCancellableRag<T>(
+  command: 'preview_rag' | 'generate_rag_answer',
+  request: PreviewRagRequest | GenerateRagAnswerRequest,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
+  const operationId = crypto.randomUUID();
+  const cancel = () => {
+    void invoke<void>('cancel_rag', { operationId }).catch((error: unknown) => {
+      console.warn('Failed to cancel grounded Ask operation', error);
+    });
+  };
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    return await invoke<T>(command, { request, operationId });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new DOMException('Grounded Ask operation was cancelled', 'AbortError');
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+  }
+}
+
 /**
  * Tauri transport adapter, calling `FileManagerService` through `invoke`
  * (spec §11, §12). Only commands registered on the Rust side (task 0015) are
@@ -1106,15 +1131,15 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<DocumentSummary | null>('get_document_summary', { request });
   }
 
-  previewRag(request: PreviewRagRequest, _signal?: AbortSignal): Promise<RagPreview> {
-    return invoke<RagPreview>('preview_rag', { request });
+  previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
+    return invokeCancellableRag<RagPreview>('preview_rag', request, signal);
   }
 
   generateRagAnswer(
     request: GenerateRagAnswerRequest,
-    _signal?: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<GenerateRagAnswerResponse> {
-    return invoke<GenerateRagAnswerResponse>('generate_rag_answer', { request });
+    return invokeCancellableRag<GenerateRagAnswerResponse>('generate_rag_answer', request, signal);
   }
 
   saveRagConversation(

@@ -9676,6 +9676,10 @@
             "type": "string",
             "description": "Exact question used during preview."
           },
+          "retrievalStrategy": {
+            "$ref": "#/components/schemas/RagRetrievalStrategyDto",
+            "description": "Retrieval strategy confirmed during preview."
+          },
           "scope": {
             "$ref": "#/components/schemas/RagScopeDto",
             "description": "Visible authorized evidence scope."
@@ -12426,6 +12430,10 @@
             "type": "string",
             "description": "Exact question used for local dense retrieval."
           },
+          "retrievalStrategy": {
+            "$ref": "#/components/schemas/RagRetrievalStrategyDto",
+            "description": "Explicit retrieval strategy; omitted legacy requests use the control."
+          },
           "scope": {
             "$ref": "#/components/schemas/RagScopeDto",
             "description": "Visible authorized evidence scope."
@@ -12747,6 +12755,19 @@
           }
         }
       },
+      "RagPlanningFallbackReasonDto": {
+        "type": "string",
+        "description": "Sanitized reason an opted-in request used the single-query control.",
+        "enum": [
+          "empty",
+          "duplicateOnly",
+          "refused",
+          "malformed",
+          "timedOut",
+          "unavailable",
+          "failed"
+        ]
+      },
       "RagPreviewDto": {
         "type": "object",
         "description": "Inspectable retrieval preview shown before generation.",
@@ -12759,9 +12780,16 @@
           "evidenceTokens",
           "evidence",
           "coverage",
-          "insufficient"
+          "insufficient",
+          "requestedStrategy",
+          "appliedStrategy",
+          "plannedQueries"
         ],
         "properties": {
+          "appliedStrategy": {
+            "$ref": "#/components/schemas/RagRetrievalStrategyDto",
+            "description": "Strategy that produced this evidence."
+          },
           "coverage": {
             "$ref": "#/components/schemas/RagCoverageDto",
             "description": "Honest requested-scope coverage."
@@ -12779,6 +12807,24 @@
             "description": "Complete selected evidence token estimate.",
             "minimum": 0
           },
+          "fallbackReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RagPlanningFallbackReasonDto",
+                "description": "Sanitized reason the single-query control was used."
+              }
+            ]
+          },
+          "fusionVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fusion contract version when fusion was applied."
+          },
           "insufficient": {
             "type": "boolean",
             "description": "Whether evidence cannot support a grounded answer."
@@ -12786,6 +12832,20 @@
           "locality": {
             "$ref": "#/components/schemas/LlmEndpointLocalityDto",
             "description": "Local or cloud classification."
+          },
+          "plannedQueries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Bounded local retrieval queries, including the original question."
+          },
+          "plannerVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Planner contract version when planning was requested."
           },
           "profileId": {
             "type": "string",
@@ -12796,6 +12856,10 @@
             "type": "string",
             "description": "User-visible profile name."
           },
+          "requestedStrategy": {
+            "$ref": "#/components/schemas/RagRetrievalStrategyDto",
+            "description": "Strategy requested by the caller."
+          },
           "retrievalFingerprint": {
             "type": "string",
             "description": "Fingerprint required to confirm this evidence set."
@@ -12805,6 +12869,14 @@
             "description": "Visible scope."
           }
         }
+      },
+      "RagRetrievalStrategyDto": {
+        "type": "string",
+        "description": "Retrieval strategy for one grounded Ask turn.",
+        "enum": [
+          "singleQuery",
+          "multiQuery"
+        ]
       },
       "RagScopeDto": {
         "type": "object",
@@ -13708,6 +13780,7 @@
           "profileId",
           "scope",
           "modelKnowledgeAllowed",
+          "retrievalStrategy",
           "turns",
           "storageBytes"
         ],
@@ -13725,6 +13798,10 @@
             "type": "string",
             "format": "uuid",
             "description": "Selected profile."
+          },
+          "retrievalStrategy": {
+            "$ref": "#/components/schemas/RagRetrievalStrategyDto",
+            "description": "Retrieval strategy fixed for this conversation."
           },
           "scope": {
             "$ref": "#/components/schemas/RagScopeDto",
