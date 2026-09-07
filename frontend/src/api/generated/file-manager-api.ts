@@ -1118,49 +1118,6 @@ return fetchMutator<createConnectionResponse>(getCreateConnectionUrl(),
 
 
 
-export type deleteConnectionResponse204 = {
-  data: void
-  status: 204
-}
-
-export type deleteConnectionResponse404 = {
-  data: ApplicationErrorDto
-  status: 404
-}
-
-export type deleteConnectionResponseSuccess = (deleteConnectionResponse204) & {
-  headers: Headers;
-};
-export type deleteConnectionResponseError = (deleteConnectionResponse404) & {
-  headers: Headers;
-};
-
-export type deleteConnectionResponse = (deleteConnectionResponseSuccess | deleteConnectionResponseError)
-
-export const getDeleteConnectionUrl = (connectionId: string,) => {
-
-
-
-
-  return `/api/v1/connections/${connectionId}`
-}
-
-/**
- * @summary Deletes a connection profile and its stored credential, if any.
- */
-export const deleteConnection = async (connectionId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteConnectionResponse> => {
-
-  return fetchMutator<deleteConnectionResponse>(getDeleteConnectionUrl(connectionId),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
 export type getConnectionResponse200 = {
   data: ConnectionDto
   status: 200
@@ -1254,6 +1211,49 @@ return fetchMutator<updateConnectionResponse>(getUpdateConnectionUrl(connectionI
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateConnectionRequestDto)
+  }
+);}
+
+
+
+export type deleteConnectionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteConnectionResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteConnectionResponseSuccess = (deleteConnectionResponse204) & {
+  headers: Headers;
+};
+export type deleteConnectionResponseError = (deleteConnectionResponse404) & {
+  headers: Headers;
+};
+
+export type deleteConnectionResponse = (deleteConnectionResponseSuccess | deleteConnectionResponseError)
+
+export const getDeleteConnectionUrl = (connectionId: string,) => {
+
+
+
+
+  return `/api/v1/connections/${connectionId}`
+}
+
+/**
+ * @summary Deletes a connection profile and its stored credential, if any.
+ */
+export const deleteConnection = async (connectionId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteConnectionResponse> => {
+
+  return fetchMutator<deleteConnectionResponse>(getDeleteConnectionUrl(connectionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 
@@ -3560,53 +3560,6 @@ export const listLlmProfilePresets = async ( options?: Parameters<typeof fetchMu
 
 
 
-export type deleteLlmProfileResponse204 = {
-  data: void
-  status: 204
-}
-
-export type deleteLlmProfileResponse404 = {
-  data: ApplicationErrorDto
-  status: 404
-}
-
-export type deleteLlmProfileResponseSuccess = (deleteLlmProfileResponse204) & {
-  headers: Headers;
-};
-export type deleteLlmProfileResponseError = (deleteLlmProfileResponse404) & {
-  headers: Headers;
-};
-
-export type deleteLlmProfileResponse = (deleteLlmProfileResponseSuccess | deleteLlmProfileResponseError)
-
-export const getDeleteLlmProfileUrl = (profileId: string,) => {
-
-
-
-
-  return `/api/v1/llm-profiles/${profileId}`
-}
-
-export const deleteLlmProfile = async (profileId: string,
-    deleteLlmProfileRequestDto: DeleteLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteLlmProfileResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return fetchMutator<deleteLlmProfileResponse>(getDeleteLlmProfileUrl(profileId),
-  {
-    ...options,
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(deleteLlmProfileRequestDto)
-  }
-);}
-
-
-
 export type updateLlmProfileResponse200 = {
   data: LlmProfileDto
   status: 200
@@ -3654,6 +3607,53 @@ return fetchMutator<updateLlmProfileResponse>(getUpdateLlmProfileUrl(profileId),
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type deleteLlmProfileResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteLlmProfileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteLlmProfileResponseSuccess = (deleteLlmProfileResponse204) & {
+  headers: Headers;
+};
+export type deleteLlmProfileResponseError = (deleteLlmProfileResponse404) & {
+  headers: Headers;
+};
+
+export type deleteLlmProfileResponse = (deleteLlmProfileResponseSuccess | deleteLlmProfileResponseError)
+
+export const getDeleteLlmProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}`
+}
+
+export const deleteLlmProfile = async (profileId: string,
+    deleteLlmProfileRequestDto: DeleteLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteLlmProfileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<deleteLlmProfileResponse>(getDeleteLlmProfileUrl(profileId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteLlmProfileRequestDto)
   }
 );}
 
@@ -7447,6 +7447,49 @@ export const startWorkspace = async (params?: StartWorkspaceParams, options?: Pa
 
 
 
+export type getWorkspaceResponse200 = {
+  data: WorkspaceDto
+  status: 200
+}
+
+export type getWorkspaceResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getWorkspaceResponseSuccess = (getWorkspaceResponse200) & {
+  headers: Headers;
+};
+export type getWorkspaceResponseError = (getWorkspaceResponse404) & {
+  headers: Headers;
+};
+
+export type getWorkspaceResponse = (getWorkspaceResponseSuccess | getWorkspaceResponseError)
+
+export const getGetWorkspaceUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}`
+}
+
+/**
+ * @summary Loads a single workspace by id.
+ */
+export const getWorkspace = async (workspaceId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<getWorkspaceResponse> => {
+
+  return fetchMutator<getWorkspaceResponse>(getGetWorkspaceUrl(workspaceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type deleteWorkspaceResponse204 = {
   data: void
   status: 204
@@ -7497,49 +7540,6 @@ export const deleteWorkspace = async (workspaceId: string,
   {
     ...options,
     method: 'DELETE'
-
-
-  }
-);}
-
-
-
-export type getWorkspaceResponse200 = {
-  data: WorkspaceDto
-  status: 200
-}
-
-export type getWorkspaceResponse404 = {
-  data: ApplicationErrorDto
-  status: 404
-}
-
-export type getWorkspaceResponseSuccess = (getWorkspaceResponse200) & {
-  headers: Headers;
-};
-export type getWorkspaceResponseError = (getWorkspaceResponse404) & {
-  headers: Headers;
-};
-
-export type getWorkspaceResponse = (getWorkspaceResponseSuccess | getWorkspaceResponseError)
-
-export const getGetWorkspaceUrl = (workspaceId: string,) => {
-
-
-
-
-  return `/api/v1/workspaces/${workspaceId}`
-}
-
-/**
- * @summary Loads a single workspace by id.
- */
-export const getWorkspace = async (workspaceId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<getWorkspaceResponse> => {
-
-  return fetchMutator<getWorkspaceResponse>(getGetWorkspaceUrl(workspaceId),
-  {
-    ...options,
-    method: 'GET'
 
 
   }
