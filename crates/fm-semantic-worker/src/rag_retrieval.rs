@@ -149,6 +149,8 @@ pub struct RagRetrievalRequest {
     pub question: String,
     /// Authoritative tenant/library/root/workspace filters.
     pub filters: QueryFilters,
+    /// Additional host-owned workspace tenants included by a device-wide scope.
+    pub additional_tenant_ids: BTreeSet<String>,
     /// Optional exact source-occurrence restriction.
     pub source_restriction: RagSourceRestriction,
     /// Current host source hashes for stale-state reporting.

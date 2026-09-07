@@ -2034,7 +2034,8 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
-        let tenant_id = semantic_worker_tenant(access, workspace_id)?;
+        let host_entire_library = matches!(access, SemanticAccessContext::Host)
+            && matches!(selection, RagScopeSelection::EntireLibrary);
         let requested_results = match selection {
             RagScopeSelection::SemanticResults(ids) => Some(ids.iter().collect::<HashSet<_>>()),
             _ => None,
@@ -2071,14 +2072,29 @@ impl SemanticLibraryService {
             _ => Vec::new(),
         };
         let mut allowed_source_ids = BTreeSet::new();
+        let mut tenant_ids = BTreeSet::new();
         let mut titles = HashMap::new();
         let mut unavailable = 0u64;
         for candidate in data.catalog.occurrences() {
-            let Some(occurrence) = data
-                .catalog
-                .authorized_occurrence(&data.policy, workspace_id, candidate.id())
-                .map_err(|_| SemanticLibraryError::InvalidRequest)?
-            else {
+            let occurrence = if host_entire_library {
+                let mut authorized = None;
+                for scope in candidate.scopes() {
+                    if let Some(occurrence) = data
+                        .catalog
+                        .authorized_occurrence(&data.policy, scope.workspace_id(), candidate.id())
+                        .map_err(|_| SemanticLibraryError::InvalidRequest)?
+                    {
+                        authorized = Some(occurrence);
+                        break;
+                    }
+                }
+                authorized
+            } else {
+                data.catalog
+                    .authorized_occurrence(&data.policy, workspace_id, candidate.id())
+                    .map_err(|_| SemanticLibraryError::InvalidRequest)?
+            };
+            let Some(occurrence) = occurrence else {
                 continue;
             };
             let selected = match selection {
@@ -2127,6 +2143,14 @@ impl SemanticLibraryService {
                 .to_owned();
             titles.insert(source_id.clone(), title);
             allowed_source_ids.insert(source_id);
+            if host_entire_library {
+                tenant_ids.extend(
+                    occurrence
+                        .scopes()
+                        .iter()
+                        .map(|scope| scope.workspace_id().to_string()),
+                );
+            }
         }
         if matched_selected.iter().any(|matched| !matched)
             || requested_results
@@ -2137,6 +2161,12 @@ impl SemanticLibraryService {
         }
         let eligible = u64::try_from(allowed_source_ids.len())
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        if !host_entire_library {
+            tenant_ids.insert(semantic_worker_tenant(access, workspace_id)?);
+        }
+        let tenant_id = tenant_ids
+            .pop_first()
+            .ok_or(SemanticLibraryError::InvalidRequest)?;
         Ok(ResolvedRagScope {
             retrieval: RagRetrievalRequest {
                 question,
@@ -2146,6 +2176,7 @@ impl SemanticLibraryService {
                     include_unavailable: true,
                     ..QueryFilters::default()
                 },
+                additional_tenant_ids: tenant_ids,
                 source_restriction: RagSourceRestriction { allowed_source_ids },
                 current_hashes: HashMap::new(),
                 policy,
@@ -2276,6 +2307,68 @@ fn location_is_within_uri(candidate: &str, folder: &str) -> bool {
 #[cfg(test)]
 mod tenant_tests {
     use super::*;
+
+    #[test]
+    fn desktop_entire_library_retrieves_roots_enrolled_from_another_workspace() {
+        let service = SemanticLibraryService::deterministic_mock();
+        let enrolled_workspace = WorkspaceId::new();
+        let active_workspace = WorkspaceId::new();
+        let root = SemanticFolderContext::new(
+            enrolled_workspace,
+            Location::parse("file:///semantic-library").unwrap(),
+        );
+        let preview = service
+            .preview_enrolment(&SemanticAccessContext::Host, root.clone(), true)
+            .unwrap();
+        service
+            .confirm_enrolment(
+                &SemanticAccessContext::Host,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &root,
+            )
+            .unwrap();
+        let root_id = service.status(&SemanticAccessContext::Host).unwrap().roots[0]
+            .id
+            .parse()
+            .unwrap();
+        let occurrence_id = service
+            .record_indexing_observation(
+                &SemanticAccessContext::Host,
+                SemanticIndexingObservation {
+                    entry_id: fm_domain::EntryId::new(),
+                    location: Location::parse("file:///semantic-library/su-fields.txt").unwrap(),
+                    content_fingerprint: core::ContentFingerprint::new("sha256:su-fields").unwrap(),
+                    root_id,
+                    workspace_ids: vec![enrolled_workspace],
+                    source_bytes: 128,
+                },
+            )
+            .unwrap();
+
+        let resolved = service
+            .resolve_rag_scope(
+                &SemanticAccessContext::Host,
+                active_workspace,
+                &RagScopeSelection::EntireLibrary,
+                "SU-fields".to_owned(),
+                RagRetrievalPolicy::default_ask(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            resolved.retrieval.filters.tenant_id,
+            enrolled_workspace.to_string()
+        );
+        assert!(resolved.retrieval.additional_tenant_ids.is_empty());
+        assert!(
+            resolved
+                .retrieval
+                .source_restriction
+                .allowed_source_ids
+                .contains(&occurrence_id.to_string())
+        );
+    }
 
     #[test]
     fn desktop_worker_tenant_matches_the_ingestion_workspace() {

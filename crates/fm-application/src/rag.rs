@@ -110,20 +110,26 @@ impl RagRetrievalCapability for SemanticRagRetrievalCapability {
             .saturating_mul(request.policy.maximum_chunks_per_document)
             .saturating_mul(8)
             .clamp(1, 512) as u32;
-        let results = self
-            .semantic
-            .query(SemanticQuery {
-                scope: SemanticScope::new(
-                    TenantId::new(request.filters.tenant_id.clone()),
-                    LibraryId::new(library_id.clone()),
-                ),
-                request_id: SemanticOperationId::new(Uuid::new_v4().to_string()),
-                text: request.question.clone(),
-                concept: None,
-                maximum_results,
-            })
-            .await
-            .map_err(map_semantic_retrieval_error)?;
+        let mut tenant_ids = request.additional_tenant_ids.clone();
+        tenant_ids.insert(request.filters.tenant_id.clone());
+        let mut results = Vec::new();
+        for tenant_id in tenant_ids {
+            results.extend(
+                self.semantic
+                    .query(SemanticQuery {
+                        scope: SemanticScope::new(
+                            TenantId::new(tenant_id),
+                            LibraryId::new(library_id.clone()),
+                        ),
+                        request_id: SemanticOperationId::new(Uuid::new_v4().to_string()),
+                        text: request.question.clone(),
+                        concept: None,
+                        maximum_results,
+                    })
+                    .await
+                    .map_err(map_semantic_retrieval_error)?,
+            );
+        }
         if cancellation.is_cancelled() {
             return Err(RagError::Cancelled);
         }
@@ -155,6 +161,13 @@ fn semantic_results_to_context(
                 .map(|item| (result.document_id.as_str().to_owned(), item)),
         );
     }
+    candidates.sort_by(|left, right| {
+        right
+            .1
+            .score
+            .total_cmp(&left.1.score)
+            .then_with(|| left.1.record_id.cmp(&right.1.record_id))
+    });
     candidates.retain(|(_, item)| {
         request.source_restriction.allowed_source_ids.is_empty()
             || request
@@ -946,7 +959,7 @@ pub enum RagError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use fm_semantic_worker::rag_retrieval::{RagContextChunk, RagRetrievalPolicy};
     use fm_semantic_worker::semantic_storage::{QueryEvidence, QueryFilters};
@@ -989,7 +1002,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn active_semantic_capability_supplies_ask_evidence() {
+    async fn semantic_retrieval_queries_an_enrolled_workspace_tenant() {
         let capability = Arc::new(FakeSemanticCapability::new());
         let scope = SemanticScope::new(TenantId::new("workspace-a"), LibraryId::new("library-a"));
         capability
@@ -1011,10 +1024,11 @@ mod tests {
                 RagRetrievalRequest {
                     question: "SU-fields".to_owned(),
                     filters: QueryFilters {
-                        tenant_id: scope.tenant_id.as_str().to_owned(),
+                        tenant_id: "active-workspace".to_owned(),
                         library_id: Some(scope.library_id.as_str().to_owned()),
                         ..QueryFilters::default()
                     },
+                    additional_tenant_ids: BTreeSet::from([scope.tenant_id.as_str().to_owned()]),
                     source_restriction: Default::default(),
                     current_hashes: HashMap::new(),
                     policy: RagRetrievalPolicy::default_ask(),

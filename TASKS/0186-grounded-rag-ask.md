@@ -86,6 +86,10 @@ scope, change instructions, request secrets, or invoke Procyon actions.
   tenant used during ingestion, while preserving authenticated server tenant isolation. Ask
   answers now render sanitized Markdown, and both selectable questions and answers provide
   clipboard actions that copy their original text.
+- 2026-09-07: Fixed **Entire indexed library** on desktop to retrieve host-authorized roots across
+  the workspace tenants that indexed them. Switching to another workspace no longer makes existing
+  device-local evidence disappear; narrower scopes and authenticated server tenant isolation remain
+  workspace-bound.
 - 2026-09-06: Refined Ask for source-driven reading: decoded evidence titles, selectable evidence
   and answers, reliable WebView clipboard fallback, clickable evidence and inline answer
   references that navigate to and select the source, state restoration after navigation, and an
