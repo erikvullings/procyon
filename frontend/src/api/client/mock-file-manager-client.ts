@@ -1970,6 +1970,7 @@ export class MockFileManagerClient implements FileManagerClient {
             { reason: 'hidden', count: 1 },
             { reason: 'unsupportedMime', count: 1 },
           ],
+          ocrRequiredFiles: [],
           availability: { state: 'available' },
           reconciliationGeneration: 0,
           indexedGeneration: 0,

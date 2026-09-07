@@ -31,6 +31,8 @@ export interface SemanticRootStatusDto {
   indexedGeneration: number;
   /** Provider-neutral location already visible to the user. */
   location: LocationDto;
+  /** Files whose latest completed reconciliation requires OCR. */
+  ocrRequiredFiles: LocationDto[];
   /**
      * Last complete catalog reconciliation generation.
      * @minimum 0

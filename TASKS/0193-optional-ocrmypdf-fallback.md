@@ -61,3 +61,6 @@ executable into a mandatory or silent dependency.
   was activated without changing the global conversion-pipeline identity. Reconciliation of the
   sole enrolled `~/Downloads/triz` root completed 40 jobs with no failures; all six formerly
   textless PDFs now have searchable records.
+- 2026-09-07: The Semantic settings status now reports the decoded paths of files whose latest
+  completed reconciliation still requires OCR, together with the explicit OCR-enabled restart
+  command. A successful later reconciliation clears the list.

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
-use fm_domain::{EntryKind, EntrySummary, GitFileStatus, WorkspaceId};
+use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, WorkspaceId};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason, RootId,
 };
@@ -64,6 +64,8 @@ pub struct SemanticIndexingReport {
     pub excluded_occurrences: u64,
     /// Actionable, sanitized reasons for conversion-time exclusions.
     pub exclusion_details: Vec<String>,
+    /// Source files whose latest completed reconciliation requires OCR.
+    pub ocr_required_files: Vec<Location>,
     /// Entries rejected by the curated eligibility policy.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Newly committed complete reconciliation generation.
@@ -106,6 +108,7 @@ pub enum SemanticIndexingError {
 pub struct SemanticIndexingService {
     providers: ProviderRegistry,
     semantic: std::sync::RwLock<SemanticService>,
+    ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
     run_lock: tokio::sync::Mutex<()>,
 }
 
@@ -114,8 +117,18 @@ impl SemanticIndexingService {
         Self {
             providers,
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
+            ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
         }
+    }
+
+    pub(crate) fn ocr_required_files(&self, root_id: RootId) -> Vec<Location> {
+        self.ocr_required_files
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&root_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub(crate) fn set_semantic(&self, semantic: SemanticService) {
@@ -189,6 +202,7 @@ impl SemanticIndexingService {
         let mut failed_occurrences = 0_u64;
         let mut excluded_occurrences = 0_u64;
         let mut exclusion_details = BTreeSet::new();
+        let mut ocr_required_files = Vec::new();
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
 
         while let Some((directory, depth)) = pending.pop_front() {
@@ -288,6 +302,7 @@ impl SemanticIndexingService {
                                     SemanticLibraryError::IncompatibleLibraryIdentity.into()
                                 );
                             }
+                            let mut requires_ocr = false;
                             for workspace_id in &workspace_ids {
                                 let tenant_id = match access {
                                     SemanticAccessContext::Host => workspace_id.to_string(),
@@ -329,9 +344,13 @@ impl SemanticIndexingService {
                                     IngestionOutcome::Excluded(detail) => {
                                         excluded_occurrences =
                                             excluded_occurrences.saturating_add(1);
+                                        requires_ocr |= detail.contains("OCRmyPDF");
                                         exclusion_details.insert(detail);
                                     }
                                 }
+                            }
+                            if requires_ocr {
+                                ocr_required_files.push(entry.location.clone());
                             }
                         }
                     }
@@ -352,6 +371,10 @@ impl SemanticIndexingService {
         check_cancelled(&cancellation)?;
         let reconciliation_generation =
             library.complete_reconciliation(access, root_id, &observed)?;
+        self.ocr_required_files
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(root_id, ocr_required_files.clone());
         let tenant_ids = match access {
             SemanticAccessContext::Host => workspace_ids.iter().map(ToString::to_string).collect(),
             SemanticAccessContext::Server(_) => vec![access.tenant_id()?],
@@ -368,6 +391,7 @@ impl SemanticIndexingService {
             failed_occurrences,
             excluded_occurrences,
             exclusion_details: exclusion_details.into_iter().collect(),
+            ocr_required_files,
             skipped_reason_counts: skipped
                 .into_iter()
                 .map(|(reason, count)| SemanticEligibilityReasonCount { reason, count })

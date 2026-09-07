@@ -118,6 +118,14 @@ function reasonLabel(reason: SemanticEligibilityReason): string {
   }
 }
 
+function decodedLocation(uri: string): string {
+  try {
+    return decodeURIComponent(uri);
+  } catch {
+    return uri;
+  }
+}
+
 function deletionCategoryLabel(category: SemanticDeletionCategory): string {
   switch (category) {
     case 'occurrences':
@@ -378,6 +386,22 @@ function rootStatusView(
             m('li', { key: reason.reason }, `${reasonLabel(reason.reason)}: ${reason.count}`),
           ),
         ),
+    root.ocrRequiredFiles.length === 0
+      ? undefined
+      : m('section.fm-semantic-library-ocr', [
+          m('h6', t('semanticLibrary', 'ocrRequiredFiles')),
+          m('p', t('semanticLibrary', 'ocrRequiredGuidance')),
+          m(
+            'ul',
+            root.ocrRequiredFiles.map((location) =>
+              m(
+                'li',
+                { key: `${location.providerId}:${location.uri}` },
+                decodedLocation(location.uri),
+              ),
+            ),
+          ),
+        ]),
     workspaceId === undefined || !root.workspaceReferences.includes(workspaceId)
       ? undefined
       : m('fieldset.fm-semantic-library-overrides', [

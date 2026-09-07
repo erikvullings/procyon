@@ -433,6 +433,11 @@ fn semantic_root_status_to_dto(root: SemanticRootStatus) -> SemanticRootStatusDt
             .into_iter()
             .map(semantic_eligibility_reason_count_to_dto)
             .collect(),
+        ocr_required_files: root
+            .ocr_required_files
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         availability: match root.availability {
             SemanticRootAvailability::Available => SemanticRootAvailabilityDto::Available,
             SemanticRootAvailability::TemporarilyUnavailable { reason } => {

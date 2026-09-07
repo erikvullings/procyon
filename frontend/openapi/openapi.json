@@ -9717,6 +9717,13 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Provider-neutral location already visible to the user."
           },
+          "ocrRequiredFiles": {
+            "description": "Files whose latest completed reconciliation requires OCR.",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "type": "array"
+          },
           "reconciliationGeneration": {
             "description": "Last complete catalog reconciliation generation.",
             "format": "int64",
@@ -9749,6 +9756,7 @@
           "eligibilityOverrides",
           "attachedVocabularyIds",
           "eligibilityReasonCounts",
+          "ocrRequiredFiles",
           "availability",
           "reconciliationGeneration",
           "indexedGeneration",

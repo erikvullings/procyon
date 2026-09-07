@@ -430,6 +430,8 @@ pub struct SemanticRootStatus {
     pub attached_vocabulary_ids: Vec<String>,
     /// Last visible reason counts, when an estimator supplied them.
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCount>,
+    /// Files whose latest completed reconciliation requires OCR.
+    pub ocr_required_files: Vec<Location>,
     /// Current source reachability.
     pub availability: SemanticRootAvailability,
     /// Last complete catalog reconciliation.
@@ -2909,6 +2911,7 @@ fn project_root(
             .map(|id| id.as_str().to_owned())
             .collect(),
         eligibility_reason_counts: counts.map_or_else(Vec::new, reason_counts),
+        ocr_required_files: Vec::new(),
         availability: match data.catalog.root_availability(root.id()) {
             core::RootAvailability::Available => SemanticRootAvailability::Available,
             core::RootAvailability::TemporarilyUnavailable { .. } => {

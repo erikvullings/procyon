@@ -168,6 +168,12 @@ describe('SemanticLibraryManagement', () => {
           eligibilityOverrides: [],
           attachedVocabularyIds: ['vocabulary-1'],
           eligibilityReasonCounts: [{ reason: 'hidden', count: 3 }],
+          ocrRequiredFiles: [
+            {
+              providerId: 'file',
+              uri: 'file:///docs/Scanned%20reference.pdf',
+            },
+          ],
           availability: {
             state: 'temporarilyUnavailable',
             reason: 'removable volume is offline',
@@ -184,6 +190,9 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Source unavailable');
     expect(root.textContent).toContain('removable volume is offline');
     expect(root.textContent).toContain('vocabulary-1');
+    expect(root.textContent).toContain('Files requiring OCR');
+    expect(root.textContent).toContain('/docs/Scanned reference.pdf');
+    expect(root.textContent).toContain('pnpm dev:tauri:semantic:ocr');
     expect(root.querySelectorAll('.fm-semantic-library-override')).toHaveLength(7);
     expect(root.textContent).not.toContain('Symlink outside root');
     expect(root.textContent).not.toContain('Over budget');
@@ -199,6 +208,7 @@ describe('SemanticLibraryManagement', () => {
       eligibilityOverrides: [],
       attachedVocabularyIds: [],
       eligibilityReasonCounts: [],
+      ocrRequiredFiles: [],
       availability: { state: 'available' as const },
       reconciliationGeneration: 1,
       indexedGeneration: 1,
@@ -277,6 +287,7 @@ describe('SemanticLibraryManagement', () => {
       eligibilityOverrides: [],
       attachedVocabularyIds: [],
       eligibilityReasonCounts: [],
+      ocrRequiredFiles: [],
       availability: { state: 'available' as const },
       reconciliationGeneration: 1,
       indexedGeneration: 1,

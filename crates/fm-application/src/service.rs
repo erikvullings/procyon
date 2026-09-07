@@ -822,7 +822,13 @@ impl FileManagerService {
         &self,
         access: &SemanticAccessContext,
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
-        self.semantic_library().await.status(access)
+        let mut status = self.semantic_library().await.status(access)?;
+        for root in &mut status.roots {
+            if let Ok(root_id) = root.id.parse() {
+                root.ocr_required_files = self.semantic_indexing.ocr_required_files(root_id);
+            }
+        }
+        Ok(status)
     }
 
     /// Replaces the composed default with an explicitly configured library

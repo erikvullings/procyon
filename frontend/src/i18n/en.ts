@@ -1211,6 +1211,9 @@ export const en = {
     reasonOverBudget: 'Over budget',
     reasonSymlinkOutside: 'Symlink outside root',
     reasonExplicitlyExcluded: 'Explicit exclusion',
+    ocrRequiredFiles: 'Files requiring OCR',
+    ocrRequiredGuidance:
+      'Restart with pnpm dev:tauri:semantic:ocr to convert and index these files automatically.',
     cleanupRunning: 'Cleanup running',
     cleanupPending: 'Cleanup pending',
     cleanupFailed: 'Cleanup failed',

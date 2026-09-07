@@ -28,6 +28,9 @@ content search, and baseline document viewing available.
   Homebrew (`brew install ocrmypdf`); on Linux use the distribution's OCRmyPDF package; on Windows
   install and run Procyon's local semantic developer environment through WSL. Procyon never
   downloads OCRmyPDF.
+- **Settings > Semantic > Enrolled roots** lists the decoded paths of files that still require OCR
+  after the latest completed reconciliation. The list clears when a later OCR-enabled
+  reconciliation successfully indexes them.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
   also available as **Ask your files** in the command palette. It always opens Ask across the
   existing library. The question and answer workspace stays prominent; generation profile, evidence

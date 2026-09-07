@@ -364,6 +364,8 @@ pub struct SemanticRootStatusDto {
     pub attached_vocabulary_ids: Vec<String>,
     /// Last available skip-reason counts.
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCountDto>,
+    /// Files whose latest completed reconciliation requires OCR.
+    pub ocr_required_files: Vec<LocationDto>,
     /// Current source reachability.
     pub availability: SemanticRootAvailabilityDto,
     /// Last complete catalog reconciliation generation.

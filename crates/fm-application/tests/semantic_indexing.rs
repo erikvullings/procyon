@@ -403,5 +403,13 @@ async fn one_ocr_required_pdf_is_reported_without_aborting_reconciliation() {
         report.exclusion_details,
         ["Add a searchable text layer with OCRmyPDF, then reindex the file."]
     );
+    assert_eq!(
+        report.ocr_required_files,
+        [Location::from_native_path(&root.path().join("scanned.pdf")).unwrap()]
+    );
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].ocr_required_files,
+        report.ocr_required_files
+    );
     assert_eq!(report.reconciliation_generation, 1);
 }

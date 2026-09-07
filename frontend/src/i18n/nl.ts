@@ -1224,6 +1224,9 @@ export const nl = {
     reasonOverBudget: 'Boven limiet',
     reasonSymlinkOutside: 'Symbolische koppeling buiten hoofdmap',
     reasonExplicitlyExcluded: 'Expliciete uitsluiting',
+    ocrRequiredFiles: 'Bestanden waarvoor OCR nodig is',
+    ocrRequiredGuidance:
+      'Herstart met pnpm dev:tauri:semantic:ocr om deze bestanden automatisch te converteren en indexeren.',
     cleanupRunning: 'Opschoning actief',
     cleanupPending: 'Opschonen in wachtrij',
     cleanupFailed: 'Opschoning mislukt',
