@@ -14,7 +14,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fm_semantic_components::{ModelPack, ModelPackKind};
-use fm_semantic_docling::DEFAULT_CONVERTER_PIPELINE_VERSION;
+use fm_semantic_conversion::ConversionBudgets;
+use fm_semantic_docling::{
+    DEFAULT_CONVERTER_PIPELINE_VERSION, OcrMyPdfConfiguration, converter_with_optional_ocr,
+};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -556,8 +559,11 @@ impl DeveloperWorker {
         let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
         let derived_index: Arc<dyn DerivedIndex> = self.index.clone();
         let candidate_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
-        let coordinator = Arc::new(IngestionCoordinator::new(
+        let ocr_configuration = OcrMyPdfConfiguration::from_environment();
+        let ocr_enabled = ocr_configuration.is_some();
+        let mut coordinator = IngestionCoordinator::with_converter(
             self.catalog.clone(),
+            converter_with_optional_ocr(ocr_configuration),
             passages,
             derived_index,
             Arc::new(DeveloperResources {
@@ -565,7 +571,14 @@ impl DeveloperWorker {
             }),
             Arc::new(DiscardDeveloperEvents),
             InteractivePriority::default(),
-        ));
+        );
+        if ocr_enabled {
+            coordinator = coordinator.with_conversion_budgets(ConversionBudgets {
+                timeout: Duration::from_secs(4 * 60),
+                ..ConversionBudgets::default()
+            });
+        }
+        let coordinator = Arc::new(coordinator);
         let ingestion: Arc<dyn WorkerIngestionBackend> = Arc::new(
             PipelineIngestionBackend::with_library_manifest(coordinator, self.manifest.clone()),
         );

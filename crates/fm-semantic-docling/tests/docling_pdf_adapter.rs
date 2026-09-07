@@ -1,10 +1,14 @@
 //! Public-Interface tests for the optional Docling PDF Adapter.
 
 use fm_semantic_conversion::{
-    BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, OptionalConverter, Provenance, SourceContent, TopLevelBoundary,
+    BaselineConverter, CancellationFlag, ConversionBudgets, ConversionContext, ConversionOutcome,
+    DocumentConverter, DocumentMetadata, OptionalConverter, Provenance, SourceContent,
+    TopLevelBoundary,
 };
-use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline_fallback};
+use fm_semantic_docling::{
+    DOCLING_PDF_CONVERTER_VERSION, OCRMYPDF_CONVERTER_VERSION, OcrMyPdfAvailability,
+    OcrMyPdfConfiguration, OcrMyPdfConverter, converter_with_baseline_fallback,
+};
 use lopdf::{Document, Object, Stream, dictionary};
 
 fn text_pdf(pages: &[&[&str]]) -> Vec<u8> {
@@ -262,4 +266,309 @@ fn deterministic_docling_orders_positioned_columns_instead_of_operator_order() {
         advanced.find("Left column starts").expect("left Docling")
             < advanced.find("Right column starts").expect("right Docling")
     );
+}
+
+#[cfg(unix)]
+mod ocrmypdf {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    fn fake_executable(root: &Path, body: &str, fixture: Option<&[u8]>) -> PathBuf {
+        if let Some(fixture) = fixture {
+            fs::write(root.join("fixture.pdf"), fixture).expect("write OCR fixture");
+        }
+        let executable = root.join("fake-ocrmypdf");
+        fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nwhile [ \"$#\" -gt 2 ]; do shift; done\ninput=\"$1\"\noutput=\"$2\"\n{body}\n"
+            ),
+        )
+        .expect("write fake OCRmyPDF");
+        let mut permissions = fs::metadata(&executable)
+            .expect("fake metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&executable, permissions).expect("make fake executable");
+        executable
+    }
+
+    fn ocr_converter(configuration: OcrMyPdfConfiguration) -> OcrMyPdfConverter {
+        OcrMyPdfConverter::new(Arc::new(converter_with_baseline_fallback()), configuration)
+    }
+
+    fn no_text_pdf() -> Vec<u8> {
+        text_pdf(&[&[]])
+    }
+
+    fn convert(
+        converter: &dyn DocumentConverter,
+        bytes: &[u8],
+        context: &ConversionContext,
+    ) -> ConversionOutcome {
+        converter
+            .convert(
+                SourceContent::Bytes(bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                context,
+            )
+            .expect("typed conversion")
+    }
+
+    fn assert_temporary_root_is_empty(root: &Path) {
+        assert_eq!(
+            fs::read_dir(root).expect("read temporary root").count(),
+            0,
+            "OCR input and output must be removed"
+        );
+    }
+
+    #[test]
+    fn detects_an_installed_executable_and_reports_absence() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let executable = fake_executable(directory.path(), "exit 0", None);
+        assert_eq!(
+            OcrMyPdfAvailability::detect(Some(&executable)),
+            OcrMyPdfAvailability::Available { executable }
+        );
+
+        let OcrMyPdfAvailability::Unavailable { guidance } =
+            OcrMyPdfAvailability::detect(Some(&directory.path().join("missing")))
+        else {
+            panic!("missing executable should be unavailable");
+        };
+        assert!(guidance.contains("Homebrew"));
+        assert!(guidance.contains("Linux"));
+        assert!(guidance.contains("WSL"));
+    }
+
+    #[test]
+    fn successful_ocr_is_reconverted_by_docling_and_discloses_provenance() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let searchable = text_pdf(&[&[
+            "Recognized evidence from OCR contains enough meaningful prose.",
+            "The second sentence confirms that deterministic conversion sees a real text layer.",
+        ]]);
+        let executable = fake_executable(
+            directory.path(),
+            "cp \"$(dirname \"$0\")/fixture.pdf\" \"$output\"",
+            Some(&searchable),
+        );
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_temporary_root(temporary_root.path()),
+        );
+
+        let outcome = convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        let document = outcome.document().expect("OCR-converted document");
+        assert_eq!(document.converter(), OCRMYPDF_CONVERTER_VERSION);
+        assert!(document.units()[0].text.contains("Recognized evidence"));
+        assert!(document.warnings().iter().any(|warning| matches!(
+            warning,
+            fm_semantic_conversion::ConversionWarning::OcrAssessment { .. }
+        )));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn ordinary_searchable_pdf_never_launches_ocr() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let marker = directory.path().join("launched");
+        let executable = fake_executable(
+            directory.path(),
+            "touch \"$(dirname \"$0\")/launched\"; exit 9",
+            None,
+        );
+        let converter = ocr_converter(OcrMyPdfConfiguration::new(executable));
+
+        let outcome = convert(
+            &converter,
+            &text_pdf(&[&[
+                "This existing searchable layer contains enough meaningful prose.",
+                "OCR must not run when deterministic Docling can already read this document.",
+            ]]),
+            &ConversionContext::new(),
+        );
+        assert!(outcome.document().is_some());
+        assert!(!marker.exists());
+    }
+
+    #[test]
+    fn absent_and_failed_executables_keep_actionable_guidance_and_cleanup() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let absent = ocr_converter(
+            OcrMyPdfConfiguration::new(directory.path().join("missing"))
+                .with_temporary_root(temporary_root.path()),
+        );
+        let ConversionOutcome::NoTextLayer { detail } =
+            convert(&absent, &no_text_pdf(), &ConversionContext::new())
+        else {
+            panic!("absent executable should preserve OCR-required outcome");
+        };
+        assert!(detail.contains("could not be started"));
+        assert!(detail.contains("OCRmyPDF"));
+        assert_temporary_root_is_empty(temporary_root.path());
+
+        let failed_executable = fake_executable(directory.path(), "exit 7", None);
+        let failed = ocr_converter(
+            OcrMyPdfConfiguration::new(failed_executable)
+                .with_temporary_root(temporary_root.path()),
+        );
+        let ConversionOutcome::NoTextLayer { detail } =
+            convert(&failed, &no_text_pdf(), &ConversionContext::new())
+        else {
+            panic!("failed executable should preserve OCR-required outcome");
+        };
+        assert!(detail.contains("exited unsuccessfully"));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn timeout_terminates_the_child_and_cleans_temporary_files() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let executable = fake_executable(directory.path(), "sleep 5", None);
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable)
+                .with_timeout(Duration::from_millis(75))
+                .with_temporary_root(temporary_root.path()),
+        );
+        let started = Instant::now();
+
+        let outcome = convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        let ConversionOutcome::NoTextLayer { detail } = outcome else {
+            panic!("timeout should remain an actionable OCR-required outcome");
+        };
+        assert!(detail.contains("local deadline"));
+        assert!(detail.contains("OCRmyPDF"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn cancellation_terminates_the_child_and_cleans_temporary_files() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let executable = fake_executable(directory.path(), "sleep 5", None);
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_temporary_root(temporary_root.path()),
+        );
+        let flag = CancellationFlag::new();
+        let cancellation = flag.clone();
+        let canceller = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(75));
+            cancellation.cancel();
+        });
+        let context = ConversionContext::new().with_cancellation(flag.handle());
+
+        let outcome = convert(&converter, &no_text_pdf(), &context);
+        canceller.join().expect("canceller");
+        assert!(matches!(outcome, ConversionOutcome::Cancelled));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn oversized_ocr_output_is_rejected_before_it_is_read() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let searchable = text_pdf(&[&[
+            "Recognized output is deliberately over the test byte limit.",
+            "This additional sentence ensures the fixture has a valid searchable text layer.",
+        ]]);
+        let executable = fake_executable(
+            directory.path(),
+            "cp \"$(dirname \"$0\")/fixture.pdf\" \"$output\"",
+            Some(&searchable),
+        );
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_temporary_root(temporary_root.path()),
+        );
+        let source = no_text_pdf();
+        let context = ConversionContext::new().with_budgets(ConversionBudgets {
+            max_source_bytes: source.len() as u64,
+            ..ConversionBudgets::default()
+        });
+
+        let outcome = convert(&converter, &source, &context);
+        let ConversionOutcome::NoTextLayer { detail } = outcome else {
+            panic!("oversized OCR output should remain an actionable skip");
+        };
+        assert!(detail.contains("exceeded"));
+        assert!(detail.contains("OCRmyPDF"));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn timeout_terminates_ocr_descendants() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let executable = fake_executable(
+            directory.path(),
+            "(sleep 1; touch \"${0%/*}/descendant-survived\") &\n\
+             sleep 5",
+            None,
+        );
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable)
+                .with_timeout(Duration::from_millis(250))
+                .with_temporary_root(temporary_root.path()),
+        );
+
+        let outcome = convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        assert!(matches!(outcome, ConversionOutcome::NoTextLayer { .. }));
+        std::thread::sleep(Duration::from_millis(1_100));
+        assert!(!directory.path().join("descendant-survived").exists());
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn ocr_child_receives_only_the_bounded_environment() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let executable = fake_executable(
+            directory.path(),
+            "set > \"${0%/*}/environment\"; exit 7",
+            None,
+        );
+        let converter = ocr_converter(OcrMyPdfConfiguration::new(executable));
+
+        let outcome = convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        assert!(matches!(outcome, ConversionOutcome::NoTextLayer { .. }));
+        let environment =
+            fs::read_to_string(directory.path().join("environment")).expect("captured environment");
+        assert!(!environment.contains("HOME="));
+        assert!(environment.contains("TMPDIR="));
+    }
+
+    #[test]
+    #[ignore = "requires PROCYON_OCR_SMOKE_PDF and a local OCRmyPDF installation"]
+    fn real_ocrmypdf_smoke_test_preserves_the_source_and_produces_text() {
+        let source_path = std::env::var_os("PROCYON_OCR_SMOKE_PDF").expect("PROCYON_OCR_SMOKE_PDF");
+        let source = fs::read(&source_path).expect("read smoke PDF");
+        let OcrMyPdfAvailability::Available { executable } = OcrMyPdfAvailability::detect(None)
+        else {
+            panic!("OCRmyPDF is not installed");
+        };
+        let converter = ocr_converter(OcrMyPdfConfiguration::new(executable));
+        let context = ConversionContext::new().with_budgets(ConversionBudgets {
+            timeout: Duration::from_secs(4 * 60),
+            ..ConversionBudgets::default()
+        });
+
+        let outcome = convert(&converter, &source, &context);
+        assert!(
+            outcome.document().is_some(),
+            "OCR did not produce searchable text: {outcome:?}"
+        );
+        assert_eq!(
+            fs::read(source_path).expect("re-read smoke PDF"),
+            source,
+            "OCR must not modify the original source"
+        );
+    }
 }

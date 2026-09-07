@@ -5,16 +5,23 @@
 //! PDFium/ONNX implementation. The `ml` feature enables those native
 //! dependencies for managed advanced-pack builds.
 
+#[cfg(windows)]
+use std::ffi::OsString;
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
 use docling_pdf::{PdfError, convert_text_layer_pages};
 use fm_semantic_conversion::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
     BaselineConverter, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
-    ConversionWarning, ConvertedDocument, DocumentMetadata, FormatKind, Omission,
-    OptionalConverter, Provenance, ProvenancePrecision, SourceMap, StructuralUnit,
-    TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
+    ConversionWarning, ConvertedDocument, DocumentConverter, DocumentMetadata, FormatKind,
+    Omission, OptionalConverter, Provenance, ProvenancePrecision, SourceContent, SourceMap,
+    StructuralUnit, TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
 };
 
 const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
@@ -27,8 +34,20 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
-/// produce different derived chunks, forcing compatible indexes to rebuild.
+/// produce different derived chunks for ordinary inputs. Optional OCR is not
+/// included: enabling it retries only previously textless PDFs, while
+/// disabling it makes reconciliation remove their OCR-derived occurrences.
+/// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
 pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/1";
+/// Version of the optional OCRmyPDF plus deterministic Docling composition.
+pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
+    ComponentVersion::new("ocrmypdf-docling", 1);
+/// Explicit environment opt-in read by the local semantic worker.
+pub const OCRMYPDF_ENABLED_ENV: &str = "PROCYON_SEMANTIC_OCRMYPDF";
+/// Optional trusted executable override for non-standard installations.
+pub const OCRMYPDF_EXECUTABLE_ENV: &str = "PROCYON_OCRMYPDF_EXECUTABLE";
+const DEFAULT_OCR_TIMEOUT: Duration = Duration::from_secs(4 * 60);
+const OCR_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 /// OCR language bundled by the audited Docling release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,6 +155,387 @@ impl DoclingPdfBackend {
     }
 }
 
+/// Availability of an explicitly requested local OCRmyPDF capability.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OcrMyPdfAvailability {
+    /// A local executable was found and can be used without network access.
+    Available {
+        /// Trusted executable selected from configuration or `PATH`.
+        executable: PathBuf,
+    },
+    /// OCRmyPDF is not installed or is not executable.
+    Unavailable {
+        /// Cross-platform installation and manual remediation guidance.
+        guidance: String,
+    },
+}
+
+impl OcrMyPdfAvailability {
+    /// Detects OCRmyPDF without downloading or executing anything.
+    #[must_use]
+    pub fn detect(executable_override: Option<&Path>) -> Self {
+        let executable = executable_override
+            .map(Path::to_path_buf)
+            .or_else(|| find_executable("ocrmypdf"));
+        match executable {
+            Some(executable) if executable.is_file() => Self::Available { executable },
+            _ => Self::Unavailable {
+                guidance: OCR_REQUIRED_GUIDANCE.into(),
+            },
+        }
+    }
+}
+
+/// Trusted, explicit configuration for the local OCR subprocess.
+#[derive(Debug, Clone)]
+pub struct OcrMyPdfConfiguration {
+    executable: PathBuf,
+    timeout: Duration,
+    temporary_root: Option<PathBuf>,
+}
+
+impl OcrMyPdfConfiguration {
+    /// Selects a trusted executable with the production OCR deadline.
+    #[must_use]
+    pub fn new(executable: impl Into<PathBuf>) -> Self {
+        Self {
+            executable: executable.into(),
+            timeout: DEFAULT_OCR_TIMEOUT,
+            temporary_root: None,
+        }
+    }
+
+    /// Overrides the hard OCR subprocess deadline.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Selects a trusted parent for private temporary files.
+    ///
+    /// Production leaves this unset to use the platform temporary directory;
+    /// tests use it to prove cleanup on every exit path.
+    #[must_use]
+    pub fn with_temporary_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.temporary_root = Some(root.into());
+        self
+    }
+
+    /// Resolves the local executable only after the environment opt-in is set
+    /// to exactly `1`.
+    #[must_use]
+    pub fn from_environment() -> Option<Self> {
+        if std::env::var(OCRMYPDF_ENABLED_ENV).as_deref() != Ok("1") {
+            return None;
+        }
+        let executable_override = std::env::var_os(OCRMYPDF_EXECUTABLE_ENV).map(PathBuf::from);
+        match OcrMyPdfAvailability::detect(executable_override.as_deref()) {
+            OcrMyPdfAvailability::Available { executable } => Some(Self::new(executable)),
+            OcrMyPdfAvailability::Unavailable { .. } => None,
+        }
+    }
+}
+
+/// OCRmyPDF fallback around the deterministic Docling-first composition.
+///
+/// The wrapped converter always gets the original bytes first. OCR is started
+/// only for its typed `NoTextLayer` outcome, and its output is passed through
+/// the same wrapped converter rather than trusted as extracted text.
+pub struct OcrMyPdfConverter {
+    deterministic: Arc<dyn DocumentConverter>,
+    configuration: OcrMyPdfConfiguration,
+}
+
+impl std::fmt::Debug for OcrMyPdfConverter {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OcrMyPdfConverter")
+            .field("configuration", &self.configuration)
+            .finish_non_exhaustive()
+    }
+}
+
+impl OcrMyPdfConverter {
+    /// Wraps a deterministic converter with explicit local OCR configuration.
+    #[must_use]
+    pub fn new(
+        deterministic: Arc<dyn DocumentConverter>,
+        configuration: OcrMyPdfConfiguration,
+    ) -> Self {
+        Self {
+            deterministic,
+            configuration,
+        }
+    }
+
+    fn no_text(detail: impl Into<String>) -> ConversionOutcome {
+        ConversionOutcome::NoTextLayer {
+            detail: format!("{} {}", detail.into(), OCR_REQUIRED_GUIDANCE),
+        }
+    }
+
+    fn run_ocr(
+        &self,
+        source: &[u8],
+        metadata: &DocumentMetadata,
+        context: &ConversionContext,
+    ) -> Result<ConversionOutcome, ConversionError> {
+        if context.is_cancelled() {
+            return Ok(ConversionOutcome::Cancelled);
+        }
+        let remaining_conversion_time = context.budgets().timeout.saturating_sub(context.elapsed());
+        if remaining_conversion_time.is_zero() {
+            return Ok(ConversionOutcome::OverBudget {
+                budget: fm_semantic_conversion::BudgetKind::Time,
+                limit: duration_millis_u64(context.budgets().timeout),
+            });
+        }
+        let mut temporary_directory = tempfile::Builder::new();
+        temporary_directory.prefix("procyon-ocr-");
+        let temporary_directory = match self.configuration.temporary_root.as_deref() {
+            Some(root) => temporary_directory.tempdir_in(root),
+            None => temporary_directory.tempdir(),
+        }
+        .map_err(ConversionError::Read)?;
+        let input_path = temporary_directory.path().join("input.pdf");
+        let output_path = temporary_directory.path().join("output.pdf");
+        fs::write(&input_path, source).map_err(ConversionError::Read)?;
+
+        let mut command = Command::new(&self.configuration.executable);
+        command
+            .arg("--output-type")
+            .arg("pdf")
+            .arg("--redo-ocr")
+            .arg("--optimize")
+            .arg("0")
+            .arg("--quiet")
+            .arg(&input_path)
+            .arg(&output_path);
+        configure_child_environment(&mut command, temporary_directory.path());
+        configure_child_process_group(&mut command);
+        let mut child = match command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                return Ok(Self::no_text(format!(
+                    "OCRmyPDF could not be started: {error}."
+                )));
+            }
+        };
+
+        let started = Instant::now();
+        let reconversion_reserve = (remaining_conversion_time / 10).min(Duration::from_secs(30));
+        let deadline = self
+            .configuration
+            .timeout
+            .min(remaining_conversion_time.saturating_sub(reconversion_reserve));
+        let status = loop {
+            if context.is_cancelled() {
+                terminate_child(&mut child);
+                return Ok(ConversionOutcome::Cancelled);
+            }
+            if started.elapsed() >= deadline {
+                terminate_child(&mut child);
+                return Ok(Self::no_text(format!(
+                    "OCRmyPDF exceeded its {} ms local deadline.",
+                    duration_millis_u64(deadline)
+                )));
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => std::thread::sleep(OCR_POLL_INTERVAL),
+                Err(error) => {
+                    terminate_child(&mut child);
+                    return Err(ConversionError::Read(error));
+                }
+            }
+        };
+
+        if !status.success() {
+            return Ok(Self::no_text(format!(
+                "OCRmyPDF exited unsuccessfully ({status})."
+            )));
+        }
+        let output_length = match fs::metadata(&output_path) {
+            Ok(metadata) => metadata.len(),
+            Err(error) => {
+                return Ok(Self::no_text(format!(
+                    "OCRmyPDF did not produce a readable PDF: {error}."
+                )));
+            }
+        };
+        if output_length > context.budgets().max_source_bytes {
+            return Ok(Self::no_text(format!(
+                "OCRmyPDF output exceeded the {} byte conversion limit.",
+                context.budgets().max_source_bytes
+            )));
+        }
+        let output = fs::read(&output_path).map_err(ConversionError::Read)?;
+        let outcome =
+            self.deterministic
+                .convert(SourceContent::Bytes(&output), metadata, context)?;
+        let outcome = match outcome {
+            ConversionOutcome::NoTextLayer { .. } => BaselineConverter::new().convert(
+                SourceContent::Bytes(&output),
+                metadata,
+                context,
+            )?,
+            other => other,
+        };
+        Ok(match outcome {
+            ConversionOutcome::Converted(document) => {
+                let mut warnings = document.warnings().to_vec();
+                warnings.push(ConversionWarning::OcrAssessment {
+                    language: "ocrmypdf-auto".into(),
+                    mean_confidence_basis_points: None,
+                });
+                ConversionOutcome::Converted(ConvertedDocument::new(
+                    OCRMYPDF_CONVERTER_VERSION,
+                    document.format(),
+                    document.units().to_vec(),
+                    warnings,
+                    document.omissions().to_vec(),
+                ))
+            }
+            ConversionOutcome::NoTextLayer { .. } => Self::no_text(
+                "OCRmyPDF completed, but deterministic conversion still found no searchable text.",
+            ),
+            other => other,
+        })
+    }
+}
+
+impl DocumentConverter for OcrMyPdfConverter {
+    fn version(&self) -> ComponentVersion {
+        OCRMYPDF_CONVERTER_VERSION
+    }
+
+    fn convert(
+        &self,
+        content: SourceContent<'_>,
+        metadata: &DocumentMetadata,
+        context: &ConversionContext,
+    ) -> Result<ConversionOutcome, ConversionError> {
+        let owned;
+        let source = match content {
+            SourceContent::Bytes(bytes) => bytes,
+            SourceContent::Reader(reader) => {
+                let limit = context.budgets().max_source_bytes;
+                let mut bytes = Vec::new();
+                reader
+                    .take(limit.saturating_add(1))
+                    .read_to_end(&mut bytes)
+                    .map_err(ConversionError::Read)?;
+                if bytes.len() as u64 > limit {
+                    return Ok(ConversionOutcome::OverBudget {
+                        budget: fm_semantic_conversion::BudgetKind::SourceBytes,
+                        limit,
+                    });
+                }
+                owned = bytes;
+                &owned
+            }
+        };
+        let outcome =
+            self.deterministic
+                .convert(SourceContent::Bytes(source), metadata, context)?;
+        match outcome {
+            ConversionOutcome::NoTextLayer { .. } => self.run_ocr(source, metadata, context),
+            other => Ok(other),
+        }
+    }
+}
+
+fn terminate_child(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let process_group = rustix::process::Pid::from_child(child);
+        let _terminate_result =
+            rustix::process::kill_process_group(process_group, rustix::process::Signal::TERM);
+        let grace_deadline = Instant::now() + Duration::from_millis(250);
+        while Instant::now() < grace_deadline {
+            if child.try_wait().ok().flatten().is_some() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _kill_result =
+            rustix::process::kill_process_group(process_group, rustix::process::Signal::KILL);
+    }
+    let _kill_result = child.kill();
+    let _wait_result = child.wait();
+}
+
+fn configure_child_environment(command: &mut Command, temporary_directory: &Path) {
+    const SAFE_ENVIRONMENT: &[&str] = &[
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "TESSDATA_PREFIX",
+        "SYSTEMROOT",
+        "WINDIR",
+        "PATHEXT",
+        "COMSPEC",
+    ];
+    let retained = SAFE_ENVIRONMENT
+        .iter()
+        .filter_map(|name| std::env::var_os(name).map(|value| (*name, value)))
+        .collect::<Vec<_>>();
+    command.env_clear();
+    command.envs(retained);
+    command.env("TMPDIR", temporary_directory);
+    command.env("TMP", temporary_directory);
+    command.env("TEMP", temporary_directory);
+}
+
+#[cfg(unix)]
+fn configure_child_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn configure_child_process_group(_command: &mut Command) {}
+
+fn duration_millis_u64(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+fn find_executable(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .flat_map(|directory| executable_candidates(&directory, name))
+        .find(|candidate| candidate.is_file())
+}
+
+fn executable_candidates(directory: &Path, name: &str) -> Vec<PathBuf> {
+    let direct = directory.join(name);
+    #[cfg(windows)]
+    {
+        let extensions =
+            std::env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
+        let mut candidates = vec![direct];
+        candidates.extend(
+            extensions
+                .to_string_lossy()
+                .split(';')
+                .filter(|extension| !extension.is_empty())
+                .map(|extension| directory.join(format!("{name}{extension}"))),
+        );
+        candidates
+    }
+    #[cfg(not(windows))]
+    {
+        vec![direct]
+    }
+}
+
 /// Builds Procyon's default converter with deterministic Docling PDF
 /// extraction preferred and the baseline converter retained for every
 /// unsupported or recoverably malformed input.
@@ -147,6 +547,19 @@ pub fn converter_with_baseline_fallback() -> OptionalConverter {
             DoclingPdfBackend::new(),
         )))),
     )
+}
+
+/// Builds the default converter and adds OCRmyPDF only when explicitly
+/// configured by the trusted host.
+#[must_use]
+pub fn converter_with_optional_ocr(
+    configuration: Option<OcrMyPdfConfiguration>,
+) -> Arc<dyn DocumentConverter> {
+    let deterministic: Arc<dyn DocumentConverter> = Arc::new(converter_with_baseline_fallback());
+    match configuration {
+        Some(configuration) => Arc::new(OcrMyPdfConverter::new(deterministic, configuration)),
+        None => deterministic,
+    }
 }
 
 #[cfg(feature = "ml")]

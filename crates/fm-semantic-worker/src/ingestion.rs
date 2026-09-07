@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use fm_semantic_conversion::{
-    Cancellation, CancellationSignal, Chunker, ConversionContext, ConversionOutcome,
-    DocumentConverter, DocumentMetadata, SourceContent,
+    Cancellation, CancellationSignal, Chunker, ConversionBudgets, ConversionContext,
+    ConversionOutcome, DocumentConverter, DocumentMetadata, SourceContent,
 };
 use fm_semantic_docling::converter_with_baseline_fallback;
 use sha2::{Digest, Sha256};
@@ -247,6 +247,7 @@ impl Drop for InteractiveQueryGuard {
 pub struct IngestionCoordinator {
     catalog: SemanticCatalog,
     converter: Arc<dyn DocumentConverter>,
+    conversion_budgets: ConversionBudgets,
     embedder: Arc<dyn EmbeddingProvider>,
     index: Arc<dyn DerivedIndex>,
     resources: Arc<dyn ResourceProbe>,
@@ -424,9 +425,35 @@ impl IngestionCoordinator {
         events: Arc<dyn IngestionEventSink>,
         priority: InteractivePriority,
     ) -> Self {
+        Self::with_converter(
+            catalog,
+            Arc::new(converter_with_baseline_fallback()),
+            embedder,
+            index,
+            resources,
+            events,
+            priority,
+        )
+    }
+
+    /// Creates a coordinator with an explicitly composed converter.
+    ///
+    /// Hosts use this seam for opt-in capabilities such as OCR without adding
+    /// format-specific branches to ingestion.
+    #[must_use]
+    pub fn with_converter(
+        catalog: SemanticCatalog,
+        converter: Arc<dyn DocumentConverter>,
+        embedder: Arc<dyn EmbeddingProvider>,
+        index: Arc<dyn DerivedIndex>,
+        resources: Arc<dyn ResourceProbe>,
+        events: Arc<dyn IngestionEventSink>,
+        priority: InteractivePriority,
+    ) -> Self {
         Self {
             catalog,
-            converter: Arc::new(converter_with_baseline_fallback()),
+            converter,
+            conversion_budgets: ConversionBudgets::default(),
             embedder,
             index,
             resources,
@@ -436,6 +463,14 @@ impl IngestionCoordinator {
             minimum_free_bytes: 512 * 1024 * 1024,
             maximum_attempts: 3,
         }
+    }
+
+    /// Replaces per-document conversion limits for explicitly configured
+    /// capabilities such as OCR.
+    #[must_use]
+    pub fn with_conversion_budgets(mut self, budgets: ConversionBudgets) -> Self {
+        self.conversion_budgets = budgets;
+        self
     }
 
     /// Pauses new ingestion without affecting query visibility.
@@ -560,9 +595,11 @@ impl IngestionCoordinator {
         let metadata = DocumentMetadata::unknown()
             .with_media_type(&document.media_type)
             .with_byte_length(document.bytes.len() as u64);
-        let context = ConversionContext::new().with_cancellation(Cancellation::new(Arc::new(
-            TokenSignal(cancellation.clone()),
-        )));
+        let context = ConversionContext::new()
+            .with_budgets(self.conversion_budgets.clone())
+            .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
+                cancellation.clone(),
+            ))));
         let outcome = self
             .converter
             .convert(SourceContent::Bytes(&document.bytes), &metadata, &context)

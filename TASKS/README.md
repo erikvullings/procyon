@@ -117,7 +117,7 @@ semantic components are not installed.
   action, and local roots retain stable filesystem identity)*
 - [x] 0192 Deterministic Docling.rs PDF conversion *(needs 0189; pure-Rust Docling-first extraction
   with one-time reindex migration and baseline fallback)*
-- [ ] 0193 Optional OCRmyPDF fallback *(needs 0192; explicit opt-in, never a mandatory dependency)*
+- [x] 0193 Optional OCRmyPDF fallback *(needs 0192; explicit opt-in, never a mandatory dependency)*
 
 ## File operations
 

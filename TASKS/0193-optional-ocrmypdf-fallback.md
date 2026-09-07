@@ -1,6 +1,6 @@
 # 0193 Optional OCRmyPDF fallback
 
-Status: open
+Status: completed
 Priority: medium
 Subsystem: backend, search
 Depends on: 0192
@@ -44,3 +44,20 @@ executable into a mandatory or silent dependency.
 - 2026-09-06: Split from 0192 when deterministic Docling was accepted as the production MVP.
   OCRmyPDF is installed at `/opt/homebrew/bin/ocrmypdf` on the development Mac, but that local fact
   must not become a product assumption or a test dependency.
+- 2026-09-07: Added a default-off OCRmyPDF composition wrapper at the document-conversion boundary.
+  It activates through `pnpm dev:tauri:semantic:ocr` (or
+  `PROCYON_SEMANTIC_OCRMYPDF=1`), supports a trusted executable override,
+  uses private temporary input/output, enforces cancellation and a hard deadline, bounds output
+  before reading, starts a dedicated process group so helper processes are terminated too,
+  forwards only a small allow-list of non-secret environment variables, and always reconverts OCR
+  output through Docling before the baseline fallback.
+  Controlled fake-executable tests cover capability detection, absence, failure, timeout,
+  cancellation, oversized output, successful OCR, cleanup, and bypass for ordinary searchable
+  PDFs. An ignored opt-in smoke test verified the installed macOS OCRmyPDF against a real source
+  without changing it.
+- 2026-09-07: Final validation passed workspace lint, all 18 non-ignored
+  `fm-semantic-docling` tests, the ignored real OCRmyPDF smoke test, all 128
+  `fm-semantic-worker` tests (2 ignored), and all 41 script tests. The OCR-enabled release worker
+  was activated without changing the global conversion-pipeline identity. Reconciliation of the
+  sole enrolled `~/Downloads/triz` root completed 40 jobs with no failures; all six formerly
+  textless PDFs now have searchable records.

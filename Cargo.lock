@@ -3226,6 +3226,8 @@ dependencies = [
  "docling-pdf",
  "fm-semantic-conversion",
  "lopdf",
+ "rustix",
+ "tempfile",
 ]
 
 [[package]]
