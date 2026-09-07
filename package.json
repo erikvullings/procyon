@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "pnpm@11.21.0",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "pnpm --dir frontend dev",
     "dev:mock": "cross-env VITE_RUNTIME=mock pnpm --dir frontend dev",
@@ -28,7 +28,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.5.12",
     "@tauri-apps/cli": "^2.11.4",
     "cross-env": "^10.1.0",
     "husky": "^9.1.7",
