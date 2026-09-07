@@ -59,6 +59,35 @@ afterEach(() => {
 });
 
 describe('RagAskDialog', () => {
+  it('focuses the question when the dialog opens', async () => {
+    const client = await configuredClient();
+    let open = false;
+    m.mount(root, {
+      view: () =>
+        m(RagAskDialog, {
+          open,
+          client,
+          workspaceId,
+          currentFolder: { providerId: 'local', uri: 'file:///documents' },
+          selectedEntries: [entry],
+          semanticSourceIds: ['source-1'],
+          onClose: vi.fn(),
+        }),
+    });
+
+    const previousFocus = document.createElement('button');
+    root.appendChild(previousFocus);
+    previousFocus.focus();
+    open = true;
+    m.redraw.sync();
+
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        root.querySelector<HTMLTextAreaElement>('#fm-rag-question-input'),
+      ),
+    );
+  });
+
   it('shows the profile, grounded default, and all five one-action scopes', async () => {
     const client = await configuredClient();
     const includeCurrentFolder = vi.fn();

@@ -1959,6 +1959,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-rag-options summary small {
   color: var(--fm-text-muted);
   line-height: inherit;
+  transform: translateY(0.125rem);
 }
 
 .fm-rag-controls {

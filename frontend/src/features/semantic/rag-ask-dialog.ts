@@ -185,6 +185,7 @@ function formatCitationProvenance(provenance: string): string {
 
 export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let wasOpen = false;
+  let focusQuestionOnReady = false;
   let busy: 'loading' | 'retrieving' | 'generating' | 'saving' | undefined;
   let error: string | undefined;
   let profiles: readonly LlmProfile[] = [];
@@ -389,7 +390,10 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
 
   return {
     onupdate: ({ attrs }) => {
-      if (attrs.open && !wasOpen) void load(attrs);
+      if (attrs.open && !wasOpen) {
+        focusQuestionOnReady = true;
+        void load(attrs);
+      }
       wasOpen = attrs.open;
     },
     onremove: () => abortController?.abort(),
@@ -442,6 +446,18 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
               value: question,
               disabled: busy !== undefined,
               autofocus: true,
+              oncreate: ({ dom }) => {
+                if (attrs.open && busy === undefined) {
+                  (dom as HTMLTextAreaElement).focus();
+                  focusQuestionOnReady = false;
+                }
+              },
+              onupdate: ({ dom }) => {
+                if (focusQuestionOnReady && busy === undefined) {
+                  (dom as HTMLTextAreaElement).focus();
+                  focusQuestionOnReady = false;
+                }
+              },
               oninput: (event: InputEvent) => {
                 question = (event.currentTarget as HTMLTextAreaElement).value;
                 resetRetrieval();
