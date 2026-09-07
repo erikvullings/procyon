@@ -32,7 +32,8 @@ content search, and baseline document viewing available.
   after the latest completed reconciliation. The list clears when a later OCR-enabled
   reconciliation successfully indexes them.
 - Once a model and an LLM profile are active, the command toolbar shows a chat-bubble action. It is
-  also available as **Ask your files** in the command palette. It always opens Ask across the
+  also available as **Ask your files** in the command palette and through
+  `Ctrl/Cmd+Shift+F`. It always opens Ask across the
   existing library. The question and answer workspace stays prominent; generation profile, evidence
   scope, privacy disclosure, retrieved evidence, and saved conversations are expandable. The final
   row keeps **Index current folder**, **Allow model knowledge**, and **Options and privacy** together.

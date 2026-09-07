@@ -474,7 +474,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               title: t('ragAsk', 'title'),
               description: t('ragAsk', 'openAssistant'),
               category: 'tools',
-              defaultShortcuts: [],
+              defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
               contextRequirements: {},
               source: { kind: 'core' as const },
             },
@@ -2701,6 +2701,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
+    openSemanticAssistant,
     openSettingsDialog,
   };
 

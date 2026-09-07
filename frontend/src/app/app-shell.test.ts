@@ -2250,6 +2250,8 @@ describe('AppShell', () => {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      semanticComponentAuthority: 'deterministicMock',
+      semanticRuntimeExecutableDownload: 'simulated',
       serverAdministration: false,
       systemTrash: false,
     });
@@ -3064,7 +3066,7 @@ describe('AppShell', () => {
     });
 
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
-    expect(root.querySelector('button[aria-label="Ask your library"]')).toBeNull();
+    expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
 
     const paletteButton = await vi.waitFor(() => {
       const button = root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]');
@@ -3074,7 +3076,7 @@ describe('AppShell', () => {
     paletteButton.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
     expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
-      'Ask your library',
+      'Ask your files',
     );
   });
 
@@ -3101,29 +3103,35 @@ describe('AppShell', () => {
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
-    const chat = await vi.waitFor(() => {
-      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Ask your library"]');
+    await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Ask your files"]');
       expect(button).not.toBeNull();
-      return button as HTMLButtonElement;
+      expect(button?.textContent).toBe('');
     });
-    expect(chat.textContent).toBe('');
 
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Ask your library'),
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Ask your files'),
     );
+    const askPaletteEntry = [...root.querySelectorAll<HTMLElement>('.fm-command-palette li')].find(
+      (entry) => entry.textContent?.includes('Ask your files'),
+    );
+    expect(askPaletteEntry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+f');
     root
       .querySelector<HTMLElement>('.fm-command-palette-backdrop')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    m.redraw.sync();
 
-    chat.click();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
-        'Include current folder',
+        'Index current folder',
       ),
     );
     [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
-      .find((label) => label.textContent?.trim() === 'Include current folder')
+      .find((label) => label.textContent?.trim() === 'Index current folder')
       ?.querySelector<HTMLInputElement>('input')
       ?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
@@ -3132,11 +3140,11 @@ describe('AppShell', () => {
       ?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
-        'Include current folder',
+        'Index current folder',
       ),
     );
     [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
-      .find((label) => label.textContent?.trim() === 'Include current folder')
+      .find((label) => label.textContent?.trim() === 'Index current folder')
       ?.querySelector<HTMLInputElement>('input')
       ?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));

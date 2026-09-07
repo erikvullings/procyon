@@ -58,6 +58,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
     defaultShortcuts: [{ key: 'l', ctrl: true, shift: true }],
   },
   {
+    id: 'client.semanticAssistant',
+    title: 'Ask your files',
+    defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
+  },
+  {
     id: 'core.swapPaneTabs',
     title: 'Swap pane tabs',
     defaultShortcuts: [{ key: 'u', ctrl: true, shift: true }],
@@ -233,6 +238,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     calculateChecksums: vi.fn(),
     findDuplicates: vi.fn(),
     openDiskUsage: vi.fn(),
+    openSemanticAssistant: vi.fn(),
   };
   return { ...base, ...overrides };
 }
@@ -571,6 +577,13 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     const context = makeContext({ openDiskUsage });
     createGlobalKeydownHandler(context)(keydown('l', { ctrlKey: true, shiftKey: true }));
     expect(openDiskUsage).toHaveBeenCalled();
+  });
+
+  it('Ctrl+Shift+F opens Ask your files', () => {
+    const openSemanticAssistant = vi.fn();
+    const context = makeContext({ openSemanticAssistant });
+    createGlobalKeydownHandler(context)(keydown('f', { ctrlKey: true, shiftKey: true }));
+    expect(openSemanticAssistant).toHaveBeenCalledOnce();
   });
 
   it('F1 opens the shortcuts help overlay', () => {
