@@ -1018,7 +1018,7 @@ describe('Pane breadcrumb editing', () => {
     mount(attrs());
 
     root
-      .querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      .querySelector<HTMLElement>('.fm-breadcrumb')
       ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     m.redraw.sync();
     expect(root.querySelector<HTMLInputElement>('.fm-path-input')?.value).toBe('/home/erik');
@@ -1104,7 +1104,7 @@ describe('Pane breadcrumb editing', () => {
     expect(root.querySelector('.fm-icon-heart')).not.toBeNull();
   });
 
-  it('uses a simple heart when the current folder can be added', () => {
+  it('uses a heart-plus when the current folder can be added', () => {
     mount(
       attrs({
         location: { providerId: 'local', uri: 'file:///home/erik/Projects' },
@@ -1112,11 +1112,25 @@ describe('Pane breadcrumb editing', () => {
       }),
     );
 
-    expect(root.querySelector('.fm-icon-heart')).not.toBeNull();
-    expect(root.querySelector('.fm-icon-heart-plus')).toBeNull();
+    expect(root.querySelector('.fm-icon-heart')).toBeNull();
+    expect(root.querySelector('.fm-icon-heart-plus')).not.toBeNull();
     root.querySelector<HTMLButtonElement>('.fm-pane-tab-favourites')?.click();
     m.redraw.sync();
     expect(root.querySelector('.fm-favourites-add')).not.toBeNull();
+  });
+
+  it('uses a simple heart when the current folder is already a favourite', () => {
+    const location = { providerId: 'local' as const, uri: 'file:///home/erik/Projects' };
+    mount(
+      attrs({
+        location,
+        favouriteLocations: [{ label: 'Projects', location }],
+        onAddFavourite: vi.fn(),
+      }),
+    );
+
+    expect(root.querySelector('.fm-icon-heart')).not.toBeNull();
+    expect(root.querySelector('.fm-icon-heart-plus')).toBeNull();
   });
 
   it('does not offer to add a transient smart-folder result as a favourite', () => {

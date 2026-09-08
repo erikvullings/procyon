@@ -39,17 +39,39 @@ if (!/^[A-Za-z0-9_.+-]+$/.test(options.asset)) {
 const assetUrl = `https://github.com/${options.repository}/releases/download/v${options.version}/${options.asset}`;
 
 function generateHomebrew() {
+  for (const name of ['linux-sha256', 'linux-asset']) {
+    if (!options[name]) throw new Error(`Missing required option --${name}`);
+  }
+  if (!/^[0-9a-f]{64}$/i.test(options['linux-sha256'])) {
+    throw new Error('Linux SHA-256 must contain exactly 64 hexadecimal characters');
+  }
+  if (!/^[A-Za-z0-9_.+-]+$/.test(options['linux-asset'])) {
+    throw new Error(`Invalid Linux release asset name: ${options['linux-asset']}`);
+  }
+  const releaseUrl = `https://github.com/${options.repository}/releases/download/v${options.version}`;
   const cask = `cask "procyon" do
-  version "${options.version}"
-  sha256 "${options.sha256.toLowerCase()}"
+  os macos: "${options.asset}", linux: "${options['linux-asset']}"
 
-  url "${assetUrl}"
+  version "${options.version}"
+
+  on_macos do
+    sha256 "${options.sha256.toLowerCase()}"
+
+    app "Procyon.app"
+    binary "#{appdir}/Procyon.app/Contents/Resources/procyon", target: "procyon"
+  end
+  on_linux do
+    sha256 "${options['linux-sha256'].toLowerCase()}"
+
+    depends_on arch: :x86_64
+
+    app_image "${options['linux-asset']}", target: "Procyon.AppImage"
+  end
+
+  url "${releaseUrl}/#{os}"
   name "Procyon"
   desc "Dual-pane file manager"
   homepage "https://github.com/${options.repository}"
-
-  app "Procyon.app"
-  binary "#{appdir}/Procyon.app/Contents/Resources/procyon", target: "procyon"
 end
 `;
   mkdirSync(dirname(options.output), { recursive: true });

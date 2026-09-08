@@ -252,6 +252,16 @@ describe('theme stylesheet', () => {
     expect(fileViewerCss).toMatch(/\.fm-file-viewer\s*\{[^}]*min-width:\s*0/s);
   });
 
+  it('distinguishes unselected tabs from the selected light-theme tab', () => {
+    const tabRule = paneCss.match(/\.fm-pane-tab\s*\{([^}]*)\}/s)?.[1];
+    const selectedTabRule = paneCss.match(
+      /\.fm-pane-tab\[aria-selected="true"\]\s*\{([^}]*)\}/s,
+    )?.[1];
+
+    expect(tabRule).toContain('background: var(--fm-background)');
+    expect(selectedTabRule).toContain('background: var(--fm-surface-elevated)');
+  });
+
   it('keeps the favourites menu width stable when row actions appear', () => {
     const menuRule = paneCss.match(/\.fm-favourites-menu\s*\{([^}]*)\}/s)?.[1];
 

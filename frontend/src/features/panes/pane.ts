@@ -4,6 +4,7 @@ import {
   arrowsSortIcon,
   gridDotsIcon,
   heartIcon,
+  heartPlusIcon,
   listIcon,
   photoIcon,
   plugIcon,
@@ -1433,75 +1434,82 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       ? undefined
                       : m('.fm-path-error', { role: 'alert' }, pathError),
                   ])
-                : m('nav.fm-breadcrumb', { 'aria-label': t('pane', 'currentPath') }, [
-                    remoteScheme === undefined
-                      ? undefined
-                      : breadcrumbRoot === undefined ||
-                          attrs.favourites.onNavigateLocation === undefined
-                        ? m(
-                            'span.fm-breadcrumb-scheme',
-                            { 'aria-hidden': 'true' },
-                            `${remoteScheme}://`,
-                          )
-                        : m(
-                            'button.fm-breadcrumb-scheme',
-                            {
-                              type: 'button',
-                              onclick: () =>
-                                void attrs.favourites.onNavigateLocation?.(breadcrumbRoot),
-                            },
-                            `${remoteScheme}://`,
-                          ),
-                    m(
-                      '.fm-breadcrumb-segments',
-                      {
-                        ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
-                      },
-                      isSearchLocation
-                        ? searchBreadcrumbSegments(activeLocationUri, attrs.searchPresentation).map(
-                            (segment) =>
-                              m('span.fm-breadcrumb-segment', { key: segment.path }, segment.label),
-                          )
-                        : (remoteScheme !== undefined && attrs.path !== '/'
-                            ? breadcrumbSegments(attrs.path).slice(1)
-                            : breadcrumbSegments(attrs.path)
-                          ).map((segment) =>
-                            m(
-                              'button.fm-breadcrumb-segment',
+                : m(
+                    'nav.fm-breadcrumb',
+                    {
+                      'aria-label': t('pane', 'currentPath'),
+                      ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
+                    },
+                    [
+                      remoteScheme === undefined
+                        ? undefined
+                        : breadcrumbRoot === undefined ||
+                            attrs.favourites.onNavigateLocation === undefined
+                          ? m(
+                              'span.fm-breadcrumb-scheme',
+                              { 'aria-hidden': 'true' },
+                              `${remoteScheme}://`,
+                            )
+                          : m(
+                              'button.fm-breadcrumb-scheme',
                               {
-                                key: segment.path,
                                 type: 'button',
-                                onclick: () => void navigate(segment.path, attrs, false),
+                                onclick: () =>
+                                  void attrs.favourites.onNavigateLocation?.(breadcrumbRoot),
                               },
-                              segment.label,
+                              `${remoteScheme}://`,
                             ),
-                          ),
-                    ),
-                    isSearchLocation && attrs.searchPresentation !== undefined
-                      ? m(
-                          'span.fm-search-execution-mode',
-                          { 'aria-label': t('search', 'executionMode') },
-                          searchExecutionModeLabel(attrs.searchPresentation.executionMode),
-                        )
-                      : undefined,
-                    isSearchLocation && attrs.onRefreshSearch !== undefined
-                      ? tooltip(
-                          t('search', 'refresh'),
-                          m(
-                            IconButton,
-                            {
-                              className: 'fm-search-refresh',
-                              'aria-label': t('search', 'refresh'),
-                              onclick: attrs.onRefreshSearch,
-                            },
-                            refreshIcon({ size: 14 }),
-                          ),
-                        )
-                      : undefined,
-                    pathError === undefined
-                      ? undefined
-                      : m('.fm-path-error', { role: 'alert' }, pathError),
-                  ]),
+                      m(
+                        '.fm-breadcrumb-segments',
+                        {},
+                        isSearchLocation
+                          ? searchBreadcrumbSegments(
+                              activeLocationUri,
+                              attrs.searchPresentation,
+                            ).map((segment) =>
+                              m('span.fm-breadcrumb-segment', { key: segment.path }, segment.label),
+                            )
+                          : (remoteScheme !== undefined && attrs.path !== '/'
+                              ? breadcrumbSegments(attrs.path).slice(1)
+                              : breadcrumbSegments(attrs.path)
+                            ).map((segment) =>
+                              m(
+                                'button.fm-breadcrumb-segment',
+                                {
+                                  key: segment.path,
+                                  type: 'button',
+                                  onclick: () => void navigate(segment.path, attrs, false),
+                                },
+                                segment.label,
+                              ),
+                            ),
+                      ),
+                      isSearchLocation && attrs.searchPresentation !== undefined
+                        ? m(
+                            'span.fm-search-execution-mode',
+                            { 'aria-label': t('search', 'executionMode') },
+                            searchExecutionModeLabel(attrs.searchPresentation.executionMode),
+                          )
+                        : undefined,
+                      isSearchLocation && attrs.onRefreshSearch !== undefined
+                        ? tooltip(
+                            t('search', 'refresh'),
+                            m(
+                              IconButton,
+                              {
+                                className: 'fm-search-refresh',
+                                'aria-label': t('search', 'refresh'),
+                                onclick: attrs.onRefreshSearch,
+                              },
+                              refreshIcon({ size: 14 }),
+                            ),
+                          )
+                        : undefined,
+                      pathError === undefined
+                        ? undefined
+                        : m('.fm-path-error', { role: 'alert' }, pathError),
+                    ],
+                  ),
             tooltip(
               t('pane', 'newTab'),
               m(
@@ -1668,7 +1676,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     m.redraw();
                   },
                 },
-                heartIcon({ size: 16 }),
+                canAddCurrentFavourite(attrs.favourites)
+                  ? heartPlusIcon({ size: 16 })
+                  : heartIcon({ size: 16 }),
               ),
             ),
           ]),
