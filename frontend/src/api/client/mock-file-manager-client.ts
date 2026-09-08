@@ -15,6 +15,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
@@ -60,6 +61,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
@@ -71,6 +73,7 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
@@ -209,7 +212,9 @@ import {
   type GeneratedDirectorySize,
 } from './mock-directory-generator';
 import {
+  buildMockKnowledgeAnswer,
   executeMockKnowledgeSearch,
+  MockKnowledgeEvidenceCache,
   MockKnowledgeScopeError,
   mockKnowledgeCapabilities,
   mockKnowledgeRoots,
@@ -385,6 +390,8 @@ export type MockClientMethod =
   | 'executeKnowledgeSearch'
   | 'cancelKnowledgeSearch'
   | 'resolveKnowledgeSource'
+  | 'generateKnowledgeAnswer'
+  | 'cancelKnowledgeAnswer'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -1312,6 +1319,9 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly documentSummaries = new Map<string, DocumentSummary>();
   private readonly ragConversations = new Map<string, SavedRagConversation>();
   private readonly knowledgeSearches = new Map<string, AbortController>();
+  private readonly knowledgeAnswers = new Map<string, AbortController>();
+  /** Inspected evidence sets an optional answer may be generated from. */
+  private readonly knowledgeEvidence = new MockKnowledgeEvidenceCache();
   private readonly ephemeralRagConversations = new Map<string, SavedRagConversation>();
   private readonly oneDriveAuthorizations = new Map<
     string,
@@ -4542,8 +4552,15 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
+  /**
+   * Reports full-text retrieval, no query embeddings, and answer generation
+   * only when this host has a saved generation profile (task 0207). Search
+   * never depends on the answer capability.
+   */
   getKnowledgeCapabilities(signal?: AbortSignal): Promise<KnowledgeCapabilities> {
-    return this.perform('getKnowledgeCapabilities', signal, () => mockKnowledgeCapabilities());
+    return this.perform('getKnowledgeCapabilities', signal, () =>
+      mockKnowledgeCapabilities(this.llmProfiles.size > 0),
+    );
   }
 
   listKnowledgeRoots(
@@ -4598,11 +4615,21 @@ export class MockFileManagerClient implements FileManagerClient {
     this.knowledgeSearches.set(request.requestId, controller);
     try {
       const result = await this.perform('executeKnowledgeSearch', controller.signal, () =>
-        executeMockKnowledgeSearch(request.requestId, this.knowledgePlan(request)),
+        executeMockKnowledgeSearch(
+          request.requestId,
+          this.knowledgePlan(request),
+          this.llmProfiles.size > 0,
+        ),
       );
       if (controller.signal.aborted) {
         throw new DOMException('The operation was aborted.', 'AbortError');
       }
+      // Retaining the displayed set is the only bridge to an optional answer:
+      // answering later reads this, never a fresh retrieval (task 0207).
+      this.knowledgeEvidence.record(result.evidenceFingerprint, {
+        workspaceId: request.scope.workspaceId,
+        evidence: result.evidence.map((row) => structuredClone(row)),
+      });
       return result;
     } finally {
       signal?.removeEventListener('abort', forward);
@@ -4639,6 +4666,78 @@ export class MockFileManagerClient implements FileManagerClient {
       }
       return resolved;
     });
+  }
+
+  /**
+   * Answers from an evidence set an earlier search already displayed (task
+   * 0207). Nothing here retrieves: an unknown, evicted, or differently
+   * authorized fingerprint is refused with `knowledgeEvidenceRefreshRequired`,
+   * so the user must run Search again rather than have retrieval reappear.
+   *
+   * Cancellation is honoured both ways, exactly like a knowledge search: an
+   * aborted `signal` rejects, and a `cancelKnowledgeAnswer` for the same
+   * `requestId` (which is how the desktop host cancels) makes the in-flight
+   * generation reject with the same `AbortError`.
+   */
+  async generateKnowledgeAnswer(
+    request: GenerateKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeAnswer> {
+    if (signal?.aborted === true) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const controller = new AbortController();
+    const forward = (): void => controller.abort();
+    signal?.addEventListener('abort', forward, { once: true });
+    this.knowledgeAnswers.set(request.requestId, controller);
+    try {
+      const answer = await this.perform('generateKnowledgeAnswer', controller.signal, () => {
+        const retained = this.knowledgeEvidence.get(
+          request.evidenceFingerprint,
+          request.workspaceId,
+        );
+        if (retained === undefined) {
+          throw new MockClientError(
+            'knowledgeEvidenceRefreshRequired',
+            'The inspected evidence set is no longer available; search again to answer.',
+          );
+        }
+        const profile = this.llmProfiles.get(request.profileId);
+        if (profile === undefined) {
+          throw new MockClientError('unavailable', 'No generation profile is configured');
+        }
+        return buildMockKnowledgeAnswer({
+          requestId: request.requestId,
+          evidenceFingerprint: request.evidenceFingerprint,
+          profileId: profile.id,
+          profileName: profile.name,
+          locality: profile.locality,
+          allowModelKnowledge: request.allowModelKnowledge ?? false,
+          evidence: retained.evidence,
+        });
+      });
+      if (controller.signal.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      return answer;
+    } finally {
+      signal?.removeEventListener('abort', forward);
+      this.knowledgeAnswers.delete(request.requestId);
+    }
+  }
+
+  /**
+   * Cancellation is applied immediately rather than behind the simulated
+   * latency, mirroring {@link cancelKnowledgeSearch}: the desktop host
+   * registers the same `requestId` before generation starts.
+   */
+  cancelKnowledgeAnswer(
+    request: CancelKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.knowledgeAnswers.get(request.requestId)?.abort();
+    this.knowledgeAnswers.delete(request.requestId);
+    return this.perform('cancelKnowledgeAnswer', signal, () => undefined);
   }
 
   private knowledgePlan(

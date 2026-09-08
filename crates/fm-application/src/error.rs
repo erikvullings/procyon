@@ -97,6 +97,14 @@ pub enum ApplicationError {
         /// `SHA256:<base64>` fingerprint previously accepted and stored.
         expected_fingerprint: String,
     },
+    /// The knowledge evidence set an answer was requested for is no longer
+    /// cached, so retrieval must be run again before answering (task 0207).
+    /// Answer generation never reruns retrieval on the caller's behalf.
+    #[error("the inspected knowledge evidence set is no longer available; run the search again")]
+    KnowledgeEvidenceRefreshRequired {
+        /// Fingerprint the caller asked to answer from.
+        evidence_fingerprint: String,
+    },
     /// An unexpected, unclassified failure occurred.
     #[error("internal error")]
     Internal,
@@ -124,6 +132,9 @@ impl ApplicationError {
             Self::PlatformOperationFailed(_) => ApplicationErrorCode::PlatformOperationFailed,
             Self::HostKeyUnverified { .. } => ApplicationErrorCode::HostKeyUnverified,
             Self::HostKeyMismatch { .. } => ApplicationErrorCode::HostKeyMismatch,
+            Self::KnowledgeEvidenceRefreshRequired { .. } => {
+                ApplicationErrorCode::KnowledgeEvidenceRefreshRequired
+            }
             Self::Internal => ApplicationErrorCode::Internal,
         }
     }
@@ -160,6 +171,11 @@ impl ApplicationError {
             } => Some(serde_json::json!({
                 "fingerprint": fingerprint,
                 "expectedFingerprint": expected_fingerprint,
+            })),
+            Self::KnowledgeEvidenceRefreshRequired {
+                evidence_fingerprint,
+            } => Some(serde_json::json!({
+                "evidenceFingerprint": evidence_fingerprint,
             })),
             _ => None,
         };

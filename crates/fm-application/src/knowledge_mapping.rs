@@ -24,9 +24,12 @@ use fm_transport_dto::{
 
 use crate::error::ApplicationError;
 use crate::knowledge::{
-    KnowledgeAction, KnowledgeAnswerDepth, KnowledgeCapabilities, KnowledgeNeed,
-    KnowledgeOutputFormat, KnowledgeScopeSelector, KnowledgeSearchOptions, KnowledgeSearchPlan,
-    KnowledgeSearchPriority, KnowledgeSearchReason, RetrievalMode,
+    KnowledgeAction, KnowledgeAnswerDepth, KnowledgeAnswerRequest, KnowledgeCapabilities,
+    KnowledgeNeed, KnowledgeOutputFormat, KnowledgeScopeSelector, KnowledgeSearchOptions,
+    KnowledgeSearchPlan, KnowledgeSearchPriority, KnowledgeSearchReason, RetrievalMode,
+};
+use crate::knowledge_answer::{
+    KnowledgeAnswer, KnowledgeAnswerError, KnowledgeAnswerEvidence, citation_label,
 };
 use crate::knowledge_dsl::{
     DiagnosticSeverity, KnowledgeDslDiagnostic, KnowledgeDslDiagnosticCode, KnowledgeDslParse,
@@ -581,5 +584,109 @@ pub(crate) fn trace_to_dto(trace: &RetrievalTrace) -> KnowledgeSearchTraceDto {
                 full_text_candidates: u32::try_from(query.full_text_candidates).unwrap_or(u32::MAX),
             })
             .collect(),
+    }
+}
+
+/// Builds the canonical answer-only request from its transport form.
+///
+/// Bounds are enforced by [`crate::knowledge::KnowledgeAnswerRequest::validate`]
+/// downstream; this mapping never copies an answer field into retrieval.
+pub(crate) fn answer_request_from_dto(
+    request: &fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+) -> KnowledgeAnswerRequest {
+    KnowledgeAnswerRequest {
+        evidence_fingerprint: request.evidence_fingerprint.clone(),
+        action: request.action.map(action_from_dto),
+        context: request.context.clone(),
+        constraints: request.constraints.clone(),
+        depth: request.depth.map(depth_from_dto),
+        output: request.output.map(format_from_dto),
+    }
+}
+
+/// Projects one displayed evidence row into the answer capability's input.
+///
+/// The label is derived from the displayed position rather than from anything
+/// the model or the worker produced, so citations stay stable and always name
+/// evidence the user already inspected.
+pub(crate) fn answer_evidence_from_dto(
+    index: usize,
+    evidence: &KnowledgeEvidenceDto,
+    indexed_content_hash: String,
+) -> KnowledgeAnswerEvidence {
+    KnowledgeAnswerEvidence {
+        label: citation_label(index),
+        record_id: evidence.record_id.clone(),
+        source_id: evidence.source_id.clone(),
+        title: evidence.title.clone(),
+        content: evidence.content.clone(),
+        section_path: evidence.section_path.clone(),
+        provenance: evidence.provenance.clone(),
+        indexed_content_hash,
+        generated: evidence.generated,
+        final_rank: evidence.final_rank,
+        adjacent: evidence.adjacent,
+        stale: evidence.stale,
+        unavailable: evidence.unavailable,
+    }
+}
+
+pub(crate) fn answer_to_dto(
+    request_id: uuid::Uuid,
+    answer: KnowledgeAnswer,
+) -> fm_transport_dto::KnowledgeAnswerDto {
+    fm_transport_dto::KnowledgeAnswerDto {
+        request_id,
+        evidence_fingerprint: answer.evidence_fingerprint,
+        profile_id: answer.profile_id,
+        profile_name: answer.profile_name,
+        locality: crate::llm_profile_mapping::locality_to_dto(answer.locality),
+        text: answer.text,
+        citations: answer
+            .citations
+            .into_iter()
+            .map(|citation| fm_transport_dto::KnowledgeAnswerCitationDto {
+                label: citation.label,
+                record_id: citation.record_id,
+                source_id: citation.source_id,
+                provenance: citation.provenance,
+                section_path: citation.section_path,
+                final_rank: citation.final_rank,
+                unavailable: citation.unavailable,
+                stale: citation.stale,
+                generated: citation.generated,
+            })
+            .collect(),
+        model_knowledge_allowed: answer.model_knowledge_allowed,
+        insufficient: answer.insufficient,
+        withheld_unauthorized: answer.withheld_unauthorized,
+        stale_evidence: answer.stale_evidence,
+        unavailable_evidence: answer.unavailable_evidence,
+    }
+}
+
+/// Maps a sanitized answer failure onto the transport error contract.
+///
+/// A missing, evicted, or mismatched evidence set is reported as its own
+/// machine-matchable code so a host can offer an explicit refresh instead of
+/// guessing from a generic invalid-request failure.
+pub(crate) fn answer_error_to_application(error: KnowledgeAnswerError) -> ApplicationError {
+    match error {
+        KnowledgeAnswerError::InvalidRequest(message) => ApplicationError::InvalidRequest(message),
+        KnowledgeAnswerError::RefreshRequired {
+            evidence_fingerprint,
+        } => ApplicationError::KnowledgeEvidenceRefreshRequired {
+            evidence_fingerprint,
+        },
+        KnowledgeAnswerError::AuthorizationUnavailable
+        | KnowledgeAnswerError::ProfileUnavailable => ApplicationError::ProviderUnavailable,
+        KnowledgeAnswerError::EvidenceRevoked | KnowledgeAnswerError::ConsentRequired => {
+            ApplicationError::PermissionDenied
+        }
+        KnowledgeAnswerError::DuplicateRequest => {
+            ApplicationError::InvalidRequest(error.to_string())
+        }
+        KnowledgeAnswerError::Cancelled => ApplicationError::OperationCancelled,
+        KnowledgeAnswerError::GenerationFailed => ApplicationError::Internal,
     }
 }

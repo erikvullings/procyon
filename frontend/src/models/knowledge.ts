@@ -1,8 +1,12 @@
 export type {
+  CancelKnowledgeAnswerRequestDto as CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequestDto as CancelKnowledgeSearchRequest,
   ExecuteKnowledgeSearchRequestDto as ExecuteKnowledgeSearchRequest,
+  GenerateKnowledgeAnswerRequestDto as GenerateKnowledgeAnswerRequest,
   KnowledgeActionDto as KnowledgeAction,
+  KnowledgeAnswerCitationDto as KnowledgeAnswerCitation,
   KnowledgeAnswerDepthDto as KnowledgeAnswerDepth,
+  KnowledgeAnswerDto as KnowledgeAnswer,
   KnowledgeCapabilitiesDto as KnowledgeCapabilities,
   KnowledgeCoverageDto as KnowledgeCoverage,
   KnowledgeDiagnosticCodeDto as KnowledgeDiagnosticCode,

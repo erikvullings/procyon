@@ -6,6 +6,8 @@ import { copyIcon, externalLinkIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
+  KnowledgeAnswer,
+  KnowledgeAnswerCitation,
   KnowledgeCapabilities,
   KnowledgeDiagnostic,
   KnowledgeEvidence,
@@ -22,9 +24,12 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchReason,
   KnowledgeSearchResult,
+  LlmEndpointLocality,
+  LlmProfile,
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
+import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { copyText } from '../preview/clipboard';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
@@ -434,6 +439,48 @@ export function classifyKnowledgeScopeSelectors(
   return { wholeLibrary, rootIds, issues };
 }
 
+/** Anchor prefix for a citation link inside generated answer markdown. */
+const CITATION_ANCHOR = '#fm-knowledge-citation-';
+
+/** Escapes a citation label for use inside a regular expression. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+/**
+ * Turns the opaque citation labels a model copied - `[E1]`, `(E1, E2)` - into
+ * in-document links.
+ *
+ * Only the citations passed in are linked, and the caller passes only those
+ * whose identity matches a row the search actually displayed, so a label the
+ * model invented stays inert text rather than becoming something clickable.
+ */
+export function linkKnowledgeCitations(
+  markdown: string,
+  citations: readonly KnowledgeAnswerCitation[],
+): string {
+  return citations.reduce((linked, citation) => {
+    const label = escapeRegExp(citation.label);
+    const target = `${CITATION_ANCHOR}${encodeURIComponent(citation.label)}`;
+    return linked
+      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'gu'), `[${citation.label}](${target})`)
+      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'gu'), `([${citation.label}](${target})`);
+  }, markdown);
+}
+
+/**
+ * Whether a host refused to answer because the inspected evidence set is gone.
+ *
+ * Every host reports this the same way - an `ApiError`, a Tauri
+ * `ApplicationErrorDto`, or the mock's `MockClientError` all carry the typed
+ * `code` - so the dialog can tell the user to search again instead of guessing
+ * from a message, and never re-searches on their behalf.
+ */
+export function isKnowledgeEvidenceRefreshRequired(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  return (error as { readonly code?: unknown }).code === 'knowledgeEvidenceRefreshRequired';
+}
+
 export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
   let wasOpen = false;
   let busy: 'loading' | 'planning' | 'searching' | undefined;
@@ -467,6 +514,25 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
   let grouping: Grouping = 'need';
   let visibleRows = RENDER_BATCH;
   let abortController: AbortController | undefined;
+  /**
+   * Answer state (task 0207). Everything here is *downstream* of a completed
+   * search: it exists only while a successful result whose capabilities report
+   * `answerGeneration` is on screen, and it never influences retrieval.
+   */
+  let answerProfiles: readonly LlmProfile[] = [];
+  let answerProfilesFailed = false;
+  let selectedAnswerProfileId = '';
+  /** Grounded-only by default; the opt-in is explicit and labelled. */
+  let allowModelKnowledge = false;
+  let answer: KnowledgeAnswer | undefined;
+  let answerError: string | undefined;
+  let answerNotice: string | undefined;
+  let generatingAnswer = false;
+  let answerAbortController: AbortController | undefined;
+  /** Bumped per generation, so only the newest response owns the state. */
+  let answerSequence = 0;
+  /** Set when an answer arrived and its region should take focus once. */
+  let focusAnswerOnReady = false;
   /** Bumped on every open/close, so responses from a previous life are dropped. */
   let generation = 0;
   /** Bumped on every edit, so a response for an older draft is never applied. */
@@ -554,6 +620,23 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
     visibleRows = RENDER_BATCH;
     notice = undefined;
     traceRequested = false;
+    resetAnswer();
+  }
+
+  /**
+   * Drops any answer and stops one in flight. An answer describes one exact
+   * evidence set, so an edit, a new search, a close or a reopen must leave
+   * nothing of it behind - not even a response still on its way.
+   */
+  function resetAnswer(): void {
+    answerAbortController?.abort();
+    answerAbortController = undefined;
+    answerSequence += 1;
+    generatingAnswer = false;
+    answer = undefined;
+    answerError = undefined;
+    answerNotice = undefined;
+    focusAnswerOnReady = false;
   }
 
   /**
@@ -697,6 +780,10 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
     mode = 'hybrid';
     scopeKind = 'entireLibrary';
     focusSubjectOnOpen = true;
+    answerProfiles = [];
+    answerProfilesFailed = false;
+    selectedAnswerProfileId = '';
+    allowModelKnowledge = false;
     try {
       const [reportedCapabilities, availableRoots] = await Promise.all([
         attrs.client.getKnowledgeCapabilities(),
@@ -713,6 +800,19 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
+      // Generation profiles are only fetched when the host actually offers
+      // answers, so a search-only host is never asked about a capability it
+      // does not have, and a failure here never blocks search (task 0207).
+      if (reportedCapabilities.answerGeneration) {
+        try {
+          const profiles = await attrs.client.listLlmProfiles();
+          if (loadGeneration !== generation) return;
+          answerProfiles = profiles;
+        } catch {
+          if (loadGeneration !== generation) return;
+          answerProfilesFailed = true;
+        }
+      }
       if (attrs.currentFolder !== undefined) {
         try {
           const folder = await attrs.client.getSemanticFolderStatus({
@@ -814,6 +914,9 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
     error = undefined;
     notice = undefined;
     result = undefined;
+    // A new search replaces the evidence set entirely, so any answer over the
+    // previous one is dropped before the first byte of the new one arrives.
+    resetAnswer();
     visibleRows = RENDER_BATCH;
     abortController = controller;
     m.redraw();
@@ -863,6 +966,95 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
     abortController?.abort();
   }
 
+  /** Whether an optional answer may be offered at all for what is on screen. */
+  function answerAvailable(): boolean {
+    return result?.capabilities.answerGeneration === true;
+  }
+
+  /** Whether the Generate control can run right now. */
+  function canGenerateAnswer(): boolean {
+    return (
+      answerAvailable() &&
+      !generatingAnswer &&
+      busy === undefined &&
+      selectedAnswerProfileId !== '' &&
+      answerProfiles.some((profile) => profile.id === selectedAnswerProfileId)
+    );
+  }
+
+  /**
+   * Generates one optional answer over the evidence already on screen.
+   *
+   * Retrieval is never involved: the request names the exact
+   * `evidenceFingerprint` the displayed result reported, and the answer-only
+   * fields come from the canonical draft that produced it. A response that
+   * lands after an edit, a new search, a close, a reopen or a newer generation
+   * is discarded, and a host that no longer retains the evidence is reported as
+   * "search again" rather than silently retrieved for.
+   */
+  async function generateAnswer(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    const inspected = result;
+    if (inspected === undefined || !canGenerateAnswer()) return;
+    const startGeneration = generation;
+    const answerRevision = revision;
+    const fingerprint = inspected.evidenceFingerprint;
+    const profileId = selectedAnswerProfileId;
+    const modelKnowledge = allowModelKnowledge;
+    resetAnswer();
+    const sequence = answerSequence;
+    const controller = new AbortController();
+    answerAbortController = controller;
+    generatingAnswer = true;
+    m.redraw();
+    /** Whether this response still belongs to what is on screen. */
+    const superseded = (): boolean =>
+      sequence !== answerSequence ||
+      startGeneration !== generation ||
+      answerRevision !== revision ||
+      result?.evidenceFingerprint !== fingerprint;
+    try {
+      const generated = await attrs.client.generateKnowledgeAnswer(
+        {
+          requestId: crypto.randomUUID(),
+          workspaceId: attrs.workspaceId,
+          evidenceFingerprint: fingerprint,
+          profileId,
+          allowModelKnowledge: modelKnowledge,
+          action: draft.action ?? null,
+          context: draft.context ?? null,
+          constraints: [...(draft.constraints ?? [])],
+          depth: draft.depth ?? null,
+          output: draft.format ?? null,
+        },
+        controller.signal,
+      );
+      if (superseded()) return;
+      answer = generated;
+      focusAnswerOnReady = true;
+    } catch (cause) {
+      if (superseded()) return;
+      if (cause instanceof DOMException && cause.name === 'AbortError') {
+        answerNotice = t('knowledgeSearch', 'answerCancelled');
+      } else if (isKnowledgeEvidenceRefreshRequired(cause)) {
+        // Retrieving again here would silently spend authorization the user
+        // did not ask to spend; they are told to press Search instead.
+        answerError = t('knowledgeSearch', 'answerRefreshRequired');
+      } else {
+        answerError = t('knowledgeSearch', 'answerFailed');
+      }
+    } finally {
+      if (sequence === answerSequence && startGeneration === generation) {
+        generatingAnswer = false;
+        answerAbortController = undefined;
+        m.redraw();
+      }
+    }
+  }
+
+  function cancelAnswer(): void {
+    answerAbortController?.abort();
+  }
+
   async function openSource(attrs: KnowledgeSearchDialogAttrs, sourceId: string): Promise<void> {
     if (attrs.onOpenSource === undefined) return;
     error = undefined;
@@ -903,6 +1095,9 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
   function close(attrs: KnowledgeSearchDialogAttrs): void {
     const wasSearching = busy === 'searching';
     cancel();
+    // An answer in flight belongs to the result this dialog is losing, so it is
+    // stopped here rather than left running for nobody.
+    resetAnswer();
     // A new generation drops every response still in flight: after a close the
     // dialog must never adopt a plan, parse or result for the query it had.
     generation += 1;
@@ -1110,6 +1305,291 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
           )
         : undefined,
     ];
+  }
+
+  /** Localised endpoint classification, shown before anything is sent. */
+  function localityLabel(locality: LlmEndpointLocality): string {
+    return locality === 'cloud'
+      ? t('knowledgeSearch', 'answerLocalityCloud')
+      : t('knowledgeSearch', 'answerLocalityLoopback');
+  }
+
+  /**
+   * The rows the search displayed, keyed by the identity a citation must
+   * match. A citation is only ever opened through an identity that is in here,
+   * so an answer can never navigate to something the user did not inspect.
+   */
+  function displayedEvidence(): ReadonlyMap<string, KnowledgeEvidence> {
+    return new Map((result?.evidence ?? []).map((row) => [row.recordId, row]));
+  }
+
+  /** The displayed row one citation names, if it names one at all. */
+  function citedRow(
+    displayed: ReadonlyMap<string, KnowledgeEvidence>,
+    citation: KnowledgeAnswerCitation,
+  ): KnowledgeEvidence | undefined {
+    const row = displayed.get(citation.recordId);
+    return row === undefined || row.sourceId !== citation.sourceId ? undefined : row;
+  }
+
+  /** The generated answer itself, plus how honest it is about its evidence. */
+  function answerBody(
+    attrs: KnowledgeSearchDialogAttrs,
+    displayed: ReadonlyMap<string, KnowledgeEvidence>,
+  ): m.Children {
+    if (generatingAnswer) {
+      return m(
+        'p.fm-knowledge-status',
+        { role: 'status' },
+        t('knowledgeSearch', 'generatingAnswer'),
+      );
+    }
+    const current = answer;
+    if (current === undefined) {
+      return m(
+        'p.fm-knowledge-status',
+        { role: 'status' },
+        answerNotice ?? t('knowledgeSearch', 'answerPlaceholder'),
+      );
+    }
+    const openable = (citation: KnowledgeAnswerCitation): boolean =>
+      citedRow(displayed, citation) !== undefined &&
+      !citation.unavailable &&
+      attrs.onOpenSource !== undefined;
+    return [
+      m(
+        'p.fm-knowledge-hint',
+        t('knowledgeSearch', 'answerProfileUsed', {
+          profile: current.profileName,
+          locality: localityLabel(current.locality),
+        }),
+      ),
+      m(
+        '.fm-knowledge-answer-markdown',
+        {
+          onclick: (event: MouseEvent) => {
+            if (!(event.target instanceof Element)) return;
+            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${CITATION_ANCHOR}"]`);
+            if (link === null) return;
+            const target = link.getAttribute('href');
+            const label =
+              target === null
+                ? undefined
+                : decodeURIComponent(target.slice(CITATION_ANCHOR.length));
+            const citation = current.citations.find((item) => item.label === label);
+            if (citation === undefined || !openable(citation)) return;
+            event.preventDefault();
+            void openSource(attrs, citation.sourceId);
+          },
+        },
+        m.trust(
+          safeMarkdownHtml(
+            // Only citations that name a displayed row are linked; anything
+            // else stays inert text rather than becoming clickable.
+            linkKnowledgeCitations(current.text, current.citations.filter(openable)),
+          ),
+        ),
+      ),
+      current.modelKnowledgeAllowed
+        ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'modelKnowledgeUsed'))
+        : undefined,
+      current.insufficient
+        ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'answerInsufficient'))
+        : undefined,
+      current.staleEvidence === 0
+        ? undefined
+        : m(
+            'p.fm-knowledge-warning',
+            t('knowledgeSearch', 'answerStaleEvidence', { count: current.staleEvidence }),
+          ),
+      current.unavailableEvidence === 0
+        ? undefined
+        : m(
+            'p.fm-knowledge-warning',
+            t('knowledgeSearch', 'answerUnavailableEvidence', {
+              count: current.unavailableEvidence,
+            }),
+          ),
+      current.withheldUnauthorized === 0
+        ? undefined
+        : m(
+            'p.fm-knowledge-warning',
+            t('knowledgeSearch', 'answerWithheldUnauthorized', {
+              count: current.withheldUnauthorized,
+            }),
+          ),
+      current.citations.length === 0
+        ? undefined
+        : m('.fm-knowledge-answer-citations', [
+            m('h4', t('knowledgeSearch', 'answerCitations')),
+            m(
+              'ul.fm-knowledge-citations',
+              current.citations.map((citation) => {
+                const row = citedRow(displayed, citation);
+                const provenance = knowledgeProvenanceLabel(citation.provenance);
+                const states = [
+                  row?.title,
+                  citation.sectionPath.length === 0 ? undefined : citation.sectionPath.join(' / '),
+                  provenance === '' ? undefined : provenance,
+                  citation.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
+                  citation.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
+                  citation.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
+                  row === undefined
+                    ? t('knowledgeSearch', 'answerCitationNotDisplayed')
+                    : undefined,
+                ].filter((value): value is string => value !== undefined && value !== '');
+                return m('li', { key: `${citation.label}-${citation.recordId}` }, [
+                  m(
+                    'button.fm-knowledge-source-link',
+                    {
+                      type: 'button',
+                      disabled: !openable(citation),
+                      'aria-label': t('knowledgeSearch', 'openCitation', {
+                        label: citation.label,
+                      }),
+                      onclick: () => void openSource(attrs, citation.sourceId),
+                    },
+                    citation.label,
+                  ),
+                  states.length === 0 ? '' : ` · ${states.join(' · ')}`,
+                ]);
+              }),
+            ),
+          ]),
+    ];
+  }
+
+  /**
+   * The optional answer section: strictly downstream of a completed search.
+   *
+   * It exists only while a successful result whose own capabilities report
+   * `answerGeneration` is on screen, so a search-only host renders nothing here
+   * and search stays complete without it.
+   */
+  function answerView(attrs: KnowledgeSearchDialogAttrs): m.Children {
+    if (!answerAvailable()) return undefined;
+    const displayed = displayedEvidence();
+    const profile = answerProfiles.find((candidate) => candidate.id === selectedAnswerProfileId);
+    return m(
+      'section.fm-knowledge-answer',
+      { 'aria-label': t('knowledgeSearch', 'answerRegion'), 'aria-busy': generatingAnswer },
+      [
+        m('h3', t('knowledgeSearch', 'answerHeading')),
+        m('p.fm-knowledge-hint', t('knowledgeSearch', 'answerHint')),
+        answerProfilesFailed
+          ? m(
+              'p.fm-knowledge-error',
+              { role: 'alert' },
+              t('knowledgeSearch', 'answerProfilesFailed'),
+            )
+          : answerProfiles.length === 0
+            ? m('p.fm-knowledge-hint', { role: 'status' }, t('knowledgeSearch', 'answerNoProfiles'))
+            : m('.fm-knowledge-answer-controls', [
+                m('.fm-knowledge-field', [
+                  m(
+                    'label',
+                    { for: 'fm-knowledge-answer-profile' },
+                    t('knowledgeSearch', 'answerProfile'),
+                  ),
+                  m(
+                    'select#fm-knowledge-answer-profile.browser-default',
+                    {
+                      name: 'knowledge-answer-profile',
+                      value: selectedAnswerProfileId,
+                      disabled: generatingAnswer,
+                      onchange: (event: Event) => {
+                        selectedAnswerProfileId = (event.currentTarget as HTMLSelectElement).value;
+                        // A different endpoint is a different disclosure, so
+                        // the previous answer cannot stand.
+                        resetAnswer();
+                      },
+                    },
+                    [
+                      m('option', { value: '' }, t('knowledgeSearch', 'answerProfilePlaceholder')),
+                      // Unkeyed on purpose: Mithril refuses a sibling list
+                      // that mixes keyed and unkeyed vnodes, and the
+                      // placeholder option cannot carry a profile key.
+                      ...answerProfiles.map((candidate) =>
+                        m(
+                          'option',
+                          { value: candidate.id },
+                          `${candidate.name} · ${localityLabel(candidate.locality)}`,
+                        ),
+                      ),
+                    ],
+                  ),
+                ]),
+                m('.fm-knowledge-answer-option', [
+                  m('input#fm-knowledge-model-knowledge', {
+                    type: 'checkbox',
+                    checked: allowModelKnowledge,
+                    disabled: generatingAnswer,
+                    onchange: (event: Event) => {
+                      allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
+                      resetAnswer();
+                    },
+                  }),
+                  m(
+                    'label',
+                    { for: 'fm-knowledge-model-knowledge' },
+                    t('knowledgeSearch', 'allowModelKnowledge'),
+                  ),
+                ]),
+              ]),
+        allowModelKnowledge
+          ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'modelKnowledgeNotice'))
+          : undefined,
+        profile === undefined
+          ? undefined
+          : m(
+              profile.locality === 'cloud' ? 'p.fm-knowledge-warning' : 'p.fm-knowledge-hint',
+              { role: 'status' },
+              profile.locality === 'cloud'
+                ? t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name })
+                : t('knowledgeSearch', 'answerLocalEndpoint', { profile: profile.name }),
+            ),
+        answerProfiles.length === 0
+          ? undefined
+          : m('.fm-knowledge-answer-actions', [
+              m(
+                FlatButton,
+                {
+                  type: 'button',
+                  className: 'fm-knowledge-generate',
+                  disabled: !canGenerateAnswer(),
+                  onclick: () => void generateAnswer(attrs),
+                },
+                generatingAnswer
+                  ? t('knowledgeSearch', 'generatingAnswer')
+                  : t('knowledgeSearch', 'generateAnswer'),
+              ),
+              generatingAnswer
+                ? m(
+                    FlatButton,
+                    { type: 'button', onclick: cancelAnswer },
+                    t('knowledgeSearch', 'cancelAnswer'),
+                  )
+                : undefined,
+            ]),
+        answerError === undefined
+          ? undefined
+          : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
+        m(
+          '.fm-knowledge-answer-body',
+          {
+            tabindex: '-1',
+            'aria-live': 'polite',
+            onupdate: ({ dom }: m.VnodeDOM) => {
+              if (focusAnswerOnReady && answer !== undefined) {
+                focusAnswerOnReady = false;
+                (dom as HTMLElement).focus();
+              }
+            },
+          },
+          answerBody(attrs, displayed),
+        ),
+      ],
+    );
   }
 
   return {
@@ -1607,6 +2087,7 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
                 : undefined,
             ],
           ),
+          answerView(attrs),
         ]),
         buttons: [
           {

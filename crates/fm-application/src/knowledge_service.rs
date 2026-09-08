@@ -24,8 +24,15 @@ use crate::knowledge::{
     KnowledgePlanner, KnowledgeScope, KnowledgeScopeSelector, KnowledgeSearchOptions,
     KnowledgeSearchRequest, KnowledgeSubject,
 };
+use crate::knowledge_answer::{
+    InspectedKnowledgeEvidence, KnowledgeAnswerCoordinator, KnowledgeAnswerIntent,
+};
 use crate::knowledge_dsl::{KnowledgeDslScopeContext, KnowledgeQueryDraft};
+use crate::knowledge_evidence_cache::{
+    CachedKnowledgeEvidence, KnowledgeEvidenceBinding, KnowledgeEvidenceCache,
+};
 use crate::knowledge_mapping::{
+    answer_error_to_application, answer_evidence_from_dto, answer_request_from_dto, answer_to_dto,
     capabilities_to_dto, coverage_to_dto, draft_from_dto, evidence_to_dto, excluded_fields,
     interpretation_to_dto, mode_from_dto, options_from_dto, plan_to_dto, route_outcome_to_dto,
     trace_to_dto,
@@ -35,6 +42,7 @@ use crate::knowledge_search::{
     KnowledgeRetrievalCapability, KnowledgeRetrievalPartition, KnowledgeSearchCoordinator,
     KnowledgeSearchError,
 };
+use crate::llm_profiles::LlmProfileService;
 use crate::semantic_library::{
     RagScopeSelection, ResolvedKnowledgeScope, ResolvedSemanticOccurrence, SemanticAccessContext,
     SemanticLibraryError, SemanticLibraryService, SemanticLibraryStatus, SemanticRootAvailability,
@@ -137,9 +145,16 @@ fn snapshot_of(resolved: &ResolvedKnowledgeScope) -> KnowledgeAuthorizationSnaps
     }
 }
 
-/// Search-only knowledge capability composed over one retrieval capability.
+/// Search-first knowledge capability composed over one retrieval capability.
+///
+/// Optional answer generation is composed alongside search rather than inside
+/// it: [`KnowledgeAnswerCoordinator`] holds no retrieval capability at all, and
+/// the only bridge between the two is a bounded cache of evidence sets that a
+/// search already produced and displayed.
 pub(crate) struct KnowledgeService {
     coordinator: KnowledgeSearchCoordinator,
+    answers: KnowledgeAnswerCoordinator,
+    evidence: KnowledgeEvidenceCache,
 }
 
 impl KnowledgeService {
@@ -147,6 +162,8 @@ impl KnowledgeService {
     pub(crate) fn new(capability: Arc<dyn KnowledgeRetrievalCapability>) -> Self {
         Self {
             coordinator: KnowledgeSearchCoordinator::new(capability),
+            answers: KnowledgeAnswerCoordinator::default(),
+            evidence: KnowledgeEvidenceCache::default(),
         }
     }
 
@@ -233,6 +250,8 @@ impl KnowledgeService {
             titles,
             selection,
             workspace_id,
+            tenant_id,
+            library_id,
             ..
         } = resolved;
         let include_trace = authorized.plan.options.include_trace;
@@ -241,13 +260,48 @@ impl KnowledgeService {
             authority,
             access: access.clone(),
             workspace_id,
-            selection,
+            selection: selection.clone(),
         };
         let outcome = self
             .coordinator
             .execute(request_id, authorized, &refresh, cancellation)
             .await
             .map_err(search_error)?;
+        let indexed_content_hashes = outcome
+            .evidence
+            .iter()
+            .map(|row| (row.record_id.clone(), row.indexed_content_hash.clone()))
+            .collect::<HashMap<_, _>>();
+        let evidence = outcome
+            .evidence
+            .into_iter()
+            .map(|evidence| {
+                evidence_to_dto(
+                    evidence,
+                    &plan,
+                    &outcome.rankings,
+                    &outcome.freshness,
+                    &titles,
+                )
+            })
+            .collect::<Vec<_>>();
+        // Retaining the displayed set is what makes a later answer possible
+        // without rerunning retrieval. It is bounded, lifetime-limited, and
+        // bound to this exact tenant/library/workspace.
+        self.evidence.record(
+            &outcome.evidence_fingerprint,
+            CachedKnowledgeEvidence {
+                binding: KnowledgeEvidenceBinding {
+                    tenant_id,
+                    library_id,
+                    workspace_id,
+                },
+                selection,
+                plan,
+                evidence: evidence.clone(),
+                indexed_content_hashes,
+            },
+        );
         Ok(fm_transport_dto::KnowledgeSearchResultDto {
             request_id,
             plan: plan_dto,
@@ -259,19 +313,7 @@ impl KnowledgeService {
                 ),
             ),
             coverage: coverage_to_dto(outcome.coverage),
-            evidence: outcome
-                .evidence
-                .into_iter()
-                .map(|evidence| {
-                    evidence_to_dto(
-                        evidence,
-                        &plan,
-                        &outcome.rankings,
-                        &outcome.freshness,
-                        &titles,
-                    )
-                })
-                .collect(),
+            evidence,
             token_count: u64::try_from(outcome.token_count).unwrap_or(u64::MAX),
             evidence_fingerprint: outcome.evidence_fingerprint,
             withheld_unauthorized: outcome.withheld_unauthorized,
@@ -281,6 +323,94 @@ impl KnowledgeService {
                 .filter(|_| include_trace)
                 .map(trace_to_dto),
         })
+    }
+
+    /// Generates one optional answer from an already-inspected evidence set.
+    ///
+    /// This never plans, retrieves, or contacts the semantic worker. The
+    /// evidence is the exact set an earlier successful search displayed, found
+    /// by fingerprint inside this caller's tenant/library/workspace binding.
+    /// A miss, an eviction, an expiry, or a binding mismatch is reported as one
+    /// refresh-required failure, so nothing about another binding's retained
+    /// evidence is observable and retrieval is never rerun implicitly.
+    pub(crate) async fn answer(
+        &self,
+        authority: Arc<dyn KnowledgeAuthority>,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+        profiles: &LlmProfileService,
+        cancellation: &CancellationToken,
+    ) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationError> {
+        let refresh_required = || ApplicationError::KnowledgeEvidenceRefreshRequired {
+            evidence_fingerprint: request.evidence_fingerprint.clone(),
+        };
+        let workspace_id = fm_domain::WorkspaceId::from(request.workspace_id);
+        // Authorization is resolved first so a caller who may no longer search
+        // this scope cannot probe which fingerprints are retained.
+        let resolved = authority
+            .resolve_knowledge_scope(access, workspace_id, &RagScopeSelection::EntireLibrary)
+            .map_err(library_error)?;
+        let binding = KnowledgeEvidenceBinding {
+            tenant_id: resolved.filters.tenant_id.clone(),
+            library_id: resolved
+                .filters
+                .library_id
+                .clone()
+                .ok_or(ApplicationError::ProviderUnavailable)?,
+            workspace_id,
+        };
+        let cached = self
+            .evidence
+            .get(&request.evidence_fingerprint, &binding)
+            .ok_or_else(refresh_required)?;
+        let evidence = cached
+            .evidence
+            .iter()
+            .enumerate()
+            .map(|(index, row)| {
+                answer_evidence_from_dto(
+                    index,
+                    row,
+                    cached
+                        .indexed_content_hashes
+                        .get(&row.record_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let refresh = ScopeRefresh {
+            authority,
+            access: access.clone(),
+            workspace_id,
+            selection: cached.selection.clone(),
+        };
+        let intent = KnowledgeAnswerIntent {
+            request: answer_request_from_dto(&request),
+            profile_id: request.profile_id,
+            allow_model_knowledge: request.allow_model_knowledge,
+        };
+        self.answers
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: request.request_id,
+                    fingerprint: &request.evidence_fingerprint,
+                    plan: &cached.plan,
+                    evidence,
+                },
+                &intent,
+                &refresh,
+                profiles,
+                cancellation,
+            )
+            .await
+            .map(|answer| answer_to_dto(request.request_id, answer))
+            .map_err(answer_error_to_application)
+    }
+
+    /// Cancels one running or not-yet-started knowledge answer.
+    pub(crate) fn cancel_answer(&self, request_id: Uuid) -> bool {
+        self.answers.cancel(request_id)
     }
 
     /// Cancels one running or not-yet-started knowledge search.
@@ -369,6 +499,8 @@ impl KnowledgeService {
             titles: resolved.titles.clone(),
             selection,
             workspace_id,
+            tenant_id: scope_context.tenant_id.clone(),
+            library_id: scope_context.library_id.clone(),
             authorized: AuthorizedKnowledgeSearch {
                 plan,
                 partitions,
@@ -390,6 +522,8 @@ struct ResolvedKnowledgeRequest {
     titles: HashMap<String, String>,
     selection: RagScopeSelection,
     workspace_id: fm_domain::WorkspaceId,
+    tenant_id: String,
+    library_id: String,
 }
 
 impl ResolvedKnowledgeRequest {
@@ -749,10 +883,11 @@ mod tests {
         RetrievalTrace, RouteFallbackReason, RouteOutcome, TracedEvidence,
     };
     use fm_transport_dto::{
-        CancelKnowledgeSearchRequestDto, ExecuteKnowledgeSearchRequestDto, KnowledgeNeedDto,
-        KnowledgeQueryDraftDto, KnowledgeRetrievalModeDto, KnowledgeScopeDto,
-        KnowledgeScopeKindDto, ListKnowledgeRootsRequestDto, ParseKnowledgeQueryRequestDto,
-        PlanKnowledgeSearchRequestDto, ResolveKnowledgeSourceRequestDto, RuntimeKindDto,
+        CancelKnowledgeSearchRequestDto, ExecuteKnowledgeSearchRequestDto,
+        GenerateKnowledgeAnswerRequestDto, KnowledgeNeedDto, KnowledgeQueryDraftDto,
+        KnowledgeRetrievalModeDto, KnowledgeScopeDto, KnowledgeScopeKindDto,
+        ListKnowledgeRootsRequestDto, ParseKnowledgeQueryRequestDto, PlanKnowledgeSearchRequestDto,
+        ResolveKnowledgeSourceRequestDto, RuntimeKindDto,
     };
     use tokio_util::sync::CancellationToken;
     use uuid::Uuid;
@@ -1217,6 +1352,218 @@ mod tests {
             .await
             .expect("evidence sources resolve to an exact location");
         assert_eq!(resolved.location.uri, "file:///indexed-library/turbines.md");
+    }
+
+    fn answer_request(
+        workspace_id: Uuid,
+        evidence_fingerprint: &str,
+    ) -> GenerateKnowledgeAnswerRequestDto {
+        GenerateKnowledgeAnswerRequestDto {
+            request_id: Uuid::new_v4(),
+            workspace_id,
+            evidence_fingerprint: evidence_fingerprint.to_owned(),
+            profile_id: Uuid::new_v4(),
+            allow_model_knowledge: false,
+            action: Some(fm_transport_dto::KnowledgeActionDto::Explain),
+            context: Some("a maintenance report".to_owned()),
+            constraints: vec!["cite sources".to_owned()],
+            depth: Some(fm_transport_dto::KnowledgeAnswerDepthDto::Brief),
+            output: Some(fm_transport_dto::KnowledgeOutputFormatDto::Bullets),
+        }
+    }
+
+    /// Search must remain complete and answering must be refused — never
+    /// silently attempted — when nothing is configured to generate with.
+    #[tokio::test]
+    async fn answering_without_a_generation_profile_is_refused_and_search_stays_complete() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        let result = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::FullText,
+                    options: None,
+                },
+            )
+            .await
+            .expect("search succeeds without generation");
+        assert!(!result.capabilities.answer_generation);
+
+        let error = fixture
+            .service
+            .generate_knowledge_answer(
+                &SemanticAccessContext::Host,
+                answer_request(fixture.workspace_id, &result.evidence_fingerprint),
+            )
+            .await
+            .expect_err("no profile means no answer");
+
+        assert!(matches!(error, ApplicationError::ProviderUnavailable));
+        assert_eq!(
+            capability.requests().len(),
+            1,
+            "answering must not retrieve"
+        );
+    }
+
+    /// The cache is the only bridge between search and answer. A fingerprint
+    /// that was never produced — or was evicted — must demand an explicit new
+    /// search instead of triggering one.
+    #[tokio::test]
+    async fn an_unknown_evidence_fingerprint_requires_an_explicit_refresh() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::FullText,
+                    options: None,
+                },
+            )
+            .await
+            .expect("search");
+
+        let error = fixture
+            .service
+            .generate_knowledge_answer(
+                &SemanticAccessContext::Host,
+                answer_request(fixture.workspace_id, "sha256:never-produced"),
+            )
+            .await
+            .expect_err("an unknown evidence set is not answerable");
+
+        match error {
+            ApplicationError::KnowledgeEvidenceRefreshRequired {
+                evidence_fingerprint,
+            } => assert_eq!(evidence_fingerprint, "sha256:never-produced"),
+            other => panic!("expected a typed refresh-required failure, got {other:?}"),
+        }
+        assert_eq!(
+            capability.requests().len(),
+            1,
+            "a cache miss must never rerun retrieval"
+        );
+    }
+
+    /// A retained evidence set belongs to the workspace that produced it. A
+    /// different workspace must observe a plain refresh-required miss rather
+    /// than any evidence, and must not cause a retrieval either.
+    #[tokio::test]
+    async fn a_retained_evidence_set_is_not_answerable_from_another_workspace() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        let result = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::FullText,
+                    options: None,
+                },
+            )
+            .await
+            .expect("search");
+
+        let error = fixture
+            .service
+            .generate_knowledge_answer(
+                &SemanticAccessContext::Host,
+                answer_request(Uuid::new_v4(), &result.evidence_fingerprint),
+            )
+            .await
+            .expect_err("another workspace must not answer from this evidence");
+
+        assert!(
+            matches!(
+                error,
+                ApplicationError::KnowledgeEvidenceRefreshRequired { .. }
+                    | ApplicationError::NotFound
+                    | ApplicationError::PermissionDenied
+                    | ApplicationError::ProviderUnavailable
+            ),
+            "unexpected failure: {error:?}"
+        );
+        assert_eq!(capability.requests().len(), 1);
+    }
+
+    /// Knowledge answers must not introduce persistent conversation storage,
+    /// and must leave the existing saved-Ask evidence lifecycle untouched:
+    /// nothing is created by searching, and deleting an unknown conversation
+    /// still reports that it does not exist.
+    #[tokio::test]
+    async fn knowledge_search_and_answers_add_no_saved_conversation_storage() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        let result = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::FullText,
+                    options: None,
+                },
+            )
+            .await
+            .expect("search");
+
+        let _ = fixture
+            .service
+            .generate_knowledge_answer(
+                &SemanticAccessContext::Host,
+                answer_request(fixture.workspace_id, &result.evidence_fingerprint),
+            )
+            .await;
+
+        let saved = fixture
+            .service
+            .list_saved_rag_conversations(&SemanticAccessContext::Host, fixture.workspace_id)
+            .expect("saved Ask conversations remain listable");
+        assert!(
+            saved.is_empty(),
+            "knowledge search and answers must not persist conversations"
+        );
+        let error = fixture
+            .service
+            .delete_rag_conversation(
+                &SemanticAccessContext::Host,
+                fm_transport_dto::DeleteRagConversationRequestDto {
+                    conversation_id: Uuid::new_v4(),
+                },
+            )
+            .expect_err("deleting an unknown conversation still reports not found");
+        assert!(matches!(error, ApplicationError::NotFound));
+    }
+
+    /// Cancellation must be available before generation starts, exactly like
+    /// search cancellation, on both hosts.
+    #[tokio::test]
+    async fn cancelling_an_answer_before_it_starts_is_accepted() {
+        let fixture = fixture(Arc::new(RecordingCapability::new(Vec::new())));
+        let request_id = Uuid::new_v4();
+
+        assert!(!fixture.service.cancel_knowledge_answer(
+            fm_transport_dto::CancelKnowledgeAnswerRequestDto { request_id }
+        ));
     }
 }
 
@@ -1686,5 +2033,521 @@ mod partition_tests {
         assert_eq!(partitions.len(), 1);
         assert!(partitions[0].filters.root_id.is_none());
         assert!(partitions[0].restriction.allowed_source_ids.is_empty());
+    }
+}
+
+/// End-to-end coverage of the optional answer path over a real profile.
+///
+/// These exercise the only bridge between search and answer: a bounded cache
+/// of the evidence a search already displayed. The retrieval capability counts
+/// its calls, so "answering never reruns retrieval" is asserted rather than
+/// assumed.
+#[cfg(test)]
+mod answer_flow_tests {
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+    use fm_credentials::InMemoryCredentialStore;
+    use fm_settings::SettingsStore;
+    use fm_transport_dto::{
+        ExecuteKnowledgeSearchRequestDto, GenerateKnowledgeAnswerRequestDto, KnowledgeActionDto,
+        KnowledgeAnswerDepthDto, KnowledgeNeedDto, KnowledgeOutputFormatDto,
+        KnowledgeQueryDraftDto, KnowledgeRetrievalModeDto, KnowledgeScopeDto,
+        KnowledgeScopeKindDto, ResolveKnowledgeSourceRequestDto,
+    };
+    use tokio_util::sync::CancellationToken;
+    use uuid::Uuid;
+
+    use super::tests::{RecordingCapability, evidence};
+    use super::{KnowledgeAuthority, KnowledgeService};
+    use crate::error::ApplicationError;
+    use crate::llm_profiles::{
+        LlmChatGeneration, LlmHostPolicy, LlmProbeRequest, LlmProbeResponse, LlmProbeTransport,
+        LlmProfileError, LlmProfileService,
+    };
+    use crate::semantic_library::{
+        SemanticAccessContext, SemanticFolderContext, SemanticIndexingObservation,
+        SemanticLibraryService,
+    };
+
+    struct AnswerTransport {
+        generations: Mutex<Vec<LlmChatGeneration>>,
+        answer: String,
+    }
+
+    impl AnswerTransport {
+        fn new(answer: &str) -> Self {
+            Self {
+                generations: Mutex::new(Vec::new()),
+                answer: answer.to_owned(),
+            }
+        }
+
+        fn generations(&self) -> Vec<LlmChatGeneration> {
+            self.generations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl LlmProbeTransport for AnswerTransport {
+        async fn discover_models(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<Option<Vec<String>>, LlmProfileError> {
+            Ok(None)
+        }
+
+        async fn stream_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<LlmProbeResponse, LlmProfileError> {
+            Ok(LlmProbeResponse {
+                status: 200,
+                body: Vec::new(),
+            })
+        }
+
+        async fn generate_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            generation: &LlmChatGeneration,
+            cancellation: &CancellationToken,
+        ) -> Result<String, LlmProfileError> {
+            if cancellation.is_cancelled() {
+                return Err(LlmProfileError::Cancelled);
+            }
+            self.generations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(generation.clone());
+            Ok(self.answer.clone())
+        }
+    }
+
+    struct Fixture {
+        _directory: tempfile::TempDir,
+        knowledge: KnowledgeService,
+        authority: Arc<dyn KnowledgeAuthority>,
+        library: Arc<SemanticLibraryService>,
+        profiles: LlmProfileService,
+        profile_id: Uuid,
+        transport: Arc<AnswerTransport>,
+        capability: Arc<RecordingCapability>,
+        workspace_id: Uuid,
+        source_id: String,
+    }
+
+    async fn fixture(answer: &str) -> Fixture {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let library = Arc::new(SemanticLibraryService::deterministic_mock());
+        let workspace_id = fm_domain::WorkspaceId::new();
+        let folder = SemanticFolderContext::new(
+            workspace_id,
+            fm_domain::Location::parse("file:///indexed-library").expect("location"),
+        );
+        let preview = library
+            .preview_enrolment(&SemanticAccessContext::Host, folder.clone(), true)
+            .expect("preview enrolment");
+        library
+            .confirm_enrolment(
+                &SemanticAccessContext::Host,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &folder,
+            )
+            .expect("confirm enrolment");
+        let root_id = library
+            .status(&SemanticAccessContext::Host)
+            .expect("status")
+            .roots[0]
+            .id
+            .clone();
+        let source_id = library
+            .record_indexing_observation(
+                &SemanticAccessContext::Host,
+                SemanticIndexingObservation {
+                    entry_id: fm_domain::EntryId::new(),
+                    location: fm_domain::Location::parse("file:///indexed-library/turbines.md")
+                        .expect("location"),
+                    content_fingerprint: fm_semantic_library::ContentFingerprint::new(
+                        "sha256:turbines",
+                    )
+                    .expect("fingerprint"),
+                    root_id: root_id.parse().expect("root id"),
+                    workspace_ids: vec![workspace_id],
+                    source_bytes: 512,
+                },
+            )
+            .expect("record observation")
+            .to_string();
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        capability.set_evidence(vec![evidence("r1", &source_id)]);
+        let transport = Arc::new(AnswerTransport::new(answer));
+        let profiles = LlmProfileService::new(
+            SettingsStore::new(directory.path().join("settings")),
+            Arc::new(InMemoryCredentialStore::new()),
+            transport.clone(),
+            LlmHostPolicy::desktop(),
+        )
+        .expect("profile service");
+        let mut draft = LlmProfileService::presets().remove(0);
+        draft.model = "answer-model".to_owned();
+        let profile = profiles.create(draft).await.expect("profile");
+        Fixture {
+            _directory: directory,
+            knowledge: KnowledgeService::new(capability.clone()),
+            authority: library.clone(),
+            library,
+            profiles,
+            profile_id: profile.id,
+            transport,
+            capability,
+            workspace_id: workspace_id.into(),
+            source_id,
+        }
+    }
+
+    fn search_request(workspace_id: Uuid) -> ExecuteKnowledgeSearchRequestDto {
+        ExecuteKnowledgeSearchRequestDto {
+            request_id: Uuid::new_v4(),
+            draft: KnowledgeQueryDraftDto {
+                about: vec!["wind turbines".to_owned()],
+                needs: vec![KnowledgeNeedDto::Definition],
+                ..KnowledgeQueryDraftDto::default()
+            },
+            scope: KnowledgeScopeDto {
+                kind: KnowledgeScopeKindDto::EntireLibrary,
+                workspace_id,
+                enrolled_root_ids: Vec::new(),
+                folder: None,
+                semantic_source_ids: Vec::new(),
+            },
+            mode: KnowledgeRetrievalModeDto::FullText,
+            options: None,
+        }
+    }
+
+    fn answer_request(
+        workspace_id: Uuid,
+        profile_id: Uuid,
+        evidence_fingerprint: &str,
+    ) -> GenerateKnowledgeAnswerRequestDto {
+        GenerateKnowledgeAnswerRequestDto {
+            request_id: Uuid::new_v4(),
+            workspace_id,
+            evidence_fingerprint: evidence_fingerprint.to_owned(),
+            profile_id,
+            allow_model_knowledge: false,
+            action: Some(KnowledgeActionDto::Explain),
+            context: Some("a maintenance report".to_owned()),
+            constraints: vec!["cite sources".to_owned()],
+            depth: Some(KnowledgeAnswerDepthDto::Brief),
+            output: Some(KnowledgeOutputFormatDto::Bullets),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_answer_consumes_the_inspected_evidence_without_retrieving_again() {
+        let fixture = fixture("Rotor blades convert wind into torque [E1].").await;
+        let result = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("search");
+        assert_eq!(result.evidence.len(), 1);
+        assert_eq!(result.evidence[0].source_id, fixture.source_id);
+        assert_eq!(fixture.capability.requests().len(), 1);
+
+        let answer = fixture
+            .knowledge
+            .answer(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                answer_request(
+                    fixture.workspace_id,
+                    fixture.profile_id,
+                    &result.evidence_fingerprint,
+                ),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("answer from the inspected evidence");
+
+        assert_eq!(
+            fixture.capability.requests().len(),
+            1,
+            "answer generation must never rerun retrieval"
+        );
+        assert_eq!(answer.evidence_fingerprint, result.evidence_fingerprint);
+        assert!(!answer.insufficient);
+        assert!(!answer.model_knowledge_allowed);
+        assert_eq!(answer.citations.len(), 1);
+        // The citation must name evidence the user already saw, and it must
+        // open through the existing knowledge source authority.
+        assert_eq!(answer.citations[0].record_id, result.evidence[0].record_id);
+        assert_eq!(answer.citations[0].source_id, result.evidence[0].source_id);
+        assert_eq!(
+            answer.citations[0].final_rank,
+            result.evidence[0].final_rank
+        );
+        let location = fixture
+            .knowledge
+            .resolve_source(
+                fixture.library.as_ref(),
+                &SemanticAccessContext::Host,
+                ResolveKnowledgeSourceRequestDto {
+                    workspace_id: fixture.workspace_id,
+                    source_id: answer.citations[0].source_id.clone(),
+                },
+            )
+            .expect("a citation resolves through the existing source authority");
+        assert_eq!(location.location.uri, "file:///indexed-library/turbines.md");
+
+        // Answer-only fields shape the answer, never a search.
+        let generation = fixture.transport.generations().remove(0);
+        assert!(generation.user_prompt.contains("a maintenance report"));
+        assert!(generation.system_prompt.contains("brief"));
+        assert!(generation.system_prompt.contains("bullet points"));
+        assert!(
+            !generation.system_prompt.contains("a maintenance report"),
+            "answer-only free text must stay data"
+        );
+    }
+
+    /// The same fingerprint must keep producing the same citation identities,
+    /// and answering twice must still never retrieve again.
+    #[tokio::test]
+    async fn repeated_answers_over_one_evidence_set_keep_citation_identities_stable() {
+        let fixture = fixture("Blades convert wind [E1].").await;
+        let result = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("search");
+
+        let mut identities = Vec::new();
+        for _ in 0..2 {
+            let answer = fixture
+                .knowledge
+                .answer(
+                    fixture.authority.clone(),
+                    &SemanticAccessContext::Host,
+                    answer_request(
+                        fixture.workspace_id,
+                        fixture.profile_id,
+                        &result.evidence_fingerprint,
+                    ),
+                    &fixture.profiles,
+                    &CancellationToken::new(),
+                )
+                .await
+                .expect("answer");
+            identities.push(
+                answer
+                    .citations
+                    .iter()
+                    .map(|citation| {
+                        (
+                            citation.label.clone(),
+                            citation.record_id.clone(),
+                            citation.source_id.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        }
+
+        assert_eq!(identities[0], identities[1]);
+        assert!(!identities[0].is_empty());
+        assert_eq!(fixture.capability.requests().len(), 1);
+    }
+
+    /// Consent revoked between search and answer must remove evidence before
+    /// any prompt is built, without disclosing what was removed.
+    #[tokio::test]
+    async fn evidence_revoked_after_the_search_is_denied_before_generation() {
+        let fixture = fixture("unused").await;
+        let result = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("search");
+        assert_eq!(result.evidence.len(), 1);
+        let folder = SemanticFolderContext::new(
+            fixture.workspace_id.into(),
+            fm_domain::Location::parse("file:///indexed-library").expect("location"),
+        );
+        let revision = fixture
+            .library
+            .status(&SemanticAccessContext::Host)
+            .expect("status")
+            .revision;
+        let plan = fixture
+            .library
+            .plan_exclusion(&SemanticAccessContext::Host, folder.clone(), revision)
+            .expect("plan exclusion");
+        fixture
+            .library
+            .confirm_exclusion(
+                &SemanticAccessContext::Host,
+                &plan.confirmation_id,
+                plan.policy_revision,
+                &folder,
+            )
+            .expect("exclusion revokes the scope");
+
+        let error = fixture
+            .knowledge
+            .answer(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                answer_request(
+                    fixture.workspace_id,
+                    fixture.profile_id,
+                    &result.evidence_fingerprint,
+                ),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect_err("revoked evidence must never be answered from");
+
+        assert!(
+            matches!(error, ApplicationError::PermissionDenied),
+            "revoked evidence must be denied, got {error:?}"
+        );
+        assert!(
+            fixture.transport.generations().is_empty(),
+            "revoked evidence must never reach an endpoint"
+        );
+        assert_eq!(fixture.capability.requests().len(), 1);
+    }
+
+    /// Retention is bounded, so an evidence set displaced by newer searches
+    /// must demand an explicit new search rather than be silently re-retrieved.
+    #[tokio::test]
+    async fn an_evicted_evidence_set_requires_an_explicit_refresh() {
+        let fixture = fixture("unused").await;
+        let first = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("first search");
+
+        for index in 0..=crate::knowledge_evidence_cache::MAX_CACHED_EVIDENCE_SETS {
+            let mut request = search_request(fixture.workspace_id);
+            request.draft.about = vec![format!("displacing subject {index}")];
+            fixture
+                .knowledge
+                .execute(
+                    fixture.authority.clone(),
+                    &SemanticAccessContext::Host,
+                    request,
+                    true,
+                    &CancellationToken::new(),
+                )
+                .await
+                .expect("displacing search");
+        }
+        let retrievals = fixture.capability.requests().len();
+
+        let error = fixture
+            .knowledge
+            .answer(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                answer_request(
+                    fixture.workspace_id,
+                    fixture.profile_id,
+                    &first.evidence_fingerprint,
+                ),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect_err("an evicted evidence set is not answerable");
+
+        match error {
+            ApplicationError::KnowledgeEvidenceRefreshRequired {
+                evidence_fingerprint,
+            } => assert_eq!(evidence_fingerprint, first.evidence_fingerprint),
+            other => panic!("expected a typed refresh-required failure, got {other:?}"),
+        }
+        assert_eq!(
+            fixture.capability.requests().len(),
+            retrievals,
+            "an eviction must never trigger a replacement retrieval"
+        );
+        assert!(fixture.transport.generations().is_empty());
+    }
+
+    /// Cancellation must stop an answer before the endpoint is contacted, and
+    /// must not fall back to a fresh retrieval.
+    #[tokio::test]
+    async fn a_cancelled_answer_contacts_no_endpoint_and_starts_no_retrieval() {
+        let fixture = fixture("unused").await;
+        let result = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("search");
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let error = fixture
+            .knowledge
+            .answer(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                answer_request(
+                    fixture.workspace_id,
+                    fixture.profile_id,
+                    &result.evidence_fingerprint,
+                ),
+                &fixture.profiles,
+                &cancellation,
+            )
+            .await
+            .expect_err("a cancelled answer must not generate");
+
+        assert!(matches!(error, ApplicationError::OperationCancelled));
+        assert!(fixture.transport.generations().is_empty());
+        assert_eq!(fixture.capability.requests().len(), 1);
     }
 }

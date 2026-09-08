@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
-import type { KnowledgeEvidence } from '../../models';
+import type { KnowledgeAnswer, KnowledgeEvidence } from '../../models';
 import {
   groupEvidenceByDocument,
   KnowledgeSearchDialog,
@@ -1104,7 +1104,7 @@ describe('knowledgeProvenanceLabel spreadsheet ranges (task 0206)', () => {
 });
 
 describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
-  it('never renders an answer panel even when answer generation is available', async () => {
+  it('never renders an answer panel before a search has succeeded (task 0207)', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
       fullText: true,
@@ -1115,6 +1115,7 @@ describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('What do you need?'));
 
     expect(root.textContent).not.toContain('Generate answer');
+    expect(root.querySelector('.fm-knowledge-answer')).toBeNull();
     expect(root.querySelector('.fm-rag-answer')).toBeNull();
     expect(root.textContent).not.toContain('Search never generates an answer');
   });
@@ -1149,5 +1150,657 @@ describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
 
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
     expect(root.textContent).toContain('Search never generates an answer');
+  });
+});
+
+/** Saves one generation profile so the mock host can answer (task 0207). */
+async function configureProfile(
+  client: MockFileManagerClient,
+  options: { readonly name?: string; readonly baseUrl?: string } = {},
+): Promise<{ readonly id: string; readonly name: string }> {
+  const profile = await client.createLlmProfile({
+    name: options.name ?? 'Local profile',
+    preset: 'openAiCompatible',
+    baseUrl: options.baseUrl ?? 'http://localhost:11434',
+    deployment: null,
+    apiVersion: null,
+    model: 'mock-model',
+    credential: null,
+    advanced: {
+      contextWindow: 8_192,
+      maximumAnswerTokens: 1_024,
+      temperature: 0.2,
+      timeoutSeconds: 30,
+      tlsPolicy: 'requireValidCertificate',
+      customHeaders: {},
+    },
+    capabilities: ['chatCompletions'],
+    redactFilenames: false,
+  });
+  return { id: profile.id, name: profile.name };
+}
+
+function answerSection(): HTMLElement | null {
+  return root.querySelector<HTMLElement>('.fm-knowledge-answer');
+}
+
+function profileSelect(): HTMLSelectElement {
+  const element = root.querySelector<HTMLSelectElement>('#fm-knowledge-answer-profile');
+  if (element === null) throw new Error('answer profile select not rendered');
+  return element;
+}
+
+function selectProfile(profileId: string): void {
+  const select = profileSelect();
+  select.value = profileId;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  m.redraw.sync();
+}
+
+function modelKnowledgeCheckbox(): HTMLInputElement {
+  const element = root.querySelector<HTMLInputElement>('#fm-knowledge-model-knowledge');
+  if (element === null) throw new Error('model knowledge checkbox not rendered');
+  return element;
+}
+
+/** Waits until an answer section exists after a completed search. */
+async function generateAnswer(): Promise<void> {
+  button('Generate answer').click();
+  m.redraw.sync();
+  await vi.waitFor(() =>
+    expect(
+      root.querySelector('.fm-knowledge-answer-markdown, .fm-knowledge-answer-error'),
+    ).not.toBeNull(),
+  );
+  m.redraw.sync();
+}
+
+/** A knowledge answer whose fields the test controls exactly. */
+function answerFixture(
+  fingerprint: string,
+  overrides: Partial<KnowledgeAnswer> = {},
+): KnowledgeAnswer {
+  return {
+    requestId: 'answer-request',
+    evidenceFingerprint: fingerprint,
+    profileId: 'profile',
+    profileName: 'Local profile',
+    locality: 'loopback',
+    text: 'Grounded answer [E1].',
+    citations: [],
+    modelKnowledgeAllowed: false,
+    insufficient: false,
+    withheldUnauthorized: 0,
+    staleEvidence: 0,
+    unavailableEvidence: 0,
+    ...overrides,
+  };
+}
+
+/** Waits until a dialog that also loads generation profiles is ready. */
+async function answersReady(): Promise<void> {
+  await vi.waitFor(() => {
+    expect(root.textContent).not.toContain('Loading knowledge search…');
+    expect(button('Search').disabled).toBe(false);
+  });
+  m.redraw.sync();
+}
+
+describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
+  it('never offers answer controls when the host reports no answer capability', async () => {
+    mount({ initialSubject: 'retrieval' });
+    await ready();
+
+    await search();
+
+    expect(answerSection()).toBeNull();
+    expect(root.textContent).not.toContain('Generate answer');
+    expect(root.textContent).toContain('Search never generates an answer');
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('does not load generation profiles when answering is unavailable', async () => {
+    const client = new MockFileManagerClient();
+    const profiles = vi.spyOn(client, 'listLlmProfiles');
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+
+    await search();
+
+    expect(profiles).not.toHaveBeenCalled();
+  });
+
+  it('stays neutral when the host offers answers but no profile is saved', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: true,
+      semantic: false,
+      answerGeneration: true,
+    });
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      return { ...result, capabilities: { ...result.capabilities, answerGeneration: true } };
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+
+    await search();
+
+    expect(answerSection()).not.toBeNull();
+    expect(root.querySelector('#fm-knowledge-answer-profile')).toBeNull();
+    expect(root.textContent).toContain('No generation profile is configured');
+    expect(() => button('Generate answer')).toThrow();
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the answer section out of the composer until a search has succeeded', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+
+    expect(answerSection()).toBeNull();
+    expect(root.textContent).not.toContain('Generate answer');
+
+    await search();
+
+    expect(answerSection()).not.toBeNull();
+    expect(root.textContent).not.toContain('Search never generates an answer');
+  });
+
+  it('requires an explicit profile choice before an answer can be generated', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+
+    expect(profileSelect().value).toBe('');
+    expect(button('Generate answer').disabled).toBe(true);
+
+    selectProfile(profile.id);
+
+    expect(button('Generate answer').disabled).toBe(false);
+  });
+
+  it('answers from the displayed evidence set without searching again', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    type(dsl(), 'about: retrieval do: apply to: "write a scheduler" format: steps depth: brief');
+    await vi.waitFor(() => expect(subjects().value).toBe('retrieval'));
+    let displayedFingerprint = '';
+    const executeOriginal = client.executeKnowledgeSearch.bind(client);
+    const execute = vi
+      .spyOn(client, 'executeKnowledgeSearch')
+      .mockImplementation(async (request, signal) => {
+        const executed = await executeOriginal(request, signal);
+        displayedFingerprint = executed.evidenceFingerprint;
+        return executed;
+      });
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    await search();
+    const searches = execute.mock.calls.length;
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    expect(execute.mock.calls.length).toBe(searches);
+    expect(generate).toHaveBeenCalledOnce();
+    const request = generate.mock.calls[0]?.[0];
+    expect(request?.evidenceFingerprint).toBe(displayedFingerprint);
+    expect(request?.workspaceId).toBe(workspaceId);
+    expect(request?.profileId).toBe(profile.id);
+    expect(request?.allowModelKnowledge).toBe(false);
+    expect(request?.action).toBe('apply');
+    expect(request?.context).toBe('write a scheduler');
+    expect(request?.output).toBe('steps');
+    expect(request?.depth).toBe('brief');
+    expect(root.querySelector('.fm-knowledge-answer-markdown')?.textContent).toContain(
+      'Answered from',
+    );
+  });
+
+  it('carries answer-only constraints without adding them to retrieval', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    type(dsl(), 'about: retrieval constraint: "cite every claim"');
+    await vi.waitFor(() => expect(subjects().value).toBe('retrieval'));
+    let plannedTexts: readonly string[] = [];
+    const executeOriginal = client.executeKnowledgeSearch.bind(client);
+    const execute = vi
+      .spyOn(client, 'executeKnowledgeSearch')
+      .mockImplementation(async (request, signal) => {
+        const executed = await executeOriginal(request, signal);
+        plannedTexts = executed.plan.searches.map((planned) => planned.text);
+        return executed;
+      });
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    await search();
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    expect(generate.mock.calls[0]?.[0]?.constraints).toEqual(['cite every claim']);
+    expect(execute.mock.calls[0]?.[0]?.draft.constraints).toEqual(['cite every claim']);
+    expect(plannedTexts.length).toBeGreaterThan(0);
+    for (const planned of plannedTexts) {
+      expect(planned).not.toContain('cite every claim');
+    }
+  });
+
+  it('keeps generation grounded by default and labels an explicit opt-in', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+
+    expect(modelKnowledgeCheckbox().checked).toBe(false);
+    modelKnowledgeCheckbox().click();
+    m.redraw.sync();
+    expect(root.textContent).toContain('not supported by the citations');
+
+    await generateAnswer();
+
+    expect(generate.mock.calls[0]?.[0]?.allowModelKnowledge).toBe(true);
+    expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
+      'permitted to use general model knowledge',
+    );
+  });
+
+  it('discloses a cloud endpoint before any evidence is sent', async () => {
+    const client = new MockFileManagerClient();
+    const local = await configureProfile(client, {
+      name: 'Local profile',
+      baseUrl: 'http://localhost:11434',
+    });
+    const cloud = await configureProfile(client, {
+      name: 'Cloud profile',
+      baseUrl: 'https://llm.example.test',
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+
+    selectProfile(local.id);
+    expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
+      'stays on this device',
+    );
+
+    selectProfile(cloud.id);
+    expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
+      'sends the evidence above',
+    );
+  });
+
+  it('tells the user to search again when the inspected evidence is gone', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockRejectedValue(
+      Object.assign(new Error('gone'), { code: 'knowledgeEvidenceRefreshRequired' }),
+    );
+    selectProfile(profile.id);
+
+    button('Generate answer').click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-answer [role="alert"]')?.textContent).toContain(
+        'Run Search again',
+      ),
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('cancels a running generation and reports the cancellation', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(
+      (_request, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          );
+        }),
+    );
+
+    button('Generate answer').click();
+    m.redraw.sync();
+    expect(root.textContent).toContain('Generating answer…');
+    button('Cancel answer').click();
+
+    await vi.waitFor(() => expect(root.textContent).toContain('The answer was cancelled.'));
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+  });
+
+  it('reports a generation failure without losing the results', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockRejectedValue(new Error('boom'));
+    selectProfile(profile.id);
+
+    button('Generate answer').click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-answer [role="alert"]')?.textContent).toContain(
+        'The answer could not be generated.',
+      ),
+    );
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('reports a profile-loading failure and keeps search complete', async () => {
+    const client = new MockFileManagerClient({
+      failures: { listLlmProfiles: new Error('offline') },
+    });
+    await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+
+    await search();
+
+    expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
+      'Generation profiles could not be loaded.',
+    );
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+    expect(root.querySelector('#fm-knowledge-answer-profile')).toBeNull();
+  });
+
+  it('clears a generated answer as soon as the query is edited', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    await generateAnswer();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).not.toBeNull();
+
+    type(subjects(), 'fusion');
+
+    expect(answerSection()).toBeNull();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+  });
+
+  it('clears a generated answer when a new search is started', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    await generateAnswer();
+
+    await search();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('#fm-knowledge-answer-profile')).not.toBeNull(),
+    );
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+  });
+
+  it('discards an answer that lands after a further edit', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const pending = deferred<KnowledgeAnswer>();
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(() => pending.promise);
+
+    button('Generate answer').click();
+    m.redraw.sync();
+    type(subjects(), 'fusion');
+    pending.resolve(answerFixture('stale-fingerprint'));
+    await Promise.resolve();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+    expect(root.textContent).not.toContain('Grounded answer');
+  });
+
+  it('discards an answer that lands after the dialog was closed and reopened', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const pending = deferred<KnowledgeAnswer>();
+    const lifecycle = mountLifecycle({ client, initialSubject: 'retrieval' });
+    lifecycle.open(true);
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(() => pending.promise);
+    button('Generate answer').click();
+    m.redraw.sync();
+
+    lifecycle.open(false);
+    lifecycle.open(true);
+    await answersReady();
+    pending.resolve(answerFixture('stale-fingerprint'));
+    await Promise.resolve();
+    m.redraw.sync();
+
+    expect(root.textContent).not.toContain('Grounded answer');
+    expect(answerSection()).toBeNull();
+  });
+
+  it('opens the exact displayed source behind a citation', async () => {
+    const onOpenSource = vi.fn();
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    await generateAnswer();
+
+    const citation = root.querySelector<HTMLButtonElement>(
+      '.fm-knowledge-citations button:not(:disabled)',
+    );
+    citation?.click();
+
+    expect(onOpenSource).toHaveBeenCalledWith(expect.stringContaining('mock-knowledge-source-'));
+  });
+
+  it('opens a citation from the answer text itself', async () => {
+    const onOpenSource = vi.fn();
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    await generateAnswer();
+
+    const link = root.querySelector<HTMLAnchorElement>('.fm-knowledge-answer-markdown a');
+    expect(link?.getAttribute('href')).toContain('#fm-knowledge-citation-');
+    link?.click();
+
+    expect(onOpenSource).toHaveBeenCalledWith(expect.stringContaining('mock-knowledge-source-'));
+  });
+
+  it('never links a citation whose identity was not displayed', async () => {
+    const onOpenSource = vi.fn();
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await answersReady();
+    await search();
+    const original = client.generateKnowledgeAnswer.bind(client);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => {
+      const generated = await original(request, signal);
+      return {
+        ...generated,
+        text: 'Invented reference [E9].',
+        citations: [
+          {
+            label: 'E9',
+            recordId: 'never-displayed',
+            sourceId: 'never-displayed-source',
+            provenance: '',
+            sectionPath: [],
+            finalRank: 9,
+            generated: false,
+            stale: false,
+            unavailable: false,
+          },
+        ],
+      };
+    });
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    expect(root.querySelector('.fm-knowledge-answer-markdown a')).toBeNull();
+    const citation = root.querySelector<HTMLButtonElement>('.fm-knowledge-citations button');
+    expect(citation?.disabled).toBe(true);
+    citation?.click();
+    expect(onOpenSource).not.toHaveBeenCalled();
+  });
+
+  it('renders answer markdown safely', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const original = client.generateKnowledgeAnswer.bind(client);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => ({
+      ...(await original(request, signal)),
+      text: '# Heading\n\n<script>window.pwned = true;</script>\n\n**bold**',
+    }));
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    expect(root.querySelector('.fm-knowledge-answer-markdown h1')?.textContent).toBe('Heading');
+    expect(root.querySelector('.fm-knowledge-answer-markdown strong')?.textContent).toBe('bold');
+    expect(root.querySelector('.fm-knowledge-answer-markdown script')).toBeNull();
+  });
+
+  it('reports stale, unavailable, generated and withheld provenance honestly', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    const original = client.generateKnowledgeAnswer.bind(client);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => {
+      const generated = await original(request, signal);
+      const [first, ...rest] = generated.citations;
+      if (first === undefined) return generated;
+      return {
+        ...generated,
+        citations: [{ ...first, stale: true, generated: true }, ...rest],
+        staleEvidence: 2,
+        unavailableEvidence: 1,
+        withheldUnauthorized: 3,
+      };
+    });
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    const section = root.querySelector('.fm-knowledge-answer');
+    expect(section?.textContent).toContain('2 cited source(s) changed since indexing');
+    expect(section?.textContent).toContain('1 cited source(s) are currently unavailable');
+    expect(section?.textContent).toContain('3 evidence row(s) were withheld');
+    expect(root.querySelector('.fm-knowledge-citations')?.textContent).toContain(
+      'Source changed since indexing',
+    );
+    expect(root.querySelector('.fm-knowledge-citations')?.textContent).toContain(
+      'Generated summary',
+    );
+  });
+
+  it('says so when the retained evidence cannot support an answer', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    const original = client.generateKnowledgeAnswer.bind(client);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => ({
+      ...(await original(request, signal)),
+      insufficient: true,
+      citations: [],
+      text: 'The inspected evidence is insufficient to answer this request.',
+    }));
+    selectProfile(profile.id);
+
+    await generateAnswer();
+
+    expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
+      'could not support a grounded answer',
+    );
+  });
+
+  it('labels every answer control and announces generation politely', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+
+    expect(answerSection()?.getAttribute('aria-label')).toBe('Optional knowledge answer');
+    expect(root.querySelector('label[for="fm-knowledge-answer-profile"]')?.textContent).toContain(
+      'Generation profile',
+    );
+    expect(root.querySelector('label[for="fm-knowledge-model-knowledge"]')?.textContent).toContain(
+      'general model knowledge',
+    );
+    expect(root.querySelector('.fm-knowledge-answer-body')?.getAttribute('aria-live')).toBe(
+      'polite',
+    );
+
+    selectProfile(profile.id);
+    await generateAnswer();
+
+    expect(document.activeElement).toBe(root.querySelector('.fm-knowledge-answer-body'));
+  });
+
+  it('cancels a running generation when the dialog is closed', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const onClose = vi.fn();
+    let aborted = false;
+    mount({ client, initialSubject: 'retrieval', onClose });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(
+      (_request, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            aborted = true;
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        }),
+    );
+
+    button('Generate answer').click();
+    m.redraw.sync();
+    subjects().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(aborted).toBe(true));
   });
 });

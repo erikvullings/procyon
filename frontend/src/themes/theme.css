@@ -2211,8 +2211,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
   white-space: pre-wrap;
 }
 
-/* Structured Knowledge Search (task 0206). Search-only: this surface never
- * renders an answer section, so the layout is composer above, evidence below. */
+/* Structured Knowledge Search (task 0206). Retrieval-first: the composer sits
+ * above the evidence, and the optional answer (task 0207) is a downstream
+ * section below it that only exists once a search has succeeded. */
 .modal.fm-knowledge-search-modal {
   --mm-modal-content-padding-top-with-close: 1rem;
   width: min(72rem, calc(100vw - 2rem));
@@ -2441,6 +2442,72 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-search :is(.fm-knowledge-excerpt, .fm-knowledge-results) {
   user-select: text;
+}
+
+/* Optional answer (task 0207): downstream of the evidence, never beside it. */
+.fm-knowledge-answer {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--fm-color-border, #d0d0d0);
+}
+
+.fm-knowledge-answer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+
+.fm-knowledge-answer-controls .fm-knowledge-field {
+  min-width: 16rem;
+}
+
+.fm-knowledge-answer-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-knowledge-answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fm-knowledge-answer-body {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.fm-knowledge-answer-markdown {
+  padding: 0.75rem;
+  border: 1px solid var(--fm-color-border, #d0d0d0);
+  border-radius: var(--fm-radius);
+  background: color-mix(in srgb, var(--fm-color-accent, #1976d2) 4%, transparent);
+}
+
+.fm-knowledge-answer-markdown > :first-child {
+  margin-top: 0;
+}
+
+.fm-knowledge-answer-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.fm-knowledge-answer-markdown a {
+  color: var(--fm-color-accent, #1976d2);
+}
+
+.fm-knowledge-citations {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 @media (max-width: 42rem) {

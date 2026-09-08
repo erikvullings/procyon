@@ -1,4 +1,5 @@
 import type {
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeDiagnostic,
   KnowledgeEvidence,
@@ -25,15 +26,15 @@ import type {
 
 /**
  * Deterministic, LLM-free knowledge search used by {@link
- * MockFileManagerClient} (task 0206).
+ * MockFileManagerClient} (tasks 0206, 0207).
  *
  * This mirrors the backend contract closely enough to drive the real UI: the
  * same canonical planner shape, the same DSL round-trip, the same
  * reciprocal-rank fusion over per-query ranks, the same per-document
  * diversification, and the same explicit route fallback. Nothing here contacts
- * a model: full text is available, query embeddings are not, and answer
- * generation is off, which is exactly the configuration the search-only UX
- * must remain fully usable in.
+ * a model: full text is available, query embeddings are not, and the optional
+ * answer is composed locally from the evidence a search already displayed, so
+ * search-only remains the default configuration the UX must stay usable in.
  */
 
 /** Planner identity reported by the mock, mirroring the Rust planner's shape. */
@@ -260,9 +261,13 @@ const MOCK_KNOWLEDGE_CORPUS: readonly MockKnowledgeDocument[] = [
   },
 ];
 
-/** Knowledge capabilities reported by the mock: full text only, no LLM. */
-export function mockKnowledgeCapabilities(): KnowledgeCapabilities {
-  return { fullText: true, semantic: false, answerGeneration: false };
+/**
+ * Knowledge capabilities reported by the mock: full text only, and no answer
+ * generation unless the mock host has a saved generation profile (task 0207).
+ * Retrieval never depends on `answerGeneration`.
+ */
+export function mockKnowledgeCapabilities(answerGeneration = false): KnowledgeCapabilities {
+  return { fullText: true, semantic: false, answerGeneration };
 }
 
 /** The indexed roots the mock exposes for scope selection. */
@@ -1059,8 +1064,9 @@ export function mockKnowledgeRouteUnavailable(mode: KnowledgeRetrievalMode): boo
 export function executeMockKnowledgeSearch(
   requestId: string,
   plan: KnowledgeSearchPlan,
+  answerGeneration = false,
 ): KnowledgeSearchResult {
-  const capabilities = mockKnowledgeCapabilities();
+  const capabilities = mockKnowledgeCapabilities(answerGeneration);
   const documents = documentsInScope(plan.scope);
   const fused = new Map<
     string,
@@ -1236,5 +1242,153 @@ export function resolveMockKnowledgeSource(sourceId: string): KnowledgeSourceLoc
     entryId: document.uri,
     location: { providerId: document.providerId, uri: document.uri },
     available: !document.unavailable,
+  };
+}
+
+// --- Optional answers over an inspected evidence set (task 0207) -----------
+
+/**
+ * How many inspected evidence sets the mock retains for optional answering.
+ *
+ * Retention is bounded exactly like the backend's evidence cache: answering is
+ * a downstream convenience over something the user already inspected, never a
+ * growing store of retrieved content.
+ */
+export const MOCK_KNOWLEDGE_EVIDENCE_SETS = 8;
+
+/** One retained evidence set, addressed by the fingerprint the search displayed. */
+export interface RetainedKnowledgeEvidence {
+  /** Workspace the evidence was authorized through. */
+  readonly workspaceId: string;
+  /** The exact rows the search displayed, in displayed order. */
+  readonly evidence: readonly KnowledgeEvidence[];
+}
+
+/**
+ * A bounded, insertion-ordered store of inspected evidence sets.
+ *
+ * The fingerprint an earlier search returned is the only way in: nothing here
+ * can retrieve, and an evicted or unknown fingerprint is simply absent, which
+ * is what makes "answer again" require an explicit new search.
+ */
+export class MockKnowledgeEvidenceCache {
+  private readonly sets = new Map<string, RetainedKnowledgeEvidence>();
+
+  constructor(private readonly maximumEntries: number = MOCK_KNOWLEDGE_EVIDENCE_SETS) {}
+
+  /** Retains one displayed evidence set, evicting the oldest beyond the bound. */
+  record(fingerprint: string, retained: RetainedKnowledgeEvidence): void {
+    this.sets.delete(fingerprint);
+    this.sets.set(fingerprint, retained);
+    while (this.sets.size > this.maximumEntries) {
+      const oldest = this.sets.keys().next();
+      if (oldest.done === true) break;
+      this.sets.delete(oldest.value);
+    }
+  }
+
+  /**
+   * Reads one retained set for the workspace it was authorized through. A
+   * fingerprint retained for another workspace is reported as absent rather
+   * than as a different failure, so nothing about it is observable.
+   */
+  get(fingerprint: string, workspaceId: string): RetainedKnowledgeEvidence | undefined {
+    const retained = this.sets.get(fingerprint);
+    if (retained === undefined || retained.workspaceId !== workspaceId) return undefined;
+    return retained;
+  }
+
+  /** Number of retained sets; used by tests to assert the bound. */
+  get size(): number {
+    return this.sets.size;
+  }
+
+  clear(): void {
+    this.sets.clear();
+  }
+}
+
+/**
+ * The stable opaque citation label for one displayed position, mirroring
+ * `citation_label` in `fm-application::knowledge_answer`: the label is derived
+ * from the position the row had in the displayed set, so a citation always
+ * names the same inspected evidence.
+ */
+export function mockKnowledgeCitationLabel(displayedIndex: number): string {
+  return `E${displayedIndex + 1}`;
+}
+
+/** How many displayed rows the deterministic mock answer cites. */
+const MOCK_ANSWER_CITATIONS = 3;
+
+/**
+ * Builds one deterministic answer over an already inspected evidence set.
+ *
+ * Nothing here retrieves or reranks: the citations are the identities the
+ * search already displayed, in displayed order, so opening a citation opens
+ * exactly the inspected source through the existing knowledge source
+ * authority.
+ */
+export function buildMockKnowledgeAnswer(options: {
+  readonly requestId: string;
+  readonly evidenceFingerprint: string;
+  readonly profileId: string;
+  readonly profileName: string;
+  readonly locality: 'loopback' | 'cloud';
+  readonly allowModelKnowledge: boolean;
+  readonly evidence: readonly KnowledgeEvidence[];
+}): KnowledgeAnswer {
+  const staleEvidence = options.evidence.filter((row) => row.stale === true).length;
+  const unavailableEvidence = options.evidence.filter((row) => row.unavailable).length;
+  const answerable = options.evidence
+    .map((row, index) => ({ row, label: mockKnowledgeCitationLabel(index) }))
+    .filter((entry) => !entry.row.unavailable)
+    .slice(0, MOCK_ANSWER_CITATIONS);
+  if (answerable.length === 0) {
+    return {
+      requestId: options.requestId,
+      evidenceFingerprint: options.evidenceFingerprint,
+      profileId: options.profileId,
+      profileName: options.profileName,
+      locality: options.locality,
+      text: 'The inspected evidence is insufficient to answer this request.',
+      citations: [],
+      modelKnowledgeAllowed: options.allowModelKnowledge,
+      insufficient: true,
+      withheldUnauthorized: 0,
+      staleEvidence,
+      unavailableEvidence,
+    };
+  }
+  const lines = answerable.map(
+    ({ row, label }) => `- **${row.title}** — ${row.excerpt.trim()} [${label}]`,
+  );
+  const lead = `Answered from the ${options.evidence.length} inspected evidence row(s) you already reviewed.`;
+  const modelKnowledge = options.allowModelKnowledge
+    ? '\n\nGeneral model knowledge was permitted for this answer and is not supported by the citations above.'
+    : '';
+  return {
+    requestId: options.requestId,
+    evidenceFingerprint: options.evidenceFingerprint,
+    profileId: options.profileId,
+    profileName: options.profileName,
+    locality: options.locality,
+    text: `${lead}\n\n${lines.join('\n')}${modelKnowledge}`,
+    citations: answerable.map(({ row, label }) => ({
+      label,
+      recordId: row.recordId,
+      sourceId: row.sourceId,
+      provenance: row.provenance,
+      sectionPath: [...row.sectionPath],
+      finalRank: row.finalRank,
+      generated: row.generated,
+      stale: row.stale ?? null,
+      unavailable: row.unavailable,
+    })),
+    modelKnowledgeAllowed: options.allowModelKnowledge,
+    insufficient: false,
+    withheldUnauthorized: 0,
+    staleEvidence,
+    unavailableEvidence,
   };
 }

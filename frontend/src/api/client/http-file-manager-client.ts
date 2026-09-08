@@ -12,6 +12,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
@@ -52,6 +53,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
@@ -63,6 +65,7 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
@@ -233,6 +236,8 @@ import {
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
   getFileGitHistory as requestGitFileHistory,
+  cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
+  generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
   getKnowledgeCapabilities as requestKnowledgeCapabilities,
   parseKnowledgeQuery as requestKnowledgeQueryParse,
   listKnowledgeRoots as requestKnowledgeRoots,
@@ -2350,6 +2355,54 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200)
       throw new Error(`Unexpected resolveKnowledgeSource response status: ${response.status}`);
     return response.data;
+  }
+
+  /**
+   * Answers from an already inspected evidence set. Aborting only drops this
+   * response, so the abort is also forwarded to `POST /answer/cancel` with the
+   * same `requestId`; otherwise the server would keep generating for an answer
+   * nobody is waiting for (task 0207). Retrieval is never rerun here: a host
+   * that no longer retains the evidence reports the typed conflict instead.
+   */
+  async generateKnowledgeAnswer(
+    request: GenerateKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeAnswer> {
+    signal?.throwIfAborted();
+    const cancel = (): void => {
+      void this.cancelKnowledgeAnswer({ requestId: request.requestId }).catch((error: unknown) => {
+        console.warn('Failed to cancel knowledge answer', error);
+      });
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      const response = await requestKnowledgeAnswerGeneration(
+        request,
+        signal === undefined ? undefined : { signal },
+      );
+      // The response can win the race against a just-requested abort; a caller
+      // that already gave up must still observe the cancellation, exactly as
+      // the desktop host reports it.
+      if (signal?.aborted === true)
+        throw new DOMException('Knowledge answer generation was cancelled', 'AbortError');
+      if (response.status !== 200)
+        throw new Error(`Unexpected generateKnowledgeAnswer response status: ${response.status}`);
+      return response.data;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+    }
+  }
+
+  async cancelKnowledgeAnswer(
+    request: CancelKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestKnowledgeAnswerCancellation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected cancelKnowledgeAnswer response status: ${response.status}`);
   }
 
   async listConnections(signal?: AbortSignal): Promise<Connection[]> {

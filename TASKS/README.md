@@ -146,7 +146,7 @@ layers and never prerequisites for retrieval.
 - [x] 0204 Knowledge request model and deterministic planner *(needs 0203)*
 - [x] 0205 Knowledge DSL and rule-based parser *(needs 0204)*
 - [x] 0206 Search-only knowledge UX and host parity *(needs 0205)*
-- [ ] 0207 Optional answer generation from evidence *(needs 0206)*
+- [x] 0207 Optional answer generation from evidence *(needs 0206)*
 - [ ] 0208 Knowledge retrieval evaluation and release gate *(needs 0207)*
 
 ## File operations

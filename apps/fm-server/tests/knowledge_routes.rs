@@ -9,8 +9,8 @@
 mod common;
 
 use fm_transport_dto::{
-    ApplicationErrorDto, KnowledgeCapabilitiesDto, KnowledgeNeedDto,
-    KnowledgeQueryInterpretationDto,
+    ApplicationErrorCode as ApplicationErrorCodeDto, ApplicationErrorDto, KnowledgeCapabilitiesDto,
+    KnowledgeNeedDto, KnowledgeQueryInterpretationDto,
 };
 use reqwest::StatusCode;
 
@@ -168,6 +168,92 @@ async fn cancellation_is_available_over_http_for_host_parity() {
     server.handle.abort();
 }
 
+#[tokio::test]
+async fn answering_without_a_generation_profile_is_refused_over_http() {
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!(
+            "{}/api/v1/semantic/knowledge/answer",
+            server.base_url
+        ))
+        .json(&serde_json::json!({
+            "requestId": uuid::Uuid::new_v4(),
+            "workspaceId": uuid::Uuid::new_v4(),
+            "evidenceFingerprint": "sha256:never-retrieved",
+            "profileId": uuid::Uuid::new_v4(),
+            "allowModelKnowledge": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let error: ApplicationErrorDto = response.json().await.unwrap();
+    // Never 200, and never a silent retrieval: without an indexed library or a
+    // retained evidence set the request is refused with a typed failure.
+    assert!(
+        matches!(
+            status,
+            StatusCode::CONFLICT | StatusCode::SERVICE_UNAVAILABLE | StatusCode::NOT_FOUND
+        ),
+        "answering an unknown evidence set must be refused, got {status}: {error:?}"
+    );
+    assert!(
+        matches!(
+            error.code,
+            ApplicationErrorCodeDto::KnowledgeEvidenceRefreshRequired
+                | ApplicationErrorCodeDto::ProviderUnavailable
+                | ApplicationErrorCodeDto::NotFound
+        ),
+        "unexpected error code: {error:?}"
+    );
+
+    server.handle.abort();
+}
+
+#[tokio::test]
+async fn answer_cancellation_is_available_over_http_with_the_documented_status() {
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!(
+            "{}/api/v1/semantic/knowledge/answer/cancel",
+            server.base_url
+        ))
+        .json(&serde_json::json!({ "requestId": uuid::Uuid::new_v4() }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(response.bytes().await.unwrap().is_empty());
+
+    server.handle.abort();
+}
+
+#[tokio::test]
+async fn a_malformed_answer_request_is_rejected_before_any_authorization_work() {
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!(
+            "{}/api/v1/semantic/knowledge/answer",
+            server.base_url
+        ))
+        .json(&serde_json::json!({ "requestId": uuid::Uuid::new_v4() }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    server.handle.abort();
+}
+
 #[test]
 fn every_knowledge_route_is_published_in_the_openapi_document() {
     let document = fm_server::openapi_document();
@@ -181,6 +267,8 @@ fn every_knowledge_route_is_published_in_the_openapi_document() {
         "/api/v1/semantic/knowledge/search",
         "/api/v1/semantic/knowledge/search/cancel",
         "/api/v1/semantic/knowledge/sources/resolve",
+        "/api/v1/semantic/knowledge/answer",
+        "/api/v1/semantic/knowledge/answer/cancel",
     ] {
         assert!(paths.contains_key(path), "{path} must be published");
     }
@@ -217,6 +305,10 @@ fn every_knowledge_route_is_published_in_the_openapi_document() {
         "KnowledgeQueryInterpretationDto",
         "KnowledgeRootDto",
         "KnowledgeSourceLocationDto",
+        "GenerateKnowledgeAnswerRequestDto",
+        "KnowledgeAnswerDto",
+        "KnowledgeAnswerCitationDto",
+        "CancelKnowledgeAnswerRequestDto",
     ] {
         assert!(
             schemas.iter().any(|name| name == schema),

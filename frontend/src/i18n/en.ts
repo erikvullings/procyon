@@ -877,6 +877,44 @@ export const en = {
     offline: 'The backend is unreachable; results may be out of date.',
     answerNotGenerated:
       'Search never generates an answer. Answer generation is unavailable and not required.',
+    answerRegion: 'Optional knowledge answer',
+    answerHeading: 'Optional answer',
+    answerHint:
+      'An answer is generated only from the evidence above. It never runs a new search; use Search to retrieve again.',
+    answerProfile: 'Generation profile',
+    answerProfilePlaceholder: 'Select a generation profile…',
+    answerNoProfiles:
+      'No generation profile is configured, so no answer can be generated. The search above is complete.',
+    answerProfilesFailed:
+      'Generation profiles could not be loaded. The search above is complete without an answer.',
+    answerLocalEndpoint:
+      '{profile} runs on a local endpoint, so the evidence above stays on this device.',
+    answerCloudEndpoint:
+      '{profile} is a cloud endpoint: generating sends the evidence above to it. Your host enforces this consent.',
+    allowModelKnowledge: 'Allow general model knowledge, clearly labelled',
+    modelKnowledgeNotice:
+      'Statements from general model knowledge are not supported by the citations below.',
+    modelKnowledgeUsed:
+      'This answer was permitted to use general model knowledge, which the citations do not support.',
+    generateAnswer: 'Generate answer',
+    generatingAnswer: 'Generating answer…',
+    cancelAnswer: 'Cancel answer',
+    answerCancelled: 'The answer was cancelled.',
+    answerFailed: 'The answer could not be generated.',
+    answerRefreshRequired:
+      'The inspected evidence is no longer available. Run Search again, then generate the answer.',
+    answerPlaceholder: 'Select a profile and generate an answer from the evidence above.',
+    answerProfileUsed: 'Answered by {profile} · {locality}',
+    answerLocalityLoopback: 'local endpoint',
+    answerLocalityCloud: 'cloud endpoint',
+    answerInsufficient: 'The retained evidence could not support a grounded answer.',
+    answerStaleEvidence: '{count} cited source(s) changed since indexing.',
+    answerUnavailableEvidence: '{count} cited source(s) are currently unavailable.',
+    answerWithheldUnauthorized:
+      '{count} evidence row(s) were withheld by a fresh authorization check.',
+    answerCitations: 'Citations',
+    answerCitationNotDisplayed: 'not part of the displayed evidence',
+    openCitation: 'Open citation {label}',
     showAdvanced: 'Advanced',
     trace: 'Include retrieval trace',
     traceHeading: 'Retrieval trace',

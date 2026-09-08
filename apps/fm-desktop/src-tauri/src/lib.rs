@@ -439,6 +439,8 @@ pub fn run() {
             commands::execute_knowledge_search,
             commands::cancel_knowledge_search,
             commands::resolve_knowledge_source,
+            commands::generate_knowledge_answer,
+            commands::cancel_knowledge_answer,
             commands::list_connections,
             commands::create_connection,
             commands::get_connection,
@@ -744,6 +746,8 @@ mod tests {
                 commands::execute_knowledge_search,
                 commands::cancel_knowledge_search,
                 commands::resolve_knowledge_source,
+                commands::generate_knowledge_answer,
+                commands::cancel_knowledge_answer,
                 commands::list_connections,
                 commands::create_connection,
                 commands::get_connection,
@@ -887,6 +891,7 @@ mod tests {
             "plan_knowledge_search",
             "execute_knowledge_search",
             "resolve_knowledge_source",
+            "generate_knowledge_answer",
         ] {
             let error = get_ipc_response(
                 &webview,
@@ -906,6 +911,65 @@ mod tests {
                 "{command} must be registered: {error}"
             );
         }
+    }
+
+    /// The optional answer commands must exist on the desktop host with the
+    /// same behavior as their HTTP routes: cancellation always succeeds, and
+    /// answering an evidence set this host never produced is refused instead
+    /// of quietly running a new retrieval.
+    #[test]
+    fn knowledge_answer_commands_are_registered_and_never_rerun_retrieval() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "cancel_knowledge_answer".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(
+                    serde_json::json!({ "request": { "requestId": uuid::Uuid::new_v4() } }),
+                ),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("answer cancellation must be registered");
+
+        let error = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "generate_knowledge_answer".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": {
+                        "requestId": uuid::Uuid::new_v4(),
+                        "workspaceId": uuid::Uuid::new_v4(),
+                        "evidenceFingerprint": "sha256:never-retrieved",
+                        "profileId": uuid::Uuid::new_v4(),
+                        "allowModelKnowledge": false
+                    }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect_err("an unknown evidence set must not be answered");
+
+        let message = error.to_string();
+        assert!(!message.contains("not found"), "{message}");
+        assert!(
+            message.contains("knowledgeEvidenceRefreshRequired")
+                || message.contains("providerUnavailable")
+                || message.contains("permissionDenied"),
+            "answering an unknown evidence set must be refused: {message}"
+        );
     }
 
     #[test]

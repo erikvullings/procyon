@@ -885,6 +885,44 @@ export const nl = {
     offline: 'De backend is onbereikbaar; resultaten kunnen verouderd zijn.',
     answerNotGenerated:
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',
+    answerRegion: 'Optioneel kennisantwoord',
+    answerHeading: 'Optioneel antwoord',
+    answerHint:
+      'Een antwoord wordt alleen uit het bewijs hierboven gegenereerd. Het start nooit een nieuwe zoekopdracht; gebruik Zoeken om opnieuw op te halen.',
+    answerProfile: 'Generatieprofiel',
+    answerProfilePlaceholder: 'Kies een generatieprofiel…',
+    answerNoProfiles:
+      'Er is geen generatieprofiel ingesteld, dus er kan geen antwoord worden gegenereerd. De zoekopdracht hierboven is compleet.',
+    answerProfilesFailed:
+      'Generatieprofielen konden niet worden geladen. De zoekopdracht hierboven is compleet zonder antwoord.',
+    answerLocalEndpoint:
+      '{profile} draait op een lokaal eindpunt, dus het bewijs hierboven blijft op dit apparaat.',
+    answerCloudEndpoint:
+      '{profile} is een cloud-eindpunt: genereren stuurt het bewijs hierboven daarheen. Je host handhaaft deze toestemming.',
+    allowModelKnowledge: 'Algemene modelkennis toestaan, duidelijk gelabeld',
+    modelKnowledgeNotice:
+      'Uitspraken uit algemene modelkennis worden niet ondersteund door de citaten hieronder.',
+    modelKnowledgeUsed:
+      'Dit antwoord mocht algemene modelkennis gebruiken, die de citaten niet ondersteunen.',
+    generateAnswer: 'Antwoord genereren',
+    generatingAnswer: 'Antwoord genereren…',
+    cancelAnswer: 'Antwoord annuleren',
+    answerCancelled: 'Het antwoord is geannuleerd.',
+    answerFailed: 'Het antwoord kon niet worden gegenereerd.',
+    answerRefreshRequired:
+      'Het geïnspecteerde bewijs is niet meer beschikbaar. Voer opnieuw Zoeken uit en genereer daarna het antwoord.',
+    answerPlaceholder: 'Kies een profiel en genereer een antwoord uit het bewijs hierboven.',
+    answerProfileUsed: 'Beantwoord door {profile} · {locality}',
+    answerLocalityLoopback: 'lokaal eindpunt',
+    answerLocalityCloud: 'cloud-eindpunt',
+    answerInsufficient: 'Het bewaarde bewijs kon geen gefundeerd antwoord ondersteunen.',
+    answerStaleEvidence: '{count} geciteerde bron(nen) zijn gewijzigd sinds indexering.',
+    answerUnavailableEvidence: '{count} geciteerde bron(nen) zijn momenteel niet beschikbaar.',
+    answerWithheldUnauthorized:
+      '{count} bewijsrij(en) zijn achtergehouden door een nieuwe autorisatiecontrole.',
+    answerCitations: 'Citaten',
+    answerCitationNotDisplayed: 'geen onderdeel van het getoonde bewijs',
+    openCitation: 'Citaat {label} openen',
     showAdvanced: 'Geavanceerd',
     trace: 'Ophaalspoor opnemen',
     traceHeading: 'Ophaalspoor',

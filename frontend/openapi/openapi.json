@@ -5392,6 +5392,103 @@
         }
       }
     },
+    "/api/v1/semantic/knowledge/answer": {
+      "post": {
+        "operationId": "generateKnowledgeAnswer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateKnowledgeAnswerRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeAnswerDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The inspected evidence set must be retrieved again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/answer/cancel": {
+      "post": {
+        "operationId": "cancelKnowledgeAnswer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelKnowledgeAnswerRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/semantic/knowledge/capabilities": {
       "get": {
         "operationId": "getKnowledgeCapabilities",
@@ -7338,6 +7435,7 @@
           "platformOperationFailed",
           "hostKeyUnverified",
           "hostKeyMismatch",
+          "knowledgeEvidenceRefreshRequired",
           "internal"
         ]
       },
@@ -7646,6 +7744,20 @@
         "example": {
           "totalBytes": 104857600,
           "fileCount": 42
+        }
+      },
+      "CancelKnowledgeAnswerRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running knowledge answer generation.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when generation was started."
+          }
         }
       },
       "CancelKnowledgeSearchRequestDto": {
@@ -10008,6 +10120,88 @@
           }
         }
       },
+      "GenerateKnowledgeAnswerRequestDto": {
+        "type": "object",
+        "description": "Requests one optional answer from an already inspected evidence set.\n\nNothing in this request re-enters retrieval: the evidence set is addressed\nby the fingerprint an earlier successful search returned, and the answer-only\nfields shape presentation only.",
+        "required": [
+          "requestId",
+          "workspaceId",
+          "evidenceFingerprint",
+          "profileId"
+        ],
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeActionDto",
+                "description": "Answer-only typed goal; never used as retrieval text."
+              }
+            ]
+          },
+          "allowModelKnowledge": {
+            "type": "boolean",
+            "description": "Explicit opt-in to distinguishable model-only knowledge."
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Answer-only constraints; never used for retrieval."
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Answer-only application context; never used for retrieval."
+          },
+          "depth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeAnswerDepthDto",
+                "description": "Answer-only requested depth."
+              }
+            ]
+          },
+          "evidenceFingerprint": {
+            "type": "string",
+            "description": "Fingerprint of the exact evidence set returned by the search."
+          },
+          "output": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeOutputFormatDto",
+                "description": "Answer-only requested presentation."
+              }
+            ]
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Explicitly selected saved generation profile."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Caller-owned identity used for cancellation and correlation."
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace through which the evidence set was authorized."
+          }
+        }
+      },
       "GenerateRagAnswerRequestDto": {
         "type": "object",
         "description": "Confirms generation against an inspected evidence set.",
@@ -10650,6 +10844,66 @@
           "cite"
         ]
       },
+      "KnowledgeAnswerCitationDto": {
+        "type": "object",
+        "description": "One citation resolved locally against the displayed evidence set.\n\nIdentities are the ones the search already displayed, so a citation opens\nexactly the inspected source through the existing knowledge source\nauthority rather than through anything the model produced.",
+        "required": [
+          "label",
+          "recordId",
+          "sourceId",
+          "provenance",
+          "sectionPath",
+          "finalRank",
+          "unavailable",
+          "generated"
+        ],
+        "properties": {
+          "finalRank": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based final rank the evidence had in the displayed set.",
+            "minimum": 0
+          },
+          "generated": {
+            "type": "boolean",
+            "description": "Generated rather than extracted evidence."
+          },
+          "label": {
+            "type": "string",
+            "description": "Opaque label copied by the model."
+          },
+          "provenance": {
+            "type": "string",
+            "description": "Serialized structural provenance of the cited evidence."
+          },
+          "recordId": {
+            "type": "string",
+            "description": "Stable derived record identity from the displayed evidence."
+          },
+          "sectionPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Structural heading hierarchy of the cited evidence."
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Source occurrence identity used for exact source navigation."
+          },
+          "stale": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether current source bytes differ from the indexed generation.\n\n`null` when the host has no comparable fingerprint for the source."
+          },
+          "unavailable": {
+            "type": "boolean",
+            "description": "Source is currently unavailable, as of a fresh authorization snapshot."
+          }
+        }
+      },
       "KnowledgeAnswerDepthDto": {
         "type": "string",
         "description": "Requested answer detail; answer-only.",
@@ -10658,6 +10912,85 @@
           "standard",
           "detailed"
         ]
+      },
+      "KnowledgeAnswerDto": {
+        "type": "object",
+        "description": "One completed optional answer over an already inspected evidence set.",
+        "required": [
+          "requestId",
+          "evidenceFingerprint",
+          "profileId",
+          "profileName",
+          "locality",
+          "text",
+          "citations",
+          "modelKnowledgeAllowed",
+          "insufficient",
+          "withheldUnauthorized",
+          "staleEvidence",
+          "unavailableEvidence"
+        ],
+        "properties": {
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeAnswerCitationDto"
+            },
+            "description": "Citations actually referenced by the answer."
+          },
+          "evidenceFingerprint": {
+            "type": "string",
+            "description": "Fingerprint of the evidence set the answer was generated from."
+          },
+          "insufficient": {
+            "type": "boolean",
+            "description": "Whether the retained evidence could not support a grounded answer."
+          },
+          "locality": {
+            "$ref": "#/components/schemas/LlmEndpointLocalityDto",
+            "description": "Local or cloud endpoint classification."
+          },
+          "modelKnowledgeAllowed": {
+            "type": "boolean",
+            "description": "Whether general model knowledge was permitted and labelled."
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profile that produced the answer."
+          },
+          "profileName": {
+            "type": "string",
+            "description": "User-visible profile name."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied by the caller."
+          },
+          "staleEvidence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Retained rows indexed from content that has since changed.",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "description": "Answer text, potentially including opaque citation labels."
+          },
+          "unavailableEvidence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Retained rows whose source is currently unavailable.",
+            "minimum": 0
+          },
+          "withheldUnauthorized": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Evidence rows withheld by a fresh authorization snapshot.\n\nOnly the count is reported; removed evidence is never disclosed.",
+            "minimum": 0
+          }
+        }
       },
       "KnowledgeCapabilitiesDto": {
         "type": "object",

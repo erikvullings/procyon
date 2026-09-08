@@ -324,6 +324,12 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::knowledge::resolve_knowledge_source
         ))
         .routes(utoipa_axum::routes!(
+            routes::knowledge::generate_knowledge_answer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::cancel_knowledge_answer
+        ))
+        .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))
         .routes(utoipa_axum::routes!(

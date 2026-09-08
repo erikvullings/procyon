@@ -12,6 +12,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
@@ -51,6 +52,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
@@ -62,6 +64,7 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
@@ -771,6 +774,24 @@ export interface FileManagerClient {
 
   /** Cancels a running or not-yet-started knowledge search by request id. */
   cancelKnowledgeSearch(request: CancelKnowledgeSearchRequest, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * Generates one optional answer over an evidence set an earlier successful
+   * search already displayed (task 0207).
+   *
+   * This never retrieves: the evidence is addressed by the fingerprint that
+   * search returned, and a host that no longer retains it must fail with the
+   * typed `knowledgeEvidenceRefreshRequired` code rather than searching again.
+   * Aborting `signal` must also cancel the backend generation identified by
+   * `request.requestId`, exactly as `executeKnowledgeSearch` does.
+   */
+  generateKnowledgeAnswer(
+    request: GenerateKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeAnswer>;
+
+  /** Cancels a running or not-yet-started knowledge answer by request id. */
+  cancelKnowledgeAnswer(request: CancelKnowledgeAnswerRequest, signal?: AbortSignal): Promise<void>;
 
   /** Resolves one opaque evidence source into an exact navigable location. */
   resolveKnowledgeSource(

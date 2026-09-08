@@ -110,10 +110,12 @@ pub use files::{
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
 pub use knowledge::{
-    CancelKnowledgeSearchRequestDto, ExecuteKnowledgeSearchRequestDto, KnowledgeActionDto,
-    KnowledgeAnswerDepthDto, KnowledgeCapabilitiesDto, KnowledgeCoverageDto,
-    KnowledgeDiagnosticCodeDto, KnowledgeDiagnosticDto, KnowledgeDiagnosticSeverityDto,
-    KnowledgeEvidenceDto, KnowledgeExcludedFieldDto, KnowledgeNeedDto, KnowledgeOutputFormatDto,
+    CancelKnowledgeAnswerRequestDto, CancelKnowledgeSearchRequestDto,
+    ExecuteKnowledgeSearchRequestDto, GenerateKnowledgeAnswerRequestDto, KnowledgeActionDto,
+    KnowledgeAnswerCitationDto, KnowledgeAnswerDepthDto, KnowledgeAnswerDto,
+    KnowledgeCapabilitiesDto, KnowledgeCoverageDto, KnowledgeDiagnosticCodeDto,
+    KnowledgeDiagnosticDto, KnowledgeDiagnosticSeverityDto, KnowledgeEvidenceDto,
+    KnowledgeExcludedFieldDto, KnowledgeNeedDto, KnowledgeOutputFormatDto,
     KnowledgeParseAmbiguityDto, KnowledgeParseConfidenceDto, KnowledgePlannedSearchDto,
     KnowledgeQueryDraftDto, KnowledgeQueryInterpretationDto, KnowledgeRankContributionDto,
     KnowledgeRetrievalModeDto, KnowledgeRootDto, KnowledgeRouteDto,

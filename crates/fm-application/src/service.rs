@@ -2118,6 +2118,54 @@ impl FileManagerService {
         self.knowledge.cancel(request.request_id)
     }
 
+    /// Generates one optional answer with a fresh cancellation token.
+    pub async fn generate_knowledge_answer(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+    ) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationError> {
+        self.generate_knowledge_answer_with_cancellation(
+            access,
+            request,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
+    /// Generates one optional answer using a host-owned cancellation token.
+    ///
+    /// Answer generation is a downstream enhancement of a search that already
+    /// happened: it consumes the exact evidence set the caller inspected, named
+    /// by its fingerprint, and never reruns or replans retrieval. When that set
+    /// is no longer retained the caller is told to search again rather than
+    /// silently getting a different one. Generation itself requires an
+    /// explicitly selected profile and reuses the same endpoint consent,
+    /// redaction, grounding, and cancellation behavior as grounded Ask.
+    pub async fn generate_knowledge_answer_with_cancellation(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationError> {
+        self.knowledge
+            .answer(
+                self.semantic_library().await,
+                access,
+                request,
+                &self.llm_profiles,
+                cancellation,
+            )
+            .await
+    }
+
+    /// Cancels one running or not-yet-started knowledge answer.
+    pub fn cancel_knowledge_answer(
+        &self,
+        request: fm_transport_dto::CancelKnowledgeAnswerRequestDto,
+    ) -> bool {
+        self.knowledge.cancel_answer(request.request_id)
+    }
+
     /// Resolves one opaque evidence source into an exact navigable location.
     ///
     /// Reuses the same authorized occurrence resolution that Ask citations use,

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   ExecuteKnowledgeSearchRequest,
+  GenerateKnowledgeAnswerRequest,
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
@@ -17,6 +19,8 @@ const planKnowledgeSearch = vi.fn();
 const executeKnowledgeSearch = vi.fn();
 const cancelKnowledgeSearch = vi.fn();
 const resolveKnowledgeSource = vi.fn();
+const generateKnowledgeAnswer = vi.fn();
+const cancelKnowledgeAnswer = vi.fn();
 
 vi.mock('../generated/file-manager-api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../generated/file-manager-api')>();
@@ -29,6 +33,8 @@ vi.mock('../generated/file-manager-api', async (importOriginal) => {
     executeKnowledgeSearch: (...args: unknown[]) => executeKnowledgeSearch(...args),
     cancelKnowledgeSearch: (...args: unknown[]) => cancelKnowledgeSearch(...args),
     resolveKnowledgeSource: (...args: unknown[]) => resolveKnowledgeSource(...args),
+    generateKnowledgeAnswer: (...args: unknown[]) => generateKnowledgeAnswer(...args),
+    cancelKnowledgeAnswer: (...args: unknown[]) => cancelKnowledgeAnswer(...args),
   };
 });
 
@@ -72,10 +78,12 @@ afterEach(() => {
   executeKnowledgeSearch.mockReset();
   cancelKnowledgeSearch.mockReset();
   resolveKnowledgeSource.mockReset();
+  generateKnowledgeAnswer.mockReset();
+  cancelKnowledgeAnswer.mockReset();
   vi.unstubAllGlobals();
 });
 
-/** Every knowledge method a host adapter must implement (task 0206). */
+/** Every knowledge method a host adapter must implement (tasks 0206, 0207). */
 const KNOWLEDGE_METHODS = [
   'getKnowledgeCapabilities',
   'listKnowledgeRoots',
@@ -84,6 +92,8 @@ const KNOWLEDGE_METHODS = [
   'executeKnowledgeSearch',
   'cancelKnowledgeSearch',
   'resolveKnowledgeSource',
+  'generateKnowledgeAnswer',
+  'cancelKnowledgeAnswer',
 ] as const;
 
 function capabilitiesFixture(): KnowledgeCapabilities {
@@ -165,6 +175,50 @@ function executeRequest(requestId: string): ExecuteKnowledgeSearchRequest {
     scope: knowledgeScope(),
     mode: 'hybrid',
     options: null,
+  };
+}
+
+function answerRequest(requestId: string): GenerateKnowledgeAnswerRequest {
+  return {
+    requestId,
+    workspaceId,
+    evidenceFingerprint: 'fingerprint',
+    profileId: 'profile-a',
+    allowModelKnowledge: false,
+    action: 'explain',
+    context: 'onboarding a new maintainer',
+    constraints: ['cite every claim'],
+    depth: 'brief',
+    output: 'bullets',
+  };
+}
+
+function answerFixture(requestId: string): KnowledgeAnswer {
+  return {
+    requestId,
+    evidenceFingerprint: 'fingerprint',
+    profileId: 'profile-a',
+    profileName: 'Local profile',
+    locality: 'loopback',
+    text: 'Grounded in the inspected evidence [E1].',
+    citations: [
+      {
+        label: 'E1',
+        recordId: 'record-a',
+        sourceId: 'source-a',
+        provenance: '',
+        sectionPath: ['Overview'],
+        finalRank: 1,
+        generated: false,
+        stale: false,
+        unavailable: false,
+      },
+    ],
+    modelKnowledgeAllowed: false,
+    insufficient: false,
+    withheldUnauthorized: 0,
+    staleEvidence: 0,
+    unavailableEvidence: 0,
   };
 }
 
@@ -356,5 +410,385 @@ describe('knowledge search request conformance (task 0206)', () => {
         ).toEqual(expected);
       }
     }
+  });
+});
+
+/** A saved generation profile the mock host can answer with. */
+async function configureMockProfile(client: InstanceType<typeof MockFileManagerClient>): Promise<{
+  readonly id: string;
+  readonly name: string;
+}> {
+  const profile = await client.createLlmProfile({
+    name: 'Local mock profile',
+    preset: 'openAiCompatible',
+    baseUrl: 'http://localhost:11434',
+    deployment: null,
+    apiVersion: null,
+    model: 'mock-model',
+    credential: null,
+    advanced: {
+      contextWindow: 8_192,
+      maximumAnswerTokens: 1_024,
+      temperature: 0.2,
+      timeoutSeconds: 30,
+      tlsPolicy: 'requireValidCertificate',
+      customHeaders: {},
+    },
+    capabilities: ['chatCompletions'],
+    redactFilenames: false,
+  });
+  return { id: profile.id, name: profile.name };
+}
+
+/** Runs one mock search and returns its displayed result. */
+async function mockSearch(
+  client: InstanceType<typeof MockFileManagerClient>,
+  requestId = 'mock-search',
+): Promise<KnowledgeSearchResult> {
+  return client.executeKnowledgeSearch({
+    requestId,
+    draft: knowledgeDraft({ about: ['retrieval'] }),
+    scope: knowledgeScope(),
+    mode: 'fullText',
+    options: knowledgeOptions(),
+  });
+}
+
+describe('HttpFileManagerClient knowledge answers (task 0207)', () => {
+  it('generates an answer from an inspected evidence set', async () => {
+    generateKnowledgeAnswer.mockResolvedValue({ status: 200, data: answerFixture('answer-a') });
+    const client = new HttpFileManagerClient();
+
+    await expect(client.generateKnowledgeAnswer(answerRequest('answer-a'))).resolves.toEqual(
+      answerFixture('answer-a'),
+    );
+    expect(generateKnowledgeAnswer).toHaveBeenCalledWith(answerRequest('answer-a'), undefined);
+    expect(executeKnowledgeSearch).not.toHaveBeenCalled();
+    expect(planKnowledgeSearch).not.toHaveBeenCalled();
+    expect(parseKnowledgeQuery).not.toHaveBeenCalled();
+  });
+
+  it('passes the abort signal and cancels the same request id on abort', async () => {
+    const controller = new AbortController();
+    let rejectGeneration: ((reason: Error) => void) | undefined;
+    generateKnowledgeAnswer.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectGeneration = reject;
+        }),
+    );
+    cancelKnowledgeAnswer.mockImplementation(() => {
+      rejectGeneration?.(new DOMException('aborted', 'AbortError'));
+      return Promise.resolve({ status: 204, data: undefined });
+    });
+    const client = new HttpFileManagerClient();
+
+    const pending = client.generateKnowledgeAnswer(answerRequest('answer-b'), controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(generateKnowledgeAnswer).toHaveBeenCalledWith(answerRequest('answer-b'), {
+      signal: controller.signal,
+    });
+    expect(cancelKnowledgeAnswer).toHaveBeenCalledWith({ requestId: 'answer-b' }, undefined);
+  });
+
+  it('reports an abort that lost the race against a completed generation', async () => {
+    const controller = new AbortController();
+    generateKnowledgeAnswer.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ status: 200, data: answerFixture('answer-race') });
+    });
+    cancelKnowledgeAnswer.mockResolvedValue({ status: 204, data: undefined });
+    const client = new HttpFileManagerClient();
+
+    await expect(
+      client.generateKnowledgeAnswer(answerRequest('answer-race'), controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('does not cancel a generation that completed normally', async () => {
+    generateKnowledgeAnswer.mockResolvedValue({ status: 200, data: answerFixture('answer-c') });
+    const controller = new AbortController();
+    const client = new HttpFileManagerClient();
+
+    await expect(
+      client.generateKnowledgeAnswer(answerRequest('answer-c'), controller.signal),
+    ).resolves.toMatchObject({ requestId: 'answer-c' });
+    controller.abort();
+
+    expect(cancelKnowledgeAnswer).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unexpected cancellation status rather than reporting success', async () => {
+    cancelKnowledgeAnswer.mockResolvedValue({ status: 200, data: undefined });
+    const client = new HttpFileManagerClient();
+
+    await expect(client.cancelKnowledgeAnswer({ requestId: 'answer-d' })).rejects.toThrow(
+      /Unexpected cancelKnowledgeAnswer response status/u,
+    );
+  });
+
+  it('propagates a typed refresh-required conflict unchanged', async () => {
+    const { ApiError } = await import('../fetch-mutator');
+    generateKnowledgeAnswer.mockRejectedValue(
+      new ApiError(409, {
+        code: 'knowledgeEvidenceRefreshRequired',
+        message: 'The inspected evidence set is no longer available.',
+      }),
+    );
+    const client = new HttpFileManagerClient();
+
+    await expect(client.generateKnowledgeAnswer(answerRequest('answer-e'))).rejects.toMatchObject({
+      code: 'knowledgeEvidenceRefreshRequired',
+      status: 409,
+    });
+  });
+});
+
+describe('knowledge answer request conformance (task 0207)', () => {
+  it('sends the same answer request shape from the HTTP and desktop adapters', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const invoked = vi.mocked(invoke);
+    invoked.mockReset();
+    invoked.mockResolvedValue(answerFixture('answer-parity'));
+    generateKnowledgeAnswer.mockResolvedValue({
+      status: 200,
+      data: answerFixture('answer-parity'),
+    });
+    const request = answerRequest('answer-parity');
+
+    await new HttpFileManagerClient().generateKnowledgeAnswer(request);
+    await new TauriFileManagerClient().generateKnowledgeAnswer(request);
+
+    expect(generateKnowledgeAnswer).toHaveBeenCalledWith(request, undefined);
+    expect(invoked).toHaveBeenCalledWith('generate_knowledge_answer', { request });
+  });
+
+  it('cancels the same desktop request id when generation is aborted', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const invoked = vi.mocked(invoke);
+    invoked.mockReset();
+    const controller = new AbortController();
+    invoked.mockImplementation((command: string) =>
+      command === 'generate_knowledge_answer'
+        ? new Promise(() => undefined)
+        : Promise.resolve(undefined),
+    );
+
+    const pending = new TauriFileManagerClient().generateKnowledgeAnswer(
+      answerRequest('answer-desktop'),
+      controller.signal,
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(invoked).toHaveBeenCalledWith('cancel_knowledge_answer', {
+      request: { requestId: 'answer-desktop' },
+    });
+  });
+
+  it('rejects an already aborted desktop generation without invoking the host', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const invoked = vi.mocked(invoke);
+    invoked.mockReset();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new TauriFileManagerClient().generateKnowledgeAnswer(
+        answerRequest('answer-aborted'),
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(invoked).not.toHaveBeenCalled();
+  });
+});
+
+describe('MockFileManagerClient knowledge answers (task 0207)', () => {
+  it('reports no answer capability until a generation profile exists', async () => {
+    const client = new MockFileManagerClient();
+
+    await expect(client.getKnowledgeCapabilities()).resolves.toMatchObject({
+      answerGeneration: false,
+    });
+    const searched = await mockSearch(client);
+    expect(searched.capabilities.answerGeneration).toBe(false);
+
+    await configureMockProfile(client);
+
+    await expect(client.getKnowledgeCapabilities()).resolves.toMatchObject({
+      answerGeneration: true,
+    });
+  });
+
+  it('refuses to answer when no generation profile is configured', async () => {
+    const client = new MockFileManagerClient();
+    const searched = await mockSearch(client);
+
+    await expect(
+      client.generateKnowledgeAnswer({
+        requestId: 'answer-none',
+        workspaceId,
+        evidenceFingerprint: searched.evidenceFingerprint,
+        profileId: 'missing-profile',
+        allowModelKnowledge: false,
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('answers from the cached evidence set and cites the displayed identities', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    const searched = await mockSearch(client);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+
+    const answer = await client.generateKnowledgeAnswer({
+      requestId: 'answer-cached',
+      workspaceId,
+      evidenceFingerprint: searched.evidenceFingerprint,
+      profileId: profile.id,
+      allowModelKnowledge: false,
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(answer.evidenceFingerprint).toBe(searched.evidenceFingerprint);
+    expect(answer.profileName).toBe(profile.name);
+    expect(answer.modelKnowledgeAllowed).toBe(false);
+    expect(answer.citations.length).toBeGreaterThan(0);
+    for (const citation of answer.citations) {
+      const displayed = searched.evidence.find((row) => row.recordId === citation.recordId);
+      expect(displayed).toBeDefined();
+      expect(citation.sourceId).toBe(displayed?.sourceId);
+      expect(citation.finalRank).toBe(displayed?.finalRank);
+      expect(answer.text).toContain(`[${citation.label}]`);
+    }
+  });
+
+  it('is deterministic for the same cached evidence set', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    const searched = await mockSearch(client);
+
+    const first = await client.generateKnowledgeAnswer({
+      requestId: 'answer-first',
+      workspaceId,
+      evidenceFingerprint: searched.evidenceFingerprint,
+      profileId: profile.id,
+      allowModelKnowledge: false,
+    });
+    const second = await client.generateKnowledgeAnswer({
+      requestId: 'answer-second',
+      workspaceId,
+      evidenceFingerprint: searched.evidenceFingerprint,
+      profileId: profile.id,
+      allowModelKnowledge: false,
+    });
+
+    expect({ ...first, requestId: '' }).toEqual({ ...second, requestId: '' });
+  });
+
+  it('labels a model-knowledge answer as permitted rather than silently mixing it in', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    const searched = await mockSearch(client);
+
+    const answer = await client.generateKnowledgeAnswer({
+      requestId: 'answer-model',
+      workspaceId,
+      evidenceFingerprint: searched.evidenceFingerprint,
+      profileId: profile.id,
+      allowModelKnowledge: true,
+    });
+
+    expect(answer.modelKnowledgeAllowed).toBe(true);
+  });
+
+  it('requires a fresh search instead of retrieving again for an unknown evidence set', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    await mockSearch(client);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+
+    await expect(
+      client.generateKnowledgeAnswer({
+        requestId: 'answer-stale',
+        workspaceId,
+        evidenceFingerprint: 'mock-knowledge-never-searched',
+        profileId: profile.id,
+        allowModelKnowledge: false,
+      }),
+    ).rejects.toMatchObject({ code: 'knowledgeEvidenceRefreshRequired' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('cancels a running generation by request id', async () => {
+    const client = new MockFileManagerClient({ latencyMs: 20 });
+    const profile = await configureMockProfile(client);
+    const searched = await mockSearch(client);
+
+    const pending = client.generateKnowledgeAnswer({
+      requestId: 'answer-cancelled',
+      workspaceId,
+      evidenceFingerprint: searched.evidenceFingerprint,
+      profileId: profile.id,
+      allowModelKnowledge: false,
+    });
+    const settled = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await client.cancelKnowledgeAnswer({ requestId: 'answer-cancelled' });
+
+    await settled;
+  });
+
+  it('rejects an already aborted generation before anything else is inspected', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    const searched = await mockSearch(client);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      client.generateKnowledgeAnswer(
+        {
+          requestId: 'answer-preaborted',
+          workspaceId,
+          evidenceFingerprint: searched.evidenceFingerprint,
+          profileId: profile.id,
+          allowModelKnowledge: false,
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('bounds the retained evidence sets rather than growing without limit', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureMockProfile(client);
+    const first = await client.executeKnowledgeSearch({
+      requestId: 'search-first',
+      draft: knowledgeDraft({ about: ['retrieval'] }),
+      scope: knowledgeScope(),
+      mode: 'fullText',
+      options: knowledgeOptions(),
+    });
+    for (let index = 0; index < 8; index += 1) {
+      await client.executeKnowledgeSearch({
+        requestId: `search-${index}`,
+        draft: knowledgeDraft({ about: [`retrieval variant ${index}`] }),
+        scope: knowledgeScope(),
+        mode: 'fullText',
+        options: knowledgeOptions(),
+      });
+    }
+
+    await expect(
+      client.generateKnowledgeAnswer({
+        requestId: 'answer-evicted',
+        workspaceId,
+        evidenceFingerprint: first.evidenceFingerprint,
+        profileId: profile.id,
+        allowModelKnowledge: false,
+      }),
+    ).rejects.toMatchObject({ code: 'knowledgeEvidenceRefreshRequired' });
   });
 });

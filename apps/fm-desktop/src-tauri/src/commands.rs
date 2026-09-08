@@ -2731,6 +2731,33 @@ pub(crate) async fn resolve_knowledge_source(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Generates one optional answer from an already-inspected evidence set.
+///
+/// Behaviorally identical to `POST /api/v1/semantic/knowledge/answer`: the
+/// answer comes from the cached evidence set named by its fingerprint, and
+/// retrieval is never rerun here.
+#[tauri::command]
+pub(crate) async fn generate_knowledge_answer(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_knowledge_answer(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Cancels one running or not-yet-started knowledge answer.
+#[tauri::command]
+pub(crate) async fn cancel_knowledge_answer(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelKnowledgeAnswerRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state.service.cancel_knowledge_answer(request);
+    Ok(())
+}
+
 /// Lists every stored connection profile with its current runtime status,
 /// identical in shape to `GET /api/v1/connections` (task 0103).
 #[tauri::command]

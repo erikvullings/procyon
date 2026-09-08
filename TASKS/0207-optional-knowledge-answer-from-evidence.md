@@ -1,6 +1,6 @@
 # 0207 Optional knowledge answer from evidence
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: rag, frontend
 Depends on: 0206
@@ -31,3 +31,14 @@ evidence set. Answer generation is a downstream enhancement and must not rerun o
 ## Agent Notes
 
 - 2026-09-08 Copilot: Created from restored Structured Knowledge Query phase 10.
+- 2026-09-08 Copilot: Added optional answer generation as a strictly downstream capability over
+  an already displayed Knowledge Search evidence fingerprint. A bounded, expiring,
+  tenant/workspace-bound cache retains the exact evidence order and content without paths; answer
+  generation has no retrieval dependency, refreshes catalog authorization before prompting, and
+  returns a typed refresh-required error rather than rerunning search. Reused the grounded Ask
+  profile, TLS/endpoint-consent, cancellation, filename-redaction, and model-knowledge boundaries.
+  Added stable evidence citations, HTTP and Tauri generate/cancel endpoints, equivalent mock
+  behavior, and an optional Mithril answer panel that stays absent when no profile is configured.
+  Verified generated API stability, 2,521 Rust tests, 3 Rust doctests, 2,063 frontend tests,
+  TypeScript, rustfmt, warning-free Clippy, Biome (pre-existing specificity warnings only), and a
+  final combined correctness/privacy review.

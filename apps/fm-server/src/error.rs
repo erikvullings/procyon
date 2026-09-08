@@ -75,6 +75,9 @@ fn status_for(error: &ApplicationError) -> StatusCode {
         ApplicationError::HostKeyUnverified { .. } | ApplicationError::HostKeyMismatch { .. } => {
             StatusCode::CONFLICT
         }
+        // The request is well formed; the inspected evidence it names is gone,
+        // so the caller must search again before an answer can be generated.
+        ApplicationError::KnowledgeEvidenceRefreshRequired { .. } => StatusCode::CONFLICT,
         ApplicationError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }

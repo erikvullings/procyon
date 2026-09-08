@@ -18,6 +18,7 @@ import type {
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
+  CancelKnowledgeAnswerRequestDto,
   CancelKnowledgeSearchRequestDto,
   CheckpointSemanticModelMigrationRequestDto,
   ChecksumFileDto,
@@ -53,6 +54,7 @@ import type {
   ExportSemanticVocabularyResponseDto,
   FinderTagsDto,
   GenerateDocumentSummaryRequestDto,
+  GenerateKnowledgeAnswerRequestDto,
   GenerateRagAnswerRequestDto,
   GenerateRagAnswerResponseDto,
   GenerateSyncPlanRequestDto,
@@ -74,6 +76,7 @@ import type {
   ImportSemanticVocabularyRequestDto,
   InstallSemanticWorkerPatchRequestDto,
   InvokeActionRequestDto,
+  KnowledgeAnswerDto,
   KnowledgeCapabilitiesDto,
   KnowledgeQueryInterpretationDto,
   KnowledgeRootDto,
@@ -6119,6 +6122,111 @@ return fetchMutator<previewDocumentSummaryResponse>(getPreviewDocumentSummaryUrl
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewDocumentSummaryRequestDto)
+  }
+);}
+
+
+
+export type generateKnowledgeAnswerResponse200 = {
+  data: KnowledgeAnswerDto
+  status: 200
+}
+
+export type generateKnowledgeAnswerResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type generateKnowledgeAnswerResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type generateKnowledgeAnswerResponse409 = {
+  data: ApplicationErrorDto
+  status: 409
+}
+
+export type generateKnowledgeAnswerResponse500 = {
+  data: ApplicationErrorDto
+  status: 500
+}
+
+export type generateKnowledgeAnswerResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type generateKnowledgeAnswerResponseSuccess = (generateKnowledgeAnswerResponse200) & {
+  headers: Headers;
+};
+export type generateKnowledgeAnswerResponseError = (generateKnowledgeAnswerResponse400 | generateKnowledgeAnswerResponse403 | generateKnowledgeAnswerResponse409 | generateKnowledgeAnswerResponse500 | generateKnowledgeAnswerResponse503) & {
+  headers: Headers;
+};
+
+export type generateKnowledgeAnswerResponse = (generateKnowledgeAnswerResponseSuccess | generateKnowledgeAnswerResponseError)
+
+export const getGenerateKnowledgeAnswerUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/answer`
+}
+
+export const generateKnowledgeAnswer = async (generateKnowledgeAnswerRequestDto: GenerateKnowledgeAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateKnowledgeAnswerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<generateKnowledgeAnswerResponse>(getGenerateKnowledgeAnswerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(generateKnowledgeAnswerRequestDto)
+  }
+);}
+
+
+
+export type cancelKnowledgeAnswerResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelKnowledgeAnswerResponseSuccess = (cancelKnowledgeAnswerResponse204) & {
+  headers: Headers;
+};
+;
+
+export type cancelKnowledgeAnswerResponse = (cancelKnowledgeAnswerResponseSuccess)
+
+export const getCancelKnowledgeAnswerUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/answer/cancel`
+}
+
+export const cancelKnowledgeAnswer = async (cancelKnowledgeAnswerRequestDto: CancelKnowledgeAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelKnowledgeAnswerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<cancelKnowledgeAnswerResponse>(getCancelKnowledgeAnswerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelKnowledgeAnswerRequestDto)
   }
 );}
 

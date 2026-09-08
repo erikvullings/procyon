@@ -48,6 +48,10 @@ pub enum ApplicationErrorCode {
     /// An SSH host key changed since it was last accepted (task 0104, spec
     /// §6.4); never silently accepted.
     HostKeyMismatch,
+    /// The cached knowledge evidence set an answer was requested for is no
+    /// longer available, so the caller must run the search again before
+    /// answering (task 0207).
+    KnowledgeEvidenceRefreshRequired,
     /// An unexpected, unclassified failure occurred.
     Internal,
 }

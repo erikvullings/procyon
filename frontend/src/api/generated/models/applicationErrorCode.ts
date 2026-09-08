@@ -29,5 +29,6 @@ export const ApplicationErrorCode = {
   platformOperationFailed: 'platformOperationFailed',
   hostKeyUnverified: 'hostKeyUnverified',
   hostKeyMismatch: 'hostKeyMismatch',
+  knowledgeEvidenceRefreshRequired: 'knowledgeEvidenceRefreshRequired',
   internal: 'internal',
 } as const;

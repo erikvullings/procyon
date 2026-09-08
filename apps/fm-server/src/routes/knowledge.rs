@@ -7,7 +7,8 @@ use axum::Json;
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
 use fm_transport_dto::{
-    ApplicationErrorDto, CancelKnowledgeSearchRequestDto, ExecuteKnowledgeSearchRequestDto,
+    ApplicationErrorDto, CancelKnowledgeAnswerRequestDto, CancelKnowledgeSearchRequestDto,
+    ExecuteKnowledgeSearchRequestDto, GenerateKnowledgeAnswerRequestDto, KnowledgeAnswerDto,
     KnowledgeCapabilitiesDto, KnowledgeQueryInterpretationDto, KnowledgeRootDto,
     KnowledgeSearchPlanDto, KnowledgeSearchResultDto, KnowledgeSourceLocationDto,
     ListKnowledgeRootsRequestDto, ParseKnowledgeQueryRequestDto, PlanKnowledgeSearchRequestDto,
@@ -159,4 +160,46 @@ pub(crate) async fn resolve_knowledge_source(
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/semantic/knowledge/answer",
+    operation_id = "generateKnowledgeAnswer",
+    request_body = GenerateKnowledgeAnswerRequestDto,
+    responses(
+        (status = 200, body = KnowledgeAnswerDto),
+        (status = 400, body = ApplicationErrorDto),
+        (status = 403, body = ApplicationErrorDto),
+        (status = 409, description = "The inspected evidence set must be retrieved again", body = ApplicationErrorDto),
+        (status = 500, body = ApplicationErrorDto),
+        (status = 503, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn generate_knowledge_answer(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<GenerateKnowledgeAnswerRequestDto>,
+) -> Result<Json<KnowledgeAnswerDto>, ApiError> {
+    state
+        .service
+        .generate_knowledge_answer(state.semantic_access(), request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/semantic/knowledge/answer/cancel",
+    operation_id = "cancelKnowledgeAnswer",
+    request_body = CancelKnowledgeAnswerRequestDto,
+    responses((status = 204))
+)]
+pub(crate) async fn cancel_knowledge_answer(
+    State(state): State<AppState>,
+    Json(request): Json<CancelKnowledgeAnswerRequestDto>,
+) -> StatusCode {
+    state.service.cancel_knowledge_answer(request);
+    StatusCode::NO_CONTENT
 }

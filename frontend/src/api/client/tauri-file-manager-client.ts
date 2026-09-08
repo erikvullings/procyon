@@ -16,6 +16,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
@@ -55,6 +56,7 @@ import type {
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
+  GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
@@ -66,6 +68,7 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeAnswer,
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
@@ -1294,6 +1297,54 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<KnowledgeSourceLocation> {
     return invoke<KnowledgeSourceLocation>('resolve_knowledge_source', { request });
+  }
+
+  /**
+   * Answers from an already inspected evidence set (task 0207). `invoke`
+   * cannot be aborted, so the abort is raced against the invocation and
+   * forwarded to `cancel_knowledge_answer` with the caller's own `requestId`,
+   * exactly as {@link executeKnowledgeSearch} does for retrieval.
+   */
+  async generateKnowledgeAnswer(
+    request: GenerateKnowledgeAnswerRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeAnswer> {
+    signal?.throwIfAborted();
+    const abortError = (): DOMException =>
+      new DOMException('Knowledge answer generation was cancelled', 'AbortError');
+    let cancel: (() => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      if (signal === undefined) return;
+      cancel = (): void => {
+        reject(abortError());
+        void invoke<void>('cancel_knowledge_answer', {
+          request: { requestId: request.requestId },
+        }).catch((error: unknown) => {
+          console.warn('Failed to cancel knowledge answer', error);
+        });
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+    });
+    try {
+      const answer = await Promise.race([
+        invoke<KnowledgeAnswer>('generate_knowledge_answer', { request }),
+        aborted,
+      ]);
+      if (signal?.aborted === true) throw abortError();
+      return answer;
+    } catch (error) {
+      if (signal?.aborted === true) throw abortError();
+      throw error;
+    } finally {
+      if (cancel !== undefined) signal?.removeEventListener('abort', cancel);
+    }
+  }
+
+  cancelKnowledgeAnswer(
+    request: CancelKnowledgeAnswerRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('cancel_knowledge_answer', { request });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

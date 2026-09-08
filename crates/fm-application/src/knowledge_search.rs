@@ -385,15 +385,19 @@ pub struct KnowledgeSearchOutcome {
     pub trace: Option<fm_semantic_worker::knowledge_retrieval::RetrievalTrace>,
 }
 
-/// Cancellation ownership of one in-flight or pre-cancelled search.
+/// Cancellation ownership of one in-flight or pre-cancelled request.
 struct ActiveSearch {
     generation: u64,
     cancellation: CancellationToken,
 }
 
-/// Registry of running searches and bounded pre-cancellation tombstones.
+/// Registry of running requests and bounded pre-cancellation tombstones.
+///
+/// Shared by search execution and by the optional answer capability in
+/// [`crate::knowledge_answer`], so both honor the same duplicate-identifier,
+/// pre-cancellation, and bounded-retention semantics.
 #[derive(Default)]
-struct CancellationRegistry {
+pub(crate) struct CancellationRegistry {
     active: HashMap<Uuid, ActiveSearch>,
     /// Cancellations that arrived before their search registered, in arrival
     /// order so the oldest is evicted first.
@@ -406,7 +410,11 @@ impl CancellationRegistry {
     ///
     /// A duplicate identifier is rejected rather than silently taking over the
     /// running search's cancellation.
-    fn begin(&mut self, request_id: Uuid, cancellation: &CancellationToken) -> Option<u64> {
+    pub(crate) fn begin(
+        &mut self,
+        request_id: Uuid,
+        cancellation: &CancellationToken,
+    ) -> Option<u64> {
         self.expire_tombstones();
         if self.active.contains_key(&request_id) {
             return None;
@@ -427,7 +435,7 @@ impl CancellationRegistry {
     }
 
     /// Releases one registration, ignoring a newer claim on the same id.
-    fn finish(&mut self, request_id: Uuid, generation: u64) {
+    pub(crate) fn finish(&mut self, request_id: Uuid, generation: u64) {
         if self
             .active
             .get(&request_id)
@@ -437,8 +445,8 @@ impl CancellationRegistry {
         }
     }
 
-    /// Cancels a running search, or records a bounded pre-cancellation.
-    fn cancel(&mut self, request_id: Uuid) -> bool {
+    /// Cancels a running request, or records a bounded pre-cancellation.
+    pub(crate) fn cancel(&mut self, request_id: Uuid) -> bool {
         self.expire_tombstones();
         if let Some(active) = self.active.get(&request_id) {
             active.cancellation.cancel();
@@ -475,16 +483,39 @@ impl CancellationRegistry {
 }
 
 /// Releases a registration even when the executing future is dropped.
-struct RegistrationGuard<'coordinator> {
-    coordinator: &'coordinator KnowledgeSearchCoordinator,
+pub(crate) struct RegistrationGuard<'registry> {
+    registry: &'registry Mutex<CancellationRegistry>,
     request_id: Uuid,
     generation: u64,
 }
 
+impl<'registry> RegistrationGuard<'registry> {
+    /// Claims one request identifier for the lifetime of the returned guard.
+    ///
+    /// Returns `None` when the identifier is already running, which callers
+    /// reject rather than taking over the running request's cancellation.
+    pub(crate) fn claim(
+        registry: &'registry Mutex<CancellationRegistry>,
+        request_id: Uuid,
+        cancellation: &CancellationToken,
+    ) -> Option<Self> {
+        let generation = registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .begin(request_id, cancellation)?;
+        Some(Self {
+            registry,
+            request_id,
+            generation,
+        })
+    }
+}
+
 impl Drop for RegistrationGuard<'_> {
     fn drop(&mut self) {
-        self.coordinator
-            .registry()
+        self.registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .finish(self.request_id, self.generation);
     }
 }
@@ -540,13 +571,9 @@ impl KnowledgeSearchCoordinator {
         cancellation: &CancellationToken,
     ) -> Result<KnowledgeSearchOutcome, KnowledgeSearchError> {
         let cancellation = cancellation.clone();
-        let Some(generation) = self.registry().begin(request_id, &cancellation) else {
+        let Some(_guard) = RegistrationGuard::claim(&self.cancellations, request_id, &cancellation)
+        else {
             return Err(KnowledgeSearchError::DuplicateRequest);
-        };
-        let _guard = RegistrationGuard {
-            coordinator: self,
-            request_id,
-            generation,
         };
         self.execute_registered(&authorized, refresh, &cancellation)
             .await

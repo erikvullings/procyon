@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::LocationDto;
+use crate::{LlmEndpointLocalityDto, LocationDto};
 
 /// Independently reported knowledge capabilities.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -691,4 +691,110 @@ pub struct KnowledgeSourceLocationDto {
     pub location: LocationDto,
     /// Whether the original source can currently open.
     pub available: bool,
+}
+
+/// Requests one optional answer from an already inspected evidence set.
+///
+/// Nothing in this request re-enters retrieval: the evidence set is addressed
+/// by the fingerprint an earlier successful search returned, and the answer-only
+/// fields shape presentation only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateKnowledgeAnswerRequestDto {
+    /// Caller-owned identity used for cancellation and correlation.
+    pub request_id: Uuid,
+    /// Workspace through which the evidence set was authorized.
+    pub workspace_id: Uuid,
+    /// Fingerprint of the exact evidence set returned by the search.
+    pub evidence_fingerprint: String,
+    /// Explicitly selected saved generation profile.
+    pub profile_id: Uuid,
+    /// Explicit opt-in to distinguishable model-only knowledge.
+    #[serde(default)]
+    pub allow_model_knowledge: bool,
+    /// Answer-only typed goal; never used as retrieval text.
+    #[serde(default)]
+    pub action: Option<KnowledgeActionDto>,
+    /// Answer-only application context; never used for retrieval.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// Answer-only constraints; never used for retrieval.
+    #[serde(default)]
+    pub constraints: Vec<String>,
+    /// Answer-only requested depth.
+    #[serde(default)]
+    pub depth: Option<KnowledgeAnswerDepthDto>,
+    /// Answer-only requested presentation.
+    #[serde(default)]
+    pub output: Option<KnowledgeOutputFormatDto>,
+}
+
+/// Requests cancellation of one running knowledge answer generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelKnowledgeAnswerRequestDto {
+    /// Identity supplied when generation was started.
+    pub request_id: Uuid,
+}
+
+/// One citation resolved locally against the displayed evidence set.
+///
+/// Identities are the ones the search already displayed, so a citation opens
+/// exactly the inspected source through the existing knowledge source
+/// authority rather than through anything the model produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeAnswerCitationDto {
+    /// Opaque label copied by the model.
+    pub label: String,
+    /// Stable derived record identity from the displayed evidence.
+    pub record_id: String,
+    /// Source occurrence identity used for exact source navigation.
+    pub source_id: String,
+    /// Serialized structural provenance of the cited evidence.
+    pub provenance: String,
+    /// Structural heading hierarchy of the cited evidence.
+    pub section_path: Vec<String>,
+    /// One-based final rank the evidence had in the displayed set.
+    pub final_rank: u32,
+    /// Source is currently unavailable, as of a fresh authorization snapshot.
+    pub unavailable: bool,
+    /// Whether current source bytes differ from the indexed generation.
+    ///
+    /// `null` when the host has no comparable fingerprint for the source.
+    pub stale: Option<bool>,
+    /// Generated rather than extracted evidence.
+    pub generated: bool,
+}
+
+/// One completed optional answer over an already inspected evidence set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeAnswerDto {
+    /// Identity supplied by the caller.
+    pub request_id: Uuid,
+    /// Fingerprint of the evidence set the answer was generated from.
+    pub evidence_fingerprint: String,
+    /// Profile that produced the answer.
+    pub profile_id: Uuid,
+    /// User-visible profile name.
+    pub profile_name: String,
+    /// Local or cloud endpoint classification.
+    pub locality: LlmEndpointLocalityDto,
+    /// Answer text, potentially including opaque citation labels.
+    pub text: String,
+    /// Citations actually referenced by the answer.
+    pub citations: Vec<KnowledgeAnswerCitationDto>,
+    /// Whether general model knowledge was permitted and labelled.
+    pub model_knowledge_allowed: bool,
+    /// Whether the retained evidence could not support a grounded answer.
+    pub insufficient: bool,
+    /// Evidence rows withheld by a fresh authorization snapshot.
+    ///
+    /// Only the count is reported; removed evidence is never disclosed.
+    pub withheld_unauthorized: u64,
+    /// Retained rows indexed from content that has since changed.
+    pub stale_evidence: u64,
+    /// Retained rows whose source is currently unavailable.
+    pub unavailable_evidence: u64,
 }
