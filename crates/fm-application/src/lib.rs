@@ -26,6 +26,7 @@ mod file_editor;
 mod folder_size;
 mod ftp;
 pub mod knowledge;
+pub mod knowledge_dsl;
 mod llm_profile_mapping;
 pub mod llm_profiles;
 mod onedrive;

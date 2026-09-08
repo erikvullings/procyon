@@ -15,9 +15,9 @@ const MAX_SUBJECTS: usize = 8;
 const MAX_RELATED_TERMS: usize = 16;
 const MAX_SCOPES: usize = 16;
 const MAX_PLANNED_SEARCHES: usize = 8;
-const MAX_TEXT_BYTES: usize = 8 * 1024;
-const MAX_IDENTIFIER_BYTES: usize = 512;
-const MAX_CONSTRAINTS: usize = 16;
+pub(crate) const MAX_TEXT_BYTES: usize = 8 * 1024;
+pub(crate) const MAX_IDENTIFIER_BYTES: usize = 512;
+pub(crate) const MAX_CONSTRAINTS: usize = 16;
 const MAX_CANDIDATES: usize = 512;
 const MAX_RESULTS: usize = 200;
 const MAX_RESULTS_PER_FILE: usize = 32;
@@ -712,7 +712,7 @@ fn valid_text(value: &str) -> bool {
 }
 
 fn valid_identifier(value: &str) -> bool {
-    !value.trim().is_empty() && value.len() <= MAX_IDENTIFIER_BYTES
+    !value.is_empty() && value.trim() == value && value.len() <= MAX_IDENTIFIER_BYTES
 }
 
 #[cfg(test)]
@@ -966,6 +966,21 @@ mod tests {
         };
         assert_eq!(
             invalid_scope.validate(),
+            Err(KnowledgeRequestError::InvalidScope { index: 0 })
+        );
+
+        let padded_scope = KnowledgeSearchRequest {
+            scopes: vec![KnowledgeScope {
+                tenant_id: "tenant-a".into(),
+                library_id: "library-a".into(),
+                selector: KnowledgeScopeSelector::Root {
+                    root_id: " root-a".into(),
+                },
+            }],
+            ..request(vec![subject("valid")])
+        };
+        assert_eq!(
+            padded_scope.validate(),
             Err(KnowledgeRequestError::InvalidScope { index: 0 })
         );
 

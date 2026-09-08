@@ -127,6 +127,17 @@ and pure planner, emits at most eight stable source searches, and reports expans
 bounds. See
 [ADR 0012](../decisions/0012-structured-knowledge-search.md).
 
+`fm-application::knowledge_dsl` is a pure, LLM-free rule-based layer above those canonical models.
+It parses a small `field: value` DSL (multiline or compact, quoted values, repeated fields, and
+documented aliases) into a typed `KnowledgeQueryDraft`, and separately recognizes common
+natural-language forms (find, definitions, procedures, examples, limitations, evidence,
+apply/use/analyse, and comparisons) with explicit confidence and recorded ambiguities instead of
+silent guesses. The draft mirrors the canonical/answer split exactly — `about`/`need`/`related`/
+`scope` versus answer-only `do`/`to`/`constraint`/`format`/`depth` — so answer text can never reach
+retrieval. Checked conversion to and from `KnowledgeSearchRequest`/`KnowledgeAnswerRequest` takes
+scope authorization and the evidence fingerprint as explicit caller-supplied inputs, keeping
+authorization outside parsing.
+
 Generation is an optional application capability independent from semantic indexing. Named
 OpenAI-compatible profiles are owned by `fm-application`, while `fm-credentials` retains their
 tokens and settings retain only opaque credential references. The capability supports local server
