@@ -63,6 +63,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
     defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
   },
   {
+    id: 'client.searchKnowledge',
+    title: 'Search Knowledge…',
+    defaultShortcuts: [{ key: 'k', ctrl: true, shift: true }],
+  },
+  {
     id: 'core.swapPaneTabs',
     title: 'Swap pane tabs',
     defaultShortcuts: [{ key: 'u', ctrl: true, shift: true }],
@@ -239,6 +244,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     findDuplicates: vi.fn(),
     openDiskUsage: vi.fn(),
     openSemanticAssistant: vi.fn(),
+    openKnowledgeSearch: vi.fn(),
   };
   return { ...base, ...overrides };
 }
@@ -584,6 +590,13 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     const context = makeContext({ openSemanticAssistant });
     createGlobalKeydownHandler(context)(keydown('f', { ctrlKey: true, shiftKey: true }));
     expect(openSemanticAssistant).toHaveBeenCalledOnce();
+  });
+
+  it('Ctrl+Shift+K opens Search Knowledge (task 0206)', () => {
+    const openKnowledgeSearch = vi.fn();
+    const context = makeContext({ openKnowledgeSearch });
+    createGlobalKeydownHandler(context)(keydown('k', { ctrlKey: true, shiftKey: true }));
+    expect(openKnowledgeSearch).toHaveBeenCalledOnce();
   });
 
   it('F1 opens the shortcuts help overlay', () => {

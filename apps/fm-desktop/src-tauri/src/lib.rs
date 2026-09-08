@@ -432,6 +432,13 @@ pub fn run() {
             commands::list_saved_rag_conversations,
             commands::delete_rag_conversation,
             commands::resolve_rag_citation,
+            commands::get_knowledge_capabilities,
+            commands::list_knowledge_roots,
+            commands::parse_knowledge_query,
+            commands::plan_knowledge_search,
+            commands::execute_knowledge_search,
+            commands::cancel_knowledge_search,
+            commands::resolve_knowledge_source,
             commands::list_connections,
             commands::create_connection,
             commands::get_connection,
@@ -730,6 +737,13 @@ mod tests {
                 commands::list_saved_rag_conversations,
                 commands::delete_rag_conversation,
                 commands::resolve_rag_citation,
+                commands::get_knowledge_capabilities,
+                commands::list_knowledge_roots,
+                commands::parse_knowledge_query,
+                commands::plan_knowledge_search,
+                commands::execute_knowledge_search,
+                commands::cancel_knowledge_search,
+                commands::resolve_knowledge_source,
                 commands::list_connections,
                 commands::create_connection,
                 commands::get_connection,
@@ -799,6 +813,99 @@ mod tests {
 
         assert_eq!(response.runtime, RuntimeKindDto::Tauri);
         app.state::<AppState>();
+    }
+
+    /// Every knowledge command must be registered and usable on the desktop
+    /// host without a generation profile, matching the browser host's routes.
+    #[test]
+    fn knowledge_commands_are_registered_and_work_without_a_generation_profile() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let capabilities = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "get_knowledge_capabilities".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::default(),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("capability command must be registered")
+        .deserialize::<fm_transport_dto::KnowledgeCapabilitiesDto>()
+        .expect("response must deserialize");
+        assert!(!capabilities.answer_generation);
+
+        let interpretation = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "parse_knowledge_query".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "request": { "text": "about: wind turbines\nneed: definition\ndo: explain" }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("parse command must be registered")
+        .deserialize::<fm_transport_dto::KnowledgeQueryInterpretationDto>()
+        .expect("response must deserialize");
+        assert_eq!(interpretation.draft.about, vec!["wind turbines".to_owned()]);
+        assert!(
+            interpretation
+                .excluded_from_retrieval
+                .iter()
+                .any(|field| field.field == "do")
+        );
+
+        get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "cancel_knowledge_search".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(
+                    serde_json::json!({ "request": { "requestId": uuid::Uuid::new_v4() } }),
+                ),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("cancel command must be registered");
+
+        for command in [
+            "list_knowledge_roots",
+            "plan_knowledge_search",
+            "execute_knowledge_search",
+            "resolve_knowledge_source",
+        ] {
+            let error = get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: local_protocol_url(),
+                    body: InvokeBody::Json(serde_json::json!({ "request": {} })),
+                    headers: Default::default(),
+                    invoke_key: INVOKE_KEY.to_string(),
+                },
+            )
+            .expect_err("an empty request must be rejected by the registered command");
+            assert!(
+                !error.to_string().contains("not found"),
+                "{command} must be registered: {error}"
+            );
+        }
     }
 
     #[test]

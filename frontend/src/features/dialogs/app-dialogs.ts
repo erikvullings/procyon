@@ -4,11 +4,13 @@ import { t } from '../../i18n';
 import type {
   Connection,
   ConnectionId,
+  KnowledgeSourceLocation,
   Location,
   OperationConflict,
   OperationId,
   PaneId,
   ResolvedRagCitation,
+  ResolveKnowledgeSourceRequest,
   ResolveRagCitationRequest,
   SavedSearch,
   Settings,
@@ -65,6 +67,7 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
+import { KnowledgeSearchDialog } from '../semantic/knowledge-search-dialog';
 import { RagAskDialog } from '../semantic/rag-ask-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
@@ -129,6 +132,26 @@ export async function navigateToRagCitation(
   if (!citation.available) return false;
   const name = pathFromUri(citation.location.uri).split(/[\\/]/).filter(Boolean).at(-1);
   await navigate(parentLocation(citation.location), name);
+  return true;
+}
+
+/**
+ * Opens the current location of one knowledge evidence source (task 0206).
+ *
+ * Reuses the same resolve-then-navigate shape as Ask citations: the opaque
+ * source id is resolved against current authorization, and navigation only
+ * happens when the source can actually be opened.
+ */
+export async function navigateToKnowledgeSource(
+  workspaceId: string,
+  sourceId: string,
+  resolveSource: (request: ResolveKnowledgeSourceRequest) => Promise<KnowledgeSourceLocation>,
+  navigate: (location: Location, preferredCursorName?: string) => Promise<void>,
+): Promise<boolean> {
+  const source = await resolveSource({ workspaceId, sourceId });
+  if (!source.available) return false;
+  const name = pathFromUri(source.location.uri).split(/[\\/]/).filter(Boolean).at(-1);
+  await navigate(parentLocation(source.location), name);
   return true;
 }
 
@@ -537,6 +560,26 @@ export function renderAppDialogs(
           (location, name) => ctx.navigateActiveLocation(location, name),
         );
         if (navigated) dialogs.cancelRagAskDialog();
+      },
+    }),
+    m(KnowledgeSearchDialog, {
+      open: ds.knowledgeSearchDialog !== undefined,
+      client,
+      workspaceId: ds.knowledgeSearchDialog?.workspaceId ?? '',
+      currentFolder: ds.knowledgeSearchDialog?.currentFolder,
+      semanticSourceIds: ds.knowledgeSearchDialog?.semanticSourceIds ?? [],
+      initialSubject: ds.knowledgeSearchDialog?.initialSubject,
+      onClose: () => dialogs.cancelKnowledgeSearchDialog(),
+      onOpenSource: async (sourceId) => {
+        const request = ds.knowledgeSearchDialog;
+        if (request === undefined) return;
+        const navigated = await navigateToKnowledgeSource(
+          request.workspaceId,
+          sourceId,
+          (sourceRequest) => client.resolveKnowledgeSource(sourceRequest),
+          (location, name) => ctx.navigateActiveLocation(location, name),
+        );
+        if (navigated) dialogs.cancelKnowledgeSearchDialog();
       },
     }),
     m(FinderTagsDialog, {

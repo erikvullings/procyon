@@ -15,6 +15,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumEntry,
@@ -55,6 +56,7 @@ import type {
   EntryMetadata,
   EntryMetadataRequest,
   EntrySummary,
+  ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
@@ -69,7 +71,15 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeCapabilities,
+  KnowledgeQueryInterpretation,
+  KnowledgeRoot,
+  KnowledgeScope,
+  KnowledgeSearchPlan,
+  KnowledgeSearchResult,
+  KnowledgeSourceLocation,
   ListDirectoryRequest,
+  ListKnowledgeRootsRequest,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -84,6 +94,8 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  ParseKnowledgeQueryRequest,
+  PlanKnowledgeSearchRequest,
   PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
@@ -105,6 +117,7 @@ import type {
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
   ResolvedRagCitation,
+  ResolveKnowledgeSourceRequest,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -187,6 +200,7 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
+import { defaultKnowledgeSearchOptions } from '../../models';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import {
@@ -194,6 +208,17 @@ import {
   GENERATED_DIRECTORY_SIZES,
   type GeneratedDirectorySize,
 } from './mock-directory-generator';
+import {
+  executeMockKnowledgeSearch,
+  MockKnowledgeScopeError,
+  mockKnowledgeCapabilities,
+  mockKnowledgeRoots,
+  mockKnowledgeRouteUnavailable,
+  parseMockKnowledgeQuery,
+  planMockKnowledgeSearch,
+  resolveMockKnowledgeScope,
+  resolveMockKnowledgeSource,
+} from './mock-knowledge-search';
 
 interface FixtureEntry {
   name: string;
@@ -353,6 +378,13 @@ export type MockClientMethod =
   | 'listSavedRagConversations'
   | 'deleteRagConversation'
   | 'resolveRagCitation'
+  | 'getKnowledgeCapabilities'
+  | 'listKnowledgeRoots'
+  | 'parseKnowledgeQuery'
+  | 'planKnowledgeSearch'
+  | 'executeKnowledgeSearch'
+  | 'cancelKnowledgeSearch'
+  | 'resolveKnowledgeSource'
   | 'generateSyncPlan'
   | 'applySyncPlan'
   | 'listConnections'
@@ -1279,6 +1311,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly llmProfiles = new Map<string, LlmProfile>();
   private readonly documentSummaries = new Map<string, DocumentSummary>();
   private readonly ragConversations = new Map<string, SavedRagConversation>();
+  private readonly knowledgeSearches = new Map<string, AbortController>();
   private readonly ephemeralRagConversations = new Map<string, SavedRagConversation>();
   private readonly oneDriveAuthorizations = new Map<
     string,
@@ -4507,6 +4540,133 @@ export class MockFileManagerClient implements FileManagerClient {
         available: true,
       };
     });
+  }
+
+  getKnowledgeCapabilities(signal?: AbortSignal): Promise<KnowledgeCapabilities> {
+    return this.perform('getKnowledgeCapabilities', signal, () => mockKnowledgeCapabilities());
+  }
+
+  listKnowledgeRoots(
+    request: ListKnowledgeRootsRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeRoot[]> {
+    return this.perform('listKnowledgeRoots', signal, () => {
+      if (request.workspaceId.length === 0) {
+        throw new MockClientError('workspaceRequired', 'Knowledge roots require a workspace');
+      }
+      return mockKnowledgeRoots();
+    });
+  }
+
+  parseKnowledgeQuery(
+    request: ParseKnowledgeQueryRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeQueryInterpretation> {
+    return this.perform('parseKnowledgeQuery', signal, () => parseMockKnowledgeQuery(request.text));
+  }
+
+  planKnowledgeSearch(
+    request: PlanKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchPlan> {
+    return this.perform('planKnowledgeSearch', signal, () => this.knowledgePlan(request));
+  }
+
+  /**
+   * Runs the deterministic no-LLM search. Cancellation is honoured both ways:
+   * an aborted `signal` rejects, and a `cancelKnowledgeSearch` for the same
+   * `requestId` (which is how the Tauri host cancels) makes the in-flight
+   * search reject with the same `AbortError`.
+   *
+   * An already-aborted signal rejects before anything else is inspected, so a
+   * cancelled request never reports a capability or validation failure the
+   * caller did not actually wait for - the same order the desktop host uses.
+   */
+  async executeKnowledgeSearch(
+    request: ExecuteKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResult> {
+    if (signal?.aborted === true) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    if (mockKnowledgeRouteUnavailable(request.mode ?? 'hybrid')) {
+      throw new MockClientError('unavailable', 'Semantic retrieval is unavailable');
+    }
+    const controller = new AbortController();
+    const forward = (): void => controller.abort();
+    signal?.addEventListener('abort', forward, { once: true });
+    this.knowledgeSearches.set(request.requestId, controller);
+    try {
+      const result = await this.perform('executeKnowledgeSearch', controller.signal, () =>
+        executeMockKnowledgeSearch(request.requestId, this.knowledgePlan(request)),
+      );
+      if (controller.signal.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      return result;
+    } finally {
+      signal?.removeEventListener('abort', forward);
+      this.knowledgeSearches.delete(request.requestId);
+    }
+  }
+
+  /**
+   * Cancellation is applied immediately rather than behind the simulated
+   * latency, because a cancel that arrives after the work it cancels would
+   * never be observable - the desktop host registers the same `requestId` with
+   * its coordinator before the search starts.
+   */
+  cancelKnowledgeSearch(
+    request: CancelKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.knowledgeSearches.get(request.requestId)?.abort();
+    this.knowledgeSearches.delete(request.requestId);
+    return this.perform('cancelKnowledgeSearch', signal, () => undefined);
+  }
+
+  resolveKnowledgeSource(
+    request: ResolveKnowledgeSourceRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSourceLocation> {
+    return this.perform('resolveKnowledgeSource', signal, () => {
+      if (request.workspaceId.length === 0) {
+        throw new MockClientError('workspaceRequired', 'Knowledge sources require a workspace');
+      }
+      const resolved = resolveMockKnowledgeSource(request.sourceId);
+      if (resolved === undefined) {
+        throw new MockClientError('notFound', 'Knowledge source not found');
+      }
+      return resolved;
+    });
+  }
+
+  private knowledgePlan(
+    request: PlanKnowledgeSearchRequest | ExecuteKnowledgeSearchRequest,
+  ): KnowledgeSearchPlan {
+    if ((request.draft.about ?? []).filter((subject) => subject.trim().length > 0).length === 0) {
+      throw new MockClientError('invalidRequest', 'A knowledge search needs at least one subject');
+    }
+    return planMockKnowledgeSearch(
+      request.draft,
+      this.knowledgeScope(request),
+      request.mode ?? 'hybrid',
+      request.options ?? defaultKnowledgeSearchOptions(),
+    );
+  }
+
+  /** Resolves the visible scope, refusing exactly what the backend refuses. */
+  private knowledgeScope(
+    request: PlanKnowledgeSearchRequest | ExecuteKnowledgeSearchRequest,
+  ): KnowledgeScope {
+    try {
+      return resolveMockKnowledgeScope(request.scope, request.draft);
+    } catch (error) {
+      if (error instanceof MockKnowledgeScopeError) {
+        throw new MockClientError(error.code, error.message);
+      }
+      throw error;
+    }
   }
 
   listConnections(signal?: AbortSignal): Promise<Connection[]> {

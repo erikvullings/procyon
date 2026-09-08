@@ -81,6 +81,7 @@ function fakeContext(
     openDiskUsage: () => {},
     openPropertiesForActivePane: () => {},
     openSemanticAssistant: () => {},
+    openKnowledgeSearch: () => {},
     uninstallApplication: () => {},
     toggleDirectoryTree: () => {},
     toggleOperationCentre: () => {},
@@ -112,6 +113,29 @@ describe('action-command-controller uninstallApplication wiring', () => {
     });
 
     expect(openDocumentSummary).toHaveBeenCalledWith(paneId, file);
+  });
+
+  it('dispatches client.searchKnowledge to the knowledge search dialog (task 0206)', () => {
+    const openKnowledgeSearch = vi.fn();
+    const getClient = vi.fn();
+    const searchKnowledge = {
+      id: 'client.searchKnowledge',
+      title: 'Search Knowledge…',
+      category: 'tools',
+      defaultShortcuts: [{ key: 'k', ctrl: true, shift: true }],
+      contextRequirements: {},
+      source: { kind: 'core' as const },
+    };
+    const context = fakeContext({
+      getRegisteredActions: () => [searchKnowledge],
+      openKnowledgeSearch,
+      getClient,
+    });
+
+    createActionCommandController(context).invokePaletteAction(searchKnowledge, undefined, {});
+
+    expect(openKnowledgeSearch).toHaveBeenCalledOnce();
+    expect(getClient).not.toHaveBeenCalled();
   });
 
   it('invokePaletteAction dispatches the real discovery flow instead of the generic backend invoke', () => {

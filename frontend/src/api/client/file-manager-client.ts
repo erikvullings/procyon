@@ -12,6 +12,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -46,6 +47,7 @@ import type {
   EntryMetadata,
   EntryMetadataRequest,
   EntrySummary,
+  ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
@@ -60,7 +62,14 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeCapabilities,
+  KnowledgeQueryInterpretation,
+  KnowledgeRoot,
+  KnowledgeSearchPlan,
+  KnowledgeSearchResult,
+  KnowledgeSourceLocation,
   ListDirectoryRequest,
+  ListKnowledgeRootsRequest,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -75,6 +84,8 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  ParseKnowledgeQueryRequest,
+  PlanKnowledgeSearchRequest,
   PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
@@ -95,6 +106,7 @@ import type {
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
   ResolvedRagCitation,
+  ResolveKnowledgeSourceRequest,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -718,6 +730,53 @@ export interface FileManagerClient {
     request: ResolveRagCitationRequest,
     signal?: AbortSignal,
   ): Promise<ResolvedRagCitation>;
+
+  /**
+   * Reports full-text, semantic and answer-generation availability
+   * independently (task 0206, ADR 0012). Knowledge search stays usable when
+   * `answerGeneration` is `false`; hosts must never gate search on it.
+   */
+  getKnowledgeCapabilities(signal?: AbortSignal): Promise<KnowledgeCapabilities>;
+
+  /** Lists the indexed roots a knowledge search may be scoped to. */
+  listKnowledgeRoots(
+    request: ListKnowledgeRootsRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeRoot[]>;
+
+  /**
+   * Interprets composer or DSL text deterministically. The text is never sent
+   * to an LLM, and parsing never resolves authorization.
+   */
+  parseKnowledgeQuery(
+    request: ParseKnowledgeQueryRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeQueryInterpretation>;
+
+  /** Builds the deterministic retrieval plan without executing it. */
+  planKnowledgeSearch(
+    request: PlanKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchPlan>;
+
+  /**
+   * Executes one search-only knowledge retrieval. Aborting `signal` must also
+   * cancel the backend search identified by `request.requestId`, so both hosts
+   * stop the same work rather than only dropping the response.
+   */
+  executeKnowledgeSearch(
+    request: ExecuteKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResult>;
+
+  /** Cancels a running or not-yet-started knowledge search by request id. */
+  cancelKnowledgeSearch(request: CancelKnowledgeSearchRequest, signal?: AbortSignal): Promise<void>;
+
+  /** Resolves one opaque evidence source into an exact navigable location. */
+  resolveKnowledgeSource(
+    request: ResolveKnowledgeSourceRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSourceLocation>;
 
   /** Lists every stored connection profile with its current runtime status (task 0103). */
   listConnections(signal?: AbortSignal): Promise<Connection[]>;

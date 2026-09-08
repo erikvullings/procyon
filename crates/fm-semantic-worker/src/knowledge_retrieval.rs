@@ -23,7 +23,9 @@ use tokio_util::sync::CancellationToken;
 use crate::embedding::EmbeddingError;
 use crate::ingestion::EmbeddingProvider;
 use crate::semantic_search::{SearchCoverage, SemanticCandidateIndex};
-use crate::semantic_storage::{QueryEvidence, QueryFilters, SemanticCatalog, StorageError};
+use crate::semantic_storage::{
+    CatalogReader, QueryEvidence, QueryFilters, SemanticCatalog, StorageError,
+};
 
 /// Rank constant used by Procyon's deterministic reciprocal-rank fusion.
 pub const DEFAULT_RANK_CONSTANT: u32 = 60;
@@ -36,6 +38,19 @@ const MAX_RESULTS_PER_FILE: usize = 32;
 const MAX_CONTEXT_TOKENS: usize = 32_768;
 const MAX_ADJACENT_RADIUS: u32 = 4;
 const AUTHORIZATION_BATCH_SIZE: usize = 1_024;
+/// Maximum exactly-scoped slices accepted by one retrieval.
+pub const MAX_RETRIEVAL_SCOPES: usize = 8;
+/// Largest candidate page requested while filling a restricted scope's budget.
+///
+/// Matches the derived index's own top-k ceiling, so an overfetch can never be
+/// rejected by the index it is issued against.
+const MAX_RESTRICTED_CANDIDATE_PAGE: usize = 1_000;
+/// How many times the candidate limit may be overfetched to fill that budget.
+const MAX_RESTRICTED_OVERFETCH_FACTOR: usize = 8;
+/// Maximum exact authorized source identities accepted by one retrieval.
+pub const MAX_ALLOWED_SOURCES: usize = 4_096;
+/// Maximum duplicate source identities retained for one evidence row.
+pub const MAX_DUPLICATE_SOURCES: usize = 32;
 
 /// Read-only native full-text boundary; the peer of [`SemanticCandidateIndex`].
 ///
@@ -195,26 +210,68 @@ impl KnowledgeRetrievalPolicy {
     }
 }
 
+/// Exact host-authorized source identities for one retrieval.
+///
+/// The host owns consent and enumerates the occurrences a caller may currently
+/// see. Applying that set inside the worker — before the result, per-file, and
+/// token budgets are spent — keeps a high-ranked out-of-scope candidate from
+/// crowding out an authorized one. An empty set means the request filters
+/// already describe the authorized scope exactly.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KnowledgeSourceRestriction {
+    /// Opaque host source identities this retrieval may return.
+    pub allowed_source_ids: BTreeSet<String>,
+}
+
+impl KnowledgeSourceRestriction {
+    /// Whether one opaque source identity may be returned.
+    #[must_use]
+    pub fn permits(&self, source_id: &str) -> bool {
+        self.allowed_source_ids.is_empty() || self.allowed_source_ids.contains(source_id)
+    }
+
+    fn bounded(&self) -> bool {
+        self.allowed_source_ids.len() <= MAX_ALLOWED_SOURCES
+    }
+}
+
 /// One bounded knowledge retrieval request.
+///
+/// A scope that the index filters cannot express exactly is carried as several
+/// exactly-scoped slices rather than as one broadened filter. Every slice is
+/// retrieved as candidates, all slices are fused into a single global ranking,
+/// and the result, per-file, token, and adjacency budgets are then spent once
+/// over that ranking — never per slice.
 #[derive(Debug, Clone)]
 pub struct KnowledgeRetrievalRequest {
     /// Planned source queries; the logical plan is owned by the caller.
     pub queries: Vec<KnowledgeQuery>,
     /// Requested physical route.
     pub route: KnowledgeRoute,
-    /// Authoritative tenant/library/root/workspace filters.
-    pub filters: QueryFilters,
+    /// Exactly-scoped slices retrieved and ranked as one logical scope.
+    pub scopes: Vec<KnowledgeRetrievalScope>,
     /// Current host source hashes keyed by opaque source identity.
     pub current_hashes: HashMap<String, String>,
     /// Requested-scope coverage supplied by the authoritative host catalog.
     pub coverage: SearchCoverage,
-    /// Bounded retrieval limits.
+    /// Bounded retrieval limits applied once across every scope.
     pub policy: KnowledgeRetrievalPolicy,
 }
 
-/// One ranked candidate list produced by a single route and source query.
+/// One exactly-scoped slice of a single authorized retrieval scope.
+#[derive(Debug, Clone, Default)]
+pub struct KnowledgeRetrievalScope {
+    /// Authoritative tenant/library/root/workspace filters.
+    pub filters: QueryFilters,
+    /// Exact authorized source identities applied while candidates are fetched.
+    pub source_restriction: KnowledgeSourceRestriction,
+}
+
+/// One ranked candidate list produced by a single scope, route, and query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RankedCandidateList {
+    /// Index of the exactly-scoped slice that produced this list.
+    pub scope_index: usize,
     /// Index of the source query that produced this list.
     pub query_index: usize,
     /// Route that produced this list.
@@ -297,6 +354,11 @@ pub struct KnowledgeEvidence {
 }
 
 /// One traced source query.
+///
+/// Candidate counts describe the candidates this retrieval actually ranked,
+/// summed over every scope. For a scope described by an exact source set they
+/// are therefore already authorized counts, never the index's pre-authorization
+/// top-k.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TracedQuery {
@@ -304,9 +366,9 @@ pub struct TracedQuery {
     pub text: String,
     /// Reason the query was planned.
     pub reason: KnowledgeRetrievalReason,
-    /// Dense candidates returned for this query.
+    /// Dense candidates ranked for this query.
     pub semantic_candidates: usize,
-    /// Lexical candidates returned for this query.
+    /// Lexical candidates ranked for this query.
     pub full_text_candidates: usize,
 }
 
@@ -391,6 +453,22 @@ pub enum KnowledgeRetrievalError {
     /// One or more bounded limits are invalid.
     #[error("knowledge retrieval policy is invalid")]
     InvalidPolicy,
+    /// The exact authorized source set exceeded its bounded contract.
+    #[error("{actual} authorized source identities exceed the maximum of {maximum}")]
+    UnboundedSourceRestriction {
+        /// Configured maximum.
+        maximum: usize,
+        /// Submitted count.
+        actual: usize,
+    },
+    /// No scope, or more exactly-scoped slices than the contract allows.
+    #[error("{actual} retrieval scopes exceed the maximum of {maximum}")]
+    InvalidScopes {
+        /// Configured maximum.
+        maximum: usize,
+        /// Submitted count.
+        actual: usize,
+    },
     /// The retrieval was cancelled.
     #[error("knowledge retrieval was cancelled")]
     Cancelled,
@@ -459,6 +537,11 @@ impl KnowledgeRetrievalService {
 
     /// Retrieves fused, authorized, source-oriented evidence.
     ///
+    /// Every exactly-scoped slice contributes candidates, the slices are fused
+    /// into one global ranking, and the bounded budgets are spent once over
+    /// that ranking, so a multi-slice scope returns what a single unpartitioned
+    /// retrieval of the same authorized scope would have returned.
+    ///
     /// # Errors
     ///
     /// Returns typed validation, capability, cancellation, embedding, index,
@@ -474,12 +557,15 @@ impl KnowledgeRetrievalService {
         }
         let capabilities = self.capabilities();
         let mut plan = RoutePlan::select(request.route, capabilities)?;
-        let lists = self.execute_routes(&request, &mut plan, cancellation)?;
+        // One read lease spans candidate authorization and materialization, so
+        // a superseded record cannot be reclaimed between the two.
+        let reader = self.catalog.begin_read()?;
+        let lists = self.execute_routes(&reader, &request, &mut plan, cancellation)?;
         if cancellation.is_cancelled() {
             return Err(KnowledgeRetrievalError::Cancelled);
         }
         let fused = fuse_ranked_candidates(&lists, request.policy.rank_constant);
-        let evidence = self.materialize(&fused, &request, cancellation)?;
+        let evidence = self.materialize(&reader, &fused, &lists, &request, cancellation)?;
         let token_count = evidence
             .iter()
             .map(|item| item.token_count)
@@ -504,13 +590,14 @@ impl KnowledgeRetrievalService {
 
     fn execute_routes(
         &self,
+        reader: &CatalogReader,
         request: &KnowledgeRetrievalRequest,
         plan: &mut RoutePlan,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RankedCandidateList>, KnowledgeRetrievalError> {
         let mut semantic = Vec::new();
         if plan.semantic {
-            match self.query_semantic(request, cancellation) {
+            match self.query_semantic(reader, request, cancellation) {
                 Ok(lists) => semantic = lists,
                 Err(KnowledgeRetrievalError::Cancelled) => {
                     return Err(KnowledgeRetrievalError::Cancelled);
@@ -526,7 +613,7 @@ impl KnowledgeRetrievalService {
         }
         let mut full_text = Vec::new();
         if plan.full_text {
-            match self.query_full_text(request, cancellation) {
+            match self.query_full_text(reader, request, cancellation) {
                 Ok(lists) => full_text = lists,
                 Err(KnowledgeRetrievalError::Cancelled) => {
                     return Err(KnowledgeRetrievalError::Cancelled);
@@ -559,6 +646,7 @@ impl KnowledgeRetrievalService {
 
     fn query_semantic(
         &self,
+        reader: &CatalogReader,
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RankedCandidateList>, KnowledgeRetrievalError> {
@@ -578,116 +666,135 @@ impl KnowledgeRetrievalService {
         if vectors.len() != texts.len() {
             return Err(KnowledgeRetrievalError::MissingQueryVector);
         }
-        let mut lists = Vec::with_capacity(vectors.len());
-        for (query_index, vector) in vectors.iter().enumerate() {
-            if cancellation.is_cancelled() {
-                return Err(KnowledgeRetrievalError::Cancelled);
+        let mut lists = Vec::with_capacity(vectors.len() * request.scopes.len());
+        for (scope_index, scope) in request.scopes.iter().enumerate() {
+            for (query_index, vector) in vectors.iter().enumerate() {
+                if cancellation.is_cancelled() {
+                    return Err(KnowledgeRetrievalError::Cancelled);
+                }
+                let record_ids = fill_candidates(reader, scope, request.policy, |limit| {
+                    index
+                        .query(vector, limit, &scope.filters)
+                        .map(|candidates| {
+                            candidates
+                                .into_iter()
+                                .map(|candidate| candidate.record_id)
+                                .collect()
+                        })
+                        .map_err(KnowledgeRetrievalError::Index)
+                })?;
+                lists.push(RankedCandidateList {
+                    scope_index,
+                    query_index,
+                    route: KnowledgeRoute::Semantic,
+                    record_ids,
+                });
             }
-            let candidates = index
-                .query(vector, request.policy.candidate_limit, &request.filters)
-                .map_err(KnowledgeRetrievalError::Index)?;
-            lists.push(RankedCandidateList {
-                query_index,
-                route: KnowledgeRoute::Semantic,
-                record_ids: candidates
-                    .into_iter()
-                    .map(|candidate| candidate.record_id)
-                    .collect(),
-            });
         }
         Ok(lists)
     }
 
     fn query_full_text(
         &self,
+        reader: &CatalogReader,
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RankedCandidateList>, KnowledgeRetrievalError> {
         let Some(index) = &self.full_text_index else {
             return Err(KnowledgeRetrievalError::FullTextUnavailable);
         };
-        let mut lists = Vec::with_capacity(request.queries.len());
-        for (query_index, query) in request.queries.iter().enumerate() {
-            if cancellation.is_cancelled() {
-                return Err(KnowledgeRetrievalError::Cancelled);
+        let mut lists = Vec::with_capacity(request.queries.len() * request.scopes.len());
+        for (scope_index, scope) in request.scopes.iter().enumerate() {
+            for (query_index, query) in request.queries.iter().enumerate() {
+                if cancellation.is_cancelled() {
+                    return Err(KnowledgeRetrievalError::Cancelled);
+                }
+                let record_ids = fill_candidates(reader, scope, request.policy, |limit| {
+                    index
+                        .query_full_text(&query.text, limit, &scope.filters)
+                        .map_err(KnowledgeRetrievalError::FullTextIndex)
+                })?;
+                lists.push(RankedCandidateList {
+                    scope_index,
+                    query_index,
+                    route: KnowledgeRoute::FullText,
+                    record_ids,
+                });
             }
-            let record_ids = index
-                .query_full_text(
-                    &query.text,
-                    request.policy.candidate_limit,
-                    &request.filters,
-                )
-                .map_err(KnowledgeRetrievalError::FullTextIndex)?;
-            lists.push(RankedCandidateList {
-                query_index,
-                route: KnowledgeRoute::FullText,
-                record_ids,
-            });
         }
         Ok(lists)
     }
 
+    /// Materializes one globally ranked candidate list into bounded evidence.
+    ///
+    /// Authorization is resolved per originating scope, because each scope owns
+    /// its own filters and exact source set. The result, per-file, token, and
+    /// adjacency budgets are then spent exactly once, walking the global
+    /// ranking, so no scope can spend another scope's budget.
     fn materialize(
         &self,
+        reader: &CatalogReader,
         fused: &[FusedCandidate],
+        lists: &[RankedCandidateList],
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<KnowledgeEvidence>, KnowledgeRetrievalError> {
-        let reader = self.catalog.begin_read()?;
-        let mut primaries = Vec::<QueryEvidence>::new();
+        let authorized = self.authorize_candidates(reader, fused, lists, request, cancellation)?;
+        let mut primaries = Vec::<(usize, QueryEvidence)>::new();
         let mut duplicates = HashMap::<String, BTreeSet<String>>::new();
         let mut logical_chunks = HashMap::<ChunkIdentity, String>::new();
         let mut results_per_file = HashMap::<String, usize>::new();
         let mut token_count = 0usize;
-        for candidate_batch in fused.chunks(AUTHORIZATION_BATCH_SIZE) {
+        for candidate in fused {
             if cancellation.is_cancelled() {
                 return Err(KnowledgeRetrievalError::Cancelled);
             }
-            let candidate_ids = candidate_batch
-                .iter()
-                .map(|candidate| candidate.record_id.clone())
-                .collect::<Vec<_>>();
-            let authorized = reader.filter_visible_candidates(&candidate_ids, &request.filters)?;
-            for evidence in authorized {
-                if cancellation.is_cancelled() {
-                    return Err(KnowledgeRetrievalError::Cancelled);
+            let Some((scope_index, evidence)) = authorized.get(&candidate.record_id) else {
+                continue;
+            };
+            let identity = ChunkIdentity::of(evidence);
+            if let Some(existing) = logical_chunks.get(&identity) {
+                let duplicates = duplicates.entry(existing.clone()).or_default();
+                if duplicates.len() < MAX_DUPLICATE_SOURCES {
+                    duplicates.insert(evidence.source_id.clone());
                 }
-                let identity = ChunkIdentity::of(&evidence);
-                if let Some(existing) = logical_chunks.get(&identity) {
-                    duplicates
-                        .entry(existing.clone())
-                        .or_default()
-                        .insert(evidence.source_id);
-                    continue;
-                }
-                if primaries.len() >= request.policy.result_limit {
-                    continue;
-                }
-                let used = results_per_file
-                    .get(&evidence.document_id)
-                    .copied()
-                    .unwrap_or_default();
-                if used >= request.policy.maximum_results_per_file {
-                    continue;
-                }
-                let Some(next_tokens) = token_count.checked_add(evidence.token_count) else {
-                    continue;
-                };
-                if next_tokens > request.policy.context_token_budget {
-                    continue;
-                }
-                token_count = next_tokens;
-                logical_chunks.insert(identity, evidence.record_id.clone());
-                results_per_file.insert(evidence.document_id.clone(), used + 1);
-                primaries.push(evidence);
+                continue;
             }
+            if primaries.len() >= request.policy.result_limit {
+                continue;
+            }
+            let used = results_per_file
+                .get(&evidence.document_id)
+                .copied()
+                .unwrap_or_default();
+            if used >= request.policy.maximum_results_per_file {
+                continue;
+            }
+            let Some(next_tokens) = token_count.checked_add(evidence.token_count) else {
+                continue;
+            };
+            if next_tokens > request.policy.context_token_budget {
+                continue;
+            }
+            token_count = next_tokens;
+            logical_chunks.insert(identity, evidence.record_id.clone());
+            results_per_file.insert(evidence.document_id.clone(), used + 1);
+            primaries.push((*scope_index, evidence.clone()));
         }
 
         let mut evidence = Vec::new();
-        for (index, primary) in primaries.iter().enumerate() {
+        for (index, (scope_index, primary)) in primaries.iter().enumerate() {
             if cancellation.is_cancelled() {
                 return Err(KnowledgeRetrievalError::Cancelled);
             }
+            let scope =
+                request
+                    .scopes
+                    .get(*scope_index)
+                    .ok_or(KnowledgeRetrievalError::InvalidScopes {
+                        maximum: MAX_RETRIEVAL_SCOPES,
+                        actual: request.scopes.len(),
+                    })?;
             let final_rank = index + 1;
             let adjacent = if request.policy.adjacent_chunk_radius == 0 || primary.generated {
                 Vec::new()
@@ -695,7 +802,7 @@ impl KnowledgeRetrievalService {
                 reader.adjacent_source_chunks(
                     primary,
                     request.policy.adjacent_chunk_radius,
-                    &request.filters,
+                    &scope.filters,
                 )?
             };
             if cancellation.is_cancelled() {
@@ -710,6 +817,7 @@ impl KnowledgeRetrievalService {
             )?);
             for context in adjacent {
                 if context.record_id == primary.record_id
+                    || !scope.source_restriction.permits(&context.source_id)
                     || (request.policy.section_bounded_context
                         && context.section_path != primary.section_path)
                     || logical_chunks.contains_key(&ChunkIdentity::of(&context))
@@ -731,6 +839,49 @@ impl KnowledgeRetrievalService {
             return Err(KnowledgeRetrievalError::Cancelled);
         }
         Ok(evidence)
+    }
+
+    /// Resolves every fused candidate against the scope that produced it.
+    ///
+    /// A candidate returned by more than one scope is authorized once, by the
+    /// lowest scope index, so overlapping scopes cannot produce two evidence
+    /// rows for the same record.
+    fn authorize_candidates(
+        &self,
+        reader: &CatalogReader,
+        fused: &[FusedCandidate],
+        lists: &[RankedCandidateList],
+        request: &KnowledgeRetrievalRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<HashMap<String, (usize, QueryEvidence)>, KnowledgeRetrievalError> {
+        let owners = scope_owners(lists);
+        let mut authorized = HashMap::<String, (usize, QueryEvidence)>::new();
+        for (scope_index, scope) in request.scopes.iter().enumerate() {
+            let candidate_ids = fused
+                .iter()
+                .filter(|candidate| {
+                    owners.get(&candidate.record_id) == Some(&scope_index)
+                        && !authorized.contains_key(&candidate.record_id)
+                })
+                .map(|candidate| candidate.record_id.clone())
+                .collect::<Vec<_>>();
+            for batch in candidate_ids.chunks(AUTHORIZATION_BATCH_SIZE) {
+                if cancellation.is_cancelled() {
+                    return Err(KnowledgeRetrievalError::Cancelled);
+                }
+                for evidence in reader.filter_visible_candidates(batch, &scope.filters)? {
+                    // The exact authorized source set is applied before any
+                    // budget is spent, so an out-of-scope candidate that
+                    // outranks an authorized one cannot consume a result slot,
+                    // a per-file slot, or the token budget.
+                    if !scope.source_restriction.permits(&evidence.source_id) {
+                        continue;
+                    }
+                    authorized.insert(evidence.record_id.clone(), (scope_index, evidence));
+                }
+            }
+        }
+        Ok(authorized)
     }
 }
 
@@ -820,10 +971,13 @@ impl ChunkIdentity {
     }
 }
 
-/// Fuses independent route rankings with deterministic reciprocal-rank fusion.
+/// Fuses independent scope, route, and query rankings with deterministic
+/// reciprocal-rank fusion.
 ///
-/// Only rank positions are combined. Duplicate identities inside one list are
-/// ignored so a repeated candidate cannot inflate its own fused score.
+/// Only rank positions are combined. A candidate contributes at most one rank
+/// per source query and route — its best one — no matter how many lists or
+/// scopes returned it, so neither a repeated identity inside one list nor an
+/// overlap between two scopes can inflate its own fused score.
 #[must_use]
 pub fn fuse_ranked_candidates(
     lists: &[RankedCandidateList],
@@ -838,7 +992,6 @@ pub fn fuse_ranked_candidates(
                 continue;
             }
             rank += 1;
-            let contribution = 1.0 / (f64::from(rank_constant) + rank as f64);
             let entry = fused
                 .entry(record_id.clone())
                 .or_insert_with(|| FusedCandidate {
@@ -846,15 +999,27 @@ pub fn fuse_ranked_candidates(
                     contributions: Vec::new(),
                     score: 0.0,
                 });
+            if let Some(existing) = entry.contributions.iter_mut().find(|contribution| {
+                contribution.query_index == list.query_index && contribution.route == list.route
+            }) {
+                existing.rank = existing.rank.min(rank);
+                continue;
+            }
             entry.contributions.push(RankContribution {
                 query_index: list.query_index,
                 route: list.route,
                 rank,
             });
-            entry.score += contribution;
         }
     }
     let mut ranked = fused.into_values().collect::<Vec<_>>();
+    for candidate in &mut ranked {
+        candidate.score = candidate
+            .contributions
+            .iter()
+            .map(|contribution| 1.0 / (f64::from(rank_constant) + contribution.rank as f64))
+            .sum();
+    }
     ranked.sort_by(|left, right| {
         right
             .score
@@ -862,6 +1027,68 @@ pub fn fuse_ranked_candidates(
             .then_with(|| left.record_id.cmp(&right.record_id))
     });
     ranked
+}
+
+/// Fills one scope's candidate budget with candidates it may actually return.
+///
+/// An unrestricted scope is already exact, so its top-k is used verbatim. A
+/// scope described by an exact source set is not expressible as an index
+/// filter, so the index is overfetched in deterministic doubling pages and each
+/// page is reduced to its authorized candidates until the budget is filled, the
+/// index is exhausted, or the bounded overfetch ceiling is reached. Relevance
+/// order is preserved throughout.
+fn fill_candidates<Fetch>(
+    reader: &CatalogReader,
+    scope: &KnowledgeRetrievalScope,
+    policy: KnowledgeRetrievalPolicy,
+    mut fetch: Fetch,
+) -> Result<Vec<String>, KnowledgeRetrievalError>
+where
+    Fetch: FnMut(usize) -> Result<Vec<String>, KnowledgeRetrievalError>,
+{
+    let budget = policy.candidate_limit;
+    if scope.source_restriction.allowed_source_ids.is_empty() {
+        return fetch(budget);
+    }
+    let ceiling = budget
+        .saturating_mul(MAX_RESTRICTED_OVERFETCH_FACTOR)
+        .min(MAX_RESTRICTED_CANDIDATE_PAGE)
+        .max(budget);
+    let mut page = budget;
+    loop {
+        let candidates = fetch(page)?;
+        let exhausted = candidates.len() < page;
+        let mut authorized = Vec::with_capacity(budget.min(candidates.len()));
+        for batch in candidates.chunks(AUTHORIZATION_BATCH_SIZE) {
+            for (record_id, source_id) in reader.visible_candidate_sources(batch, &scope.filters)? {
+                if scope.source_restriction.permits(&source_id) {
+                    authorized.push(record_id);
+                }
+            }
+        }
+        if authorized.len() >= budget {
+            authorized.truncate(budget);
+            return Ok(authorized);
+        }
+        if exhausted || page >= ceiling {
+            return Ok(authorized);
+        }
+        page = page.saturating_mul(2).min(ceiling);
+    }
+}
+
+/// Maps every candidate identity to the lowest scope index that produced it.
+fn scope_owners(lists: &[RankedCandidateList]) -> HashMap<String, usize> {
+    let mut owners = HashMap::<String, usize>::new();
+    for list in lists {
+        for record_id in &list.record_ids {
+            owners
+                .entry(record_id.clone())
+                .and_modify(|owner| *owner = (*owner).min(list.scope_index))
+                .or_insert(list.scope_index);
+        }
+    }
+    owners
 }
 
 const fn semantic_failure_reason(error: &KnowledgeRetrievalError) -> RouteFallbackReason {
@@ -888,6 +1115,20 @@ fn validate_request(request: &KnowledgeRetrievalRequest) -> Result<(), Knowledge
             .any(|query| query.text.trim().is_empty() || query.text.len() > MAX_QUERY_BYTES)
     {
         return Err(KnowledgeRetrievalError::EmptyQuery);
+    }
+    if request.scopes.is_empty() || request.scopes.len() > MAX_RETRIEVAL_SCOPES {
+        return Err(KnowledgeRetrievalError::InvalidScopes {
+            maximum: MAX_RETRIEVAL_SCOPES,
+            actual: request.scopes.len(),
+        });
+    }
+    for scope in &request.scopes {
+        if !scope.source_restriction.bounded() {
+            return Err(KnowledgeRetrievalError::UnboundedSourceRestriction {
+                maximum: MAX_ALLOWED_SOURCES,
+                actual: scope.source_restriction.allowed_source_ids.len(),
+            });
+        }
     }
     Ok(())
 }
@@ -1335,6 +1576,203 @@ mod tests {
         catalog
     }
 
+    /// A catalog whose authorized scope spans two enrolled roots, including one
+    /// file that occurs under both of them.
+    fn multi_root_fixture(path: &std::path::Path) -> SemanticCatalog {
+        let catalog = SemanticCatalog::open(path).expect("catalog");
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register tenant-a");
+        // One file present under both roots, at the same structural position in
+        // both, so the two occurrences are one logical chunk.
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-x",
+            vec![
+                occurrence(
+                    "occurrence-x-a",
+                    "source-x-a",
+                    "root-a",
+                    "workspace-a",
+                    true,
+                ),
+                occurrence(
+                    "occurrence-x-b",
+                    "source-x-b",
+                    "root-b",
+                    "workspace-a",
+                    true,
+                ),
+            ],
+            vec![
+                record("x-0", "occurrence-x-a", 0),
+                record("x-0b", "occurrence-x-b", 0),
+            ],
+        );
+        // One file present under both roots whose indexed chunks do not
+        // overlap, so its per-file budget can only be honored globally.
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-m",
+            vec![
+                occurrence(
+                    "occurrence-m-a",
+                    "source-m-a",
+                    "root-a",
+                    "workspace-a",
+                    true,
+                ),
+                occurrence(
+                    "occurrence-m-b",
+                    "source-m-b",
+                    "root-b",
+                    "workspace-a",
+                    true,
+                ),
+            ],
+            vec![
+                record("m-a-0", "occurrence-m-a", 0),
+                record("m-a-1", "occurrence-m-a", 1),
+                record("m-b-2", "occurrence-m-b", 2),
+                record("m-b-3", "occurrence-m-b", 3),
+            ],
+        );
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-d1",
+            vec![occurrence(
+                "occurrence-d1",
+                "source-d1",
+                "root-a",
+                "workspace-a",
+                true,
+            )],
+            vec![
+                record("d1-0", "occurrence-d1", 0),
+                record("d1-1", "occurrence-d1", 1),
+            ],
+        );
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-d2",
+            vec![occurrence(
+                "occurrence-d2",
+                "source-d2",
+                "root-b",
+                "workspace-a",
+                true,
+            )],
+            vec![
+                record("d2-0", "occurrence-d2", 0),
+                record("d2-1", "occurrence-d2", 1),
+            ],
+        );
+        catalog
+    }
+
+    /// Full-text index answering from a fixed per-root corpus that honors the
+    /// requested top-k, so overfetching is observable.
+    struct RootCorpusFullTextIndex {
+        corpora: BTreeMap<String, Vec<String>>,
+        limits: Mutex<Vec<usize>>,
+    }
+
+    impl RootCorpusFullTextIndex {
+        fn new(corpora: &[(&str, &[&str])]) -> Arc<Self> {
+            Arc::new(Self {
+                corpora: corpora
+                    .iter()
+                    .map(|(root, records)| {
+                        (
+                            (*root).to_owned(),
+                            records.iter().map(|record| (*record).to_owned()).collect(),
+                        )
+                    })
+                    .collect(),
+                limits: Mutex::new(Vec::new()),
+            })
+        }
+
+        fn limits(&self) -> Vec<usize> {
+            self.limits.lock().unwrap().clone()
+        }
+    }
+
+    impl FullTextCandidateIndex for RootCorpusFullTextIndex {
+        fn query_full_text(
+            &self,
+            _text: &str,
+            limit: usize,
+            filters: &QueryFilters,
+        ) -> Result<Vec<String>, String> {
+            self.limits.lock().unwrap().push(limit);
+            let root = filters.root_id.clone().unwrap_or_default();
+            Ok(self
+                .corpora
+                .get(&root)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .take(limit)
+                .collect())
+        }
+    }
+
+    /// Dense index answering from a fixed per-root corpus that honors top-k.
+    struct RootCorpusVectorIndex {
+        corpora: BTreeMap<String, Vec<String>>,
+        limits: Mutex<Vec<usize>>,
+    }
+
+    impl RootCorpusVectorIndex {
+        fn new(corpora: &[(&str, &[&str])]) -> Arc<Self> {
+            Arc::new(Self {
+                corpora: corpora
+                    .iter()
+                    .map(|(root, records)| {
+                        (
+                            (*root).to_owned(),
+                            records.iter().map(|record| (*record).to_owned()).collect(),
+                        )
+                    })
+                    .collect(),
+                limits: Mutex::new(Vec::new()),
+            })
+        }
+
+        fn limits(&self) -> Vec<usize> {
+            self.limits.lock().unwrap().clone()
+        }
+    }
+
+    impl SemanticCandidateIndex for RootCorpusVectorIndex {
+        fn query(
+            &self,
+            _vector: &[f32],
+            limit: usize,
+            filters: &QueryFilters,
+        ) -> Result<Vec<ScoredRecord>, String> {
+            self.limits.lock().unwrap().push(limit);
+            let root = filters.root_id.clone().unwrap_or_default();
+            Ok(self
+                .corpora
+                .get(&root)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .take(limit)
+                .enumerate()
+                .map(|(index, record_id)| ScoredRecord {
+                    record_id,
+                    score: 1.0 - index as f32 / 100.0,
+                })
+                .collect())
+        }
+    }
     fn filters() -> QueryFilters {
         QueryFilters {
             tenant_id: "tenant-a".into(),
@@ -1355,16 +1793,40 @@ mod tests {
         route: KnowledgeRoute,
         policy: KnowledgeRetrievalPolicy,
     ) -> KnowledgeRetrievalRequest {
+        scoped_request(route, policy, vec![scope(filters(), &[])])
+    }
+
+    fn scoped_request(
+        route: KnowledgeRoute,
+        policy: KnowledgeRetrievalPolicy,
+        scopes: Vec<KnowledgeRetrievalScope>,
+    ) -> KnowledgeRetrievalRequest {
         KnowledgeRetrievalRequest {
             queries: vec![KnowledgeQuery {
                 text: "structured knowledge".into(),
                 reason: KnowledgeRetrievalReason::Subject,
             }],
             route,
-            filters: filters(),
+            scopes,
             current_hashes: HashMap::new(),
             coverage: crate::semantic_search::SearchCoverage::default(),
             policy,
+        }
+    }
+
+    fn scope(filters: QueryFilters, allowed: &[&str]) -> KnowledgeRetrievalScope {
+        KnowledgeRetrievalScope {
+            filters,
+            source_restriction: KnowledgeSourceRestriction {
+                allowed_source_ids: allowed.iter().map(|source| (*source).to_owned()).collect(),
+            },
+        }
+    }
+
+    fn root_filters(root_id: &str) -> QueryFilters {
+        QueryFilters {
+            root_id: Some(root_id.into()),
+            ..filters()
         }
     }
 
@@ -1408,11 +1870,13 @@ mod tests {
         let ranked = fuse_ranked_candidates(
             &[
                 RankedCandidateList {
+                    scope_index: 0,
                     query_index: 0,
                     route: KnowledgeRoute::Semantic,
                     record_ids: vec!["a-0".into(), "b-0".into(), "a-0".into()],
                 },
                 RankedCandidateList {
+                    scope_index: 0,
                     query_index: 0,
                     route: KnowledgeRoute::FullText,
                     record_ids: vec!["b-0".into(), "c-0".into()],
@@ -1431,6 +1895,441 @@ mod tests {
         assert_eq!(ranked[0].contributions.len(), 2);
         assert_eq!(ranked[0].contributions[0].rank, 2);
         assert_eq!(ranked[0].contributions[1].rank, 1);
+    }
+
+    /// The exact authorized source set must be applied before the result,
+    /// per-file, and token budgets: an out-of-scope candidate that outranks an
+    /// authorized one must not consume the scope's only result slot.
+    #[test]
+    fn out_of_scope_candidates_never_crowd_out_authorized_ones() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            fixture(&path),
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![
+                vec!["b-0", "b-1", "a-0"],
+                vec!["b-0", "b-1", "a-0"],
+            ])),
+        );
+        let narrow = KnowledgeRetrievalPolicy {
+            result_limit: 1,
+            ..policy()
+        };
+
+        let unrestricted = service
+            .retrieve(
+                request(KnowledgeRoute::FullText, narrow),
+                &CancellationToken::new(),
+            )
+            .expect("unrestricted retrieval");
+        assert_eq!(record_ids(&unrestricted), ["b-0"]);
+
+        let restricted = scoped_request(
+            KnowledgeRoute::FullText,
+            narrow,
+            vec![scope(filters(), &["source-a"])],
+        );
+        let restricted = service
+            .retrieve(restricted, &CancellationToken::new())
+            .expect("restricted retrieval");
+
+        assert_eq!(record_ids(&restricted), ["a-0"]);
+        assert_eq!(restricted.evidence[0].source_id, "source-a");
+    }
+
+    /// A scope described by an exact source set must still return a full
+    /// candidate budget of candidates it may actually show. Checking the
+    /// restriction only after the index's top-k lets unauthorized records
+    /// consume the budget and silently starves the scope.
+    #[test]
+    fn a_restricted_full_text_scope_fills_its_candidate_budget_with_authorized_hits() {
+        let path = catalog_path();
+        let index = RootCorpusFullTextIndex::new(&[(
+            "root-a",
+            &["b-0", "b-1", "e-0", "e-1", "a-0", "a-1"],
+        )]);
+        let service =
+            KnowledgeRetrievalService::new(fixture(&path), None, None, Some(index.clone()));
+        let narrow = KnowledgeRetrievalPolicy {
+            candidate_limit: 2,
+            ..policy()
+        };
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    narrow,
+                    vec![scope(root_filters("root-a"), &["source-a"])],
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("restricted retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["a-0", "a-1"]);
+        // The budget is filled by deterministic doubling, never by asking the
+        // index for an unbounded page.
+        assert_eq!(index.limits(), vec![2, 4, 8]);
+    }
+
+    #[test]
+    fn a_restricted_semantic_scope_fills_its_candidate_budget_with_authorized_hits() {
+        let path = catalog_path();
+        let index =
+            RootCorpusVectorIndex::new(&[("root-a", &["b-0", "b-1", "e-0", "e-1", "a-0", "a-1"])]);
+        let service = KnowledgeRetrievalService::new(
+            fixture(&path),
+            Some(FakeEmbedder::working()),
+            Some(index.clone()),
+            None,
+        );
+        let narrow = KnowledgeRetrievalPolicy {
+            candidate_limit: 2,
+            ..policy()
+        };
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::Semantic,
+                    narrow,
+                    vec![scope(root_filters("root-a"), &["source-a"])],
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("restricted retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["a-0", "a-1"]);
+        assert_eq!(index.limits(), vec![2, 4, 8]);
+    }
+
+    /// Overfetching is bounded: an authorized budget that cannot be filled
+    /// returns what the scope really has instead of paging without end.
+    #[test]
+    fn filling_a_restricted_budget_stops_at_the_bounded_overfetch_ceiling() {
+        let path = catalog_path();
+        let index = RootCorpusFullTextIndex::new(&[(
+            "root-a",
+            &["b-0", "b-1", "e-0", "e-1", "e-2", "a-0"],
+        )]);
+        let service =
+            KnowledgeRetrievalService::new(fixture(&path), None, None, Some(index.clone()));
+        let narrow = KnowledgeRetrievalPolicy {
+            candidate_limit: 4,
+            ..policy()
+        };
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    narrow,
+                    vec![scope(root_filters("root-a"), &["source-a"])],
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("restricted retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["a-0"]);
+        assert!(index.limits().len() <= 4, "{:?}", index.limits());
+    }
+
+    /// An unrestricted scope is already exact, so nothing is overfetched.
+    #[test]
+    fn an_unrestricted_scope_asks_the_index_for_its_candidate_limit_once() {
+        let path = catalog_path();
+        let index = RootCorpusFullTextIndex::new(&[("root-a", &["a-0", "a-1", "a-2"])]);
+        let service =
+            KnowledgeRetrievalService::new(fixture(&path), None, None, Some(index.clone()));
+
+        service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        candidate_limit: 3,
+                        ..policy()
+                    },
+                    vec![scope(root_filters("root-a"), &[])],
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("unrestricted retrieval");
+
+        assert_eq!(index.limits(), vec![3]);
+    }
+
+    fn multi_root_scopes() -> Vec<KnowledgeRetrievalScope> {
+        vec![
+            scope(root_filters("root-a"), &[]),
+            scope(root_filters("root-b"), &[]),
+        ]
+    }
+
+    /// The result limit belongs to the search, not to each partition of the
+    /// scope: two roots must not return two full result sets.
+    #[test]
+    fn a_multi_root_scope_spends_one_global_result_limit() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            multi_root_fixture(&path),
+            None,
+            None,
+            Some(RootCorpusFullTextIndex::new(&[
+                ("root-a", &["d1-0", "d1-1"]),
+                ("root-b", &["d2-0", "d2-1"]),
+            ])),
+        );
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        result_limit: 2,
+                        ..policy()
+                    },
+                    multi_root_scopes(),
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("multi-root retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["d1-0", "d2-0"]);
+        assert_eq!(retrieval.evidence[0].final_rank, 1);
+        assert_eq!(retrieval.evidence[1].final_rank, 2);
+    }
+
+    /// So does the complete-chunk token budget.
+    #[test]
+    fn a_multi_root_scope_spends_one_global_token_budget() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            multi_root_fixture(&path),
+            None,
+            None,
+            Some(RootCorpusFullTextIndex::new(&[
+                ("root-a", &["d1-0", "d1-1"]),
+                ("root-b", &["d2-0", "d2-1"]),
+            ])),
+        );
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        context_token_budget: 25,
+                        ..policy()
+                    },
+                    multi_root_scopes(),
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("multi-root retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["d1-0", "d2-0"]);
+        assert_eq!(retrieval.token_count, 20);
+    }
+
+    /// One file indexed under two roots must not be allowed twice as many
+    /// results as a file indexed under one.
+    #[test]
+    fn a_multi_root_scope_spends_one_global_per_file_limit() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            multi_root_fixture(&path),
+            None,
+            None,
+            Some(RootCorpusFullTextIndex::new(&[
+                ("root-a", &["m-a-0", "m-a-1"]),
+                ("root-b", &["m-b-2", "m-b-3"]),
+            ])),
+        );
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        maximum_results_per_file: 2,
+                        ..policy()
+                    },
+                    multi_root_scopes(),
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("multi-root retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["m-a-0", "m-b-2"]);
+    }
+
+    /// The same logical chunk reached through two roots is one result carrying
+    /// both authorized occurrences, never two competing rows.
+    #[test]
+    fn a_chunk_reachable_through_two_roots_collapses_to_one_ranked_result() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            multi_root_fixture(&path),
+            None,
+            None,
+            Some(RootCorpusFullTextIndex::new(&[
+                ("root-a", &["x-0"]),
+                ("root-b", &["x-0b"]),
+            ])),
+        );
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(KnowledgeRoute::FullText, policy(), multi_root_scopes()),
+                &CancellationToken::new(),
+            )
+            .expect("multi-root retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["x-0"]);
+        assert_eq!(retrieval.evidence[0].source_id, "source-x-a");
+        assert_eq!(
+            retrieval.evidence[0].duplicate_source_ids,
+            vec!["source-x-b".to_owned()]
+        );
+        assert_eq!(retrieval.token_count, 10);
+    }
+
+    /// Adjacent context is expanded once, after the global ranking, using the
+    /// scope that authorized the primary it belongs to.
+    #[test]
+    fn adjacent_context_across_roots_stays_bound_to_its_own_scope() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            multi_root_fixture(&path),
+            None,
+            None,
+            Some(RootCorpusFullTextIndex::new(&[
+                ("root-a", &["m-a-0"]),
+                ("root-b", &["m-b-3"]),
+            ])),
+        );
+
+        let retrieval = service
+            .retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        adjacent_chunk_radius: 1,
+                        section_bounded_context: false,
+                        ..policy()
+                    },
+                    multi_root_scopes(),
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("multi-root retrieval");
+
+        assert_eq!(record_ids(&retrieval), ["m-a-0", "m-a-1", "m-b-3", "m-b-2"]);
+        assert!(!retrieval.evidence[0].adjacent);
+        assert!(retrieval.evidence[1].adjacent);
+        assert_eq!(retrieval.evidence[1].final_rank, 1);
+        assert!(retrieval.evidence[3].adjacent);
+        assert_eq!(retrieval.evidence[3].final_rank, 2);
+    }
+
+    /// A retrieval must name at least one scope and no more than the bounded
+    /// maximum, so an unscoped tenant-wide search cannot be requested.
+    #[test]
+    fn an_absent_or_oversized_scope_set_is_rejected_before_retrieval() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            fixture(&path),
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["a-0"]])),
+        );
+
+        assert!(matches!(
+            service.retrieve(
+                scoped_request(KnowledgeRoute::FullText, policy(), Vec::new()),
+                &CancellationToken::new(),
+            ),
+            Err(KnowledgeRetrievalError::InvalidScopes { .. })
+        ));
+        assert!(matches!(
+            service.retrieve(
+                scoped_request(
+                    KnowledgeRoute::FullText,
+                    policy(),
+                    (0..=MAX_RETRIEVAL_SCOPES)
+                        .map(|index| scope(root_filters(&format!("root-{index}")), &[]))
+                        .collect(),
+                ),
+                &CancellationToken::new(),
+            ),
+            Err(KnowledgeRetrievalError::InvalidScopes { .. })
+        ));
+    }
+
+    /// Fusion combines ranks, never partition-local scores: a candidate that
+    /// two scopes return is credited once per source query and route.
+    #[test]
+    fn fusion_credits_a_candidate_once_per_query_and_route_across_scopes() {
+        let shared = fuse_ranked_candidates(
+            &[
+                RankedCandidateList {
+                    scope_index: 0,
+                    query_index: 0,
+                    route: KnowledgeRoute::FullText,
+                    record_ids: vec!["a-0".into(), "b-0".into()],
+                },
+                RankedCandidateList {
+                    scope_index: 1,
+                    query_index: 0,
+                    route: KnowledgeRoute::FullText,
+                    record_ids: vec!["a-0".into()],
+                },
+            ],
+            DEFAULT_RANK_CONSTANT,
+        );
+
+        let single = fuse_ranked_candidates(
+            &[RankedCandidateList {
+                scope_index: 0,
+                query_index: 0,
+                route: KnowledgeRoute::FullText,
+                record_ids: vec!["a-0".into(), "b-0".into()],
+            }],
+            DEFAULT_RANK_CONSTANT,
+        );
+
+        assert_eq!(shared[0].record_id, "a-0");
+        assert_eq!(shared[0].contributions.len(), 1);
+        assert_eq!(shared[0].score, single[0].score);
+        assert_eq!(shared[1].score, single[1].score);
+    }
+
+    #[test]
+    fn an_unbounded_authorized_source_set_is_rejected_before_retrieval() {
+        let path = catalog_path();
+        let service = KnowledgeRetrievalService::new(
+            fixture(&path),
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["a-0"]])),
+        );
+        let mut unbounded = request(KnowledgeRoute::FullText, policy());
+        unbounded.scopes[0].source_restriction = KnowledgeSourceRestriction {
+            allowed_source_ids: (0..=MAX_ALLOWED_SOURCES)
+                .map(|index| format!("source-{index}"))
+                .collect(),
+        };
+
+        let error = service
+            .retrieve(unbounded, &CancellationToken::new())
+            .expect_err("an unbounded restriction must be rejected");
+
+        assert!(matches!(
+            error,
+            KnowledgeRetrievalError::UnboundedSourceRestriction { .. }
+        ));
     }
 
     #[test]
@@ -1754,11 +2653,13 @@ mod tests {
     fn hybrid_fusion_is_stable_across_route_execution_order() {
         let lists = [
             RankedCandidateList {
+                scope_index: 0,
                 query_index: 0,
                 route: KnowledgeRoute::Semantic,
                 record_ids: vec!["a-0".into(), "b-0".into()],
             },
             RankedCandidateList {
+                scope_index: 0,
                 query_index: 1,
                 route: KnowledgeRoute::FullText,
                 record_ids: vec!["b-0".into(), "c-0".into()],
@@ -1848,14 +2749,14 @@ mod tests {
         assert_eq!(record_ids(&tenant_scoped), ["a-0"]);
 
         let mut root_scoped = request(KnowledgeRoute::FullText, policy());
-        root_scoped.filters.root_id = Some("root-b".into());
+        root_scoped.scopes[0].filters.root_id = Some("root-b".into());
         let root_scoped = service
             .retrieve(root_scoped, &CancellationToken::new())
             .expect("root scoped retrieval");
         assert_eq!(record_ids(&root_scoped), ["b-0"]);
 
         let mut workspace_scoped = request(KnowledgeRoute::FullText, policy());
-        workspace_scoped.filters.workspace_id = Some("workspace-b".into());
+        workspace_scoped.scopes[0].filters.workspace_id = Some("workspace-b".into());
         let workspace_scoped = service
             .retrieve(workspace_scoped, &CancellationToken::new())
             .expect("workspace scoped retrieval");
@@ -1887,7 +2788,7 @@ mod tests {
         assert!(!stale.evidence[0].unavailable);
 
         let mut unavailable = request(KnowledgeRoute::FullText, policy());
-        unavailable.filters.include_unavailable = true;
+        unavailable.scopes[0].filters.include_unavailable = true;
         let unavailable = service
             .retrieve(unavailable, &CancellationToken::new())
             .expect("unavailable retrieval");
@@ -1977,16 +2878,17 @@ mod tests {
 
         let materialization_cancelled = CancellationToken::new();
         materialization_cancelled.cancel();
+        let lists = [RankedCandidateList {
+            scope_index: 0,
+            query_index: 0,
+            route: KnowledgeRoute::FullText,
+            record_ids: vec!["a-0".into()],
+        }];
         assert!(matches!(
             service.materialize(
-                &fuse_ranked_candidates(
-                    &[RankedCandidateList {
-                        query_index: 0,
-                        route: KnowledgeRoute::FullText,
-                        record_ids: vec!["a-0".into()],
-                    }],
-                    DEFAULT_RANK_CONSTANT,
-                ),
+                &service.catalog.begin_read().expect("read lease"),
+                &fuse_ranked_candidates(&lists, DEFAULT_RANK_CONSTANT),
+                &lists,
                 &request(
                     KnowledgeRoute::FullText,
                     KnowledgeRetrievalPolicy {

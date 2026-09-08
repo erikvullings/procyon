@@ -3080,6 +3080,76 @@ describe('AppShell', () => {
     );
   });
 
+  it('offers Search Knowledge without any generation profile (task 0206)', async () => {
+    m.mount(root, {
+      view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
+    });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    // Ask needs a generation profile; knowledge search must not.
+    expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
+    const trigger = await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>(
+        'button[aria-label="Search Knowledge…"]',
+      );
+      expect(button).not.toBeNull();
+      return button as HTMLButtonElement;
+    });
+
+    trigger.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).toContain(
+        'What do you need?',
+      ),
+    );
+    expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).not.toContain(
+      'Generate answer',
+    );
+  });
+
+  it('exposes Search Knowledge in the command palette with its shortcut (task 0206)', async () => {
+    m.mount(root, {
+      view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Search Knowledge…'),
+    );
+
+    const entry = [...root.querySelectorAll<HTMLElement>('.fm-command-palette li')].find(
+      (candidate) => candidate.textContent?.includes('Search Knowledge…'),
+    );
+    expect(entry?.textContent).toContain('client.searchKnowledge');
+    expect(entry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+k');
+    entry?.querySelector('button')?.click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).toContain('Subject'),
+    );
+  });
+
+  it('hides Search Knowledge when no retrieval capability is reported (task 0206)', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: false,
+      semantic: false,
+      answerGeneration: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    expect(root.querySelector('button[aria-label="Search Knowledge…"]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
+    expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
+      'Search Knowledge…',
+    );
+  });
+
   it('opens Ask immediately and offers to include an unenrolled active folder', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await client.createLlmProfile({

@@ -659,6 +659,21 @@ impl DeveloperWorker {
         )
     }
 
+    /// Composes search-only knowledge retrieval over the same catalog, model,
+    /// and native Zvec index the dense route uses.
+    fn knowledge_backend(&self) -> Arc<dyn crate::WorkerKnowledgeBackend> {
+        let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
+        let vector_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
+        let full_text_index: Arc<dyn crate::knowledge_retrieval::FullTextCandidateIndex> =
+            self.index.clone();
+        Arc::new(crate::knowledge_retrieval::KnowledgeRetrievalService::new(
+            self.catalog.clone(),
+            Some(queries),
+            Some(vector_index),
+            Some(full_text_index),
+        ))
+    }
+
     fn backends(&self) -> (Arc<dyn WorkerIngestionBackend>, Arc<dyn WorkerQueryBackend>) {
         let passages = RolePrefixedEmbedder::wrap(&self.embedder, &self.passage_prefix);
         let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
@@ -694,8 +709,9 @@ impl DeveloperWorker {
     }
 
     fn into_server(self, config: WorkerConfig) -> WorkerServer {
+        let knowledge = self.knowledge_backend();
         let (ingestion, query) = self.backends();
-        WorkerServer::with_backends(config, ingestion, query)
+        WorkerServer::with_all_backends(config, ingestion, query, knowledge)
     }
 }
 

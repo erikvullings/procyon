@@ -267,6 +267,16 @@ impl DocumentRecord {
         &self.artifacts
     }
 
+    /// Returns the authoritative current content fingerprint.
+    ///
+    /// This is the streamed digest that established this document's identity,
+    /// so a caller can compare indexed evidence against current source truth
+    /// instead of assuming evidence is fresh.
+    #[must_use]
+    pub const fn content_fingerprint(&self) -> &ContentFingerprint {
+        &self.content_fingerprint
+    }
+
     /// Returns authoritative measured byte consumption.
     #[must_use]
     pub const fn measurement(&self) -> DocumentMeasurement {

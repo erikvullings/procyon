@@ -111,6 +111,7 @@ export interface WorkspacePaneContent {
   readonly onParent: () => void | Promise<void>;
   readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
+  readonly onSearchKnowledge?: () => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;
@@ -638,6 +639,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         ...(content.onDocumentSummary === undefined
           ? {}
           : { onDocumentSummary: content.onDocumentSummary }),
+        ...(content.onSearchKnowledge === undefined
+          ? {}
+          : { onSearchKnowledge: content.onSearchKnowledge }),
         onSelectionAction: content.onSelectionAction,
         onRetry: content.onRetry,
         onLoadNextPage: content.onLoadNextPage,

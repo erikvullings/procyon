@@ -860,6 +860,7 @@ export const fr = {
   llmProfiles: en.llmProfiles,
   documentSummary: en.documentSummary,
   ragAsk: en.ragAsk,
+  knowledgeSearch: en.knowledgeSearch,
   diagnostics: {
     ...en.diagnostics,
     copyForBugReport: 'Copier pour le rapport de bogue',

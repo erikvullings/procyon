@@ -210,6 +210,7 @@ function toolsMenu(actions: readonly ActionDescriptor[]): NativeMenu {
       },
       { kind: 'separator' },
       ...actionItems(actions, [
+        'client.searchKnowledge',
         'core.copyName',
         'core.copyPath',
         'core.copyRelativePath',

@@ -39,6 +39,15 @@ export interface RagAskDialogRequest {
   readonly semanticSourceIds: readonly string[];
 }
 
+/** Opens search-only Structured Knowledge Search with a defaulted scope (task 0206). */
+export interface KnowledgeSearchDialogRequest {
+  readonly workspaceId: string;
+  readonly currentFolder: Location | undefined;
+  readonly semanticSourceIds: readonly string[];
+  /** Subject text carried over from the surface that opened the dialog. */
+  readonly initialSubject: string | undefined;
+}
+
 /** Backs the uninstall review checklist (task 0148): the `.app` bundle being uninstalled plus
  * what discovery found for it, held until the user confirms or cancels. */
 export interface ApplicationUninstallDialogRequest {
@@ -66,6 +75,7 @@ export interface DialogUIState {
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
   documentSummaryDialog: DocumentSummaryDialogRequest | undefined;
   ragAskDialog: RagAskDialogRequest | undefined;
+  knowledgeSearchDialog: KnowledgeSearchDialogRequest | undefined;
   applicationUninstallDialog: ApplicationUninstallDialogRequest | undefined;
 }
 
@@ -112,6 +122,8 @@ export interface DialogUIController {
   cancelDocumentSummaryDialog(): void;
   openRagAskDialog(request: RagAskDialogRequest): void;
   cancelRagAskDialog(): void;
+  openKnowledgeSearchDialog(request: KnowledgeSearchDialogRequest): void;
+  cancelKnowledgeSearchDialog(): void;
   openApplicationUninstallDialog(request: ApplicationUninstallDialogRequest): void;
   cancelApplicationUninstallDialog(): void;
 }
@@ -136,6 +148,7 @@ export function createDialogUIController(): DialogUIController {
     spotlightCommentDialog: undefined,
     documentSummaryDialog: undefined,
     ragAskDialog: undefined,
+    knowledgeSearchDialog: undefined,
     applicationUninstallDialog: undefined,
   };
 
@@ -271,6 +284,14 @@ export function createDialogUIController(): DialogUIController {
 
     cancelRagAskDialog(): void {
       state.ragAskDialog = undefined;
+    },
+
+    openKnowledgeSearchDialog(request): void {
+      state.knowledgeSearchDialog = request;
+    },
+
+    cancelKnowledgeSearchDialog(): void {
+      state.knowledgeSearchDialog = undefined;
     },
 
     openApplicationUninstallDialog(request): void {

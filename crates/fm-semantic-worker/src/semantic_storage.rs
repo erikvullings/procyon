@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
 const CATALOG_SCHEMA_VERSION: i64 = 5;
+/// Maximum untrusted derived-index candidates re-authorized in one call.
+const MAX_VISIBILITY_CANDIDATES: usize = 4_096;
 
 /// Distance metric bound into one library's immutable index manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1798,10 +1800,10 @@ impl CatalogReader {
         filters: &QueryFilters,
     ) -> Result<Vec<QueryEvidence>, StorageError> {
         validate_identifier(&filters.tenant_id, "tenant_id")?;
-        if candidate_record_ids.len() > 4_096 {
+        if candidate_record_ids.len() > MAX_VISIBILITY_CANDIDATES {
             return Err(StorageError::TooManyCandidates {
                 actual: candidate_record_ids.len(),
-                maximum: 4_096,
+                maximum: MAX_VISIBILITY_CANDIDATES,
             });
         }
         let mut statement = self.connection.prepare(
@@ -1925,6 +1927,82 @@ impl CatalogReader {
             }
         }
         Ok(evidence)
+    }
+
+    /// Resolves visible candidates to their opaque source identity only.
+    ///
+    /// This is the cheap projection of [`Self::filter_visible_candidates`]: it
+    /// applies exactly the same tenant, scope, and publication authority but
+    /// loads no content, so an exactly-restricted retrieval can decide which
+    /// candidates it may keep while it is still filling its candidate budget.
+    /// Results keep the caller's relevance order and omit invisible records.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty tenants, excessive candidate sets, and catalog failures.
+    pub fn visible_candidate_sources(
+        &self,
+        candidate_record_ids: &[String],
+        filters: &QueryFilters,
+    ) -> Result<Vec<(String, String)>, StorageError> {
+        validate_identifier(&filters.tenant_id, "tenant_id")?;
+        if candidate_record_ids.len() > MAX_VISIBILITY_CANDIDATES {
+            return Err(StorageError::TooManyCandidates {
+                actual: candidate_record_ids.len(),
+                maximum: MAX_VISIBILITY_CANDIDATES,
+            });
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT r.record_id, o.source_id
+             FROM records r
+             JOIN generations g
+               ON g.tenant_id = r.tenant_id
+              AND g.library_id = r.library_id
+              AND g.document_id = r.document_id
+              AND g.generation = r.generation
+             JOIN occurrences o
+               ON o.occurrence_id = r.occurrence_id
+              AND o.generation = r.generation
+             WHERE r.record_id = ?1
+               AND r.tenant_id = ?2
+               AND g.state = 'complete'
+               AND (?3 IS NULL OR r.library_id = ?3)
+               AND (?4 IS NULL OR o.root_id = ?4)
+               AND (?5 IS NULL OR o.workspace_id = ?5)
+               AND (?6 IS NULL OR o.media_type = ?6)
+               AND (?7 IS NULL OR o.modified_at_ms >= ?7)
+               AND (?8 IS NULL OR o.modified_at_ms <= ?8)
+               AND (?9 IS NULL OR r.concept_id = ?9)
+               AND (?10 IS NULL OR r.generation = ?10)
+               AND (?11 = 1 OR o.available = 1)",
+        )?;
+        let generation = filters.generation.map(i64_generation).transpose()?;
+        let include_unavailable = i64::from(filters.include_unavailable);
+        let mut sources = Vec::new();
+        for record_id in candidate_record_ids {
+            let result = statement
+                .query_row(
+                    params![
+                        record_id,
+                        filters.tenant_id,
+                        filters.library_id,
+                        filters.root_id,
+                        filters.workspace_id,
+                        filters.media_type,
+                        filters.modified_from_ms,
+                        filters.modified_to_ms,
+                        filters.concept_id,
+                        generation,
+                        include_unavailable,
+                    ],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?;
+            if let Some(pair) = result {
+                sources.push(pair);
+            }
+        }
+        Ok(sources)
     }
 
     /// Loads source chunks immediately surrounding an authorized evidence row.

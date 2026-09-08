@@ -861,6 +861,7 @@ export const pt = {
   llmProfiles: en.llmProfiles,
   documentSummary: en.documentSummary,
   ragAsk: en.ragAsk,
+  knowledgeSearch: en.knowledgeSearch,
   diagnostics: {
     ...en.diagnostics,
     copyForBugReport: 'Copiar para relatório de erro',

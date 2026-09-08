@@ -95,6 +95,9 @@ impl From<fm_semantic_worker::ClientError> for SemanticError {
             fm_semantic_worker::ClientError::ShutdownBlocked { remaining_clients } => {
                 Self::ShutdownBlocked { remaining_clients }
             }
+            // A rolling-compatible worker may simply not implement an optional
+            // capability. That is an availability fact, not a protocol fault.
+            fm_semantic_worker::ClientError::CapabilityUnavailable { .. } => Self::Unavailable,
             fm_semantic_worker::ClientError::InsecureEndpoint => Self::AuthenticationConfiguration,
             fm_semantic_worker::ClientError::InvalidNegotiatedLimits(_) => Self::ProtocolViolation,
             fm_semantic_worker::ClientError::InvalidNegotiatedVersion => Self::ProtocolViolation,
@@ -327,6 +330,34 @@ pub trait SemanticCapability: Send + Sync {
         &self,
         scope: SemanticScope,
     ) -> Result<Vec<SemanticProgressEvent>, SemanticError>;
+
+    /// Executes one bounded hybrid knowledge retrieval.
+    ///
+    /// Capabilities that have no knowledge route report themselves unavailable
+    /// rather than silently degrading search into a dense-only query.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, capability, or protocol failure.
+    async fn knowledge_search(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::knowledge_retrieval::KnowledgeRetrievalRequest,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeRetrieval, SemanticError> {
+        let _ = (request_id, request);
+        Err(SemanticError::Unavailable)
+    }
+
+    /// Reports full-text and query-embedding availability independently.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, capability, or protocol failure.
+    async fn knowledge_capabilities(
+        &self,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeCapabilities, SemanticError> {
+        Err(SemanticError::Unavailable)
+    }
 
     /// Requests cancellation of an opaque operation.
     async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError>;
@@ -731,6 +762,24 @@ impl SemanticCapability for IpcSemanticCapability {
         })
     }
 
+    async fn knowledge_search(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::knowledge_retrieval::KnowledgeRetrievalRequest,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeRetrieval, SemanticError> {
+        let client = self.worker_client().await?;
+        let result = client.knowledge_search(request_id.as_str(), &request).await;
+        self.adapt_result(result).await
+    }
+
+    async fn knowledge_capabilities(
+        &self,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeCapabilities, SemanticError> {
+        let client = self.worker_client().await?;
+        let result = client.knowledge_capabilities().await;
+        self.adapt_result(result).await
+    }
+
     async fn ingestion_job(
         &self,
         scope: SemanticScope,
@@ -870,6 +919,20 @@ impl SemanticService {
         query: SemanticQuery,
     ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
         self.capability.query(query).await
+    }
+
+    pub(crate) async fn knowledge_search(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::knowledge_retrieval::KnowledgeRetrievalRequest,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeRetrieval, SemanticError> {
+        self.capability.knowledge_search(request_id, request).await
+    }
+
+    pub(crate) async fn knowledge_capabilities(
+        &self,
+    ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeCapabilities, SemanticError> {
+        self.capability.knowledge_capabilities().await
     }
 
     pub(crate) async fn ingestion_job(

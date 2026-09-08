@@ -856,6 +856,7 @@ export const pl = {
   llmProfiles: en.llmProfiles,
   documentSummary: en.documentSummary,
   ragAsk: en.ragAsk,
+  knowledgeSearch: en.knowledgeSearch,
   diagnostics: {
     ...en.diagnostics,
     copyForBugReport: 'Kopiuj do zgłoszenia błędu',

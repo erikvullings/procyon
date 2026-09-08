@@ -231,6 +231,8 @@ export interface PaneAttrs {
   // Entry operations (8)
   readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
+  /** Opens search-only knowledge search scoped to this semantic result set (task 0206). */
+  readonly onSearchKnowledge?: () => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
   readonly onRetry: () => void | Promise<void>;
   readonly onLoadNextPage: () => void | Promise<void>;
@@ -492,6 +494,13 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           },
           t('search', 'notRelevant'),
         ),
+        attrs.onSearchKnowledge === undefined
+          ? undefined
+          : m(
+              'button.fm-semantic-search-knowledge',
+              { type: 'button', onclick: () => attrs.onSearchKnowledge?.() },
+              t('knowledgeSearch', 'openTitle'),
+            ),
         m(
           'button',
           { type: 'button', onclick: exportSemanticEvaluationCases },

@@ -21,6 +21,23 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
 
 const { TauriFileManagerClient } = await import('./tauri-file-manager-client');
 
+/** One knowledge search request, shared by the cancellation tests. */
+function knowledgeRequest(requestId: string) {
+  return {
+    requestId,
+    draft: { about: ['retrieval'], needs: [], related: [], scopes: [] },
+    scope: {
+      workspaceId: 'workspace-a',
+      kind: 'entireLibrary' as const,
+      folder: null,
+      enrolledRootIds: [],
+      semanticSourceIds: [],
+    },
+    mode: 'fullText' as const,
+    options: null,
+  };
+}
+
 function fixtureCapabilities() {
   return {
     clipboard: true,
@@ -99,6 +116,155 @@ describe('TauriFileManagerClient', () => {
     const operationId = invoke.mock.calls[0]?.[1]?.operationId;
     expect(operationId).toEqual(expect.any(String));
     expect(invoke).toHaveBeenNthCalledWith(2, 'cancel_rag', { operationId });
+  });
+
+  it("propagates knowledge search cancellation with the caller's own request id", async () => {
+    let rejectSearch: ((reason: Error) => void) | undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === 'execute_knowledge_search') {
+        return new Promise((_resolve, reject) => {
+          rejectSearch = reject;
+        });
+      }
+      if (command === 'cancel_knowledge_search') {
+        rejectSearch?.(new Error('cancelled'));
+        return Promise.resolve();
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+    const controller = new AbortController();
+    const request = {
+      requestId: 'knowledge-request-a',
+      draft: {
+        about: ['hybrid retrieval'],
+        needs: ['definition' as const],
+        related: [],
+        scopes: [],
+      },
+      scope: {
+        workspaceId: 'workspace-a',
+        kind: 'entireLibrary' as const,
+        folder: null,
+        enrolledRootIds: [],
+        semanticSourceIds: [],
+      },
+      mode: 'hybrid' as const,
+      options: null,
+    };
+    const search = new TauriFileManagerClient().executeKnowledgeSearch(request, controller.signal);
+
+    controller.abort();
+
+    await expect(search).rejects.toMatchObject({ name: 'AbortError' });
+    expect(invoke).toHaveBeenNthCalledWith(1, 'execute_knowledge_search', { request });
+    expect(invoke).toHaveBeenNthCalledWith(2, 'cancel_knowledge_search', {
+      request: { requestId: 'knowledge-request-a' },
+    });
+  });
+
+  it('rejects immediately when the knowledge search signal is already aborted', async () => {
+    invoke.mockResolvedValue({});
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new TauriFileManagerClient().executeKnowledgeSearch(
+        {
+          requestId: 'knowledge-request-b',
+          draft: { about: ['retrieval'], needs: [], related: [], scopes: [] },
+          scope: {
+            workspaceId: 'workspace-a',
+            kind: 'entireLibrary',
+            folder: null,
+            enrolledRootIds: [],
+            semanticSourceIds: [],
+          },
+          mode: 'fullText',
+          options: null,
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('still rejects with AbortError when the desktop search completes after the abort', async () => {
+    let resolveSearch: ((value: unknown) => void) | undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === 'execute_knowledge_search') {
+        return new Promise((resolve) => {
+          resolveSearch = resolve;
+        });
+      }
+      return Promise.resolve();
+    });
+    const controller = new AbortController();
+    const search = new TauriFileManagerClient().executeKnowledgeSearch(
+      knowledgeRequest('knowledge-request-late'),
+      controller.signal,
+    );
+
+    controller.abort();
+    resolveSearch?.({ requestId: 'knowledge-request-late' });
+
+    await expect(search).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects with AbortError even when the host refuses the cancellation', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    invoke.mockImplementation((command: string) => {
+      if (command === 'execute_knowledge_search') return new Promise(() => undefined);
+      return Promise.reject(new Error('cancel failed'));
+    });
+    const controller = new AbortController();
+    const search = new TauriFileManagerClient().executeKnowledgeSearch(
+      knowledgeRequest('knowledge-request-stuck'),
+      controller.signal,
+    );
+
+    controller.abort();
+
+    // The invocation itself never settles: the abort has to win the race.
+    await expect(search).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+  });
+
+  it('resolves normally when nothing aborted the knowledge search', async () => {
+    invoke.mockResolvedValue({ requestId: 'knowledge-request-ok' });
+    const controller = new AbortController();
+
+    await expect(
+      new TauriFileManagerClient().executeKnowledgeSearch(
+        knowledgeRequest('knowledge-request-ok'),
+        controller.signal,
+      ),
+    ).resolves.toMatchObject({ requestId: 'knowledge-request-ok' });
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes every other knowledge call to its dedicated desktop command', async () => {
+    invoke.mockResolvedValue({});
+    const client = new TauriFileManagerClient();
+
+    await client.getKnowledgeCapabilities();
+    await client.listKnowledgeRoots({ workspaceId: 'workspace-a' });
+    await client.parseKnowledgeQuery({ text: 'about: retrieval' });
+    await client.cancelKnowledgeSearch({ requestId: 'knowledge-request-c' });
+    await client.resolveKnowledgeSource({ workspaceId: 'workspace-a', sourceId: 'source-a' });
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_knowledge_capabilities');
+    expect(invoke).toHaveBeenNthCalledWith(2, 'list_knowledge_roots', {
+      request: { workspaceId: 'workspace-a' },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'parse_knowledge_query', {
+      request: { text: 'about: retrieval' },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, 'cancel_knowledge_search', {
+      request: { requestId: 'knowledge-request-c' },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(5, 'resolve_knowledge_source', {
+      request: { workspaceId: 'workspace-a', sourceId: 'source-a' },
+    });
   });
 
   it('uses the dedicated desktop OCR commands without forwarding executable paths', async () => {

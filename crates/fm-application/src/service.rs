@@ -69,6 +69,10 @@ use crate::document_summary_mapping::{
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
+use crate::knowledge_search::{
+    KnowledgeRetrievalCapability, UnavailableKnowledgeRetrievalCapability,
+};
+use crate::knowledge_service::KnowledgeService;
 use crate::llm_profile_mapping::{
     disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
     profile_to_export_dto, test_result_to_dto,
@@ -157,6 +161,7 @@ pub struct FileManagerService {
     docx_preview: DocxPreviewService,
     document_conversion: DocumentConversionService,
     document_summaries: DocumentSummaryCoordinator,
+    knowledge: KnowledgeService,
     rag: RagCoordinator,
     rag_conversation_path: PathBuf,
     semantic_vocabulary_path: PathBuf,
@@ -588,6 +593,7 @@ impl FileManagerService {
                 UnavailableDocumentSummaryCapability,
             )),
             rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
+            knowledge: KnowledgeService::new(Arc::new(UnavailableKnowledgeRetrievalCapability)),
             rag_conversation_path,
             semantic_vocabulary_path,
             rag_ephemeral: Mutex::new(HashMap::new()),
@@ -1394,6 +1400,9 @@ impl FileManagerService {
         self.rag = RagCoordinator::new(Arc::new(SemanticRagRetrievalCapability::new(
             semantic.clone(),
         )));
+        self.knowledge = KnowledgeService::new(Arc::new(
+            crate::knowledge_search::SemanticKnowledgeRetrievalCapability::new(semantic.clone()),
+        ));
         self.semantic = semantic;
         self
     }
@@ -1564,6 +1573,17 @@ impl FileManagerService {
         capability: Arc<dyn RagRetrievalCapability>,
     ) -> Self {
         self.rag = RagCoordinator::new(capability);
+        self
+    }
+
+    /// Replaces the unavailable default with a worker-backed knowledge
+    /// retriever. Search is complete without any generation profile.
+    #[must_use]
+    pub fn with_knowledge_retrieval_capability(
+        mut self,
+        capability: Arc<dyn KnowledgeRetrievalCapability>,
+    ) -> Self {
+        self.knowledge = KnowledgeService::new(capability);
         self
     }
 
@@ -2012,6 +2032,110 @@ impl FileManagerService {
             },
             retrieval_strategy,
         })
+    }
+
+    /// Reports independent knowledge retrieval and answer capabilities.
+    ///
+    /// Full-text, semantic, and answer generation are reported separately so a
+    /// host can render a complete search experience without an LLM profile.
+    pub async fn knowledge_capabilities(&self) -> fm_transport_dto::KnowledgeCapabilitiesDto {
+        self.knowledge
+            .capabilities(self.answer_generation_available())
+            .await
+    }
+
+    /// Lists indexed roots a knowledge search may be scoped to.
+    pub async fn list_knowledge_roots(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ListKnowledgeRootsRequestDto,
+    ) -> Result<Vec<fm_transport_dto::KnowledgeRootDto>, ApplicationError> {
+        self.knowledge
+            .roots(self.semantic_library().await.as_ref(), access, request)
+    }
+
+    /// Interprets DSL or natural-language composer text deterministically.
+    ///
+    /// This never contacts an LLM and never resolves authorization.
+    #[must_use]
+    pub fn parse_knowledge_query(
+        &self,
+        request: fm_transport_dto::ParseKnowledgeQueryRequestDto,
+    ) -> fm_transport_dto::KnowledgeQueryInterpretationDto {
+        self.knowledge.parse(request)
+    }
+
+    /// Builds the deterministic plan for an authorized scope without retrieving.
+    pub async fn plan_knowledge_search(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::PlanKnowledgeSearchRequestDto,
+    ) -> Result<fm_transport_dto::KnowledgeSearchPlanDto, ApplicationError> {
+        self.knowledge
+            .plan(self.semantic_library().await.as_ref(), access, request)
+    }
+
+    /// Executes a knowledge search with a fresh cancellation token.
+    pub async fn execute_knowledge_search(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ExecuteKnowledgeSearchRequestDto,
+    ) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationError> {
+        self.execute_knowledge_search_with_cancellation(
+            access,
+            request,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
+    /// Executes a knowledge search using a host-owned cancellation token.
+    ///
+    /// Retrieval never contacts an LLM: a complete result is returned whether
+    /// or not answer generation is available.
+    pub async fn execute_knowledge_search_with_cancellation(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ExecuteKnowledgeSearchRequestDto,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationError> {
+        self.knowledge
+            .execute(
+                self.semantic_library().await,
+                access,
+                request,
+                self.answer_generation_available(),
+                cancellation,
+            )
+            .await
+    }
+
+    /// Cancels one running or not-yet-started knowledge search.
+    pub fn cancel_knowledge_search(
+        &self,
+        request: fm_transport_dto::CancelKnowledgeSearchRequestDto,
+    ) -> bool {
+        self.knowledge.cancel(request.request_id)
+    }
+
+    /// Resolves one opaque evidence source into an exact navigable location.
+    ///
+    /// Reuses the same authorized occurrence resolution that Ask citations use,
+    /// so knowledge results open exactly the indexed source.
+    pub async fn resolve_knowledge_source(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ResolveKnowledgeSourceRequestDto,
+    ) -> Result<fm_transport_dto::KnowledgeSourceLocationDto, ApplicationError> {
+        self.knowledge
+            .resolve_source(self.semantic_library().await.as_ref(), access, request)
+    }
+
+    /// Whether any generation profile exists for optional answer generation.
+    fn answer_generation_available(&self) -> bool {
+        self.llm_profiles
+            .list()
+            .is_ok_and(|profiles| !profiles.is_empty())
     }
 
     /// Streams a provider-neutral document into the semantic capability.

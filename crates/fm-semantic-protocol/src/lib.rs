@@ -943,6 +943,106 @@ pub enum RequestValidationError {
     /// Query result limit is zero.
     #[error("maximum query results must be greater than zero")]
     InvalidMaximumResults,
+    /// Knowledge retrieval carried no bounded source query.
+    #[error("knowledge retrieval requires 1 to {maximum} bounded source queries")]
+    InvalidKnowledgeQueries {
+        /// Maximum accepted source queries.
+        maximum: usize,
+    },
+    /// Knowledge retrieval limits are absent or outside their bounds.
+    #[error("knowledge retrieval policy is invalid")]
+    InvalidKnowledgePolicy,
+    /// Knowledge retrieval requested an unspecified physical route.
+    #[error("knowledge retrieval route is required")]
+    InvalidKnowledgeRoute,
+    /// The exact authorized source set is unbounded or carries invalid identity.
+    #[error("knowledge retrieval accepts at most {maximum} authorized source identities")]
+    InvalidKnowledgeSourceRestriction {
+        /// Maximum accepted authorized source identities.
+        maximum: usize,
+    },
+    /// No exactly-scoped slice, or more slices than the contract allows.
+    #[error("knowledge scope partitions are absent or exceed the maximum of {maximum}")]
+    InvalidKnowledgeScopePartitions {
+        /// Maximum accepted exactly-scoped slices.
+        maximum: usize,
+    },
+}
+
+/// Maximum planned source queries accepted by one knowledge retrieval.
+pub const MAX_KNOWLEDGE_QUERIES: usize = 8;
+/// Maximum bytes accepted for one knowledge source query.
+pub const MAX_KNOWLEDGE_QUERY_BYTES: usize = 8 * 1024;
+/// Maximum exact authorized source identities accepted by one retrieval.
+pub const MAX_KNOWLEDGE_ALLOWED_SOURCES: usize = 4_096;
+/// Maximum exactly-scoped slices accepted by one knowledge retrieval.
+pub const MAX_KNOWLEDGE_SCOPE_PARTITIONS: usize = 8;
+/// Maximum bytes accepted for one opaque source identity.
+pub const MAX_KNOWLEDGE_SOURCE_ID_BYTES: usize = 256;
+
+/// Validates one bounded knowledge retrieval request.
+///
+/// # Errors
+///
+/// Returns a typed validation failure for absent authority or identity,
+/// unbounded source queries, an unspecified route, or invalid limits.
+pub fn validate_knowledge_search(
+    request: &v1::KnowledgeSearchRequest,
+) -> Result<(), RequestValidationError> {
+    validate_session(request.session.as_ref())?;
+    validate_scope(request.scope.as_ref())?;
+    if request.request_id.is_empty() {
+        return Err(RequestValidationError::MissingRequestId);
+    }
+    if request.queries.is_empty()
+        || request.queries.len() > MAX_KNOWLEDGE_QUERIES
+        || request.queries.iter().any(|query| {
+            query.text.trim().is_empty() || query.text.len() > MAX_KNOWLEDGE_QUERY_BYTES
+        })
+    {
+        return Err(RequestValidationError::InvalidKnowledgeQueries {
+            maximum: MAX_KNOWLEDGE_QUERIES,
+        });
+    }
+    if v1::KnowledgeRoute::try_from(request.route)
+        .is_ok_and(|route| route == v1::KnowledgeRoute::Unspecified)
+        || v1::KnowledgeRoute::try_from(request.route).is_err()
+    {
+        return Err(RequestValidationError::InvalidKnowledgeRoute);
+    }
+    let Some(policy) = &request.policy else {
+        return Err(RequestValidationError::InvalidKnowledgePolicy);
+    };
+    if policy.candidate_limit == 0
+        || policy.result_limit == 0
+        || policy.maximum_results_per_file == 0
+        || policy.context_token_budget == 0
+        || policy.rank_constant == 0
+    {
+        return Err(RequestValidationError::InvalidKnowledgePolicy);
+    }
+    if request.partitions.is_empty() || request.partitions.len() > MAX_KNOWLEDGE_SCOPE_PARTITIONS {
+        return Err(RequestValidationError::InvalidKnowledgeScopePartitions {
+            maximum: MAX_KNOWLEDGE_SCOPE_PARTITIONS,
+        });
+    }
+    for partition in &request.partitions {
+        if partition.filters.is_none() {
+            return Err(RequestValidationError::InvalidKnowledgeScopePartitions {
+                maximum: MAX_KNOWLEDGE_SCOPE_PARTITIONS,
+            });
+        }
+        if partition.allowed_source_ids.len() > MAX_KNOWLEDGE_ALLOWED_SOURCES
+            || partition.allowed_source_ids.iter().any(|source_id| {
+                source_id.trim().is_empty() || source_id.len() > MAX_KNOWLEDGE_SOURCE_ID_BYTES
+            })
+        {
+            return Err(RequestValidationError::InvalidKnowledgeSourceRestriction {
+                maximum: MAX_KNOWLEDGE_ALLOWED_SOURCES,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Validates a v1 ingestion item against the default resource policy.

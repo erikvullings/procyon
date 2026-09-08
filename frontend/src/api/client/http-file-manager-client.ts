@@ -12,6 +12,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -46,6 +47,7 @@ import type {
   EntryMetadata,
   EntryMetadataRequest,
   EntrySummary,
+  ExecuteKnowledgeSearchRequest,
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
@@ -61,7 +63,14 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeCapabilities,
+  KnowledgeQueryInterpretation,
+  KnowledgeRoot,
+  KnowledgeSearchPlan,
+  KnowledgeSearchResult,
+  KnowledgeSourceLocation,
   ListDirectoryRequest,
+  ListKnowledgeRootsRequest,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -75,6 +84,8 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  ParseKnowledgeQueryRequest,
+  PlanKnowledgeSearchRequest,
   PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
@@ -96,6 +107,7 @@ import type {
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
   ResolvedRagCitation,
+  ResolveKnowledgeSourceRequest,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -221,6 +233,13 @@ import {
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
   getFileGitHistory as requestGitFileHistory,
+  getKnowledgeCapabilities as requestKnowledgeCapabilities,
+  parseKnowledgeQuery as requestKnowledgeQueryParse,
+  listKnowledgeRoots as requestKnowledgeRoots,
+  cancelKnowledgeSearch as requestKnowledgeSearchCancellation,
+  executeKnowledgeSearch as requestKnowledgeSearchExecution,
+  planKnowledgeSearch as requestKnowledgeSearchPlan,
+  resolveKnowledgeSource as requestKnowledgeSourceResolution,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
   createLlmProfile as requestLlmProfileCreation,
@@ -2223,6 +2242,113 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw new Error(`Unexpected resolveRagCitation response status: ${response.status}`);
+    return response.data;
+  }
+
+  async getKnowledgeCapabilities(signal?: AbortSignal): Promise<KnowledgeCapabilities> {
+    const response = await requestKnowledgeCapabilities(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected getKnowledgeCapabilities response status: ${response.status}`);
+    return response.data;
+  }
+
+  async listKnowledgeRoots(
+    request: ListKnowledgeRootsRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeRoot[]> {
+    const response = await requestKnowledgeRoots(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected listKnowledgeRoots response status: ${response.status}`);
+    return response.data;
+  }
+
+  async parseKnowledgeQuery(
+    request: ParseKnowledgeQueryRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeQueryInterpretation> {
+    const response = await requestKnowledgeQueryParse(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected parseKnowledgeQuery response status: ${response.status}`);
+    return response.data;
+  }
+
+  async planKnowledgeSearch(
+    request: PlanKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchPlan> {
+    const response = await requestKnowledgeSearchPlan(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected planKnowledgeSearch response status: ${response.status}`);
+    return response.data;
+  }
+
+  /**
+   * Aborting only drops this response, so the abort is also forwarded to
+   * `POST /search/cancel` with the same `requestId`; otherwise the server
+   * would keep retrieving for a search nobody is waiting for (task 0206).
+   */
+  async executeKnowledgeSearch(
+    request: ExecuteKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResult> {
+    signal?.throwIfAborted();
+    const cancel = (): void => {
+      void this.cancelKnowledgeSearch({ requestId: request.requestId }).catch((error: unknown) => {
+        console.warn('Failed to cancel knowledge search', error);
+      });
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      const response = await requestKnowledgeSearchExecution(
+        request,
+        signal === undefined ? undefined : { signal },
+      );
+      // The response can win the race against a just-requested abort; a caller
+      // that already gave up must still observe the cancellation, exactly as
+      // the desktop host reports it.
+      if (signal?.aborted === true)
+        throw new DOMException('Knowledge search was cancelled', 'AbortError');
+      if (response.status !== 200)
+        throw new Error(`Unexpected executeKnowledgeSearch response status: ${response.status}`);
+      return response.data;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+    }
+  }
+
+  async cancelKnowledgeSearch(
+    request: CancelKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestKnowledgeSearchCancellation(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected cancelKnowledgeSearch response status: ${response.status}`);
+  }
+
+  async resolveKnowledgeSource(
+    request: ResolveKnowledgeSourceRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSourceLocation> {
+    const response = await requestKnowledgeSourceResolution(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected resolveKnowledgeSource response status: ${response.status}`);
     return response.data;
   }
 

@@ -14,6 +14,7 @@ pub(crate) mod extended_attributes;
 pub(crate) mod files;
 pub(crate) mod health;
 pub(crate) mod icons;
+pub(crate) mod knowledge;
 pub(crate) mod llm_profile;
 pub(crate) mod onedrive_authorization;
 pub(crate) mod operation;

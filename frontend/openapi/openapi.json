@@ -5392,6 +5392,321 @@
         }
       }
     },
+    "/api/v1/semantic/knowledge/capabilities": {
+      "get": {
+        "operationId": "getKnowledgeCapabilities",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeCapabilitiesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/parse": {
+      "post": {
+        "operationId": "parseKnowledgeQuery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseKnowledgeQueryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeQueryInterpretationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/plan": {
+      "post": {
+        "operationId": "planKnowledgeSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanKnowledgeSearchRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSearchPlanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/roots": {
+      "post": {
+        "operationId": "listKnowledgeRoots",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListKnowledgeRootsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeRootDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/search": {
+      "post": {
+        "operationId": "executeKnowledgeSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteKnowledgeSearchRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSearchResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/search/cancel": {
+      "post": {
+        "operationId": "cancelKnowledgeSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelKnowledgeSearchRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/knowledge/sources/resolve": {
+      "post": {
+        "operationId": "resolveKnowledgeSource",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveKnowledgeSourceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSourceLocationDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/library/capabilities": {
       "get": {
         "operationId": "getSemanticLibraryCapabilities",
@@ -7331,6 +7646,20 @@
         "example": {
           "totalBytes": 104857600,
           "fileCount": 42
+        }
+      },
+      "CancelKnowledgeSearchRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running knowledge search.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when the search was started."
+          }
         }
       },
       "CheckpointSemanticModelMigrationRequestDto": {
@@ -9500,6 +9829,45 @@
           "metadataRevision": 0
         }
       },
+      "ExecuteKnowledgeSearchRequestDto": {
+        "type": "object",
+        "description": "Requests execution of a deterministic plan.",
+        "required": [
+          "requestId",
+          "draft",
+          "scope"
+        ],
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/KnowledgeQueryDraftDto",
+            "description": "Typed composer state."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/KnowledgeRetrievalModeDto",
+            "description": "Requested retrieval mode."
+          },
+          "options": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeSearchOptionsDto",
+                "description": "Optional bounded option overrides."
+              }
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Caller-owned identity used for cancellation and correlation."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KnowledgeScopeDto",
+            "description": "Visible authorized scope."
+          }
+        }
+      },
       "ExportSemanticVocabularyResponseDto": {
         "type": "object",
         "required": [
@@ -10270,6 +10638,1150 @@
           }
         }
       },
+      "KnowledgeActionDto": {
+        "type": "string",
+        "description": "Optional typed answer goal; never used as retrieval text.",
+        "enum": [
+          "explain",
+          "learn",
+          "apply",
+          "evaluate",
+          "compare",
+          "cite"
+        ]
+      },
+      "KnowledgeAnswerDepthDto": {
+        "type": "string",
+        "description": "Requested answer detail; answer-only.",
+        "enum": [
+          "brief",
+          "standard",
+          "detailed"
+        ]
+      },
+      "KnowledgeCapabilitiesDto": {
+        "type": "object",
+        "description": "Independently reported knowledge capabilities.",
+        "required": [
+          "fullText",
+          "semantic",
+          "answerGeneration"
+        ],
+        "properties": {
+          "answerGeneration": {
+            "type": "boolean",
+            "description": "Optional evidence-grounded answer generation is available."
+          },
+          "fullText": {
+            "type": "boolean",
+            "description": "Native full-text retrieval is available."
+          },
+          "semantic": {
+            "type": "boolean",
+            "description": "Compatible query embeddings and vector retrieval are available."
+          }
+        }
+      },
+      "KnowledgeCoverageDto": {
+        "type": "object",
+        "description": "Honest requested-scope coverage.\n\nEvery field is either measured against authoritative host state or reported\nas unknown. Nothing here is derived from an assumption that indexing has\nkept up with consent.",
+        "required": [
+          "eligible",
+          "fingerprinted",
+          "unavailable",
+          "staleEvidence",
+          "unavailableEvidence",
+          "unknownFreshnessEvidence",
+          "scopeIsExact",
+          "partial"
+        ],
+        "properties": {
+          "eligible": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Authorized sources in the resolved scope.",
+            "minimum": 0
+          },
+          "fingerprinted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Authorized sources with a comparable current content fingerprint.",
+            "minimum": 0
+          },
+          "indexed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Sources with a complete published generation.\n\n`null` when publication state is worker-owned and the host cannot read\nit, which is reported rather than inferred from the eligible count.",
+            "minimum": 0
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "Whether the requested scope is only partially represented."
+          },
+          "scopeIsExact": {
+            "type": "boolean",
+            "description": "Whether retrieval ranked exactly the authorized scope."
+          },
+          "staleEvidence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Returned rows indexed from content that has since changed.",
+            "minimum": 0
+          },
+          "unavailable": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Authorized sources that currently cannot be opened.",
+            "minimum": 0
+          },
+          "unavailableEvidence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Returned rows whose source is currently unavailable.",
+            "minimum": 0
+          },
+          "unknownFreshnessEvidence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Returned rows whose freshness the host cannot determine.",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeDiagnosticCodeDto": {
+        "type": "string",
+        "description": "Machine-matchable parser diagnostic classification.",
+        "enum": [
+          "unknownField",
+          "duplicateField",
+          "emptyValue",
+          "invalidNeedValue",
+          "invalidScopeValue",
+          "invalidActionValue",
+          "invalidFormatValue",
+          "tooManyValues",
+          "valueTooLong",
+          "unterminatedQuote",
+          "invalidDepthValue"
+        ]
+      },
+      "KnowledgeDiagnosticDto": {
+        "type": "object",
+        "description": "One actionable parser diagnostic.",
+        "required": [
+          "severity",
+          "code",
+          "message",
+          "start",
+          "end"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/KnowledgeDiagnosticCodeDto",
+            "description": "Machine-matchable diagnostic code."
+          },
+          "end": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Exclusive end byte offset into the parsed text.",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable explanation."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/KnowledgeDiagnosticSeverityDto",
+            "description": "Diagnostic severity."
+          },
+          "start": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Inclusive start byte offset into the parsed text.",
+            "minimum": 0
+          },
+          "suggestion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Suggested correction, when a close match was found."
+          }
+        }
+      },
+      "KnowledgeDiagnosticSeverityDto": {
+        "type": "string",
+        "description": "Parser diagnostic severity.",
+        "enum": [
+          "error",
+          "warning"
+        ]
+      },
+      "KnowledgeEvidenceDto": {
+        "type": "object",
+        "description": "One authorized source-oriented evidence row.",
+        "required": [
+          "recordId",
+          "sourceId",
+          "duplicateSourceIds",
+          "documentId",
+          "title",
+          "chunkKind",
+          "excerpt",
+          "content",
+          "tokenCount",
+          "sectionPath",
+          "provenance",
+          "sourcePosition",
+          "generated",
+          "unavailable",
+          "adjacent",
+          "finalRank",
+          "fusedScore",
+          "matchedSearchIndexes",
+          "reasons",
+          "rankContributions"
+        ],
+        "properties": {
+          "adjacent": {
+            "type": "boolean",
+            "description": "Added after ranking as adjacent structural context."
+          },
+          "chunkKind": {
+            "type": "string",
+            "description": "`chunk`, `summary`, or a future versioned kind."
+          },
+          "content": {
+            "type": "string",
+            "description": "Complete structurally bounded chunk content."
+          },
+          "documentId": {
+            "type": "string",
+            "description": "Content identity shared by every occurrence of the file."
+          },
+          "duplicateSourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other authorized occurrences carrying this exact chunk."
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Bounded display excerpt."
+          },
+          "finalRank": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based final rank; adjacent rows inherit their primary's rank.",
+            "minimum": 0
+          },
+          "fusedScore": {
+            "type": "number",
+            "format": "double",
+            "description": "Deterministic reciprocal-rank-fusion score."
+          },
+          "generated": {
+            "type": "boolean",
+            "description": "Generated rather than extracted evidence."
+          },
+          "matchedSearchIndexes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Planned searches that retrieved this row."
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Indexed IANA media type."
+          },
+          "modifiedAtMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Indexed source modification time."
+          },
+          "provenance": {
+            "type": "string",
+            "description": "Serialized structural provenance."
+          },
+          "rankContributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeRankContributionDto"
+            },
+            "description": "Route/query ranks that produced this row."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSearchReasonDto"
+            },
+            "description": "Reasons retained from every matched planned search."
+          },
+          "recordId": {
+            "type": "string",
+            "description": "Stable derived record identity."
+          },
+          "sectionPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Structural heading hierarchy."
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Source occurrence identity used for exact source navigation."
+          },
+          "sourcePosition": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Document order.",
+            "minimum": 0
+          },
+          "stale": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether current source bytes differ from the indexed generation.\n\n`null` when the host has no comparable fingerprint for the source, so\nfreshness is honestly unknown rather than assumed current."
+          },
+          "title": {
+            "type": "string",
+            "description": "User-visible document title."
+          },
+          "tokenCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Token count charged against the context budget.",
+            "minimum": 0
+          },
+          "unavailable": {
+            "type": "boolean",
+            "description": "Source is currently unavailable, as of a fresh host snapshot."
+          }
+        }
+      },
+      "KnowledgeExcludedFieldDto": {
+        "type": "object",
+        "description": "One draft field explicitly not used for retrieval.",
+        "required": [
+          "field",
+          "value"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "Canonical DSL field name (`do`, `to`, `constraint`, `format`, `depth`)."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value carried by the field."
+          }
+        }
+      },
+      "KnowledgeNeedDto": {
+        "type": "string",
+        "description": "User-selected information shape.",
+        "enum": [
+          "overview",
+          "definition",
+          "procedure",
+          "examples",
+          "evidence",
+          "arguments",
+          "comparison",
+          "limitations",
+          "references"
+        ]
+      },
+      "KnowledgeOutputFormatDto": {
+        "type": "string",
+        "description": "Requested answer presentation; answer-only.",
+        "enum": [
+          "narrative",
+          "bullets",
+          "steps",
+          "table"
+        ]
+      },
+      "KnowledgeParseAmbiguityDto": {
+        "type": "object",
+        "description": "One recorded alternative interpretation.",
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "alternativeAction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeActionDto",
+                "description": "Alternative answer action, when answer intent is ambiguous."
+              }
+            ]
+          },
+          "alternativeNeed": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeNeedDto",
+                "description": "Alternative information need, when retrieval shape is ambiguous."
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable explanation of the alternative reading."
+          }
+        }
+      },
+      "KnowledgeParseConfidenceDto": {
+        "type": "string",
+        "description": "How the parser arrived at the draft.",
+        "enum": [
+          "explicit",
+          "deterministic",
+          "ambiguous"
+        ]
+      },
+      "KnowledgePlannedSearchDto": {
+        "type": "object",
+        "description": "One deterministic source search.",
+        "required": [
+          "text",
+          "priority",
+          "reasons"
+        ],
+        "properties": {
+          "priority": {
+            "$ref": "#/components/schemas/KnowledgeSearchPriorityDto",
+            "description": "Stable planning priority."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSearchReasonDto"
+            },
+            "description": "All reasons retained after equivalent-query deduplication."
+          },
+          "text": {
+            "type": "string",
+            "description": "Exact query text sent to retrieval."
+          }
+        }
+      },
+      "KnowledgeQueryDraftDto": {
+        "type": "object",
+        "description": "Typed composer state mirroring the retrieval/answer split exactly.",
+        "properties": {
+          "about": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered retrieval subjects."
+          },
+          "action": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeActionDto",
+                "description": "Answer-only typed goal; never used as retrieval text."
+              }
+            ]
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Answer-only constraints; never used for retrieval."
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Answer-only application context; never used for retrieval."
+          },
+          "depth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeAnswerDepthDto",
+                "description": "Answer-only answer depth."
+              }
+            ]
+          },
+          "format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeOutputFormatDto",
+                "description": "Answer-only output format."
+              }
+            ]
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeNeedDto"
+            },
+            "description": "Explicit information needs."
+          },
+          "related": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit lower-priority related terms."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeScopeSelectorDto"
+            },
+            "description": "DSL-expressible scope selectors."
+          }
+        }
+      },
+      "KnowledgeQueryInterpretationDto": {
+        "type": "object",
+        "description": "Deterministic interpretation shown before execution.",
+        "required": [
+          "draft",
+          "confidence",
+          "ambiguities",
+          "diagnostics",
+          "dslMultiline",
+          "dslCompact",
+          "excludedFromRetrieval"
+        ],
+        "properties": {
+          "ambiguities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeParseAmbiguityDto"
+            },
+            "description": "Alternative interpretations recorded instead of discarded."
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/KnowledgeParseConfidenceDto",
+            "description": "How the draft was derived."
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDiagnosticDto"
+            },
+            "description": "Actionable diagnostics."
+          },
+          "draft": {
+            "$ref": "#/components/schemas/KnowledgeQueryDraftDto",
+            "description": "Typed composer state."
+          },
+          "dslCompact": {
+            "type": "string",
+            "description": "Canonical compact DSL equivalent of the draft."
+          },
+          "dslMultiline": {
+            "type": "string",
+            "description": "Canonical multiline DSL equivalent of the draft."
+          },
+          "excludedFromRetrieval": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeExcludedFieldDto"
+            },
+            "description": "Answer-only fields present in the draft and excluded from retrieval."
+          }
+        }
+      },
+      "KnowledgeRankContributionDto": {
+        "type": "object",
+        "description": "One route/query rank that contributed to a fused result.",
+        "required": [
+          "searchIndex",
+          "route",
+          "rank"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based rank within that route's result list.",
+            "minimum": 0
+          },
+          "route": {
+            "$ref": "#/components/schemas/KnowledgeRouteDto",
+            "description": "Contributing route."
+          },
+          "searchIndex": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Index of the contributing planned search.",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeRetrievalModeDto": {
+        "type": "string",
+        "description": "Requested physical retrieval mode.",
+        "enum": [
+          "hybrid",
+          "fullText",
+          "semantic"
+        ]
+      },
+      "KnowledgeRootDto": {
+        "type": "object",
+        "description": "One indexed root a knowledge search may be scoped to.",
+        "required": [
+          "rootId",
+          "location",
+          "label",
+          "recursive",
+          "available",
+          "indexedGeneration"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether the indexed source is currently reachable."
+          },
+          "indexedGeneration": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last generation committed to runtime state.",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "description": "User-visible root label."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral location already visible in the file manager."
+          },
+          "recursive": {
+            "type": "boolean",
+            "description": "Whether descendants inherit consent."
+          },
+          "rootId": {
+            "type": "string",
+            "description": "Stable path-independent root identity."
+          }
+        }
+      },
+      "KnowledgeRouteDto": {
+        "type": "string",
+        "description": "Physical route actually used by one retrieval.",
+        "enum": [
+          "hybrid",
+          "fullText",
+          "semantic"
+        ]
+      },
+      "KnowledgeRouteFallbackReasonDto": {
+        "type": "string",
+        "description": "Sanitized reason the requested route was not used verbatim.",
+        "enum": [
+          "queryEmbeddingsUnavailable",
+          "queryEmbeddingFailed",
+          "semanticQueryFailed",
+          "fullTextIndexUnavailable",
+          "fullTextQueryFailed"
+        ]
+      },
+      "KnowledgeRouteOutcomeDto": {
+        "type": "object",
+        "description": "Requested and applied routes with an explicit fallback reason.",
+        "required": [
+          "requested",
+          "applied"
+        ],
+        "properties": {
+          "applied": {
+            "$ref": "#/components/schemas/KnowledgeRouteDto",
+            "description": "Route actually executed."
+          },
+          "fallbackReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeRouteFallbackReasonDto",
+                "description": "Present whenever `applied` differs from `requested`."
+              }
+            ]
+          },
+          "requested": {
+            "$ref": "#/components/schemas/KnowledgeRouteDto",
+            "description": "Route the caller asked for."
+          }
+        }
+      },
+      "KnowledgeScopeDto": {
+        "type": "object",
+        "description": "Visible authorized search scope resolved by the application.",
+        "required": [
+          "kind",
+          "workspaceId"
+        ],
+        "properties": {
+          "enrolledRootIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Enrolled root IDs for the enrolled-root scope."
+          },
+          "folder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Folder location for the current-folder scope."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/KnowledgeScopeKindDto",
+            "description": "Scope kind."
+          },
+          "semanticSourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Opaque source IDs from a host-produced semantic result set."
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace through which access is authorized."
+          }
+        }
+      },
+      "KnowledgeScopeKindDto": {
+        "type": "string",
+        "description": "Visible authorized search scope kind.",
+        "enum": [
+          "entireLibrary",
+          "enrolledRoots",
+          "currentFolder",
+          "semanticResults"
+        ]
+      },
+      "KnowledgeScopeSelectorDto": {
+        "type": "object",
+        "description": "One DSL-expressible scope selector.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque root or workspace identity; absent for the whole library."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/KnowledgeScopeSelectorKindDto",
+            "description": "Selector kind."
+          }
+        }
+      },
+      "KnowledgeScopeSelectorKindDto": {
+        "type": "string",
+        "description": "DSL-expressible scope selector inside the authorized library.",
+        "enum": [
+          "wholeLibrary",
+          "root",
+          "workspace"
+        ]
+      },
+      "KnowledgeSearchOptionsDto": {
+        "type": "object",
+        "description": "Bounded retrieval and evidence options.",
+        "required": [
+          "maximumSearches",
+          "candidateLimit",
+          "resultLimit",
+          "maximumResultsPerFile",
+          "contextTokenBudget",
+          "adjacentChunkRadius",
+          "sectionBoundedContext",
+          "includeTrace"
+        ],
+        "properties": {
+          "adjacentChunkRadius": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Neighboring structural chunks included on each side.",
+            "minimum": 0
+          },
+          "candidateLimit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Candidate count requested per physical route and logical search.",
+            "minimum": 0
+          },
+          "contextTokenBudget": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Complete-chunk token budget for primary and adjacent evidence.",
+            "minimum": 0
+          },
+          "includeTrace": {
+            "type": "boolean",
+            "description": "Whether to return the privacy-safe planning and retrieval trace."
+          },
+          "maximumResultsPerFile": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum primary results selected from one document.",
+            "minimum": 0
+          },
+          "maximumSearches": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum logical searches emitted by the planner.",
+            "minimum": 0
+          },
+          "resultLimit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum primary results in the evidence set.",
+            "minimum": 0
+          },
+          "sectionBoundedContext": {
+            "type": "boolean",
+            "description": "Whether adjacent chunks must share the primary section."
+          }
+        }
+      },
+      "KnowledgeSearchPlanDto": {
+        "type": "object",
+        "description": "Deterministic inspectable plan.",
+        "required": [
+          "version",
+          "subjects",
+          "mode",
+          "options",
+          "searches",
+          "omittedSearches",
+          "scope",
+          "scopeLabel",
+          "authorizedSources",
+          "scopeIsExact",
+          "excludedFromRetrieval"
+        ],
+        "properties": {
+          "authorizedSources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of authorized indexed sources inside the scope.",
+            "minimum": 0
+          },
+          "excludedFromRetrieval": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeExcludedFieldDto"
+            },
+            "description": "Answer-only fields present in the request and excluded from retrieval."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/KnowledgeRetrievalModeDto",
+            "description": "Requested retrieval mode."
+          },
+          "omittedSearches": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Expansions omitted because of query-size or search-count bounds.",
+            "minimum": 0
+          },
+          "options": {
+            "$ref": "#/components/schemas/KnowledgeSearchOptionsDto",
+            "description": "Validated resource and evidence options."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KnowledgeScopeDto",
+            "description": "Resolved authorized scope this plan executes against.\n\nThis is the effective scope after root selectors, DSL scope selectors,\nand host authorization were applied, not the requested scope."
+          },
+          "scopeIsExact": {
+            "type": "boolean",
+            "description": "Whether retrieval ranks exactly this scope rather than a superset."
+          },
+          "scopeLabel": {
+            "type": "string",
+            "description": "User-visible scope label."
+          },
+          "searches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgePlannedSearchDto"
+            },
+            "description": "Stable bounded source searches."
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Original ordered subjects."
+          },
+          "version": {
+            "type": "string",
+            "description": "Planner identity."
+          }
+        }
+      },
+      "KnowledgeSearchPriorityDto": {
+        "type": "string",
+        "description": "Stable planner priority.",
+        "enum": [
+          "primary",
+          "secondary",
+          "related"
+        ]
+      },
+      "KnowledgeSearchReasonDto": {
+        "type": "object",
+        "description": "One retained reason a logical search exists.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeActionDto",
+                "description": "Answer action that selected a default need, when applicable."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/KnowledgeSearchReasonKindDto",
+            "description": "Reason kind."
+          },
+          "need": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeNeedDto",
+                "description": "Information need used by the template, when the reason has one."
+              }
+            ]
+          },
+          "relatedTermIndex": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Position of the related term, when applicable.",
+            "minimum": 0
+          },
+          "subjectIndex": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Position of the expanded subject, when the reason has one.",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeSearchReasonKindDto": {
+        "type": "string",
+        "description": "Auditable reason kind for emitting one logical search.",
+        "enum": [
+          "subject",
+          "need",
+          "actionDefault",
+          "relatedTerm"
+        ]
+      },
+      "KnowledgeSearchResultDto": {
+        "type": "object",
+        "description": "Complete search-only result; no answer is generated or required.",
+        "required": [
+          "requestId",
+          "plan",
+          "route",
+          "capabilities",
+          "coverage",
+          "evidence",
+          "tokenCount",
+          "evidenceFingerprint",
+          "withheldUnauthorized"
+        ],
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/KnowledgeCapabilitiesDto",
+            "description": "Capabilities observed for this search."
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/KnowledgeCoverageDto",
+            "description": "Honest requested-scope coverage."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeEvidenceDto"
+            },
+            "description": "Ranked primary evidence with post-rank adjacent context."
+          },
+          "evidenceFingerprint": {
+            "type": "string",
+            "description": "Fingerprint of this exact evidence set for optional later answering."
+          },
+          "plan": {
+            "$ref": "#/components/schemas/KnowledgeSearchPlanDto",
+            "description": "Deterministic plan that produced this result."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied by the caller."
+          },
+          "route": {
+            "$ref": "#/components/schemas/KnowledgeRouteOutcomeDto",
+            "description": "Requested and applied routes with any explicit fallback."
+          },
+          "tokenCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Complete-chunk tokens retained.",
+            "minimum": 0
+          },
+          "trace": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeSearchTraceDto",
+                "description": "Optional bounded trace."
+              }
+            ]
+          },
+          "withheldUnauthorized": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Evidence rows dropped by application authorization after retrieval.",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeSearchTraceDto": {
+        "type": "object",
+        "description": "Bounded privacy-safe retrieval explanation.",
+        "required": [
+          "rankConstant",
+          "queries"
+        ],
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeTracedQueryDto"
+            },
+            "description": "Planned searches in execution order."
+          },
+          "rankConstant": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rank constant used by fusion.",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeSourceLocationDto": {
+        "type": "object",
+        "description": "Current local navigation target for one evidence source.",
+        "required": [
+          "entryId",
+          "location",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether the original source can currently open."
+          },
+          "entryId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Current entry identity."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Current provider-neutral location."
+          }
+        }
+      },
+      "KnowledgeTracedQueryDto": {
+        "type": "object",
+        "description": "One traced planned search.",
+        "required": [
+          "text",
+          "semanticCandidates",
+          "fullTextCandidates"
+        ],
+        "properties": {
+          "fullTextCandidates": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Lexical candidates returned for this query.",
+            "minimum": 0
+          },
+          "semanticCandidates": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Dense candidates returned for this query.",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "description": "Query text supplied by the planner."
+          }
+        }
+      },
       "LanguageDto": {
         "type": "string",
         "description": "UI language.",
@@ -10382,6 +11894,20 @@
           "showHidden": false,
           "foldersFirst": true,
           "showGitStatus": false
+        }
+      },
+      "ListKnowledgeRootsRequestDto": {
+        "type": "object",
+        "description": "Requests the indexed roots authorized through one workspace.",
+        "required": [
+          "workspaceId"
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace through which roots are authorized."
+          }
         }
       },
       "ListSavedRagConversationsRequestDto": {
@@ -11964,6 +13490,19 @@
           }
         }
       },
+      "ParseKnowledgeQueryRequestDto": {
+        "type": "object",
+        "description": "Requests deterministic interpretation of DSL or natural-language text.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Raw composer or DSL text; never sent to an LLM."
+          }
+        }
+      },
       "PermissionsInfoDto": {
         "type": "object",
         "description": "Filesystem permission information for an entry.",
@@ -12006,6 +13545,39 @@
           "query": {
             "type": "string",
             "description": "The filter's plain-text query."
+          }
+        }
+      },
+      "PlanKnowledgeSearchRequestDto": {
+        "type": "object",
+        "description": "Requests a deterministic plan without executing retrieval.",
+        "required": [
+          "draft",
+          "scope"
+        ],
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/KnowledgeQueryDraftDto",
+            "description": "Typed composer state."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/KnowledgeRetrievalModeDto",
+            "description": "Requested retrieval mode."
+          },
+          "options": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/KnowledgeSearchOptionsDto",
+                "description": "Optional bounded option overrides."
+              }
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KnowledgeScopeDto",
+            "description": "Visible authorized scope."
           }
         }
       },
@@ -13287,6 +14859,25 @@
           "algorithm": {
             "$ref": "#/components/schemas/ChecksumAlgorithmDto",
             "description": "Which of the job's algorithms to write. A checksum file carries one\nalgorithm, matching `sha256sum`/`md5sum`."
+          }
+        }
+      },
+      "ResolveKnowledgeSourceRequestDto": {
+        "type": "object",
+        "description": "Resolves one opaque evidence source against current authorization.",
+        "required": [
+          "workspaceId",
+          "sourceId"
+        ],
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "description": "Opaque source identity returned with evidence."
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace through which the source is opened."
           }
         }
       },

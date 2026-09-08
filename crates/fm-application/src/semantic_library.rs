@@ -2030,11 +2030,89 @@ impl SemanticLibraryService {
         question: String,
         policy: RagRetrievalPolicy,
     ) -> Result<ResolvedRagScope, SemanticLibraryError> {
+        let sources = self.resolve_scope_sources(access, workspace_id, selection, true)?;
+        Ok(ResolvedRagScope {
+            retrieval: RagRetrievalRequest {
+                question,
+                filters: QueryFilters {
+                    tenant_id: sources.tenant_id,
+                    library_id: Some(sources.library_id),
+                    include_unavailable: true,
+                    ..QueryFilters::default()
+                },
+                additional_tenant_ids: sources.additional_tenant_ids,
+                source_restriction: RagSourceRestriction {
+                    allowed_source_ids: sources.allowed_source_ids,
+                },
+                current_hashes: HashMap::new(),
+                policy,
+            },
+            titles: sources.titles,
+            eligible: sources.eligible,
+            unavailable: sources.unavailable,
+        })
+    }
+
+    /// Resolves a user-visible Structured Knowledge scope into current
+    /// authorization.
+    ///
+    /// Unlike Ask's whole-library scope, knowledge search never crosses the
+    /// requesting workspace's tenant: one search executes against exactly one
+    /// worker tenant, so coverage and evidence stay honest for the scope the
+    /// user actually selected.
+    pub(crate) fn resolve_knowledge_scope(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: WorkspaceId,
+        selection: &RagScopeSelection,
+    ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
+        let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
+        Ok(ResolvedKnowledgeScope {
+            filters: QueryFilters {
+                tenant_id: sources.tenant_id,
+                library_id: Some(sources.library_id),
+                // A desktop tenant *is* the workspace, so naming the workspace
+                // explicitly narrows nothing but keeps the exact scope on the
+                // wire. A server tenant spans workspaces and its worker rows
+                // are written per ingesting workspace, so a workspace filter
+                // there could hide evidence that is authorized through a later
+                // co-enrolment; the exact source restriction covers that case.
+                workspace_id: matches!(access, SemanticAccessContext::Host)
+                    .then(|| workspace_id.to_string()),
+                include_unavailable: true,
+                ..QueryFilters::default()
+            },
+            // Whole-library and enrolled-root scopes are exactly representable
+            // by worker filters. Folder, semantic-result, and selected-file
+            // scopes are not, so they are described by their exact authorized
+            // source identities instead.
+            filters_are_exact: matches!(
+                selection,
+                RagScopeSelection::EntireLibrary | RagScopeSelection::EnrolledRoots(_)
+            ),
+            allowed_source_ids: sources.allowed_source_ids,
+            sources_by_root: sources.sources_by_root,
+            unavailable_source_ids: sources.unavailable_source_ids,
+            fingerprints: sources.fingerprints,
+            titles: sources.titles,
+            eligible: sources.eligible,
+        })
+    }
+
+    /// Enumerates the exact authorized occurrences of one visible scope.
+    fn resolve_scope_sources(
+        &self,
+        access: &SemanticAccessContext,
+        workspace_id: WorkspaceId,
+        selection: &RagScopeSelection,
+        cross_workspace: bool,
+    ) -> Result<ResolvedScopeSources, SemanticLibraryError> {
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
-        let host_entire_library = matches!(access, SemanticAccessContext::Host)
+        let host_entire_library = cross_workspace
+            && matches!(access, SemanticAccessContext::Host)
             && matches!(selection, RagScopeSelection::EntireLibrary);
         let requested_results = match selection {
             RagScopeSelection::SemanticResults(ids) => Some(ids.iter().collect::<HashSet<_>>()),
@@ -2072,6 +2150,9 @@ impl SemanticLibraryService {
             _ => Vec::new(),
         };
         let mut allowed_source_ids = BTreeSet::new();
+        let mut sources_by_root: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        let mut unavailable_source_ids = BTreeSet::new();
+        let mut fingerprints = HashMap::new();
         let mut tenant_ids = BTreeSet::new();
         let mut titles = HashMap::new();
         let mut unavailable = 0u64;
@@ -2131,6 +2212,24 @@ impl SemanticLibraryService {
                 != Some(core::SourceAvailability::Available)
             {
                 unavailable = unavailable.saturating_add(1);
+                unavailable_source_ids.insert(source_id.clone());
+            }
+            if let Some(document) = data.catalog.document(occurrence.document_id()) {
+                fingerprints.insert(
+                    source_id.clone(),
+                    document.content_fingerprint().as_str().to_owned(),
+                );
+            }
+            for scope in occurrence.scopes() {
+                let requested_root = requested_roots
+                    .as_ref()
+                    .is_none_or(|root_ids| root_ids.contains(&scope.root_id()));
+                if requested_root && (scope.workspace_id() == workspace_id || host_entire_library) {
+                    sources_by_root
+                        .entry(scope.root_id().to_string())
+                        .or_default()
+                        .insert(source_id.clone());
+                }
             }
             let title = occurrence
                 .location()
@@ -2167,20 +2266,14 @@ impl SemanticLibraryService {
         let tenant_id = tenant_ids
             .pop_first()
             .ok_or(SemanticLibraryError::InvalidRequest)?;
-        Ok(ResolvedRagScope {
-            retrieval: RagRetrievalRequest {
-                question,
-                filters: QueryFilters {
-                    tenant_id,
-                    library_id: Some(data.policy.library().id().to_string()),
-                    include_unavailable: true,
-                    ..QueryFilters::default()
-                },
-                additional_tenant_ids: tenant_ids,
-                source_restriction: RagSourceRestriction { allowed_source_ids },
-                current_hashes: HashMap::new(),
-                policy,
-            },
+        Ok(ResolvedScopeSources {
+            tenant_id,
+            additional_tenant_ids: tenant_ids,
+            library_id: data.policy.library().id().to_string(),
+            allowed_source_ids,
+            sources_by_root,
+            unavailable_source_ids,
+            fingerprints,
             titles,
             eligible,
             unavailable,
@@ -2285,6 +2378,41 @@ pub(crate) struct ResolvedRagScope {
     pub(crate) unavailable: u64,
 }
 
+/// Exact authorized occurrences of one visible scope, shared by Ask and
+/// Structured Knowledge Search.
+pub(crate) struct ResolvedScopeSources {
+    pub(crate) tenant_id: String,
+    pub(crate) additional_tenant_ids: BTreeSet<String>,
+    pub(crate) library_id: String,
+    pub(crate) allowed_source_ids: BTreeSet<String>,
+    pub(crate) sources_by_root: BTreeMap<String, BTreeSet<String>>,
+    pub(crate) unavailable_source_ids: BTreeSet<String>,
+    pub(crate) fingerprints: HashMap<String, String>,
+    pub(crate) titles: HashMap<String, String>,
+    pub(crate) eligible: u64,
+    pub(crate) unavailable: u64,
+}
+
+/// Worker filters and host-only display data for one knowledge search.
+///
+/// This is a snapshot of *current* authorization: it is re-resolved before
+/// evidence is projected so that consent revoked during retrieval cannot leak
+/// into a result.
+pub(crate) struct ResolvedKnowledgeScope {
+    pub(crate) filters: QueryFilters,
+    /// Whether [`Self::filters`] alone describe exactly the authorized scope.
+    pub(crate) filters_are_exact: bool,
+    pub(crate) allowed_source_ids: BTreeSet<String>,
+    /// Authorized sources grouped by the enrolled root that authorizes them.
+    pub(crate) sources_by_root: BTreeMap<String, BTreeSet<String>>,
+    /// Authorized sources that cannot currently be opened.
+    pub(crate) unavailable_source_ids: BTreeSet<String>,
+    /// Current host content fingerprints keyed by opaque source identity.
+    pub(crate) fingerprints: HashMap<String, String>,
+    pub(crate) titles: HashMap<String, String>,
+    pub(crate) eligible: u64,
+}
+
 fn semantic_worker_tenant(
     access: &SemanticAccessContext,
     workspace_id: WorkspaceId,
@@ -2367,6 +2495,180 @@ mod tenant_tests {
                 .source_restriction
                 .allowed_source_ids
                 .contains(&occurrence_id.to_string())
+        );
+    }
+
+    #[test]
+    fn knowledge_scope_stays_inside_the_requesting_workspace_tenant() {
+        let service = SemanticLibraryService::deterministic_mock();
+        let enrolled_workspace = WorkspaceId::new();
+        let other_workspace = WorkspaceId::new();
+        let root = SemanticFolderContext::new(
+            enrolled_workspace,
+            Location::parse("file:///semantic-library").unwrap(),
+        );
+        let preview = service
+            .preview_enrolment(&SemanticAccessContext::Host, root.clone(), true)
+            .unwrap();
+        service
+            .confirm_enrolment(
+                &SemanticAccessContext::Host,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &root,
+            )
+            .unwrap();
+        let root_id: core::RootId = service.status(&SemanticAccessContext::Host).unwrap().roots[0]
+            .id
+            .parse()
+            .unwrap();
+        let occurrence_id = service
+            .record_indexing_observation(
+                &SemanticAccessContext::Host,
+                SemanticIndexingObservation {
+                    entry_id: fm_domain::EntryId::new(),
+                    location: Location::parse("file:///semantic-library/turbines.md").unwrap(),
+                    content_fingerprint: core::ContentFingerprint::new("sha256:turbines").unwrap(),
+                    root_id,
+                    workspace_ids: vec![enrolled_workspace],
+                    source_bytes: 256,
+                },
+            )
+            .unwrap();
+
+        let authorized = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                enrolled_workspace,
+                &RagScopeSelection::EnrolledRoots(vec![root_id]),
+            )
+            .unwrap();
+        assert_eq!(authorized.filters.tenant_id, enrolled_workspace.to_string());
+        // A desktop tenant is the workspace, so the workspace is named on the
+        // wire as well; the scope stays exactly representable by filters.
+        assert_eq!(
+            authorized.filters.workspace_id,
+            Some(enrolled_workspace.to_string())
+        );
+        assert!(authorized.filters_are_exact);
+        assert_eq!(
+            authorized.sources_by_root.get(&root_id.to_string()),
+            Some(&BTreeSet::from([occurrence_id.to_string()]))
+        );
+        assert!(
+            authorized
+                .allowed_source_ids
+                .contains(&occurrence_id.to_string())
+        );
+        // Current source truth travels with the scope so evidence staleness is
+        // measured rather than assumed.
+        assert_eq!(
+            authorized
+                .fingerprints
+                .get(&occurrence_id.to_string())
+                .map(String::as_str),
+            Some("sha256:turbines")
+        );
+        assert!(authorized.unavailable_source_ids.is_empty());
+        assert_eq!(authorized.eligible, 1);
+
+        // Whole-library knowledge search never crosses into another workspace's
+        // tenant, unlike Ask's host-wide scope.
+        let foreign = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                other_workspace,
+                &RagScopeSelection::EntireLibrary,
+            )
+            .unwrap();
+        assert_eq!(foreign.filters.tenant_id, other_workspace.to_string());
+        assert!(foreign.allowed_source_ids.is_empty());
+
+        // A root enrolled through another workspace cannot be named as a scope.
+        let denied = service.resolve_knowledge_scope(
+            &SemanticAccessContext::Host,
+            other_workspace,
+            &RagScopeSelection::EnrolledRoots(vec![root_id]),
+        );
+        assert!(matches!(denied, Err(SemanticLibraryError::InvalidRequest)));
+    }
+
+    #[test]
+    fn knowledge_scope_partitions_only_the_requested_overlapping_root() {
+        let service = SemanticLibraryService::deterministic_mock();
+        let workspace_id = WorkspaceId::new();
+        let parent = SemanticFolderContext::new(
+            workspace_id,
+            Location::parse("file:///semantic-library").unwrap(),
+        );
+        let child = SemanticFolderContext::new(
+            workspace_id,
+            Location::parse("file:///semantic-library/child").unwrap(),
+        );
+        for folder in [&parent, &child] {
+            let preview = service
+                .preview_enrolment(&SemanticAccessContext::Host, folder.clone(), true)
+                .unwrap();
+            service
+                .confirm_enrolment(
+                    &SemanticAccessContext::Host,
+                    &preview.confirmation_id,
+                    preview.policy_revision,
+                    folder,
+                )
+                .unwrap();
+        }
+        let status = service.status(&SemanticAccessContext::Host).unwrap();
+        let parent_id: core::RootId = status
+            .roots
+            .iter()
+            .find(|root| root.location == parent.location)
+            .unwrap()
+            .id
+            .parse()
+            .unwrap();
+        let child_id: core::RootId = status
+            .roots
+            .iter()
+            .find(|root| root.location == child.location)
+            .unwrap()
+            .id
+            .parse()
+            .unwrap();
+        let entry_id = fm_domain::EntryId::new();
+        let location = Location::parse("file:///semantic-library/child/guide.md").unwrap();
+        let fingerprint = core::ContentFingerprint::new("sha256:overlapping").unwrap();
+        for root_id in [parent_id, child_id] {
+            service
+                .record_indexing_observation(
+                    &SemanticAccessContext::Host,
+                    SemanticIndexingObservation {
+                        entry_id,
+                        location: location.clone(),
+                        content_fingerprint: fingerprint.clone(),
+                        root_id,
+                        workspace_ids: vec![workspace_id],
+                        source_bytes: 256,
+                    },
+                )
+                .unwrap();
+        }
+
+        let authorized = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                workspace_id,
+                &RagScopeSelection::EnrolledRoots(vec![child_id]),
+            )
+            .unwrap();
+
+        assert_eq!(
+            authorized
+                .sources_by_root
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![child_id.to_string()]
         );
     }
 

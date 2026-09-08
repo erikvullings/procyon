@@ -174,6 +174,8 @@ export interface GlobalKeydownContext {
   openDiskUsage(): void;
   /** Opens Ask across the indexed semantic library. */
   openSemanticAssistant(): void;
+  /** Opens search-only Structured Knowledge Search (task 0206). */
+  openKnowledgeSearch(): void;
   /** Opens the Settings dialog (Cmd+,/Ctrl+,) - a no-op if already open. */
   openSettingsDialog(): void;
 }
@@ -1258,6 +1260,17 @@ const ACTION_KEYDOWN_ROUTES = [
       if (state.dispatchedAction === 'client.semanticAssistant') {
         event.preventDefault();
         context.openSemanticAssistant();
+        return;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'client.searchKnowledge',
+    tryHandle: (context, event, state) => {
+      if (state.dispatchedAction === 'client.searchKnowledge') {
+        event.preventDefault();
+        context.openKnowledgeSearch();
         return;
       }
       return false;

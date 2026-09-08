@@ -18,6 +18,7 @@ pub mod error;
 pub mod files;
 pub mod finder_tags;
 pub mod health;
+pub mod knowledge;
 pub mod llm_profile;
 pub mod location;
 pub mod operation;
@@ -108,6 +109,22 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
+pub use knowledge::{
+    CancelKnowledgeSearchRequestDto, ExecuteKnowledgeSearchRequestDto, KnowledgeActionDto,
+    KnowledgeAnswerDepthDto, KnowledgeCapabilitiesDto, KnowledgeCoverageDto,
+    KnowledgeDiagnosticCodeDto, KnowledgeDiagnosticDto, KnowledgeDiagnosticSeverityDto,
+    KnowledgeEvidenceDto, KnowledgeExcludedFieldDto, KnowledgeNeedDto, KnowledgeOutputFormatDto,
+    KnowledgeParseAmbiguityDto, KnowledgeParseConfidenceDto, KnowledgePlannedSearchDto,
+    KnowledgeQueryDraftDto, KnowledgeQueryInterpretationDto, KnowledgeRankContributionDto,
+    KnowledgeRetrievalModeDto, KnowledgeRootDto, KnowledgeRouteDto,
+    KnowledgeRouteFallbackReasonDto, KnowledgeRouteOutcomeDto, KnowledgeScopeDto,
+    KnowledgeScopeKindDto, KnowledgeScopeSelectorDto, KnowledgeScopeSelectorKindDto,
+    KnowledgeSearchOptionsDto, KnowledgeSearchPlanDto, KnowledgeSearchPriorityDto,
+    KnowledgeSearchReasonDto, KnowledgeSearchReasonKindDto, KnowledgeSearchResultDto,
+    KnowledgeSearchTraceDto, KnowledgeSourceLocationDto, KnowledgeTracedQueryDto,
+    ListKnowledgeRootsRequestDto, ParseKnowledgeQueryRequestDto, PlanKnowledgeSearchRequestDto,
+    ResolveKnowledgeSourceRequestDto,
+};
 pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
     LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmPresetDto,

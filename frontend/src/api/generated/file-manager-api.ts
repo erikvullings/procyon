@@ -18,6 +18,7 @@ import type {
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
+  CancelKnowledgeSearchRequestDto,
   CheckpointSemanticModelMigrationRequestDto,
   ChecksumFileDto,
   ChecksumPageDto,
@@ -48,6 +49,7 @@ import type {
   EntryMetadataDto,
   EntryMetadataRequest,
   EntrySummaryDto,
+  ExecuteKnowledgeSearchRequestDto,
   ExportSemanticVocabularyResponseDto,
   FinderTagsDto,
   GenerateDocumentSummaryRequestDto,
@@ -72,8 +74,15 @@ import type {
   ImportSemanticVocabularyRequestDto,
   InstallSemanticWorkerPatchRequestDto,
   InvokeActionRequestDto,
+  KnowledgeCapabilitiesDto,
+  KnowledgeQueryInterpretationDto,
+  KnowledgeRootDto,
+  KnowledgeSearchPlanDto,
+  KnowledgeSearchResultDto,
+  KnowledgeSourceLocationDto,
   ListDirectoryChildrenRequest,
   ListDirectoryRequest,
+  ListKnowledgeRootsRequestDto,
   ListOperationsParams,
   ListSavedRagConversationsRequestDto,
   LlmProfileDto,
@@ -93,6 +102,8 @@ import type {
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
+  ParseKnowledgeQueryRequestDto,
+  PlanKnowledgeSearchRequestDto,
   PlanSemanticExclusionRequestDto,
   PlanSemanticModelMigrationRequestDto,
   PluginDescriptorDto,
@@ -114,6 +125,7 @@ import type {
   RemoveApplicationDockIconRequestDto,
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
+  ResolveKnowledgeSourceRequestDto,
   ResolveOperationConflictRequestDto,
   ResolveRagCitationRequestDto,
   ResolvedRagCitationDto,
@@ -6107,6 +6119,351 @@ return fetchMutator<previewDocumentSummaryResponse>(getPreviewDocumentSummaryUrl
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewDocumentSummaryRequestDto)
+  }
+);}
+
+
+
+export type getKnowledgeCapabilitiesResponse200 = {
+  data: KnowledgeCapabilitiesDto
+  status: 200
+}
+
+export type getKnowledgeCapabilitiesResponseSuccess = (getKnowledgeCapabilitiesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getKnowledgeCapabilitiesResponse = (getKnowledgeCapabilitiesResponseSuccess)
+
+export const getGetKnowledgeCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/capabilities`
+}
+
+export const getKnowledgeCapabilities = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<getKnowledgeCapabilitiesResponse> => {
+
+  return fetchMutator<getKnowledgeCapabilitiesResponse>(getGetKnowledgeCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type parseKnowledgeQueryResponse200 = {
+  data: KnowledgeQueryInterpretationDto
+  status: 200
+}
+
+export type parseKnowledgeQueryResponseSuccess = (parseKnowledgeQueryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type parseKnowledgeQueryResponse = (parseKnowledgeQueryResponseSuccess)
+
+export const getParseKnowledgeQueryUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/parse`
+}
+
+export const parseKnowledgeQuery = async (parseKnowledgeQueryRequestDto: ParseKnowledgeQueryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<parseKnowledgeQueryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<parseKnowledgeQueryResponse>(getParseKnowledgeQueryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(parseKnowledgeQueryRequestDto)
+  }
+);}
+
+
+
+export type planKnowledgeSearchResponse200 = {
+  data: KnowledgeSearchPlanDto
+  status: 200
+}
+
+export type planKnowledgeSearchResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type planKnowledgeSearchResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type planKnowledgeSearchResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type planKnowledgeSearchResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type planKnowledgeSearchResponseSuccess = (planKnowledgeSearchResponse200) & {
+  headers: Headers;
+};
+export type planKnowledgeSearchResponseError = (planKnowledgeSearchResponse400 | planKnowledgeSearchResponse403 | planKnowledgeSearchResponse404 | planKnowledgeSearchResponse503) & {
+  headers: Headers;
+};
+
+export type planKnowledgeSearchResponse = (planKnowledgeSearchResponseSuccess | planKnowledgeSearchResponseError)
+
+export const getPlanKnowledgeSearchUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/plan`
+}
+
+export const planKnowledgeSearch = async (planKnowledgeSearchRequestDto: PlanKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<planKnowledgeSearchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<planKnowledgeSearchResponse>(getPlanKnowledgeSearchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(planKnowledgeSearchRequestDto)
+  }
+);}
+
+
+
+export type listKnowledgeRootsResponse200 = {
+  data: KnowledgeRootDto[]
+  status: 200
+}
+
+export type listKnowledgeRootsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type listKnowledgeRootsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type listKnowledgeRootsResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type listKnowledgeRootsResponseSuccess = (listKnowledgeRootsResponse200) & {
+  headers: Headers;
+};
+export type listKnowledgeRootsResponseError = (listKnowledgeRootsResponse400 | listKnowledgeRootsResponse403 | listKnowledgeRootsResponse503) & {
+  headers: Headers;
+};
+
+export type listKnowledgeRootsResponse = (listKnowledgeRootsResponseSuccess | listKnowledgeRootsResponseError)
+
+export const getListKnowledgeRootsUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/roots`
+}
+
+export const listKnowledgeRoots = async (listKnowledgeRootsRequestDto: ListKnowledgeRootsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<listKnowledgeRootsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<listKnowledgeRootsResponse>(getListKnowledgeRootsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(listKnowledgeRootsRequestDto)
+  }
+);}
+
+
+
+export type executeKnowledgeSearchResponse200 = {
+  data: KnowledgeSearchResultDto
+  status: 200
+}
+
+export type executeKnowledgeSearchResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type executeKnowledgeSearchResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type executeKnowledgeSearchResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type executeKnowledgeSearchResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type executeKnowledgeSearchResponseSuccess = (executeKnowledgeSearchResponse200) & {
+  headers: Headers;
+};
+export type executeKnowledgeSearchResponseError = (executeKnowledgeSearchResponse400 | executeKnowledgeSearchResponse403 | executeKnowledgeSearchResponse404 | executeKnowledgeSearchResponse503) & {
+  headers: Headers;
+};
+
+export type executeKnowledgeSearchResponse = (executeKnowledgeSearchResponseSuccess | executeKnowledgeSearchResponseError)
+
+export const getExecuteKnowledgeSearchUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/search`
+}
+
+export const executeKnowledgeSearch = async (executeKnowledgeSearchRequestDto: ExecuteKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<executeKnowledgeSearchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<executeKnowledgeSearchResponse>(getExecuteKnowledgeSearchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(executeKnowledgeSearchRequestDto)
+  }
+);}
+
+
+
+export type cancelKnowledgeSearchResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelKnowledgeSearchResponseSuccess = (cancelKnowledgeSearchResponse204) & {
+  headers: Headers;
+};
+;
+
+export type cancelKnowledgeSearchResponse = (cancelKnowledgeSearchResponseSuccess)
+
+export const getCancelKnowledgeSearchUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/search/cancel`
+}
+
+export const cancelKnowledgeSearch = async (cancelKnowledgeSearchRequestDto: CancelKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelKnowledgeSearchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<cancelKnowledgeSearchResponse>(getCancelKnowledgeSearchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelKnowledgeSearchRequestDto)
+  }
+);}
+
+
+
+export type resolveKnowledgeSourceResponse200 = {
+  data: KnowledgeSourceLocationDto
+  status: 200
+}
+
+export type resolveKnowledgeSourceResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type resolveKnowledgeSourceResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type resolveKnowledgeSourceResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type resolveKnowledgeSourceResponseSuccess = (resolveKnowledgeSourceResponse200) & {
+  headers: Headers;
+};
+export type resolveKnowledgeSourceResponseError = (resolveKnowledgeSourceResponse403 | resolveKnowledgeSourceResponse404 | resolveKnowledgeSourceResponse503) & {
+  headers: Headers;
+};
+
+export type resolveKnowledgeSourceResponse = (resolveKnowledgeSourceResponseSuccess | resolveKnowledgeSourceResponseError)
+
+export const getResolveKnowledgeSourceUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/knowledge/sources/resolve`
+}
+
+export const resolveKnowledgeSource = async (resolveKnowledgeSourceRequestDto: ResolveKnowledgeSourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveKnowledgeSourceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<resolveKnowledgeSourceResponse>(getResolveKnowledgeSourceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveKnowledgeSourceRequestDto)
   }
 );}
 

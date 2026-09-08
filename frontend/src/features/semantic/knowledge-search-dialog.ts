@@ -1,0 +1,1632 @@
+import m, { type FactoryComponent } from 'mithril';
+import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
+
+import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { copyIcon, externalLinkIcon } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
+import { t } from '../../i18n';
+import type {
+  KnowledgeCapabilities,
+  KnowledgeDiagnostic,
+  KnowledgeEvidence,
+  KnowledgeNeed,
+  KnowledgeQueryDraft,
+  KnowledgeQueryInterpretation,
+  KnowledgeRetrievalMode,
+  KnowledgeRoot,
+  KnowledgeRouteFallbackReason,
+  KnowledgeScope,
+  KnowledgeScopeKind,
+  KnowledgeScopeSelector,
+  KnowledgeSearchOptions,
+  KnowledgeSearchPlan,
+  KnowledgeSearchReason,
+  KnowledgeSearchResult,
+  Location,
+} from '../../models';
+import { defaultKnowledgeSearchOptions } from '../../models';
+import { copyText } from '../preview/clipboard';
+
+/** Everything the shell knows about the default scope when the dialog opens. */
+export interface KnowledgeSearchDialogAttrs {
+  readonly open: boolean;
+  readonly client: FileManagerClient;
+  readonly workspaceId: string;
+  /** Active directory, offered as the default scope when it is indexed. */
+  readonly currentFolder: Location | undefined;
+  /** Opaque source ids of the active semantic result set, if any. */
+  readonly semanticSourceIds: readonly string[];
+  /** Initial subject text, e.g. the active quick filter or semantic query. */
+  readonly initialSubject?: string | undefined;
+  readonly onClose: () => void;
+  readonly onOpenSource?: (sourceId: string) => void | Promise<void>;
+}
+
+/** Canonical need order, matching the backend enum declaration order. */
+const NEEDS: readonly KnowledgeNeed[] = [
+  'overview',
+  'definition',
+  'procedure',
+  'examples',
+  'evidence',
+  'arguments',
+  'comparison',
+  'limitations',
+  'references',
+];
+
+const MODES: readonly KnowledgeRetrievalMode[] = ['hybrid', 'fullText', 'semantic'];
+
+const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
+  'entireLibrary',
+  'enrolledRoots',
+  'currentFolder',
+  'semanticResults',
+];
+
+/** How many evidence rows are rendered before the user asks for more. */
+const RENDER_BATCH = 10;
+
+type Grouping = 'need' | 'document' | 'relevance';
+
+function needLabel(need: KnowledgeNeed): string {
+  switch (need) {
+    case 'overview':
+      return t('knowledgeSearch', 'needOverview');
+    case 'definition':
+      return t('knowledgeSearch', 'needDefinition');
+    case 'procedure':
+      return t('knowledgeSearch', 'needProcedure');
+    case 'examples':
+      return t('knowledgeSearch', 'needExamples');
+    case 'evidence':
+      return t('knowledgeSearch', 'needEvidence');
+    case 'arguments':
+      return t('knowledgeSearch', 'needArguments');
+    case 'comparison':
+      return t('knowledgeSearch', 'needComparison');
+    case 'limitations':
+      return t('knowledgeSearch', 'needLimitations');
+    case 'references':
+      return t('knowledgeSearch', 'needReferences');
+  }
+}
+
+function modeLabel(mode: KnowledgeRetrievalMode): string {
+  switch (mode) {
+    case 'hybrid':
+      return t('knowledgeSearch', 'modeHybrid');
+    case 'fullText':
+      return t('knowledgeSearch', 'modeFullText');
+    case 'semantic':
+      return t('knowledgeSearch', 'modeSemantic');
+  }
+}
+
+function scopeKindLabel(kind: KnowledgeScopeKind): string {
+  switch (kind) {
+    case 'entireLibrary':
+      return t('knowledgeSearch', 'scopeEntireLibrary');
+    case 'enrolledRoots':
+      return t('knowledgeSearch', 'scopeEnrolledRoots');
+    case 'currentFolder':
+      return t('knowledgeSearch', 'scopeCurrentFolder');
+    case 'semanticResults':
+      return t('knowledgeSearch', 'scopeSemanticResults');
+  }
+}
+
+function fallbackReasonLabel(reason: KnowledgeRouteFallbackReason): string {
+  switch (reason) {
+    case 'queryEmbeddingsUnavailable':
+      return t('knowledgeSearch', 'fallbackQueryEmbeddingsUnavailable');
+    case 'queryEmbeddingFailed':
+      return t('knowledgeSearch', 'fallbackQueryEmbeddingFailed');
+    case 'semanticQueryFailed':
+      return t('knowledgeSearch', 'fallbackSemanticQueryFailed');
+    case 'fullTextIndexUnavailable':
+      return t('knowledgeSearch', 'fallbackFullTextIndexUnavailable');
+    case 'fullTextQueryFailed':
+      return t('knowledgeSearch', 'fallbackFullTextQueryFailed');
+  }
+}
+
+function reasonLabel(reason: KnowledgeSearchReason): string {
+  switch (reason.kind) {
+    case 'subject':
+      return t('knowledgeSearch', 'reasonSubject');
+    case 'need':
+      return t('knowledgeSearch', 'reasonNeed', {
+        need: reason.need == null ? '' : needLabel(reason.need),
+      });
+    case 'actionDefault':
+      return t('knowledgeSearch', 'reasonActionDefault', {
+        action: reason.action ?? '',
+        need: reason.need == null ? '' : needLabel(reason.need),
+      });
+    case 'relatedTerm':
+      return t('knowledgeSearch', 'reasonRelatedTerm');
+  }
+}
+
+function priorityLabel(priority: KnowledgeSearchPlan['searches'][number]['priority']): string {
+  switch (priority) {
+    case 'primary':
+      return t('knowledgeSearch', 'planSearchPrimary');
+    case 'secondary':
+      return t('knowledgeSearch', 'planSearchSecondary');
+    case 'related':
+      return t('knowledgeSearch', 'planSearchRelated');
+  }
+}
+
+/** Renders serialized structural provenance as a short human location. */
+export function knowledgeProvenanceLabel(provenance: string): string {
+  const describe = (value: unknown): string | undefined => {
+    if (typeof value === 'string') {
+      try {
+        return describe(JSON.parse(value));
+      } catch {
+        return value.length === 0 ? undefined : value;
+      }
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const node = value as Record<string, unknown>;
+    const number = (key: string): number | undefined =>
+      typeof node[key] === 'number' ? node[key] : undefined;
+    switch (node.kind) {
+      case 'exact':
+        return describe(node.value);
+      case 'span': {
+        const first = describe(node.first);
+        const last = describe(node.last);
+        if (first === undefined) return last;
+        if (last === undefined || last === first) return first;
+        return `${first} – ${last}`;
+      }
+      case 'pdfBlock': {
+        const page = number('page_number');
+        return page === undefined ? undefined : t('ragAsk', 'citationPage', { page });
+      }
+      case 'textLines':
+      case 'codeLines': {
+        const start = number('start_line');
+        const end = number('end_line');
+        return start === undefined || end === undefined
+          ? undefined
+          : t('ragAsk', 'citationLines', { start, end });
+      }
+      case 'slide': {
+        const slide = number('slide_number');
+        return slide === undefined ? undefined : t('ragAsk', 'citationSlide', { slide });
+      }
+      case 'spreadsheetRange': {
+        const range = spreadsheetRangeLabel(node);
+        if (range === undefined) return undefined;
+        const sheet = typeof node.sheet === 'string' ? node.sheet.trim() : '';
+        return sheet.length === 0
+          ? t('ragAsk', 'citationCells', { range })
+          : t('ragAsk', 'citationSheetCells', { sheet, range });
+      }
+      case 'docxBlock': {
+        const block = number('block_index');
+        return block === undefined ? undefined : t('ragAsk', 'citationBlock', { block: block + 1 });
+      }
+      default:
+        return undefined;
+    }
+  };
+  return describe(provenance) ?? '';
+}
+
+/**
+ * Renders a 0-based inclusive spreadsheet cell rectangle as A1 notation. A
+ * single cell renders as `B3`, a rectangle as `B3:D8`; anything with a missing
+ * or non-numeric bound renders as nothing rather than as an invented range.
+ */
+function spreadsheetRangeLabel(node: Record<string, unknown>): string | undefined {
+  const index = (key: string): number | undefined => {
+    const value = node[key];
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+  };
+  const startRow = index('start_row');
+  const startColumn = index('start_column');
+  const endRow = index('end_row');
+  const endColumn = index('end_column');
+  if (
+    startRow === undefined ||
+    startColumn === undefined ||
+    endRow === undefined ||
+    endColumn === undefined
+  ) {
+    return undefined;
+  }
+  const first = `${spreadsheetColumnName(startColumn)}${startRow + 1}`;
+  const last = `${spreadsheetColumnName(endColumn)}${endRow + 1}`;
+  return first === last ? first : `${first}:${last}`;
+}
+
+/** Converts a 0-based column index into its spreadsheet letters (0 → `A`). */
+function spreadsheetColumnName(column: number): string {
+  let remaining = column;
+  let name = '';
+  do {
+    name = String.fromCharCode(65 + (remaining % 26)) + name;
+    remaining = Math.floor(remaining / 26) - 1;
+  } while (remaining >= 0);
+  return name;
+}
+
+/** Canonical DSL text for one scope selector, matching the backend serialiser. */
+function scopeSelectorText(selector: KnowledgeScopeSelector): string {
+  switch (selector.kind) {
+    case 'wholeLibrary':
+      return 'library';
+    case 'root':
+      return `root:${selector.id ?? ''}`;
+    case 'workspace':
+      return `workspace:${selector.id ?? ''}`;
+  }
+}
+
+/** Quotes a value exactly like the DSL serialiser, so a round-trip is lossless. */
+function quoteValue(value: string): string {
+  return /[\s,:;"]/u.test(value) ? `"${value.replace(/(["\\])/gu, '\\$1')}"` : value;
+}
+
+/** Serialises a value list into the comma-separated DSL form. */
+function joinValues(values: readonly string[]): string {
+  return values.map(quoteValue).join(', ');
+}
+
+/**
+ * Splits a comma-separated DSL value list, honouring quotes and escapes, so a
+ * value that itself contains a comma - `"ACME, Inc."` - stays one value.
+ */
+function splitValues(raw: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+    if (character === '\\' && quoted && index + 1 < raw.length) {
+      current += raw[index + 1] ?? '';
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (character === ',' && !quoted) {
+      values.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += character;
+  }
+  values.push(current.trim());
+  return values.filter((value) => value.length > 0);
+}
+
+/**
+ * Reads the subject editor: one subject per line or comma-separated, using the
+ * same quoting rules as the DSL, so a subject like `"ACME, Inc."` survives
+ * editing as the single value the parser returned.
+ */
+function splitSubjects(value: string): string[] {
+  return value.split('\n').flatMap((line) => splitValues(line));
+}
+
+/** Writes the subject editor: one quoted-as-needed subject per line. */
+function joinSubjects(values: readonly string[]): string {
+  return values.map(quoteValue).join('\n');
+}
+
+/**
+ * Groups evidence by the knowledge need that retrieved it. A row retrieved by
+ * more than one need appears under each, which is what makes the grouping
+ * useful; rows retrieved only by a subject or related term are kept in an
+ * explicit "other" group rather than dropped.
+ */
+export function groupEvidenceByNeed(
+  evidence: readonly KnowledgeEvidence[],
+): readonly { readonly need: KnowledgeNeed | undefined; readonly rows: KnowledgeEvidence[] }[] {
+  const groups = new Map<KnowledgeNeed | undefined, KnowledgeEvidence[]>();
+  for (const row of evidence) {
+    const needs = new Set(
+      row.reasons
+        .map((reason) => reason.need)
+        .filter((need): need is KnowledgeNeed => need != null),
+    );
+    const keys: (KnowledgeNeed | undefined)[] = needs.size === 0 ? [undefined] : [...needs];
+    for (const key of keys) {
+      const existing = groups.get(key);
+      if (existing === undefined) groups.set(key, [row]);
+      else existing.push(row);
+    }
+  }
+  return [...NEEDS, undefined]
+    .filter((need) => groups.has(need))
+    .map((need) => ({ need, rows: groups.get(need) ?? [] }));
+}
+
+/**
+ * Groups evidence by document, preserving the best rank per document. Two
+ * documents can share a title, so the stable `documentId` is carried through
+ * for keying rather than the user-visible title.
+ */
+export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]): readonly {
+  readonly documentId: string;
+  readonly title: string;
+  readonly rows: KnowledgeEvidence[];
+}[] {
+  const groups = new Map<
+    string,
+    { documentId: string; title: string; rows: KnowledgeEvidence[] }
+  >();
+  for (const row of evidence) {
+    const existing = groups.get(row.documentId);
+    if (existing === undefined)
+      groups.set(row.documentId, { documentId: row.documentId, title: row.title, rows: [row] });
+    else existing.rows.push(row);
+  }
+  return [...groups.values()];
+}
+
+/** An emptied canonical draft; every field is explicit so nothing is inferred. */
+function emptyDraft(): KnowledgeQueryDraft {
+  return {
+    about: [],
+    needs: [],
+    related: [],
+    scopes: [],
+    action: null,
+    context: null,
+    constraints: [],
+    format: null,
+    depth: null,
+  };
+}
+
+/** Why one DSL scope selector cannot be applied to the visual scope control. */
+export interface KnowledgeScopeIssue {
+  readonly selector: KnowledgeScopeSelector;
+  readonly reason: 'unknownRoot' | 'unsupported';
+}
+
+/**
+ * Splits DSL scope selectors into the ones the visual scope control can
+ * represent and the ones it cannot.
+ *
+ * `library` maps to the entire-library scope and `root:<id>` to a selected
+ * indexed root; a root the host never reported, and any `workspace:<id>`
+ * selector (which the backend resolves against a different authority), are
+ * returned as issues so the dialog can say so instead of dropping them.
+ */
+export function classifyKnowledgeScopeSelectors(
+  selectors: readonly KnowledgeScopeSelector[],
+  knownRootIds: ReadonlySet<string>,
+): {
+  readonly wholeLibrary: boolean;
+  readonly rootIds: readonly string[];
+  readonly issues: readonly KnowledgeScopeIssue[];
+} {
+  const rootIds: string[] = [];
+  const issues: KnowledgeScopeIssue[] = [];
+  let wholeLibrary = false;
+  for (const selector of selectors) {
+    switch (selector.kind) {
+      case 'wholeLibrary':
+        wholeLibrary = true;
+        break;
+      case 'root': {
+        const id = selector.id ?? '';
+        if (knownRootIds.has(id)) rootIds.push(id);
+        else issues.push({ selector, reason: 'unknownRoot' });
+        break;
+      }
+      case 'workspace':
+        issues.push({ selector, reason: 'unsupported' });
+        break;
+    }
+  }
+  return { wholeLibrary, rootIds, issues };
+}
+
+export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
+  let wasOpen = false;
+  let busy: 'loading' | 'planning' | 'searching' | undefined;
+  let error: string | undefined;
+  let notice: string | undefined;
+  let capabilities: KnowledgeCapabilities | undefined;
+  let roots: readonly KnowledgeRoot[] = [];
+  /**
+   * Canonical, lossless query state. The visual controls and the DSL box are
+   * two editors over *this* value, never two independent sources of truth, so a
+   * quoted subject such as `about: "ACME, Inc."` stays one element no matter
+   * which editor last touched it.
+   */
+  let draft: KnowledgeQueryDraft = emptyDraft();
+  let subjectsText = '';
+  let relatedText = '';
+  let mode: KnowledgeRetrievalMode = 'hybrid';
+  let scopeKind: KnowledgeScopeKind = 'entireLibrary';
+  let selectedRootIds = new Set<string>();
+  let dslText = '';
+  let includeTrace = false;
+  let currentFolderIndexed = false;
+  let interpretation: KnowledgeQueryInterpretation | undefined;
+  /** DSL scopes that cannot be applied; search stays blocked while any exist. */
+  let scopeIssues: readonly KnowledgeScopeIssue[] = [];
+  /** Whether the query explicitly declared the whole-library scope selector. */
+  let wholeLibraryDeclared = false;
+  let plan: KnowledgeSearchPlan | undefined;
+  let result: KnowledgeSearchResult | undefined;
+  let traceRequested = false;
+  let grouping: Grouping = 'need';
+  let visibleRows = RENDER_BATCH;
+  let abortController: AbortController | undefined;
+  /** Bumped on every open/close, so responses from a previous life are dropped. */
+  let generation = 0;
+  /** Bumped on every edit, so a response for an older draft is never applied. */
+  let revision = 0;
+  /** Revision the in-flight parse was issued for, and the promise to await. */
+  let parsingRevision: number | undefined;
+  let pendingParse: Promise<void> | undefined;
+  /** Set when the dialog must take focus after its next render. */
+  let focusSubjectOnOpen = false;
+
+  /** Bounded options sent with both the plan preview and the search itself. */
+  function searchOptions(): KnowledgeSearchOptions {
+    return { ...defaultKnowledgeSearchOptions(), includeTrace };
+  }
+
+  /** Scope selectors expressed by the visual scope control, plus what it cannot express. */
+  function scopeSelectors(): KnowledgeScopeSelector[] {
+    // Selectors the composer could not apply are carried through verbatim
+    // rather than quietly deleted, so the DSL keeps saying what the user wrote
+    // while the dialog explains why that query cannot run.
+    const retained = scopeIssues.map((issue) => issue.selector);
+    if (scopeKind === 'enrolledRoots') {
+      return [
+        ...roots
+          .filter((root) => selectedRootIds.has(root.rootId))
+          .map((root): KnowledgeScopeSelector => ({ kind: 'root', id: root.rootId })),
+        ...retained,
+      ];
+    }
+    if (scopeKind === 'entireLibrary' && wholeLibraryDeclared) {
+      return [{ kind: 'wholeLibrary', id: null }, ...retained];
+    }
+    return retained;
+  }
+
+  /** The canonical draft as it is sent to the backend, with scopes projected. */
+  function currentDraft(): KnowledgeQueryDraft {
+    return { ...draft, scopes: scopeSelectors() };
+  }
+
+  /** Records one editor change: results are stale, and so is any in-flight response. */
+  function edited(): void {
+    revision += 1;
+    resetResults();
+  }
+
+  function scope(attrs: KnowledgeSearchDialogAttrs): KnowledgeScope {
+    return {
+      workspaceId: attrs.workspaceId,
+      kind: scopeKind,
+      folder: scopeKind === 'currentFolder' ? (attrs.currentFolder ?? null) : null,
+      enrolledRootIds: scopeKind === 'enrolledRoots' ? [...selectedRootIds] : [],
+      semanticSourceIds: scopeKind === 'semanticResults' ? [...attrs.semanticSourceIds] : [],
+    };
+  }
+
+  function scopeAvailable(attrs: KnowledgeSearchDialogAttrs, kind: KnowledgeScopeKind): boolean {
+    switch (kind) {
+      case 'entireLibrary':
+        return true;
+      case 'enrolledRoots':
+        return roots.length > 0;
+      case 'currentFolder':
+        return attrs.currentFolder !== undefined && currentFolderIndexed;
+      case 'semanticResults':
+        return attrs.semanticSourceIds.length > 0;
+    }
+  }
+
+  function modeAvailable(candidate: KnowledgeRetrievalMode): boolean {
+    if (capabilities === undefined) return candidate === 'hybrid';
+    switch (candidate) {
+      case 'hybrid':
+        return capabilities.fullText || capabilities.semantic;
+      case 'fullText':
+        return capabilities.fullText;
+      case 'semantic':
+        return capabilities.semantic;
+    }
+  }
+
+  function resetResults(): void {
+    result = undefined;
+    plan = undefined;
+    visibleRows = RENDER_BATCH;
+    notice = undefined;
+    traceRequested = false;
+  }
+
+  /**
+   * Applies one interpretation to the canonical draft and to whichever editor
+   * did not produce it. Re-canonicalising the DSL box while the user is typing
+   * in it would delete every half-finished field (`need: d` parses to nothing),
+   * so a DSL-sourced interpretation only ever updates the visual controls.
+   */
+  function applyInterpretation(next: KnowledgeQueryInterpretation, fromDsl: boolean): void {
+    interpretation = next;
+    if (!fromDsl) {
+      dslText = next.dslMultiline;
+      return;
+    }
+    draft = { ...next.draft, scopes: [] };
+    subjectsText = joinSubjects(next.draft.about ?? []);
+    relatedText = joinValues(next.draft.related ?? []);
+    applyScopeSelectors(next.draft.scopes ?? []);
+  }
+
+  /**
+   * Synchronises DSL scope selectors with the visual scope control instead of
+   * ignoring them, and records the ones that cannot be represented so the
+   * dialog can report them and refuse to search.
+   */
+  function applyScopeSelectors(selectors: readonly KnowledgeScopeSelector[]): void {
+    const classified = classifyKnowledgeScopeSelectors(
+      selectors,
+      new Set(roots.map((root) => root.rootId)),
+    );
+    scopeIssues = classified.issues;
+    wholeLibraryDeclared = classified.wholeLibrary;
+    if (classified.rootIds.length > 0) {
+      scopeKind = 'enrolledRoots';
+      selectedRootIds = new Set(classified.rootIds);
+      return;
+    }
+    if (classified.wholeLibrary) {
+      scopeKind = 'entireLibrary';
+    }
+  }
+
+  /**
+   * Re-interprets the current query so both editors stay equivalent. Responses
+   * are applied only when they still belong to this dialog generation and to
+   * the revision they were issued for, so an edit, a close or a reopen while a
+   * parse is in flight discards it.
+   */
+  function reinterpret(attrs: KnowledgeSearchDialogAttrs, text?: string): Promise<void> {
+    const parseGeneration = generation;
+    const parseRevision = revision;
+    const source = text ?? formatDraftText();
+    parsingRevision = parseRevision;
+    if (source.trim().length === 0) {
+      interpretation = undefined;
+      scopeIssues = [];
+      wholeLibraryDeclared = false;
+      if (text === undefined) {
+        dslText = '';
+      } else {
+        // Emptying the query language box empties the query, so the visual
+        // composer cannot keep editing a draft the user just deleted.
+        draft = emptyDraft();
+        subjectsText = '';
+        relatedText = '';
+      }
+      parsingRevision = undefined;
+      pendingParse = undefined;
+      return Promise.resolve();
+    }
+    const parse = attrs.client
+      .parseKnowledgeQuery({ text: source })
+      .then((parsed) => {
+        if (parseGeneration !== generation || parseRevision !== revision) return;
+        applyInterpretation(parsed, text !== undefined);
+      })
+      .catch(() => {
+        if (parseGeneration !== generation || parseRevision !== revision) return;
+        error = t('knowledgeSearch', 'parseFailed');
+      })
+      .finally(() => {
+        if (parseGeneration !== generation || parseRevision !== revision) return;
+        parsingRevision = undefined;
+        pendingParse = undefined;
+        m.redraw();
+      });
+    pendingParse = parse;
+    return parse;
+  }
+
+  /** Whether the latest edit has not been interpreted yet. */
+  function parsePending(): boolean {
+    return parsingRevision === revision;
+  }
+
+  /** Serialises the canonical draft into DSL text the parser accepts. */
+  function formatDraftText(): string {
+    const current = currentDraft();
+    const lines: string[] = [];
+    if ((current.about ?? []).length > 0) lines.push(`about: ${joinValues(current.about ?? [])}`);
+    if ((current.needs ?? []).length > 0) lines.push(`need: ${(current.needs ?? []).join(', ')}`);
+    if ((current.related ?? []).length > 0)
+      lines.push(`related: ${joinValues(current.related ?? [])}`);
+    if ((current.scopes ?? []).length > 0)
+      lines.push(`scope: ${joinValues((current.scopes ?? []).map(scopeSelectorText))}`);
+    if (current.action != null) lines.push(`do: ${current.action}`);
+    if (current.context != null && current.context.length > 0)
+      lines.push(`to: ${quoteValue(current.context)}`);
+    for (const constraint of current.constraints ?? [])
+      lines.push(`constraint: ${quoteValue(constraint)}`);
+    if (current.format != null) lines.push(`format: ${current.format}`);
+    if (current.depth != null) lines.push(`depth: ${current.depth}`);
+    return lines.join('\n');
+  }
+
+  async function load(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    // A new generation invalidates every response still in flight from the
+    // previous open, so none of them can be applied to this fresh composer.
+    generation += 1;
+    revision += 1;
+    const loadGeneration = generation;
+    parsingRevision = undefined;
+    pendingParse = undefined;
+    busy = 'loading';
+    error = undefined;
+    notice = undefined;
+    resetResults();
+    interpretation = undefined;
+    scopeIssues = [];
+    wholeLibraryDeclared = false;
+    draft = { ...emptyDraft(), about: splitSubjects(attrs.initialSubject ?? '') };
+    subjectsText = attrs.initialSubject ?? '';
+    relatedText = '';
+    dslText = '';
+    grouping = 'need';
+    currentFolderIndexed = false;
+    includeTrace = false;
+    capabilities = undefined;
+    roots = [];
+    selectedRootIds = new Set();
+    mode = 'hybrid';
+    scopeKind = 'entireLibrary';
+    focusSubjectOnOpen = true;
+    try {
+      const [reportedCapabilities, availableRoots] = await Promise.all([
+        attrs.client.getKnowledgeCapabilities(),
+        attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
+      ]);
+      if (loadGeneration !== generation) return;
+      capabilities = reportedCapabilities;
+      roots = availableRoots;
+      selectedRootIds = new Set(
+        availableRoots.filter((root) => root.available).map((r) => r.rootId),
+      );
+      mode = reportedCapabilities.semantic
+        ? 'hybrid'
+        : reportedCapabilities.fullText
+          ? 'hybrid'
+          : 'fullText';
+      if (attrs.currentFolder !== undefined) {
+        try {
+          const folder = await attrs.client.getSemanticFolderStatus({
+            workspaceId: attrs.workspaceId,
+            location: attrs.currentFolder,
+          });
+          if (loadGeneration !== generation) return;
+          currentFolderIndexed =
+            (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
+            folder.workspaceReferenced;
+        } catch {
+          currentFolderIndexed = false;
+        }
+      }
+      scopeKind = scopeAvailable(attrs, 'currentFolder')
+        ? 'currentFolder'
+        : scopeAvailable(attrs, 'semanticResults')
+          ? 'semanticResults'
+          : 'entireLibrary';
+    } catch {
+      if (loadGeneration !== generation) return;
+      error = t('knowledgeSearch', 'loadFailed');
+    } finally {
+      if (loadGeneration === generation) {
+        busy = undefined;
+        m.redraw();
+      }
+    }
+    if (loadGeneration === generation && (draft.about ?? []).length > 0) {
+      await reinterpret(attrs);
+    }
+  }
+
+  async function previewPlan(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    // `busy` is shared, and the plan disclosure's summary cannot be disabled:
+    // clearing it here would hide Cancel and re-enable Search mid-search.
+    if (busy !== undefined || !canSearch()) return;
+    const planGeneration = generation;
+    const planRevision = revision;
+    busy = 'planning';
+    error = undefined;
+    try {
+      const previewed = await attrs.client.planKnowledgeSearch({
+        draft: currentDraft(),
+        scope: scope(attrs),
+        mode,
+        options: searchOptions(),
+      });
+      // A plan built for a query the user has already edited away would
+      // describe a search they can no longer run.
+      if (planGeneration !== generation || planRevision !== revision) return;
+      plan = previewed;
+    } catch {
+      if (planGeneration !== generation || planRevision !== revision) return;
+      error = t('knowledgeSearch', 'planFailed');
+    } finally {
+      if (planGeneration === generation) {
+        busy = undefined;
+        m.redraw();
+      }
+    }
+  }
+
+  /** Whether the canonical draft carries at least one retrievable subject. */
+  function hasSubject(): boolean {
+    return (draft.about ?? []).some((subject) => subject.trim().length > 0);
+  }
+
+  /** Whether a search can run: a subject, and no unusable scope selector. */
+  function canSearch(): boolean {
+    return hasSubject() && scopeIssues.length === 0;
+  }
+
+  /**
+   * Whether the Search control is unusable. A query that is still being
+   * interpreted keeps the control live - `search` awaits that parse - but an
+   * unusable scope selector blocks it outright, because no edit in flight can
+   * make the query the user typed runnable.
+   */
+  function searchDisabled(): boolean {
+    return busy !== undefined || scopeIssues.length > 0 || (!hasSubject() && !parsePending());
+  }
+
+  /**
+   * Runs the search against the *latest* interpreted query. A parse still in
+   * flight is awaited first, so a search can never be built from a half-applied
+   * draft, and a response that arrives after a further edit, a close or a
+   * reopen is discarded rather than shown.
+   */
+  async function search(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    if (busy !== undefined) return;
+    // A query typed only into the DSL box has not reached the canonical draft
+    // until its parse lands, so an in-flight parse is a reason to wait, not a
+    // reason to refuse.
+    if (pendingParse === undefined && !canSearch()) return;
+    const startGeneration = generation;
+    const controller = new AbortController();
+    busy = 'searching';
+    error = undefined;
+    notice = undefined;
+    result = undefined;
+    visibleRows = RENDER_BATCH;
+    abortController = controller;
+    m.redraw();
+    if (pendingParse !== undefined) await pendingParse;
+    if (startGeneration !== generation) return;
+    if (controller.signal.aborted || !canSearch()) {
+      if (controller.signal.aborted) notice = t('knowledgeSearch', 'cancelled');
+      busy = undefined;
+      abortController = undefined;
+      m.redraw();
+      return;
+    }
+    const searchRevision = revision;
+    traceRequested = includeTrace;
+    const requestId = crypto.randomUUID();
+    try {
+      const executed = await attrs.client.executeKnowledgeSearch(
+        {
+          requestId,
+          draft: currentDraft(),
+          scope: scope(attrs),
+          mode,
+          options: searchOptions(),
+        },
+        controller.signal,
+      );
+      if (startGeneration !== generation || searchRevision !== revision) return;
+      result = executed;
+      plan = executed.plan;
+    } catch (cause) {
+      if (startGeneration !== generation || searchRevision !== revision) return;
+      if (cause instanceof DOMException && cause.name === 'AbortError') {
+        notice = t('knowledgeSearch', 'cancelled');
+      } else {
+        error = t('knowledgeSearch', 'searchFailed');
+      }
+    } finally {
+      if (startGeneration === generation) {
+        busy = undefined;
+        abortController = undefined;
+        m.redraw();
+      }
+    }
+  }
+
+  function cancel(): void {
+    abortController?.abort();
+  }
+
+  async function openSource(attrs: KnowledgeSearchDialogAttrs, sourceId: string): Promise<void> {
+    if (attrs.onOpenSource === undefined) return;
+    error = undefined;
+    try {
+      await attrs.onOpenSource(sourceId);
+    } catch {
+      error = t('knowledgeSearch', 'openSourceFailed');
+      m.redraw();
+    }
+  }
+
+  async function copy(value: string): Promise<void> {
+    try {
+      await copyText(value);
+    } catch {
+      error = t('ragAsk', 'copyFailed');
+      m.redraw();
+    }
+  }
+
+  function diagnosticText(diagnostic: KnowledgeDiagnostic): string {
+    const suggestion =
+      diagnostic.suggestion == null
+        ? ''
+        : ` ${t('knowledgeSearch', 'diagnosticSuggestion', { suggestion: diagnostic.suggestion })}`;
+    return `${diagnostic.message}${suggestion}`;
+  }
+
+  /** Actionable text for a DSL scope selector the composer cannot apply. */
+  function scopeIssueText(issue: KnowledgeScopeIssue): string {
+    const selector = scopeSelectorText(issue.selector);
+    return issue.reason === 'unknownRoot'
+      ? t('knowledgeSearch', 'dslScopeUnknownRoot', { selector })
+      : t('knowledgeSearch', 'dslScopeUnsupported', { selector });
+  }
+
+  /** Cancels any running search and closes, invalidating in-flight responses. */
+  function close(attrs: KnowledgeSearchDialogAttrs): void {
+    const wasSearching = busy === 'searching';
+    cancel();
+    // A new generation drops every response still in flight: after a close the
+    // dialog must never adopt a plan, parse or result for the query it had.
+    generation += 1;
+    parsingRevision = undefined;
+    pendingParse = undefined;
+    busy = undefined;
+    if (wasSearching) notice = t('knowledgeSearch', 'cancelled');
+    attrs.onClose();
+  }
+
+  /**
+   * Escape must always reach the dialog: the composer's text controls stop
+   * keydown propagation so typing never triggers global shortcuts, which also
+   * stops the modal's own document-level Escape handler from seeing it.
+   */
+  function stopTypingKeys(attrs: KnowledgeSearchDialogAttrs, event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'Escape' && !event.isComposing) {
+      event.preventDefault();
+      close(attrs);
+    }
+  }
+
+  function evidenceRow(
+    attrs: KnowledgeSearchDialogAttrs,
+    row: KnowledgeEvidence,
+    key: string,
+  ): m.Vnode {
+    const provenance = knowledgeProvenanceLabel(row.provenance);
+    const states = [
+      row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
+      row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
+      row.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
+      row.stale == null ? t('knowledgeSearch', 'unknownFreshness') : undefined,
+      row.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
+      row.duplicateSourceIds.length === 0
+        ? undefined
+        : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
+    ].filter((value): value is string => value !== undefined);
+    return m('li.fm-knowledge-result', { key }, [
+      m('.fm-knowledge-result-heading', [
+        m(
+          'button.fm-knowledge-source-link',
+          {
+            type: 'button',
+            disabled: row.unavailable || attrs.onOpenSource === undefined,
+            'aria-label': t('knowledgeSearch', 'openSource', { title: row.title }),
+            onclick: () => void openSource(attrs, row.sourceId),
+          },
+          [externalLinkIcon({ size: 14 }), m('span', row.title)],
+        ),
+        tooltip(
+          t('ragAsk', 'copyEvidence', { label: row.title }),
+          m(
+            IconButton,
+            {
+              type: 'button',
+              'aria-label': t('ragAsk', 'copyEvidence', { label: row.title }),
+              onclick: () => void copy(row.content),
+            },
+            copyIcon({ size: 16 }),
+          ),
+        ),
+      ]),
+      m('p.fm-knowledge-excerpt', row.excerpt),
+      m('ul.fm-knowledge-reasons', [
+        ...row.reasons.map((reason, index) =>
+          m('li', { key: `${key}-reason-${index}` }, reasonLabel(reason)),
+        ),
+      ]),
+      m('small.fm-knowledge-result-meta', [
+        t('knowledgeSearch', 'resultRank', { rank: row.finalRank }),
+        ' · ',
+        t('knowledgeSearch', 'resultScore', { score: row.fusedScore.toFixed(4) }),
+        row.sectionPath.length === 0 ? '' : ` · ${row.sectionPath.join(' / ')}`,
+        provenance === '' ? '' : ` · ${provenance}`,
+        ...row.rankContributions.map(
+          (contribution) =>
+            ` · ${t('knowledgeSearch', 'rankContribution', {
+              route: modeLabel(contribution.route),
+              rank: contribution.rank,
+            })}`,
+        ),
+      ]),
+      states.length === 0
+        ? undefined
+        : m(
+            'p.fm-knowledge-state',
+            states.flatMap((state, index) => (index === 0 ? [state] : [' · ', state])),
+          ),
+    ]);
+  }
+
+  /**
+   * Renders the privacy-safe retrieval trace the search was asked for: the
+   * bounded planned queries with their per-route candidate counts, the fused
+   * row count, and the rank constant that produced the fusion. When a trace was
+   * requested but the host returned none, that is said explicitly rather than
+   * leaving the checkbox looking like it did nothing.
+   */
+  function traceView(): m.Children {
+    if (result === undefined || !traceRequested) return undefined;
+    const trace = result.trace;
+    if (trace == null) {
+      return m(
+        'p.fm-knowledge-trace-body.fm-knowledge-hint',
+        { role: 'status' },
+        t('knowledgeSearch', 'traceUnavailable'),
+      );
+    }
+    return m('.fm-knowledge-trace-body', [
+      m('h4', t('knowledgeSearch', 'traceHeading')),
+      m(
+        'p',
+        t('knowledgeSearch', 'traceSummary', {
+          queries: trace.queries.length,
+          fused: result.evidence.length,
+          constant: trace.rankConstant,
+        }),
+      ),
+      m(
+        'ol.fm-knowledge-trace-queries',
+        trace.queries.map((query, index) =>
+          m('li', { key: `trace-${index}` }, [
+            m('code', query.text),
+            m(
+              'small.fm-knowledge-hint',
+              ` · ${t('knowledgeSearch', 'traceCandidates', {
+                fullText: query.fullTextCandidates,
+                semantic: query.semanticCandidates,
+              })}`,
+            ),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  function resultsView(attrs: KnowledgeSearchDialogAttrs): m.Children {
+    if (busy === 'searching') {
+      return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
+    }
+    if (result === undefined) {
+      return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
+    }
+    if (result.evidence.length === 0) {
+      return m('.fm-knowledge-empty', [
+        m('p', { role: 'status' }, t('knowledgeSearch', 'empty')),
+        m('p.fm-knowledge-hint', t('knowledgeSearch', 'emptyHint')),
+      ]);
+    }
+    const rendered = result.evidence.slice(0, visibleRows);
+    const sections: m.Children[] = [];
+    if (grouping === 'relevance') {
+      sections.push(
+        m(
+          'ol.fm-knowledge-results',
+          rendered.map((row) => evidenceRow(attrs, row, row.recordId)),
+        ),
+      );
+    } else if (grouping === 'document') {
+      for (const group of groupEvidenceByDocument(rendered)) {
+        sections.push(
+          m('section.fm-knowledge-group', { key: `document-${group.documentId}` }, [
+            m('h4', group.title),
+            m(
+              'ol.fm-knowledge-results',
+              group.rows.map((row) =>
+                evidenceRow(attrs, row, `${group.documentId}-${row.recordId}`),
+              ),
+            ),
+          ]),
+        );
+      }
+    } else {
+      for (const group of groupEvidenceByNeed(rendered)) {
+        const label =
+          group.need === undefined
+            ? t('knowledgeSearch', 'groupUnattributed')
+            : needLabel(group.need);
+        sections.push(
+          m('section.fm-knowledge-group', { key: `need-${group.need ?? 'other'}` }, [
+            m('h4', label),
+            m(
+              'ol.fm-knowledge-results',
+              group.rows.map((row) => evidenceRow(attrs, row, `${label}-${row.recordId}`)),
+            ),
+          ]),
+        );
+      }
+    }
+    return [
+      sections,
+      result.evidence.length > visibleRows
+        ? m(
+            FlatButton,
+            {
+              type: 'button',
+              className: 'fm-knowledge-show-more',
+              onclick: () => {
+                visibleRows += RENDER_BATCH;
+              },
+            },
+            t('knowledgeSearch', 'showMore'),
+          )
+        : undefined,
+    ];
+  }
+
+  return {
+    onupdate: ({ attrs }) => {
+      if (attrs.open && !wasOpen) void load(attrs);
+      wasOpen = attrs.open;
+      // The modal keeps its content mounted while closed, so the subject
+      // field's own `oncreate` only ever runs once, long before the dialog is
+      // opened. Focus is therefore taken on the closed -> open transition.
+      if (attrs.open && focusSubjectOnOpen) {
+        const subject = document.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+        if (subject !== null) {
+          focusSubjectOnOpen = false;
+          subject.focus();
+          subject.setSelectionRange(subject.value.length, subject.value.length);
+        }
+      }
+    },
+    onremove: () => abortController?.abort(),
+    view: ({ attrs }) => {
+      const offline = attrs.client.connection.get() === 'closed';
+      const searchable = canSearch();
+      const route = result?.route;
+      return m(ModalPanel, {
+        id: 'fm-knowledge-search-dialog',
+        title: t('knowledgeSearch', 'title'),
+        className: 'fm-knowledge-search-modal',
+        isOpen: attrs.open,
+        fixedFooter: true,
+        closeOnEsc: true,
+        onToggle: (open: boolean) => {
+          if (!open) close(attrs);
+        },
+        description: m('.fm-knowledge-search', [
+          error === undefined ? undefined : m('p.fm-knowledge-error', { role: 'alert' }, error),
+          offline
+            ? m('p.fm-knowledge-warning', { role: 'status' }, t('knowledgeSearch', 'offline'))
+            : undefined,
+          busy === 'loading'
+            ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
+            : undefined,
+          m('.fm-knowledge-composer', [
+            m('label.fm-knowledge-field', [
+              m('span', t('knowledgeSearch', 'subjects')),
+              m('textarea#fm-knowledge-subjects', {
+                name: 'knowledge-subjects',
+                rows: 2,
+                value: subjectsText,
+                disabled: busy === 'loading' || busy === 'searching',
+                autocomplete: 'off',
+                placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
+                'aria-describedby': 'fm-knowledge-subjects-hint',
+                oncreate: ({ dom }: m.VnodeDOM) => {
+                  if (attrs.open) {
+                    focusSubjectOnOpen = false;
+                    (dom as HTMLTextAreaElement).focus();
+                  }
+                },
+                oninput: (event: InputEvent) => {
+                  subjectsText = (event.currentTarget as HTMLTextAreaElement).value;
+                  draft = { ...draft, about: splitSubjects(subjectsText) };
+                  edited();
+                  void reinterpret(attrs);
+                },
+                onkeydown: (event: KeyboardEvent) => {
+                  event.stopPropagation();
+                  if (event.key === 'Escape' && !event.isComposing) {
+                    event.preventDefault();
+                    close(attrs);
+                    return;
+                  }
+                  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                    event.preventDefault();
+                    void search(attrs);
+                  }
+                },
+              }),
+              m(
+                'small#fm-knowledge-subjects-hint.fm-knowledge-hint',
+                t('knowledgeSearch', 'subjectsHint'),
+              ),
+            ]),
+            m('fieldset.fm-knowledge-needs', [
+              m('legend', t('knowledgeSearch', 'needs')),
+              NEEDS.map((need) =>
+                m('label', { key: need }, [
+                  m('input', {
+                    type: 'checkbox',
+                    checked: (draft.needs ?? []).includes(need),
+                    disabled: busy === 'searching',
+                    onchange: (event: Event) => {
+                      const selected = new Set(draft.needs ?? []);
+                      if ((event.currentTarget as HTMLInputElement).checked) selected.add(need);
+                      else selected.delete(need);
+                      draft = { ...draft, needs: NEEDS.filter((value) => selected.has(value)) };
+                      edited();
+                      void reinterpret(attrs);
+                    },
+                  }),
+                  m('span', needLabel(need)),
+                ]),
+              ),
+            ]),
+            m('label.fm-knowledge-field', [
+              m('span', t('knowledgeSearch', 'related')),
+              m('input#fm-knowledge-related', {
+                type: 'text',
+                name: 'knowledge-related',
+                value: relatedText,
+                disabled: busy === 'searching',
+                autocomplete: 'off',
+                'aria-describedby': 'fm-knowledge-related-hint',
+                oninput: (event: InputEvent) => {
+                  relatedText = (event.currentTarget as HTMLInputElement).value;
+                  draft = { ...draft, related: splitValues(relatedText) };
+                  edited();
+                  void reinterpret(attrs);
+                },
+                onkeydown: (event: KeyboardEvent) => stopTypingKeys(attrs, event),
+              }),
+              m(
+                'small#fm-knowledge-related-hint.fm-knowledge-hint',
+                t('knowledgeSearch', 'relatedHint'),
+              ),
+            ]),
+            m('.fm-knowledge-row', [
+              m('label.fm-knowledge-field', [
+                m('span', t('knowledgeSearch', 'scope')),
+                m(
+                  'select#fm-knowledge-scope.browser-default',
+                  {
+                    name: 'knowledge-scope',
+                    value: scopeKind,
+                    disabled: busy === 'searching',
+                    onchange: (event: Event) => {
+                      scopeKind = (event.currentTarget as HTMLSelectElement)
+                        .value as KnowledgeScopeKind;
+                      edited();
+                      void reinterpret(attrs);
+                    },
+                  },
+                  SCOPE_KINDS.map((kind) =>
+                    m(
+                      'option',
+                      { key: kind, value: kind, disabled: !scopeAvailable(attrs, kind) },
+                      scopeKindLabel(kind),
+                    ),
+                  ),
+                ),
+              ]),
+              m('fieldset.fm-knowledge-modes', [
+                m('legend', t('knowledgeSearch', 'mode')),
+                MODES.map((candidate) =>
+                  m(
+                    'button',
+                    {
+                      key: candidate,
+                      type: 'button',
+                      class:
+                        mode === candidate ? 'fm-knowledge-mode is-selected' : 'fm-knowledge-mode',
+                      'aria-pressed': mode === candidate ? 'true' : 'false',
+                      disabled: !modeAvailable(candidate) || busy === 'searching',
+                      title: modeAvailable(candidate)
+                        ? undefined
+                        : t('knowledgeSearch', 'modeSemanticUnavailable'),
+                      onclick: () => {
+                        mode = candidate;
+                        edited();
+                      },
+                    },
+                    modeLabel(candidate),
+                  ),
+                ),
+              ]),
+            ]),
+            capabilities?.semantic === false
+              ? m(
+                  'p.fm-knowledge-hint',
+                  { role: 'status' },
+                  mode === 'hybrid'
+                    ? t('knowledgeSearch', 'hybridFallsBackToFullText')
+                    : t('knowledgeSearch', 'modeSemanticUnavailable'),
+                )
+              : undefined,
+            capabilities?.fullText === false
+              ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'fullTextUnavailable'))
+              : undefined,
+            scopeKind === 'enrolledRoots'
+              ? m('fieldset.fm-knowledge-roots', [
+                  m('legend', t('knowledgeSearch', 'roots')),
+                  roots.length === 0
+                    ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'rootsEmpty'))
+                    : roots.map((root) =>
+                        m('label', { key: root.rootId }, [
+                          m('input', {
+                            type: 'checkbox',
+                            checked: selectedRootIds.has(root.rootId),
+                            disabled: busy === 'searching',
+                            onchange: (event: Event) => {
+                              if ((event.currentTarget as HTMLInputElement).checked)
+                                selectedRootIds.add(root.rootId);
+                              else selectedRootIds.delete(root.rootId);
+                              edited();
+                              void reinterpret(attrs);
+                            },
+                          }),
+                          m(
+                            'span',
+                            root.available
+                              ? root.label
+                              : `${root.label} · ${t('knowledgeSearch', 'rootUnavailable')}`,
+                          ),
+                        ]),
+                      ),
+                ])
+              : undefined,
+          ]),
+          m('details.fm-knowledge-dsl', [
+            m('summary', t('knowledgeSearch', 'dsl')),
+            m('textarea#fm-knowledge-dsl-input', {
+              name: 'knowledge-dsl',
+              rows: 4,
+              value: dslText,
+              disabled: busy === 'searching',
+              autocomplete: 'off',
+              'aria-describedby': 'fm-knowledge-dsl-hint',
+              oninput: (event: InputEvent) => {
+                dslText = (event.currentTarget as HTMLTextAreaElement).value;
+                edited();
+                void reinterpret(attrs, dslText);
+              },
+              onkeydown: (event: KeyboardEvent) => stopTypingKeys(attrs, event),
+            }),
+            m('small#fm-knowledge-dsl-hint.fm-knowledge-hint', t('knowledgeSearch', 'dslHint')),
+            scopeIssues.length === 0
+              ? undefined
+              : m('.fm-knowledge-scope-issues', [
+                  m('h4', t('knowledgeSearch', 'dslScopeIssues')),
+                  m(
+                    'ul',
+                    scopeIssues.map((issue, index) =>
+                      m(
+                        'li.fm-knowledge-error',
+                        { key: `scope-issue-${index}`, role: 'alert' },
+                        scopeIssueText(issue),
+                      ),
+                    ),
+                  ),
+                ]),
+          ]),
+          interpretation === undefined
+            ? undefined
+            : m('section.fm-knowledge-interpretation', [
+                m('h3', t('knowledgeSearch', 'interpretation')),
+                m(
+                  'p',
+                  { role: 'status' },
+                  interpretation.confidence === 'explicit'
+                    ? t('knowledgeSearch', 'confidenceExplicit')
+                    : interpretation.confidence === 'deterministic'
+                      ? t('knowledgeSearch', 'confidenceDeterministic')
+                      : t('knowledgeSearch', 'confidenceAmbiguous'),
+                ),
+                interpretation.diagnostics.length === 0
+                  ? undefined
+                  : m('.fm-knowledge-diagnostics', [
+                      m('h4', t('knowledgeSearch', 'diagnostics')),
+                      m(
+                        'ul',
+                        interpretation.diagnostics.map((diagnostic, index) =>
+                          m(
+                            'li',
+                            {
+                              key: `diagnostic-${index}`,
+                              class:
+                                diagnostic.severity === 'error'
+                                  ? 'fm-knowledge-error'
+                                  : 'fm-knowledge-warning',
+                              role: diagnostic.severity === 'error' ? 'alert' : undefined,
+                            },
+                            diagnosticText(diagnostic),
+                          ),
+                        ),
+                      ),
+                    ]),
+                interpretation.ambiguities.length === 0
+                  ? undefined
+                  : m('.fm-knowledge-ambiguities', [
+                      m('h4', t('knowledgeSearch', 'ambiguities')),
+                      m(
+                        'ul',
+                        interpretation.ambiguities.map((ambiguity, index) =>
+                          m('li', { key: `ambiguity-${index}` }, ambiguity.description),
+                        ),
+                      ),
+                    ]),
+                interpretation.excludedFromRetrieval.length === 0
+                  ? undefined
+                  : m('.fm-knowledge-excluded', [
+                      m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
+                      m('p.fm-knowledge-hint', t('knowledgeSearch', 'excludedFromRetrievalHint')),
+                      m(
+                        'ul',
+                        interpretation.excludedFromRetrieval.map((field, index) =>
+                          m(
+                            'li',
+                            { key: `excluded-${index}` },
+                            t('knowledgeSearch', 'excludedField', {
+                              field: field.field,
+                              value: field.value,
+                            }),
+                          ),
+                        ),
+                      ),
+                    ]),
+              ]),
+          m(
+            'details.fm-knowledge-plan',
+            {
+              ontoggle: (event: Event) => {
+                if ((event.currentTarget as HTMLDetailsElement).open && plan === undefined) {
+                  void previewPlan(attrs);
+                }
+              },
+            },
+            [
+              m('summary', t('knowledgeSearch', 'showAdvanced')),
+              m('label.fm-knowledge-trace', [
+                m('input', {
+                  type: 'checkbox',
+                  checked: includeTrace,
+                  disabled: busy === 'searching',
+                  onchange: (event: Event) => {
+                    includeTrace = (event.currentTarget as HTMLInputElement).checked;
+                  },
+                }),
+                m('span', t('knowledgeSearch', 'trace')),
+              ]),
+              traceView(),
+              plan === undefined
+                ? m(
+                    FlatButton,
+                    {
+                      type: 'button',
+                      disabled: !searchable || busy !== undefined,
+                      onclick: () => void previewPlan(attrs),
+                    },
+                    t('knowledgeSearch', 'plan'),
+                  )
+                : m('.fm-knowledge-plan-body', [
+                    m('p', t('knowledgeSearch', 'planVersion', { version: plan.version })),
+                    m('p', t('knowledgeSearch', 'planScope', { scope: plan.scopeLabel })),
+                    m('p', t('knowledgeSearch', 'planSources', { count: plan.authorizedSources })),
+                    m('p', t('knowledgeSearch', 'planSearches', { count: plan.searches.length })),
+                    plan.omittedSearches === 0
+                      ? undefined
+                      : m(
+                          'p.fm-knowledge-warning',
+                          t('knowledgeSearch', 'planOmitted', { count: plan.omittedSearches }),
+                        ),
+                    m(
+                      'ol.fm-knowledge-planned-searches',
+                      plan.searches.map((planned, index) =>
+                        m('li', { key: `planned-${index}` }, [
+                          m('code', planned.text),
+                          m('small.fm-knowledge-hint', ` · ${priorityLabel(planned.priority)}`),
+                          m(
+                            'ul',
+                            planned.reasons.map((reason, reasonIndex) =>
+                              m(
+                                'li',
+                                { key: `planned-${index}-reason-${reasonIndex}` },
+                                reasonLabel(reason),
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                    plan.excludedFromRetrieval.length === 0
+                      ? undefined
+                      : m('.fm-knowledge-excluded', [
+                          m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
+                          m(
+                            'ul',
+                            plan.excludedFromRetrieval.map((field, index) =>
+                              m(
+                                'li',
+                                { key: `plan-excluded-${index}` },
+                                t('knowledgeSearch', 'excludedField', {
+                                  field: field.field,
+                                  value: field.value,
+                                }),
+                              ),
+                            ),
+                          ),
+                        ]),
+                  ]),
+            ],
+          ),
+          m(
+            'section.fm-knowledge-results-section',
+            {
+              'aria-label': t('knowledgeSearch', 'resultsRegion'),
+              'aria-busy': busy === 'searching' ? 'true' : 'false',
+            },
+            [
+              m('.fm-knowledge-results-heading', [
+                m('h3', t('knowledgeSearch', 'results')),
+                result === undefined
+                  ? undefined
+                  : m('label.fm-knowledge-grouping', [
+                      m('span', t('knowledgeSearch', 'groupBy')),
+                      m(
+                        'select#fm-knowledge-grouping.browser-default',
+                        {
+                          value: grouping,
+                          onchange: (event: Event) => {
+                            grouping = (event.currentTarget as HTMLSelectElement).value as Grouping;
+                          },
+                        },
+                        [
+                          m('option', { value: 'need' }, t('knowledgeSearch', 'groupByNeed')),
+                          m(
+                            'option',
+                            { value: 'document' },
+                            t('knowledgeSearch', 'groupByDocument'),
+                          ),
+                          m(
+                            'option',
+                            { value: 'relevance' },
+                            t('knowledgeSearch', 'groupByRelevance'),
+                          ),
+                        ],
+                      ),
+                    ]),
+              ]),
+              result === undefined
+                ? undefined
+                : m('.fm-knowledge-result-summary', { role: 'status' }, [
+                    m(
+                      'p',
+                      t('knowledgeSearch', 'resultsSummary', {
+                        count: result.evidence.length,
+                        tokens: result.tokenCount,
+                      }),
+                    ),
+                    route === undefined
+                      ? undefined
+                      : m(
+                          route.fallbackReason == null ? 'p' : 'p.fm-knowledge-warning',
+                          route.fallbackReason == null
+                            ? t('knowledgeSearch', 'routeApplied', {
+                                route: modeLabel(route.applied),
+                              })
+                            : t('knowledgeSearch', 'routeFallback', {
+                                requested: modeLabel(route.requested),
+                                applied: modeLabel(route.applied),
+                                reason: fallbackReasonLabel(route.fallbackReason),
+                              }),
+                        ),
+                    m(
+                      'p',
+                      result.coverage.indexed == null
+                        ? t('knowledgeSearch', 'coverageUnknownIndexed', {
+                            eligible: result.coverage.eligible,
+                            fingerprinted: result.coverage.fingerprinted,
+                            unavailable: result.coverage.unavailable,
+                          })
+                        : t('knowledgeSearch', 'coverage', {
+                            indexed: result.coverage.indexed,
+                            eligible: result.coverage.eligible,
+                            fingerprinted: result.coverage.fingerprinted,
+                            unavailable: result.coverage.unavailable,
+                          }),
+                    ),
+                    result.coverage.partial
+                      ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'coveragePartial'))
+                      : undefined,
+                    result.coverage.scopeIsExact
+                      ? undefined
+                      : m('p.fm-knowledge-warning', t('knowledgeSearch', 'coverageInexact')),
+                    result.withheldUnauthorized === 0
+                      ? undefined
+                      : m(
+                          'p.fm-knowledge-warning',
+                          t('knowledgeSearch', 'withheldUnauthorized', {
+                            count: result.withheldUnauthorized,
+                          }),
+                        ),
+                  ]),
+              m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, resultsView(attrs)),
+              capabilities?.answerGeneration === false
+                ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'answerNotGenerated'))
+                : undefined,
+            ],
+          ),
+        ]),
+        buttons: [
+          {
+            label:
+              busy === 'searching'
+                ? t('knowledgeSearch', 'searching')
+                : t('knowledgeSearch', 'search'),
+            className: 'fm-knowledge-primary',
+            disabled: searchDisabled(),
+            onclick: () => void search(attrs),
+          },
+          ...(busy === 'searching'
+            ? [{ label: t('knowledgeSearch', 'cancel'), onclick: cancel }]
+            : []),
+          {
+            label: t('button', 'close'),
+            onclick: () => close(attrs),
+          },
+        ],
+      });
+    },
+  };
+};

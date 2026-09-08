@@ -369,6 +369,226 @@ enum Capability {
   CAPABILITY_CANCELLATION = 4;
   // The worker supports graceful shutdown.
   CAPABILITY_GRACEFUL_SHUTDOWN = 5;
+  // Bounded hybrid knowledge retrieval is available.
+  CAPABILITY_KNOWLEDGE_SEARCH = 6;
+}
+
+// One planned knowledge source query and why it exists.
+message KnowledgeQuery {
+  // Query text; never rewritten by the worker.
+  string text = 1;
+  // Why the host planned this query.
+  KnowledgeRetrievalReason reason = 2;
+}
+
+// Why one knowledge source query was issued.
+enum KnowledgeRetrievalReason {
+  KNOWLEDGE_RETRIEVAL_REASON_UNSPECIFIED = 0;
+  KNOWLEDGE_RETRIEVAL_REASON_SUBJECT = 1;
+  KNOWLEDGE_RETRIEVAL_REASON_OVERVIEW = 2;
+  KNOWLEDGE_RETRIEVAL_REASON_DEFINITION = 3;
+  KNOWLEDGE_RETRIEVAL_REASON_PROCEDURE = 4;
+  KNOWLEDGE_RETRIEVAL_REASON_EXAMPLES = 5;
+  KNOWLEDGE_RETRIEVAL_REASON_EVIDENCE = 6;
+  KNOWLEDGE_RETRIEVAL_REASON_ARGUMENTS = 7;
+  KNOWLEDGE_RETRIEVAL_REASON_COMPARISON = 8;
+  KNOWLEDGE_RETRIEVAL_REASON_LIMITATIONS = 9;
+  KNOWLEDGE_RETRIEVAL_REASON_REFERENCES = 10;
+  KNOWLEDGE_RETRIEVAL_REASON_RELATED = 11;
+}
+
+// Physical knowledge retrieval route.
+enum KnowledgeRoute {
+  KNOWLEDGE_ROUTE_UNSPECIFIED = 0;
+  // Native full text and dense vectors fused by rank.
+  KNOWLEDGE_ROUTE_HYBRID = 1;
+  // Native full text only.
+  KNOWLEDGE_ROUTE_FULL_TEXT = 2;
+  // Dense vectors only.
+  KNOWLEDGE_ROUTE_SEMANTIC = 3;
+}
+
+// Sanitized reason a requested route was not used verbatim.
+enum KnowledgeRouteFallbackReason {
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_UNSPECIFIED = 0;
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_QUERY_EMBEDDINGS_UNAVAILABLE = 1;
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_QUERY_EMBEDDING_FAILED = 2;
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_SEMANTIC_QUERY_FAILED = 3;
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_FULL_TEXT_INDEX_UNAVAILABLE = 4;
+  KNOWLEDGE_ROUTE_FALLBACK_REASON_FULL_TEXT_QUERY_FAILED = 5;
+}
+
+// Host-authorized retrieval filters inside the request scope.
+message KnowledgeFilters {
+  // Optional enrolled root.
+  optional string root_id = 1;
+  // Optional workspace.
+  optional string workspace_id = 2;
+  // Whether unavailable occurrences may be returned.
+  bool include_unavailable = 3;
+}
+
+// Bounded resource, diversity, and context limits for one retrieval.
+message KnowledgeRetrievalPolicy {
+  uint32 candidate_limit = 1;
+  uint32 result_limit = 2;
+  uint32 maximum_results_per_file = 3;
+  uint32 context_token_budget = 4;
+  uint32 adjacent_chunk_radius = 5;
+  bool section_bounded_context = 6;
+  uint32 rank_constant = 7;
+  bool include_trace = 8;
+}
+
+// Honest requested-scope coverage owned by the authoritative host catalog.
+message KnowledgeCoverage {
+  uint64 eligible = 1;
+  uint64 indexed = 2;
+  uint64 stale = 3;
+  uint64 pending = 4;
+  uint64 excluded = 5;
+  uint64 skipped = 6;
+  uint64 failed = 7;
+  uint64 unavailable = 8;
+}
+
+// One exactly-scoped slice of a single authorized retrieval scope.
+//
+// A scope the index filters cannot express exactly is carried as several
+// slices instead of one broadened filter. The worker retrieves candidates for
+// every slice, fuses them into one global ranking, and spends its result,
+// per-file, token, and adjacency budgets once over that ranking.
+message KnowledgeScopePartition {
+  // Host-authorized filters for this slice.
+  KnowledgeFilters filters = 1;
+  // Exact host-authorized source identities. When present, the worker keeps
+  // only these sources while it fills its candidate budget, so out-of-scope
+  // candidates cannot crowd out authorized ones. Absent means the filters
+  // above already describe this slice exactly.
+  repeated string allowed_source_ids = 2;
+}
+
+// One bounded hybrid knowledge retrieval.
+message KnowledgeSearchRequest {
+  // Single-scope filters and source set, superseded by `partitions`.
+  reserved 6, 9;
+  reserved "filters", "allowed_source_ids";
+
+  // Authenticated session.
+  SessionContext session = 1;
+  // Tenant and library searched by this retrieval.
+  ResourceScope scope = 2;
+  // Opaque request identifier used for cancellation and correlation.
+  string request_id = 3;
+  // Planned source queries; the logical plan stays with the host.
+  repeated KnowledgeQuery queries = 4;
+  // Requested physical route.
+  KnowledgeRoute route = 5;
+  // Bounded retrieval limits applied once across every partition.
+  KnowledgeRetrievalPolicy policy = 7;
+  // Host-owned coverage echoed back with the result.
+  KnowledgeCoverage coverage = 8;
+  // Exactly-scoped slices retrieved and ranked as one logical scope.
+  repeated KnowledgeScopePartition partitions = 10;
+}
+
+// Requests independently reported knowledge retrieval capabilities.
+message KnowledgeCapabilitiesRequest {
+  // Authenticated session.
+  SessionContext session = 1;
+}
+
+// Independently reported retrieval capabilities.
+message KnowledgeCapabilities {
+  // A native full-text index is present.
+  bool full_text = 1;
+  // A compatible embedding runtime and vector index are present.
+  bool query_embeddings = 2;
+}
+
+// Requested and applied routes with an explicit fallback reason.
+message KnowledgeRouteOutcome {
+  KnowledgeRoute requested = 1;
+  KnowledgeRoute applied = 2;
+  KnowledgeRouteFallbackReason fallback_reason = 3;
+}
+
+// One authorized source-oriented evidence row.
+message KnowledgeEvidence {
+  string record_id = 1;
+  string occurrence_id = 2;
+  string source_id = 3;
+  repeated string duplicate_source_ids = 4;
+  string document_id = 5;
+  string library_id = 6;
+  string chunk_kind = 7;
+  string excerpt = 8;
+  string content = 9;
+  uint64 token_count = 10;
+  repeated string section_path = 11;
+  // JSON-encoded structural provenance; never a filesystem path.
+  string provenance = 12;
+  optional string media_type = 13;
+  optional int64 modified_at_ms = 14;
+  string indexed_content_hash = 15;
+  uint64 generation = 16;
+  uint32 source_position = 17;
+  bool generated = 18;
+  bool unavailable = 19;
+  bool stale = 20;
+  bool adjacent = 21;
+  uint32 final_rank = 22;
+}
+
+// One route/query rank that contributed to a fused candidate.
+message KnowledgeRankContribution {
+  uint32 query_index = 1;
+  KnowledgeRoute route = 2;
+  uint32 rank = 3;
+}
+
+// One traced source query.
+message KnowledgeTracedQuery {
+  string text = 1;
+  KnowledgeRetrievalReason reason = 2;
+  uint32 semantic_candidates = 3;
+  uint32 full_text_candidates = 4;
+}
+
+// One traced evidence row. Content, excerpts, headings, and filesystem paths
+// are deliberately absent.
+message KnowledgeTracedEvidence {
+  string record_id = 1;
+  string occurrence_id = 2;
+  string source_id = 3;
+  string document_id = 4;
+  repeated KnowledgeRankContribution contributions = 5;
+  double fused_score = 6;
+  uint32 final_rank = 7;
+  string provenance = 8;
+  bool adjacent = 9;
+  bool generated = 10;
+  bool unavailable = 11;
+  bool stale = 12;
+}
+
+// Bounded privacy-safe explanation of one retrieval.
+message KnowledgeRetrievalTrace {
+  KnowledgeRouteOutcome route = 1;
+  KnowledgeCapabilities capabilities = 2;
+  uint32 rank_constant = 3;
+  repeated KnowledgeTracedQuery queries = 4;
+  repeated KnowledgeTracedEvidence entries = 5;
+}
+
+// Deterministic bounded retrieval output.
+message KnowledgeSearchResponse {
+  KnowledgeRouteOutcome route = 1;
+  KnowledgeCapabilities capabilities = 2;
+  repeated KnowledgeEvidence evidence = 3;
+  uint64 token_count = 4;
+  KnowledgeCoverage coverage = 5;
+  KnowledgeRetrievalTrace trace = 6;
 }
 
 // One multiplexed request frame on the local transport.
@@ -386,6 +606,8 @@ message ClientFrame {
     EventSubscription events = 8;
     CancelRequest cancel = 9;
     ShutdownRequest shutdown = 10;
+    KnowledgeSearchRequest knowledge_search = 11;
+    KnowledgeCapabilitiesRequest knowledge_capabilities = 12;
   }
 }
 
@@ -409,6 +631,8 @@ message ServerFrame {
     ShutdownResponse shutdown_started = 10;
     ProtocolError error = 11;
     StreamEnd stream_end = 12;
+    KnowledgeSearchResponse knowledge_result = 13;
+    KnowledgeCapabilities knowledge_capabilities = 14;
   }
 }
 
@@ -432,4 +656,8 @@ service SemanticWorker {
   rpc Cancel(CancelRequest) returns (CancelResponse);
   // Begins graceful shutdown.
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  // Executes one bounded hybrid knowledge retrieval.
+  rpc KnowledgeSearch(KnowledgeSearchRequest) returns (KnowledgeSearchResponse);
+  // Reports full-text and query-embedding availability independently.
+  rpc GetKnowledgeCapabilities(KnowledgeCapabilitiesRequest) returns (KnowledgeCapabilities);
 }

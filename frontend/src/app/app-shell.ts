@@ -13,6 +13,7 @@ import {
   closeIcon,
   commandIcon,
   compareIcon,
+  contentSearchIcon,
   cornerLeftUpIcon,
   layoutGridIcon,
   listIcon,
@@ -391,6 +392,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
   let semanticAssistantAvailable = false;
+  let knowledgeSearchAvailable = false;
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
@@ -467,6 +469,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         contextRequirements: {},
         source: { kind: 'core' },
       },
+      ...(knowledgeSearchAvailable
+        ? [
+            {
+              id: 'client.searchKnowledge',
+              title: t('knowledgeSearch', 'openTitle'),
+              description: t('knowledgeSearch', 'openDescription'),
+              category: 'tools',
+              defaultShortcuts: [{ key: 'k', ctrl: true, shift: true }],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+          ]
+        : []),
       ...(semanticAssistantAvailable
         ? [
             {
@@ -532,7 +547,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   function syncNativeMenu(): void {
     if (runtimeKind !== 'tauri') return;
     const spec: NativeMenuSpec = buildNativeMenuSpec({
-      actions: localisedRegisteredActions(),
+      // Client-only actions (Search Knowledge, disk usage, ...) have no backend
+      // registry entry, so the menu builder can only find them when they are
+      // passed alongside the registered ones - exactly as the command palette
+      // and the menu dispatch context already do.
+      actions: [...localisedRegisteredActions(), ...clientOnlyActions()],
       favouriteActions: favouriteActions(),
       tabs: nativeMenuWindowTabs(),
       canOpenNewWindow: attrsClient.openWorkspaceWindow !== undefined,
@@ -1819,6 +1838,48 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     });
   }
 
+  /** Opens search-only Structured Knowledge Search, defaulting the scope from
+   * the active indexed folder, then the active semantic result set, then the
+   * whole authorized library (task 0206). */
+  function openKnowledgeSearch(): void {
+    const active = activeDirectory();
+    if (workspace === undefined) return;
+    const presentation =
+      active === undefined
+        ? undefined
+        : findFilesPresentationsByLocationUri.get(active.location.uri);
+    const semanticSourceIds = [
+      ...new Set(
+        (presentation?.semanticResults ?? []).flatMap((result) => [
+          result.bestEvidence.sourceId,
+          ...result.additionalSourceIds,
+        ]),
+      ),
+    ];
+    dialogs.openKnowledgeSearchDialog({
+      workspaceId: workspace.id,
+      currentFolder: active?.location,
+      semanticSourceIds,
+      initialSubject:
+        presentation?.kind === 'semantic' || presentation?.kind === 'content'
+          ? presentation.term
+          : undefined,
+    });
+    m.redraw();
+  }
+
+  /** Knowledge search stays usable without a generation profile, so its own
+   * availability only depends on the reported retrieval capabilities. */
+  async function refreshKnowledgeSearchAvailability(): Promise<void> {
+    try {
+      const capabilities = await attrsClient.getKnowledgeCapabilities();
+      knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
+    } catch {
+      knowledgeSearchAvailable = false;
+    }
+    m.redraw();
+  }
+
   async function refreshSemanticAssistantAvailability(): Promise<void> {
     try {
       const [components, library, profiles] = await Promise.all([
@@ -2702,6 +2763,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
     openSemanticAssistant,
+    openKnowledgeSearch,
     openSettingsDialog,
   };
 
@@ -2845,6 +2907,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       m.redraw();
     },
     openSemanticAssistant,
+    openKnowledgeSearch,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     toggleDirectoryTree,
@@ -2949,6 +3012,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();
     },
+    openKnowledgeSearch,
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
@@ -3210,6 +3274,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     oninit: ({ attrs }) => {
       attrsClient = attrs.client;
       void refreshSemanticAssistantAvailability();
+      void refreshKnowledgeSearchAvailability();
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
@@ -3611,6 +3676,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 searchIcon(),
               ),
             ),
+            knowledgeSearchAvailable
+              ? tooltip(
+                  t('knowledgeSearch', 'openTitle'),
+                  m(
+                    IconButton,
+                    {
+                      className: 'fm-knowledge-search-trigger',
+                      'aria-label': t('knowledgeSearch', 'openTitle'),
+                      onclick: openKnowledgeSearch,
+                    },
+                    contentSearchIcon(),
+                  ),
+                )
+              : undefined,
             semanticAssistantAvailable
               ? tooltip(
                   t('ragAsk', 'openAssistant'),
@@ -3871,6 +3950,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   if (!open && currentSettings !== undefined) {
                     applyAppearance(currentSettings);
                     void refreshSemanticAssistantAvailability();
+                    void refreshKnowledgeSearchAvailability();
                   }
                   m.redraw();
                 },

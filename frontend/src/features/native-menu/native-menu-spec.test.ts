@@ -273,6 +273,24 @@ describe('buildNativeMenuSpec', () => {
     ]);
   });
 
+  it('surfaces Search Knowledge in the Tools menu when it is available (task 0206)', () => {
+    const actions = [
+      action('client.searchKnowledge', 'Search Knowledge…', [
+        { key: 'k', ctrl: true, shift: true },
+      ]),
+      action('core.copyName', 'Copy Filename'),
+    ];
+    const toolsMenu = buildNativeMenuSpec(inputs({ actions })).menus.find(
+      (menu) => menu.title === 'Tools',
+    );
+    expect(toolsMenu?.items.map((item) => (item.kind === 'action' ? item.id : item.kind))).toEqual([
+      'ui.openSettings',
+      'separator',
+      'client.searchKnowledge',
+      'core.copyName',
+    ]);
+  });
+
   it('skips Tools menu ids that are not currently registered instead of crashing', () => {
     const toolsMenu = buildNativeMenuSpec(inputs({ actions: [] })).menus.find(
       (menu) => menu.title === 'Tools',

@@ -187,6 +187,8 @@ export interface PaneContentContext {
   ): void;
   closeViewer(paneId: PaneId): void;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
+  /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
+  openKnowledgeSearch?(): void;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -524,6 +526,9 @@ export function createPaneContentBuilder(
         );
       },
       onDocumentSummary: (entry) => context.openDocumentSummary?.(paneId, entry),
+      ...(context.openKnowledgeSearch === undefined
+        ? {}
+        : { onSearchKnowledge: () => context.openKnowledgeSearch?.() }),
       onSelectionAction: (action: SelectionAction) => {
         if (key === undefined) return;
         if (action.type === 'moveCursorTo' && action.edge === 'last' && directory.hasMore) {

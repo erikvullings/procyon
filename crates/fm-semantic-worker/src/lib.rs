@@ -11,6 +11,7 @@ mod developer_onnx;
 pub mod document_summary;
 pub mod embedding;
 pub mod ingestion;
+pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
 pub mod rag_retrieval;
 pub mod representative_selection;
@@ -19,7 +20,7 @@ pub mod semantic_storage;
 #[cfg(feature = "zvec")]
 pub mod zvec_storage;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -31,7 +32,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use fm_semantic_protocol::{
     DeadlineKind, FrameError, LimitError, NegotiatedLimitsError, NegotiationError, Negotiator,
     ProtocolLimits, ProtocolVersion, RequestValidationError, SessionToken, StreamBudget,
-    VersionRange, read_frame, v1, validate_ingestion_with_limits, validate_query, write_frame,
+    VersionRange, read_frame, v1, validate_ingestion_with_limits, validate_knowledge_search,
+    validate_query, write_frame,
 };
 use prost::Message;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -353,6 +355,12 @@ pub enum ClientError {
     ShutdownBlocked {
         /// Number of other connections that must close before retrying.
         remaining_clients: u32,
+    },
+    /// The connected worker did not negotiate an optional capability.
+    #[error("worker does not support the {capability:?} capability")]
+    CapabilityUnavailable {
+        /// Capability the caller required.
+        capability: v1::Capability,
     },
     /// The local endpoint is not protected for the current user.
     #[error("worker endpoint is not protected for the current user")]
@@ -1257,6 +1265,7 @@ pub struct WorkerClient {
     inner: Arc<ClientInner>,
     session: v1::SessionContext,
     protocol_version: u32,
+    capabilities: BTreeSet<v1::Capability>,
 }
 
 /// A host-facing semantic result detached from protobuf DTOs.
@@ -1398,6 +1407,42 @@ pub trait WorkerQueryBackend: Send + Sync {
     ) -> Result<Vec<SearchResult>, String>;
 }
 
+/// Injectable bounded knowledge retrieval used by the local IPC server.
+///
+/// The worker owns candidate retrieval and evidence materialization only. The
+/// host keeps filesystem, consent, and planning authority and sends opaque
+/// identifiers plus already-authorized filters.
+pub trait WorkerKnowledgeBackend: Send + Sync {
+    /// Reports full-text and query-embedding availability independently.
+    fn capabilities(&self) -> knowledge_retrieval::KnowledgeCapabilities;
+
+    /// Executes one bounded, tenant-scoped hybrid knowledge retrieval.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed capability, cancellation, or retrieval failure.
+    fn search(
+        &self,
+        request: knowledge_retrieval::KnowledgeRetrievalRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<knowledge_retrieval::KnowledgeRetrieval, knowledge_retrieval::KnowledgeRetrievalError>;
+}
+
+impl WorkerKnowledgeBackend for knowledge_retrieval::KnowledgeRetrievalService {
+    fn capabilities(&self) -> knowledge_retrieval::KnowledgeCapabilities {
+        Self::capabilities(self)
+    }
+
+    fn search(
+        &self,
+        request: knowledge_retrieval::KnowledgeRetrievalRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<knowledge_retrieval::KnowledgeRetrieval, knowledge_retrieval::KnowledgeRetrievalError>
+    {
+        self.retrieve(request, cancellation)
+    }
+}
+
 /// Host-facing ingestion lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IngestionState {
@@ -1442,6 +1487,7 @@ impl Clone for WorkerClient {
             inner: Arc::clone(&self.inner),
             session: self.session.clone(),
             protocol_version: self.protocol_version,
+            capabilities: self.capabilities.clone(),
         }
     }
 }
@@ -1544,6 +1590,7 @@ impl WorkerClient {
             inner,
             session: v1::SessionContext::default(),
             protocol_version: 0,
+            capabilities: BTreeSet::new(),
         };
         let negotiated = client
             .unary(v1::client_frame::Payload::Negotiate(v1::NegotiateRequest {
@@ -1561,6 +1608,12 @@ impl WorkerClient {
             return Err(ClientError::InvalidNegotiatedVersion);
         }
         client.protocol_version = response.selected_version;
+        client.capabilities = response
+            .capabilities
+            .iter()
+            .filter_map(|value| v1::Capability::try_from(*value).ok())
+            .filter(|capability| *capability != v1::Capability::Unspecified)
+            .collect();
         let limits = response
             .limits
             .as_ref()
@@ -1594,6 +1647,16 @@ impl WorkerClient {
         self.protocol_version
     }
 
+    /// Whether the connected worker negotiated one optional capability.
+    ///
+    /// A rolling-compatible worker may speak this protocol version without
+    /// implementing every optional capability, so callers must ask before
+    /// issuing an optional RPC rather than inferring support from the version.
+    #[must_use]
+    pub fn supports(&self, capability: v1::Capability) -> bool {
+        self.capabilities.contains(&capability)
+    }
+
     /// Reads authenticated worker health.
     ///
     /// # Errors
@@ -1618,6 +1681,78 @@ impl WorkerClient {
             }
             _ => Err(ClientError::UnexpectedResponse),
         }
+    }
+
+    /// Executes one bounded hybrid knowledge retrieval over the authenticated
+    /// channel.
+    ///
+    /// The caller owns planning and authorization: `request` already carries
+    /// host-authorized tenant/library/root filters and bounded planned queries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, capability, or protocol
+    /// failure.
+    pub async fn knowledge_search(
+        &self,
+        request_id: &str,
+        request: &knowledge_retrieval::KnowledgeRetrievalRequest,
+    ) -> Result<knowledge_retrieval::KnowledgeRetrieval, ClientError> {
+        self.require_knowledge_capability()?;
+        let payload = self
+            .unary(v1::client_frame::Payload::KnowledgeSearch(
+                knowledge_ipc::request_to_wire(
+                    self.session.clone(),
+                    request_id.to_owned(),
+                    request,
+                ),
+            ))
+            .await?;
+        match payload {
+            v1::server_frame::Payload::KnowledgeResult(response) => {
+                knowledge_ipc::response_from_wire(&response)
+                    .map_err(|_| ClientError::UnexpectedResponse)
+            }
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Reports the worker's independent full-text and query-embedding
+    /// availability without executing a retrieval.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, or protocol failure.
+    pub async fn knowledge_capabilities(
+        &self,
+    ) -> Result<knowledge_retrieval::KnowledgeCapabilities, ClientError> {
+        self.require_knowledge_capability()?;
+        let payload = self
+            .unary(v1::client_frame::Payload::KnowledgeCapabilities(
+                v1::KnowledgeCapabilitiesRequest {
+                    session: Some(self.session.clone()),
+                },
+            ))
+            .await?;
+        match payload {
+            v1::server_frame::Payload::KnowledgeCapabilities(capabilities) => {
+                Ok(knowledge_retrieval::KnowledgeCapabilities {
+                    full_text: capabilities.full_text,
+                    query_embeddings: capabilities.query_embeddings,
+                })
+            }
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Rejects a knowledge RPC that an older compatible worker cannot serve.
+    fn require_knowledge_capability(&self) -> Result<(), ClientError> {
+        if self.supports(v1::Capability::KnowledgeSearch) {
+            return Ok(());
+        }
+        Err(ClientError::CapabilityUnavailable {
+            capability: v1::Capability::KnowledgeSearch,
+        })
     }
 
     /// Streams one provider-neutral document into the fake ingestion engine.
@@ -1993,6 +2128,10 @@ impl WorkerClient {
                 session: self.session.clone(),
                 request_id: request.request_id.clone(),
             }),
+            v1::client_frame::Payload::KnowledgeSearch(request) => Some(PendingCancellation {
+                session: self.session.clone(),
+                request_id: request.request_id.clone(),
+            }),
             _ => None,
         };
         let (mut receiver, mut pending_request) = self.register(correlation_id, cancellation);
@@ -2220,6 +2359,7 @@ fn all_capabilities() -> Vec<i32> {
         v1::Capability::Events,
         v1::Capability::Cancellation,
         v1::Capability::GracefulShutdown,
+        v1::Capability::KnowledgeSearch,
     ]
     .into_iter()
     .map(i32::from)
@@ -2234,6 +2374,7 @@ struct RuntimeState {
     next_job: AtomicU64,
     ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
     query_backend: Option<Arc<dyn WorkerQueryBackend>>,
+    knowledge_backend: Option<Arc<dyn WorkerKnowledgeBackend>>,
     documents: Mutex<Vec<Arc<Document>>>,
     jobs: Mutex<Arc<HashMap<String, Arc<Job>>>>,
     connections: watch::Sender<usize>,
@@ -2305,18 +2446,59 @@ enum StreamPreparationError {
     Backend,
 }
 
-enum QueryRegistration {
+/// Cancellation ownership of one cancellable request, decided on the
+/// connection read loop before the handler is spawned.
+enum RequestRegistration {
     Unregistered,
     Registered(CancellationToken),
     Duplicate,
 }
 
-struct QueryRegistrationGuard {
+struct RequestRegistrationGuard {
     connection: Arc<ConnectionState>,
     request_id: String,
 }
 
-impl Drop for QueryRegistrationGuard {
+/// Deterministic encoded-byte budget for one knowledge response payload.
+///
+/// The negotiated maximum applies to the whole server frame, so the payload
+/// budget subtracts a fixed allowance for the frame envelope (correlation id,
+/// payload tag, and length prefix). Reserving a constant keeps the budget
+/// deterministic and independent of the response contents.
+const fn knowledge_response_budget(limits: ProtocolLimits) -> usize {
+    const FRAME_ENVELOPE_BYTES: usize = 64;
+    limits
+        .max_message_bytes()
+        .saturating_sub(FRAME_ENVELOPE_BYTES)
+}
+
+/// Maps a typed retrieval failure onto a sanitized protocol error.
+fn knowledge_retrieval_error(
+    error: &knowledge_retrieval::KnowledgeRetrievalError,
+) -> v1::ProtocolError {
+    use knowledge_retrieval::KnowledgeRetrievalError as RetrievalError;
+    match error {
+        RetrievalError::Cancelled => {
+            protocol_error(v1::ErrorCode::Cancelled, "knowledge retrieval cancelled")
+        }
+        RetrievalError::EmptyQuery
+        | RetrievalError::TooManyQueries { .. }
+        | RetrievalError::InvalidPolicy => {
+            protocol_error(v1::ErrorCode::InvalidRequest, error.to_string())
+        }
+        RetrievalError::UnboundedSourceRestriction { .. } => {
+            protocol_error(v1::ErrorCode::LimitExceeded, error.to_string())
+        }
+        RetrievalError::SemanticUnavailable
+        | RetrievalError::FullTextUnavailable
+        | RetrievalError::RetrievalUnavailable => {
+            protocol_error(v1::ErrorCode::Unavailable, error.to_string())
+        }
+        _ => protocol_error(v1::ErrorCode::Internal, "knowledge retrieval failed"),
+    }
+}
+
+impl Drop for RequestRegistrationGuard {
     fn drop(&mut self) {
         self.connection
             .cancellations
@@ -2367,10 +2549,46 @@ impl WorkerServer {
         Self::with_optional_backends(config, Some(ingestion_backend), Some(query_backend))
     }
 
+    /// Creates a worker backed by durable ingestion, dense retrieval, and
+    /// bounded hybrid knowledge retrieval.
+    #[must_use]
+    pub fn with_all_backends(
+        config: WorkerConfig,
+        ingestion_backend: Arc<dyn WorkerIngestionBackend>,
+        query_backend: Arc<dyn WorkerQueryBackend>,
+        knowledge_backend: Arc<dyn WorkerKnowledgeBackend>,
+    ) -> Self {
+        Self::compose(
+            config,
+            Some(ingestion_backend),
+            Some(query_backend),
+            Some(knowledge_backend),
+        )
+    }
+
+    /// Creates a worker backed by knowledge retrieval only, primarily for
+    /// independently testing search deployments.
+    #[must_use]
+    pub fn with_knowledge_backend(
+        config: WorkerConfig,
+        knowledge_backend: Arc<dyn WorkerKnowledgeBackend>,
+    ) -> Self {
+        Self::compose(config, None, None, Some(knowledge_backend))
+    }
+
     fn with_optional_backends(
         config: WorkerConfig,
         ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
         query_backend: Option<Arc<dyn WorkerQueryBackend>>,
+    ) -> Self {
+        Self::compose(config, ingestion_backend, query_backend, None)
+    }
+
+    fn compose(
+        config: WorkerConfig,
+        ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
+        query_backend: Option<Arc<dyn WorkerQueryBackend>>,
+        knowledge_backend: Option<Arc<dyn WorkerKnowledgeBackend>>,
     ) -> Self {
         let concurrency = Arc::new(Semaphore::new(config.limits.max_concurrent_requests()));
         let (connections, _) = watch::channel(0);
@@ -2383,6 +2601,7 @@ impl WorkerServer {
                 next_job: AtomicU64::new(1),
                 ingestion_backend,
                 query_backend,
+                knowledge_backend,
                 documents: Mutex::new(Vec::new()),
                 jobs: Mutex::new(Arc::new(HashMap::new())),
                 connections,
@@ -2520,7 +2739,7 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                 request_connection,
                 connection_writer,
                 None,
-                QueryRegistration::Unregistered,
+                RequestRegistration::Unregistered,
             )
             .await;
         } else {
@@ -2537,7 +2756,7 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                 .await;
                 continue;
             };
-            let query_registration = match &frame.payload {
+            let request_registration = match &frame.payload {
                 Some(v1::client_frame::Payload::Query(request))
                     if session_matches(&connection, request.session.as_ref())
                         && !state.draining.load(Ordering::Acquire)
@@ -2545,11 +2764,26 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                         && validate_query(request).is_ok() =>
                 {
                     match register_cancellation(&connection, &request.request_id) {
-                        Some(cancellation) => QueryRegistration::Registered(cancellation),
-                        None => QueryRegistration::Duplicate,
+                        Some(cancellation) => RequestRegistration::Registered(cancellation),
+                        None => RequestRegistration::Duplicate,
                     }
                 }
-                _ => QueryRegistration::Unregistered,
+                // Knowledge retrieval registers its cancellation on the read
+                // loop, exactly like an ordinary query: a cancel frame that
+                // arrives immediately after the search frame is then always
+                // observed by the running search instead of racing the spawned
+                // handler task.
+                Some(v1::client_frame::Payload::KnowledgeSearch(request))
+                    if session_matches(&connection, request.session.as_ref())
+                        && !connection.disconnected.is_cancelled()
+                        && validate_knowledge_search(request).is_ok() =>
+                {
+                    match register_cancellation(&connection, &request.request_id) {
+                        Some(cancellation) => RequestRegistration::Registered(cancellation),
+                        None => RequestRegistration::Duplicate,
+                    }
+                }
+                _ => RequestRegistration::Unregistered,
             };
             tokio::spawn(async move {
                 handle_frame(
@@ -2558,7 +2792,7 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                     request_connection,
                     connection_writer,
                     Some(permit),
-                    query_registration,
+                    request_registration,
                 )
                 .await;
             });
@@ -2572,24 +2806,27 @@ async fn handle_frame(
     connection: Arc<ConnectionState>,
     writer: Arc<ConnectionWriter>,
     request_permit: Option<OwnedSemaphorePermit>,
-    query_registration: QueryRegistration,
+    request_registration: RequestRegistration,
 ) {
     let _request_permit = request_permit;
     let correlation_id = frame.correlation_id;
     let payload = match frame.payload {
         Some(v1::client_frame::Payload::Negotiate(request)) => {
-            match Negotiator::new(
-                state.config.versions,
-                [
-                    v1::Capability::Ingestion,
-                    v1::Capability::Query,
-                    v1::Capability::Events,
-                    v1::Capability::Cancellation,
-                    v1::Capability::GracefulShutdown,
-                ],
-                state.config.limits,
-            )
-            .negotiate(&request)
+            // Knowledge retrieval is advertised only when this worker actually
+            // composes a knowledge backend, so a client can distinguish "this
+            // build cannot search knowledge" from "this search found nothing".
+            let mut capabilities = vec![
+                v1::Capability::Ingestion,
+                v1::Capability::Query,
+                v1::Capability::Events,
+                v1::Capability::Cancellation,
+                v1::Capability::GracefulShutdown,
+            ];
+            if state.knowledge_backend.is_some() {
+                capabilities.push(v1::Capability::KnowledgeSearch);
+            }
+            match Negotiator::new(state.config.versions, capabilities, state.config.limits)
+                .negotiate(&request)
             {
                 Ok(response) => {
                     connection.negotiated.store(true, Ordering::Release);
@@ -3010,8 +3247,8 @@ async fn handle_frame(
         }
         Some(v1::client_frame::Payload::Query(request)) => {
             let mut registration_guard =
-                matches!(&query_registration, QueryRegistration::Registered(_)).then(|| {
-                    QueryRegistrationGuard {
+                matches!(&request_registration, RequestRegistration::Registered(_)).then(|| {
+                    RequestRegistrationGuard {
                         connection: Arc::clone(&connection),
                         request_id: request.request_id.clone(),
                     }
@@ -3065,9 +3302,9 @@ async fn handle_frame(
             if connection.disconnected.is_cancelled() {
                 return;
             }
-            let cancellation = match query_registration {
-                QueryRegistration::Registered(cancellation) => cancellation,
-                QueryRegistration::Duplicate => {
+            let cancellation = match request_registration {
+                RequestRegistration::Registered(cancellation) => cancellation,
+                RequestRegistration::Duplicate => {
                     send_error(
                         &writer,
                         correlation_id,
@@ -3080,7 +3317,7 @@ async fn handle_frame(
                     .await;
                     return;
                 }
-                QueryRegistration::Unregistered => {
+                RequestRegistration::Unregistered => {
                     let Some(cancellation) =
                         register_cancellation(&connection, &request.request_id)
                     else {
@@ -3096,7 +3333,7 @@ async fn handle_frame(
                         .await;
                         return;
                     };
-                    registration_guard = Some(QueryRegistrationGuard {
+                    registration_guard = Some(RequestRegistrationGuard {
                         connection: Arc::clone(&connection),
                         request_id: request.request_id.clone(),
                     });
@@ -3458,6 +3695,195 @@ async fn handle_frame(
             )
             .await;
             return;
+        }
+        Some(v1::client_frame::Payload::KnowledgeCapabilities(request)) => {
+            if !session_matches(&connection, request.session.as_ref()) {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Unauthenticated, "session rejected"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            let capabilities = state
+                .knowledge_backend
+                .as_ref()
+                .map(|backend| backend.capabilities())
+                .unwrap_or(knowledge_retrieval::KnowledgeCapabilities {
+                    full_text: false,
+                    query_embeddings: false,
+                });
+            v1::server_frame::Payload::KnowledgeCapabilities(v1::KnowledgeCapabilities {
+                full_text: capabilities.full_text,
+                query_embeddings: capabilities.query_embeddings,
+            })
+        }
+        Some(v1::client_frame::Payload::KnowledgeSearch(request)) => {
+            let registration_guard =
+                matches!(&request_registration, RequestRegistration::Registered(_)).then(|| {
+                    RequestRegistrationGuard {
+                        connection: Arc::clone(&connection),
+                        request_id: request.request_id.clone(),
+                    }
+                });
+            if !session_matches(&connection, request.session.as_ref()) {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Unauthenticated, "session rejected"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            if let Err(error) = validate_knowledge_search(&request) {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    request_validation_error(error),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            let Some(backend) = state.knowledge_backend.clone() else {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::Unavailable,
+                        "knowledge retrieval is unavailable",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            };
+            let retrieval = match knowledge_ipc::request_from_wire(&request) {
+                Ok(retrieval) => retrieval,
+                Err(error) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::InvalidRequest, error.to_string()),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+            };
+            let (cancellation, _registration_guard) = match request_registration {
+                RequestRegistration::Registered(cancellation) => (cancellation, registration_guard),
+                RequestRegistration::Duplicate => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(
+                            v1::ErrorCode::InvalidRequest,
+                            "request identifier is already active",
+                        ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                RequestRegistration::Unregistered => {
+                    let Some(cancellation) =
+                        register_cancellation(&connection, &request.request_id)
+                    else {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::InvalidRequest,
+                                "request identifier is already active",
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    };
+                    (
+                        cancellation,
+                        Some(RequestRegistrationGuard {
+                            connection: Arc::clone(&connection),
+                            request_id: request.request_id.clone(),
+                        }),
+                    )
+                }
+            };
+            if cancellation.is_cancelled() {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Cancelled, "knowledge retrieval cancelled"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            let disconnected = connection.disconnected.clone();
+            let search_cancellation = cancellation.clone();
+            let executed = tokio::task::spawn_blocking(move || {
+                backend.search(retrieval, &search_cancellation)
+            });
+            let result = tokio::select! {
+                result = executed => result,
+                () = disconnected.cancelled() => {
+                    cancellation.cancel();
+                    return;
+                }
+            };
+            match result {
+                Ok(Ok(retrieval)) => match knowledge_ipc::bounded_response_to_wire(
+                    &retrieval,
+                    knowledge_response_budget(state.config.limits),
+                ) {
+                    Ok(response) => v1::server_frame::Payload::KnowledgeResult(response),
+                    Err(error @ knowledge_ipc::KnowledgeWireError::ResponseTooLarge { .. }) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(v1::ErrorCode::LimitExceeded, error.to_string()),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                    Err(error) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(v1::ErrorCode::Internal, error.to_string()),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                },
+                Ok(Err(error)) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        knowledge_retrieval_error(&error),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                Err(_) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::Internal, "knowledge retrieval failed"),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+            }
         }
         Some(v1::client_frame::Payload::Cancel(request)) => {
             if !session_matches(&connection, request.session.as_ref()) {
@@ -4326,7 +4752,16 @@ fn request_validation_error(error: RequestValidationError) -> v1::ProtocolError 
         | RequestValidationError::MissingDocumentId
         | RequestValidationError::EmptyQuery
         | RequestValidationError::InvalidConceptQuery
-        | RequestValidationError::InvalidMaximumResults => v1::ErrorCode::InvalidRequest,
+        | RequestValidationError::InvalidMaximumResults
+        | RequestValidationError::InvalidKnowledgeQueries { .. }
+        | RequestValidationError::InvalidKnowledgePolicy
+        | RequestValidationError::InvalidKnowledgeRoute => v1::ErrorCode::InvalidRequest,
+        RequestValidationError::InvalidKnowledgeScopePartitions { .. } => {
+            v1::ErrorCode::InvalidRequest
+        }
+        RequestValidationError::InvalidKnowledgeSourceRestriction { .. } => {
+            v1::ErrorCode::LimitExceeded
+        }
     };
     protocol_error(code, error.to_string())
 }

@@ -2652,6 +2652,85 @@ pub(crate) async fn resolve_rag_citation(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reports independent knowledge retrieval and answer capabilities.
+#[tauri::command]
+pub(crate) async fn get_knowledge_capabilities(
+    state: State<'_, AppState>,
+) -> Result<fm_transport_dto::KnowledgeCapabilitiesDto, ApplicationErrorDto> {
+    Ok(state.service.knowledge_capabilities().await)
+}
+
+/// Lists indexed roots a knowledge search may be scoped to.
+#[tauri::command]
+pub(crate) async fn list_knowledge_roots(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ListKnowledgeRootsRequestDto,
+) -> Result<Vec<fm_transport_dto::KnowledgeRootDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_knowledge_roots(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Interprets DSL or natural-language composer text without an LLM.
+#[tauri::command]
+pub(crate) async fn parse_knowledge_query(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ParseKnowledgeQueryRequestDto,
+) -> Result<fm_transport_dto::KnowledgeQueryInterpretationDto, ApplicationErrorDto> {
+    Ok(state.service.parse_knowledge_query(request))
+}
+
+/// Builds the deterministic retrieval plan without executing it.
+#[tauri::command]
+pub(crate) async fn plan_knowledge_search(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PlanKnowledgeSearchRequestDto,
+) -> Result<fm_transport_dto::KnowledgeSearchPlanDto, ApplicationErrorDto> {
+    state
+        .service
+        .plan_knowledge_search(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Executes one search-only knowledge retrieval.
+#[tauri::command]
+pub(crate) async fn execute_knowledge_search(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ExecuteKnowledgeSearchRequestDto,
+) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .execute_knowledge_search(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Cancels one running or not-yet-started knowledge search.
+#[tauri::command]
+pub(crate) async fn cancel_knowledge_search(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelKnowledgeSearchRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state.service.cancel_knowledge_search(request);
+    Ok(())
+}
+
+/// Resolves one opaque evidence source into an exact navigable location.
+#[tauri::command]
+pub(crate) async fn resolve_knowledge_source(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ResolveKnowledgeSourceRequestDto,
+) -> Result<fm_transport_dto::KnowledgeSourceLocationDto, ApplicationErrorDto> {
+    state
+        .service
+        .resolve_knowledge_source(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Lists every stored connection profile with its current runtime status,
 /// identical in shape to `GET /api/v1/connections` (task 0103).
 #[tauri::command]

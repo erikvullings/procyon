@@ -238,6 +238,7 @@ type FlatAttrsInput = Partial<{
   keybindingOverrides: Readonly<Record<string, string>>;
   // Operations
   onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  onSearchKnowledge: () => void;
   onSelectionAction: (action: SelectionAction) => void;
   onRetry: () => void | Promise<void>;
   onLoadNextPage: () => void | Promise<void>;
@@ -337,6 +338,9 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
     actions: input.actions ?? keybindingActions,
     keybindingOverrides: input.keybindingOverrides ?? {},
     onOpenEntry: input.onOpenEntry ?? vi.fn(),
+    ...(input.onSearchKnowledge === undefined
+      ? {}
+      : { onSearchKnowledge: input.onSearchKnowledge }),
     onSelectionAction: input.onSelectionAction ?? vi.fn(),
     onRetry: input.onRetry ?? vi.fn(),
     onLoadNextPage: input.onLoadNextPage ?? vi.fn(),
@@ -771,6 +775,97 @@ describe('Pane search breadcrumb rendering', () => {
     );
     root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button')?.click();
     expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');
+  });
+
+  it('offers Search Knowledge from the semantic result set when the shell supports it (task 0206)', () => {
+    const onSearchKnowledge = vi.fn();
+    const selectedEntry = entries[0];
+    if (selectedEntry === undefined) throw new Error('missing entry fixture');
+    const presentation = {
+      kind: 'semantic' as const,
+      term: 'multilingual report',
+      executionMode: 'semantic' as const,
+      semanticResults: [
+        {
+          entryId: selectedEntry.id,
+          location: selectedEntry.location,
+          score: 0.91,
+          bestEvidence: {
+            recordId: 'record-1',
+            sourceId: 'source-1',
+            score: 0.91,
+            chunkKind: 'paragraph',
+            excerpt: 'Beste bewijs voor het rapport.',
+            provenanceJson:
+              '{"kind":"exact","value":{"kind":"textLines","startLine":4,"endLine":6}}',
+            indexedContentHash: 'sha256:fixture',
+            generation: 2,
+            available: true,
+            stale: false,
+            generated: false,
+            sourcePosition: 0,
+          },
+          additionalEvidence: [],
+          additionalSourceIds: [],
+        },
+      ],
+    };
+    mount(
+      attrs({
+        path: 'search://local/semantic-search',
+        entries: [selectedEntry],
+        selectedEntryIds: new Set([selectedEntry.id]),
+        searchPresentation: presentation,
+        onSearchKnowledge,
+      }),
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-semantic-search-knowledge')?.click();
+
+    expect(onSearchKnowledge).toHaveBeenCalledOnce();
+  });
+
+  it('omits Search Knowledge from semantic results when the shell provides no handler', () => {
+    const selectedEntry = entries[0];
+    if (selectedEntry === undefined) throw new Error('missing entry fixture');
+    mount(
+      attrs({
+        path: 'search://local/semantic-search',
+        entries: [selectedEntry],
+        selectedEntryIds: new Set([selectedEntry.id]),
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'multilingual report',
+          executionMode: 'semantic',
+          semanticResults: [
+            {
+              entryId: selectedEntry.id,
+              location: selectedEntry.location,
+              score: 0.91,
+              bestEvidence: {
+                recordId: 'record-1',
+                sourceId: 'source-1',
+                score: 0.91,
+                chunkKind: 'paragraph',
+                excerpt: 'Beste bewijs voor het rapport.',
+                provenanceJson:
+                  '{"kind":"exact","value":{"kind":"textLines","startLine":4,"endLine":6}}',
+                indexedContentHash: 'sha256:fixture',
+                generation: 2,
+                available: true,
+                stale: false,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-semantic-search-knowledge')).toBeNull();
   });
 
   it('shows a saved search name instead of its underlying query', () => {

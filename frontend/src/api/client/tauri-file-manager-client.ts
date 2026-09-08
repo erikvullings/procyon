@@ -16,6 +16,7 @@ import type {
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
   CalculateFolderSizeResult,
+  CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -50,6 +51,7 @@ import type {
   EntryMetadata,
   EntryMetadataRequest,
   EntrySummary,
+  ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
   GenerateDocumentSummaryRequest,
@@ -64,7 +66,14 @@ import type {
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
+  KnowledgeCapabilities,
+  KnowledgeQueryInterpretation,
+  KnowledgeRoot,
+  KnowledgeSearchPlan,
+  KnowledgeSearchResult,
+  KnowledgeSourceLocation,
   ListDirectoryRequest,
+  ListKnowledgeRootsRequest,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -79,6 +88,8 @@ import type {
   OpenStructuredViewRequest,
   Operation,
   OperationId,
+  ParseKnowledgeQueryRequest,
+  PlanKnowledgeSearchRequest,
   PlanSemanticExclusionRequest,
   PlanSemanticModelMigrationRequest,
   PluginDescriptor,
@@ -99,6 +110,7 @@ import type {
   RemoveApplicationDockIconResult,
   ResolveConflictRequest,
   ResolvedRagCitation,
+  ResolveKnowledgeSourceRequest,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -1197,6 +1209,91 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<ResolvedRagCitation> {
     return invoke<ResolvedRagCitation>('resolve_rag_citation', { request });
+  }
+
+  getKnowledgeCapabilities(_signal?: AbortSignal): Promise<KnowledgeCapabilities> {
+    return invoke<KnowledgeCapabilities>('get_knowledge_capabilities');
+  }
+
+  listKnowledgeRoots(
+    request: ListKnowledgeRootsRequest,
+    _signal?: AbortSignal,
+  ): Promise<KnowledgeRoot[]> {
+    return invoke<KnowledgeRoot[]>('list_knowledge_roots', { request });
+  }
+
+  parseKnowledgeQuery(
+    request: ParseKnowledgeQueryRequest,
+    _signal?: AbortSignal,
+  ): Promise<KnowledgeQueryInterpretation> {
+    return invoke<KnowledgeQueryInterpretation>('parse_knowledge_query', { request });
+  }
+
+  planKnowledgeSearch(
+    request: PlanKnowledgeSearchRequest,
+    _signal?: AbortSignal,
+  ): Promise<KnowledgeSearchPlan> {
+    return invoke<KnowledgeSearchPlan>('plan_knowledge_search', { request });
+  }
+
+  /**
+   * `invoke` cannot be aborted, so the abort is forwarded to
+   * `cancel_knowledge_search` using the caller's own `requestId` - the same
+   * identity the backend coordinator registered (task 0206).
+   *
+   * The abort is *raced* against the invocation rather than only observed
+   * afterwards: a cancel that the host rejects, or a search that finishes
+   * anyway, must still reject with `AbortError` for the caller that already
+   * gave up. The signal is therefore checked before the call, on the abort
+   * event, and again after the await.
+   */
+  async executeKnowledgeSearch(
+    request: ExecuteKnowledgeSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeSearchResult> {
+    signal?.throwIfAborted();
+    const abortError = (): DOMException =>
+      new DOMException('Knowledge search was cancelled', 'AbortError');
+    let cancel: (() => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      if (signal === undefined) return;
+      cancel = (): void => {
+        reject(abortError());
+        void invoke<void>('cancel_knowledge_search', {
+          request: { requestId: request.requestId },
+        }).catch((error: unknown) => {
+          console.warn('Failed to cancel knowledge search', error);
+        });
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+    });
+    try {
+      const result = await Promise.race([
+        invoke<KnowledgeSearchResult>('execute_knowledge_search', { request }),
+        aborted,
+      ]);
+      if (signal?.aborted === true) throw abortError();
+      return result;
+    } catch (error) {
+      if (signal?.aborted === true) throw abortError();
+      throw error;
+    } finally {
+      if (cancel !== undefined) signal?.removeEventListener('abort', cancel);
+    }
+  }
+
+  cancelKnowledgeSearch(
+    request: CancelKnowledgeSearchRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('cancel_knowledge_search', { request });
+  }
+
+  resolveKnowledgeSource(
+    request: ResolveKnowledgeSourceRequest,
+    _signal?: AbortSignal,
+  ): Promise<KnowledgeSourceLocation> {
+    return invoke<KnowledgeSourceLocation>('resolve_knowledge_source', { request });
   }
 
   listConnections(_signal?: AbortSignal): Promise<Connection[]> {

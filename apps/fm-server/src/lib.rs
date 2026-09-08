@@ -303,6 +303,27 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::rag::delete_rag_conversation))
         .routes(utoipa_axum::routes!(routes::rag::resolve_rag_citation))
         .routes(utoipa_axum::routes!(
+            routes::knowledge::get_knowledge_capabilities
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::list_knowledge_roots
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::parse_knowledge_query
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::plan_knowledge_search
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::execute_knowledge_search
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::cancel_knowledge_search
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::knowledge::resolve_knowledge_source
+        ))
+        .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::begin_onedrive_authorization
         ))
         .routes(utoipa_axum::routes!(
