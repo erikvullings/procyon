@@ -1,0 +1,678 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "knowledge-retrieval-corpus-v1",
+  "tenantId": "evaluation-tenant",
+  "libraryId": "evaluation-library",
+  "authorizedRootIds": ["root-engineering", "root-operations", "root-application"],
+  "crossLanguageTerms": [
+    ["nacelle", "gondel", "maschinenhaus"],
+    ["turbine", "windturbine", "windkraftanlage", "éolienne", "éoliennes"],
+    ["suppression", "brandblussysteem", "gondelbrandblussysteem", "löschanlage", "extinction"],
+    ["inspection", "inspectie", "inspektion", "inspecties"],
+    ["procedure", "verfahren", "procédure", "werkwijze"],
+    ["examples", "example", "voorbeeld", "voorbeelden", "beispiel", "exemple"],
+    ["limitations", "beperkingen", "grenzen", "limites"],
+    ["battery", "batterij", "batterie", "batterijen"],
+    ["inverter", "wechselrichter", "omvormer"],
+    ["insulation", "isolationswiderstand", "isolatieweerstand"],
+    ["sorting", "sorteren", "sortierung", "tri"],
+    ["blade", "rotorblad", "rotorblatt", "pale"],
+    ["retention", "bewaartermijn"],
+    ["checklist", "controlelijst", "checkliste"],
+    ["safety", "veiligheid", "sicherheit", "sécurité"],
+    ["definition", "definitie", "definition", "définition"]
+  ],
+  "documents": [
+    {
+      "documentId": "wind-nacelle-suppression-procedure",
+      "language": "en",
+      "role": "procedure",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-nacelle-procedure",
+          "sourceId": "source-nacelle-procedure",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "nacelle-procedure-0",
+          "sectionPath": ["Nacelle fire suppression", "Scope"],
+          "text": "This maintenance procedure covers the aerosol nacelle fire suppression system fitted to the V90 turbine platform. It applies to the annual inspection of the suppression canister, the thermal detection loop and the manual release lever."
+        },
+        {
+          "chunkId": "nacelle-procedure-1",
+          "sectionPath": ["Nacelle fire suppression", "Inspection steps"],
+          "text": "Step 1 isolate the turbine and lock out the yaw drive. Step 2 verify the suppression canister pressure gauge reads between 12.4 and 13.8 bar. Step 3 test continuity of the thermal detection loop with a calibrated loop tester. Step 4 record the canister batch number and the measured pressure in the inspection log."
+        },
+        {
+          "chunkId": "nacelle-procedure-2",
+          "sectionPath": ["Nacelle fire suppression", "Acceptance"],
+          "text": "The suppression system passes the inspection when the canister pressure is inside the acceptance band, the detection loop resistance stays under 40 ohm and the manual release lever returns to its armed position without binding."
+        }
+      ]
+    },
+    {
+      "documentId": "windturbine-gondel-inspectieprocedure",
+      "language": "nl",
+      "role": "procedure",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-gondel-procedure",
+          "sourceId": "source-gondel-procedure",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "gondel-procedure-0",
+          "sectionPath": ["Gondelbrandblussysteem", "Toepassing"],
+          "text": "Deze werkwijze beschrijft de jaarlijkse inspectie van het gondelbrandblussysteem van een windturbine. De inspectie omvat de blusfles, de thermische detectielus en de handmatige ontgrendeling in de gondel."
+        },
+        {
+          "chunkId": "gondel-procedure-1",
+          "sectionPath": ["Gondelbrandblussysteem", "Stappen"],
+          "text": "Stap 1 zet de windturbine stil en vergrendel de kruiaandrijving. Stap 2 controleer of de druk van de blusfles tussen 12,4 en 13,8 bar ligt. Stap 3 meet de doorgang van de thermische detectielus met een geijkte lustester. Stap 4 noteer het batchnummer en de gemeten druk in het inspectierapport."
+        }
+      ]
+    },
+    {
+      "documentId": "wind-nacelle-suppression-example",
+      "language": "en",
+      "role": "example",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-nacelle-example",
+          "sourceId": "source-nacelle-example",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "nacelle-example-0",
+          "sectionPath": ["Worked example", "Turbine 14 inspection"],
+          "text": "Worked example for turbine 14. The technician measured a suppression canister pressure of 12.9 bar and a detection loop resistance of 31 ohm, both inside the acceptance band, and closed the work order the same afternoon."
+        },
+        {
+          "chunkId": "nacelle-example-1",
+          "sectionPath": ["Worked example", "Turbine 21 rejection"],
+          "text": "A second example from turbine 21 shows a rejected inspection. The canister pressure had fallen to 11.6 bar after a slow valve leak, so the canister was replaced and the example log records the replacement batch number."
+        }
+      ]
+    },
+    {
+      "documentId": "wind-nacelle-suppression-limitations",
+      "language": "en",
+      "role": "limitation",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-nacelle-limitations",
+          "sourceId": "source-nacelle-limitations",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "nacelle-limitations-0",
+          "sectionPath": ["Known limitations", "Cold weather"],
+          "text": "Known limitations of the aerosol suppression system. Below minus 20 degrees Celsius the canister pressure reading is unreliable and the acceptance band does not apply, so the inspection must be deferred to a warmer day."
+        },
+        {
+          "chunkId": "nacelle-limitations-1",
+          "sectionPath": ["Known limitations", "Detection coverage"],
+          "text": "A further limitation is detection coverage. The thermal loop does not cover the converter cabinet, so a converter fire is only detected once it reaches the nacelle roof, and this risk is accepted in the current design."
+        }
+      ]
+    },
+    {
+      "documentId": "pv-wechselrichter-messverfahren",
+      "language": "de",
+      "role": "procedure",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-wechselrichter-verfahren",
+          "sourceId": "source-wechselrichter-verfahren",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-solar",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "wechselrichter-verfahren-0",
+          "sectionPath": ["Wechselrichter", "Messverfahren"],
+          "text": "Dieses Verfahren beschreibt die Messung des Isolationswiderstand am Wechselrichter einer Photovoltaikanlage. Die Messung erfolgt bei abgeschalteter Anlage mit einem Isolationsmessgerät bei 1000 Volt Prüfspannung."
+        },
+        {
+          "chunkId": "wechselrichter-verfahren-1",
+          "sectionPath": ["Wechselrichter", "Schritte"],
+          "text": "Schritt 1 Anlage freischalten und gegen Wiedereinschalten sichern. Schritt 2 Isolationswiderstand zwischen Strangleitung und Erde messen. Schritt 3 Messwert protokollieren, der Grenzwert liegt bei einem Megaohm."
+        }
+      ]
+    },
+    {
+      "documentId": "pv-wechselrichter-grenzen",
+      "language": "de",
+      "role": "limitation",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-wechselrichter-grenzen",
+          "sourceId": "source-wechselrichter-grenzen",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-solar",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "wechselrichter-grenzen-0",
+          "sectionPath": ["Wechselrichter", "Grenzen"],
+          "text": "Grenzen des Messverfahrens. Bei feuchter Witterung sinkt der gemessene Isolationswiderstand ohne echten Fehler, deshalb ist die Messung bei Nässe nicht aussagekräftig und muss wiederholt werden."
+        }
+      ]
+    },
+    {
+      "documentId": "batterie-securite-procedure",
+      "language": "fr",
+      "role": "procedure",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-batterie-procedure",
+          "sourceId": "source-batterie-procedure",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-storage",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "batterie-procedure-0",
+          "sectionPath": ["Batterie lithium", "Procédure"],
+          "text": "Cette procédure de sécurité décrit la mise hors tension d'une batterie lithium fer phosphate avant intervention. Le sectionneur principal est ouvert, puis la tension résiduelle du bus continu est vérifiée."
+        },
+        {
+          "chunkId": "batterie-procedure-1",
+          "sectionPath": ["Batterie lithium", "Emballement thermique"],
+          "text": "En cas d'emballement thermique, la procédure impose d'évacuer le local, de couper la ventilation et d'attendre quatre heures avant toute réouverture de l'armoire batterie."
+        }
+      ]
+    },
+    {
+      "documentId": "batterie-exemple-intervention",
+      "language": "fr",
+      "role": "example",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-batterie-exemple",
+          "sourceId": "source-batterie-exemple",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-storage",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "batterie-exemple-0",
+          "sectionPath": ["Batterie lithium", "Exemple"],
+          "text": "Exemple d'intervention sur le site de Lille. La tension résiduelle mesurée était de 42 volts après ouverture du sectionneur, et l'exemple montre que l'attente de dix minutes suffisait avant le remplacement du module."
+        }
+      ]
+    },
+    {
+      "documentId": "composite-blade-sorting-procedure",
+      "language": "en",
+      "role": "procedure",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-blade-sorting-procedure",
+          "sourceId": "source-blade-sorting-procedure",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-recycling",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "blade-sorting-procedure-0",
+          "sectionPath": ["Recycled blade material", "Sorting procedure"],
+          "text": "The sorting procedure for recycled composite blade material separates glass fibre laminate from balsa core and from bonded steel inserts. Each incoming batch is weighed, sampled and assigned a sorting class before it leaves the reception bay."
+        },
+        {
+          "chunkId": "blade-sorting-procedure-1",
+          "sectionPath": ["Recycled blade material", "Sorting steps"],
+          "text": "Step 1 cut a 200 millimetre coupon from the batch. Step 2 burn off the resin in the muffle furnace to expose the fibre. Step 3 assign sorting class A when the glass fraction exceeds 60 percent by mass, otherwise class B. Step 4 label the batch with its sorting class."
+        }
+      ]
+    },
+    {
+      "documentId": "composite-blade-sorting-example",
+      "language": "en",
+      "role": "example",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-blade-sorting-example",
+          "sourceId": "source-blade-sorting-example",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-recycling",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "blade-sorting-example-0",
+          "sectionPath": ["Recycled blade material", "Sorting example"],
+          "text": "A sorting example for recycled composite blade material, batch RB-4417. The coupon lost 38 percent of its mass in the furnace, giving a glass fraction of 62 percent, so the batch was sorted into class A and released for fibre recovery."
+        },
+        {
+          "chunkId": "blade-sorting-example-1",
+          "sectionPath": ["Recycled blade material", "Rejected example"],
+          "text": "A second example of recycled blade material shows a rejected batch. Bonded steel inserts were found after sorting, the batch was returned to the reception bay and the example is used in the operator training pack."
+        }
+      ]
+    },
+    {
+      "documentId": "procyon-pane-sorting-reference",
+      "language": "en",
+      "role": "applicationContext",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-pane-sorting-reference",
+          "sourceId": "source-pane-sorting-reference",
+          "rootId": "root-application",
+          "workspaceId": "workspace-handbook",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "pane-sorting-reference-0",
+          "sectionPath": ["Procyon handbook", "Sorting a pane"],
+          "text": "Sorting in the file manager is per pane. Click a column header to change the sorting key, click it again to reverse the sorting direction, and the active pane keeps its sorting when you navigate into a directory."
+        },
+        {
+          "chunkId": "pane-sorting-reference-1",
+          "sectionPath": ["Procyon handbook", "Sorting options"],
+          "text": "Available sorting keys are name, size, modification time and extension. Directory-first sorting is on by default, and the sorting state of each pane is stored per workspace so both panes can use a different sorting."
+        }
+      ]
+    },
+    {
+      "documentId": "procyon-search-reference",
+      "language": "en",
+      "role": "applicationContext",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-search-reference",
+          "sourceId": "source-search-reference",
+          "rootId": "root-application",
+          "workspaceId": "workspace-handbook",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "search-reference-0",
+          "sectionPath": ["Procyon handbook", "Search filters"],
+          "text": "The search panel filters the active pane by name pattern, size range and modification time. A search runs in the background and its results can be opened in the right pane without leaving the current directory."
+        }
+      ]
+    },
+    {
+      "documentId": "procyon-copy-conflict-reference",
+      "language": "en",
+      "role": "applicationContext",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-copy-conflict-reference",
+          "sourceId": "source-copy-conflict-reference",
+          "rootId": "root-application",
+          "workspaceId": "workspace-handbook",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "copy-conflict-reference-0",
+          "sectionPath": ["Procyon handbook", "Copy conflicts"],
+          "text": "When a copy operation finds an existing file the conflict policy decides the outcome. You can keep both files, skip the file, overwrite it, or open the inspection dialog and decide per file while the operation stays paused."
+        }
+      ]
+    },
+    {
+      "documentId": "turbine-maintenance-checklist",
+      "language": "en",
+      "role": "duplicate",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-checklist-engineering",
+          "sourceId": "source-checklist-engineering",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        },
+        {
+          "occurrenceId": "occurrence-checklist-operations",
+          "sourceId": "source-checklist-operations",
+          "rootId": "root-operations",
+          "workspaceId": "workspace-fleet",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "checklist-0",
+          "sectionPath": ["Annual checklist", "Torque"],
+          "text": "Annual turbine inspection checklist. Verify the blade root bolt torque against the 2900 newton metre reference, verify the yaw brake torque, and confirm that every torque value is entered in the checklist before the tower is released."
+        },
+        {
+          "chunkId": "checklist-1",
+          "sectionPath": ["Annual checklist", "Sign off"],
+          "text": "The checklist is signed off by the site supervisor. An unsigned checklist blocks the turbine from returning to production and is escalated to the fleet maintenance planner."
+        }
+      ]
+    },
+    {
+      "documentId": "records-retention-policy",
+      "language": "en",
+      "role": "update",
+      "lifecycle": "updated",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-retention-policy",
+          "sourceId": "source-retention-policy",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-quality",
+          "available": true
+        }
+      ],
+      "previousChunks": [
+        {
+          "chunkId": "retention-policy-v1-0",
+          "sectionPath": ["Records retention", "Period"],
+          "text": "Inspection records are retained for a retention period of 12 months after the inspection date, after which the retention policy allows the record to be destroyed."
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "retention-policy-v2-0",
+          "sectionPath": ["Records retention", "Period"],
+          "text": "Inspection records are retained for a retention period of 36 months after the inspection date. The revised retention policy also requires the signed checklist to be retained together with the inspection record."
+        },
+        {
+          "chunkId": "retention-policy-v2-1",
+          "sectionPath": ["Records retention", "Definition"],
+          "text": "For this policy the definition of an inspection record is the measurement log, the signed checklist and any replacement batch numbers captured during the inspection."
+        }
+      ]
+    },
+    {
+      "documentId": "decommissioned-rotor-note",
+      "language": "en",
+      "role": "deletion",
+      "lifecycle": "deleted",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-decommissioned-note",
+          "sourceId": "source-decommissioned-note",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "decommissioned-note-0",
+          "sectionPath": ["Decommissioned", "Rotor note"],
+          "text": "Decommissioned rotor note for turbine 7. The rotor was removed from service after a lightning strike and this note was withdrawn from the library when the asset record was closed."
+        }
+      ]
+    },
+    {
+      "documentId": "restricted-rotor-fatigue-analysis",
+      "language": "en",
+      "role": "scopeIsolation",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-restricted-fatigue",
+          "sourceId": "source-restricted-fatigue",
+          "rootId": "root-restricted",
+          "workspaceId": "workspace-confidential",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "restricted-fatigue-0",
+          "sectionPath": ["Confidential", "Rotor blade fatigue"],
+          "text": "Confidential rotor blade fatigue analysis. The spectral fatigue assessment of the blade root laminate shows a remaining life of 9 years under the measured load spectrum for the coastal fleet."
+        }
+      ]
+    },
+    {
+      "documentId": "wind-glossary",
+      "language": "nl",
+      "role": "definition",
+      "occurrences": [
+        {
+          "occurrenceId": "occurrence-glossary",
+          "sourceId": "source-glossary",
+          "rootId": "root-engineering",
+          "workspaceId": "workspace-maintenance",
+          "available": true
+        }
+      ],
+      "chunks": [
+        {
+          "chunkId": "glossary-0",
+          "sectionPath": ["Woordenlijst", "Gondel"],
+          "text": "Definitie gondel. De gondel is de behuizing boven op de mast van een windturbine waarin de generator, de tandwielkast en het gondelbrandblussysteem zijn opgesteld."
+        },
+        {
+          "chunkId": "glossary-1",
+          "sectionPath": ["Woordenlijst", "Kruiaandrijving"],
+          "text": "Definitie kruiaandrijving. De kruiaandrijving draait de gondel naar de wind en wordt tijdens elke inspectie vergrendeld voordat iemand de gondel betreedt."
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "specialist-term-nacelle-suppression",
+      "category": "specialistTerm",
+      "language": "en",
+      "question": "In the maintenance backlog of the Procyon library, how do we inspect the nacelle fire suppression system of a turbine?",
+      "subject": "nacelle fire suppression system",
+      "needs": ["procedure"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-nacelle-procedure"],
+      "relevantChunkIds": ["nacelle-procedure-1", "nacelle-procedure-2"],
+      "contextOnlySourceIds": [
+        "source-pane-sorting-reference",
+        "source-search-reference",
+        "source-copy-conflict-reference"
+      ],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "multilingual-gondelbrandblussysteem",
+      "category": "multilingual",
+      "language": "nl",
+      "question": "Hoe inspecteer ik het gondelbrandblussysteem van een windturbine volgens de werkwijze?",
+      "subject": "gondelbrandblussysteem inspectie",
+      "needs": ["procedure"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-gondel-procedure", "source-nacelle-procedure"],
+      "relevantChunkIds": ["gondel-procedure-1", "nacelle-procedure-1"],
+      "contextOnlySourceIds": ["source-pane-sorting-reference", "source-search-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "procedure-isolationswiderstand",
+      "category": "procedure",
+      "language": "de",
+      "question": "Welches Verfahren gilt für die Messung des Isolationswiderstand am Wechselrichter und wo liegen die Grenzen?",
+      "subject": "Isolationswiderstand Wechselrichter",
+      "needs": ["procedure", "limitations"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-wechselrichter-verfahren", "source-wechselrichter-grenzen"],
+      "relevantChunkIds": ["wechselrichter-verfahren-1", "wechselrichter-grenzen-0"],
+      "contextOnlySourceIds": ["source-copy-conflict-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "example-batterie-securite",
+      "category": "example",
+      "language": "fr",
+      "question": "Quelle est la procédure de sécurité batterie lithium et existe-t-il un exemple d'intervention?",
+      "subject": "sécurité batterie lithium",
+      "needs": ["procedure", "examples"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-batterie-procedure", "source-batterie-exemple"],
+      "relevantChunkIds": ["batterie-procedure-0", "batterie-exemple-0"],
+      "contextOnlySourceIds": ["source-search-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "limitations-cold-weather-suppression",
+      "category": "limitation",
+      "language": "en",
+      "question": "What are the known limitations of the aerosol suppression system in cold weather?",
+      "subject": "aerosol suppression system",
+      "needs": ["limitations"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-nacelle-limitations"],
+      "relevantChunkIds": ["nacelle-limitations-0", "nacelle-limitations-1"],
+      "contextOnlySourceIds": ["source-pane-sorting-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "match-sorting-regression",
+      "category": "matchSorting",
+      "language": "en",
+      "question": "How do I sort recycled blade material in Procyon, and is there a sorting example I can copy into the right pane?",
+      "subject": "sorting recycled blade material",
+      "needs": ["procedure", "examples"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-blade-sorting-procedure", "source-blade-sorting-example"],
+      "relevantChunkIds": ["blade-sorting-procedure-1", "blade-sorting-example-0"],
+      "contextOnlySourceIds": ["source-pane-sorting-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "application-context-distraction",
+      "category": "applicationContext",
+      "language": "en",
+      "question": "Which maintenance checklist should I open in the right pane so I can copy the turbine torque values, and how do I sort that pane?",
+      "subject": "turbine inspection checklist torque",
+      "needs": ["procedure"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-checklist-engineering", "source-checklist-operations"],
+      "relevantChunkIds": ["checklist-0"],
+      "contextOnlySourceIds": [
+        "source-pane-sorting-reference",
+        "source-search-reference",
+        "source-copy-conflict-reference"
+      ],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "duplicate-checklist-collapse",
+      "category": "duplicate",
+      "language": "en",
+      "question": "What torque reference does the annual turbine inspection checklist give for the blade root bolts?",
+      "subject": "blade root bolt torque reference",
+      "needs": [],
+      "relatedTerms": ["annual checklist"],
+      "relevantSourceIds": ["source-checklist-engineering", "source-checklist-operations"],
+      "relevantChunkIds": ["checklist-0"],
+      "contextOnlySourceIds": ["source-copy-conflict-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "updated-retention-period",
+      "category": "update",
+      "language": "en",
+      "question": "What retention period applies to inspection records after the policy revision?",
+      "subject": "records retention period",
+      "needs": ["definition"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-retention-policy"],
+      "relevantChunkIds": ["retention-policy-v2-0"],
+      "contextOnlySourceIds": [],
+      "forbiddenChunkIds": ["retention-policy-v1-0"],
+      "expectedNoEvidence": false
+    },
+    {
+      "id": "deleted-rotor-note",
+      "category": "deletion",
+      "language": "en",
+      "question": "What does the decommissioned rotor note for turbine 7 say about the lightning strike?",
+      "subject": "decommissioned rotor note turbine 7",
+      "needs": [],
+      "relatedTerms": [],
+      "relevantSourceIds": [],
+      "relevantChunkIds": [],
+      "contextOnlySourceIds": [],
+      "forbiddenChunkIds": ["decommissioned-note-0"],
+      "expectedNoEvidence": true
+    },
+    {
+      "id": "scope-isolated-fatigue-analysis",
+      "category": "scopeIsolation",
+      "language": "en",
+      "question": "What remaining blade root fatigue life does the confidential coastal fleet analysis report?",
+      "subject": "rotor blade fatigue analysis remaining life",
+      "needs": ["evidence"],
+      "relatedTerms": [],
+      "relevantSourceIds": [],
+      "relevantChunkIds": [],
+      "contextOnlySourceIds": [],
+      "forbiddenChunkIds": ["restricted-fatigue-0"],
+      "expectedNoEvidence": true
+    },
+    {
+      "id": "negative-control-unrelated-domain",
+      "category": "negativeControl",
+      "language": "en",
+      "question": "What is the irrigation schedule for Martian greenhouse tulip cultivation?",
+      "subject": "Martian greenhouse tulip irrigation schedule",
+      "needs": [],
+      "relatedTerms": [],
+      "relevantSourceIds": [],
+      "relevantChunkIds": [],
+      "contextOnlySourceIds": [],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": true
+    },
+    {
+      "id": "definition-gondel-glossary",
+      "category": "definition",
+      "language": "nl",
+      "question": "Wat is de definitie van de gondel van een windturbine?",
+      "subject": "gondel",
+      "needs": ["definition"],
+      "relatedTerms": [],
+      "relevantSourceIds": ["source-glossary"],
+      "relevantChunkIds": ["glossary-0"],
+      "contextOnlySourceIds": ["source-pane-sorting-reference"],
+      "forbiddenChunkIds": [],
+      "expectedNoEvidence": false
+    }
+  ]
+}

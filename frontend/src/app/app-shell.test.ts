@@ -3150,6 +3150,27 @@ describe('AppShell', () => {
     );
   });
 
+  it('keeps Search Knowledge hidden when only answer generation is reported (task 0208)', async () => {
+    const client = new MockFileManagerClient();
+    // An unqualified release build reports no retrieval at all; an optional
+    // answer capability must never make the search surface visible.
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: false,
+      semantic: false,
+      answerGeneration: true,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    expect(root.querySelector('button[aria-label="Search Knowledge…"]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
+    expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
+      'Search Knowledge…',
+    );
+  });
+
   it('opens Ask immediately and offers to include an unenrolled active folder', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await client.createLlmProfile({

@@ -411,6 +411,13 @@ pub struct KnowledgeCapabilities {
 }
 
 impl KnowledgeCapabilities {
+    /// Nothing is offered: used by builds that must fail closed.
+    pub const UNAVAILABLE: Self = Self {
+        full_text: false,
+        semantic: false,
+        answer_generation: false,
+    };
+
     /// Reports whether at least one route can satisfy the mode.
     #[must_use]
     pub const fn supports(self, mode: RetrievalMode) -> bool {

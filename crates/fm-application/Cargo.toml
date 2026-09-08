@@ -6,6 +6,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+# Runs the knowledge-retrieval evaluation over the real native Zvec dense and
+# full-text indexes. Off by default: the official SDK dynamically links Zvec and
+# downloads a native artifact at build time unless ZVEC_LIB_DIR is supplied.
+zvec = ["fm-semantic-worker/zvec"]
+
 [dependencies]
 async-trait.workspace = true
 calamine.workspace = true

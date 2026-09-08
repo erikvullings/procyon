@@ -31,6 +31,7 @@ use uuid::Uuid;
 use crate::knowledge::{
     KnowledgeCapabilities, KnowledgeSearchPlan, KnowledgeSearchReason, RetrievalMode,
 };
+use crate::knowledge_release::KnowledgeReleaseAccess;
 
 /// Maximum pre-cancellations retained for searches that have not started.
 const MAX_PRE_CANCELLATIONS: usize = 256;
@@ -523,23 +524,53 @@ impl Drop for RegistrationGuard<'_> {
 /// Search-only knowledge capability shared by every host.
 pub struct KnowledgeSearchCoordinator {
     capability: Arc<dyn KnowledgeRetrievalCapability>,
+    release_access: KnowledgeReleaseAccess,
     cancellations: Mutex<CancellationRegistry>,
 }
 
 impl KnowledgeSearchCoordinator {
     /// Composes the coordinator over one retrieval capability.
+    ///
+    /// Release visibility defaults to whatever this build was qualified for.
     #[must_use]
     pub fn new(capability: Arc<dyn KnowledgeRetrievalCapability>) -> Self {
+        Self::with_release_access(capability, KnowledgeReleaseAccess::from_build())
+    }
+
+    /// Composes the coordinator with an explicit release visibility decision.
+    #[must_use]
+    pub fn with_release_access(
+        capability: Arc<dyn KnowledgeRetrievalCapability>,
+        release_access: KnowledgeReleaseAccess,
+    ) -> Self {
         Self {
             capability,
+            release_access,
             cancellations: Mutex::new(CancellationRegistry::default()),
         }
     }
 
+    /// Replaces the release visibility decision this coordinator enforces.
+    pub fn set_release_access(&mut self, release_access: KnowledgeReleaseAccess) {
+        self.release_access = release_access;
+    }
+
+    /// Reports the release visibility decision this coordinator enforces.
+    #[must_use]
+    pub const fn release_access(&self) -> KnowledgeReleaseAccess {
+        self.release_access
+    }
+
     /// Reports retrieval and answer capabilities independently.
     ///
-    /// `answer_generation` is host-owned: retrieval never depends on it.
+    /// `answer_generation` is host-owned: retrieval never depends on it. A
+    /// build without a measured go decision reports every capability as
+    /// unavailable, so an optional answer capability can never make an
+    /// unqualified search surface visible.
     pub async fn capabilities(&self, answer_generation: bool) -> KnowledgeCapabilities {
+        if !self.release_access.is_available() {
+            return KnowledgeCapabilities::UNAVAILABLE;
+        }
         KnowledgeCapabilities::from_worker(self.capability.capabilities().await, answer_generation)
     }
 
@@ -559,6 +590,9 @@ impl KnowledgeSearchCoordinator {
     /// before any evidence is projected, so consent revoked while the worker
     /// was running cannot disclose content.
     ///
+    /// A build without a measured go decision refuses before any request
+    /// reaches the worker, so hiding the surface is never the only control.
+    ///
     /// # Errors
     ///
     /// Returns typed capability, duplicate-identifier, cancellation, or
@@ -570,6 +604,9 @@ impl KnowledgeSearchCoordinator {
         refresh: &dyn KnowledgeAuthorizationRefresh,
         cancellation: &CancellationToken,
     ) -> Result<KnowledgeSearchOutcome, KnowledgeSearchError> {
+        if !self.release_access.is_available() {
+            return Err(KnowledgeSearchError::Unavailable);
+        }
         let cancellation = cancellation.clone();
         let Some(_guard) = RegistrationGuard::claim(&self.cancellations, request_id, &cancellation)
         else {
@@ -1557,6 +1594,71 @@ mod tests {
             .await
             .expect_err("an unconfigured capability cannot retrieve");
         assert_eq!(error, KnowledgeSearchError::Unavailable);
+    }
+
+    /// An unqualified release build must not disclose that retrieval works,
+    /// even when the worker itself is completely capable (task 0208).
+    #[tokio::test]
+    async fn an_unqualified_release_build_reports_nothing_and_refuses_to_execute() {
+        let capability = Arc::new(FixedCapability::new(
+            WorkerKnowledgeCapabilities {
+                full_text: true,
+                query_embeddings: true,
+            },
+            retrieval(vec![evidence("r1", "source-a", false, 1)], None),
+        ));
+        let coordinator = KnowledgeSearchCoordinator::with_release_access(
+            capability.clone(),
+            KnowledgeReleaseAccess::Unqualified,
+        );
+
+        let capabilities = coordinator.capabilities(true).await;
+        assert!(!capabilities.full_text);
+        assert!(!capabilities.semantic);
+        assert!(
+            !capabilities.answer_generation,
+            "answer generation must never make an unqualified search visible"
+        );
+        assert!(!capabilities.supports(RetrievalMode::Hybrid));
+        assert!(!capabilities.supports(RetrievalMode::FullText));
+        assert!(!capabilities.supports(RetrievalMode::Semantic));
+
+        let error = execute(&coordinator, authorized(plan(Vec::new()), &["source-a"]))
+            .await
+            .expect_err("an unqualified release build must not retrieve");
+        assert_eq!(error, KnowledgeSearchError::Unavailable);
+        assert!(
+            capability.requests.lock().unwrap().is_empty(),
+            "no retrieval may reach the worker"
+        );
+    }
+
+    /// The same worker stays fully usable for developer and qualified builds.
+    #[tokio::test]
+    async fn developer_and_qualified_builds_keep_the_full_search_surface() {
+        for access in [
+            KnowledgeReleaseAccess::Developer,
+            KnowledgeReleaseAccess::Qualified,
+        ] {
+            let capability = Arc::new(FixedCapability::new(
+                WorkerKnowledgeCapabilities {
+                    full_text: true,
+                    query_embeddings: true,
+                },
+                retrieval(vec![evidence("r1", "source-a", false, 1)], None),
+            ));
+            let coordinator =
+                KnowledgeSearchCoordinator::with_release_access(capability.clone(), access);
+
+            let capabilities = coordinator.capabilities(false).await;
+            assert!(capabilities.full_text, "{access:?} must keep full text");
+            assert!(capabilities.semantic, "{access:?} must keep semantic");
+
+            let outcome = execute(&coordinator, authorized(plan(Vec::new()), &["source-a"]))
+                .await
+                .expect("a usable build must retrieve");
+            assert_eq!(outcome.evidence.len(), 1);
+        }
     }
 
     /// Multi-root scopes are one logical search, not several. Every partition

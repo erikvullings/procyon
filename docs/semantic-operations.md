@@ -235,6 +235,40 @@ only tests catalog verification; it establishes no publisher trust. Never redist
 production component pack. Remove it by uninstalling the semantic components in Settings and
 deleting the copied bundle directory after the app exits.
 
+#### Structured Knowledge Search release visibility
+
+Structured Knowledge Search is gated separately from the semantic component pack, because its
+release question is retrieval quality rather than artifact distribution. Tagged and dispatched
+desktop builds compile the feature's production visibility from the protected repository variable
+`KNOWLEDGE_SEARCH_RELEASE_QUALIFIED`, which must be exactly `true` or `false`. Only an exact `true`
+confirms a measured go decision and compiles
+`PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true` into the build; an absent, empty, or `false`
+variable fails closed, and any other value fails the release rather than qualifying it silently.
+The variable cannot override the checked-in `docs/evaluations/knowledge-retrieval-v1.json`: the
+release precondition rejects the build unless that report records `decision: "go"`, a production
+measurement, and no blocking reasons. The report is also bound to the checked-in corpus and a
+fingerprint of the release-critical planner, retrieval, and index sources; changing any of them
+invalidates the report and requires a new measurement. There is no workflow-dispatch bypass.
+
+An unqualified release build reports `fullText`, `semantic`, and `answerGeneration` as unavailable,
+so the surface is hidden, and the backend refuses knowledge planning, search, and answers with
+`providerUnavailable` before any request reaches the worker. Hiding the entry point is never the
+only control, and an optional answer capability can never make an unqualified search visible.
+Debug, developer, and test builds - including `pnpm dev`, `pnpm dev:server`, `pnpm dev:tauri`, the
+mock runtime, and every automated test - stay fully usable without any qualification. A local
+release build can be qualified deliberately by compiling it with
+`PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true`; the decision is compile-time only, so no runtime
+setting on an installed application can turn the feature on.
+
+A candidate that claims a measured go additionally runs the supported-platform full-text index
+preconditions on each release runner before it builds
+(`node scripts/check-knowledge-search-preconditions.mjs`). The script first verifies the repository
+report, then verifies the Zvec full-text schema, its one-way migration from a vector-only collection,
+interrupted-migration rollback and publication after a restart, derived-collection rebuild, and
+committed-write recovery. Those tests are behind the `zvec` feature and are therefore not covered by
+the ordinary workspace test run. To roll back, set `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` to `false`
+before the next release; installed builds are unaffected because the decision is compiled per build.
+
 #### Rotation, retention, rollback, and revocation
 
 - **Routine rotation:** generate a new Ed25519 key offline, place only its base64 public key in the

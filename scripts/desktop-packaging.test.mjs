@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -19,6 +19,16 @@ function workflow(name) {
 
 function workflowText(name) {
   return read('.github', 'workflows', name);
+}
+
+/// Scratch space inside the repository, never a shared temporary directory.
+function scratchDirectory(prefix) {
+  const parent = join(repoRoot, 'target', 'desktop-packaging-tests');
+  mkdirSync(parent, { recursive: true });
+  const directory = join(parent, `${prefix}${process.pid}`);
+  rmSync(directory, { force: true, recursive: true });
+  mkdirSync(directory, { recursive: true });
+  return directory;
 }
 
 test('desktop Cargo metadata and Tauri bootstrap config agree on product identity and icons', () => {
@@ -210,6 +220,182 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     releaseText,
     /bundle\/(?:dmg|msi|nsis|deb|appimage).*semantic|semantic.*bundle\/(?:dmg|msi|nsis|deb|appimage)/i,
   );
+});
+
+test('release desktop builds fail closed without a measured knowledge-search go decision', () => {
+  const release = workflow('release-desktop.yml');
+  const releaseText = workflowText('release-desktop.yml');
+
+  for (const jobName of ['macos', 'linux', 'windows']) {
+    const steps = release.jobs[jobName].steps ?? [];
+    const qualification = steps.findIndex((step) =>
+      /export-knowledge-release-qualification\.mjs/.test(step.run ?? ''),
+    );
+    const preconditions = steps.findIndex((step) =>
+      /check-knowledge-search-preconditions\.mjs/.test(step.run ?? ''),
+    );
+    const build = steps.findIndex((step) => /build:tauri/.test(step.run ?? ''));
+
+    assert.ok(qualification >= 0, `${jobName} must record the knowledge-search decision`);
+    assert.ok(preconditions >= 0, `${jobName} must verify the full-text preconditions`);
+    assert.ok(build >= 0, `${jobName} must build the desktop bundle`);
+    assert.ok(qualification < build, `${jobName} must decide before it builds`);
+    assert.ok(preconditions < build, `${jobName} must verify before it builds`);
+
+    // The compiled flag is decided by the script from the protected variable,
+    // so the step itself is unconditional and cannot be bypassed by a dispatch.
+    assert.equal(steps[qualification].if, undefined);
+    assert.equal(
+      steps[qualification].env?.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED,
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression syntax.
+      '${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}',
+    );
+    // The expensive supported-platform checks only run for a candidate that
+    // claims a measured go, so an ordinary release does no duplicate work.
+    assert.equal(steps[preconditions].if, "vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'");
+    assert.doesNotMatch(steps[preconditions].if, /workflow_dispatch/);
+  }
+
+  // The existing semantic gate keeps its own, separate variable and behaviour.
+  assert.match(releaseText, /vars\.SEMANTIC_RELEASE_QUALIFIED == 'true'/);
+  assert.match(releaseText, /vars\.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED/);
+});
+
+test('knowledge qualification exporter compiles the flag only for an exact measured go', () => {
+  const outputRoot = scratchDirectory('knowledge-qualification-');
+
+  function exportQualification(value) {
+    const environmentFile = join(outputRoot, `github-${value ?? 'unset'}.env`);
+    writeFileSync(environmentFile, '');
+    const env = { ...process.env };
+    delete env.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED;
+    if (value !== undefined) env.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED = value;
+    const stdout = execFileSync(
+      'node',
+      ['scripts/export-knowledge-release-qualification.mjs', environmentFile],
+      { cwd: repoRoot, env, encoding: 'utf8' },
+    );
+    return { written: readFileSync(environmentFile, 'utf8'), stdout };
+  }
+
+  // Unset and an explicit no-go both fail closed: nothing is compiled in.
+  for (const value of [undefined, '', 'false']) {
+    const { written, stdout } = exportQualification(value);
+    assert.equal(written, '');
+    assert.match(stdout, /not production visible/i);
+  }
+
+  const qualified = exportQualification('true');
+  assert.equal(qualified.written, 'PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true\n');
+
+  // An ambiguous value is a configuration error, never a silent go.
+  for (const value of ['TRUE', '1', 'yes', ' true']) {
+    assert.throws(
+      () => exportQualification(value),
+      /Command failed/,
+      `${value} must not qualify a release`,
+    );
+  }
+});
+
+test('knowledge release preconditions run the supported-platform full-text lifecycle tests', () => {
+  const planned = JSON.parse(
+    execFileSync('node', ['scripts/check-knowledge-search-preconditions.mjs', '--print-plan'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }),
+  );
+  const storage = read('crates', 'fm-semantic-worker', 'src', 'zvec_storage.rs');
+
+  assert.equal(planned.command, 'cargo');
+  assert.deepEqual(planned.reportValidator.arguments.slice(0, 7), [
+    'run',
+    '--quiet',
+    '--locked',
+    '-p',
+    'fm-application',
+    '--example',
+    'validate_knowledge_release_report',
+  ]);
+  assert.ok(planned.commonArguments.includes('--features'));
+  assert.ok(planned.commonArguments.includes('zvec'));
+  assert.deepEqual(planned.commonArguments.slice(0, 5), [
+    'test',
+    '--locked',
+    '-p',
+    'fm-semantic-worker',
+    '--lib',
+  ]);
+  assert.equal(planned.invocations.length, planned.tests.length);
+  assert.ok(
+    planned.tests.some((name) => /migrat/.test(name)),
+    'migration coverage is required',
+  );
+  assert.ok(
+    planned.tests.some((name) => /full_text/.test(name)),
+    'full-text lifecycle coverage is required',
+  );
+  for (const [index, name] of planned.tests.entries()) {
+    const [, unqualified] = name.split('zvec_storage::tests::');
+    assert.match(
+      storage,
+      new RegExp(`fn ${unqualified}\\(`),
+      `${name} must exist in the Zvec storage tests`,
+    );
+    assert.deepEqual(planned.invocations[index].slice(-3), ['--', '--exact', name]);
+  }
+});
+
+test('knowledge release preconditions require a repository-recorded measured go', () => {
+  const current = spawnSync(
+    'node',
+    ['scripts/check-knowledge-search-preconditions.mjs', '--check-report'],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(current.status, 0);
+  assert.match(`${current.stdout}${current.stderr}`, /not a measured go/i);
+
+  const outputRoot = scratchDirectory('knowledge-report-');
+  const reports = [
+    {
+      name: 'unmeasured-go',
+      value: { decision: 'go', productionMeasurement: false, blockingReasons: [] },
+      accepted: false,
+    },
+    {
+      name: 'blocked-go',
+      value: {
+        decision: 'go',
+        productionMeasurement: true,
+        blockingReasons: ['supported-platform evidence missing'],
+      },
+      accepted: false,
+    },
+  ];
+  for (const candidate of reports) {
+    const report = join(outputRoot, `${candidate.name}.json`);
+    writeFileSync(report, JSON.stringify(candidate.value));
+    const result = spawnSync(
+      'node',
+      ['scripts/check-knowledge-search-preconditions.mjs', '--check-report', '--report', report],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+    assert.equal(result.status === 0, candidate.accepted, candidate.name);
+  }
+
+  const forged = JSON.parse(read('docs', 'evaluations', 'knowledge-retrieval-v1.json'));
+  forged.decision = 'go';
+  forged.productionMeasurement = true;
+  forged.blockingReasons = [];
+  const report = join(outputRoot, 'forged-go.json');
+  writeFileSync(report, JSON.stringify(forged));
+  const forgedResult = spawnSync(
+    'node',
+    ['scripts/check-knowledge-search-preconditions.mjs', '--check-report', '--report', report],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(forgedResult.status, 0);
+  assert.match(`${forgedResult.stdout}${forgedResult.stderr}`, /evidence does not support a go/i);
 });
 
 test('release verification key exporter writes only a validated public key as hex', () => {

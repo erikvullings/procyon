@@ -79,6 +79,21 @@ describe('AppShell native menu synchronisation (task 0206)', () => {
     expect(menuItemIds(lastPushedMenuSpec(), 'Tools')).not.toContain('client.searchKnowledge');
   });
 
+  it('omits Search Knowledge when only answer generation is reported (task 0208)', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: false,
+      semantic: false,
+      answerGeneration: true,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+
+    await vi.waitFor(() => {
+      expect(menuItemIds(lastPushedMenuSpec(), 'Tools')).toContain('core.copyPath');
+    });
+    expect(menuItemIds(lastPushedMenuSpec(), 'Tools')).not.toContain('client.searchKnowledge');
+  });
+
   it('opens the knowledge search dialog when the menu item is activated', async () => {
     const client = new MockFileManagerClient();
     let dispatch: ((message: { id: string }) => void) | undefined;

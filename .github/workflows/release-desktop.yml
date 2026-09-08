@@ -56,6 +56,15 @@ jobs:
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
+      - name: Record the measured Structured Knowledge Search decision
+        env:
+          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
+        run: >
+          node scripts/export-knowledge-release-qualification.mjs
+          "$GITHUB_ENV"
+      - name: Verify supported-platform full-text migration and lifecycle
+        if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-knowledge-search-preconditions.mjs
       - name: Configure temporary signing paths
         run: |
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
@@ -213,6 +222,15 @@ jobs:
           "$GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
+      - name: Record the measured Structured Knowledge Search decision
+        env:
+          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
+        run: >
+          node scripts/export-knowledge-release-qualification.mjs
+          "$GITHUB_ENV"
+      - name: Verify supported-platform full-text migration and lifecycle
+        if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-knowledge-search-preconditions.mjs
       - name: Build Linux packages
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v2
@@ -252,6 +270,15 @@ jobs:
           "$env:GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
         run: node scripts/check-desktop-release.mjs "$env:GITHUB_REF_NAME"
+      - name: Record the measured Structured Knowledge Search decision
+        env:
+          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
+        run: >
+          node scripts/export-knowledge-release-qualification.mjs
+          "$env:GITHUB_ENV"
+      - name: Verify supported-platform full-text migration and lifecycle
+        if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-knowledge-search-preconditions.mjs
       - name: Build unsigned Windows installers
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v2

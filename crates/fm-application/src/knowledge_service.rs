@@ -37,6 +37,7 @@ use crate::knowledge_mapping::{
     interpretation_to_dto, mode_from_dto, options_from_dto, plan_to_dto, route_outcome_to_dto,
     trace_to_dto,
 };
+use crate::knowledge_release::KnowledgeReleaseAccess;
 use crate::knowledge_search::{
     AuthorizedKnowledgeSearch, KnowledgeAuthorizationRefresh, KnowledgeAuthorizationSnapshot,
     KnowledgeRetrievalCapability, KnowledgeRetrievalPartition, KnowledgeSearchCoordinator,
@@ -160,11 +161,35 @@ pub(crate) struct KnowledgeService {
 impl KnowledgeService {
     /// Composes the capability over one worker-backed retrieval capability.
     pub(crate) fn new(capability: Arc<dyn KnowledgeRetrievalCapability>) -> Self {
+        Self::with_release_access(capability, KnowledgeReleaseAccess::from_build())
+    }
+
+    /// Composes the capability with an explicit release visibility decision.
+    pub(crate) fn with_release_access(
+        capability: Arc<dyn KnowledgeRetrievalCapability>,
+        release_access: KnowledgeReleaseAccess,
+    ) -> Self {
         Self {
-            coordinator: KnowledgeSearchCoordinator::new(capability),
+            coordinator: KnowledgeSearchCoordinator::with_release_access(
+                capability,
+                release_access,
+            ),
             answers: KnowledgeAnswerCoordinator::default(),
             evidence: KnowledgeEvidenceCache::default(),
         }
+    }
+
+    /// Rejects every knowledge request made by a build that must fail closed.
+    fn release_gate(&self) -> Result<(), ApplicationError> {
+        if self.coordinator.release_access().is_available() {
+            return Ok(());
+        }
+        Err(ApplicationError::ProviderUnavailable)
+    }
+
+    /// Replaces the release visibility decision this capability enforces.
+    pub(crate) fn set_release_access(&mut self, release_access: KnowledgeReleaseAccess) {
+        self.coordinator.set_release_access(release_access);
     }
 
     /// Reports retrieval and answer capabilities independently.
@@ -214,6 +239,7 @@ impl KnowledgeService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::PlanKnowledgeSearchRequestDto,
     ) -> Result<fm_transport_dto::KnowledgeSearchPlanDto, ApplicationError> {
+        self.release_gate()?;
         Ok(self
             .resolve(
                 authority,
@@ -235,6 +261,7 @@ impl KnowledgeService {
         answer_generation: bool,
         cancellation: &CancellationToken,
     ) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationError> {
+        self.release_gate()?;
         let request_id = request.request_id;
         let resolved = self.resolve(
             authority.as_ref(),
@@ -341,6 +368,7 @@ impl KnowledgeService {
         profiles: &LlmProfileService,
         cancellation: &CancellationToken,
     ) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationError> {
+        self.release_gate()?;
         let refresh_required = || ApplicationError::KnowledgeEvidenceRefreshRequired {
             evidence_fingerprint: request.evidence_fingerprint.clone(),
         };
@@ -893,6 +921,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::error::ApplicationError;
+    use crate::knowledge_release::KnowledgeReleaseAccess;
     use crate::knowledge_search::KnowledgeRetrievalCapability;
     use crate::semantic_library::{
         SemanticAccessContext, SemanticFolderContext, SemanticIndexingObservation,
@@ -1162,6 +1191,132 @@ mod tests {
         assert!(result.evidence_fingerprint.starts_with("sha256:"));
         assert_eq!(result.coverage.eligible, 1);
         assert!(result.plan.searches.len() >= 2);
+    }
+
+    /// A build without a measured go decision must fail closed everywhere the
+    /// backend can be reached, not only in the UI that hides the surface.
+    #[tokio::test]
+    async fn an_unqualified_release_build_reports_and_serves_nothing() {
+        let capability = Arc::new(RecordingCapability::new(vec![evidence("r1", "source")]));
+        let mut fixture = fixture(capability.clone());
+        fixture.service = fixture
+            .service
+            .with_knowledge_release_access(KnowledgeReleaseAccess::Unqualified);
+
+        let capabilities = fixture.service.knowledge_capabilities().await;
+        assert!(!capabilities.full_text);
+        assert!(!capabilities.semantic);
+        assert!(!capabilities.answer_generation);
+
+        let plan_error = fixture
+            .service
+            .plan_knowledge_search(
+                &SemanticAccessContext::Host,
+                PlanKnowledgeSearchRequestDto {
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::Hybrid,
+                    options: None,
+                },
+            )
+            .await
+            .expect_err("planning must not run in an unqualified build");
+        assert!(matches!(plan_error, ApplicationError::ProviderUnavailable));
+
+        let search_error = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::Hybrid,
+                    options: None,
+                },
+            )
+            .await
+            .expect_err("search must not run in an unqualified build");
+        assert!(matches!(
+            search_error,
+            ApplicationError::ProviderUnavailable
+        ));
+
+        let answer_error = fixture
+            .service
+            .generate_knowledge_answer(
+                &SemanticAccessContext::Host,
+                GenerateKnowledgeAnswerRequestDto {
+                    request_id: Uuid::new_v4(),
+                    workspace_id: fixture.workspace_id,
+                    evidence_fingerprint: "sha256:absent".to_owned(),
+                    profile_id: Uuid::new_v4(),
+                    allow_model_knowledge: false,
+                    action: None,
+                    context: None,
+                    constraints: Vec::new(),
+                    depth: None,
+                    output: None,
+                },
+            )
+            .await
+            .expect_err("answers must not run in an unqualified build");
+        assert!(matches!(
+            answer_error,
+            ApplicationError::ProviderUnavailable
+        ));
+
+        assert!(
+            capability
+                .requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_empty(),
+            "no request may reach the worker in an unqualified build"
+        );
+    }
+
+    /// Developer, test, and qualified builds keep the complete surface.
+    #[tokio::test]
+    async fn a_qualified_build_keeps_planning_and_searching() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let mut fixture = fixture(capability.clone());
+        fixture.service = fixture
+            .service
+            .with_knowledge_release_access(KnowledgeReleaseAccess::Qualified);
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+
+        let capabilities = fixture.service.knowledge_capabilities().await;
+        assert!(capabilities.full_text);
+
+        fixture
+            .service
+            .plan_knowledge_search(
+                &SemanticAccessContext::Host,
+                PlanKnowledgeSearchRequestDto {
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::Hybrid,
+                    options: None,
+                },
+            )
+            .await
+            .expect("planning must run in a qualified build");
+        let result = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(fixture.workspace_id),
+                    mode: KnowledgeRetrievalModeDto::Hybrid,
+                    options: None,
+                },
+            )
+            .await
+            .expect("search must run in a qualified build");
+        assert_eq!(result.evidence.len(), 1);
     }
 
     #[tokio::test]

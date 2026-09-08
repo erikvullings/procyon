@@ -69,6 +69,7 @@ use crate::document_summary_mapping::{
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_editor::FileEditorService;
+use crate::knowledge_release::KnowledgeReleaseAccess;
 use crate::knowledge_search::{
     KnowledgeRetrievalCapability, UnavailableKnowledgeRetrievalCapability,
 };
@@ -162,6 +163,7 @@ pub struct FileManagerService {
     document_conversion: DocumentConversionService,
     document_summaries: DocumentSummaryCoordinator,
     knowledge: KnowledgeService,
+    knowledge_release: KnowledgeReleaseAccess,
     rag: RagCoordinator,
     rag_conversation_path: PathBuf,
     semantic_vocabulary_path: PathBuf,
@@ -594,6 +596,7 @@ impl FileManagerService {
             )),
             rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
             knowledge: KnowledgeService::new(Arc::new(UnavailableKnowledgeRetrievalCapability)),
+            knowledge_release: KnowledgeReleaseAccess::from_build(),
             rag_conversation_path,
             semantic_vocabulary_path,
             rag_ephemeral: Mutex::new(HashMap::new()),
@@ -1400,9 +1403,14 @@ impl FileManagerService {
         self.rag = RagCoordinator::new(Arc::new(SemanticRagRetrievalCapability::new(
             semantic.clone(),
         )));
-        self.knowledge = KnowledgeService::new(Arc::new(
-            crate::knowledge_search::SemanticKnowledgeRetrievalCapability::new(semantic.clone()),
-        ));
+        self.knowledge = KnowledgeService::with_release_access(
+            Arc::new(
+                crate::knowledge_search::SemanticKnowledgeRetrievalCapability::new(
+                    semantic.clone(),
+                ),
+            ),
+            self.knowledge_release,
+        );
         self.semantic = semantic;
         self
     }
@@ -1583,7 +1591,19 @@ impl FileManagerService {
         mut self,
         capability: Arc<dyn KnowledgeRetrievalCapability>,
     ) -> Self {
-        self.knowledge = KnowledgeService::new(capability);
+        self.knowledge = KnowledgeService::with_release_access(capability, self.knowledge_release);
+        self
+    }
+
+    /// Replaces the build-owned Structured Knowledge Search release decision.
+    ///
+    /// Hosts and tests use this to model a qualified or unqualified release
+    /// build explicitly; ordinary construction keeps whatever decision this
+    /// build was compiled with.
+    #[must_use]
+    pub fn with_knowledge_release_access(mut self, access: KnowledgeReleaseAccess) -> Self {
+        self.knowledge_release = access;
+        self.knowledge.set_release_access(access);
         self
     }
 

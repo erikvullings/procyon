@@ -8,9 +8,14 @@
 
 mod common;
 
+use std::sync::Arc;
+
+use fm_application::FileManagerService;
+use fm_application::knowledge_release::KnowledgeReleaseAccess;
+use fm_server::config::ServerConfig;
 use fm_transport_dto::{
     ApplicationErrorCode as ApplicationErrorCodeDto, ApplicationErrorDto, KnowledgeCapabilitiesDto,
-    KnowledgeNeedDto, KnowledgeQueryInterpretationDto,
+    KnowledgeNeedDto, KnowledgeQueryInterpretationDto, RuntimeKindDto,
 };
 use reqwest::StatusCode;
 
@@ -114,6 +119,87 @@ async fn searching_without_a_configured_library_is_denied_rather_than_silently_e
         status == StatusCode::SERVICE_UNAVAILABLE || status == StatusCode::NOT_FOUND,
         "search without an indexed library must be denied, got {status}: {error:?}"
     );
+
+    server.handle.abort();
+}
+
+/// Hiding the surface in the UI is never the only control: an unqualified
+/// release build must also refuse over HTTP, ahead of request validation
+/// (task 0208).
+#[tokio::test]
+async fn an_unqualified_release_build_fails_closed_over_http() {
+    let workspace_directory = tempfile::tempdir().unwrap();
+    let config = ServerConfig {
+        port: 0,
+        workspace_directory: workspace_directory.path().to_path_buf(),
+        settings_directory: workspace_directory.path().join("config"),
+        dev_mode_auth_disabled: true,
+        ..ServerConfig::default()
+    };
+    let service = Arc::new(
+        FileManagerService::new(
+            RuntimeKindDto::BrowserServer,
+            &config.workspace_directory,
+            &config.settings_directory,
+        )
+        .with_knowledge_release_access(KnowledgeReleaseAccess::Unqualified),
+    );
+    let server = TestServer::spawn_with_service(config, service, workspace_directory).await;
+    let client = reqwest::Client::new();
+
+    let capabilities: KnowledgeCapabilitiesDto = client
+        .get(format!(
+            "{}/api/v1/semantic/knowledge/capabilities",
+            server.base_url
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(!capabilities.full_text);
+    assert!(!capabilities.semantic);
+    assert!(!capabilities.answer_generation);
+
+    // The identical request is a 400 on a usable build, so a 503 here proves
+    // the gate refuses before the plan is even validated.
+    let plan = client
+        .post(format!(
+            "{}/api/v1/semantic/knowledge/plan",
+            server.base_url
+        ))
+        .json(&serde_json::json!({
+            "draft": { "about": ["wind turbines"] },
+            "scope": {
+                "kind": "semanticResults",
+                "workspaceId": uuid::Uuid::new_v4(),
+                "semanticSourceIds": []
+            },
+            "mode": "fullText"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(plan.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let error: ApplicationErrorDto = plan.json().await.unwrap();
+    assert_eq!(error.code, ApplicationErrorCodeDto::ProviderUnavailable);
+
+    let search = client
+        .post(format!(
+            "{}/api/v1/semantic/knowledge/search",
+            server.base_url
+        ))
+        .json(&serde_json::json!({
+            "requestId": uuid::Uuid::new_v4(),
+            "draft": { "about": ["wind turbines"], "needs": ["definition"] },
+            "scope": { "kind": "entireLibrary", "workspaceId": uuid::Uuid::new_v4() },
+            "mode": "hybrid"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(search.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     server.handle.abort();
 }
