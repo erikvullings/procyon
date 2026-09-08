@@ -142,7 +142,7 @@ layers and never prerequisites for retrieval.
 
 - [x] 0201 Structured knowledge architecture and Zvec audit
 - [x] 0202 Native Zvec full-text index and migration *(needs 0201)*
-- [ ] 0203 Hybrid knowledge retrieval and evidence *(needs 0202)*
+- [x] 0203 Hybrid knowledge retrieval and evidence *(needs 0202)*
 - [ ] 0204 Knowledge request model and deterministic planner *(needs 0203)*
 - [ ] 0205 Knowledge DSL and rule-based parser *(needs 0204)*
 - [ ] 0206 Search-only knowledge UX and host parity *(needs 0205)*
