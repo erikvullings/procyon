@@ -66,7 +66,7 @@ const WORKER_RAM_BYTES: u64 = 64 * 1024 * 1024;
 const RUNTIME_RAM_BYTES: u64 = 8 * 1024 * 1024;
 
 const WORKER_PROTOCOL_VERSION: u32 = 1;
-const INDEX_SCHEMA_VERSION: u32 = 1;
+const INDEX_SCHEMA_VERSION: u32 = 2;
 
 /// Target operating-system/architecture pairs with a qualified, verified
 /// Zvec native runtime artifact (see `docs/architecture/zvec-rust-sdk.md`).
@@ -765,7 +765,7 @@ mod tests {
         let manifest = build(&spec);
 
         assert_eq!(manifest.pipeline().worker_protocol_version(), 1);
-        assert_eq!(manifest.pipeline().index_schema_version(), 1);
+        assert_eq!(manifest.pipeline().index_schema_version(), 2);
         assert_eq!(manifest.pipeline().converter(), spec.converter_identity);
         assert_eq!(manifest.pipeline().chunker(), spec.chunker_identity);
         assert_eq!(

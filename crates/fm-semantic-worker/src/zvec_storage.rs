@@ -4,28 +4,54 @@
 //! builds neither download nor link the optional native runtime.
 
 use std::fs::{File, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use fs2::FileExt;
 use zvec_rust::{
-    Collection, CollectionOptions, CollectionSchema, DataType, Doc, FieldSchema, IndexParams,
+    Collection, CollectionOptions, CollectionSchema, DataType, Doc, FieldSchema, Fts, IndexParams,
     MetricType, SearchQuery,
 };
 
 use crate::ingestion::{DerivedIndex, DerivedRecord};
 use crate::semantic_search::{ScoredRecord, SemanticCandidateIndex};
-use crate::semantic_storage::{QueryFilters, VectorIndexKind};
+use crate::semantic_storage::{DerivedIndexRecord, QueryFilters, VectorIndexKind};
 
 /// Official Rust SDK version pinned by Procyon.
 pub const ZVEC_RUST_VERSION: &str = "0.7.0";
 /// Native C API version paired with the pinned Rust SDK.
 pub const ZVEC_NATIVE_VERSION: &str = "0.7.0";
 /// Procyon schema version implemented by this adapter.
-pub const ZVEC_SCHEMA_VERSION: u32 = 1;
+pub const ZVEC_SCHEMA_VERSION: u32 = 2;
 /// Maximum retrieval candidates accepted by the worker.
 pub const MAX_TOP_K: usize = 1_000;
 const MAX_WRITE_BATCH_DOCUMENTS: usize = 1_024;
+const FTS_FIELD: &str = "content";
+
+/// Schema shape detected in an existing Procyon Zvec collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZvecSchemaState {
+    /// Schema v1 with vectors and filters but no searchable content.
+    VectorOnly,
+    /// Schema v2 with both dense vectors and native full-text search.
+    FullText,
+}
+
+/// Result of ensuring that a collection has the current FTS schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZvecMigrationOutcome {
+    /// The collection already used the current schema.
+    AlreadyCurrent,
+    /// A vector-only collection was rebuilt and atomically replaced.
+    Rebuilt,
+}
+
+#[derive(Debug)]
+struct MigrationPaths {
+    staging: PathBuf,
+    backup: PathBuf,
+    ready: PathBuf,
+}
 
 /// Audited packaging facts for one Procyon target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,8 +130,28 @@ pub struct ZvecRecord {
     pub concept_id: Option<String>,
     /// Published or staging generation.
     pub generation: u64,
+    /// Complete structurally bounded text used by native lexical retrieval.
+    pub content: String,
     /// Normalized FP32 embedding.
     pub embedding: Vec<f32>,
+}
+
+impl From<DerivedIndexRecord> for ZvecRecord {
+    fn from(record: DerivedIndexRecord) -> Self {
+        Self {
+            record_id: record.record_id,
+            tenant_id: record.tenant_id,
+            library_id: record.library_id,
+            root_id: record.root_id,
+            workspace_id: record.workspace_id,
+            media_type: record.media_type,
+            modified_at_ms: record.modified_at_ms,
+            concept_id: record.concept_id,
+            generation: record.generation,
+            content: record.content,
+            embedding: record.vector,
+        }
+    }
 }
 
 /// Worker-owned Zvec derived-index handle.
@@ -116,6 +162,13 @@ pub struct ZvecStorage {
 }
 
 impl ZvecStorage {
+    /// Returns whether an interrupted staged migration has recoverable artifacts.
+    #[must_use]
+    pub fn migration_pending(path: &Path) -> bool {
+        let paths = migration_paths(path);
+        paths.staging.exists() || paths.backup.exists() || paths.ready.exists()
+    }
+
     /// Creates a collection and takes the Procyon single-writer lock.
     ///
     /// # Errors
@@ -179,6 +232,11 @@ impl ZvecStorage {
                 DataType::Int64,
                 IndexParams::invert(true, false)?,
             )
+            .add_indexed_field(
+                FTS_FIELD,
+                DataType::String,
+                IndexParams::fts(None, None, None)?,
+            )
             .add_vector_field("embedding", DataType::VectorFp32, dimensions, vector_index)
             .build()?;
         let collection = Collection::create_and_open(path_string(path)?, &schema, None)?;
@@ -187,6 +245,137 @@ impl ZvecStorage {
             dimensions: dimensions as usize,
             _writer_lock: Some(writer_lock),
         })
+    }
+
+    /// Inspects whether an existing collection is vector-only or FTS-capable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ZvecStorageError::SchemaMismatch`] for partial or unknown schemas.
+    pub fn inspect_schema(path: &Path) -> Result<ZvecSchemaState, ZvecStorageError> {
+        ensure_initialized()?;
+        let mut options = CollectionOptions::new()?;
+        options.set_read_only(true)?;
+        let collection = Collection::open(path_string(path)?, Some(&options))?;
+        classify_collection_schema(&collection)
+    }
+
+    /// Rebuilds a vector-only collection into the current FTS schema.
+    ///
+    /// The caller supplies records recovered from authoritative SQLite state.
+    /// The old collection remains available until the staging collection is
+    /// flushed, optimized, and verified.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed filesystem, schema, verification, or SDK error. A failed
+    /// publication restores the vector-only collection.
+    pub fn migrate_vector_only(
+        path: &Path,
+        dimensions: usize,
+        index_kind: VectorIndexKind,
+        records: &[ZvecRecord],
+    ) -> Result<ZvecMigrationOutcome, ZvecStorageError> {
+        Self::migrate_vector_only_with(path, dimensions, index_kind, |staging| {
+            staging.upsert(records)?;
+            u64::try_from(records.len()).map_err(|_| ZvecStorageError::MigrationVerification)
+        })
+    }
+
+    /// Rebuilds the collection while a caller streams authoritative batches.
+    ///
+    /// The callback must return the number of records it supplied. A generic
+    /// error keeps catalog paging failures typed at the composition boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns the caller's error type for source reads and converted Zvec
+    /// errors for staging, verification, or publication failures.
+    pub fn migrate_vector_only_with<E, F>(
+        path: &Path,
+        dimensions: usize,
+        index_kind: VectorIndexKind,
+        populate: F,
+    ) -> Result<ZvecMigrationOutcome, E>
+    where
+        E: From<ZvecStorageError>,
+        F: FnOnce(&ZvecStorage) -> Result<u64, E>,
+    {
+        let _migration_lock = acquire_writer_lock(path).map_err(E::from)?;
+        let paths = migration_paths(path);
+        recover_interrupted_migration(path, &paths).map_err(E::from)?;
+        let had_existing_collection = path.exists();
+        if had_existing_collection
+            && Self::inspect_schema(path).map_err(E::from)? == ZvecSchemaState::FullText
+        {
+            remove_directory_if_exists(&paths.staging)
+                .map_err(ZvecStorageError::from)
+                .map_err(E::from)?;
+            remove_directory_if_exists(&paths.backup)
+                .map_err(ZvecStorageError::from)
+                .map_err(E::from)?;
+            remove_file_if_exists(&paths.ready)
+                .map_err(ZvecStorageError::from)
+                .map_err(E::from)?;
+            return Ok(ZvecMigrationOutcome::AlreadyCurrent);
+        }
+
+        remove_directory_if_exists(&paths.staging)
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        remove_directory_if_exists(&paths.backup)
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        remove_file_if_exists(&paths.ready)
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        let staging = Self::create(&paths.staging, dimensions, index_kind).map_err(E::from)?;
+        let expected_count = populate(&staging)?;
+        staging.flush().map_err(E::from)?;
+        staging.optimize().map_err(E::from)?;
+        let stats = staging
+            .collection
+            .stats()
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        let schema = staging
+            .collection
+            .schema()
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        if stats.doc_count != expected_count
+            || !schema.has_field(FTS_FIELD)
+            || !schema.has_index(FTS_FIELD)
+        {
+            return Err(E::from(ZvecStorageError::MigrationVerification));
+        }
+        drop(staging);
+        std::fs::write(&paths.ready, b"ready\n")
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        if had_existing_collection {
+            std::fs::rename(path, &paths.backup)
+                .map_err(ZvecStorageError::from)
+                .map_err(E::from)?;
+        }
+        if let Err(error) = std::fs::rename(&paths.staging, path) {
+            if paths.backup.exists() {
+                std::fs::rename(&paths.backup, path)
+                    .map_err(ZvecStorageError::from)
+                    .map_err(E::from)?;
+            }
+            return Err(E::from(ZvecStorageError::Io(error)));
+        }
+        remove_file_if_exists(&paths.ready)
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        remove_directory_if_exists(&paths.backup)
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        remove_file_if_exists(&append_suffix(&paths.staging, ".procyon-writer.lock"))
+            .map_err(ZvecStorageError::from)
+            .map_err(E::from)?;
+        Ok(ZvecMigrationOutcome::Rebuilt)
     }
 
     /// Opens an existing collection for reading or writing.
@@ -212,8 +401,9 @@ impl ZvecStorage {
         let mut options = CollectionOptions::new()?;
         options.set_read_only(read_only)?;
         let collection = Collection::open(path_string(path)?, Some(&options))?;
-        let schema = collection.schema()?;
-        if !schema.has_field("embedding") || !schema.has_index("embedding") {
+        if classify_collection_schema(&collection)? != ZvecSchemaState::FullText
+            || vector_schema_probe(&collection, expected_dimensions).is_err()
+        {
             return Err(ZvecStorageError::SchemaMismatch);
         }
         Ok(Self {
@@ -290,6 +480,7 @@ impl ZvecStorage {
                 i64::try_from(record.generation)
                     .map_err(|_| ZvecStorageError::InvalidGeneration)?,
             )?;
+            document.add_string(FTS_FIELD, &record.content)?;
             document.add_vector_f32("embedding", &record.embedding)?;
             documents.push(document);
         }
@@ -344,20 +535,12 @@ impl ZvecStorage {
         top_k: usize,
         filters: &QueryFilters,
     ) -> Result<Vec<ScoredRecord>, ZvecStorageError> {
-        if top_k == 0 || top_k > MAX_TOP_K {
-            return Err(ZvecStorageError::InvalidTopK {
-                requested: top_k,
-                maximum: MAX_TOP_K,
-            });
-        }
+        validate_query(top_k, filters)?;
         if vector.len() != self.dimensions {
             return Err(ZvecStorageError::DimensionMismatch {
                 expected: self.dimensions,
                 actual: vector.len(),
             });
-        }
-        if filters.tenant_id.is_empty() {
-            return Err(ZvecStorageError::MissingTenant);
         }
         let filter = compile_filter(filters)?;
         let mut query = SearchQuery::new(
@@ -383,6 +566,48 @@ impl ZvecStorage {
                     record_id,
                     score: 1.0 - document.get_score(),
                 })
+            })
+            .collect()
+    }
+
+    /// Executes bounded native full-text retrieval without requiring an embedding.
+    ///
+    /// Returned IDs remain candidates until reauthorized against SQLite.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty queries, invalid limits, missing tenant scope, and SDK errors.
+    pub fn query_full_text_record_ids(
+        &self,
+        text: &str,
+        top_k: usize,
+        filters: &QueryFilters,
+    ) -> Result<Vec<String>, ZvecStorageError> {
+        validate_query(top_k, filters)?;
+        if text.trim().is_empty() {
+            return Err(ZvecStorageError::EmptyFullTextQuery);
+        }
+        let mut fts = Fts::new()?;
+        fts.set_match_string(text)?;
+        let mut query = SearchQuery::fts(
+            FTS_FIELD,
+            &fts,
+            i32::try_from(top_k).map_err(|_| ZvecStorageError::InvalidTopK {
+                requested: top_k,
+                maximum: MAX_TOP_K,
+            })?,
+        )?;
+        query.set_filter(&compile_filter(filters)?)?;
+        query.set_include_vector(false)?;
+        query.set_output_fields(&[])?;
+        self.collection
+            .query(&query)?
+            .into_iter()
+            .map(|document| {
+                document
+                    .get_pk()
+                    .map(str::to_owned)
+                    .ok_or(ZvecStorageError::MissingPrimaryKey)
             })
             .collect()
     }
@@ -474,6 +699,9 @@ pub enum ZvecStorageError {
     /// Every query requires tenant scope.
     #[error("tenant filter is required")]
     MissingTenant,
+    /// Native full-text retrieval requires non-whitespace input.
+    #[error("full-text query is empty")]
+    EmptyFullTextQuery,
     /// A returned document did not contain its Zvec primary key.
     #[error("Zvec result omitted its primary key")]
     MissingPrimaryKey,
@@ -486,6 +714,9 @@ pub enum ZvecStorageError {
     /// SDK global initialization failed previously.
     #[error("Zvec initialization failed: {0}")]
     Initialization(String),
+    /// A staged FTS rebuild did not contain every record and a complete index.
+    #[error("staged Zvec FTS migration failed verification")]
+    MigrationVerification,
 }
 
 impl DerivedIndex for ZvecStorage {
@@ -502,6 +733,7 @@ impl DerivedIndex for ZvecStorage {
                 modified_at_ms: record.modified_at_ms,
                 concept_id: None,
                 generation: record.generation,
+                content: record.content.clone(),
                 embedding: record.embedding.clone(),
             })
             .collect::<Vec<_>>();
@@ -551,7 +783,7 @@ fn acquire_writer_lock(path: &Path) -> Result<File, ZvecStorageError> {
         .read(true)
         .write(true)
         .truncate(false)
-        .open(path.with_extension("procyon-writer.lock"))?;
+        .open(append_suffix(path, ".procyon-writer.lock"))?;
     lock.try_lock_exclusive()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::WouldBlock => ZvecStorageError::WriterAlreadyOpen,
@@ -562,6 +794,112 @@ fn acquire_writer_lock(path: &Path) -> Result<File, ZvecStorageError> {
 
 fn path_string(path: &Path) -> Result<&str, ZvecStorageError> {
     path.to_str().ok_or(ZvecStorageError::InvalidPath)
+}
+
+fn classify_collection_schema(
+    collection: &Collection,
+) -> Result<ZvecSchemaState, ZvecStorageError> {
+    let schema = collection.schema()?;
+    if !schema.has_field("embedding") || !schema.has_index("embedding") {
+        return Err(ZvecStorageError::SchemaMismatch);
+    }
+    match (schema.has_field(FTS_FIELD), schema.has_index(FTS_FIELD)) {
+        (false, false) => Ok(ZvecSchemaState::VectorOnly),
+        (true, true) => {
+            for field in [
+                "tenant_id",
+                "library_id",
+                "root_id",
+                "workspace_id",
+                "media_type",
+                "modified_at_ms",
+                "concept_id",
+                "generation",
+            ] {
+                if !schema.has_field(field) || !schema.has_index(field) {
+                    return Err(ZvecStorageError::SchemaMismatch);
+                }
+            }
+            full_text_schema_probe(collection)?;
+            Ok(ZvecSchemaState::FullText)
+        }
+        _ => Err(ZvecStorageError::SchemaMismatch),
+    }
+}
+
+fn full_text_schema_probe(collection: &Collection) -> Result<(), ZvecStorageError> {
+    let mut fts = Fts::new()?;
+    fts.set_match_string("__procyon_fts_schema_probe__")?;
+    let mut query = SearchQuery::fts(FTS_FIELD, &fts, 1)?;
+    query.set_filter("tenant_id = '__procyon_schema_probe__'")?;
+    query.set_include_vector(false)?;
+    query.set_output_fields(&[])?;
+    collection.query(&query)?;
+    Ok(())
+}
+
+fn vector_schema_probe(
+    collection: &Collection,
+    expected_dimensions: usize,
+) -> Result<(), ZvecStorageError> {
+    let vector = vec![0.0; expected_dimensions];
+    let mut query = SearchQuery::new("embedding", &vector, 1)?;
+    query.set_filter("tenant_id = '__procyon_schema_probe__'")?;
+    query.set_include_vector(false)?;
+    query.set_output_fields(&[])?;
+    collection.query(&query)?;
+    Ok(())
+}
+
+fn migration_paths(path: &Path) -> MigrationPaths {
+    MigrationPaths {
+        staging: path.with_extension("fts-v2-staging"),
+        backup: path.with_extension("fts-v1-backup"),
+        ready: path.with_extension("fts-v2-ready"),
+    }
+}
+
+fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_owned();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+fn recover_interrupted_migration(
+    path: &Path,
+    paths: &MigrationPaths,
+) -> Result<(), ZvecStorageError> {
+    if path.exists() {
+        return Ok(());
+    }
+    if paths.ready.exists() && paths.staging.exists() {
+        std::fs::rename(&paths.staging, path)?;
+        remove_directory_if_exists(&paths.backup)?;
+        remove_file_if_exists(&paths.ready)?;
+        return Ok(());
+    }
+    if paths.backup.exists() {
+        remove_directory_if_exists(&paths.staging)?;
+        remove_file_if_exists(&paths.ready)?;
+        std::fs::rename(&paths.backup, path)?;
+    }
+    Ok(())
+}
+
+fn remove_directory_if_exists(path: &Path) -> Result<(), std::io::Error> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), std::io::Error> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn compile_filter(filters: &QueryFilters) -> Result<String, ZvecStorageError> {
@@ -591,6 +929,19 @@ fn compile_filter(filters: &QueryFilters) -> Result<String, ZvecStorageError> {
         clauses.push(format!("generation = {value}"));
     }
     Ok(clauses.join(" AND "))
+}
+
+fn validate_query(top_k: usize, filters: &QueryFilters) -> Result<(), ZvecStorageError> {
+    if top_k == 0 || top_k > MAX_TOP_K {
+        return Err(ZvecStorageError::InvalidTopK {
+            requested: top_k,
+            maximum: MAX_TOP_K,
+        });
+    }
+    if filters.tenant_id.is_empty() {
+        return Err(ZvecStorageError::MissingTenant);
+    }
+    Ok(())
 }
 
 fn escape_filter_value(value: &str) -> Result<String, ZvecStorageError> {
@@ -627,6 +978,7 @@ mod tests {
             modified_at_ms: 1_000,
             concept_id: Some("concept-a".into()),
             generation: 1,
+            content: format!("content for {id}"),
             embedding: vector,
         }
     }
@@ -819,6 +1171,299 @@ mod tests {
         assert!(results[0].score > results[1].score);
         assert!((results[0].score - 1.0).abs() < f32::EPSILON);
         assert!(results[1].score.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn full_text_search_handles_terms_phrases_case_unicode_updates_and_deletes() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 1, VectorIndexKind::Flat)
+            .expect("create collection");
+        let mut alpha = record("alpha", "tenant-a", "text-plain", vec![1.0]);
+        alpha.content = "Fault Tree Analysis for naïve café systems".into();
+        let mut beta = record("beta", "tenant-a", "text-plain", vec![1.0]);
+        beta.content = "Ordinary maintenance procedure".into();
+        storage.insert(&[alpha.clone(), beta]).expect("insert");
+
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("fault", 10, &tenant_filters("tenant-a"))
+                .expect("term query"),
+            vec!["alpha"]
+        );
+        assert_eq!(
+            storage
+                .query_full_text_record_ids(
+                    "\"Fault Tree Analysis\"",
+                    10,
+                    &tenant_filters("tenant-a")
+                )
+                .expect("phrase query"),
+            vec!["alpha"]
+        );
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("NAÏVE", 10, &tenant_filters("tenant-a"))
+                .expect("unicode query"),
+            vec!["alpha"]
+        );
+
+        alpha.content = "Failure mode analysis".into();
+        storage.update(&[alpha]).expect("update");
+        assert!(
+            storage
+                .query_full_text_record_ids("fault", 10, &tenant_filters("tenant-a"))
+                .expect("query removed term")
+                .is_empty()
+        );
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("failure", 10, &tenant_filters("tenant-a"))
+                .expect("query updated term"),
+            vec!["alpha"]
+        );
+
+        storage.delete(&["alpha"]).expect("delete");
+        assert!(
+            storage
+                .query_full_text_record_ids("failure", 10, &tenant_filters("tenant-a"))
+                .expect("query deleted term")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn full_text_search_preserves_tenant_scope_and_bounds() {
+        let directory = tempdir().expect("temp directory");
+        let storage = ZvecStorage::create(&directory.path().join("zvec"), 1, VectorIndexKind::Flat)
+            .expect("create collection");
+        let mut tenant_a = record("a", "tenant-a", "text-plain", vec![1.0]);
+        tenant_a.content = "specialist identifier ABC-123".into();
+        let mut tenant_b = record("b", "tenant-b", "text-plain", vec![1.0]);
+        tenant_b.content = "specialist identifier ABC-123".into();
+        storage.insert(&[tenant_a, tenant_b]).expect("insert");
+
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("ABC-123", 10, &tenant_filters("tenant-a"))
+                .expect("scoped query"),
+            vec!["a"]
+        );
+        assert!(matches!(
+            storage.query_full_text_record_ids("ABC-123", 0, &tenant_filters("tenant-a")),
+            Err(ZvecStorageError::InvalidTopK { .. })
+        ));
+        assert!(matches!(
+            storage.query_full_text_record_ids("ABC-123", 10, &tenant_filters("")),
+            Err(ZvecStorageError::MissingTenant)
+        ));
+    }
+
+    #[test]
+    fn migrates_a_vector_only_collection_without_losing_records() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join("zvec");
+        create_vector_only_collection(&path, 1);
+        assert_eq!(
+            ZvecStorage::inspect_schema(&path).expect("inspect v1"),
+            ZvecSchemaState::VectorOnly
+        );
+        assert!(matches!(
+            ZvecStorage::open(&path, 1, false),
+            Err(ZvecStorageError::SchemaMismatch)
+        ));
+        let mut rebuilt = record("legacy", "tenant-a", "text-plain", vec![1.0]);
+        rebuilt.content = "restored searchable content".into();
+
+        assert_eq!(
+            ZvecStorage::migrate_vector_only(
+                &path,
+                1,
+                VectorIndexKind::Flat,
+                std::slice::from_ref(&rebuilt),
+            )
+            .expect("migrate"),
+            ZvecMigrationOutcome::Rebuilt
+        );
+        assert_eq!(
+            ZvecStorage::inspect_schema(&path).expect("inspect v2"),
+            ZvecSchemaState::FullText
+        );
+        let storage = ZvecStorage::open(&path, 1, false).expect("open migrated");
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("searchable", 10, &tenant_filters("tenant-a"),)
+                .expect("query migrated"),
+            vec!["legacy"]
+        );
+    }
+
+    #[test]
+    fn rebuilds_a_missing_derived_collection_from_authoritative_records() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join("zvec");
+        let mut rebuilt = record("restored", "tenant-a", "text-plain", vec![1.0]);
+        rebuilt.content = "authoritative SQLite content".into();
+
+        assert_eq!(
+            ZvecStorage::migrate_vector_only(
+                &path,
+                1,
+                VectorIndexKind::Flat,
+                std::slice::from_ref(&rebuilt),
+            )
+            .expect("rebuild missing index"),
+            ZvecMigrationOutcome::Rebuilt
+        );
+        let storage = ZvecStorage::open(&path, 1, false).expect("open rebuilt");
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("SQLite", 10, &tenant_filters("tenant-a"))
+                .expect("query rebuilt"),
+            vec!["restored"]
+        );
+    }
+
+    #[test]
+    fn rejects_a_content_field_with_the_wrong_index_type() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join("zvec");
+        let storage =
+            ZvecStorage::create(&path, 1, VectorIndexKind::Flat).expect("create collection");
+        storage
+            .collection
+            .drop_index(FTS_FIELD)
+            .expect("drop FTS index");
+        storage
+            .collection
+            .create_index(
+                FTS_FIELD,
+                &IndexParams::invert(false, false).expect("invert index"),
+            )
+            .expect("replace with wrong index");
+        storage.flush().expect("flush schema");
+        drop(storage);
+
+        assert!(matches!(
+            ZvecStorage::inspect_schema(&path),
+            Err(ZvecStorageError::Sdk(_)) | Err(ZvecStorageError::SchemaMismatch)
+        ));
+    }
+
+    #[test]
+    fn migration_rolls_back_an_unpublished_staging_directory_after_restart() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join("zvec");
+        create_vector_only_collection(&path, 1);
+        let paths = migration_paths(&path);
+        std::fs::rename(&path, &paths.backup).expect("simulate retired v1");
+        std::fs::create_dir_all(&paths.staging).expect("simulate partial staging");
+        let mut invalid = record("legacy", "tenant-a", "text-plain", vec![1.0, 0.0]);
+        invalid.content = "invalid migration attempt".into();
+        assert!(matches!(
+            ZvecStorage::migrate_vector_only(
+                &path,
+                1,
+                VectorIndexKind::Flat,
+                std::slice::from_ref(&invalid),
+            ),
+            Err(ZvecStorageError::DimensionMismatch { .. })
+        ));
+        assert_eq!(
+            ZvecStorage::inspect_schema(&path).expect("restored v1"),
+            ZvecSchemaState::VectorOnly
+        );
+
+        let mut rebuilt = record("legacy", "tenant-a", "text-plain", vec![1.0]);
+        rebuilt.content = "restart-safe migration".into();
+
+        ZvecStorage::migrate_vector_only(
+            &path,
+            1,
+            VectorIndexKind::Flat,
+            std::slice::from_ref(&rebuilt),
+        )
+        .expect("recover and migrate");
+
+        assert!(!paths.backup.exists());
+        assert!(!paths.staging.exists());
+        let storage = ZvecStorage::open(&path, 1, false).expect("open recovered");
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("restart-safe", 10, &tenant_filters("tenant-a"))
+                .expect("query recovered"),
+            vec!["legacy"]
+        );
+    }
+
+    #[test]
+    fn migration_publishes_a_verified_ready_stage_after_restart() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join("zvec");
+        create_vector_only_collection(&path, 1);
+        let paths = migration_paths(&path);
+        let staging =
+            ZvecStorage::create(&paths.staging, 1, VectorIndexKind::Flat).expect("staging index");
+        let mut rebuilt = record("legacy", "tenant-a", "text-plain", vec![1.0]);
+        rebuilt.content = "verified ready migration".into();
+        staging
+            .upsert(std::slice::from_ref(&rebuilt))
+            .expect("stage record");
+        staging.flush().expect("flush stage");
+        staging.optimize().expect("optimize stage");
+        drop(staging);
+        std::fs::rename(&path, &paths.backup).expect("retire v1");
+        std::fs::write(&paths.ready, b"ready\n").expect("ready marker");
+
+        assert_eq!(
+            ZvecStorage::migrate_vector_only(
+                &path,
+                1,
+                VectorIndexKind::Flat,
+                std::slice::from_ref(&rebuilt),
+            )
+            .expect("recover ready stage"),
+            ZvecMigrationOutcome::AlreadyCurrent
+        );
+        assert!(!paths.backup.exists());
+        assert!(!paths.ready.exists());
+        let storage = ZvecStorage::open(&path, 1, false).expect("open published stage");
+        assert_eq!(
+            storage
+                .query_full_text_record_ids("verified", 10, &tenant_filters("tenant-a"))
+                .expect("query published stage"),
+            vec!["legacy"]
+        );
+    }
+
+    fn create_vector_only_collection(path: &Path, dimensions: u32) {
+        ensure_initialized().expect("initialize");
+        let schema = CollectionSchema::builder("procyon-semantic-records")
+            .add_indexed_field(
+                "tenant_id",
+                DataType::String,
+                IndexParams::invert(false, false).expect("tenant index"),
+            )
+            .add_vector_field(
+                "embedding",
+                DataType::VectorFp32,
+                dimensions,
+                IndexParams::flat(MetricType::Cosine).expect("vector index"),
+            )
+            .build()
+            .expect("legacy schema");
+        let collection =
+            Collection::create_and_open(path_string(path).expect("path"), &schema, None)
+                .expect("legacy collection");
+        let mut document = Doc::new().expect("document");
+        document.set_pk("legacy");
+        document
+            .add_string("tenant_id", "tenant-a")
+            .expect("tenant");
+        document
+            .add_vector_f32("embedding", &[1.0])
+            .expect("embedding");
+        collection.insert(&[&document]).expect("insert legacy");
+        collection.flush().expect("flush legacy");
     }
 
     #[test]

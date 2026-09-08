@@ -133,6 +133,8 @@ pub struct DerivedRecord {
     pub generation: u64,
     /// Normalized vector.
     pub embedding: Vec<f32>,
+    /// Complete structurally bounded text indexed for lexical retrieval.
+    pub content: String,
     /// Bounded display excerpt.
     pub excerpt: String,
 }
@@ -753,6 +755,7 @@ impl IngestionCoordinator {
                 modified_at_ms: document.modified_at_ms,
                 generation,
                 embedding: vector,
+                content: chunk.embedding_input.clone(),
                 excerpt: chunk.display_excerpt.clone(),
             });
         }

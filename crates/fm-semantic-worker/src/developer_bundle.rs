@@ -36,11 +36,13 @@ use crate::semantic_search::{
 use crate::semantic_storage::{
     DistanceMetric, LibraryIndexManifest, SemanticCatalog, VectorIndexKind,
 };
-use crate::zvec_storage::{ZVEC_SCHEMA_VERSION, ZvecStorage, ZvecStorageError};
+use crate::zvec_storage::{ZVEC_SCHEMA_VERSION, ZvecRecord, ZvecStorage, ZvecStorageError};
 use crate::{
     ServerError, WorkerConfig, WorkerIngestionBackend, WorkerQueryBackend, WorkerServer,
     run_desktop_worker_with_factory,
 };
+
+const INDEX_REBUILD_BATCH_SIZE: usize = 256;
 
 /// Fixed vector width for the non-production developer embedder.
 pub const DEVELOPMENT_EMBEDDING_DIMENSIONS: usize = 384;
@@ -598,17 +600,30 @@ impl DeveloperWorker {
         std::fs::create_dir_all(&model_directory)?;
         let manifest = developer_manifest(&model.identity);
         let catalog = SemanticCatalog::open(model_directory.join("catalog.sqlite"))?;
-        catalog.validate_registered_library_manifests(&manifest)?;
         let index_directory = model_directory.join("zvec");
-        let index = if index_directory.exists() {
+        let index = if ZvecStorage::migration_pending(&index_directory) {
+            rebuild_derived_index(&catalog, &index_directory, model.identity.dimensions)?;
+            catalog.complete_zvec_schema_migration(&manifest)?;
             ZvecStorage::open(&index_directory, model.identity.dimensions, false)?
+        } else if index_directory.exists() {
+            match ZvecStorage::open(&index_directory, model.identity.dimensions, false) {
+                Ok(index) => {
+                    catalog.complete_zvec_schema_migration(&manifest)?;
+                    index
+                }
+                Err(ZvecStorageError::SchemaMismatch) => {
+                    rebuild_derived_index(&catalog, &index_directory, model.identity.dimensions)?;
+                    catalog.complete_zvec_schema_migration(&manifest)?;
+                    ZvecStorage::open(&index_directory, model.identity.dimensions, false)?
+                }
+                Err(error) => return Err(error.into()),
+            }
         } else {
-            ZvecStorage::create(
-                &index_directory,
-                model.identity.dimensions,
-                VectorIndexKind::Flat,
-            )?
+            rebuild_derived_index(&catalog, &index_directory, model.identity.dimensions)?;
+            catalog.complete_zvec_schema_migration(&manifest)?;
+            ZvecStorage::open(&index_directory, model.identity.dimensions, false)?
         };
+        catalog.validate_registered_library_manifests(&manifest)?;
         Ok(Self {
             catalog,
             embedder,
@@ -682,6 +697,42 @@ impl DeveloperWorker {
         let (ingestion, query) = self.backends();
         WorkerServer::with_backends(config, ingestion, query)
     }
+}
+
+fn rebuild_derived_index(
+    catalog: &SemanticCatalog,
+    index_directory: &Path,
+    dimensions: usize,
+) -> Result<(), DeveloperBundleError> {
+    ZvecStorage::migrate_vector_only_with::<DeveloperBundleError, _>(
+        index_directory,
+        dimensions,
+        VectorIndexKind::Flat,
+        |staging| {
+            let mut after_record_id = None;
+            let mut written = 0_u64;
+            loop {
+                let batch = catalog.derived_index_record_batch(
+                    after_record_id.as_deref(),
+                    INDEX_REBUILD_BATCH_SIZE,
+                )?;
+                if batch.is_empty() {
+                    break;
+                }
+                after_record_id = batch.last().map(|record| record.record_id.clone());
+                let records = batch.into_iter().map(ZvecRecord::from).collect::<Vec<_>>();
+                staging.upsert(&records)?;
+                written = written
+                    .checked_add(
+                        u64::try_from(records.len())
+                            .map_err(|_| ZvecStorageError::MigrationVerification)?,
+                    )
+                    .ok_or(ZvecStorageError::MigrationVerification)?;
+            }
+            Ok(written)
+        },
+    )?;
+    Ok(())
 }
 
 /// Runs the normal authenticated local worker with durable development
@@ -1012,6 +1063,26 @@ mod tests {
         let model_directory = fixture_index_directory(&directory.0);
         assert!(model_directory.join("catalog.sqlite").is_file());
         assert!(model_directory.join("zvec").is_dir());
+
+        drop(query);
+        drop(reopened);
+        std::fs::remove_dir_all(model_directory.join("zvec")).expect("remove derived index");
+        let rebuilt =
+            DeveloperWorker::open(&directory.0, None).expect("rebuild missing derived index");
+        let (_, query) = rebuilt.backends();
+        let after_rebuild = query
+            .query(
+                WorkerQueryInput {
+                    tenant_id: "tenant-development".into(),
+                    library_id: "library-development".into(),
+                    query: "semantic evidence".into(),
+                    concept_query: None,
+                    maximum_results: 10,
+                },
+                &CancellationToken::new(),
+            )
+            .expect("query after rebuilding missing index");
+        assert_eq!(after_rebuild[0].document_id, "document-development");
     }
 
     /// Resolves the packed real model, failing loudly rather than passing

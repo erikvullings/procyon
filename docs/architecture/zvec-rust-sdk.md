@@ -76,8 +76,9 @@ release. The safe Rust API provides every primitive needed for Structured Knowle
   without combining BM25 and cosine scores;
 - `Collection::add_column`, `create_index`, `drop_index`, and `optimize` support runtime schema
   changes;
-- `CollectionSchema::has_field`, `has_index`, `FieldSchema::index_type`, and
-  `Collection::stats` expose index presence and build completeness.
+- `CollectionSchema::has_field`, `has_index`, and `FieldSchema::index_type` expose FTS index
+  presence; `Collection::stats` reports document count and vector-index completeness but does not
+  list the FTS index in the pinned SDK's observed output.
 
 Prebuilt packages include the cppjieba dictionary, which `initialize` discovers for the documented
 `jieba` tokenizer. The default tokenizer is proven by the pinned crate's FTS tests and is the safe
@@ -85,6 +86,12 @@ initial choice for space-delimited English, Dutch, German, and French content. T
 not enumerate other tokenizer/filter names or expose the configured tokenizer through schema
 inspection, so Procyon must not guess filter names. The selected FTS tokenizer and configuration
 must be recorded in the worker-owned manifest and changed only through a schema migration.
+
+The safe 0.7.0 schema API does not expose a field lookup that would let Procyon read the persisted
+vector metric. Startup therefore verifies every required field/index, executes dimension and FTS
+schema probes, and relies on the authoritative manifest's cosine metric. Collections are created
+only by this adapter; an externally replaced collection is unsupported and query failures remain
+typed rather than silently changing scoring.
 
 These APIs use the same native library on every qualified target in the table above. Native FTS
 does not remove the existing macOS x64 packaging blocker.
@@ -109,7 +116,8 @@ than mutate the live collection:
    existing vector/filter fields.
 3. Stream authorized records and vectors from SQLite in bounded batches; no source conversion or
    embedding call is required.
-4. Flush, optimize, and require every expected index to report complete.
+4. Flush, optimize, verify the rebuilt document count, and inspect the expected FTS and vector
+   schema fields. Zvec 0.7.0 does not expose FTS build completeness through `Collection::stats`.
 5. Atomically publish the new collection and manifest only after validation.
 6. Retain the old version-1 directory until publication succeeds, then reclaim it through the
    existing deferred-cleanup path.

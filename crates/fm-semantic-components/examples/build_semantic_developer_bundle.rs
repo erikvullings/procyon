@@ -18,7 +18,7 @@ use semver::{Version, VersionReq};
 
 const DEVELOPMENT_SIGNING_KEY: [u8; 32] = [0x19; 32];
 const DEVELOPMENT_MODEL_DIMENSIONS: u32 = 384;
-const INDEX_SCHEMA_VERSION: u32 = 1;
+const INDEX_SCHEMA_VERSION: u32 = 2;
 
 /// Immutable upstream identity of the real multilingual retrieval model.
 ///

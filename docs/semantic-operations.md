@@ -219,7 +219,7 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 1.
+`docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 2.
 Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
 installers for qualification without publishing them. Tagged releases do that work only when the
 protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198

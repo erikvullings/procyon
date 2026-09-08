@@ -222,6 +222,7 @@ impl DocumentSummaryService {
             modified_at_ms: prepared.modified_at_ms,
             generation: prepared.source_generation,
             embedding: vector.clone(),
+            content: summary.full_text.clone(),
             excerpt: summary.brief_text.clone(),
         };
         self.index

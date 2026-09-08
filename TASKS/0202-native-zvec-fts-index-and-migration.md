@@ -1,6 +1,6 @@
 # 0202 Native Zvec full-text index and migration
 
-Status: open
+Status: done
 Priority: high
 Subsystem: semantic, search, storage
 Depends on: 0201
@@ -31,3 +31,16 @@ chunk index and migrate vector-only indexes without silently deleting authoritat
 ## Agent Notes
 
 - 2026-09-08 Copilot: Created from restored Structured Knowledge Query phases 1-2.
+- 2026-09-08 Copilot: Added schema-v2 native Zvec FTS over complete structural chunk/summary
+  content, including headings already carried in the conversion embedding input. File names remain
+  outside the worker because it intentionally has no filesystem-path authority. Added bounded,
+  tenant-filtered FTS-only queries that require no query vector; insert, update, upsert, and delete
+  now keep lexical and vector fields consistent.
+- 2026-09-08 Copilot: Added exact schema probes, authoritative SQLite rebuild records, schema-only
+  manifest migration, and a staged flush/optimize/verify/swap flow. Missing indexes rebuild from
+  SQLite, interrupted pre-publication migrations roll back, ready staging directories recover, and
+  version-1 data remains untouched until publication succeeds. Updated developer/managed startup
+  and production bundle metadata to index schema 2. Verified 18 native Zvec storage tests, 13
+  catalog tests, 87 passing tests in the complete developer-bundle worker suite (three production
+  model tests remain intentionally ignored), all 91 semantic-component target tests, and warning-free
+  clippy for both affected crates.

@@ -54,7 +54,7 @@ pub fn embedded_production_verifying_key() -> Result<VerifyingKey, ProductionCat
 pub fn production_pipeline_identity() -> crate::ProductionPipelineIdentity {
     crate::ProductionPipelineIdentity::new(
         1,
-        1,
+        2,
         PRODUCTION_CONVERTER_IDENTITY,
         PRODUCTION_CHUNKER_IDENTITY,
         crate::TokenizerId::new(PRODUCTION_TOKENIZER_ID)

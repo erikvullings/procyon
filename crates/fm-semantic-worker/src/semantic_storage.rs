@@ -171,6 +171,33 @@ pub struct StagedRecord {
     pub concept_id: Option<String>,
 }
 
+/// Authoritative record material used to rebuild the disposable Zvec index.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DerivedIndexRecord {
+    /// Stable Zvec primary key.
+    pub record_id: String,
+    /// Tenant scope.
+    pub tenant_id: String,
+    /// Library scope.
+    pub library_id: String,
+    /// Enrolled root scope.
+    pub root_id: String,
+    /// Optional workspace scope.
+    pub workspace_id: Option<String>,
+    /// Indexed media type.
+    pub media_type: String,
+    /// Source modification time.
+    pub modified_at_ms: i64,
+    /// Published or staging generation.
+    pub generation: u64,
+    /// Complete structurally bounded text.
+    pub content: String,
+    /// Normalized embedding retained by SQLite.
+    pub vector: Vec<f32>,
+    /// Optional SKOS concept identity.
+    pub concept_id: Option<String>,
+}
+
 /// Complete extracted chunks and embeddings for one visible document generation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummarySourceSet {
@@ -496,6 +523,144 @@ impl SemanticCatalog {
                 });
             }
         }
+        Ok(())
+    }
+
+    /// Loads one stable keyset page used to reconstruct the derived Zvec collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed database or corruption error.
+    pub fn derived_index_record_batch(
+        &self,
+        after_record_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<DerivedIndexRecord>, StorageError> {
+        if limit == 0 {
+            return Err(StorageError::InvalidLimit);
+        }
+        let limit = i64::try_from(limit).map_err(|_| StorageError::InvalidLimit)?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT r.record_id, r.tenant_id, r.library_id, o.root_id, o.workspace_id,
+                    o.media_type, o.modified_at_ms, r.generation, r.content, v.vector,
+                    r.concept_id
+             FROM records r
+             JOIN occurrences o
+               ON o.occurrence_id = r.occurrence_id
+              AND o.generation = r.generation
+             JOIN vectors v ON v.cache_key = r.cache_key
+             WHERE (?1 IS NULL OR r.record_id > ?1)
+             ORDER BY r.record_id
+             LIMIT ?2",
+        )?;
+        let rows = statement
+            .query_map(params![after_record_id, limit], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, i64>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, Vec<u8>>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(
+                |(
+                    record_id,
+                    tenant_id,
+                    library_id,
+                    root_id,
+                    workspace_id,
+                    media_type,
+                    modified_at_ms,
+                    generation,
+                    content,
+                    vector,
+                    concept_id,
+                )| {
+                    Ok(DerivedIndexRecord {
+                        record_id,
+                        tenant_id,
+                        library_id,
+                        root_id,
+                        workspace_id,
+                        media_type,
+                        modified_at_ms,
+                        generation: u64::try_from(generation)
+                            .map_err(|_| StorageError::CorruptCatalog)?,
+                        content,
+                        vector: decode_vector(&vector)?,
+                        concept_id,
+                    })
+                },
+            )
+            .collect()
+    }
+
+    /// Commits a completed derived-index schema migration to every library manifest.
+    ///
+    /// Only the Zvec schema version may differ. This prevents an index rebuild
+    /// from silently accepting a model, tokenizer, converter, or chunker change.
+    ///
+    /// # Errors
+    ///
+    /// Returns a migration requirement when any other manifest field differs.
+    pub fn complete_zvec_schema_migration(
+        &self,
+        expected: &LibraryIndexManifest,
+    ) -> Result<(), StorageError> {
+        expected.validate()?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let mut statement = transaction.prepare(
+            "SELECT tenant_id, library_id, manifest_json
+             FROM libraries
+             ORDER BY tenant_id, library_id",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+        for (tenant_id, library_id, manifest_json) in rows {
+            let mut manifest: LibraryIndexManifest = serde_json::from_str(&manifest_json)?;
+            manifest.validate()?;
+            if manifest.zvec_schema_version > expected.zvec_schema_version {
+                return Err(StorageError::MigrationRequired {
+                    incompatible_fields: vec!["zvec_schema_version"],
+                });
+            }
+            let incompatible_fields = manifest
+                .incompatible_fields(expected)
+                .into_iter()
+                .filter(|field| *field != "zvec_schema_version")
+                .collect::<Vec<_>>();
+            if !incompatible_fields.is_empty() {
+                return Err(StorageError::MigrationRequired {
+                    incompatible_fields,
+                });
+            }
+            manifest.zvec_schema_version = expected.zvec_schema_version;
+            transaction.execute(
+                "UPDATE libraries SET manifest_json = ?3
+                 WHERE tenant_id = ?1 AND library_id = ?2",
+                params![tenant_id, library_id, serde_json::to_string(&manifest)?],
+            )?;
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1871,6 +2036,9 @@ pub enum StorageError {
     /// Identifier is missing or unsafe.
     #[error("invalid semantic storage identifier: {0}")]
     InvalidIdentifier(&'static str),
+    /// A bounded storage page requested no records or exceeded SQLite's range.
+    #[error("invalid semantic storage page limit")]
+    InvalidLimit,
     /// Manifest contains a zero or empty compatibility field.
     #[error("invalid semantic library manifest")]
     InvalidManifest,
@@ -2478,6 +2646,93 @@ mod tests {
             Err(StorageError::MigrationRequired {
                 incompatible_fields
             }) if incompatible_fields == vec!["dimensions", "model_revision"]
+        ));
+    }
+
+    #[test]
+    fn exposes_authoritative_records_for_a_derived_index_rebuild() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let staged = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![
+                occurrence("occurrence-b", "root-b"),
+                occurrence("occurrence-a", "root-a"),
+            ],
+            "searchable structured content",
+        );
+        catalog.stage_generation(&staged).expect("stage");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .expect("publish");
+        let mut expected_ids = staged
+            .records
+            .iter()
+            .map(|record| record.record_id.clone())
+            .collect::<Vec<_>>();
+        expected_ids.sort();
+
+        let first = catalog
+            .derived_index_record_batch(None, 1)
+            .expect("load first rebuild page");
+
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].record_id, expected_ids[0]);
+        assert_eq!(first[0].content, "searchable structured content");
+        assert_eq!(first[0].root_id, "root-a");
+        assert_eq!(first[0].workspace_id.as_deref(), Some("workspace-a"));
+        assert_eq!(first[0].concept_id.as_deref(), Some("concept-a"));
+        assert_eq!(first[0].vector, vec![0.6, 0.8, 0.0]);
+        let second = catalog
+            .derived_index_record_batch(Some(&first[0].record_id), 1)
+            .expect("load next rebuild page");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].record_id, expected_ids[1]);
+        assert!(first[0].record_id < second[0].record_id);
+        assert!(
+            catalog
+                .derived_index_record_batch(Some(&second[0].record_id), 1)
+                .expect("reach end of rebuild pages")
+                .is_empty()
+        );
+        assert!(matches!(
+            catalog.derived_index_record_batch(None, 0),
+            Err(StorageError::InvalidLimit)
+        ));
+    }
+
+    #[test]
+    fn completes_only_a_schema_only_manifest_migration() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let mut expected = manifest();
+        expected.zvec_schema_version = 2;
+
+        catalog
+            .complete_zvec_schema_migration(&expected)
+            .expect("complete migration");
+        catalog
+            .validate_registered_library_manifests(&expected)
+            .expect("updated manifest");
+        assert!(matches!(
+            catalog.complete_zvec_schema_migration(&manifest()),
+            Err(StorageError::MigrationRequired {
+                incompatible_fields
+            }) if incompatible_fields == vec!["zvec_schema_version"]
+        ));
+
+        let mut incompatible = expected.clone();
+        incompatible.model_revision = "different-model".into();
+        assert!(matches!(
+            catalog.complete_zvec_schema_migration(&incompatible),
+            Err(StorageError::MigrationRequired { .. })
         ));
     }
 
