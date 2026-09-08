@@ -238,7 +238,7 @@ impl RagRetrievalService {
             .into_iter()
             .map(|item| item.record_id)
             .collect::<Vec<_>>();
-        let reader = self.catalog.begin_read();
+        let reader = self.catalog.begin_read()?;
         let visible = reader.filter_visible_candidates(&ids, &request.filters)?;
         threshold_primary_evidence(
             visible
@@ -286,7 +286,7 @@ impl RagRetrievalService {
         primaries: &[RagCandidate],
         request: &RagRetrievalRequest,
     ) -> Result<RagContext, RagRetrievalError> {
-        let reader = self.catalog.begin_read();
+        let reader = self.catalog.begin_read()?;
         let mut adjacent_by_primary = HashMap::new();
         for primary in primaries {
             let adjacent = if primary.evidence.generated {

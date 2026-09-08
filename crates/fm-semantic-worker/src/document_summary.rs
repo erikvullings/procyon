@@ -589,6 +589,7 @@ mod tests {
         assert_eq!(
             catalog
                 .begin_read()
+                .expect("reader")
                 .filter_visible_candidates(
                     std::slice::from_ref(&summary.record_id),
                     &crate::semantic_storage::QueryFilters {

@@ -1207,6 +1207,7 @@ mod tests {
             let evidence = self
                 .catalog
                 .begin_read()
+                .expect("reader")
                 .filter_visible_candidates(
                     &candidates,
                     &QueryFilters {

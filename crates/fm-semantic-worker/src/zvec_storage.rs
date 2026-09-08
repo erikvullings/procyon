@@ -14,6 +14,7 @@ use zvec_rust::{
 };
 
 use crate::ingestion::{DerivedIndex, DerivedRecord};
+use crate::knowledge_retrieval::FullTextCandidateIndex;
 use crate::semantic_search::{ScoredRecord, SemanticCandidateIndex};
 use crate::semantic_storage::{DerivedIndexRecord, QueryFilters, VectorIndexKind};
 
@@ -754,6 +755,18 @@ impl SemanticCandidateIndex for ZvecStorage {
         filters: &QueryFilters,
     ) -> Result<Vec<ScoredRecord>, String> {
         self.query_scored_records(vector, limit, filters)
+            .map_err(|error| error.to_string())
+    }
+}
+
+impl FullTextCandidateIndex for ZvecStorage {
+    fn query_full_text(
+        &self,
+        text: &str,
+        limit: usize,
+        filters: &QueryFilters,
+    ) -> Result<Vec<String>, String> {
+        self.query_full_text_record_ids(text, limit, filters)
             .map_err(|error| error.to_string())
     }
 }

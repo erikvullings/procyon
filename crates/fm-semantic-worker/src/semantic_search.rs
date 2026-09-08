@@ -385,7 +385,7 @@ impl SemanticSearchService {
             .collect::<Vec<_>>();
         let evidence = self
             .catalog
-            .begin_read()
+            .begin_read()?
             .filter_visible_candidates(&candidate_ids, &request.filters)?;
         let grouped = group_evidence(
             evidence

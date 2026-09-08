@@ -60,3 +60,12 @@ returns source-oriented evidence independent of RAG answer generation.
   `fm-semantic-worker` suite (54 further integration tests, one pre-existing ignored), the 18
   feature-gated native Zvec tests, `cargo fmt --all --check`, and warning-free clippy with and
   without the `zvec` feature.
+- 2026-09-08 Copilot: Post-review hardening removed the 1,024-candidate authorization truncation:
+  fused candidates are now authorized in bounded ranked batches until exhausted, while selection
+  remains result- and token-bounded and later duplicate occurrences are still recorded. A
+  `CatalogReader` now owns one SQLite read transaction, so primary authorization and adjacency use
+  the same publication snapshot. Cancellation is checked between authorization batches, selected
+  primaries, adjacency reads, and final return. Regression coverage includes a visible candidate
+  after the first 1,024 unauthorized IDs, duplicates beyond the result boundary, materialization
+  cancellation, and publication during a retained read snapshot. Reverified all 73 worker library
+  tests, all 92 `zvec`-enabled library tests, and warning-free clippy in both configurations.

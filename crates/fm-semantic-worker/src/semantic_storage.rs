@@ -776,12 +776,14 @@ impl SemanticCatalog {
     }
 
     /// Starts an in-process read lease that delays derived-record reclamation.
-    #[must_use]
-    pub fn begin_read(&self) -> CatalogReader {
+    pub fn begin_read(&self) -> Result<CatalogReader, StorageError> {
+        let connection = self.connection()?;
+        connection.execute_batch("BEGIN DEFERRED")?;
         self.active_readers.fetch_add(1, Ordering::AcqRel);
-        CatalogReader {
+        Ok(CatalogReader {
             catalog: self.clone(),
-        }
+            connection,
+        })
     }
 
     /// Reclaims superseded records and unreferenced cached vectors.
@@ -1778,6 +1780,7 @@ impl SemanticCatalog {
 /// Read lease retaining superseded records until evidence materialization ends.
 pub struct CatalogReader {
     catalog: SemanticCatalog,
+    connection: Connection,
 }
 
 impl CatalogReader {
@@ -1801,9 +1804,7 @@ impl CatalogReader {
                 maximum: 4_096,
             });
         }
-        let mut connection = self.catalog.connection()?;
-        let transaction = connection.transaction()?;
-        let mut statement = transaction.prepare(
+        let mut statement = self.connection.prepare(
             "SELECT r.record_id, r.library_id, r.document_id, o.occurrence_id,
                     o.source_id, r.provenance, r.generation, r.record_kind,
                     r.excerpt, r.content, r.token_count, r.section_path_json,
@@ -1945,8 +1946,7 @@ impl CatalogReader {
         }
         let lower = anchor.source_position.saturating_sub(radius);
         let upper = anchor.source_position.saturating_add(radius);
-        let connection = self.catalog.connection()?;
-        let mut statement = connection.prepare(
+        let mut statement = self.connection.prepare(
             "SELECT record_id
              FROM records
              WHERE tenant_id = ?1
@@ -1973,7 +1973,6 @@ impl CatalogReader {
             )?
             .collect::<Result<Vec<_>, _>>()?;
         drop(statement);
-        drop(connection);
         self.filter_visible_candidates(&record_ids, filters)
     }
 }
@@ -2957,6 +2956,7 @@ mod tests {
             .collect::<Vec<_>>();
         let evidence = catalog
             .begin_read()
+            .expect("reader")
             .filter_visible_candidates(
                 &candidates,
                 &QueryFilters {
@@ -2981,6 +2981,7 @@ mod tests {
         );
         let remaining = catalog
             .begin_read()
+            .expect("reader")
             .filter_visible_candidates(
                 &candidates,
                 &QueryFilters {
@@ -3052,8 +3053,8 @@ mod tests {
             ..QueryFilters::default()
         };
 
-        let before = catalog
-            .begin_read()
+        let snapshot_reader = catalog.begin_read().expect("snapshot reader");
+        let before = snapshot_reader
             .filter_visible_candidates(&candidates, &filters)
             .expect("before");
         assert_eq!(before.len(), 1);
@@ -3062,7 +3063,12 @@ mod tests {
         catalog
             .publish_generation("tenant-a", "library-a", "document-a", 2)
             .expect("publish new");
-        let reader = catalog.begin_read();
+        let during = snapshot_reader
+            .filter_visible_candidates(&candidates, &filters)
+            .expect("snapshot remains stable");
+        assert_eq!(during.len(), 1);
+        assert_eq!(during[0].generation, 1);
+        let reader = catalog.begin_read().expect("reader");
         let after = reader
             .filter_visible_candidates(&candidates, &filters)
             .expect("after");
@@ -3073,6 +3079,7 @@ mod tests {
             Err(StorageError::ReadersActive)
         ));
         drop(reader);
+        drop(snapshot_reader);
         assert_eq!(
             catalog.reclaim_superseded().expect("reclaim"),
             ReclaimStats {
@@ -3124,6 +3131,7 @@ mod tests {
         ];
         let evidence = catalog
             .begin_read()
+            .expect("reader")
             .filter_visible_candidates(
                 &candidates,
                 &QueryFilters {
@@ -3167,6 +3175,7 @@ mod tests {
             SemanticCatalog::open(directory.path().join("catalog.sqlite")).expect("reopen");
         let invisible = reopened
             .begin_read()
+            .expect("reader")
             .filter_visible_candidates(
                 &[staged.records[0].record_id.clone()],
                 &QueryFilters {
@@ -3182,6 +3191,7 @@ mod tests {
         assert_eq!(
             reopened
                 .begin_read()
+                .expect("reader")
                 .filter_visible_candidates(
                     &[staged.records[0].record_id.clone()],
                     &QueryFilters {
@@ -3296,6 +3306,7 @@ mod tests {
             .expect("publish second");
         let visible = catalog
             .begin_read()
+            .expect("reader")
             .filter_visible_candidates(
                 std::slice::from_ref(&summary.record_id),
                 &QueryFilters {
