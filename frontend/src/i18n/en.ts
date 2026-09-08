@@ -734,11 +734,6 @@ export const en = {
     copyEvidence: 'Copy evidence {label}',
     copyFailed: 'The text could not be copied.',
     allowModelKnowledge: 'Allow model knowledge',
-    multiQuery: 'Broaden retrieval with query planning',
-    queryPlanningDisclosure:
-      'Sends the question to the selected profile before retrieval. Planned queries cannot change the selected evidence scope.',
-    queryPlanCount: '{count} retrieval queries',
-    queryPlanFallback: 'Query planning used single-query fallback ({reason}).',
     evidence: 'Retrieved evidence',
     similarityScore: 'Similarity {score}',
     similarityDescription: 'Cosine similarity {score}; higher is closer',

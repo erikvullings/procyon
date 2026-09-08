@@ -131,7 +131,23 @@ semantic components are not installed.
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
 - [x] 0200 Opt-in multi-query grounded Ask *(needs 0199 and its go decision; single-query remains
-  the default and fallback)*
+  the default and fallback; developer UI removed after the restored handoff showed this experiment
+  was not the requested alternative)*
+
+## Structured knowledge search
+
+Search-first, offline-capable retrieval from intentionally indexed roots. These tasks implement the
+restored Structured Knowledge Query specification; LLM parsing and answer generation are optional
+layers and never prerequisites for retrieval.
+
+- [x] 0201 Structured knowledge architecture and Zvec audit
+- [ ] 0202 Native Zvec full-text index and migration *(needs 0201)*
+- [ ] 0203 Hybrid knowledge retrieval and evidence *(needs 0202)*
+- [ ] 0204 Knowledge request model and deterministic planner *(needs 0203)*
+- [ ] 0205 Knowledge DSL and rule-based parser *(needs 0204)*
+- [ ] 0206 Search-only knowledge UX and host parity *(needs 0205)*
+- [ ] 0207 Optional answer generation from evidence *(needs 0206)*
+- [ ] 0208 Knowledge retrieval evaluation and release gate *(needs 0207)*
 
 ## File operations
 

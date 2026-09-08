@@ -115,6 +115,15 @@ bounded evidence, provenance, stale/availability state, and honest coverage. The
 that evidence beside the ordinary pane, opens its excerpt in the existing viewer, and stores
 explicit relevance judgements locally for user-triggered export only.
 
+Structured Knowledge Search extends that retrieval boundary with native full-text search as a peer
+to vectors. Its request and deterministic plan contain only subjects, knowledge needs, explicit
+related terms, authorized scopes, and retrieval options. Zvec executes independent FTS and dense
+routes and fuses ranks without mixing score domains; missing or incompatible query embeddings
+degrade explicitly to FTS. Source evidence remains useful offline and without a generation profile.
+Action and application context belong to a separate optional answer request and never affect
+retrieval unless repeated explicitly as a related term. See
+[ADR 0012](../decisions/0012-structured-knowledge-search.md).
+
 Generation is an optional application capability independent from semantic indexing. Named
 OpenAI-compatible profiles are owned by `fm-application`, while `fm-credentials` retains their
 tokens and settings retain only opaque credential references. The capability supports local server

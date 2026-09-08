@@ -107,3 +107,7 @@ and visible fallback when planning cannot safely complete.
   `singleQuery`. Developers may enable the backend with `PROCYON_ENABLE_MULTI_QUERY_RAG=1` and the
   UI with `VITE_ENABLE_MULTI_QUERY_RAG=true`; debug/test builds retain coverage without presenting
   the experiment as a measured improvement.
+- 2026-09-08 Copilot: The restored requirements explicitly list mandatory LLM query rewriting as a
+  V1 non-goal. Removed the developer-facing Ask checkbox so the experiment cannot be mistaken for
+  the requested UX. The dormant typed backend remains isolated for benchmark reproducibility;
+  tasks 0201-0208 own Structured Knowledge Search.

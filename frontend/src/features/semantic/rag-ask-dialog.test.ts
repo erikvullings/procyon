@@ -132,16 +132,14 @@ describe('RagAskDialog', () => {
     const preferenceRow = preferences?.querySelector('.fm-rag-preference-row');
     expect(preferenceRow?.querySelector('.fm-rag-options')).not.toBeNull();
     const checkboxes = preferences?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-    expect(checkboxes).toHaveLength(3);
+    expect(checkboxes).toHaveLength(2);
     const includeFolder = checkboxes?.item(0);
     expect(includeFolder?.checked).toBe(false);
     if (includeFolder === undefined) throw new Error('folder inclusion checkbox not rendered');
     includeFolder.checked = true;
     includeFolder.dispatchEvent(new Event('change', { bubbles: true }));
     expect(includeCurrentFolder).toHaveBeenCalledOnce();
-    const retrievalStrategy = checkboxes?.item(1);
-    expect(retrievalStrategy?.checked).toBe(false);
-    const modelKnowledge = checkboxes?.item(2);
+    const modelKnowledge = checkboxes?.item(1);
     expect(modelKnowledge?.checked).toBe(false);
     expect(root.textContent).toContain('read-only');
     expect(root.textContent).toContain('Index current folder');
@@ -209,7 +207,7 @@ describe('RagAskDialog', () => {
     await vi.waitFor(() => expect(root.textContent).not.toContain('Saved conversations'));
   });
 
-  it('keeps single-query retrieval by default and discloses opted-in query planning', async () => {
+  it('keeps Ask retrieval single-query and does not expose LLM query planning', async () => {
     const client = await configuredClient();
     const preview = vi.spyOn(client, 'previewRag');
     m.mount(root, {
@@ -226,14 +224,8 @@ describe('RagAskDialog', () => {
     });
     await vi.waitFor(() => expect(root.textContent).toContain('Local profile'));
 
-    const strategy = root.querySelector<HTMLInputElement>('#fm-rag-multi-query');
-    expect(strategy?.checked).toBe(false);
-    expect(root.textContent).toContain(
-      'Sends the question to the selected profile before retrieval',
-    );
-    if (strategy === null) throw new Error('retrieval strategy control not rendered');
-    strategy.checked = true;
-    strategy.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(root.querySelector('#fm-rag-multi-query')).toBeNull();
+    expect(root.textContent).not.toContain('query planning');
     const question = root.querySelector<HTMLTextAreaElement>('textarea');
     if (question === null) throw new Error('question input not rendered');
     question.value = 'Compare the alpha and beta designs';
@@ -246,11 +238,11 @@ describe('RagAskDialog', () => {
 
     await vi.waitFor(() =>
       expect(preview).toHaveBeenCalledWith(
-        expect.objectContaining({ retrievalStrategy: 'multiQuery' }),
+        expect.objectContaining({ retrievalStrategy: 'singleQuery' }),
         expect.any(AbortSignal),
       ),
     );
-    await vi.waitFor(() => expect(root.textContent).toContain('3 retrieval queries'));
+    expect(root.textContent).not.toContain('retrieval queries');
   });
 
   it('submits with Enter and preserves Shift+Enter for a newline', async () => {

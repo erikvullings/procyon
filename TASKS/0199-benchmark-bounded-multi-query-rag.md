@@ -85,3 +85,7 @@ by a reproducible comparison using the retrieval metrics established in 0188.
   records **no-go** even though the fixture-level quality thresholds pass; a production measurement
   must replace it before enabling the candidate for normal users. No index, embedding, conversion,
   or retained-vector migration is required.
+- 2026-09-08 Copilot: The requester restored the missing handoff. The intended alternative is
+  Structured Knowledge Search, not LLM query rewriting. This experiment remains a valid no-go
+  benchmark but is superseded product work; tasks 0201-0208 implement the actual local-first
+  architecture.
