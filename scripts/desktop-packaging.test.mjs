@@ -7,6 +7,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 
+import { installNativeRuntimeAlias } from './build-semantic-developer-bundle.mjs';
+
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function read(...segments) {
@@ -396,6 +398,26 @@ test('knowledge release preconditions require a repository-recorded measured go'
   );
   assert.notEqual(forgedResult.status, 0);
   assert.match(`${forgedResult.stdout}${forgedResult.stderr}`, /evidence does not support a go/i);
+});
+
+test('developer semantic bundle exposes the native runtime under its loader filename', () => {
+  const outputRoot = scratchDirectory('semantic-runtime-alias-');
+  for (const [platform, library] of [
+    ['darwin', 'libzvec_c_api.dylib'],
+    ['linux', 'libzvec_c_api.so'],
+    ['win32', 'zvec_c_api.dll'],
+  ]) {
+    const source = join(outputRoot, platform, 'build', `content-addressed-${library}`);
+    const bundle = join(outputRoot, platform, 'bundle');
+    mkdirSync(dirname(source), { recursive: true });
+    mkdirSync(join(bundle, 'artifacts'), { recursive: true });
+    writeFileSync(source, `native-runtime-${platform}`);
+
+    const alias = installNativeRuntimeAlias(source, bundle, platform);
+
+    assert.equal(alias, join(bundle, 'artifacts', library));
+    assert.equal(readFileSync(alias, 'utf8'), `native-runtime-${platform}`);
+  }
 });
 
 test('release verification key exporter writes only a validated public key as hex', () => {

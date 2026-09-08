@@ -20,13 +20,16 @@ function run(command, args, options = {}) {
   }
 }
 
+function zvecNativeLibraryNames(platform) {
+  return platform === 'darwin'
+    ? ['libzvec_c_api.dylib']
+    : platform === 'win32'
+      ? ['zvec_c_api.dll', 'libzvec_c_api.dll']
+      : ['libzvec_c_api.so'];
+}
+
 function findZvecNativeLibrary(targetDirectory, profile) {
-  const names =
-    process.platform === 'darwin'
-      ? ['libzvec_c_api.dylib']
-      : process.platform === 'win32'
-        ? ['zvec_c_api.dll', 'libzvec_c_api.dll']
-        : ['libzvec_c_api.so'];
+  const names = zvecNativeLibraryNames(process.platform);
   const buildDirectory = path.join(targetDirectory, profile, 'build');
   const candidates = fs
     .readdirSync(buildDirectory, { withFileTypes: true })
@@ -42,6 +45,17 @@ function findZvecNativeLibrary(targetDirectory, profile) {
     );
   }
   return candidates[0];
+}
+
+export function installNativeRuntimeAlias(
+  nativeRuntime,
+  outputDirectory,
+  platform = process.platform,
+) {
+  const artifacts = path.join(outputDirectory, 'artifacts');
+  const alias = path.join(artifacts, zvecNativeLibraryNames(platform)[0]);
+  fs.copyFileSync(nativeRuntime, alias);
+  return alias;
 }
 
 export async function buildSemanticDeveloperBundle() {
@@ -102,6 +116,7 @@ export async function buildSemanticDeveloperBundle() {
     modelCache,
     output,
   ]);
+  installNativeRuntimeAlias(nativeRuntime, output);
   return output;
 }
 
