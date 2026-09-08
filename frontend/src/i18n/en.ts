@@ -873,7 +873,14 @@ export const en = {
     loadFailed: 'Knowledge search is not available right now.',
     parseFailed: 'The query could not be interpreted.',
     planFailed: 'The query plan could not be built.',
-    searchFailed: 'The search could not be completed.',
+    searchNoSources:
+      'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
+    searchUnavailable:
+      'Knowledge search is unavailable. Check Semantic Search settings and try again.',
+    searchDenied: 'This search scope is no longer authorized. Choose another scope and try again.',
+    searchInvalid: 'This search could not be run. Review the subject and scope, then try again.',
+    searchFailed:
+      'Knowledge search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
     offline: 'The backend is unreachable; results may be out of date.',
     answerNotGenerated:
       'Search never generates an answer. Answer generation is unavailable and not required.',

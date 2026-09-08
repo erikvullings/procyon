@@ -517,7 +517,7 @@ impl KnowledgeService {
         let (partitions, scope_is_exact) = partition_scope(
             &resolved,
             matches!(selection, RagScopeSelection::EntireLibrary),
-        );
+        )?;
         Ok(ResolvedKnowledgeRequest {
             effective_scope: effective_scope_dto(scope, &selection, &selectors),
             scope_label: scope_label(scope, &selection),
@@ -578,29 +578,44 @@ impl ResolvedKnowledgeRequest {
 fn partition_scope(
     resolved: &ResolvedKnowledgeScope,
     whole_library: bool,
-) -> (Vec<KnowledgeRetrievalPartition>, bool) {
+) -> Result<(Vec<KnowledgeRetrievalPartition>, bool), ApplicationError> {
     if whole_library {
-        return (
-            vec![KnowledgeRetrievalPartition {
-                filters: resolved.filters.clone(),
-                restriction: KnowledgeSourceRestriction::default(),
-            }],
+        let mut tenant_ids = BTreeSet::from([resolved.filters.tenant_id.clone()]);
+        tenant_ids.extend(resolved.additional_tenant_ids.iter().cloned());
+        if tenant_ids.len() > crate::knowledge_search::MAX_SCOPE_PARTITIONS {
+            return Err(ApplicationError::InvalidRequest(format!(
+                "entire-library knowledge search spans more than {} workspace partitions",
+                crate::knowledge_search::MAX_SCOPE_PARTITIONS
+            )));
+        }
+        return Ok((
+            tenant_ids
+                .into_iter()
+                .map(|tenant_id| KnowledgeRetrievalPartition {
+                    filters: QueryFilters {
+                        tenant_id,
+                        workspace_id: None,
+                        ..resolved.filters.clone()
+                    },
+                    restriction: KnowledgeSourceRestriction::default(),
+                })
+                .collect(),
             true,
-        );
+        ));
     }
     if resolved.filters_are_exact {
         let roots = resolved.sources_by_root.keys().cloned().collect::<Vec<_>>();
         if roots.is_empty() {
-            return (
+            return Ok((
                 vec![KnowledgeRetrievalPartition {
                     filters: resolved.filters.clone(),
                     restriction: KnowledgeSourceRestriction::default(),
                 }],
                 true,
-            );
+            ));
         }
         if roots.len() <= crate::knowledge_search::MAX_SCOPE_PARTITIONS {
-            return (
+            return Ok((
                 roots
                     .into_iter()
                     .map(|root_id| KnowledgeRetrievalPartition {
@@ -612,10 +627,10 @@ fn partition_scope(
                     })
                     .collect(),
                 true,
-            );
+            ));
         }
     }
-    restricted_partitions(resolved)
+    Ok(restricted_partitions(resolved))
 }
 
 /// Describes an inexpressible scope by its exact authorized source identities.
@@ -1191,6 +1206,38 @@ mod tests {
         assert!(result.evidence_fingerprint.starts_with("sha256:"));
         assert_eq!(result.coverage.eligible, 1);
         assert!(result.plan.searches.len() >= 2);
+    }
+
+    #[tokio::test]
+    async fn entire_library_search_keeps_indexed_evidence_after_workspace_replacement() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        let replacement_workspace = Uuid::new_v4();
+
+        let result = fixture
+            .service
+            .execute_knowledge_search(
+                &SemanticAccessContext::Host,
+                ExecuteKnowledgeSearchRequestDto {
+                    request_id: Uuid::new_v4(),
+                    draft: draft(),
+                    scope: scope(replacement_workspace),
+                    mode: KnowledgeRetrievalModeDto::Hybrid,
+                    options: None,
+                },
+            )
+            .await
+            .expect("host-wide device library search");
+
+        assert_eq!(result.evidence.len(), 1);
+        let requests = capability.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].scopes[0].filters.tenant_id,
+            fixture.workspace_id.to_string()
+        );
+        assert!(requests[0].scopes[0].filters.workspace_id.is_none());
     }
 
     /// A build without a measured go decision must fail closed everywhere the
@@ -2042,6 +2089,7 @@ mod partition_tests {
     use fm_semantic_worker::semantic_storage::QueryFilters;
 
     use super::partition_scope;
+    use crate::error::ApplicationError;
     use crate::semantic_library::ResolvedKnowledgeScope;
 
     fn sources(prefix: &str, count: usize) -> BTreeSet<String> {
@@ -2062,6 +2110,7 @@ mod partition_tests {
                 include_unavailable: true,
                 ..QueryFilters::default()
             },
+            additional_tenant_ids: BTreeSet::new(),
             filters_are_exact,
             allowed_source_ids,
             sources_by_root,
@@ -2082,7 +2131,7 @@ mod partition_tests {
             ]),
         );
 
-        let (partitions, exact) = partition_scope(&resolved, false);
+        let (partitions, exact) = partition_scope(&resolved, false).unwrap();
 
         assert!(exact);
         assert_eq!(partitions.len(), 2);
@@ -2102,7 +2151,7 @@ mod partition_tests {
             BTreeMap::from([("root-a".to_owned(), sources("a", 3))]),
         );
 
-        let (partitions, exact) = partition_scope(&resolved, false);
+        let (partitions, exact) = partition_scope(&resolved, false).unwrap();
 
         assert!(exact);
         assert_eq!(partitions.len(), 1);
@@ -2122,7 +2171,7 @@ mod partition_tests {
             ]),
         );
 
-        let (partitions, exact) = partition_scope(&resolved, false);
+        let (partitions, exact) = partition_scope(&resolved, false).unwrap();
 
         assert!(exact);
         assert_eq!(partitions.len(), 2);
@@ -2142,7 +2191,7 @@ mod partition_tests {
             BTreeMap::from([("root-a".to_owned(), sources("a", MAX_ALLOWED_SOURCES + 1))]),
         );
 
-        let (partitions, exact) = partition_scope(&resolved, false);
+        let (partitions, exact) = partition_scope(&resolved, false).unwrap();
 
         assert!(!exact);
         assert_eq!(partitions.len(), 1);
@@ -2162,7 +2211,7 @@ mod partition_tests {
             .collect();
         let resolved = scope(false, roots);
 
-        let (partitions, exact) = partition_scope(&resolved, false);
+        let (partitions, exact) = partition_scope(&resolved, false).unwrap();
 
         assert!(!exact);
         assert_eq!(partitions.len(), 1);
@@ -2171,7 +2220,7 @@ mod partition_tests {
     }
 
     #[test]
-    fn whole_library_uses_one_exact_partition_regardless_of_root_count() {
+    fn whole_library_uses_one_exact_partition_per_workspace_tenant() {
         let roots = (0..=crate::knowledge_search::MAX_SCOPE_PARTITIONS)
             .map(|index| {
                 (
@@ -2180,14 +2229,39 @@ mod partition_tests {
                 )
             })
             .collect();
-        let resolved = scope(true, roots);
+        let mut resolved = scope(true, roots);
+        resolved.additional_tenant_ids =
+            BTreeSet::from(["tenant-c".to_owned(), "tenant-b".to_owned()]);
 
-        let (partitions, exact) = partition_scope(&resolved, true);
+        let (partitions, exact) = partition_scope(&resolved, true).unwrap();
 
         assert!(exact);
-        assert_eq!(partitions.len(), 1);
-        assert!(partitions[0].filters.root_id.is_none());
-        assert!(partitions[0].restriction.allowed_source_ids.is_empty());
+        assert_eq!(
+            partitions
+                .iter()
+                .map(|partition| partition.filters.tenant_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tenant", "tenant-b", "tenant-c"]
+        );
+        assert!(
+            partitions
+                .iter()
+                .all(|partition| partition.filters.root_id.is_none()
+                    && partition.filters.workspace_id.is_none()
+                    && partition.restriction.allowed_source_ids.is_empty())
+        );
+    }
+
+    #[test]
+    fn whole_library_rejects_more_workspace_tenants_than_the_worker_can_bound() {
+        let mut resolved = scope(true, BTreeMap::new());
+        resolved.additional_tenant_ids = (0..crate::knowledge_search::MAX_SCOPE_PARTITIONS)
+            .map(|index| format!("tenant-{index}"))
+            .collect();
+
+        let error = partition_scope(&resolved, true).expect_err("scope must remain bounded");
+
+        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
     }
 }
 

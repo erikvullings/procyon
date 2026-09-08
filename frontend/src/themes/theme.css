@@ -2331,11 +2331,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-error {
-  color: var(--fm-color-error, #b00020);
+  padding: 0.5rem 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--fm-error) 35%, var(--fm-border));
+  border-radius: var(--fm-radius);
+  color: var(--fm-error);
+  background: color-mix(in srgb, var(--fm-error) 9%, var(--fm-surface));
 }
 
 .fm-knowledge-warning {
-  color: var(--fm-color-warning, #8a6d00);
+  color: var(--fm-warning);
 }
 
 .fm-knowledge-status {

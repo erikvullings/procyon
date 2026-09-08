@@ -319,7 +319,24 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
-        'The search could not be completed.',
+        'Knowledge search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
+      ),
+    );
+  });
+
+  it('gives recovery guidance when the selected scope has no indexed sources', async () => {
+    const failure = Object.assign(new Error('resource not found'), { code: 'notFound' });
+    const client = new MockFileManagerClient({
+      failures: { executeKnowledgeSearch: failure },
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+
+    button('Search').click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('[role="alert"]')?.textContent).toBe(
+        'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
       ),
     );
   });

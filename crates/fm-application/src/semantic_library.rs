@@ -2056,17 +2056,20 @@ impl SemanticLibraryService {
     /// Resolves a user-visible Structured Knowledge scope into current
     /// authorization.
     ///
-    /// Unlike Ask's whole-library scope, knowledge search never crosses the
-    /// requesting workspace's tenant: one search executes against exactly one
-    /// worker tenant, so coverage and evidence stay honest for the scope the
-    /// user actually selected.
+    /// A desktop whole-library search spans every workspace tenant that still
+    /// owns indexed occurrences. The device library outlives individual
+    /// workspaces, so replacing a workspace must not orphan its indexed roots.
+    /// Server callers remain confined to their authenticated tenant.
     pub(crate) fn resolve_knowledge_scope(
         &self,
         access: &SemanticAccessContext,
         workspace_id: WorkspaceId,
         selection: &RagScopeSelection,
     ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
-        let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
+        let cross_workspace = matches!(access, SemanticAccessContext::Host)
+            && matches!(selection, RagScopeSelection::EntireLibrary);
+        let sources =
+            self.resolve_scope_sources(access, workspace_id, selection, cross_workspace)?;
         Ok(ResolvedKnowledgeScope {
             filters: QueryFilters {
                 tenant_id: sources.tenant_id,
@@ -2077,11 +2080,12 @@ impl SemanticLibraryService {
                 // are written per ingesting workspace, so a workspace filter
                 // there could hide evidence that is authorized through a later
                 // co-enrolment; the exact source restriction covers that case.
-                workspace_id: matches!(access, SemanticAccessContext::Host)
+                workspace_id: (matches!(access, SemanticAccessContext::Host) && !cross_workspace)
                     .then(|| workspace_id.to_string()),
                 include_unavailable: true,
                 ..QueryFilters::default()
             },
+            additional_tenant_ids: sources.additional_tenant_ids,
             // Whole-library and enrolled-root scopes are exactly representable
             // by worker filters. Folder, semantic-result, and selected-file
             // scopes are not, so they are described by their exact authorized
@@ -2263,6 +2267,9 @@ impl SemanticLibraryService {
         if !host_entire_library {
             tenant_ids.insert(semantic_worker_tenant(access, workspace_id)?);
         }
+        if tenant_ids.is_empty() {
+            tenant_ids.insert(semantic_worker_tenant(access, workspace_id)?);
+        }
         let tenant_id = tenant_ids
             .pop_first()
             .ok_or(SemanticLibraryError::InvalidRequest)?;
@@ -2400,6 +2407,8 @@ pub(crate) struct ResolvedScopeSources {
 /// into a result.
 pub(crate) struct ResolvedKnowledgeScope {
     pub(crate) filters: QueryFilters,
+    /// Additional desktop workspace tenants included by a host-wide library search.
+    pub(crate) additional_tenant_ids: BTreeSet<String>,
     /// Whether [`Self::filters`] alone describe exactly the authorized scope.
     pub(crate) filters_are_exact: bool,
     pub(crate) allowed_source_ids: BTreeSet<String>,
@@ -2499,7 +2508,7 @@ mod tenant_tests {
     }
 
     #[test]
-    fn knowledge_scope_stays_inside_the_requesting_workspace_tenant() {
+    fn desktop_entire_library_knowledge_scope_survives_workspace_replacement() {
         let service = SemanticLibraryService::deterministic_mock();
         let enrolled_workspace = WorkspaceId::new();
         let other_workspace = WorkspaceId::new();
@@ -2572,8 +2581,9 @@ mod tenant_tests {
         assert!(authorized.unavailable_source_ids.is_empty());
         assert_eq!(authorized.eligible, 1);
 
-        // Whole-library knowledge search never crosses into another workspace's
-        // tenant, unlike Ask's host-wide scope.
+        // The device library outlives individual workspaces. Replacing the
+        // workspace must not orphan already indexed roots from a host-wide
+        // "entire library" search.
         let foreign = service
             .resolve_knowledge_scope(
                 &SemanticAccessContext::Host,
@@ -2581,8 +2591,13 @@ mod tenant_tests {
                 &RagScopeSelection::EntireLibrary,
             )
             .unwrap();
-        assert_eq!(foreign.filters.tenant_id, other_workspace.to_string());
-        assert!(foreign.allowed_source_ids.is_empty());
+        assert_eq!(foreign.filters.tenant_id, enrolled_workspace.to_string());
+        assert_eq!(foreign.filters.workspace_id, None);
+        assert!(foreign.additional_tenant_ids.is_empty());
+        assert_eq!(
+            foreign.allowed_source_ids,
+            BTreeSet::from([occurrence_id.to_string()])
+        );
 
         // A root enrolled through another workspace cannot be named as a scope.
         let denied = service.resolve_knowledge_scope(

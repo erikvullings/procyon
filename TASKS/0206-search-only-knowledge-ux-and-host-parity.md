@@ -78,3 +78,9 @@ exact sources. No LLM profile or answer panel may be required.
   stability, 2,489 Rust tests, 3 Rust doctests, 2,020 frontend tests, TypeScript, rustfmt,
   warning-free Clippy, Biome (pre-existing specificity warnings only), and a final combined
   correctness review.
+- 2026-09-08 Copilot: Fixed a live desktop regression where an enrolled device library became
+  unsearchable after its originating workspace was replaced. Host-wide entire-library searches now
+  query every persisted workspace tenant through bounded worker partitions, while server searches
+  remain tenant-isolated. Added backend regressions for workspace replacement and deterministic
+  multi-tenant partitioning, made transport-coded search failures actionable, and corrected the
+  dark-theme alert to use the canonical error token and an error surface.

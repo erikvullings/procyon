@@ -841,6 +841,16 @@ export const nl = {
     searching: 'Bezig met zoeken…',
     cancel: 'Zoeken annuleren',
     cancelled: 'De zoekopdracht is geannuleerd.',
+    searchNoSources:
+      'Er zijn geen geïndexeerde documenten beschikbaar in dit bereik. Kies een ander bereik of indexeer een map en probeer het opnieuw.',
+    searchUnavailable:
+      'Kennis zoeken is niet beschikbaar. Controleer de instellingen voor semantisch zoeken en probeer het opnieuw.',
+    searchDenied:
+      'Dit zoekbereik is niet langer geautoriseerd. Kies een ander bereik en probeer het opnieuw.',
+    searchInvalid:
+      'Deze zoekopdracht kon niet worden uitgevoerd. Controleer het onderwerp en bereik en probeer het opnieuw.',
+    searchFailed:
+      'Er is een interne fout opgetreden bij het zoeken naar kennis. Probeer het opnieuw; bouw de semantische index opnieuw op als het probleem blijft bestaan.',
     results: 'Bronnen',
     resultsSummary: '{count} bronresulta(a)t(en) · {tokens} bewijstoken(s)',
     groupBy: 'Groeperen op',
@@ -881,7 +891,6 @@ export const nl = {
     loadFailed: 'Kennis zoeken is momenteel niet beschikbaar.',
     parseFailed: 'De query kon niet worden geïnterpreteerd.',
     planFailed: 'Het queryplan kon niet worden opgebouwd.',
-    searchFailed: 'De zoekopdracht kon niet worden voltooid.',
     offline: 'De backend is onbereikbaar; resultaten kunnen verouderd zijn.',
     answerNotGenerated:
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',

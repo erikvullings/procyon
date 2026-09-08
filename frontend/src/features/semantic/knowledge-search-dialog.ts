@@ -481,6 +481,28 @@ export function isKnowledgeEvidenceRefreshRequired(error: unknown): boolean {
   return (error as { readonly code?: unknown }).code === 'knowledgeEvidenceRefreshRequired';
 }
 
+/** Maps transport-stable error codes to actionable, localized search guidance. */
+export function knowledgeSearchErrorMessage(error: unknown): string {
+  const code =
+    typeof error === 'object' && error !== null
+      ? (error as { readonly code?: unknown }).code
+      : undefined;
+  switch (code) {
+    case 'notFound':
+      return t('knowledgeSearch', 'searchNoSources');
+    case 'providerUnavailable':
+      return t('knowledgeSearch', 'searchUnavailable');
+    case 'permissionDenied':
+      return t('knowledgeSearch', 'searchDenied');
+    case 'invalidRequest':
+      return t('knowledgeSearch', 'searchInvalid');
+    case 'operationCancelled':
+      return t('knowledgeSearch', 'cancelled');
+    default:
+      return t('knowledgeSearch', 'searchFailed');
+  }
+}
+
 export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
   let wasOpen = false;
   let busy: 'loading' | 'planning' | 'searching' | undefined;
@@ -951,7 +973,7 @@ export const KnowledgeSearchDialog: FactoryComponent<KnowledgeSearchDialogAttrs>
       if (cause instanceof DOMException && cause.name === 'AbortError') {
         notice = t('knowledgeSearch', 'cancelled');
       } else {
-        error = t('knowledgeSearch', 'searchFailed');
+        error = knowledgeSearchErrorMessage(cause);
       }
     } finally {
       if (startGeneration === generation) {
