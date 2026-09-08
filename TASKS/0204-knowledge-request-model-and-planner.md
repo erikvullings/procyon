@@ -1,6 +1,6 @@
 # 0204 Knowledge request model and deterministic planner
 
-Status: open
+Status: done
 Priority: high
 Subsystem: domain, semantic, search
 Depends on: 0203
@@ -34,3 +34,16 @@ expand search; optional action/context/output fields remain outside retrieval.
 ## Agent Notes
 
 - 2026-09-08 Copilot: Created from restored Structured Knowledge Query phases 4 and 6.
+- 2026-09-08 Copilot: Started after 0203 established retrieval routes, evidence, and publication
+  snapshot materialization. The planner will live in `fm-application`, keeping worker retrieval
+  mechanical and host authorization/composition above the worker boundary.
+- 2026-09-08 Copilot: Added `fm-application::knowledge` with bounded canonical search and
+  answer-only requests, extensible multi-subject and authorized-scope models, typed needs/actions,
+  independent FTS/vector/answer capabilities, and a deterministic versioned plan. Planning emits
+  raw subjects first, then conservative need expansions and explicit related terms; equivalent
+  searches retain their first spelling and combine reasons, and omitted bounded expansions are
+  reported. The planner accepts only a typed action, making answer context, constraints, output,
+  and evidence text structurally unavailable to retrieval; explicit needs always override action
+  defaults. Added canonical worker-reason and capability bridges without moving authorization into
+  the worker. Verified 10 focused planner tests, all 509 passing `fm-application` library tests
+  (one pre-existing ignored), formatting, and warning-free clippy.

@@ -121,7 +121,10 @@ related terms, authorized scopes, and retrieval options. Zvec executes independe
 routes and fuses ranks without mixing score domains; missing or incompatible query embeddings
 degrade explicitly to FTS. Source evidence remains useful offline and without a generation profile.
 Action and application context belong to a separate optional answer request and never affect
-retrieval unless repeated explicitly as a related term. See
+retrieval text unless repeated explicitly as a related term; a typed action may select conservative
+default needs when the user selected none. `fm-application::knowledge` owns the canonical models
+and pure planner, emits at most eight stable source searches, and reports expansions omitted by
+bounds. See
 [ADR 0012](../decisions/0012-structured-knowledge-search.md).
 
 Generation is an optional application capability independent from semantic indexing. Named

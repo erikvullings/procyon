@@ -25,6 +25,7 @@ mod error;
 mod file_editor;
 mod folder_size;
 mod ftp;
+pub mod knowledge;
 mod llm_profile_mapping;
 pub mod llm_profiles;
 mod onedrive;
