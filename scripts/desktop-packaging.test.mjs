@@ -125,7 +125,7 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(releaseText, /libwebkit2gtk-4\.1-dev/);
   assert.match(releaseText, /bundle\/deb\/\*\.deb/);
   assert.match(releaseText, /bundle\/appimage\/\*\.AppImage/);
-  assert.deepEqual(release.jobs.homebrew.needs, ['macos']);
+  assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(release.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
@@ -154,6 +154,10 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
       ...commonArgs,
       '--asset',
       'Procyon_1.2.3_universal.dmg',
+      '--linux-sha256',
+      'b'.repeat(64),
+      '--linux-asset',
+      'Procyon_1.2.3_amd64.AppImage',
       '--output',
       caskPath,
     ],
@@ -163,9 +167,16 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   assert.match(cask, /cask "procyon" do/);
   assert.match(cask, /version "1\.2\.3"/);
   assert.match(cask, new RegExp(`sha256 "${checksum}"`));
-  assert.match(cask, /releases\/download\/v1\.2\.3\/Procyon_1\.2\.3_universal\.dmg/);
+  assert.match(
+    cask,
+    /os macos: "Procyon_1\.2\.3_universal\.dmg", linux: "Procyon_1\.2\.3_amd64\.AppImage"/,
+  );
+  assert.match(cask, /releases\/download\/v1\.2\.3\/#\{os\}/);
   assert.match(cask, /app "Procyon\.app"/);
   assert.match(cask, /binary "#{appdir}\/Procyon\.app\/Contents\/Resources\/procyon"/);
+  assert.match(cask, /on_linux do/);
+  assert.match(cask, new RegExp(`sha256 "${'b'.repeat(64)}"`));
+  assert.match(cask, /app_image "Procyon_1\.2\.3_amd64\.AppImage", target: "Procyon\.AppImage"/);
 
   const tauriConfig = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.equal(tauriConfig.bundle.resources['resources/procyon'], 'procyon');

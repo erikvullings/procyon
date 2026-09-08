@@ -139,6 +139,13 @@ export const heartIcon = trustedStrokeIcon(
   'fm-icon-heart',
 );
 
+/** "heart-plus" — current location is not yet a favourite. */
+export const heartPlusIcon = trustedStrokeIcon(
+  '<path d="M12 20l-7.5 -7.428a5 5 0 1 1 7.5 -6.572a5 5 0 0 1 6.6 7.5" />' +
+    '<path d="M16 19h6" /><path d="M19 16v6" />',
+  'fm-icon-heart-plus',
+);
+
 /** "plus" — add the current location to favourites. */
 export const plusIcon = trustedStrokeIcon(
   '<path d="M12 5l0 14" /><path d="M5 12l14 0" />',

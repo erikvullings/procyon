@@ -3744,8 +3744,11 @@ describe('AppShell', () => {
     });
     expect((await client.getSettings()).favouriteLocations).toEqual([]);
     expect(root.querySelector('.fm-favourites-add')).toBeNull();
-    expect(root.querySelector('.fm-icon-heart')).not.toBeNull();
-    expect(root.querySelector('.fm-icon-heart-plus')).toBeNull();
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    await vi.waitFor(() => {
+      expect(activePane?.querySelector('.fm-icon-heart')).not.toBeNull();
+      expect(activePane?.querySelector('.fm-icon-heart-plus')).toBeNull();
+    });
   });
 
   it('shows the search term in the breadcrumb/tab title and focuses/cursors the first result so ArrowDown moves the cursor', async () => {
