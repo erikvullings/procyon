@@ -220,28 +220,37 @@ jobs:
             target/release/bundle/nsis/*-setup.exe
 
   homebrew:
-    name: Publish Homebrew cask
-    needs: [macos]
+    name: Publish cross-platform Homebrew cask
+    needs: [macos, linux]
     if: github.event_name == 'push'
     runs-on: macos-latest
     environment: desktop-release
     steps:
       - uses: actions/checkout@v5
-      - name: Download the signed and notarized DMG
+      - name: Download the macOS and Linux release packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download "$GITHUB_REF_NAME" --pattern "*.dmg" --dir package-input
-      - name: Generate the cask from the released asset
+        run: |
+          gh release download "$GITHUB_REF_NAME" \
+            --pattern "*.dmg" \
+            --pattern "*.AppImage" \
+            --dir package-input
+      - name: Generate the cask from the released packages
         run: |
           DMG_PATH="$(find package-input -type f -name '*.dmg' -print -quit)"
+          APPIMAGE_PATH="$(find package-input -type f -name '*.AppImage' -print -quit)"
           test -n "$DMG_PATH"
+          test -n "$APPIMAGE_PATH"
           VERSION="${GITHUB_REF_NAME#v}"
-          SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)"
+          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)"
+          APPIMAGE_SHA256="$(shasum -a 256 "$APPIMAGE_PATH" | cut -d ' ' -f 1)"
           node scripts/generate-package-manager-files.mjs homebrew \
             --version "$VERSION" \
-            --sha256 "$SHA256" \
+            --sha256 "$DMG_SHA256" \
             --repository "$GITHUB_REPOSITORY" \
             --asset "$(basename "$DMG_PATH")" \
+            --linux-sha256 "$APPIMAGE_SHA256" \
+            --linux-asset "$(basename "$APPIMAGE_PATH")" \
             --output generated-cask/procyon.rb
       - uses: actions/checkout@v5
         with:

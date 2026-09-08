@@ -107,7 +107,7 @@
   padding: 0 0.5rem;
   border: 0;
   border-right: 1px solid var(--fm-border);
-  background: var(--fm-surface);
+  background: var(--fm-background);
   color: var(--fm-text-muted);
   font: inherit;
   font-weight: 600;

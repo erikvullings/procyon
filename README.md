@@ -773,19 +773,22 @@ Configure:
 Pull-request CI does not reference those secrets. The workflow publishes generated release notes,
 signed and notarized macOS packages, unsigned Windows installers, and Linux packages. It then
 calculates checksums from those exact release assets, updates `Casks/procyon.rb` in the configured
-Homebrew tap, and generates and pushes the Chocolatey package. The macOS release is a universal
-binary for Apple Silicon and Intel Macs. A manual workflow dispatch runs only the protected macOS
-signing path, verifies the signature, Gatekeeper assessment, notarization tickets, and architectures,
-then uploads a temporary workflow artefact without creating a release. Windows users should expect
-a Microsoft Defender SmartScreen warning and must choose to run the installer only after verifying
-that it came from the official release.
+Homebrew tap with OS-specific DMG and AppImage entries, and generates and pushes the Chocolatey
+package. The macOS release is a universal binary for Apple Silicon and Intel Macs; the Homebrew
+Linux entry is x86_64-only. A manual workflow dispatch runs only the protected macOS signing path,
+verifies the signature, Gatekeeper assessment, notarization tickets, and architectures, then uploads
+a temporary workflow artefact without creating a release. Windows users should expect a Microsoft
+Defender SmartScreen warning and must choose to run the installer only after verifying that it came
+from the official release.
 
-After the first packages have been published, users can install Procyon with:
+After the packages have been published, macOS and x86_64 Linux users can install Procyon with:
 
 ```sh
 brew tap erikvullings/tap
 brew install --cask procyon
 ```
+
+The cask installs the signed and notarized DMG on macOS and the AppImage on Linux.
 
 Homebrew 6.0+ requires explicitly trusting third-party taps before their casks/formulae can run
 (taps can execute arbitrary Ruby with the user's privileges). If `brew install` refuses to proceed,
