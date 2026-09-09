@@ -483,6 +483,20 @@ describe('Pane view-mode menu', () => {
   });
 });
 
+describe('Pane viewer tabs', () => {
+  it('keeps new-tab and favourites actions available beside viewer tabs', () => {
+    const onNewTab = vi.fn();
+    mount(attrs({ viewerContent: m('.viewer-content'), onNewTab }));
+
+    const newTab = root.querySelector<HTMLButtonElement>('.fm-pane-tab-new');
+    expect(newTab).not.toBeNull();
+    expect(root.querySelector<HTMLButtonElement>('.fm-pane-tab-favourites')).not.toBeNull();
+
+    newTab?.click();
+    expect(onNewTab).toHaveBeenCalledOnce();
+  });
+});
+
 describe('Pane grid sort menu', () => {
   it('offers name/date/size/extension ascending and descending, dispatching onSortChange', () => {
     const onSortChange = vi.fn();
@@ -1113,7 +1127,9 @@ describe('Pane breadcrumb editing', () => {
     );
 
     expect(root.querySelector('.fm-icon-heart')).toBeNull();
-    expect(root.querySelector('.fm-icon-heart-plus')).not.toBeNull();
+    expect(root.querySelector('.fm-icon-heart-plus path')?.getAttribute('d')).toBe(
+      'M12 20l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.96 6.053',
+    );
     root.querySelector<HTMLButtonElement>('.fm-pane-tab-favourites')?.click();
     m.redraw.sync();
     expect(root.querySelector('.fm-favourites-add')).not.toBeNull();

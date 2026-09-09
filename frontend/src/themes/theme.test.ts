@@ -250,6 +250,9 @@ describe('theme stylesheet', () => {
   it('keeps directory and viewer content inside its pane grid track', () => {
     expect(paneCss).toMatch(/\.fm-pane\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
     expect(fileViewerCss).toMatch(/\.fm-file-viewer\s*\{[^}]*min-width:\s*0/s);
+    expect(fileViewerCss).toMatch(
+      /\.fm-file-viewer-loading\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center/s,
+    );
   });
 
   it('keeps knowledge results below the tab strip without horizontal overflow', () => {
@@ -258,8 +261,14 @@ describe('theme stylesheet', () => {
     );
     expect(themeCss).toMatch(/\.fm-knowledge-search\s*\{[^}]*overflow:\s*hidden/s);
     expect(themeCss).toMatch(/\.fm-knowledge-results-body\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(themeCss).not.toMatch(
+      /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible/,
+    );
     expect(themeCss).toMatch(
-      /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--fm-accent\)/s,
+      /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects\s*\{[^}]*outline:\s*0/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
     );
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,

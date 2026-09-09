@@ -141,9 +141,15 @@ export const heartIcon = trustedStrokeIcon(
 
 /** "heart-plus" — current location is not yet a favourite. */
 export const heartPlusIcon = trustedStrokeIcon(
-  '<path d="M12 20l-7.5 -7.428a5 5 0 1 1 7.5 -6.572a5 5 0 0 1 6.6 7.5" />' +
+  '<path d="M12 20l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.96 6.053" />' +
     '<path d="M16 19h6" /><path d="M19 16v6" />',
   'fm-icon-heart-plus',
+);
+
+/** "corner-down-left" — submit with the Enter key. */
+export const cornerDownLeftIcon = trustedStrokeIcon(
+  '<path d="M18 6v6a3 3 0 0 1 -3 3h-10l4 -4m0 8l-4 -4" />',
+  'fm-icon-corner-down-left',
 );
 
 /** "plus" — add the current location to favourites. */

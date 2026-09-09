@@ -63,7 +63,8 @@ function type(element: HTMLTextAreaElement | HTMLInputElement, value: string): v
 
 function button(label: string): HTMLButtonElement {
   const found = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-    (candidate) => candidate.textContent?.trim() === label,
+    (candidate) =>
+      candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label,
   );
   if (found === undefined) throw new Error(`button not rendered: ${label}`);
   return found;
@@ -113,7 +114,12 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const toolbar = root.querySelector('.fm-knowledge-search-toolbar');
     expect(toolbar).not.toBeNull();
     expect(toolbar?.querySelector('#fm-knowledge-subjects')).not.toBeNull();
-    expect(toolbar?.querySelector('.fm-knowledge-search-submit')).not.toBeNull();
+    const submit = toolbar?.querySelector<HTMLButtonElement>(
+      'button.fm-knowledge-search-submit[aria-label="Search"]',
+    );
+    expect(submit?.classList.contains('btn-icon')).toBe(true);
+    expect(submit?.querySelector('.fm-icon-corner-down-left')).not.toBeNull();
+    expect(submit?.textContent).toBe('');
     const settings = toolbar?.querySelector<HTMLButtonElement>(
       'button[aria-label="Search settings"]',
     );
@@ -1229,6 +1235,26 @@ describe('KnowledgeSearchDialog retrieval trace (task 0206)', () => {
 });
 
 describe('knowledgeProvenanceLabel spreadsheet ranges (task 0206)', () => {
+  it('renders production exact and span wrappers as clickable source positions', () => {
+    expect(
+      knowledgeProvenanceLabel(
+        JSON.stringify({
+          kind: 'exact',
+          value: { kind: 'pdfBlock', page_number: 167, block_index: 3 },
+        }),
+      ),
+    ).toBe('Page 167');
+    expect(
+      knowledgeProvenanceLabel(
+        JSON.stringify({
+          kind: 'span',
+          first: { kind: 'pdfBlock', page_number: 167, block_index: 3 },
+          last: { kind: 'pdfBlock', page_number: 168, block_index: 1 },
+        }),
+      ),
+    ).toBe('Page 167 – Page 168');
+  });
+
   it('labels reflowable EPUB evidence by chapter and source lines', () => {
     expect(
       knowledgeProvenanceLabel(

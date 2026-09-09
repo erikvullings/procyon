@@ -2,7 +2,12 @@ import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { externalLinkIcon, filterIcon, settingsIcon } from '../../components/tabler-icons';
+import {
+  cornerDownLeftIcon,
+  externalLinkIcon,
+  filterIcon,
+  settingsIcon,
+} from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
@@ -1682,15 +1687,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     'aria-label': t('knowledgeSearch', 'searching'),
                   })
                 : undefined,
-              m(
-                FlatButton,
-                {
-                  type: 'button',
-                  className: 'fm-knowledge-search-submit',
-                  disabled: busy !== undefined || !canSearch(),
-                  onclick: () => void search(attrs),
-                },
+              tooltip(
                 t('knowledgeSearch', 'search'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-search-submit',
+                    'aria-label': t('knowledgeSearch', 'search'),
+                    disabled: busy !== undefined || !canSearch(),
+                    onclick: () => void search(attrs),
+                  },
+                  cornerDownLeftIcon({ size: 16 }),
+                ),
               ),
               tooltip(
                 t('knowledgeSearch', 'settings'),

@@ -2286,22 +2286,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   white-space: nowrap;
 }
 
-.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: -2px;
-}
-
-.fm-app-shell .fm-knowledge-search-submit.btn-flat {
-  flex: 0 0 auto;
-  min-width: 4.25rem;
-  height: var(--fm-row-height);
-  min-height: var(--fm-row-height);
-  margin: 0;
-  padding: 0 0.5rem;
-  font: inherit;
-}
-
+.fm-app-shell .fm-knowledge-search-submit.btn-icon,
 .fm-app-shell .fm-knowledge-settings-trigger.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   width: var(--fm-row-height);
   min-width: var(--fm-row-height);
   height: var(--fm-row-height);
@@ -2309,6 +2299,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
   margin: 0;
   padding: 0;
   color: var(--fm-text-muted);
+}
+
+.fm-knowledge-search-toolbar > .fm-tooltip:last-child {
+  margin-inline-end: 0.5rem;
 }
 
 .fm-knowledge-settings {

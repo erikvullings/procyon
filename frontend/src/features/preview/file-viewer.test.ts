@@ -141,9 +141,12 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-archive-summary')?.textContent).toContain('N/A');
   });
 
-  it('shows a loading message while loading', () => {
+  it('centres an accessible spinner while loading', () => {
     mount(baseAttrs({ status: 'loading', entry: entry() }));
-    expect(root.querySelector('.fm-file-viewer-body')?.textContent).toBe('Loading…');
+    const loading = root.querySelector('.fm-file-viewer-loading');
+    expect(loading?.getAttribute('role')).toBe('status');
+    expect(loading?.getAttribute('aria-label')).toBe('Loading…');
+    expect(loading?.querySelector('.fm-file-viewer-loading-spinner')).not.toBeNull();
   });
 
   it('offers document summary from the Lister toolbar', () => {
