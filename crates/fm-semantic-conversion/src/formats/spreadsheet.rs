@@ -152,7 +152,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
     use crate::cancellation::Cancellation;
-    use crate::formats::ooxml::tests::package;
+    use crate::formats::package::tests::package;
     use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
 
     /// Builds a minimal but valid XLSX package with inline strings, so the

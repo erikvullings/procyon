@@ -16,6 +16,12 @@ use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft};
 use crate::model::{Provenance, TopLevelBoundary, UnitKind};
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum HtmlContext {
+    Standalone,
+    EpubSpine { spine_index: u32 },
+}
+
 /// Elements whose character data is discarded entirely.
 const SKIPPED_ELEMENTS: &[&str] = &["script", "style", "noscript", "template", "svg"];
 
@@ -106,6 +112,14 @@ struct Block {
 
 /// Converts bounded HTML into headings, paragraphs, list items and tables.
 pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, source: &str) -> Result<(), Stop> {
+    convert_with_context(builder, source, HtmlContext::Standalone)
+}
+
+pub(crate) fn convert_with_context(
+    builder: &mut DocumentBuilder<'_, '_>,
+    source: &str,
+    context: HtmlContext,
+) -> Result<(), Stop> {
     let bytes: Vec<char> = source.chars().collect();
     let mut position = 0_usize;
     let mut line = 1_u32;
@@ -155,12 +169,17 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, source: &str) -> Re
         };
         let raw: String = bytes[position + 1..tag_end].iter().collect();
         let closing = raw.starts_with('/');
-        let name = raw
+        let qualified_name = raw
             .trim_start_matches('/')
             .split(|character: char| character.is_whitespace() || character == '/')
             .next()
             .unwrap_or("")
             .to_ascii_lowercase();
+        let name = qualified_name
+            .rsplit(':')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
         let self_closing = raw.trim_end().ends_with('/') || VOID_ELEMENTS.contains(&name.as_str());
         line += count_newlines(&bytes, position, tag_end);
         position = tag_end + 1;
@@ -190,7 +209,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, source: &str) -> Re
                 && block.name == name
             {
                 let block = open.pop().unwrap_or_else(|| unreachable!());
-                emit(builder, block, line, &mut headings)?;
+                emit(builder, block, line, &mut headings, context)?;
             }
             continue;
         }
@@ -224,7 +243,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, source: &str) -> Re
             // A nested block closes the enclosing one, which keeps container
             // elements such as `div` from swallowing their children.
             if let Some(previous) = open.pop() {
-                emit(builder, previous, line, &mut headings)?;
+                emit(builder, previous, line, &mut headings, context)?;
             }
             open.push(Block {
                 kind,
@@ -235,7 +254,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, source: &str) -> Re
         }
     }
     while let Some(block) = open.pop() {
-        emit(builder, block, line, &mut headings)?;
+        emit(builder, block, line, &mut headings, context)?;
     }
     Ok(())
 }
@@ -245,6 +264,7 @@ fn emit(
     block: Block,
     end_line: u32,
     headings: &mut Vec<(u32, String)>,
+    context: HtmlContext,
 ) -> Result<(), Stop> {
     let text = decode_entities(&block.text)
         .lines()
@@ -265,19 +285,30 @@ fn emit(
         .iter()
         .map(|(_, title)| title.clone())
         .collect::<Vec<_>>();
-    let boundary = match (level, headings.first()) {
-        (_, Some((_, title))) => TopLevelBoundary::Section(title.clone()),
-        (Some(_), None) => TopLevelBoundary::Section(text.clone()),
-        (None, None) => TopLevelBoundary::Document,
+    let boundary = match context {
+        HtmlContext::Standalone => match (level, headings.first()) {
+            (_, Some((_, title))) => TopLevelBoundary::Section(title.clone()),
+            (Some(_), None) => TopLevelBoundary::Section(text.clone()),
+            (None, None) => TopLevelBoundary::Document,
+        },
+        HtmlContext::EpubSpine { spine_index } => TopLevelBoundary::EpubSpine(spine_index),
+    };
+    let provenance = match context {
+        HtmlContext::Standalone => Provenance::TextLines {
+            start_line: block.start_line,
+            end_line: end_line.max(block.start_line),
+        },
+        HtmlContext::EpubSpine { spine_index } => Provenance::EpubText {
+            spine_index,
+            start_line: block.start_line,
+            end_line: end_line.max(block.start_line),
+        },
     };
     builder.push(UnitDraft {
         kind: block.kind,
         section_path,
         text: text.clone(),
-        provenance: Provenance::TextLines {
-            start_line: block.start_line,
-            end_line: end_line.max(block.start_line),
-        },
+        provenance,
         boundary,
         source_offset: None,
     })?;

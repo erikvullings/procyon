@@ -8,7 +8,7 @@
 use quick_xml::events::Event;
 
 use crate::builder::{DocumentBuilder, UnitDraft};
-use crate::formats::ooxml::{self, Package, PackageError};
+use crate::formats::package::{self, Package, PackageError};
 use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
 
 /// Maximum bytes read from `word/document.xml`.
@@ -37,13 +37,13 @@ pub(crate) fn convert(
     builder: &mut DocumentBuilder<'_, '_>,
     archive: &mut Package<'_>,
 ) -> Result<(), PackageError> {
-    let Some(part) = ooxml::read_part(archive, "word/document.xml", MAX_DOCUMENT_PART_BYTES)?
+    let Some(part) = package::read_part(archive, "word/document.xml", MAX_DOCUMENT_PART_BYTES)?
     else {
         return Err(PackageError::Malformed(
             "the package has no word/document.xml part".to_owned(),
         ));
     };
-    let mut reader = ooxml::xml_reader(&part);
+    let mut reader = package::xml_reader(&part);
     let mut buffer = Vec::new();
     let mut depth = 0_u32;
 
@@ -62,10 +62,10 @@ pub(crate) fn convert(
         let event = reader.read_event_into(&mut buffer).map_err(|error| {
             PackageError::Malformed(format!("word/document.xml is not well formed: {error}"))
         })?;
-        ooxml::inspect_event(&event, &mut depth, builder.tracker())?;
+        package::inspect_event(&event, &mut depth, builder.tracker())?;
         match &event {
             Event::Eof => break,
-            Event::Start(start) => match ooxml::local_name(start.name().as_ref()).as_str() {
+            Event::Start(start) => match package::local_name(start.name().as_ref()).as_str() {
                 "tbl" => {
                     table = Some(TableState {
                         rows: Vec::new(),
@@ -84,16 +84,16 @@ pub(crate) fn convert(
                 }
                 _ => {}
             },
-            Event::Empty(empty) => match ooxml::local_name(empty.name().as_ref()).as_str() {
+            Event::Empty(empty) => match package::local_name(empty.name().as_ref()).as_str() {
                 "pStyle" if in_paragraph_properties => {
                     style = empty.attributes().flatten().find_map(|attribute| {
-                        (ooxml::local_name(attribute.key.as_ref()) == "val")
+                        (package::local_name(attribute.key.as_ref()) == "val")
                             .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
                     });
                 }
                 "outlineLvl" if in_paragraph_properties && style.is_none() => {
                     if let Some(level) = empty.attributes().flatten().find_map(|attribute| {
-                        (ooxml::local_name(attribute.key.as_ref()) == "val")
+                        (package::local_name(attribute.key.as_ref()) == "val")
                             .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
                     }) && let Ok(level) = level.parse::<u32>()
                     {
@@ -112,7 +112,7 @@ pub(crate) fn convert(
                     push_text(&mut paragraph, &mut table, &decoded);
                 }
             }
-            Event::End(end) => match ooxml::local_name(end.name().as_ref()).as_str() {
+            Event::End(end) => match package::local_name(end.name().as_ref()).as_str() {
                 "pPr" => in_paragraph_properties = false,
                 "tc" => {
                     if let Some(state) = table.as_mut() {
@@ -160,7 +160,7 @@ pub(crate) fn convert(
             detail: "the document body was truncated by an output budget".to_owned(),
         });
     } else {
-        ooxml::ensure_balanced(depth, "word/document.xml")?;
+        package::ensure_balanced(depth, "word/document.xml")?;
     }
     Ok(())
 }
@@ -259,7 +259,7 @@ mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock, Stop};
     use crate::cancellation::{Cancellation, CancellationFlag};
-    use crate::formats::ooxml::tests::package;
+    use crate::formats::package::tests::package;
     use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
 
     const DOCUMENT: &[u8] = br#"<?xml version="1.0"?>
@@ -297,7 +297,7 @@ mod tests {
     ) -> Result<ConvertedDocument, PackageError> {
         let clock = ManualClock::new();
         let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
-        let mut archive = ooxml::preflight(bytes, &mut tracker)?;
+        let mut archive = package::preflight(bytes, &mut tracker)?;
         let mut builder = DocumentBuilder::new(
             ComponentVersion::new("baseline", 1),
             FormatKind::Docx,

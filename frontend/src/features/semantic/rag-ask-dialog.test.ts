@@ -315,11 +315,18 @@ describe('RagAskDialog', () => {
               answer: {
                 ...event.answer,
                 text,
-                citations: event.answer.citations.map((citation) => ({
-                  ...citation,
-                  provenance:
-                    '{"kind":"exact","value":"{\\"block_index\\":0,\\"kind\\":\\"pdfBlock\\",\\"page_number\\":195}"}',
-                })),
+                citations: event.answer.citations.flatMap((citation) => [
+                  {
+                    ...citation,
+                    provenance:
+                      '{"kind":"exact","value":"{\\"block_index\\":0,\\"kind\\":\\"pdfBlock\\",\\"page_number\\":195}"}',
+                  },
+                  {
+                    ...citation,
+                    label: 'C2',
+                    provenance: '{"kind":"epubText","spine_index":2,"start_line":7,"end_line":11}',
+                  },
+                ]),
               },
             };
           }
@@ -380,6 +387,7 @@ describe('RagAskDialog', () => {
       'C1',
     );
     expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Page 195');
+    expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Chapter 3, lines 7–11');
     expect(root.querySelector('.fm-rag-citations')?.textContent).not.toContain('pdfBlock');
 
     root.querySelector<HTMLButtonElement>('[aria-label="Copy answer"]')?.click();

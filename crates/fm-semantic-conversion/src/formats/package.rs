@@ -1,4 +1,4 @@
-//! Shared OOXML package handling: ZIP preflight and bounded part reading.
+//! Shared ZIP package handling: preflight, bounded part reads and XML safety.
 //!
 //! Everything below reads *only* XML text and structure from the package.
 //! Relationship parts are not followed, no external reference is resolved, no
@@ -13,6 +13,7 @@
 //! * entry names that escape the package (`..`, absolute paths, backslashes),
 //! * entries whose compression ratio marks them as a decompression bomb.
 
+use std::collections::HashSet;
 use std::io::{Cursor, Read};
 
 use quick_xml::events::Event;
@@ -57,6 +58,7 @@ pub(crate) fn preflight<'a>(
         PackageError::Malformed(format!("the package is not readable: {error}"))
     })?;
     tracker.charge_archive_entries(archive.len() as u64)?;
+    let mut names = HashSet::new();
     for index in 0..archive.len() {
         tracker.checkpoint()?;
         let entry = archive.by_index_raw(index).map_err(|error| {
@@ -68,18 +70,20 @@ pub(crate) fn preflight<'a>(
                 "package entry '{name}' is encrypted"
             )));
         }
-        if entry.enclosed_name().is_none() || name.contains('\\') {
+        if let Some(detail) = unsafe_entry_detail(
+            &name,
+            entry.enclosed_name().is_some(),
+            entry.size(),
+            entry.compressed_size(),
+        ) {
+            return Err(PackageError::Malformed(detail));
+        }
+        if !names.insert(name.clone()) {
             return Err(PackageError::Malformed(format!(
-                "package entry '{name}' escapes the package"
+                "package contains duplicate entry '{name}'"
             )));
         }
         let uncompressed = entry.size();
-        let compressed = entry.compressed_size().max(1);
-        if uncompressed > RATIO_CHECK_FLOOR && uncompressed / compressed > MAX_COMPRESSION_RATIO {
-            return Err(PackageError::Malformed(format!(
-                "package entry '{name}' expands by more than {MAX_COMPRESSION_RATIO}x"
-            )));
-        }
         drop(entry);
         tracker.charge_expanded_bytes(uncompressed)?;
     }
@@ -130,8 +134,25 @@ pub(crate) fn read_part(
     Ok(Some(buffer))
 }
 
-/// Creates an XML reader for a package part with the settings every OOXML
-/// parser here uses.
+pub(crate) fn unsafe_entry_detail(
+    name: &str,
+    enclosed: bool,
+    uncompressed: u64,
+    compressed: u64,
+) -> Option<String> {
+    if !enclosed || name.contains('\\') {
+        return Some(format!("package entry '{name}' escapes the package"));
+    }
+    if uncompressed > RATIO_CHECK_FLOOR && uncompressed / compressed.max(1) > MAX_COMPRESSION_RATIO
+    {
+        return Some(format!(
+            "package entry '{name}' expands by more than {MAX_COMPRESSION_RATIO}x"
+        ));
+    }
+    None
+}
+
+/// Creates an XML reader with the settings every package parser here uses.
 pub(crate) fn xml_reader(bytes: &[u8]) -> quick_xml::Reader<&[u8]> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     reader.config_mut().trim_text(false);
@@ -158,7 +179,7 @@ pub(crate) fn inspect_event(
 ) -> Result<(), PackageError> {
     match event {
         Event::DocType(_) => Err(PackageError::Malformed(
-            "DOCTYPE declarations are not allowed in OOXML parts".to_owned(),
+            "DOCTYPE declarations are not allowed in package XML parts".to_owned(),
         )),
         Event::Start(_) => {
             *depth += 1;

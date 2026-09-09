@@ -760,6 +760,7 @@ export const nl = {
     openEvidence: 'Bewijs {label} openen',
     citationPage: 'Pagina {page}',
     citationLines: 'Regels {start}–{end}',
+    citationEpubLines: 'Hoofdstuk {chapter}, regels {start}–{end}',
     citationSlide: 'Dia {slide}',
     citationCells: 'Cellen {range}',
     citationSheetCells: 'Blad {sheet}, cellen {range}',

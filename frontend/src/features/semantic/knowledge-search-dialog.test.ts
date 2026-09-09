@@ -1229,6 +1229,19 @@ describe('KnowledgeSearchDialog retrieval trace (task 0206)', () => {
 });
 
 describe('knowledgeProvenanceLabel spreadsheet ranges (task 0206)', () => {
+  it('labels reflowable EPUB evidence by chapter and source lines', () => {
+    expect(
+      knowledgeProvenanceLabel(
+        JSON.stringify({
+          kind: 'epubText',
+          spine_index: 2,
+          start_line: 7,
+          end_line: 11,
+        }),
+      ),
+    ).toBe('Chapter 3, lines 7–11');
+  });
+
   it('labels a sheet cell range', () => {
     expect(
       knowledgeProvenanceLabel(

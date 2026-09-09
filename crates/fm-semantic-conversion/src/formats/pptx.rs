@@ -3,14 +3,14 @@
 //! Slides are discovered from the part names `ppt/slides/slideN.xml` and
 //! sorted **explicitly** by their numeric suffix. ZIP entries arrive in
 //! whatever order the writer chose, and relationship parts are deliberately
-//! not read (see [`crate::formats::ooxml`]), so the numeric suffix is the
+//! not read (see [`crate::formats::package`]), so the numeric suffix is the
 //! ordering evidence available - a slide whose name does not carry a number is
 //! reported as an omission rather than given a guessed position.
 
 use quick_xml::events::Event;
 
 use crate::builder::{DocumentBuilder, UnitDraft};
-use crate::formats::ooxml::{self, Package, PackageError};
+use crate::formats::package::{self, Package, PackageError};
 use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
 
 /// Maximum bytes read from one slide part.
@@ -23,7 +23,7 @@ const SHAPE_ELEMENTS: &[&str] = &["sp", "graphicFrame", "pic", "cxnSp"];
 fn slide_parts(archive: &Package<'_>) -> (Vec<(u32, String)>, Vec<String>) {
     let mut numbered = Vec::new();
     let mut unnumbered = Vec::new();
-    for name in ooxml::part_names(archive) {
+    for name in package::part_names(archive) {
         let Some(rest) = name.strip_prefix("ppt/slides/slide") else {
             continue;
         };
@@ -66,7 +66,7 @@ pub(crate) fn convert(
         if builder.is_saturated() {
             break;
         }
-        let Some(part) = ooxml::read_part(archive, &name, MAX_SLIDE_PART_BYTES)? else {
+        let Some(part) = package::read_part(archive, &name, MAX_SLIDE_PART_BYTES)? else {
             builder.omit(Omission::UnreadablePart {
                 detail: format!("slide part '{name}' disappeared from the package"),
             });
@@ -83,7 +83,7 @@ fn convert_slide(
     slide_number: u32,
     name: &str,
 ) -> Result<(), PackageError> {
-    let mut reader = ooxml::xml_reader(part);
+    let mut reader = package::xml_reader(part);
     let mut buffer = Vec::new();
     let mut depth = 0_u32;
     let mut shape_index = 0_u32;
@@ -98,17 +98,17 @@ fn convert_slide(
         let event = reader.read_event_into(&mut buffer).map_err(|error| {
             PackageError::Malformed(format!("{name} is not well formed: {error}"))
         })?;
-        ooxml::inspect_event(&event, &mut depth, builder.tracker())?;
+        package::inspect_event(&event, &mut depth, builder.tracker())?;
         match &event {
             Event::Eof => break,
             Event::Start(start) => {
-                let local = ooxml::local_name(start.name().as_ref());
+                let local = package::local_name(start.name().as_ref());
                 if SHAPE_ELEMENTS.contains(&local.as_str()) {
                     shape_stack.push(depth);
                 }
             }
             Event::End(end) => {
-                let local = ooxml::local_name(end.name().as_ref());
+                let local = package::local_name(end.name().as_ref());
                 match local.as_str() {
                     "p" => text.push('\n'),
                     "tc" => text.push_str(" | "),
@@ -135,7 +135,7 @@ fn convert_slide(
         buffer.clear();
     }
     if !builder.is_saturated() {
-        ooxml::ensure_balanced(depth, name)?;
+        package::ensure_balanced(depth, name)?;
     }
     emit_shape(builder, &mut text, slide_number, shape_index)?;
     Ok(())
@@ -179,7 +179,7 @@ mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
     use crate::cancellation::Cancellation;
-    use crate::formats::ooxml::tests::package;
+    use crate::formats::package::tests::package;
     use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
 
     fn slide(title: &str, body: &str) -> Vec<u8> {
@@ -212,7 +212,7 @@ mod tests {
         let cancellation = Cancellation::none();
         let clock = ManualClock::new();
         let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
-        let mut archive = ooxml::preflight(bytes, &mut tracker)?;
+        let mut archive = package::preflight(bytes, &mut tracker)?;
         let mut builder = DocumentBuilder::new(
             ComponentVersion::new("baseline", 1),
             FormatKind::Pptx,
@@ -280,7 +280,7 @@ mod tests {
         let cancellation = Cancellation::none();
         let clock = ManualClock::new();
         let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
-        let mut archive = ooxml::preflight(&bytes, &mut tracker).expect("preflight");
+        let mut archive = package::preflight(&bytes, &mut tracker).expect("preflight");
         let mut builder = DocumentBuilder::new(
             ComponentVersion::new("baseline", 1),
             FormatKind::Pptx,

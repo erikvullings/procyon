@@ -753,6 +753,7 @@ export const en = {
     openEvidence: 'Open evidence {label}',
     citationPage: 'Page {page}',
     citationLines: 'Lines {start}–{end}',
+    citationEpubLines: 'Chapter {chapter}, lines {start}–{end}',
     citationSlide: 'Slide {slide}',
     citationCells: 'Cells {range}',
     citationSheetCells: 'Sheet {sheet}, cells {range}',

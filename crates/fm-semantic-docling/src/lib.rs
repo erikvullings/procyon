@@ -40,7 +40,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/1";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/2";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 1);

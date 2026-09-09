@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   nativeLibraryNames,
   PRODUCTION_CHUNKER_IDENTITY,
+  PRODUCTION_CONVERTER_IDENTITY,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
 
@@ -34,4 +35,8 @@ test('Zvec native library names are platform-specific', () => {
 
 test('production bundle records the compiled structural chunker identity', () => {
   assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/3');
+});
+
+test('production bundle records the EPUB-capable baseline converter identity', () => {
+  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/1036000+baseline/2');
 });

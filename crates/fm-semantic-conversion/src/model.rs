@@ -178,6 +178,8 @@ pub enum FormatKind {
     Markdown,
     /// Bounded HTML.
     Html,
+    /// EPUB package with manifest-declared HTML spine content.
+    Epub,
     /// WordprocessingML (`.docx`).
     Docx,
     /// PresentationML (`.pptx`).
@@ -199,6 +201,7 @@ impl FormatKind {
             Self::SourceCode => "source-code",
             Self::Markdown => "markdown",
             Self::Html => "html",
+            Self::Epub => "epub",
             Self::Docx => "docx",
             Self::Pptx => "pptx",
             Self::Spreadsheet => "spreadsheet",
@@ -288,6 +291,15 @@ pub enum Provenance {
         /// 0-based index in document body order.
         block_index: u32,
     },
+    /// Inclusive 1-based line range in one EPUB spine item.
+    EpubText {
+        /// 0-based position of the resource in the declared EPUB spine.
+        spine_index: u32,
+        /// First line of the unit in the XHTML/HTML resource.
+        start_line: u32,
+        /// Last line of the unit in the XHTML/HTML resource.
+        end_line: u32,
+    },
 }
 
 /// The top-level boundary a unit belongs to.
@@ -307,6 +319,8 @@ pub enum TopLevelBoundary {
     Sheet(String),
     /// A top-level section, identified by its heading text.
     Section(String),
+    /// A 0-based EPUB spine item.
+    EpubSpine(u32),
 }
 
 /// One normalized piece of a converted document.

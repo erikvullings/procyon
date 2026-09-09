@@ -24,6 +24,9 @@
 //! distinguishable by the caller. Bounded output that had to drop content is
 //! marked [`Completeness::Partial`] and carries [`Omission`]s; there is no
 //! silent partial success.
+//! EPUB conversion is signature-verified and follows only readable HTML
+//! resources declared by the package spine; bundled media and non-spine
+//! resources are never crawled.
 
 mod advanced;
 mod budget;

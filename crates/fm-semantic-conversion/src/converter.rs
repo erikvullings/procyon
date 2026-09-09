@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::budget::{BudgetTracker, Clock, ConversionBudgets, Stop, SystemClock};
 use crate::builder::DocumentBuilder;
 use crate::cancellation::Cancellation;
-use crate::formats::{csv, docx, html, markdown, ooxml, pdf, plain, pptx, spreadsheet};
+use crate::formats::{csv, docx, epub, html, markdown, package, pdf, plain, pptx, spreadsheet};
 use crate::model::{
     ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument, DocumentMetadata,
     FormatKind, MediaType, SkipReason,
@@ -22,7 +22,7 @@ use crate::text::decode;
 
 /// Version of the baseline converter. Bumping it invalidates every fingerprint
 /// derived from its output.
-pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 1);
+pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 2);
 
 /// Magic bytes of an OLE compound file. Encrypted OOXML documents are stored
 /// this way, as are the legacy `.doc`/`.xls`/`.ppt` binary formats.
@@ -163,11 +163,11 @@ fn stop_outcome(stop: Stop) -> ConversionOutcome {
     }
 }
 
-fn package_outcome(error: ooxml::PackageError) -> ConversionOutcome {
+fn package_outcome(error: package::PackageError) -> ConversionOutcome {
     match error {
-        ooxml::PackageError::Malformed(detail) => ConversionOutcome::Malformed { detail },
-        ooxml::PackageError::Encrypted(detail) => ConversionOutcome::Encrypted { detail },
-        ooxml::PackageError::Stopped(stop) => stop_outcome(stop),
+        package::PackageError::Malformed(detail) => ConversionOutcome::Malformed { detail },
+        package::PackageError::Encrypted(detail) => ConversionOutcome::Encrypted { detail },
+        package::PackageError::Stopped(stop) => stop_outcome(stop),
     }
 }
 
@@ -323,16 +323,17 @@ impl DocumentConverter for BaselineConverter {
                 }
                 builder.finish()
             }
-            FormatKind::Docx | FormatKind::Pptx => {
-                let mut archive = match ooxml::preflight(bytes, &mut tracker) {
+            FormatKind::Docx | FormatKind::Pptx | FormatKind::Epub => {
+                let mut archive = match package::preflight(bytes, &mut tracker) {
                     Ok(archive) => archive,
                     Err(error) => return Ok(package_outcome(error)),
                 };
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
-                let outcome = if format == FormatKind::Docx {
-                    docx::convert(&mut builder, &mut archive)
-                } else {
-                    pptx::convert(&mut builder, &mut archive)
+                let outcome = match format {
+                    FormatKind::Docx => docx::convert(&mut builder, &mut archive),
+                    FormatKind::Pptx => pptx::convert(&mut builder, &mut archive),
+                    FormatKind::Epub => epub::convert(&mut builder, &mut archive),
+                    _ => unreachable!(),
                 };
                 if let Err(error) = outcome {
                     return Ok(package_outcome(error));
@@ -340,7 +341,7 @@ impl DocumentConverter for BaselineConverter {
                 builder.finish()
             }
             FormatKind::Spreadsheet => {
-                if let Err(error) = ooxml::preflight(bytes, &mut tracker) {
+                if let Err(error) = package::preflight(bytes, &mut tracker) {
                     return Ok(package_outcome(error));
                 }
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
@@ -382,7 +383,7 @@ mod tests {
     use crate::budget::{BudgetKind, ManualClock};
     use crate::cancellation::CancellationFlag;
     use crate::chunk::Chunker;
-    use crate::formats::ooxml::tests::package;
+    use crate::formats::package::tests::package;
     use crate::model::{Completeness, Provenance, TopLevelBoundary};
 
     fn convert(bytes: &[u8], metadata: &DocumentMetadata) -> ConversionOutcome {

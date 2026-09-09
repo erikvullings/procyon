@@ -157,7 +157,7 @@ fn extension_of(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use std::sync::Arc;
 
     use async_trait::async_trait;
@@ -338,6 +338,55 @@ mod tests {
         bytes
     }
 
+    fn epub_with_image() -> Vec<u8> {
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        archive
+            .start_file(
+                "mimetype",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )
+            .expect("start mimetype");
+        archive
+            .write_all(b"application/epub+zip")
+            .expect("write mimetype");
+        for (name, content) in [
+            (
+                "META-INF/container.xml",
+                r#"<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="EPUB/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"#,
+            ),
+            (
+                "EPUB/content.opf",
+                r#"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <manifest>
+    <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+    <item id="cover" href="cover.png" media-type="image/png"/>
+  </manifest>
+  <spine><itemref idref="chapter"/></spine>
+</package>"#,
+            ),
+            (
+                "EPUB/chapter.xhtml",
+                "<html><body><h1>EPUB chapter</h1><p>Provider-neutral book text.</p></body></html>",
+            ),
+            ("EPUB/cover.png", "IMAGE_BYTES_MUST_NOT_BE_INDEXED"),
+        ] {
+            archive
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .expect("start EPUB part");
+            archive
+                .write_all(content.as_bytes())
+                .expect("write EPUB part");
+        }
+        archive.finish().expect("finish EPUB").into_inner()
+    }
+
     #[tokio::test]
     async fn converts_bytes_streamed_from_any_provider() {
         let service = memory_service(b"# Title\n\nBody paragraph.\n", "notes.md");
@@ -357,6 +406,32 @@ mod tests {
             fm_semantic_conversion::FormatKind::Markdown
         );
         assert_eq!(document.units()[0].text, "Title");
+    }
+
+    #[tokio::test]
+    async fn converts_epub_spine_text_from_any_provider_without_indexing_images() {
+        let service = memory_service(&epub_with_image(), "book.epub");
+        let outcome = service
+            .convert(
+                Location::new(
+                    ProviderId::new("memory-conversion-test-double"),
+                    "memory://book.epub",
+                ),
+                CancellationToken::new(),
+            )
+            .await
+            .expect("conversion");
+        let document = outcome.document().expect("converted");
+        assert_eq!(document.format(), fm_semantic_conversion::FormatKind::Epub);
+        let text = document
+            .units()
+            .iter()
+            .map(|unit| unit.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("EPUB chapter"));
+        assert!(text.contains("Provider-neutral book text."));
+        assert!(!text.contains("IMAGE_BYTES_MUST_NOT_BE_INDEXED"));
     }
 
     #[tokio::test]

@@ -21,7 +21,7 @@ results are not substitutes for measurements from the exact signed production ar
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
 | Dimensions / normalization | 384 / L2 |
-| Converter | `docling-pdf/1036000+baseline/1` |
+| Converter | `docling-pdf/1036000+baseline/2` |
 | Chunker | `structural/3` |
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |

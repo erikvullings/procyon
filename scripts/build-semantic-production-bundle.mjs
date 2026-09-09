@@ -8,6 +8,7 @@ import { fetchMultilingualModel } from './fetch-semantic-model.mjs';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const PRODUCTION_CHUNKER_IDENTITY = 'structural/3';
+export const PRODUCTION_CONVERTER_IDENTITY = 'docling-pdf/1036000+baseline/2';
 
 const targets = new Map([
   ['darwin-arm64', { os: 'macos', arch: 'aarch64', rust: 'aarch64-apple-darwin' }],
@@ -185,7 +186,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     target.arch,
     values.get('--release-base-url'),
     values.get('--source-revision'),
-    'docling-pdf/1036000+baseline/1',
+    PRODUCTION_CONVERTER_IDENTITY,
     PRODUCTION_CHUNKER_IDENTITY,
   ]);
   return path.resolve(values.get('--output'));

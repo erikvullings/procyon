@@ -154,6 +154,14 @@ function citationLocation(value: unknown): string | undefined {
         ? undefined
         : t('ragAsk', 'citationLines', { start, end });
     }
+    case 'epubText': {
+      const spine = number('spine_index');
+      const start = number('start_line');
+      const end = number('end_line');
+      return spine === undefined || start === undefined || end === undefined
+        ? undefined
+        : t('ragAsk', 'citationEpubLines', { chapter: spine + 1, start, end });
+    }
     case 'slide': {
       const slide = number('slide_number');
       return slide === undefined ? undefined : t('ragAsk', 'citationSlide', { slide });

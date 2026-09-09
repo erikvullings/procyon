@@ -367,7 +367,7 @@ fn fixture_production_manifest(
     let pipeline = ProductionPipelineIdentity::new(
         1,
         7,
-        "docling-pdf/1036000+baseline/1",
+        "docling-pdf/1036000+baseline/2",
         "structural/3",
         model.tokenizer().clone(),
         model.identity().clone(),
@@ -406,7 +406,7 @@ fn production_catalog_generation_is_deterministic_and_records_pipeline_provenanc
     );
     assert_eq!(
         first.pipeline().converter(),
-        "docling-pdf/1036000+baseline/1"
+        "docling-pdf/1036000+baseline/2"
     );
     assert_eq!(first.pipeline().chunker(), "structural/3");
     assert_eq!(first.provenance().len(), 3);
@@ -475,11 +475,11 @@ fn production_catalog_rejects_a_signed_converter_or_chunker_for_another_host_pip
     let expected_model = fixture_model_metadata();
     for (converter, chunker, expected_field) in [
         (
-            "docling-pdf/1036001+baseline/1",
+            "docling-pdf/1036001+baseline/2",
             "structural/3",
             "converter",
         ),
-        ("docling-pdf/1036000+baseline/1", "structural/4", "chunker"),
+        ("docling-pdf/1036000+baseline/2", "structural/4", "chunker"),
     ] {
         let incompatible = ProductionPipelineIdentity::new(
             1,

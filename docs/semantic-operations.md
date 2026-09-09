@@ -219,7 +219,7 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/1036000+baseline/1`, chunker `structural/3`, worker protocol 1, and index schema 2.
+`docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
 Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
 installers for qualification without publishing them. Tagged releases do that work only when the
 protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
@@ -353,7 +353,11 @@ evaluation metric.
 
 Storage diagnostics aggregate authoritative measurements by enrolled root and detected format,
 separating active bytes from bytes pending cleanup. They do not trust caller-supplied totals.
-Baseline conversion supports plain text, source code, Markdown, HTML, DOCX, PPTX, XLSX, and CSV.
+Baseline conversion supports plain text, source code, Markdown, HTML, EPUB, DOCX, PPTX, XLSX, and
+CSV. EPUB conversion follows the package manifest and spine in reading order, indexes only readable
+XHTML/HTML content, and ignores bundled images and other media. Font-only obfuscation does not block
+readable text, while encryption of a spine document is reported explicitly. Because EPUB is
+reflowable, evidence uses chapter and source-line provenance rather than synthetic page numbers.
 PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
 with the original `lopdf` implementation retained for recoverable fallback. Docling heading nodes
 become section paths and its page-furniture nodes are excluded from chunks. The deterministic

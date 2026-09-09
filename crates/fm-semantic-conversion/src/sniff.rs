@@ -5,8 +5,8 @@
 //! not written for. The rules, applied in order:
 //!
 //! 1. **Magic bytes win for containers.** `%PDF-` is a PDF; a ZIP local file
-//!    header is examined for the OOXML marker parts and resolved to DOCX,
-//!    PPTX or XLSX. A declared media type never overrides this.
+//!    header is examined for the EPUB signature or OOXML marker parts and
+//!    resolved accordingly. A declared media type never overrides this.
 //! 2. **Then the declared media type**, for text-shaped formats.
 //! 3. **Then the extension hint.**
 //! 4. **Then the bytes.** Content with a NUL byte in its first 8 KiB and no
@@ -14,8 +14,10 @@
 //!    unsupported rather than decoded as mojibake.
 //! 5. Otherwise the content is plain text.
 
-use std::io::Cursor;
+use std::collections::HashSet;
+use std::io::{Cursor, Read};
 
+use crate::formats::package;
 use crate::model::{FormatKind, MediaType};
 
 /// How many leading bytes are inspected when deciding whether content is
@@ -95,15 +97,58 @@ fn zip_format(bytes: &[u8]) -> ResolvedFormat {
     let mut has_word = false;
     let mut has_presentation = false;
     let mut has_workbook = false;
+    let mut epub_mimetype_entries = 0_u32;
+    let mut epub_mimetype_is_stored = false;
+    let mut names = HashSet::new();
     for index in 0..archive.len() {
-        let Ok(entry) = archive.by_index_raw(index) else {
-            continue;
+        let entry = match archive.by_index_raw(index) {
+            Ok(entry) => entry,
+            Err(error) => {
+                return ResolvedFormat::Malformed {
+                    detail: format!("ZIP entry {index} is unreadable: {error}"),
+                };
+            }
         };
-        match entry.name() {
+        let name = entry.name().to_owned();
+        if let Some(detail) = package::unsafe_entry_detail(
+            &name,
+            entry.enclosed_name().is_some(),
+            entry.size(),
+            entry.compressed_size(),
+        ) {
+            return ResolvedFormat::Malformed { detail };
+        }
+        if !names.insert(name.clone()) {
+            return ResolvedFormat::Malformed {
+                detail: format!("ZIP package contains duplicate entry '{name}'"),
+            };
+        }
+        match name.as_str() {
             "word/document.xml" => has_word = true,
             "ppt/presentation.xml" => has_presentation = true,
             "xl/workbook.xml" | "xl/workbook.bin" => has_workbook = true,
+            "mimetype" => {
+                epub_mimetype_entries += 1;
+                epub_mimetype_is_stored = entry.compression() == zip::CompressionMethod::Stored;
+            }
             _ => {}
+        }
+    }
+    if epub_mimetype_entries == 1 && epub_mimetype_is_stored {
+        let mut mimetype = Vec::new();
+        if archive
+            .by_name("mimetype")
+            .and_then(|mut entry| {
+                entry
+                    .by_ref()
+                    .take(64)
+                    .read_to_end(&mut mimetype)
+                    .map_err(zip::result::ZipError::Io)
+            })
+            .is_ok()
+            && mimetype == b"application/epub+zip"
+        {
+            return ResolvedFormat::Supported(FormatKind::Epub);
         }
     }
     if has_word {

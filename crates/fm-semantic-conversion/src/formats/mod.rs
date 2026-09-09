@@ -7,9 +7,10 @@
 
 pub(crate) mod csv;
 pub(crate) mod docx;
+pub(crate) mod epub;
 pub(crate) mod html;
 pub(crate) mod markdown;
-pub(crate) mod ooxml;
+pub(crate) mod package;
 pub(crate) mod pdf;
 pub(crate) mod plain;
 pub(crate) mod pptx;
