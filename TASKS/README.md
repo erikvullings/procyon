@@ -150,6 +150,7 @@ layers and never prerequisites for retrieval.
 - [x] 0208 Knowledge retrieval evaluation and release gate *(needs 0207; measured NO-GO keeps
   production visibility disabled pending production and supported-platform qualification)*
 - [x] 0209 Knowledge search pane UX *(needs 0206)*
+- [x] 0210 Knowledge search document results *(needs 0209)*
 
 ## File operations
 

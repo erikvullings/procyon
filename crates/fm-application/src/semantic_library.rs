@@ -1971,11 +1971,31 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
-        let Some(occurrence) = data
-            .catalog
-            .authorized_occurrence(&data.policy, workspace_id, occurrence_id)
-            .map_err(|_| SemanticLibraryError::InvalidRequest)?
-        else {
+        let occurrence = if matches!(access, SemanticAccessContext::Host) {
+            let candidate = data
+                .catalog
+                .occurrences()
+                .find(|candidate| candidate.id() == occurrence_id);
+            let mut authorized = None;
+            if let Some(candidate) = candidate {
+                for scope in candidate.scopes() {
+                    if let Some(occurrence) = data
+                        .catalog
+                        .authorized_occurrence(&data.policy, scope.workspace_id(), occurrence_id)
+                        .map_err(|_| SemanticLibraryError::InvalidRequest)?
+                    {
+                        authorized = Some(occurrence);
+                        break;
+                    }
+                }
+            }
+            authorized
+        } else {
+            data.catalog
+                .authorized_occurrence(&data.policy, workspace_id, occurrence_id)
+                .map_err(|_| SemanticLibraryError::InvalidRequest)?
+        };
+        let Some(occurrence) = occurrence else {
             return Ok(None);
         };
         Ok(Some(ResolvedSemanticOccurrence {
@@ -2598,6 +2618,15 @@ mod tenant_tests {
             foreign.allowed_source_ids,
             BTreeSet::from([occurrence_id.to_string()])
         );
+        let opened = service
+            .resolve_occurrence(
+                &SemanticAccessContext::Host,
+                other_workspace,
+                &occurrence_id.to_string(),
+            )
+            .unwrap()
+            .expect("host-wide evidence remains openable after workspace replacement");
+        assert_eq!(opened.location.uri, "file:///semantic-library/turbines.md");
 
         // A root enrolled through another workspace cannot be named as a scope.
         let denied = service.resolve_knowledge_scope(

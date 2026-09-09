@@ -19,6 +19,7 @@ import type {
 } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { copyText } from '../preview/clipboard';
+import { decodeEvidenceTitle } from './evidence-title';
 
 export interface RagAskDialogAttrs {
   readonly open: boolean;
@@ -103,15 +104,6 @@ function coverageText(preview: RagPreview): string {
     excluded: coverage.excluded,
     unavailable: coverage.unavailable,
   });
-}
-
-function decodeEvidenceTitle(title: string | null | undefined): string | undefined {
-  if (title == null) return undefined;
-  try {
-    return decodeURIComponent(title);
-  } catch {
-    return title;
-  }
 }
 
 function escapeRegExp(value: string): string {

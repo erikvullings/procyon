@@ -834,7 +834,7 @@ export const en = {
     cancel: 'Cancel search',
     cancelled: 'The search was cancelled.',
     results: 'Sources',
-    resultsSummary: '{count} source result(s) · {tokens} evidence token(s)',
+    resultsSummary: '{documents} document(s) · {sections} matching section(s)',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',

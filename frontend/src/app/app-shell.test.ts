@@ -3156,13 +3156,9 @@ describe('AppShell', () => {
     });
     subject.value = 'retrieval';
     subject.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    await vi.waitFor(() => {
-      const search = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-        (candidate) => candidate.textContent?.trim() === 'Search',
-      );
-      expect(search?.disabled).toBe(false);
-      search?.click();
-    });
+    subject.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
     const source = await vi.waitFor(() => {
       const candidate = root.querySelector<HTMLButtonElement>(
         '.fm-knowledge-source-link:not(:disabled)',

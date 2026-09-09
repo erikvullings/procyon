@@ -852,7 +852,7 @@ export const nl = {
     searchFailed:
       'Er is een interne fout opgetreden bij het zoeken naar kennis. Probeer het opnieuw; bouw de semantische index opnieuw op als het probleem blijft bestaan.',
     results: 'Bronnen',
-    resultsSummary: '{count} bronresulta(a)t(en) · {tokens} bewijstoken(s)',
+    resultsSummary: '{documents} document(en) · {sections} overeenkomende sectie(s)',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',

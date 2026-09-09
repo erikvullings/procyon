@@ -1,9 +1,8 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, IconButton } from 'mithril-materialized';
+import { FlatButton } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { copyIcon, externalLinkIcon } from '../../components/tabler-icons';
-import { tooltip } from '../../components/tooltip';
+import { externalLinkIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type {
   KnowledgeAnswer,
@@ -30,7 +29,7 @@ import type {
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
-import { copyText } from '../preview/clipboard';
+import { decodeEvidenceTitle } from './evidence-title';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -68,11 +67,6 @@ const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
   'currentFolder',
   'semanticResults',
 ];
-
-/** How many evidence rows are rendered before the user asks for more. */
-const RENDER_BATCH = 10;
-
-type Grouping = 'need' | 'document' | 'relevance';
 
 function needLabel(need: KnowledgeNeed): string {
   switch (need) {
@@ -329,54 +323,77 @@ function joinSubjects(values: readonly string[]): string {
 }
 
 /**
- * Groups evidence by the knowledge need that retrieved it. A row retrieved by
- * more than one need appears under each, which is what makes the grouping
- * useful; rows retrieved only by a subject or related term are kept in an
- * explicit "other" group rather than dropped.
- */
-export function groupEvidenceByNeed(
-  evidence: readonly KnowledgeEvidence[],
-): readonly { readonly need: KnowledgeNeed | undefined; readonly rows: KnowledgeEvidence[] }[] {
-  const groups = new Map<KnowledgeNeed | undefined, KnowledgeEvidence[]>();
-  for (const row of evidence) {
-    const needs = new Set(
-      row.reasons
-        .map((reason) => reason.need)
-        .filter((need): need is KnowledgeNeed => need != null),
-    );
-    const keys: (KnowledgeNeed | undefined)[] = needs.size === 0 ? [undefined] : [...needs];
-    for (const key of keys) {
-      const existing = groups.get(key);
-      if (existing === undefined) groups.set(key, [row]);
-      else existing.push(row);
-    }
-  }
-  return [...NEEDS, undefined]
-    .filter((need) => groups.has(need))
-    .map((need) => ({ need, rows: groups.get(need) ?? [] }));
-}
-
-/**
- * Groups evidence by document, preserving the best rank per document. Two
- * documents can share a title, so the stable `documentId` is carried through
- * for keying rather than the user-visible title.
+ * Ranks documents by their best evidence while restoring each document's
+ * structural order. Two documents can share a title, so the stable
+ * `documentId` remains the key.
  */
 export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]): readonly {
   readonly documentId: string;
   readonly title: string;
   readonly rows: KnowledgeEvidence[];
+  readonly openEvidence: KnowledgeEvidence;
+  readonly bestRank: number;
+  readonly bestScore: number;
 }[] {
   const groups = new Map<
     string,
-    { documentId: string; title: string; rows: KnowledgeEvidence[] }
+    {
+      documentId: string;
+      title: string;
+      rows: KnowledgeEvidence[];
+      openEvidence: KnowledgeEvidence;
+      bestRank: number;
+      bestScore: number;
+    }
   >();
   for (const row of evidence) {
     const existing = groups.get(row.documentId);
-    if (existing === undefined)
-      groups.set(row.documentId, { documentId: row.documentId, title: row.title, rows: [row] });
-    else existing.rows.push(row);
+    if (existing === undefined) {
+      groups.set(row.documentId, {
+        documentId: row.documentId,
+        title: decodeEvidenceTitle(row.title) ?? row.title,
+        rows: [row],
+        openEvidence: row,
+        bestRank: row.finalRank,
+        bestScore: row.fusedScore,
+      });
+      continue;
+    }
+    existing.rows.push(row);
+    const outranksBest =
+      row.finalRank < existing.bestRank ||
+      (row.finalRank === existing.bestRank && row.fusedScore > existing.bestScore);
+    if (outranksBest) {
+      existing.bestRank = row.finalRank;
+      existing.bestScore = row.fusedScore;
+    }
+    const outranksOpenTarget =
+      row.finalRank < existing.openEvidence.finalRank ||
+      (row.finalRank === existing.openEvidence.finalRank &&
+        row.fusedScore > existing.openEvidence.fusedScore);
+    if (
+      (!row.unavailable && existing.openEvidence.unavailable) ||
+      (row.unavailable === existing.openEvidence.unavailable && outranksOpenTarget)
+    ) {
+      existing.openEvidence = row;
+    }
   }
-  return [...groups.values()];
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      rows: group.rows.toSorted(
+        (left, right) =>
+          left.sourcePosition - right.sourcePosition ||
+          left.finalRank - right.finalRank ||
+          left.recordId.localeCompare(right.recordId),
+      ),
+    }))
+    .toSorted(
+      (left, right) =>
+        left.bestRank - right.bestRank ||
+        right.bestScore - left.bestScore ||
+        left.documentId.localeCompare(right.documentId),
+    );
 }
 
 /** An emptied canonical draft; every field is explicit so nothing is inferred. */
@@ -532,8 +549,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let plan: KnowledgeSearchPlan | undefined;
   let result: KnowledgeSearchResult | undefined;
   let traceRequested = false;
-  let grouping: Grouping = 'need';
-  let visibleRows = RENDER_BATCH;
   let abortController: AbortController | undefined;
   /**
    * Answer state (task 0207). Everything here is *downstream* of a completed
@@ -558,8 +573,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let generation = 0;
   /** Bumped on every edit, so a response for an older draft is never applied. */
   let revision = 0;
-  /** Revision the in-flight parse was issued for, and the promise to await. */
-  let parsingRevision: number | undefined;
+  /** In-flight interpretation the Enter handler must await before searching. */
   let pendingParse: Promise<void> | undefined;
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
@@ -638,7 +652,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   function resetResults(): void {
     result = undefined;
     plan = undefined;
-    visibleRows = RENDER_BATCH;
     notice = undefined;
     traceRequested = false;
     resetAnswer();
@@ -709,7 +722,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     const parseGeneration = generation;
     const parseRevision = revision;
     const source = text ?? formatDraftText();
-    parsingRevision = parseRevision;
     if (source.trim().length === 0) {
       interpretation = undefined;
       scopeIssues = [];
@@ -722,7 +734,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         draft = emptyDraft();
         subjectsText = '';
       }
-      parsingRevision = undefined;
       pendingParse = undefined;
       return Promise.resolve();
     }
@@ -738,17 +749,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       })
       .finally(() => {
         if (parseGeneration !== generation || parseRevision !== revision) return;
-        parsingRevision = undefined;
         pendingParse = undefined;
         m.redraw();
       });
     pendingParse = parse;
     return parse;
-  }
-
-  /** Whether the latest edit has not been interpreted yet. */
-  function parsePending(): boolean {
-    return parsingRevision === revision;
   }
 
   /** Serialises the canonical draft into DSL text the parser accepts. */
@@ -777,7 +782,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     generation += 1;
     revision += 1;
     const loadGeneration = generation;
-    parsingRevision = undefined;
     pendingParse = undefined;
     busy = 'loading';
     error = undefined;
@@ -789,7 +793,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     draft = { ...emptyDraft(), about: splitSubjects(attrs.initialSubject ?? '') };
     subjectsText = attrs.initialSubject ?? '';
     dslText = '';
-    grouping = 'relevance';
     currentFolderIndexed = false;
     includeTrace = false;
     capabilities = undefined;
@@ -905,16 +908,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   }
 
   /**
-   * Whether the Search control is unusable. A query that is still being
-   * interpreted keeps the control live - `search` awaits that parse - but an
-   * unusable scope selector blocks it outright, because no edit in flight can
-   * make the query the user typed runnable.
-   */
-  function searchDisabled(): boolean {
-    return busy !== undefined || scopeIssues.length > 0 || (!hasSubject() && !parsePending());
-  }
-
-  /**
    * Runs the search against the *latest* interpreted query. A parse still in
    * flight is awaited first, so a search can never be built from a half-applied
    * draft, and a response that arrives after a further edit, a close or a
@@ -935,7 +928,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     // A new search replaces the evidence set entirely, so any answer over the
     // previous one is dropped before the first byte of the new one arrives.
     resetAnswer();
-    visibleRows = RENDER_BATCH;
     abortController = controller;
     m.redraw();
     if (pendingParse !== undefined) await pendingParse;
@@ -964,6 +956,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       if (startGeneration !== generation || searchRevision !== revision) return;
       result = executed;
       plan = executed.plan;
+      capabilities = executed.capabilities;
     } catch (cause) {
       if (startGeneration !== generation || searchRevision !== revision) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1087,15 +1080,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  async function copy(value: string): Promise<void> {
-    try {
-      await copyText(value);
-    } catch {
-      error = t('ragAsk', 'copyFailed');
-      m.redraw();
-    }
-  }
-
   function diagnosticText(diagnostic: KnowledgeDiagnostic): string {
     const suggestion =
       diagnostic.suggestion == null
@@ -1122,7 +1106,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     // A new generation drops every response still in flight: after a close the
     // dialog must never adopt a plan, parse or result for the query it had.
     generation += 1;
-    parsingRevision = undefined;
     pendingParse = undefined;
     busy = undefined;
     if (wasSearching) notice = t('knowledgeSearch', 'cancelled');
@@ -1142,12 +1125,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  function evidenceRow(
-    attrs: KnowledgeSearchDialogAttrs,
-    row: KnowledgeEvidence,
-    key: string,
-  ): m.Vnode {
-    const provenance = knowledgeProvenanceLabel(row.provenance);
+  function evidenceSection(row: KnowledgeEvidence, key: string): m.Vnode {
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
       row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
@@ -1158,57 +1136,40 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         ? undefined
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
-    return m('li.fm-knowledge-result', { key }, [
-      m('.fm-knowledge-result-heading', [
-        m(
-          'button.fm-knowledge-source-link',
-          {
-            type: 'button',
-            disabled: row.unavailable || attrs.onOpenSource === undefined,
-            'aria-label': t('knowledgeSearch', 'openSource', { title: row.title }),
-            onclick: () => void openSource(attrs, row),
-          },
-          [externalLinkIcon({ size: 14 }), m('span', row.title)],
-        ),
-        tooltip(
-          t('ragAsk', 'copyEvidence', { label: row.title }),
-          m(
-            IconButton,
-            {
-              type: 'button',
-              'aria-label': t('ragAsk', 'copyEvidence', { label: row.title }),
-              onclick: () => void copy(row.content),
-            },
-            copyIcon({ size: 16 }),
-          ),
-        ),
-      ]),
-      m('p.fm-knowledge-excerpt', row.excerpt),
-      m('ul.fm-knowledge-reasons', [
-        ...row.reasons.map((reason, index) =>
-          m('li', { key: `${key}-reason-${index}` }, reasonLabel(reason)),
-        ),
-      ]),
-      m('small.fm-knowledge-result-meta', [
-        t('knowledgeSearch', 'resultRank', { rank: row.finalRank }),
-        ' · ',
-        t('knowledgeSearch', 'resultScore', { score: row.fusedScore.toFixed(4) }),
-        row.sectionPath.length === 0 ? '' : ` · ${row.sectionPath.join(' / ')}`,
-        provenance === '' ? '' : ` · ${provenance}`,
-        ...row.rankContributions.map(
-          (contribution) =>
-            ` · ${t('knowledgeSearch', 'rankContribution', {
-              route: modeLabel(contribution.route),
-              rank: contribution.rank,
-            })}`,
-        ),
-      ]),
+    return m('section.fm-knowledge-result', { key }, [
+      m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
       states.length === 0
         ? undefined
         : m(
             'p.fm-knowledge-state',
             states.flatMap((state, index) => (index === 0 ? [state] : [' · ', state])),
           ),
+    ]);
+  }
+
+  function evidenceDocument(
+    attrs: KnowledgeSearchDialogAttrs,
+    group: ReturnType<typeof groupEvidenceByDocument>[number],
+  ): m.Vnode {
+    const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
+    return m('article.fm-knowledge-group', { key: `document-${group.documentId}` }, [
+      m('h4.fm-knowledge-result-heading', [
+        m(
+          'button.fm-knowledge-source-link',
+          {
+            type: 'button',
+            disabled: !openable,
+            'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
+            title: group.title,
+            onclick: () => void openSource(attrs, group.openEvidence),
+          },
+          [externalLinkIcon({ size: 14 }), m('span', group.title)],
+        ),
+      ]),
+      m(
+        '.fm-knowledge-results',
+        group.rows.map((row) => evidenceSection(row, `${group.documentId}-${row.recordId}`)),
+      ),
     ]);
   }
 
@@ -1270,62 +1231,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m('p.fm-knowledge-hint', t('knowledgeSearch', 'emptyHint')),
       ]);
     }
-    const rendered = result.evidence.slice(0, visibleRows);
-    const sections: m.Children[] = [];
-    if (grouping === 'relevance') {
-      sections.push(
-        m(
-          'ol.fm-knowledge-results',
-          rendered.map((row) => evidenceRow(attrs, row, row.recordId)),
-        ),
-      );
-    } else if (grouping === 'document') {
-      for (const group of groupEvidenceByDocument(rendered)) {
-        sections.push(
-          m('section.fm-knowledge-group', { key: `document-${group.documentId}` }, [
-            m('h4', group.title),
-            m(
-              'ol.fm-knowledge-results',
-              group.rows.map((row) =>
-                evidenceRow(attrs, row, `${group.documentId}-${row.recordId}`),
-              ),
-            ),
-          ]),
-        );
-      }
-    } else {
-      for (const group of groupEvidenceByNeed(rendered)) {
-        const label =
-          group.need === undefined
-            ? t('knowledgeSearch', 'groupUnattributed')
-            : needLabel(group.need);
-        sections.push(
-          m('section.fm-knowledge-group', { key: `need-${group.need ?? 'other'}` }, [
-            m('h4', label),
-            m(
-              'ol.fm-knowledge-results',
-              group.rows.map((row) => evidenceRow(attrs, row, `${label}-${row.recordId}`)),
-            ),
-          ]),
-        );
-      }
-    }
-    return [
-      sections,
-      result.evidence.length > visibleRows
-        ? m(
-            FlatButton,
-            {
-              type: 'button',
-              className: 'fm-knowledge-show-more',
-              onclick: () => {
-                visibleRows += RENDER_BATCH;
-              },
-            },
-            t('knowledgeSearch', 'showMore'),
-          )
-        : undefined,
-    ];
+    return groupEvidenceByDocument(result.evidence).map((group) => evidenceDocument(attrs, group));
   }
 
   /** Localised endpoint classification, shown before anything is sent. */
@@ -1656,7 +1562,15 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             : undefined,
           m('.fm-knowledge-composer', [
             m('label.fm-knowledge-field', [
-              m('span', t('knowledgeSearch', 'subjects')),
+              m('span.fm-knowledge-subject-label', [
+                m('span', t('knowledgeSearch', 'subjects')),
+                busy === 'searching'
+                  ? m('span.fm-knowledge-search-spinner', {
+                      role: 'status',
+                      'aria-label': t('knowledgeSearch', 'searching'),
+                    })
+                  : undefined,
+              ]),
               m('textarea#fm-knowledge-subjects', {
                 name: 'knowledge-subjects',
                 rows: 2,
@@ -1712,23 +1626,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ]),
               ),
             ]),
-          ]),
-          m('.fm-knowledge-actions', [
-            m(
-              FlatButton,
-              {
-                type: 'button',
-                className: 'fm-knowledge-primary',
-                disabled: searchDisabled(),
-                onclick: () => void search(attrs),
-              },
-              busy === 'searching'
-                ? t('knowledgeSearch', 'searching')
-                : t('knowledgeSearch', 'search'),
-            ),
-            busy === 'searching'
-              ? m(FlatButton, { type: 'button', onclick: cancel }, t('knowledgeSearch', 'cancel'))
-              : undefined,
           ]),
           m('details.fm-knowledge-advanced', [
             m('summary', t('knowledgeSearch', 'showAdvanced')),
@@ -1896,24 +1793,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     ])
                   : undefined,
               ]),
-              m('label.fm-knowledge-grouping', [
-                m('span', t('knowledgeSearch', 'groupBy')),
-                m(
-                  'select#fm-knowledge-grouping.browser-default',
-                  {
-                    value: grouping,
-                    onchange: (event: Event) => {
-                      grouping = (event.currentTarget as HTMLSelectElement).value as Grouping;
-                    },
-                  },
-                  [
-                    m('option', { value: 'relevance' }, t('knowledgeSearch', 'groupByRelevance')),
-                    m('option', { value: 'need' }, t('knowledgeSearch', 'groupByNeed')),
-                    m('option', { value: 'document' }, t('knowledgeSearch', 'groupByDocument')),
-                  ],
-                ),
-                m('small.fm-knowledge-hint', t('knowledgeSearch', 'groupByHint')),
-              ]),
               m(
                 'details.fm-knowledge-plan',
                 {
@@ -2070,8 +1949,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     'p.fm-knowledge-result-summary',
                     { role: 'status' },
                     t('knowledgeSearch', 'resultsSummary', {
-                      count: result.evidence.length,
-                      tokens: result.tokenCount,
+                      documents: groupEvidenceByDocument(result.evidence).length,
+                      sections: result.evidence.length,
                     }),
                   ),
               m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, resultsView(attrs)),

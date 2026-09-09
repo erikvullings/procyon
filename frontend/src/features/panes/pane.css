@@ -86,6 +86,10 @@
   scrollbar-width: none;
 }
 
+.fm-pane-viewer > .fm-pane-tabs {
+  flex: 0 0 var(--fm-header-height);
+}
+
 .fm-pane-tabs::-webkit-scrollbar {
   display: none;
 }
