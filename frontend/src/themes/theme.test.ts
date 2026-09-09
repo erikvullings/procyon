@@ -256,13 +256,20 @@ describe('theme stylesheet', () => {
     expect(paneCss).toMatch(
       /\.fm-pane-viewer > \.fm-pane-tabs\s*\{[^}]*flex:\s*0 0 var\(--fm-header-height\)/s,
     );
-    expect(themeCss).toMatch(/\.fm-knowledge-search\s*\{[^}]*overflow-x:\s*hidden/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-search\s*\{[^}]*overflow:\s*hidden/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-results-body\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--fm-accent\)/s,
+    );
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
     );
     expect(themeCss).toMatch(/\.fm-knowledge-needs\s*\{[^}]*border:\s*0/s);
     expect(themeCss).toMatch(/:where\(\.fm-knowledge-needs label > span\)\s*\{[^}]*border:\s*0/s);
-    expect(themeCss).toMatch(/\.fm-knowledge-document-list\s*\{[^}]*list-style:\s*decimal/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-document-list\s*\{[^}]*list-style:\s*none/s);
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-document-heading\s*\{[^}]*grid-template-columns:\s*1\.5rem minmax\(0,\s*1fr\)/s,
+    );
     expect(themeCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
     );

@@ -13,6 +13,7 @@ import {
 let root: HTMLElement;
 
 const workspaceId = '22222222-2222-4222-8222-222222222222';
+const preferencesStorageKey = 'procyon.knowledgeSearch.preferences.v1';
 
 interface MountOptions {
   readonly client?: MockFileManagerClient;
@@ -93,6 +94,7 @@ function submitSearch(): void {
 
 beforeEach(() => {
   setLocale('en');
+  localStorage.removeItem(preferencesStorageKey);
   root = document.createElement('div');
   document.body.appendChild(root);
 });
@@ -104,6 +106,83 @@ afterEach(() => {
 });
 
 describe('KnowledgeSearchDialog (task 0206)', () => {
+  it('uses a fixed filter-style toolbar and moves search settings into a modal', async () => {
+    mount();
+
+    await ready();
+    const toolbar = root.querySelector('.fm-knowledge-search-toolbar');
+    expect(toolbar).not.toBeNull();
+    expect(toolbar?.querySelector('#fm-knowledge-subjects')).not.toBeNull();
+    expect(toolbar?.querySelector('.fm-knowledge-search-submit')).not.toBeNull();
+    const settings = toolbar?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Search settings"]',
+    );
+    expect(settings).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-needs')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced')).toBeNull();
+
+    settings?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-knowledge-settings-modal')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-needs')).not.toBeNull();
+    expect(
+      root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-advanced'),
+    ).not.toBeNull();
+  });
+
+  it('restores and persists selected knowledge needs across pane instances', async () => {
+    localStorage.setItem(
+      preferencesStorageKey,
+      JSON.stringify({ needs: ['definition', 'procedure', 'not-a-need'] }),
+    );
+    mount();
+    await ready();
+
+    const inputs = [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')];
+    expect(
+      inputs.filter((input) => input.checked).map((input) => input.parentElement?.textContent),
+    ).toEqual(['Definition', 'Procedure']);
+
+    inputs[3]?.click();
+    expect(JSON.parse(localStorage.getItem(preferencesStorageKey) ?? '{}')).toEqual({
+      needs: ['definition', 'procedure', 'examples'],
+    });
+
+    m.mount(root, null);
+    mount();
+    await ready();
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')]
+        .filter((input) => input.checked)
+        .map((input) => input.parentElement?.textContent),
+    ).toEqual(['Definition', 'Procedure', 'Examples']);
+  });
+
+  it('keeps safe defaults when preference storage is malformed or unavailable', async () => {
+    localStorage.setItem(preferencesStorageKey, '{not-json');
+    mount();
+    await ready();
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')].some(
+        (input) => input.checked,
+      ),
+    ).toBe(false);
+
+    m.mount(root, null);
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('storage unavailable');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('storage unavailable');
+    });
+    mount();
+    await ready();
+    expect(() =>
+      root.querySelector<HTMLInputElement>('.fm-knowledge-needs input')?.click(),
+    ).not.toThrow();
+  });
+
   it('focuses the subject field and shows the idle state before any search', async () => {
     mount();
 
@@ -290,16 +369,17 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await search();
 
     expect(root.querySelectorAll('.fm-knowledge-document-item')).toHaveLength(1);
+    expect(root.querySelector('.fm-knowledge-document-number')?.textContent).toBe('1.');
     expect(root.querySelector('.fm-knowledge-source-link span')?.textContent).toBe(
       'TRIZ Substance-Field Modelling.pdf',
     );
     expect(root.querySelector('.fm-knowledge-section-title')?.textContent).toBe(
       'Standards / Su-Field synthesis',
     );
-    expect(root.querySelector('.fm-knowledge-section-position')?.textContent).toBe('Page 167');
-    const sections = root.querySelectorAll('.fm-knowledge-section-link');
-    expect(sections[1]?.querySelector('.fm-knowledge-section-title')?.textContent).toBe('Page 168');
-    expect(sections[1]?.querySelector('.fm-knowledge-section-position')).toBeNull();
+    const pages = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-page-link');
+    expect(pages[0]?.textContent).toBe('Page 167');
+    expect(pages[1]?.textContent).toBe('Page 168');
+    expect(root.textContent).not.toContain('Matching section');
     expect(root.querySelector('.fm-knowledge-result-markdown h2')?.textContent).toBe(
       'Su-Field model',
     );
@@ -310,7 +390,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-result-meta')).toBeNull();
     expect(root.querySelector('#fm-knowledge-grouping')).toBeNull();
 
-    root.querySelector<HTMLButtonElement>('.fm-knowledge-section-link')?.click();
+    pages[0]?.click();
     expect(onOpenSource).toHaveBeenCalledWith(
       expect.objectContaining({
         sectionPath: ['Standards', 'Su-Field synthesis'],
@@ -1059,14 +1139,21 @@ describe('KnowledgeSearchDialog open lifecycle (task 0206)', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('closes on Escape from the query-language field', async () => {
+  it('closes only search settings on Escape from the query-language field', async () => {
     const onClose = vi.fn();
     mount({ onClose });
     await ready();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Search settings"]')?.click();
+    m.redraw.sync();
 
-    dsl().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    dsl().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    m.redraw.sync();
 
-    expect(onClose).toHaveBeenCalledOnce();
+    expect(root.querySelector('.fm-knowledge-settings-modal.active')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-search')).not.toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('never lets a composer key reach the rest of the application', async () => {

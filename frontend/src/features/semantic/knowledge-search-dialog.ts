@@ -1,8 +1,9 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton } from 'mithril-materialized';
+import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { externalLinkIcon } from '../../components/tabler-icons';
+import { externalLinkIcon, filterIcon, settingsIcon } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
   KnowledgeAnswer,
@@ -67,6 +68,41 @@ const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
   'currentFolder',
   'semanticResults',
 ];
+
+const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
+
+function loadPreferredNeeds(): KnowledgeNeed[] {
+  try {
+    const stored = globalThis.localStorage?.getItem(PREFERENCES_STORAGE_KEY);
+    if (stored == null) return [];
+    const value: unknown = JSON.parse(stored);
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !('needs' in value) ||
+      !Array.isArray(value.needs)
+    ) {
+      return [];
+    }
+    const selected = new Set(
+      value.needs.filter(
+        (need): need is KnowledgeNeed =>
+          typeof need === 'string' && NEEDS.includes(need as KnowledgeNeed),
+      ),
+    );
+    return NEEDS.filter((need) => selected.has(need));
+  } catch {
+    return [];
+  }
+}
+
+function persistPreferredNeeds(needs: readonly KnowledgeNeed[]): void {
+  try {
+    globalThis.localStorage?.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify({ needs }));
+  } catch {
+    // Search remains usable when a host disables persistent browser storage.
+  }
+}
 
 function needLabel(need: KnowledgeNeed): string {
   switch (need) {
@@ -577,6 +613,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let pendingParse: Promise<void> | undefined;
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
+  let settingsOpen = false;
 
   /** Bounded options sent with both the plan preview and the search itself. */
   function searchOptions(): KnowledgeSearchOptions {
@@ -687,6 +724,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
     draft = { ...next.draft, scopes: [] };
     subjectsText = joinSubjects(next.draft.about ?? []);
+    persistPreferredNeeds(next.draft.needs ?? []);
     applyScopeSelectors(next.draft.scopes ?? []);
   }
 
@@ -790,7 +828,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     interpretation = undefined;
     scopeIssues = [];
     wholeLibraryDeclared = false;
-    draft = { ...emptyDraft(), about: splitSubjects(attrs.initialSubject ?? '') };
+    draft = {
+      ...emptyDraft(),
+      about: splitSubjects(attrs.initialSubject ?? ''),
+      needs: loadPreferredNeeds(),
+    };
     subjectsText = attrs.initialSubject ?? '';
     dslText = '';
     currentFolderIndexed = false;
@@ -805,6 +847,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     answerProfilesFailed = false;
     selectedAnswerProfileId = '';
     allowModelKnowledge = false;
+    settingsOpen = false;
     try {
       const [reportedCapabilities, availableRoots] = await Promise.all([
         attrs.client.getKnowledgeCapabilities(),
@@ -1112,16 +1155,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     attrs.onClose();
   }
 
-  /**
-   * Escape must always reach the dialog: the composer's text controls stop
-   * keydown propagation so typing never triggers global shortcuts, which also
-   * stops the modal's own document-level Escape handler from seeing it.
-   */
-  function stopTypingKeys(attrs: KnowledgeSearchDialogAttrs, event: KeyboardEvent): void {
+  /** Keeps editor keystrokes local and lets Escape dismiss only the settings modal. */
+  function stopSettingsTypingKeys(event: KeyboardEvent): void {
     event.stopPropagation();
     if (event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
-      close(attrs);
+      settingsOpen = false;
     }
   }
 
@@ -1132,8 +1171,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
     const indexedTitle = row.sectionPath.join(' / ');
-    const sectionTitle = indexedTitle || position || t('knowledgeSearch', 'matchingSection');
-    const separatePosition = indexedTitle === '' ? '' : position;
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
@@ -1146,24 +1183,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      m(
-        'button.fm-knowledge-section-link',
-        {
-          type: 'button',
-          disabled: !openable,
-          'aria-label': t('knowledgeSearch', 'openSection', {
-            section:
-              separatePosition === '' ? sectionTitle : `${sectionTitle}, ${separatePosition}`,
-          }),
-          onclick: () => void openSource(attrs, row),
-        },
-        [
-          m('span.fm-knowledge-section-title', sectionTitle),
-          separatePosition === ''
-            ? undefined
-            : m('span.fm-knowledge-section-position', separatePosition),
-        ],
-      ),
+      indexedTitle === '' && position === ''
+        ? undefined
+        : m('.fm-knowledge-section-heading', [
+            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
+            position === ''
+              ? undefined
+              : m(
+                  'button.fm-knowledge-page-link',
+                  {
+                    type: 'button',
+                    disabled: !openable,
+                    'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
+                    onclick: () => void openSource(attrs, row),
+                  },
+                  position,
+                ),
+          ]),
       m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
       states.length === 0
         ? undefined
@@ -1184,18 +1220,21 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       'li.fm-knowledge-document-item',
       { key: `document-${group.documentId}`, value: index + 1 },
       m('article.fm-knowledge-group', [
-        m('h4.fm-knowledge-result-heading', [
-          m(
-            'button.fm-knowledge-source-link',
-            {
-              type: 'button',
-              disabled: !openable,
-              'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
-              title: group.title,
-              onclick: () => void openSource(attrs, group.openEvidence),
-            },
-            [externalLinkIcon({ size: 14 }), m('span', group.title)],
-          ),
+        m('.fm-knowledge-document-heading', [
+          m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
+          m('h4.fm-knowledge-result-heading', [
+            m(
+              'button.fm-knowledge-source-link',
+              {
+                type: 'button',
+                disabled: !openable,
+                'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
+                title: group.title,
+                onclick: () => void openSource(attrs, group.openEvidence),
+              },
+              [externalLinkIcon({ size: 14 }), m('span', group.title)],
+            ),
+          ]),
         ]),
         m(
           '.fm-knowledge-sections',
@@ -1592,6 +1631,434 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         'section#fm-knowledge-search-pane.fm-knowledge-search',
         { 'aria-label': t('knowledgeSearch', 'title') },
         [
+          m('.fm-knowledge-composer', [
+            m('.fm-knowledge-search-toolbar', [
+              filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),
+              m('textarea#fm-knowledge-subjects', {
+                name: 'knowledge-subjects',
+                rows: 1,
+                value: subjectsText,
+                disabled: busy === 'loading' || busy === 'searching',
+                autocomplete: 'off',
+                'aria-label': t('knowledgeSearch', 'subjects'),
+                placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
+                onupdate: ({ dom }: m.VnodeDOM) => {
+                  if (!focusSubjectOnOpen || busy === 'loading') return;
+                  focusSubjectOnOpen = false;
+                  const input = dom as HTMLTextAreaElement;
+                  input.focus();
+                  input.setSelectionRange(input.value.length, input.value.length);
+                },
+                oninput: (event: InputEvent) => {
+                  subjectsText = (event.currentTarget as HTMLTextAreaElement).value;
+                  draft = { ...draft, about: splitSubjects(subjectsText) };
+                  edited();
+                  void reinterpret(attrs);
+                },
+                onkeydown: (event: KeyboardEvent) => {
+                  event.stopPropagation();
+                  if (event.key === 'Escape' && !event.isComposing) {
+                    event.preventDefault();
+                    close(attrs);
+                    return;
+                  }
+                  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                    event.preventDefault();
+                    void search(attrs);
+                  }
+                },
+              }),
+              busy === 'searching'
+                ? m('span.fm-knowledge-search-spinner', {
+                    role: 'status',
+                    'aria-label': t('knowledgeSearch', 'searching'),
+                  })
+                : undefined,
+              m(
+                FlatButton,
+                {
+                  type: 'button',
+                  className: 'fm-knowledge-search-submit',
+                  disabled: busy !== undefined || !canSearch(),
+                  onclick: () => void search(attrs),
+                },
+                t('knowledgeSearch', 'search'),
+              ),
+              tooltip(
+                t('knowledgeSearch', 'settings'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-settings-trigger',
+                    'aria-label': t('knowledgeSearch', 'settings'),
+                    onclick: () => {
+                      settingsOpen = true;
+                    },
+                  },
+                  settingsIcon({ size: 16 }),
+                ),
+              ),
+            ]),
+            m(ModalPanel, {
+              className: 'fm-dense-modal fm-knowledge-settings-modal',
+              title: t('knowledgeSearch', 'settings'),
+              isOpen: settingsOpen,
+              closeOnEsc: true,
+              onToggle: (open: boolean) => {
+                settingsOpen = open;
+              },
+              description: m('.fm-knowledge-settings', [
+                m('fieldset.fm-knowledge-needs', [
+                  m('legend', t('knowledgeSearch', 'needs')),
+                  NEEDS.map((need) =>
+                    m('label', { key: need }, [
+                      m('input', {
+                        type: 'checkbox',
+                        checked: (draft.needs ?? []).includes(need),
+                        disabled: busy === 'searching',
+                        onchange: (event: Event) => {
+                          const selected = new Set(draft.needs ?? []);
+                          if ((event.currentTarget as HTMLInputElement).checked) selected.add(need);
+                          else selected.delete(need);
+                          const needs = NEEDS.filter((value) => selected.has(value));
+                          draft = { ...draft, needs };
+                          persistPreferredNeeds(needs);
+                          edited();
+                          void reinterpret(attrs);
+                        },
+                      }),
+                      m('span', needLabel(need)),
+                    ]),
+                  ),
+                ]),
+                m('details.fm-knowledge-advanced', [
+                  m('summary', t('knowledgeSearch', 'showAdvanced')),
+                  m('.fm-knowledge-advanced-body', [
+                    m('.fm-knowledge-row', [
+                      m('label.fm-knowledge-field', [
+                        m('span', t('knowledgeSearch', 'scope')),
+                        m(
+                          'select#fm-knowledge-scope.browser-default',
+                          {
+                            name: 'knowledge-scope',
+                            value: scopeKind,
+                            disabled: busy === 'searching',
+                            onchange: (event: Event) => {
+                              scopeKind = (event.currentTarget as HTMLSelectElement)
+                                .value as KnowledgeScopeKind;
+                              edited();
+                              void reinterpret(attrs);
+                            },
+                          },
+                          SCOPE_KINDS.map((kind) =>
+                            m(
+                              'option',
+                              { key: kind, value: kind, disabled: !scopeAvailable(attrs, kind) },
+                              scopeKindLabel(kind),
+                            ),
+                          ),
+                        ),
+                      ]),
+                      m('fieldset.fm-knowledge-modes', [
+                        m('legend', t('knowledgeSearch', 'mode')),
+                        MODES.map((candidate) =>
+                          m(
+                            'button',
+                            {
+                              key: candidate,
+                              type: 'button',
+                              class:
+                                mode === candidate
+                                  ? 'fm-knowledge-mode is-selected'
+                                  : 'fm-knowledge-mode',
+                              'aria-pressed': mode === candidate ? 'true' : 'false',
+                              disabled: !modeAvailable(candidate) || busy === 'searching',
+                              title: modeAvailable(candidate)
+                                ? undefined
+                                : t('knowledgeSearch', 'modeSemanticUnavailable'),
+                              onclick: () => {
+                                mode = candidate;
+                                edited();
+                              },
+                            },
+                            modeLabel(candidate),
+                          ),
+                        ),
+                      ]),
+                    ]),
+                    capabilities?.semantic === false
+                      ? m(
+                          'p.fm-knowledge-hint',
+                          { role: 'status' },
+                          mode === 'hybrid'
+                            ? t('knowledgeSearch', 'hybridFallsBackToFullText')
+                            : t('knowledgeSearch', 'modeSemanticUnavailable'),
+                        )
+                      : undefined,
+                    capabilities?.fullText === false
+                      ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'fullTextUnavailable'))
+                      : undefined,
+                    scopeKind === 'enrolledRoots'
+                      ? m('fieldset.fm-knowledge-roots', [
+                          m('legend', t('knowledgeSearch', 'roots')),
+                          roots.length === 0
+                            ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'rootsEmpty'))
+                            : roots.map((root) =>
+                                m('label', { key: root.rootId }, [
+                                  m('input', {
+                                    type: 'checkbox',
+                                    checked: selectedRootIds.has(root.rootId),
+                                    disabled: busy === 'searching',
+                                    onchange: (event: Event) => {
+                                      if ((event.currentTarget as HTMLInputElement).checked)
+                                        selectedRootIds.add(root.rootId);
+                                      else selectedRootIds.delete(root.rootId);
+                                      edited();
+                                      void reinterpret(attrs);
+                                    },
+                                  }),
+                                  m(
+                                    'span',
+                                    root.available
+                                      ? root.label
+                                      : `${root.label} · ${t('knowledgeSearch', 'rootUnavailable')}`,
+                                  ),
+                                ]),
+                              ),
+                        ])
+                      : undefined,
+                    m('details.fm-knowledge-dsl', [
+                      m('summary', t('knowledgeSearch', 'dsl')),
+                      m('textarea#fm-knowledge-dsl-input', {
+                        name: 'knowledge-dsl',
+                        rows: 4,
+                        value: dslText,
+                        disabled: busy === 'searching',
+                        autocomplete: 'off',
+                        'aria-describedby': 'fm-knowledge-dsl-hint',
+                        oninput: (event: InputEvent) => {
+                          dslText = (event.currentTarget as HTMLTextAreaElement).value;
+                          edited();
+                          void reinterpret(attrs, dslText);
+                        },
+                        onkeydown: stopSettingsTypingKeys,
+                      }),
+                      m(
+                        'small#fm-knowledge-dsl-hint.fm-knowledge-hint',
+                        t('knowledgeSearch', 'dslHint'),
+                      ),
+                      scopeIssues.length === 0
+                        ? undefined
+                        : m('.fm-knowledge-scope-issues', [
+                            m('h4', t('knowledgeSearch', 'dslScopeIssues')),
+                            m(
+                              'ul',
+                              scopeIssues.map((issue, index) =>
+                                m(
+                                  'li.fm-knowledge-error',
+                                  { key: `scope-issue-${index}`, role: 'alert' },
+                                  scopeIssueText(issue),
+                                ),
+                              ),
+                            ),
+                          ]),
+                      interpretation?.diagnostics.length
+                        ? m(
+                            'ul.fm-knowledge-diagnostics',
+                            interpretation.diagnostics.map((diagnostic, index) =>
+                              m(
+                                'li',
+                                {
+                                  key: `diagnostic-${index}`,
+                                  class:
+                                    diagnostic.severity === 'error'
+                                      ? 'fm-knowledge-error'
+                                      : 'fm-knowledge-warning',
+                                  role: diagnostic.severity === 'error' ? 'alert' : undefined,
+                                },
+                                diagnosticText(diagnostic),
+                              ),
+                            ),
+                          )
+                        : undefined,
+                      interpretation?.excludedFromRetrieval.length
+                        ? m('.fm-knowledge-excluded', [
+                            m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
+                            m(
+                              'ul',
+                              interpretation.excludedFromRetrieval.map((field, index) =>
+                                m(
+                                  'li',
+                                  { key: `excluded-${index}` },
+                                  t('knowledgeSearch', 'excludedField', {
+                                    field: field.field,
+                                    value: field.value,
+                                  }),
+                                ),
+                              ),
+                            ),
+                          ])
+                        : undefined,
+                    ]),
+                    m(
+                      'details.fm-knowledge-plan',
+                      {
+                        ontoggle: (event: Event) => {
+                          if (
+                            (event.currentTarget as HTMLDetailsElement).open &&
+                            plan === undefined
+                          ) {
+                            void previewPlan(attrs);
+                          }
+                        },
+                      },
+                      [
+                        m('summary', t('knowledgeSearch', 'plan')),
+                        m('label.fm-knowledge-trace', [
+                          m('input', {
+                            type: 'checkbox',
+                            checked: includeTrace,
+                            disabled: busy === 'searching',
+                            onchange: (event: Event) => {
+                              includeTrace = (event.currentTarget as HTMLInputElement).checked;
+                            },
+                          }),
+                          m('span', t('knowledgeSearch', 'trace')),
+                        ]),
+                        traceView(),
+                        plan === undefined
+                          ? m(
+                              FlatButton,
+                              {
+                                type: 'button',
+                                disabled: !searchable || busy !== undefined,
+                                onclick: () => void previewPlan(attrs),
+                              },
+                              t('knowledgeSearch', 'plan'),
+                            )
+                          : m('.fm-knowledge-plan-body', [
+                              m(
+                                'p',
+                                t('knowledgeSearch', 'planVersion', { version: plan.version }),
+                              ),
+                              m('p', t('knowledgeSearch', 'planScope', { scope: plan.scopeLabel })),
+                              m(
+                                'p',
+                                t('knowledgeSearch', 'planSources', {
+                                  count: plan.authorizedSources,
+                                }),
+                              ),
+                              m(
+                                'p',
+                                t('knowledgeSearch', 'planSearches', {
+                                  count: plan.searches.length,
+                                }),
+                              ),
+                              plan.omittedSearches === 0
+                                ? undefined
+                                : m(
+                                    'p.fm-knowledge-warning',
+                                    t('knowledgeSearch', 'planOmitted', {
+                                      count: plan.omittedSearches,
+                                    }),
+                                  ),
+                              m(
+                                'ol.fm-knowledge-planned-searches',
+                                plan.searches.map((planned, index) =>
+                                  m('li', { key: `planned-${index}` }, [
+                                    m('code', planned.text),
+                                    m(
+                                      'small.fm-knowledge-hint',
+                                      ` · ${priorityLabel(planned.priority)}`,
+                                    ),
+                                    m(
+                                      'ul',
+                                      planned.reasons.map((reason, reasonIndex) =>
+                                        m(
+                                          'li',
+                                          { key: `planned-${index}-reason-${reasonIndex}` },
+                                          reasonLabel(reason),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                                ),
+                              ),
+                              plan.excludedFromRetrieval.length === 0
+                                ? undefined
+                                : m('.fm-knowledge-excluded', [
+                                    m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
+                                    m(
+                                      'ul',
+                                      plan.excludedFromRetrieval.map((field, index) =>
+                                        m(
+                                          'li',
+                                          { key: `plan-excluded-${index}` },
+                                          t('knowledgeSearch', 'excludedField', {
+                                            field: field.field,
+                                            value: field.value,
+                                          }),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                            ]),
+                      ],
+                    ),
+                    result === undefined
+                      ? undefined
+                      : m('details.fm-knowledge-result-details', [
+                          m('summary', t('knowledgeSearch', 'searchDetails')),
+                          route === undefined
+                            ? undefined
+                            : m(
+                                route.fallbackReason == null ? 'p' : 'p.fm-knowledge-warning',
+                                route.fallbackReason == null
+                                  ? t('knowledgeSearch', 'routeApplied', {
+                                      route: modeLabel(route.applied),
+                                    })
+                                  : t('knowledgeSearch', 'routeFallback', {
+                                      requested: modeLabel(route.requested),
+                                      applied: modeLabel(route.applied),
+                                      reason: fallbackReasonLabel(route.fallbackReason),
+                                    }),
+                              ),
+                          m(
+                            'p',
+                            result.coverage.indexed == null
+                              ? t('knowledgeSearch', 'coverageUnknownIndexed', {
+                                  eligible: result.coverage.eligible,
+                                  fingerprinted: result.coverage.fingerprinted,
+                                  unavailable: result.coverage.unavailable,
+                                })
+                              : t('knowledgeSearch', 'coverage', {
+                                  indexed: result.coverage.indexed,
+                                  eligible: result.coverage.eligible,
+                                  fingerprinted: result.coverage.fingerprinted,
+                                  unavailable: result.coverage.unavailable,
+                                }),
+                          ),
+                          result.coverage.partial
+                            ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'coveragePartial'))
+                            : undefined,
+                          result.coverage.scopeIsExact
+                            ? undefined
+                            : m('p.fm-knowledge-warning', t('knowledgeSearch', 'coverageInexact')),
+                          result.withheldUnauthorized === 0
+                            ? undefined
+                            : m(
+                                'p.fm-knowledge-warning',
+                                t('knowledgeSearch', 'withheldUnauthorized', {
+                                  count: result.withheldUnauthorized,
+                                }),
+                              ),
+                        ]),
+                  ]),
+                ]),
+              ]),
+            }),
+          ]),
           error === undefined ? undefined : m('p.fm-knowledge-error', { role: 'alert' }, error),
           offline
             ? m('p.fm-knowledge-warning', { role: 'status' }, t('knowledgeSearch', 'offline'))
@@ -1599,393 +2066,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           busy === 'loading'
             ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
             : undefined,
-          m('.fm-knowledge-composer', [
-            m('.fm-knowledge-field', [
-              m('label.fm-knowledge-subject-label', { for: 'fm-knowledge-subjects' }, [
-                m('span', t('knowledgeSearch', 'subjects')),
-                busy === 'searching'
-                  ? m('span.fm-knowledge-search-spinner', {
-                      role: 'status',
-                      'aria-label': t('knowledgeSearch', 'searching'),
-                    })
-                  : undefined,
-              ]),
-              m('.fm-knowledge-subject-editor', [
-                m('textarea#fm-knowledge-subjects', {
-                  name: 'knowledge-subjects',
-                  rows: 2,
-                  value: subjectsText,
-                  disabled: busy === 'loading' || busy === 'searching',
-                  autocomplete: 'off',
-                  placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
-                  onupdate: ({ dom }: m.VnodeDOM) => {
-                    if (!focusSubjectOnOpen || busy === 'loading') return;
-                    focusSubjectOnOpen = false;
-                    const input = dom as HTMLTextAreaElement;
-                    input.focus();
-                    input.setSelectionRange(input.value.length, input.value.length);
-                  },
-                  oninput: (event: InputEvent) => {
-                    subjectsText = (event.currentTarget as HTMLTextAreaElement).value;
-                    draft = { ...draft, about: splitSubjects(subjectsText) };
-                    edited();
-                    void reinterpret(attrs);
-                  },
-                  onkeydown: (event: KeyboardEvent) => {
-                    event.stopPropagation();
-                    if (event.key === 'Escape' && !event.isComposing) {
-                      event.preventDefault();
-                      close(attrs);
-                      return;
-                    }
-                    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-                      event.preventDefault();
-                      void search(attrs);
-                    }
-                  },
-                }),
-                m(
-                  FlatButton,
-                  {
-                    type: 'button',
-                    className: 'fm-knowledge-search-submit',
-                    disabled: busy !== undefined || !canSearch(),
-                    onclick: () => void search(attrs),
-                  },
-                  t('knowledgeSearch', 'search'),
-                ),
-              ]),
-            ]),
-            m('fieldset.fm-knowledge-needs', [
-              m('legend', t('knowledgeSearch', 'needs')),
-              NEEDS.map((need) =>
-                m('label', { key: need }, [
-                  m('input', {
-                    type: 'checkbox',
-                    checked: (draft.needs ?? []).includes(need),
-                    disabled: busy === 'searching',
-                    onchange: (event: Event) => {
-                      const selected = new Set(draft.needs ?? []);
-                      if ((event.currentTarget as HTMLInputElement).checked) selected.add(need);
-                      else selected.delete(need);
-                      draft = { ...draft, needs: NEEDS.filter((value) => selected.has(value)) };
-                      edited();
-                      void reinterpret(attrs);
-                    },
-                  }),
-                  m('span', needLabel(need)),
-                ]),
-              ),
-            ]),
-          ]),
-          m('details.fm-knowledge-advanced', [
-            m('summary', t('knowledgeSearch', 'showAdvanced')),
-            m('.fm-knowledge-advanced-body', [
-              m('.fm-knowledge-row', [
-                m('label.fm-knowledge-field', [
-                  m('span', t('knowledgeSearch', 'scope')),
-                  m(
-                    'select#fm-knowledge-scope.browser-default',
-                    {
-                      name: 'knowledge-scope',
-                      value: scopeKind,
-                      disabled: busy === 'searching',
-                      onchange: (event: Event) => {
-                        scopeKind = (event.currentTarget as HTMLSelectElement)
-                          .value as KnowledgeScopeKind;
-                        edited();
-                        void reinterpret(attrs);
-                      },
-                    },
-                    SCOPE_KINDS.map((kind) =>
-                      m(
-                        'option',
-                        { key: kind, value: kind, disabled: !scopeAvailable(attrs, kind) },
-                        scopeKindLabel(kind),
-                      ),
-                    ),
-                  ),
-                ]),
-                m('fieldset.fm-knowledge-modes', [
-                  m('legend', t('knowledgeSearch', 'mode')),
-                  MODES.map((candidate) =>
-                    m(
-                      'button',
-                      {
-                        key: candidate,
-                        type: 'button',
-                        class:
-                          mode === candidate
-                            ? 'fm-knowledge-mode is-selected'
-                            : 'fm-knowledge-mode',
-                        'aria-pressed': mode === candidate ? 'true' : 'false',
-                        disabled: !modeAvailable(candidate) || busy === 'searching',
-                        title: modeAvailable(candidate)
-                          ? undefined
-                          : t('knowledgeSearch', 'modeSemanticUnavailable'),
-                        onclick: () => {
-                          mode = candidate;
-                          edited();
-                        },
-                      },
-                      modeLabel(candidate),
-                    ),
-                  ),
-                ]),
-              ]),
-              capabilities?.semantic === false
-                ? m(
-                    'p.fm-knowledge-hint',
-                    { role: 'status' },
-                    mode === 'hybrid'
-                      ? t('knowledgeSearch', 'hybridFallsBackToFullText')
-                      : t('knowledgeSearch', 'modeSemanticUnavailable'),
-                  )
-                : undefined,
-              capabilities?.fullText === false
-                ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'fullTextUnavailable'))
-                : undefined,
-              scopeKind === 'enrolledRoots'
-                ? m('fieldset.fm-knowledge-roots', [
-                    m('legend', t('knowledgeSearch', 'roots')),
-                    roots.length === 0
-                      ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'rootsEmpty'))
-                      : roots.map((root) =>
-                          m('label', { key: root.rootId }, [
-                            m('input', {
-                              type: 'checkbox',
-                              checked: selectedRootIds.has(root.rootId),
-                              disabled: busy === 'searching',
-                              onchange: (event: Event) => {
-                                if ((event.currentTarget as HTMLInputElement).checked)
-                                  selectedRootIds.add(root.rootId);
-                                else selectedRootIds.delete(root.rootId);
-                                edited();
-                                void reinterpret(attrs);
-                              },
-                            }),
-                            m(
-                              'span',
-                              root.available
-                                ? root.label
-                                : `${root.label} · ${t('knowledgeSearch', 'rootUnavailable')}`,
-                            ),
-                          ]),
-                        ),
-                  ])
-                : undefined,
-              m('details.fm-knowledge-dsl', [
-                m('summary', t('knowledgeSearch', 'dsl')),
-                m('textarea#fm-knowledge-dsl-input', {
-                  name: 'knowledge-dsl',
-                  rows: 4,
-                  value: dslText,
-                  disabled: busy === 'searching',
-                  autocomplete: 'off',
-                  'aria-describedby': 'fm-knowledge-dsl-hint',
-                  oninput: (event: InputEvent) => {
-                    dslText = (event.currentTarget as HTMLTextAreaElement).value;
-                    edited();
-                    void reinterpret(attrs, dslText);
-                  },
-                  onkeydown: (event: KeyboardEvent) => stopTypingKeys(attrs, event),
-                }),
-                m('small#fm-knowledge-dsl-hint.fm-knowledge-hint', t('knowledgeSearch', 'dslHint')),
-                scopeIssues.length === 0
-                  ? undefined
-                  : m('.fm-knowledge-scope-issues', [
-                      m('h4', t('knowledgeSearch', 'dslScopeIssues')),
-                      m(
-                        'ul',
-                        scopeIssues.map((issue, index) =>
-                          m(
-                            'li.fm-knowledge-error',
-                            { key: `scope-issue-${index}`, role: 'alert' },
-                            scopeIssueText(issue),
-                          ),
-                        ),
-                      ),
-                    ]),
-                interpretation?.diagnostics.length
-                  ? m(
-                      'ul.fm-knowledge-diagnostics',
-                      interpretation.diagnostics.map((diagnostic, index) =>
-                        m(
-                          'li',
-                          {
-                            key: `diagnostic-${index}`,
-                            class:
-                              diagnostic.severity === 'error'
-                                ? 'fm-knowledge-error'
-                                : 'fm-knowledge-warning',
-                            role: diagnostic.severity === 'error' ? 'alert' : undefined,
-                          },
-                          diagnosticText(diagnostic),
-                        ),
-                      ),
-                    )
-                  : undefined,
-                interpretation?.excludedFromRetrieval.length
-                  ? m('.fm-knowledge-excluded', [
-                      m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
-                      m(
-                        'ul',
-                        interpretation.excludedFromRetrieval.map((field, index) =>
-                          m(
-                            'li',
-                            { key: `excluded-${index}` },
-                            t('knowledgeSearch', 'excludedField', {
-                              field: field.field,
-                              value: field.value,
-                            }),
-                          ),
-                        ),
-                      ),
-                    ])
-                  : undefined,
-              ]),
-              m(
-                'details.fm-knowledge-plan',
-                {
-                  ontoggle: (event: Event) => {
-                    if ((event.currentTarget as HTMLDetailsElement).open && plan === undefined) {
-                      void previewPlan(attrs);
-                    }
-                  },
-                },
-                [
-                  m('summary', t('knowledgeSearch', 'plan')),
-                  m('label.fm-knowledge-trace', [
-                    m('input', {
-                      type: 'checkbox',
-                      checked: includeTrace,
-                      disabled: busy === 'searching',
-                      onchange: (event: Event) => {
-                        includeTrace = (event.currentTarget as HTMLInputElement).checked;
-                      },
-                    }),
-                    m('span', t('knowledgeSearch', 'trace')),
-                  ]),
-                  traceView(),
-                  plan === undefined
-                    ? m(
-                        FlatButton,
-                        {
-                          type: 'button',
-                          disabled: !searchable || busy !== undefined,
-                          onclick: () => void previewPlan(attrs),
-                        },
-                        t('knowledgeSearch', 'plan'),
-                      )
-                    : m('.fm-knowledge-plan-body', [
-                        m('p', t('knowledgeSearch', 'planVersion', { version: plan.version })),
-                        m('p', t('knowledgeSearch', 'planScope', { scope: plan.scopeLabel })),
-                        m(
-                          'p',
-                          t('knowledgeSearch', 'planSources', { count: plan.authorizedSources }),
-                        ),
-                        m(
-                          'p',
-                          t('knowledgeSearch', 'planSearches', { count: plan.searches.length }),
-                        ),
-                        plan.omittedSearches === 0
-                          ? undefined
-                          : m(
-                              'p.fm-knowledge-warning',
-                              t('knowledgeSearch', 'planOmitted', {
-                                count: plan.omittedSearches,
-                              }),
-                            ),
-                        m(
-                          'ol.fm-knowledge-planned-searches',
-                          plan.searches.map((planned, index) =>
-                            m('li', { key: `planned-${index}` }, [
-                              m('code', planned.text),
-                              m('small.fm-knowledge-hint', ` · ${priorityLabel(planned.priority)}`),
-                              m(
-                                'ul',
-                                planned.reasons.map((reason, reasonIndex) =>
-                                  m(
-                                    'li',
-                                    { key: `planned-${index}-reason-${reasonIndex}` },
-                                    reasonLabel(reason),
-                                  ),
-                                ),
-                              ),
-                            ]),
-                          ),
-                        ),
-                        plan.excludedFromRetrieval.length === 0
-                          ? undefined
-                          : m('.fm-knowledge-excluded', [
-                              m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
-                              m(
-                                'ul',
-                                plan.excludedFromRetrieval.map((field, index) =>
-                                  m(
-                                    'li',
-                                    { key: `plan-excluded-${index}` },
-                                    t('knowledgeSearch', 'excludedField', {
-                                      field: field.field,
-                                      value: field.value,
-                                    }),
-                                  ),
-                                ),
-                              ),
-                            ]),
-                      ]),
-                ],
-              ),
-              result === undefined
-                ? undefined
-                : m('details.fm-knowledge-result-details', [
-                    m('summary', t('knowledgeSearch', 'searchDetails')),
-                    route === undefined
-                      ? undefined
-                      : m(
-                          route.fallbackReason == null ? 'p' : 'p.fm-knowledge-warning',
-                          route.fallbackReason == null
-                            ? t('knowledgeSearch', 'routeApplied', {
-                                route: modeLabel(route.applied),
-                              })
-                            : t('knowledgeSearch', 'routeFallback', {
-                                requested: modeLabel(route.requested),
-                                applied: modeLabel(route.applied),
-                                reason: fallbackReasonLabel(route.fallbackReason),
-                              }),
-                        ),
-                    m(
-                      'p',
-                      result.coverage.indexed == null
-                        ? t('knowledgeSearch', 'coverageUnknownIndexed', {
-                            eligible: result.coverage.eligible,
-                            fingerprinted: result.coverage.fingerprinted,
-                            unavailable: result.coverage.unavailable,
-                          })
-                        : t('knowledgeSearch', 'coverage', {
-                            indexed: result.coverage.indexed,
-                            eligible: result.coverage.eligible,
-                            fingerprinted: result.coverage.fingerprinted,
-                            unavailable: result.coverage.unavailable,
-                          }),
-                    ),
-                    result.coverage.partial
-                      ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'coveragePartial'))
-                      : undefined,
-                    result.coverage.scopeIsExact
-                      ? undefined
-                      : m('p.fm-knowledge-warning', t('knowledgeSearch', 'coverageInexact')),
-                    result.withheldUnauthorized === 0
-                      ? undefined
-                      : m(
-                          'p.fm-knowledge-warning',
-                          t('knowledgeSearch', 'withheldUnauthorized', {
-                            count: result.withheldUnauthorized,
-                          }),
-                        ),
-                  ]),
-            ]),
-          ]),
           m(
             'section.fm-knowledge-results-section',
             {
@@ -2006,10 +2086,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       })}`,
                 ]),
               ),
-              m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, resultsView(attrs)),
+              m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [
+                resultsView(attrs),
+                answerView(attrs),
+              ]),
             ],
           ),
-          answerView(attrs),
         ],
       );
     },

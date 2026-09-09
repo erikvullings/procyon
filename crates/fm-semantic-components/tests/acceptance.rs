@@ -368,7 +368,7 @@ fn fixture_production_manifest(
         1,
         7,
         "docling-pdf/1036000+baseline/1",
-        "structural/2",
+        "structural/3",
         model.tokenizer().clone(),
         model.identity().clone(),
     )?;
@@ -408,7 +408,7 @@ fn production_catalog_generation_is_deterministic_and_records_pipeline_provenanc
         first.pipeline().converter(),
         "docling-pdf/1036000+baseline/1"
     );
-    assert_eq!(first.pipeline().chunker(), "structural/2");
+    assert_eq!(first.pipeline().chunker(), "structural/3");
     assert_eq!(first.provenance().len(), 3);
 }
 
@@ -424,7 +424,7 @@ fn production_catalog_signature_covers_provenance_and_pipeline_compatibility() {
     assert_eq!(trusted.revision(), manifest.catalog().revision());
 
     let mut altered = serde_json::to_value(manifest).expect("serialize production manifest");
-    altered["pipeline"]["chunker"] = "structural/3".into();
+    altered["pipeline"]["chunker"] = "structural/4".into();
     let altered = serde_json::from_value(altered).expect("deserialize altered manifest");
     let signed = SignedProductionCatalogManifest::new(altered, signature.to_bytes());
     assert!(matches!(
@@ -476,10 +476,10 @@ fn production_catalog_rejects_a_signed_converter_or_chunker_for_another_host_pip
     for (converter, chunker, expected_field) in [
         (
             "docling-pdf/1036001+baseline/1",
-            "structural/2",
+            "structural/3",
             "converter",
         ),
-        ("docling-pdf/1036000+baseline/1", "structural/3", "chunker"),
+        ("docling-pdf/1036000+baseline/1", "structural/4", "chunker"),
     ] {
         let incompatible = ProductionPipelineIdentity::new(
             1,

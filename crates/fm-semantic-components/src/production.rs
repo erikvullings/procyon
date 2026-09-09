@@ -20,7 +20,7 @@ pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VER
 /// Converter pipeline compiled into the production semantic worker.
 pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036000+baseline/1";
 /// Structural chunker compiled into the production semantic worker.
-pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/2";
+pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
 /// Logical component identity of the production semantic worker.
 pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 /// Logical component identity of the production Zvec native runtime.

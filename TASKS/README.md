@@ -152,6 +152,7 @@ layers and never prerequisites for retrieval.
 - [x] 0209 Knowledge search pane UX *(needs 0206)*
 - [x] 0210 Knowledge search document results *(needs 0209)*
 - [x] 0211 Knowledge search result navigation *(needs 0210)*
+- [x] 0212 Knowledge search toolbar and PDF sections *(needs 0211)*
 
 ## File operations
 

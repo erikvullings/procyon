@@ -219,7 +219,7 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/1036000+baseline/1`, chunker `structural/2`, worker protocol 1, and index schema 2.
+`docling-pdf/1036000+baseline/1`, chunker `structural/3`, worker protocol 1, and index schema 2.
 Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
 installers for qualification without publishing them. Tagged releases do that work only when the
 protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
@@ -339,9 +339,10 @@ change only: it requires no reindexing and has no storage impact.
 
 Chunking itself is structural, not embedding-driven semantic segmentation. Converters retain
 paragraph, heading, page, slide, sheet, and section structure; the chunker packs compatible adjacent
-units toward a 400-token target without crossing incompatible top-level boundaries. The full section
-heading hierarchy is prepended to the chunk content used for embedding and is preserved for evidence
-display.
+units toward a 400-token target without crossing incompatible top-level boundaries or section
+paths. A heading starts a new chunk and becomes the final element of that chunk's section path. The
+full section heading hierarchy is prepended to the chunk content used for embedding and is preserved
+for evidence display.
 
 Changes to model, chunker, converter, index, grouping, summary selection, or labelling threshold
 require a before/after `EvaluationChangeReport` with distinct fingerprints, the same cases/cutoff,
@@ -354,7 +355,12 @@ Storage diagnostics aggregate authoritative measurements by enrolled root and de
 separating active bytes from bytes pending cleanup. They do not trust caller-supplied totals.
 Baseline conversion supports plain text, source code, Markdown, HTML, DOCX, PPTX, XLSX, and CSV.
 PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
-with the original `lopdf` implementation retained for recoverable fallback. Image-only PDFs are excluded from semantic indexing with actionable OCRmyPDF guidance; they are not
+with the original `lopdf` implementation retained for recoverable fallback. Docling heading nodes
+become section paths and its page-furniture nodes are excluded from chunks. The deterministic
+extractor does not guess headings that the PDF text layer does not identify, and the baseline
+fallback preserves paragraphs and page provenance without synthesizing heading hierarchy; those
+results therefore display page links without a section title. Image-only PDFs are excluded from
+semantic indexing with actionable OCRmyPDF guidance; they are not
 counted as retryable ingestion failures. When local OCR is explicitly enabled, only that
 `NoTextLayer` outcome invokes OCRmyPDF. Procyon copies the bounded bytes into a private temporary
 directory, passes neither the provider path nor credentials, gives the child only an allow-listed

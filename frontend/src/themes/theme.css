@@ -2211,22 +2211,19 @@ input[type="text"].fm-shortcuts-help-capture-input {
   white-space: pre-wrap;
 }
 
-/* Structured Knowledge Search (tasks 0206/0209). The pane owns the only scroll
- * region; common query controls stay above evidence and expert mechanics fold
- * into Advanced. */
+/* Structured Knowledge Search (tasks 0206/0209/0212). The filter-style toolbar
+ * stays fixed while evidence owns the pane's only scroll region. */
 .fm-knowledge-search {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  gap: 0.75rem;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 0.75rem 1rem 1.5rem;
-  overflow-x: hidden;
-  overflow-y: auto;
+  padding: 0;
+  overflow: hidden;
   font-weight: 400;
   line-height: 1.5;
 }
@@ -2243,8 +2240,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-composer {
-  display: grid;
-  gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 .fm-knowledge-field {
@@ -2252,15 +2248,77 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.25rem;
 }
 
-.fm-knowledge-subject-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.5rem;
-  align-items: end;
+.fm-knowledge-search-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  box-sizing: border-box;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  padding-inline-start: 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  font-size: 0.92em;
 }
 
-.fm-knowledge-search-submit {
-  min-width: 5.5rem;
+.fm-knowledge-search-icon {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(var(--fm-row-height) - 1px);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: calc(var(--fm-row-height) - 1px);
+  white-space: nowrap;
+}
+
+.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: -2px;
+}
+
+.fm-app-shell .fm-knowledge-search-submit.btn-flat {
+  flex: 0 0 auto;
+  min-width: 4.25rem;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 0.5rem;
+  font: inherit;
+}
+
+.fm-app-shell .fm-knowledge-settings-trigger.btn-icon {
+  width: var(--fm-row-height);
+  min-width: var(--fm-row-height);
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  margin: 0;
+  padding: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-knowledge-settings {
+  display: grid;
+  gap: 1rem;
+}
+
+.modal.fm-dense-modal.fm-knowledge-settings-modal {
+  width: min(42rem, calc(100vw - 2rem)) !important;
+  max-width: min(42rem, calc(100vw - 2rem)) !important;
 }
 
 .fm-knowledge-field textarea,
@@ -2347,13 +2405,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   outline-offset: 2px;
 }
 
-.fm-knowledge-subject-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
 .fm-knowledge-search-spinner {
   width: 0.8rem;
   height: 0.8rem;
@@ -2436,9 +2487,19 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text-muted);
 }
 
+.fm-knowledge-search > .fm-knowledge-error,
+.fm-knowledge-search > .fm-knowledge-warning,
+.fm-knowledge-search > .fm-knowledge-status {
+  margin: 0.5rem 1rem 0;
+}
+
 .fm-knowledge-results-section {
-  display: grid;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 0.5rem;
+  min-height: 0;
+  padding: 0.75rem 1rem 0;
 }
 
 .fm-knowledge-scope-issues,
@@ -2486,30 +2547,42 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-knowledge-results-body {
   display: grid;
   gap: 1rem;
+  min-height: 0;
+  padding-block-end: 1.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .fm-knowledge-document-list {
   display: grid;
-  gap: 1rem;
+  gap: 0;
   margin: 0;
-  padding-inline-start: 2rem;
-  list-style: decimal;
+  padding: 0;
+  list-style: none;
 }
 
 .fm-knowledge-document-item {
   min-width: 0;
-  padding-inline-start: 0.25rem;
+  padding-block: 0.75rem 1rem;
+  border-block-end: 1px solid var(--fm-border);
 }
 
-.fm-knowledge-document-item::marker {
+.fm-knowledge-document-item:first-child {
+  padding-block-start: 0.25rem;
+}
+
+.fm-knowledge-document-heading {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.fm-knowledge-document-number {
   color: var(--fm-text-muted);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-}
-
-.fm-knowledge-document-item + .fm-knowledge-document-item {
-  padding-top: 1rem;
-  border-top: 1px solid var(--fm-border);
 }
 
 .fm-knowledge-group {
@@ -2522,6 +2595,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
   display: grid;
   min-width: 0;
   gap: 0.75rem;
+  margin-inline-start: 2rem;
 }
 
 .fm-knowledge-result {
@@ -2530,24 +2604,38 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.25rem;
 }
 
-.fm-knowledge-section-link {
+.fm-knowledge-section-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  width: 100%;
   min-width: 0;
+}
+
+.fm-knowledge-page-link {
+  flex: 0 0 auto;
+  width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: inherit;
+  color: var(--fm-color-accent, #1976d2);
   font: inherit;
-  text-align: start;
+  font-size: 0.875rem;
+  text-align: end;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.fm-knowledge-section-link:disabled {
+.fm-knowledge-section-title + .fm-knowledge-page-link {
+  width: auto;
+}
+
+.fm-knowledge-page-link:disabled {
+  color: var(--fm-text-muted);
   cursor: default;
+  text-decoration: none;
 }
 
 .fm-knowledge-section-title {
@@ -2556,17 +2644,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.fm-knowledge-section-position {
-  flex: 0 0 auto;
-  color: var(--fm-color-accent, #1976d2);
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
-.fm-knowledge-section-link:disabled .fm-knowledge-section-position {
-  color: var(--fm-text-muted);
 }
 
 .fm-knowledge-result + .fm-knowledge-result {

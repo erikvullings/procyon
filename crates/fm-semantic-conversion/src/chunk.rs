@@ -3,8 +3,8 @@
 //! The chunker packs adjacent structural units up to a token target, never
 //! exceeds a hard maximum, and only uses overlap when it has to split a single
 //! oversized unit. It never packs across an incompatible top-level boundary
-//! (a different page, slide, sheet or section) merely to reach the target,
-//! because a chunk that spans two boundaries cannot be cited precisely.
+//! (a different page, slide or sheet) or section path merely to reach the
+//! target, because a chunk that spans either cannot be cited precisely.
 //!
 //! # Embedding input
 //!
@@ -23,12 +23,14 @@
 //! token-estimator version. A local edit changes only the chunks that contain
 //! the edited unit; every other chunk keeps its fingerprint and its vector.
 
-use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, Provenance, StructuralUnit};
+use crate::model::{
+    ComponentVersion, ConvertedDocument, FormatKind, Provenance, StructuralUnit, UnitKind,
+};
 use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
 use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
-pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 2);
+pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 3);
 
 /// Domain separator, so a fingerprint cannot collide with any other BLAKE3 use
 /// in the workspace.
@@ -180,26 +182,25 @@ impl Chunker {
 
         for unit in document.units() {
             let (section_path, _) =
-                bounded_section_path(&unit.section_path, self.options.max_tokens);
-            let unit_tokens = estimate_tokens(&embedding_input(&section_path, &unit.text));
+                bounded_section_path(&chunk_section_path(unit), self.options.max_tokens);
+            let unit_content = chunk_content(&[unit]);
+            let unit_tokens = estimate_tokens(&embedding_input(&section_path, &unit_content));
             if unit_tokens > self.options.max_tokens {
                 self.flush(document, &mut pending, &mut chunks);
                 self.split_unit(document, unit, &mut chunks);
                 continue;
             }
-            let compatible = pending
-                .last()
-                .is_none_or(|previous| previous.boundary == unit.boundary);
+            let compatible = pending.last().is_none_or(|previous| {
+                unit.kind != UnitKind::Heading
+                    && previous.boundary == unit.boundary
+                    && chunk_section_path(previous) == chunk_section_path(unit)
+            });
             let exceeds_target = !pending.is_empty() && {
                 let (path, _) =
-                    bounded_section_path(&pending[0].section_path, self.options.max_tokens);
-                let mut content = pending
-                    .iter()
-                    .map(|pending_unit| pending_unit.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                content.push_str("\n\n");
-                content.push_str(&unit.text);
+                    bounded_section_path(&chunk_section_path(pending[0]), self.options.max_tokens);
+                let mut candidate = pending.clone();
+                candidate.push(unit);
+                let content = chunk_content(&candidate);
                 estimate_tokens(&embedding_input(&path, &content)) > self.options.target_tokens
             };
             if !compatible || exceeds_target {
@@ -221,11 +222,7 @@ impl Chunker {
             return;
         }
         let units = std::mem::take(pending);
-        let content = units
-            .iter()
-            .map(|unit| unit.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let content = chunk_content(&units);
         let first = units.first().unwrap_or_else(|| unreachable!());
         let last = units.last().unwrap_or_else(|| unreachable!());
         let provenance = if units.len() == 1 {
@@ -237,7 +234,7 @@ impl Chunker {
             }
         };
         let (section_path, section_path_truncated) =
-            bounded_section_path(&first.section_path, self.options.max_tokens);
+            bounded_section_path(&chunk_section_path(first), self.options.max_tokens);
         let chunk = self.build(
             document,
             chunks.len() as u32,
@@ -259,10 +256,21 @@ impl Chunker {
         chunks: &mut Vec<Chunk>,
     ) {
         let (section_path, section_path_truncated) =
-            bounded_section_path(&unit.section_path, self.options.max_tokens);
+            bounded_section_path(&chunk_section_path(unit), self.options.max_tokens);
         let prefix_tokens = estimate_tokens(&embedding_input(&section_path, ""));
-        let content_budget = self.options.max_tokens.saturating_sub(prefix_tokens).max(1);
-        let windows = self.split_text(&unit.text, content_budget);
+        let separator_tokens = if section_path.is_empty() {
+            0
+        } else {
+            estimate_tokens("\n\n")
+        };
+        let content_budget = self
+            .options
+            .max_tokens
+            .saturating_sub(prefix_tokens)
+            .saturating_sub(separator_tokens)
+            .max(1);
+        let content = chunk_content(&[unit]);
+        let windows = self.split_text(&content, content_budget);
         let total = windows.len() as u32;
         for (index, (text, overlap_tokens)) in windows.into_iter().enumerate() {
             let chunk = self.build(
@@ -393,6 +401,24 @@ impl Chunker {
     }
 }
 
+fn chunk_section_path(unit: &StructuralUnit) -> Vec<String> {
+    let mut path = unit.section_path.clone();
+    if unit.kind == UnitKind::Heading {
+        path.push(unit.text.clone());
+    }
+    path
+}
+
+fn chunk_content(units: &[&StructuralUnit]) -> String {
+    let skip_heading = units.len() > 1 && units[0].kind == UnitKind::Heading;
+    units
+        .iter()
+        .skip(usize::from(skip_heading))
+        .map(|unit| unit.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 fn split_without_overlap(text: &str, max_tokens: u32) -> Vec<(String, u32)> {
     let mut windows = Vec::new();
     let mut pending = text;
@@ -442,6 +468,9 @@ fn bounded_section_path(section_path: &[String], max_tokens: u32) -> (Vec<String
 fn embedding_input(section_path: &[String], content: &str) -> String {
     if section_path.is_empty() {
         return content.to_owned();
+    }
+    if content.is_empty() {
+        return section_path.join(" > ");
     }
     format!("{}\n\n{content}", section_path.join(" > "))
 }
@@ -532,6 +561,18 @@ mod tests {
         }
     }
 
+    fn heading(
+        order: u32,
+        text: &str,
+        boundary: TopLevelBoundary,
+        parent_path: &[&str],
+    ) -> StructuralUnit {
+        StructuralUnit {
+            kind: UnitKind::Heading,
+            ..unit(order, text, boundary, parent_path)
+        }
+    }
+
     fn document(units: Vec<StructuralUnit>) -> ConvertedDocument {
         ConvertedDocument::new(
             ComponentVersion::new("baseline", 1),
@@ -597,6 +638,51 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].unit_orders, [0]);
         assert_eq!(chunks[1].unit_orders, [1]);
+    }
+
+    #[test]
+    fn headings_start_distinct_chunks_and_name_their_own_section() {
+        let boundary = TopLevelBoundary::Page(7);
+        let document = document(vec![
+            heading(0, "Definition", boundary.clone(), &[]),
+            unit(
+                1,
+                "A concise definition.",
+                boundary.clone(),
+                &["Definition"],
+            ),
+            heading(2, "Examples", boundary.clone(), &[]),
+            unit(3, "A worked example.", boundary, &["Examples"]),
+        ]);
+
+        let chunks = Chunker::default().chunk(&document);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert_eq!(chunks[0].section_path, ["Definition"]);
+        assert_eq!(
+            chunks[0].embedding_input,
+            "Definition\n\nA concise definition."
+        );
+        assert_eq!(chunks[1].unit_orders, [2, 3]);
+        assert_eq!(chunks[1].section_path, ["Examples"]);
+    }
+
+    #[test]
+    fn repeated_sibling_headings_still_start_distinct_chunks() {
+        let boundary = TopLevelBoundary::Page(7);
+        let document = document(vec![
+            heading(0, "Example", boundary.clone(), &[]),
+            unit(1, "First example.", boundary.clone(), &["Example"]),
+            heading(2, "Example", boundary.clone(), &[]),
+            unit(3, "Second example.", boundary, &["Example"]),
+        ]);
+
+        let chunks = Chunker::default().chunk(&document);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert_eq!(chunks[1].unit_orders, [2, 3]);
     }
 
     #[test]

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   nativeLibraryNames,
+  PRODUCTION_CHUNKER_IDENTITY,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
 
@@ -29,4 +30,8 @@ test('Zvec native library names are platform-specific', () => {
   assert.deepEqual(nativeLibraryNames('darwin'), ['libzvec_c_api.dylib']);
   assert.deepEqual(nativeLibraryNames('win32'), ['zvec_c_api.dll', 'libzvec_c_api.dll']);
   assert.deepEqual(nativeLibraryNames('linux'), ['libzvec_c_api.so']);
+});
+
+test('production bundle records the compiled structural chunker identity', () => {
+  assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/3');
 });

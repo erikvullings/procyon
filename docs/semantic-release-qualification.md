@@ -22,7 +22,7 @@ results are not substitutes for measurements from the exact signed production ar
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
 | Dimensions / normalization | 384 / L2 |
 | Converter | `docling-pdf/1036000+baseline/1` |
-| Chunker | `structural/2` |
+| Chunker | `structural/3` |
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |

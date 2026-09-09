@@ -268,10 +268,18 @@ export function knowledgeEvidencePage(provenance: string): number | undefined {
   } catch {
     return undefined;
   }
-  if (value === null || typeof value !== 'object') return undefined;
-  const fields = value as Record<string, unknown>;
-  const page = fields.page_number ?? fields.pageNumber ?? fields.slide_number ?? fields.slideNumber;
-  return typeof page === 'number' && Number.isInteger(page) && page > 0 ? page : undefined;
+  const pageFrom = (candidate: unknown): number | undefined => {
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return undefined;
+    }
+    const fields = candidate as Record<string, unknown>;
+    if (fields.kind === 'exact') return pageFrom(fields.value);
+    if (fields.kind === 'span') return pageFrom(fields.first) ?? pageFrom(fields.last);
+    const page =
+      fields.page_number ?? fields.pageNumber ?? fields.slide_number ?? fields.slideNumber;
+    return typeof page === 'number' && Number.isInteger(page) && page > 0 ? page : undefined;
+  };
+  return pageFrom(value);
 }
 
 const DEFAULT_THEME: Theme = 'auto';

@@ -22,6 +22,20 @@ describe('knowledgeEvidencePage', () => {
     expect(knowledgeEvidencePage('{"kind":"slide","slideNumber":12,"shape_index":4}')).toBe(12);
   });
 
+  it('maps chunk provenance wrappers to the first preview page', () => {
+    expect(
+      knowledgeEvidencePage(
+        '{"kind":"exact","value":{"kind":"pdfBlock","page_number":37,"block_index":2}}',
+      ),
+    ).toBe(37);
+    expect(
+      knowledgeEvidencePage(
+        '{"kind":"span","first":{"kind":"pdfBlock","page_number":41,"block_index":3},' +
+          '"last":{"kind":"pdfBlock","page_number":42,"block_index":0}}',
+      ),
+    ).toBe(41);
+  });
+
   it('ignores malformed or non-page provenance', () => {
     expect(knowledgeEvidencePage('{"kind":"textLines","start_line":4}')).toBeUndefined();
     expect(knowledgeEvidencePage('not json')).toBeUndefined();
