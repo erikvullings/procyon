@@ -1506,6 +1506,28 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({ content: { currentPage: 2 } });
   });
 
+  it('opens a PDF on the requested knowledge-evidence page', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1, 2, 3],
+      offset: 0,
+      length: 3,
+      eof: true,
+    });
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'report.pdf', extension: 'pdf' }),
+      initialPage: 3,
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        content: { kind: 'pdf', pageCount: 3, currentPage: 3 },
+      }),
+    );
+  });
+
   it('loads the real nested PDF outline and resolves bookmark destinations to pages', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({

@@ -190,6 +190,7 @@ import type {
   Connection,
   DirectoryDelta,
   EntrySummary,
+  KnowledgeEvidence,
   Location,
   NativeMenuSpec,
   Operation,
@@ -247,6 +248,30 @@ interface DiskUsageTabEntry {
   expansionLocation: Location | undefined;
   expansionBaseResult: ScanDiskUsageResult | undefined;
   state: DiskUsageViewState;
+}
+
+interface KnowledgeSearchTabEntry {
+  key: string;
+  paneId: PaneId;
+  readonly tabId: TabId;
+  readonly workspaceId: WorkspaceId;
+  readonly currentFolder: Location | undefined;
+  readonly semanticSourceIds: readonly string[];
+  readonly initialSubject: string | undefined;
+}
+
+/** Returns the one-based preview page encoded by structural knowledge provenance. */
+export function knowledgeEvidencePage(provenance: string): number | undefined {
+  let value: unknown;
+  try {
+    value = JSON.parse(provenance);
+  } catch {
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object') return undefined;
+  const fields = value as Record<string, unknown>;
+  const page = fields.page_number ?? fields.pageNumber ?? fields.slide_number ?? fields.slideNumber;
+  return typeof page === 'number' && Number.isInteger(page) && page > 0 ? page : undefined;
 }
 
 const DEFAULT_THEME: Theme = 'auto';
@@ -775,6 +800,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   >();
   const diskUsageByTab = new Map<string, DiskUsageTabEntry>();
+  const knowledgeSearchByTab = new Map<string, KnowledgeSearchTabEntry>();
   const editorByPane = new Map<
     PaneId,
     { readonly controller: FileEditorController; state: FileEditorState }
@@ -1182,12 +1208,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       readonly wholeWord: boolean;
     },
     openMetadata?: boolean,
+    initialPage?: number,
   ): void {
     const existingViewer = [...viewerByTab.entries()][0];
     if (existingViewer !== undefined) {
       const [key, viewer] = existingViewer;
       if (viewer.state.entry.location.uri === entry.location.uri) {
-        closeViewer(viewer.paneId, viewer.tabId);
+        if (initialPage === undefined) {
+          closeViewer(viewer.paneId, viewer.tabId);
+          return;
+        }
+        tabController.activateTab(viewer.paneId, viewer.tabId);
+        viewer.controller.goToPdfPage(initialPage);
         return;
       }
       viewer.controller.dispose();
@@ -1197,6 +1229,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         entry,
         ...(workspace ? { workspaceId: workspace.id } : {}),
         ...(initialSearch ? { initialSearch } : {}),
+        ...(initialPage ? { initialPage } : {}),
         initialMetadataPanelOpen: openMetadata === true,
         update: (state) => {
           const current = viewerByTab.get(key);
@@ -1238,6 +1271,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           entry,
           workspaceId: currentWorkspace.id,
           ...(initialSearch ? { initialSearch } : {}),
+          ...(initialPage ? { initialPage } : {}),
           initialMetadataPanelOpen: openMetadata === true,
           update: (state) => {
             const existing = viewerByTab.get(key);
@@ -1530,6 +1564,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
     }
     diskUsageByTab.delete(key);
+    knowledgeSearchByTab.delete(key);
     navigation.abort(paneId, tabId);
     directories.delete(key);
     selections.delete(key);
@@ -1571,6 +1606,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       diskUsage.key = targetKey;
       diskUsage.paneId = targetPaneId;
       diskUsageByTab.set(targetKey, diskUsage);
+    }
+    const knowledgeSearch = knowledgeSearchByTab.get(sourceKey);
+    if (knowledgeSearch !== undefined) {
+      knowledgeSearchByTab.delete(sourceKey);
+      knowledgeSearch.key = targetKey;
+      knowledgeSearch.paneId = targetPaneId;
+      knowledgeSearchByTab.set(targetKey, knowledgeSearch);
     }
     navigation.moveTab(sourcePaneId, targetPaneId, tabId);
     const quickFilterDraft = appState?.quickFilterDrafts.byTabKey[sourceKey];
@@ -1838,12 +1880,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     });
   }
 
-  /** Opens search-only Structured Knowledge Search, defaulting the scope from
-   * the active indexed folder, then the active semantic result set, then the
-   * whole authorized library (task 0206). */
+  /** Opens search-only Structured Knowledge Search as a session-only tab (task 0209). */
   function openKnowledgeSearch(): void {
     const active = activeDirectory();
-    if (workspace === undefined) return;
+    const currentWorkspace = workspace;
+    if (currentWorkspace === undefined) return;
     const presentation =
       active === undefined
         ? undefined
@@ -1856,16 +1897,92 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         ]),
       ),
     ];
-    dialogs.openKnowledgeSearchDialog({
-      workspaceId: workspace.id,
-      currentFolder: active?.location,
-      semanticSourceIds,
-      initialSubject:
-        presentation?.kind === 'semantic' || presentation?.kind === 'content'
-          ? presentation.term
-          : undefined,
+    const paneId = currentWorkspace.activePaneId;
+    const pane = currentWorkspace.panesById[paneId];
+    const activeTab = pane?.tabsById[pane.activeTabId];
+    if (activeTab === undefined) return;
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'addTransientTab',
+        workspaceId: currentWorkspace.id,
+        paneId,
+        location: activeTab.location,
+        expectedRevision: currentWorkspace.revision,
+      },
+      (next) => {
+        replaceWorkspace(next);
+        const tabId = next.panesById[paneId]?.activeTabId;
+        if (tabId === undefined) return;
+        const key = tabKey(paneId, tabId);
+        knowledgeSearchByTab.set(key, {
+          key,
+          paneId,
+          tabId,
+          workspaceId: next.id,
+          currentFolder: active?.location,
+          semanticSourceIds,
+          initialSubject:
+            presentation?.kind === 'semantic' || presentation?.kind === 'content'
+              ? presentation.term
+              : undefined,
+        });
+        m.redraw();
+      },
+    ).catch((error: unknown) => {
+      toast({
+        html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
+      });
     });
-    m.redraw();
+  }
+
+  async function openKnowledgeSource(
+    sourcePaneId: PaneId,
+    evidence: KnowledgeEvidence,
+  ): Promise<void> {
+    const currentWorkspace = workspace;
+    const targetPaneId = currentWorkspace?.paneOrder.find(
+      (candidate) => candidate !== sourcePaneId,
+    );
+    if (currentWorkspace === undefined || targetPaneId === undefined) {
+      throw new Error(t('knowledgeSearch', 'openSourceFailed'));
+    }
+    const source = await attrsClient.resolveKnowledgeSource({
+      workspaceId: currentWorkspace.id,
+      sourceId: evidence.sourceId,
+    });
+    if (!source.available) throw new Error(t('knowledgeSearch', 'openSourceFailed'));
+    const path = pathFromUri(source.location.uri);
+    const rawName = path.split(/[\\/]/).filter(Boolean).at(-1) ?? evidence.title;
+    let name = rawName;
+    try {
+      name = decodeURIComponent(rawName);
+    } catch {
+      // Keep the provider's original path segment when it is not URI encoded.
+    }
+    const dot = name.lastIndexOf('.');
+    const entry: EntrySummary = {
+      id: source.entryId,
+      location: source.location,
+      name,
+      kind: 'file',
+      hidden: false,
+      readOnly: false,
+      ...(dot > 0 ? { extension: name.slice(dot + 1).toLowerCase() } : {}),
+      ...(evidence.mediaType == null ? {} : { mimeType: evidence.mediaType }),
+      ...(evidence.modifiedAtMs == null
+        ? {}
+        : { modifiedAt: new Date(evidence.modifiedAtMs).toISOString() }),
+      metadataRevision: evidence.modifiedAtMs ?? 0,
+    };
+    openViewer(
+      attrsClient,
+      targetPaneId,
+      entry,
+      undefined,
+      false,
+      knowledgeEvidencePage(evidence.provenance),
+    );
   }
 
   /** Knowledge search stays usable without a generation profile, so its own
@@ -2687,6 +2804,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         }
       }
       for (const [key, entry] of movedDiskUsage) diskUsageByTab.set(key, entry);
+      const movedKnowledgeSearch = new Map<string, KnowledgeSearchTabEntry>();
+      for (const tabId of paneA.tabOrder) {
+        const entry = knowledgeSearchByTab.get(tabKey(paneAId, tabId));
+        if (entry !== undefined) {
+          knowledgeSearchByTab.delete(entry.key);
+          entry.key = tabKey(paneBId, tabId);
+          entry.paneId = paneBId;
+          movedKnowledgeSearch.set(entry.key, entry);
+        }
+      }
+      for (const tabId of paneB.tabOrder) {
+        const entry = knowledgeSearchByTab.get(tabKey(paneBId, tabId));
+        if (entry !== undefined) {
+          knowledgeSearchByTab.delete(entry.key);
+          entry.key = tabKey(paneAId, tabId);
+          entry.paneId = paneAId;
+          movedKnowledgeSearch.set(entry.key, entry);
+        }
+      }
+      for (const [key, entry] of movedKnowledgeSearch) knowledgeSearchByTab.set(key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
@@ -2950,6 +3087,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getViewerByTab: () => viewerByTab,
     getEditorByPane: () => editorByPane,
     getDiskUsageByTab: () => diskUsageByTab,
+    getKnowledgeSearchByTab: () => knowledgeSearchByTab,
     setConnections: (conns) => {
       connections = conns;
     },
@@ -3013,6 +3151,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       m.redraw();
     },
     openKnowledgeSearch,
+    closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
+    openKnowledgeSource,
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>

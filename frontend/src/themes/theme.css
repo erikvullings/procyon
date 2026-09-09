@@ -2211,21 +2211,18 @@ input[type="text"].fm-shortcuts-help-capture-input {
   white-space: pre-wrap;
 }
 
-/* Structured Knowledge Search (task 0206). Retrieval-first: the composer sits
- * above the evidence, and the optional answer (task 0207) is a downstream
- * section below it that only exists once a search has succeeded. */
-.modal.fm-knowledge-search-modal {
-  --mm-modal-content-padding-top-with-close: 1rem;
-  width: min(72rem, calc(100vw - 2rem));
-  max-width: min(72rem, calc(100vw - 2rem)) !important;
-  max-height: min(90vh, 56rem);
-}
-
+/* Structured Knowledge Search (tasks 0206/0209). The pane owns the only scroll
+ * region; common query controls stay above evidence and expert mechanics fold
+ * into Advanced. */
 .fm-knowledge-search {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  min-height: min(28rem, calc(100vh - 12rem));
+  flex: 1 1 auto;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.75rem 1rem 1.5rem;
+  overflow-y: auto;
   font-weight: 400;
   line-height: 1.5;
 }
@@ -2243,7 +2240,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-composer {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .fm-knowledge-field {
@@ -2284,6 +2281,11 @@ input[type="text"].fm-shortcuts-help-capture-input {
   border-radius: 4px;
 }
 
+.fm-knowledge-needs {
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem 0.5rem;
+}
+
 .fm-knowledge-needs legend,
 .fm-knowledge-roots legend,
 .fm-knowledge-modes legend {
@@ -2297,6 +2299,46 @@ input[type="text"].fm-shortcuts-help-capture-input {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.fm-knowledge-needs label {
+  position: relative;
+  cursor: pointer;
+}
+
+:where(.fm-knowledge-needs label > span) {
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--fm-border, rgb(0 0 0 / 15%));
+  border-radius: 999px;
+  color: var(--fm-text-muted);
+}
+
+:where(.fm-knowledge-needs label:has(input:checked) > span) {
+  border-color: var(--fm-color-accent, #1976d2);
+  color: var(--fm-color-accent, #1976d2);
+  background: color-mix(in srgb, var(--fm-color-accent, #1976d2) 8%, transparent);
+}
+
+.fm-knowledge-needs input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+:where(.fm-knowledge-needs label:has(input:focus-visible) > span) {
+  outline: 2px solid var(--fm-color-accent, #1976d2);
+  outline-offset: 2px;
+}
+
+.fm-knowledge-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.fm-knowledge-primary {
+  min-width: 7rem;
 }
 
 .fm-knowledge-mode {
@@ -2319,9 +2361,22 @@ input[type="text"].fm-shortcuts-help-capture-input {
   opacity: 0.5;
 }
 
+.fm-knowledge-advanced > summary,
 .fm-knowledge-dsl summary,
-.fm-knowledge-plan summary {
+.fm-knowledge-plan summary,
+.fm-knowledge-result-details summary {
   cursor: pointer;
+}
+
+.fm-knowledge-advanced {
+  border-top: 1px solid var(--fm-border, rgb(0 0 0 / 15%));
+  padding-top: 0.5rem;
+}
+
+.fm-knowledge-advanced-body {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
 }
 
 .fm-knowledge-dsl textarea {
@@ -2346,7 +2401,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text-muted);
 }
 
-.fm-knowledge-interpretation,
 .fm-knowledge-results-section {
   display: grid;
   gap: 0.5rem;
@@ -2362,7 +2416,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-size: 0.875rem;
 }
 
-.fm-knowledge-interpretation ul,
 .fm-knowledge-planned-searches,
 .fm-knowledge-scope-issues ul,
 .fm-knowledge-trace-queries,
@@ -2393,16 +2446,14 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-grouping {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  display: grid;
+  justify-items: start;
+  gap: 0.25rem;
 }
 
 .fm-knowledge-results-body {
   display: grid;
   gap: 0.75rem;
-  max-height: 24rem;
-  overflow-y: auto;
 }
 
 .fm-knowledge-group {
@@ -2420,7 +2471,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-result-meta,
-.fm-knowledge-state {
+.fm-knowledge-state,
+.fm-knowledge-result-summary {
   margin: 0;
   color: var(--fm-text-muted);
   font-variant-numeric: tabular-nums;
@@ -2482,8 +2534,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-knowledge-answer-body {
   display: grid;
   gap: 0.5rem;
-  max-height: 20rem;
-  overflow-y: auto;
   user-select: text;
 }
 

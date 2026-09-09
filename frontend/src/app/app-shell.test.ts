@@ -8,12 +8,25 @@ import { ApiError } from '../api/fetch-mutator';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import {
   AppShell,
+  knowledgeEvidencePage,
   locationForPath,
   removeDiskUsageNodes,
   respectSystemLocationReadOnly,
 } from './app-shell';
 
 const DISMISSED_OPERATIONS_STORAGE_KEY = 'fm.dismissedOperationIds';
+
+describe('knowledgeEvidencePage', () => {
+  it('maps PDF and presentation provenance to one-based preview pages', () => {
+    expect(knowledgeEvidencePage('{"kind":"pdfBlock","page_number":37,"block_index":2}')).toBe(37);
+    expect(knowledgeEvidencePage('{"kind":"slide","slideNumber":12,"shape_index":4}')).toBe(12);
+  });
+
+  it('ignores malformed or non-page provenance', () => {
+    expect(knowledgeEvidencePage('{"kind":"textLines","start_line":4}')).toBeUndefined();
+    expect(knowledgeEvidencePage('not json')).toBeUndefined();
+  });
+});
 
 describe('respectSystemLocationReadOnly', () => {
   it('makes a detected read-only network mount non-writable', () => {
@@ -3080,9 +3093,11 @@ describe('AppShell', () => {
     );
   });
 
-  it('offers Search Knowledge without any generation profile (task 0206)', async () => {
+  it('opens Search Knowledge in a transient pane tab without any generation profile', async () => {
+    const client = new MockFileManagerClient();
+    const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
     m.mount(root, {
-      view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
+      view: () => m(AppShell, { runtime: 'mock', client }),
     });
 
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
@@ -3099,13 +3114,71 @@ describe('AppShell', () => {
     trigger.click();
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).toContain(
+      expect(root.querySelector('.fm-knowledge-search')?.textContent).toContain(
         'What do you need?',
       ),
     );
-    expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).not.toContain(
+    expect(root.querySelector('.fm-knowledge-search-modal')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(
       'Generate answer',
     );
+    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Search Knowledge');
+    expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'addTransientTab' }),
+      undefined,
+    );
+
+    root
+      .querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Search Knowledge"]')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search')).toBeNull());
+  });
+
+  it('opens selected knowledge evidence in the opposite pane', async () => {
+    const client = new MockFileManagerClient();
+    const resolveSource = vi.spyOn(client, 'resolveKnowledgeSource');
+    m.mount(root, {
+      view: () => m(AppShell, { runtime: 'mock', client }),
+    });
+    const trigger = await vi.waitFor(() => {
+      const candidate = root.querySelector<HTMLButtonElement>(
+        'button[aria-label="Search Knowledge…"]',
+      );
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLButtonElement;
+    });
+    trigger.click();
+    const subject = await vi.waitFor(() => {
+      const candidate = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+      expect(candidate).not.toBeNull();
+      expect(candidate?.disabled).toBe(false);
+      return candidate as HTMLTextAreaElement;
+    });
+    subject.value = 'retrieval';
+    subject.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await vi.waitFor(() => {
+      const search = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidate) => candidate.textContent?.trim() === 'Search',
+      );
+      expect(search?.disabled).toBe(false);
+      search?.click();
+    });
+    const source = await vi.waitFor(() => {
+      const candidate = root.querySelector<HTMLButtonElement>(
+        '.fm-knowledge-source-link:not(:disabled)',
+      );
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLButtonElement;
+    });
+    const searchPane = source.closest('.fm-pane');
+    source.click();
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer')).not.toBeNull());
+    expect(resolveSource).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: expect.stringContaining('mock-knowledge-source-') }),
+    );
+    expect(root.querySelector('.fm-file-viewer')?.closest('.fm-pane')).not.toBe(searchPane);
+    expect(root.querySelector('.fm-knowledge-search')).not.toBeNull();
   });
 
   it('exposes Search Knowledge in the command palette with its shortcut (task 0206)', async () => {
@@ -3124,11 +3197,6 @@ describe('AppShell', () => {
     );
     expect(entry?.textContent).toContain('client.searchKnowledge');
     expect(entry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+k');
-    entry?.querySelector('button')?.click();
-
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).toContain('Subject'),
-    );
   });
 
   it('hides Search Knowledge when no retrieval capability is reported (task 0206)', async () => {

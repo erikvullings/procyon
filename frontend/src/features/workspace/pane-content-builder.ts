@@ -9,6 +9,7 @@ import type {
   Connection,
   EntryId,
   EntrySummary,
+  KnowledgeEvidence,
   Location,
   PaneId,
   PluginDescriptor,
@@ -59,6 +60,7 @@ import {
   type SelectionAction,
   type SelectionState,
 } from '../selection/selection';
+import { KnowledgeSearchPane } from '../semantic/knowledge-search-dialog';
 import { type SortModel, sortEntriesResponsive } from '../sorting/sorting';
 import { dispatchWorkspaceCommand } from './dispatch-workspace-command';
 import type { WorkspaceController } from './workspace-controller';
@@ -70,6 +72,14 @@ type InitialSearch = {
   readonly caseSensitive: boolean;
   readonly wholeWord: boolean;
 };
+
+export interface KnowledgeSearchTabState {
+  readonly tabId: TabId;
+  readonly workspaceId: string;
+  readonly currentFolder: Location | undefined;
+  readonly semanticSourceIds: readonly string[];
+  readonly initialSubject: string | undefined;
+}
 
 /** Shown before settings finish loading, mirroring the backend's own default (`core.gitStatus`
  * stays opt-in even then). */
@@ -132,6 +142,7 @@ export interface PaneContentContext {
     { readonly controller: FileEditorController; state: FileEditorState }
   >;
   getDiskUsageByTab(): Map<string, { state: DiskUsageViewState }>;
+  getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
 
   // Scalar state setters
   setConnections(conns: readonly Connection[]): void;
@@ -189,6 +200,8 @@ export interface PaneContentContext {
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
+  closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
+  openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -316,6 +329,8 @@ export function createPaneContentBuilder(
     const nativeIconLoader = context.getNativeIconLoader();
     const thumbnailLoader = context.getThumbnailLoader();
     const finderTagsLoader = context.getFinderTagsLoader();
+    const knowledgeSearch =
+      key === undefined ? undefined : context.getKnowledgeSearchByTab().get(key);
     const viewerTitles = new Map(
       (pane?.tabOrder ?? []).flatMap((tabId) => {
         const title = context.getViewerByTab().get(context.tabKey(paneId, tabId))?.state.entry.name;
@@ -325,6 +340,9 @@ export function createPaneContentBuilder(
     for (const tabId of pane?.tabOrder ?? []) {
       if (context.getDiskUsageByTab().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('diskUsage', 'tabTitle'));
+      }
+      if (context.getKnowledgeSearchByTab().has(context.tabKey(paneId, tabId))) {
+        viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
       }
     }
     const defaultFavouriteLabel =
@@ -856,9 +874,22 @@ export function createPaneContentBuilder(
                     });
               })(),
             }
-          : key !== undefined && context.getViewerByTab().has(key)
+          : key !== undefined &&
+              (knowledgeSearch !== undefined || context.getViewerByTab().has(key))
             ? {
                 viewerContent: (() => {
+                  if (knowledgeSearch !== undefined) {
+                    return m(KnowledgeSearchPane, {
+                      open: true,
+                      client,
+                      workspaceId: knowledgeSearch.workspaceId,
+                      currentFolder: knowledgeSearch.currentFolder,
+                      semanticSourceIds: knowledgeSearch.semanticSourceIds,
+                      initialSubject: knowledgeSearch.initialSubject,
+                      onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
+                      onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
+                    });
+                  }
                   const viewer = context.getViewerByTab().get(key);
                   if (viewer === undefined) return undefined;
                   const videoPosterDataUri = context

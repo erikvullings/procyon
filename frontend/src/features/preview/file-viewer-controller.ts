@@ -369,6 +369,8 @@ export interface FileViewerControllerOptions {
     readonly caseSensitive: boolean;
     readonly wholeWord: boolean;
   };
+  /** One-based page selected when a PDF or converted presentation first becomes ready. */
+  readonly initialPage?: number;
   /** Opens the Alt+Space metadata/info panel immediately once content loads, so Alt+Space works
    * even when no viewer was already open (it opens one, with the panel visible). */
   readonly initialMetadataPanelOpen?: boolean;
@@ -539,6 +541,8 @@ export function createFileViewerController(
   }
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   const initialMetadataOpen = options.initialMetadataPanelOpen === true;
+  const initialPdfPage = (pageCount: number): number =>
+    Math.min(Math.max(options.initialPage ?? 1, 1), pageCount);
   /** The comic's page locations in order, populated once by `loadComic`. Kept out of published
    * state since `Location[]` is controller-internal - the view only ever sees the current page's
    * already-decoded `dataUri`. */
@@ -828,7 +832,7 @@ export function createFileViewerController(
         kind: 'pdf',
         document,
         pageCount: document.numPages,
-        currentPage: 1,
+        currentPage: initialPdfPage(document.numPages),
         zoom: 1,
         outline,
       },
@@ -1115,7 +1119,7 @@ export function createFileViewerController(
           kind: 'pdf',
           document: firstPageDocument,
           pageCount: firstPageDocument.numPages,
-          currentPage: 1,
+          currentPage: initialPdfPage(firstPageDocument.numPages),
           zoom: 1,
         },
       });
@@ -1151,7 +1155,13 @@ export function createFileViewerController(
         status: 'ready',
         entry,
         metadataPanelOpen: initialMetadataOpen,
-        content: { kind: 'pdf', document, pageCount: document.numPages, currentPage: 1, zoom: 1 },
+        content: {
+          kind: 'pdf',
+          document,
+          pageCount: document.numPages,
+          currentPage: initialPdfPage(document.numPages),
+          zoom: 1,
+        },
       });
       void firstPageDocument.cleanup();
     } catch (error: unknown) {

@@ -20,7 +20,7 @@ interface MountOptions {
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
   readonly onClose?: () => void;
-  readonly onOpenSource?: (sourceId: string) => void | Promise<void>;
+  readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
 
 function mount(options: MountOptions = {}): MockFileManagerClient {
@@ -72,7 +72,7 @@ function button(label: string): HTMLButtonElement {
 async function ready(): Promise<void> {
   await vi.waitFor(() => {
     expect(root.textContent).not.toContain('Loading knowledge search…');
-    expect(root.textContent).toContain('Search never generates an answer');
+    expect(root.querySelector('.fm-knowledge-advanced')).not.toBeNull();
   });
   m.redraw.sync();
 }
@@ -99,16 +99,17 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
   it('focuses the subject field and shows the idle state before any search', async () => {
     mount();
 
-    await vi.waitFor(() => expect(root.textContent).toContain('What do you need?'));
+    await ready();
     expect(document.activeElement).toBe(subjects());
     expect(root.textContent).toContain('Compose a subject, then search your indexed documents.');
     expect(root.querySelector('.fm-knowledge-results')).toBeNull();
   });
 
-  it('never renders an answer section and says answering is not required', async () => {
+  it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {
     mount({ initialSubject: 'retrieval' });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Search never generates an answer'));
+    await ready();
+    expect(root.textContent).not.toContain('Search never generates an answer');
     expect(root.textContent).not.toContain('Generate answer');
     expect(root.textContent).not.toContain('Your generated answer will appear here.');
     expect(root.querySelector('.fm-rag-answer')).toBeNull();
@@ -141,7 +142,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     ]);
   });
 
-  it('keeps the visual composer and the DSL equivalent in sync both ways', async () => {
+  it('keeps the compact composer and the advanced DSL equivalent in sync', async () => {
     mount();
     await ready();
 
@@ -153,14 +154,15 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     type(dsl(), 'about: fusion\nneed: limitations\nrelated: bm25');
     await vi.waitFor(() => expect(subjects().value).toBe('fusion'));
-    expect(root.querySelector<HTMLInputElement>('#fm-knowledge-related')?.value).toBe('bm25');
+    expect(root.querySelector('#fm-knowledge-related')).toBeNull();
+    expect(dsl().value).toContain('related: bm25');
     const checked = [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')]
       .map((input, index) => (input.checked ? index : undefined))
       .filter((index) => index !== undefined);
     expect(checked).toEqual([7]);
   });
 
-  it('reports the interpretation confidence and parser diagnostics', async () => {
+  it('keeps parser diagnostics with the advanced query language', async () => {
     mount();
     await ready();
 
@@ -168,17 +170,19 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('Unknown field "nonsense"'));
     expect(root.querySelector('.fm-knowledge-diagnostics [role="alert"]')).not.toBeNull();
-    expect(root.textContent).toContain('Read as explicit query fields.');
+    expect(root.textContent).not.toContain('Interpretation');
+    expect(root.textContent).not.toContain('Read as explicit query fields.');
   });
 
-  it('records an alternative reading instead of silently choosing one', async () => {
+  it('does not expose parser interpretation mechanics in the common flow', async () => {
     mount();
     await ready();
 
     type(dsl(), 'compare hybrid and dense retrieval');
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Alternative readings'));
-    expect(root.textContent).toContain('More than one reading was possible.');
+    await vi.waitFor(() => expect(subjects().value).toBe('"hybrid and dense retrieval"'));
+    expect(root.textContent).not.toContain('Alternative readings');
+    expect(root.textContent).not.toContain('More than one reading was possible.');
   });
 
   it('lists answer-only fields explicitly excluded from retrieval', async () => {
@@ -187,6 +191,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     type(dsl(), 'about: retrieval do: apply to: "write a scheduler" format: steps');
 
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+    button('Query plan').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Not used for retrieval'));
     const excluded = root.querySelector('.fm-knowledge-excluded');
     expect(excluded?.textContent).toContain('do: apply');
@@ -214,7 +220,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.textContent).toContain('Entire indexed library');
   });
 
-  it('runs a complete search with no language model and groups evidence by need', async () => {
+  it('runs a complete search with no language model as a ranked list', async () => {
     mount({ initialSubject: 'retrieval' });
     await ready();
     root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')[1]?.click();
@@ -226,7 +232,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'Knowledge search results',
     );
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
-    expect(root.querySelector('.fm-knowledge-group h4')?.textContent).toBeTruthy();
+    expect(root.querySelector('.fm-knowledge-group h4')).toBeNull();
     expect(root.textContent).toContain('Retrieval design notes');
     expect(root.textContent).toContain('Subject');
   });
@@ -238,7 +244,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await search();
 
-    expect(root.querySelector('.fm-knowledge-result-summary')?.textContent).toContain(
+    expect(root.querySelector('.fm-knowledge-result-details')?.textContent).toContain(
       'Requested Hybrid, ran Full text: query embeddings are unavailable',
     );
   });
@@ -265,7 +271,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await search();
 
     expect(root.textContent).toContain('Source changed since indexing');
-    expect(root.querySelector('.fm-knowledge-result-summary')?.textContent).toContain('Coverage:');
+    expect(root.querySelector('.fm-knowledge-result-details')?.textContent).toContain('Coverage:');
   });
 
   it('opens the exact source of one evidence row', async () => {
@@ -277,7 +283,9 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const link = root.querySelector<HTMLButtonElement>('.fm-knowledge-source-link:not(:disabled)');
     link?.click();
 
-    expect(onOpenSource).toHaveBeenCalledWith(expect.stringContaining('mock-knowledge-source-'));
+    expect(onOpenSource).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: expect.stringContaining('mock-knowledge-source-') }),
+    );
   });
 
   it('reports a failure to open a source without losing the results', async () => {
@@ -405,8 +413,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     mount({ initialSubject: 'retrieval' });
     await ready();
 
-    expect(subjects().getAttribute('aria-describedby')).toBe('fm-knowledge-subjects-hint');
-    expect(root.querySelector('#fm-knowledge-subjects-hint')).not.toBeNull();
+    expect(subjects().getAttribute('aria-describedby')).toBeNull();
+    expect(root.querySelector('#fm-knowledge-subjects-hint')).toBeNull();
     expect(root.querySelector('.fm-knowledge-needs legend')?.textContent).toBe('What do you need?');
     expect(root.querySelector('.fm-knowledge-modes legend')?.textContent).toBe('Retrieval');
     expect(root.querySelector('.fm-knowledge-results-body')?.getAttribute('aria-live')).toBe(
@@ -534,7 +542,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     m.redraw.sync();
     await ready();
     type(dsl(), 'about: retrieval do: apply');
-    await vi.waitFor(() => expect(root.textContent).toContain('do: apply'));
+    await vi.waitFor(() => expect(dsl().value).toContain('do: apply'));
 
     open = false;
     m.redraw.sync();
@@ -594,7 +602,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await search();
 
-    expect(root.querySelector('.fm-knowledge-result-summary')?.textContent).toContain(
+    expect(root.querySelector('.fm-knowledge-result-details')?.textContent).toContain(
       'indexed count unknown',
     );
     expect(root.querySelector('.fm-knowledge-result-summary')?.textContent).not.toContain(
@@ -649,12 +657,6 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-function related(): HTMLInputElement {
-  const element = root.querySelector<HTMLInputElement>('#fm-knowledge-related');
-  if (element === null) throw new Error('related input not rendered');
-  return element;
-}
-
 function scopeSelect(): HTMLSelectElement {
   const element = root.querySelector<HTMLSelectElement>('#fm-knowledge-scope');
   if (element === null) throw new Error('scope select not rendered');
@@ -705,7 +707,7 @@ describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
     await ready();
 
     type(dsl(), 'about: retrieval related: "bm25, dense", fusion');
-    await vi.waitFor(() => expect(related().value).toBe('"bm25, dense", fusion'));
+    await vi.waitFor(() => expect(dsl().value).toContain('related: "bm25, dense", fusion'));
 
     searchButton().click();
     await vi.waitFor(() => expect(execute).toHaveBeenCalled());
@@ -930,8 +932,8 @@ describe('KnowledgeSearchDialog open lifecycle (task 0206)', () => {
     const lifecycle = mountLifecycle();
     lifecycle.open(true);
     await ready();
-    related().focus();
-    expect(document.activeElement).toBe(related());
+    dsl().focus();
+    expect(document.activeElement).toBe(dsl());
 
     lifecycle.open(false);
     lifecycle.open(true);
@@ -940,12 +942,12 @@ describe('KnowledgeSearchDialog open lifecycle (task 0206)', () => {
     expect(document.activeElement).toBe(subjects());
   });
 
-  it('closes on Escape from the related-terms field', async () => {
+  it('closes on Escape from the subject field', async () => {
     const onClose = vi.fn();
     mount({ onClose });
     await ready();
 
-    related().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    subjects().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -970,7 +972,7 @@ describe('KnowledgeSearchDialog open lifecycle (task 0206)', () => {
     document.addEventListener('keydown', listener);
 
     dsl().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    related().dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    subjects().dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
     document.removeEventListener('keydown', listener);
 
     expect(seen).toEqual([]);
@@ -1166,7 +1168,7 @@ describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
     await search();
 
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
-    expect(root.textContent).toContain('Search never generates an answer');
+    expect(root.textContent).not.toContain('Search never generates an answer');
   });
 });
 
@@ -1272,7 +1274,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     expect(answerSection()).toBeNull();
     expect(root.textContent).not.toContain('Generate answer');
-    expect(root.textContent).toContain('Search never generates an answer');
+    expect(root.textContent).not.toContain('Search never generates an answer');
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
@@ -1634,7 +1636,9 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     );
     citation?.click();
 
-    expect(onOpenSource).toHaveBeenCalledWith(expect.stringContaining('mock-knowledge-source-'));
+    expect(onOpenSource).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: expect.stringContaining('mock-knowledge-source-') }),
+    );
   });
 
   it('opens a citation from the answer text itself', async () => {
@@ -1651,7 +1655,9 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(link?.getAttribute('href')).toContain('#fm-knowledge-citation-');
     link?.click();
 
-    expect(onOpenSource).toHaveBeenCalledWith(expect.stringContaining('mock-knowledge-source-'));
+    expect(onOpenSource).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: expect.stringContaining('mock-knowledge-source-') }),
+    );
   });
 
   it('never links a citation whose identity was not displayed', async () => {

@@ -94,7 +94,7 @@ describe('AppShell native menu synchronisation (task 0206)', () => {
     expect(menuItemIds(lastPushedMenuSpec(), 'Tools')).not.toContain('client.searchKnowledge');
   });
 
-  it('opens the knowledge search dialog when the menu item is activated', async () => {
+  it('opens the knowledge search pane when the menu item is activated', async () => {
     const client = new MockFileManagerClient();
     let dispatch: ((message: { id: string }) => void) | undefined;
     invoke.mockImplementation((command: string, payload?: Record<string, unknown>) => {
@@ -111,8 +111,10 @@ describe('AppShell native menu synchronisation (task 0206)', () => {
 
     dispatch?.({ id: 'client.searchKnowledge' });
 
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-search-modal')?.textContent).toContain('Subject'),
-    );
+    await vi.waitFor(() => {
+      const search = root.querySelector('.fm-knowledge-search');
+      expect(search).not.toBeNull();
+      expect(search?.textContent).toContain('What are you looking for?');
+    });
   });
 });

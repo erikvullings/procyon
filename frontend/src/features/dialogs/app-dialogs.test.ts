@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Connection, KnowledgeSourceLocation, ResolvedRagCitation } from '../../models';
-import {
-  navigateToKnowledgeSource,
-  navigateToRagCitation,
-  openCreatedConnection,
-} from './app-dialogs';
-import { createDialogUIController } from './dialog-ui-controller';
+import type { Connection, ResolvedRagCitation } from '../../models';
+import { navigateToRagCitation, openCreatedConnection } from './app-dialogs';
 
 function connection(overrides: Partial<Connection> = {}): Connection {
   return {
@@ -103,77 +98,5 @@ describe('navigateToRagCitation', () => {
       { providerId: 'local', uri: 'file:///documents' },
       'TRIZ Engineering.pdf',
     );
-  });
-});
-
-describe('navigateToKnowledgeSource (task 0206)', () => {
-  it('opens the containing folder and selects the decoded source name', async () => {
-    const resolve = vi.fn().mockResolvedValue({
-      available: true,
-      entryId: 'entry-a',
-      location: { providerId: 'local', uri: 'file:///documents/Hybrid%20Retrieval.md' },
-    } satisfies KnowledgeSourceLocation);
-    const navigate = vi.fn().mockResolvedValue(undefined);
-
-    await expect(
-      navigateToKnowledgeSource(
-        '22222222-2222-4222-8222-222222222222',
-        'source-a',
-        resolve,
-        navigate,
-      ),
-    ).resolves.toBe(true);
-
-    expect(resolve).toHaveBeenCalledWith({
-      workspaceId: '22222222-2222-4222-8222-222222222222',
-      sourceId: 'source-a',
-    });
-    expect(navigate).toHaveBeenCalledWith(
-      { providerId: 'local', uri: 'file:///documents' },
-      'Hybrid Retrieval.md',
-    );
-  });
-
-  it('does not navigate to an unavailable source', async () => {
-    const navigate = vi.fn();
-
-    await expect(
-      navigateToKnowledgeSource(
-        '22222222-2222-4222-8222-222222222222',
-        'source-b',
-        vi.fn().mockResolvedValue({
-          available: false,
-          entryId: 'entry-b',
-          location: { providerId: 'local', uri: 'file:///documents/gone.md' },
-        } satisfies KnowledgeSourceLocation),
-        navigate,
-      ),
-    ).resolves.toBe(false);
-    expect(navigate).not.toHaveBeenCalled();
-  });
-});
-
-describe('knowledge search dialog state (task 0206)', () => {
-  it('opens and cancels through the shared dialog controller', () => {
-    const dialogs = createDialogUIController();
-    expect(dialogs.getState().knowledgeSearchDialog).toBeUndefined();
-
-    dialogs.openKnowledgeSearchDialog({
-      workspaceId: '22222222-2222-4222-8222-222222222222',
-      currentFolder: { providerId: 'local', uri: 'file:///documents' },
-      semanticSourceIds: ['source-a'],
-      initialSubject: 'retrieval',
-    });
-
-    expect(dialogs.getState().knowledgeSearchDialog).toEqual({
-      workspaceId: '22222222-2222-4222-8222-222222222222',
-      currentFolder: { providerId: 'local', uri: 'file:///documents' },
-      semanticSourceIds: ['source-a'],
-      initialSubject: 'retrieval',
-    });
-
-    dialogs.cancelKnowledgeSearchDialog();
-
-    expect(dialogs.getState().knowledgeSearchDialog).toBeUndefined();
   });
 });
