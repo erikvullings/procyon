@@ -853,6 +853,8 @@ export const nl = {
       'Er is een interne fout opgetreden bij het zoeken naar kennis. Probeer het opnieuw; bouw de semantische index opnieuw op als het probleem blijft bestaan.',
     results: 'Bronnen',
     resultsSummary: '{documents} document(en) · {sections} overeenkomende sectie(s)',
+    matchingSection: 'Overeenkomende sectie',
+    openSection: 'Open {section} in de bron',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',

@@ -835,6 +835,8 @@ export const en = {
     cancelled: 'The search was cancelled.',
     results: 'Sources',
     resultsSummary: '{documents} document(s) · {sections} matching section(s)',
+    matchingSection: 'Matching section',
+    openSection: 'Open {section} in source',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',

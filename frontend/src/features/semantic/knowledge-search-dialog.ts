@@ -1125,7 +1125,16 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  function evidenceSection(row: KnowledgeEvidence, key: string): m.Vnode {
+  function evidenceSection(
+    attrs: KnowledgeSearchDialogAttrs,
+    row: KnowledgeEvidence,
+    key: string,
+  ): m.Vnode {
+    const position = knowledgeProvenanceLabel(row.provenance);
+    const indexedTitle = row.sectionPath.join(' / ');
+    const sectionTitle = indexedTitle || position || t('knowledgeSearch', 'matchingSection');
+    const separatePosition = indexedTitle === '' ? '' : position;
+    const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
       row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
@@ -1137,6 +1146,24 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
+      m(
+        'button.fm-knowledge-section-link',
+        {
+          type: 'button',
+          disabled: !openable,
+          'aria-label': t('knowledgeSearch', 'openSection', {
+            section:
+              separatePosition === '' ? sectionTitle : `${sectionTitle}, ${separatePosition}`,
+          }),
+          onclick: () => void openSource(attrs, row),
+        },
+        [
+          m('span.fm-knowledge-section-title', sectionTitle),
+          separatePosition === ''
+            ? undefined
+            : m('span.fm-knowledge-section-position', separatePosition),
+        ],
+      ),
       m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
       states.length === 0
         ? undefined
@@ -1150,27 +1177,34 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   function evidenceDocument(
     attrs: KnowledgeSearchDialogAttrs,
     group: ReturnType<typeof groupEvidenceByDocument>[number],
+    index: number,
   ): m.Vnode {
     const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
-    return m('article.fm-knowledge-group', { key: `document-${group.documentId}` }, [
-      m('h4.fm-knowledge-result-heading', [
+    return m(
+      'li.fm-knowledge-document-item',
+      { key: `document-${group.documentId}`, value: index + 1 },
+      m('article.fm-knowledge-group', [
+        m('h4.fm-knowledge-result-heading', [
+          m(
+            'button.fm-knowledge-source-link',
+            {
+              type: 'button',
+              disabled: !openable,
+              'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
+              title: group.title,
+              onclick: () => void openSource(attrs, group.openEvidence),
+            },
+            [externalLinkIcon({ size: 14 }), m('span', group.title)],
+          ),
+        ]),
         m(
-          'button.fm-knowledge-source-link',
-          {
-            type: 'button',
-            disabled: !openable,
-            'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
-            title: group.title,
-            onclick: () => void openSource(attrs, group.openEvidence),
-          },
-          [externalLinkIcon({ size: 14 }), m('span', group.title)],
+          '.fm-knowledge-sections',
+          group.rows.map((row) =>
+            evidenceSection(attrs, row, `${group.documentId}-${row.recordId}`),
+          ),
         ),
       ]),
-      m(
-        '.fm-knowledge-results',
-        group.rows.map((row) => evidenceSection(row, `${group.documentId}-${row.recordId}`)),
-      ),
-    ]);
+    );
   }
 
   /**
@@ -1231,7 +1265,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m('p.fm-knowledge-hint', t('knowledgeSearch', 'emptyHint')),
       ]);
     }
-    return groupEvidenceByDocument(result.evidence).map((group) => evidenceDocument(attrs, group));
+    return m(
+      'ol.fm-knowledge-document-list',
+      groupEvidenceByDocument(result.evidence).map((group, index) =>
+        evidenceDocument(attrs, group, index),
+      ),
+    );
   }
 
   /** Localised endpoint classification, shown before anything is sent. */
@@ -1561,8 +1600,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
             : undefined,
           m('.fm-knowledge-composer', [
-            m('label.fm-knowledge-field', [
-              m('span.fm-knowledge-subject-label', [
+            m('.fm-knowledge-field', [
+              m('label.fm-knowledge-subject-label', { for: 'fm-knowledge-subjects' }, [
                 m('span', t('knowledgeSearch', 'subjects')),
                 busy === 'searching'
                   ? m('span.fm-knowledge-search-spinner', {
@@ -1571,39 +1610,51 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     })
                   : undefined,
               ]),
-              m('textarea#fm-knowledge-subjects', {
-                name: 'knowledge-subjects',
-                rows: 2,
-                value: subjectsText,
-                disabled: busy === 'loading' || busy === 'searching',
-                autocomplete: 'off',
-                placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
-                onupdate: ({ dom }: m.VnodeDOM) => {
-                  if (!focusSubjectOnOpen || busy === 'loading') return;
-                  focusSubjectOnOpen = false;
-                  const input = dom as HTMLTextAreaElement;
-                  input.focus();
-                  input.setSelectionRange(input.value.length, input.value.length);
-                },
-                oninput: (event: InputEvent) => {
-                  subjectsText = (event.currentTarget as HTMLTextAreaElement).value;
-                  draft = { ...draft, about: splitSubjects(subjectsText) };
-                  edited();
-                  void reinterpret(attrs);
-                },
-                onkeydown: (event: KeyboardEvent) => {
-                  event.stopPropagation();
-                  if (event.key === 'Escape' && !event.isComposing) {
-                    event.preventDefault();
-                    close(attrs);
-                    return;
-                  }
-                  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-                    event.preventDefault();
-                    void search(attrs);
-                  }
-                },
-              }),
+              m('.fm-knowledge-subject-editor', [
+                m('textarea#fm-knowledge-subjects', {
+                  name: 'knowledge-subjects',
+                  rows: 2,
+                  value: subjectsText,
+                  disabled: busy === 'loading' || busy === 'searching',
+                  autocomplete: 'off',
+                  placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
+                  onupdate: ({ dom }: m.VnodeDOM) => {
+                    if (!focusSubjectOnOpen || busy === 'loading') return;
+                    focusSubjectOnOpen = false;
+                    const input = dom as HTMLTextAreaElement;
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                  },
+                  oninput: (event: InputEvent) => {
+                    subjectsText = (event.currentTarget as HTMLTextAreaElement).value;
+                    draft = { ...draft, about: splitSubjects(subjectsText) };
+                    edited();
+                    void reinterpret(attrs);
+                  },
+                  onkeydown: (event: KeyboardEvent) => {
+                    event.stopPropagation();
+                    if (event.key === 'Escape' && !event.isComposing) {
+                      event.preventDefault();
+                      close(attrs);
+                      return;
+                    }
+                    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                      event.preventDefault();
+                      void search(attrs);
+                    }
+                  },
+                }),
+                m(
+                  FlatButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-search-submit',
+                    disabled: busy !== undefined || !canSearch(),
+                    onclick: () => void search(attrs),
+                  },
+                  t('knowledgeSearch', 'search'),
+                ),
+              ]),
             ]),
             m('fieldset.fm-knowledge-needs', [
               m('legend', t('knowledgeSearch', 'needs')),
@@ -1942,17 +1993,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               'aria-busy': busy === 'searching' ? 'true' : 'false',
             },
             [
-              m('.fm-knowledge-results-heading', [m('h3', t('knowledgeSearch', 'results'))]),
-              result === undefined
-                ? undefined
-                : m(
-                    'p.fm-knowledge-result-summary',
-                    { role: 'status' },
-                    t('knowledgeSearch', 'resultsSummary', {
-                      documents: groupEvidenceByDocument(result.evidence).length,
-                      sections: result.evidence.length,
-                    }),
-                  ),
+              m(
+                '.fm-knowledge-results-heading',
+                { role: result === undefined ? undefined : 'status' },
+                m('h3', [
+                  t('knowledgeSearch', 'results'),
+                  result === undefined
+                    ? undefined
+                    : `: ${t('knowledgeSearch', 'resultsSummary', {
+                        documents: groupEvidenceByDocument(result.evidence).length,
+                        sections: result.evidence.length,
+                      })}`,
+                ]),
+              ),
               m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, resultsView(attrs)),
             ],
           ),

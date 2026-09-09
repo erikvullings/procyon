@@ -960,6 +960,28 @@ function renderImageBody(
  * size the viewer happened to be when the page was first drawn. Surfaces render failures as text
  * instead of silently leaving the canvas blank, since a bad page (or a transient decode error) is
  * otherwise indistinguishable from "still loading". */
+export function pdfRenderBounds(container: HTMLElement | null): {
+  readonly width: number;
+  readonly height: number;
+} {
+  if (container === null) return { width: 800, height: 1000 };
+  const style = getComputedStyle(container);
+  const pixels = (value: string): number => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return {
+    width: Math.max(
+      1,
+      Math.floor(container.clientWidth - pixels(style.paddingLeft) - pixels(style.paddingRight)),
+    ),
+    height: Math.max(
+      1,
+      Math.floor(container.clientHeight - pixels(style.paddingTop) - pixels(style.paddingBottom)),
+    ),
+  };
+}
+
 const PdfPageCanvas: FactoryComponent<{
   readonly document: PDFDocumentProxy;
   readonly searchDocument?: PDFDocumentProxy;
@@ -990,6 +1012,7 @@ const PdfPageCanvas: FactoryComponent<{
         search?: FileViewerPdfSearchState;
       }
     | undefined;
+
   async function render(
     root: HTMLElement,
     attrs: {
@@ -1008,9 +1031,7 @@ const PdfPageCanvas: FactoryComponent<{
     renderingPage = attrs.pageNumber;
     renderingZoom = attrs.zoom;
     error = undefined;
-    const container = root.parentElement;
-    const width = container?.clientWidth ?? 800;
-    const height = container?.clientHeight ?? 1000;
+    const { width, height } = pdfRenderBounds(root.parentElement);
     try {
       await renderPdfPageToCanvas(
         attrs.document,
@@ -1646,7 +1667,8 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                             editingZoom = true;
                           },
                         },
-                        state.content.kind === 'image' && state.content.fitToContainer
+                        (state.content.kind === 'image' && state.content.fitToContainer) ||
+                          (state.content.kind === 'pdf' && state.content.zoom === 1)
                           ? t('viewer', 'fit')
                           : `${Math.round(state.content.zoom * 100)}%`,
                       ),

@@ -261,6 +261,8 @@ describe('theme stylesheet', () => {
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
     );
     expect(themeCss).toMatch(/\.fm-knowledge-needs\s*\{[^}]*border:\s*0/s);
+    expect(themeCss).toMatch(/:where\(\.fm-knowledge-needs label > span\)\s*\{[^}]*border:\s*0/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-document-list\s*\{[^}]*list-style:\s*decimal/s);
     expect(themeCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
     );

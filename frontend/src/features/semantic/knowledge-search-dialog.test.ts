@@ -79,7 +79,9 @@ async function ready(): Promise<void> {
 
 async function search(): Promise<void> {
   submitSearch();
-  await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-result-summary')).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(root.querySelector('.fm-knowledge-results-heading[role="status"]')).not.toBeNull(),
+  );
   m.redraw.sync();
 }
 
@@ -238,8 +240,13 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'Knowledge search results',
     );
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
-    expect(root.querySelector('.fm-knowledge-group h4')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-document-list')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-document-item h4')).not.toBeNull();
     expect(root.textContent).toContain('Retrieval design notes');
+    expect(root.querySelector('.fm-knowledge-results-heading')?.textContent).toMatch(
+      /^Sources: \d+ document\(s\) · \d+ matching section\(s\)$/u,
+    );
+    expect(root.querySelector('.fm-knowledge-result-summary')).toBeNull();
     expect(root.querySelector('.fm-knowledge-results-section')?.textContent).not.toContain(
       'Subject',
     );
@@ -259,18 +266,40 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             ...first,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: '## Su-Field model\n\nA **substance-field** section.',
+            sectionPath: ['Standards', 'Su-Field synthesis'],
+            provenance: '{"kind":"pdfBlock","page_number":167,"block_index":3}',
+            unavailable: false,
+          },
+          {
+            ...first,
+            recordId: `${first.recordId}-page-168`,
+            title: 'TRIZ%20Substance-Field%20Modelling.pdf',
+            content: 'A continuation without an indexed heading.',
+            sectionPath: [],
+            provenance: '{"kind":"pdfBlock","page_number":168,"block_index":0}',
+            sourcePosition: first.sourcePosition + 1,
+            unavailable: false,
           },
         ],
       };
     });
-    mount({ client, initialSubject: 'retrieval' });
+    const onOpenSource = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
     await ready();
 
     await search();
 
+    expect(root.querySelectorAll('.fm-knowledge-document-item')).toHaveLength(1);
     expect(root.querySelector('.fm-knowledge-source-link span')?.textContent).toBe(
       'TRIZ Substance-Field Modelling.pdf',
     );
+    expect(root.querySelector('.fm-knowledge-section-title')?.textContent).toBe(
+      'Standards / Su-Field synthesis',
+    );
+    expect(root.querySelector('.fm-knowledge-section-position')?.textContent).toBe('Page 167');
+    const sections = root.querySelectorAll('.fm-knowledge-section-link');
+    expect(sections[1]?.querySelector('.fm-knowledge-section-title')?.textContent).toBe('Page 168');
+    expect(sections[1]?.querySelector('.fm-knowledge-section-position')).toBeNull();
     expect(root.querySelector('.fm-knowledge-result-markdown h2')?.textContent).toBe(
       'Su-Field model',
     );
@@ -280,6 +309,14 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-reasons')).toBeNull();
     expect(root.querySelector('.fm-knowledge-result-meta')).toBeNull();
     expect(root.querySelector('#fm-knowledge-grouping')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.fm-knowledge-section-link')?.click();
+    expect(onOpenSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sectionPath: ['Standards', 'Su-Field synthesis'],
+        provenance: expect.stringContaining('"page_number":167'),
+      }),
+    );
   });
 
   it('explains that a hybrid request ran as full text when embeddings are unavailable', async () => {
@@ -424,7 +461,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'true',
     );
     expect(root.querySelector('.fm-knowledge-search-spinner')).not.toBeNull();
-    expect(() => button('Search')).toThrow();
+    expect(button('Search').disabled).toBe(true);
     expect(() => button('Cancel search')).toThrow();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search-spinner')).toBeNull());
@@ -460,11 +497,14 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     subjects().dispatchEvent(newline);
     expect(newline.defaultPrevented).toBe(false);
     expect(execute).not.toHaveBeenCalled();
-    expect(() => button('Search')).toThrow();
+    expect(button('Search').disabled).toBe(false);
 
     submitSearch();
 
     await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('Search').disabled).toBe(false));
+    button('Search').click();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
   });
 
   it('labels every control and announces results politely', async () => {
@@ -663,7 +703,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-result-details')?.textContent).toContain(
       'indexed count unknown',
     );
-    expect(root.querySelector('.fm-knowledge-result-summary')?.textContent).not.toContain(
+    expect(root.querySelector('.fm-knowledge-results-heading')?.textContent).not.toContain(
       'Coverage: 0/',
     );
   });
@@ -776,7 +816,7 @@ describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
     type(dsl(), '');
 
     await vi.waitFor(() => expect(subjects().value).toBe(''));
-    expect(() => button('Search')).toThrow();
+    expect(button('Search').disabled).toBe(true);
   });
 
   it('discards a parse that lands after a further edit', async () => {
@@ -825,7 +865,7 @@ describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
     pending.resolve(stale);
     await vi.waitFor(() => expect(subjects().disabled).toBe(false));
 
-    expect(root.querySelector('.fm-knowledge-result-summary')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-results-heading[role="status"]')).toBeNull();
     expect(root.querySelectorAll('.fm-knowledge-result')).toHaveLength(0);
   });
 

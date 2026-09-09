@@ -2,7 +2,7 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EntrySummary } from '../../models';
-import { FileViewer, type FileViewerAttrs } from './file-viewer';
+import { FileViewer, type FileViewerAttrs, pdfRenderBounds } from './file-viewer';
 import type { FileViewerState } from './file-viewer-controller';
 
 const renderPdfPageToCanvas = vi.fn().mockResolvedValue(undefined);
@@ -648,6 +648,19 @@ describe('FileViewer', () => {
     expect(root.querySelector<HTMLInputElement>('.fm-file-viewer-page-input')?.value).toBe('3');
     pageInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onSelectPdfPage).toHaveBeenCalledWith(3);
+    expect(root.querySelector('.fm-file-viewer-zoom-level')?.textContent).toBe('Fit');
+  });
+
+  it('fits PDF pages inside the padded preview content box', () => {
+    const container = document.createElement('div');
+    container.style.padding = '16px 12px';
+    Object.defineProperties(container, {
+      clientWidth: { value: 640 },
+      clientHeight: { value: 480 },
+    });
+    root.appendChild(container);
+
+    expect(pdfRenderBounds(container)).toEqual({ width: 616, height: 448 });
   });
 
   it('disables PDF page navigation at the first/last page', () => {
