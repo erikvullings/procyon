@@ -737,6 +737,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       sourcePosition: number,
       finalRank: number,
       unavailable = false,
+      adjacent = false,
     ): KnowledgeEvidence => ({
       recordId,
       documentId,
@@ -749,7 +750,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       provenance: '',
       chunkKind: 'chunk',
       sourcePosition,
-      adjacent: false,
+      adjacent,
       generated: false,
       stale: false,
       unavailable,
@@ -767,11 +768,13 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       row('document-b', 'record-b', 0, 2),
       row('document-a', 'record-a-later', 8, 1, true),
       row('document-a', 'record-a-earlier', 3, 4),
+      row('document-a', 'record-a-adjacent', 2, 1, false, true),
     ]);
 
     expect(groups).toHaveLength(2);
     expect(groups.map((group) => group.documentId)).toEqual(['document-a', 'document-b']);
     expect(groups[0]?.rows.map((entry) => entry.sourcePosition)).toEqual([3, 8]);
+    expect(groups[0]?.rows.map((entry) => entry.recordId)).not.toContain('record-a-adjacent');
     expect(groups[0]?.bestRank).toBe(1);
     expect(groups[0]?.openEvidence.recordId).toBe('record-a-earlier');
   });

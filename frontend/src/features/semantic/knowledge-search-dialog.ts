@@ -376,9 +376,10 @@ function joinSubjects(values: readonly string[]): string {
 }
 
 /**
- * Ranks documents by their best evidence while restoring each document's
- * structural order. Two documents can share a title, so the stable
- * `documentId` remains the key.
+ * Ranks documents by their matched evidence while restoring each document's
+ * structural order. Adjacent chunks remain available to grounded-answer
+ * generation, but are not presented as search matches. Two documents can
+ * share a title, so the stable `documentId` remains the key.
  */
 export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]): readonly {
   readonly documentId: string;
@@ -400,6 +401,7 @@ export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]):
     }
   >();
   for (const row of evidence) {
+    if (row.adjacent) continue;
     const existing = groups.get(row.documentId);
     if (existing === undefined) {
       groups.set(row.documentId, {
