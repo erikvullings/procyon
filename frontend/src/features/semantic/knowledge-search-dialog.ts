@@ -218,8 +218,12 @@ export function knowledgeProvenanceLabel(provenance: string): string {
       case 'exact':
         return describe(node.value);
       case 'span': {
-        const first = describe(node.first);
-        const last = describe(node.last);
+        const span =
+          node.value !== null && typeof node.value === 'object' && !Array.isArray(node.value)
+            ? (node.value as Record<string, unknown>)
+            : node;
+        const first = describe(span.first);
+        const last = describe(span.last);
         if (first === undefined) return last;
         if (last === undefined || last === first) return first;
         return `${first} – ${last}`;

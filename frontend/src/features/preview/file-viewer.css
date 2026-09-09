@@ -16,6 +16,27 @@
   min-height: 0;
 }
 
+.fm-file-viewer-loading-spinner {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0.18rem solid color-mix(in srgb, var(--fm-text-muted) 30%, transparent);
+  border-top-color: var(--fm-accent);
+  border-radius: 50%;
+  animation: fm-file-viewer-loading-spin 0.8s linear infinite;
+}
+
+@keyframes fm-file-viewer-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-file-viewer-loading-spinner {
+    animation: none;
+  }
+}
+
 .fm-file-viewer-archive-summary {
   display: grid;
   place-items: center;

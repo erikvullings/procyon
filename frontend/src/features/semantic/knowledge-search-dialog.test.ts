@@ -352,7 +352,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: '## Su-Field model\n\nA **substance-field** section.',
             sectionPath: ['Standards', 'Su-Field synthesis'],
-            provenance: '{"kind":"pdfBlock","page_number":167,"block_index":3}',
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfBlock","page_number":167,"block_index":3}}',
             unavailable: false,
           },
           {
@@ -361,7 +362,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: 'A continuation without an indexed heading.',
             sectionPath: [],
-            provenance: '{"kind":"pdfBlock","page_number":168,"block_index":0}',
+            provenance:
+              '{"kind":"span","value":{"first":{"kind":"pdfBlock","page_number":168,"block_index":0},"last":{"kind":"pdfBlock","page_number":168,"block_index":2}}}',
             sourcePosition: first.sourcePosition + 1,
             unavailable: false,
           },
@@ -1248,8 +1250,10 @@ describe('knowledgeProvenanceLabel spreadsheet ranges (task 0206)', () => {
       knowledgeProvenanceLabel(
         JSON.stringify({
           kind: 'span',
-          first: { kind: 'pdfBlock', page_number: 167, block_index: 3 },
-          last: { kind: 'pdfBlock', page_number: 168, block_index: 1 },
+          value: {
+            first: { kind: 'pdfBlock', page_number: 167, block_index: 3 },
+            last: { kind: 'pdfBlock', page_number: 168, block_index: 1 },
+          },
         }),
       ),
     ).toBe('Page 167 – Page 168');

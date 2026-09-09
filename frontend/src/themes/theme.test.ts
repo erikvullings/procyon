@@ -253,6 +253,13 @@ describe('theme stylesheet', () => {
     expect(fileViewerCss).toMatch(
       /\.fm-file-viewer-loading\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center/s,
     );
+    expect(fileViewerCss).toMatch(
+      /\.fm-file-viewer-loading-spinner\s*\{[^}]*animation:\s*fm-file-viewer-loading-spin [^;}]+ infinite/s,
+    );
+    expect(fileViewerCss).toMatch(/@keyframes fm-file-viewer-loading-spin/);
+    expect(fileViewerCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-file-viewer-loading-spinner\s*\{[^}]*animation:\s*none/s,
+    );
   });
 
   it('keeps knowledge results below the tab strip without horizontal overflow', () => {
@@ -261,6 +268,10 @@ describe('theme stylesheet', () => {
     );
     expect(themeCss).toMatch(/\.fm-knowledge-search\s*\{[^}]*overflow:\s*hidden/s);
     expect(themeCss).toMatch(/\.fm-knowledge-results-body\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-results-section\s*\{[^}]*padding:\s*0\.75rem 0 0 1rem/s,
+    );
+    expect(themeCss).toMatch(/\.fm-knowledge-results-body\s*\{[^}]*padding-inline-end:\s*1rem/s);
     expect(themeCss).not.toMatch(
       /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects:focus-visible/,
     );

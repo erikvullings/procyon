@@ -1,12 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import {
-  CircularProgress,
-  FlatButton,
-  ModalPanel,
-  PaginationControls,
-  Select,
-  toast,
-} from 'mithril-materialized';
+import { FlatButton, ModalPanel, PaginationControls, Select, toast } from 'mithril-materialized';
 import {
   closeIcon,
   copyIcon,
@@ -1947,12 +1940,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   role: 'status',
                   'aria-label': t('shell', 'loading'),
                 },
-                m(CircularProgress, {
-                  mode: 'indeterminate',
-                  size: 'medium',
-                  className: 'fm-file-viewer-loading-spinner',
-                  'aria-label': t('shell', 'loading'),
-                }),
+                m('span.fm-file-viewer-loading-spinner', { 'aria-hidden': 'true' }),
               )
             : state.status === 'unsupported'
               ? renderExternalFallback(attrs, t('viewer', 'previewUnavailableGeneric'))

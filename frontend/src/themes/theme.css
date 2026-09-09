@@ -2493,7 +2493,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
   flex-direction: column;
   gap: 0.5rem;
   min-height: 0;
-  padding: 0.75rem 1rem 0;
+  padding: 0.75rem 0 0 1rem;
 }
 
 .fm-knowledge-scope-issues,
@@ -2542,6 +2542,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
   display: grid;
   gap: 1rem;
   min-height: 0;
+  padding-inline-end: 1rem;
   padding-block-end: 1.5rem;
   overflow-x: hidden;
   overflow-y: auto;

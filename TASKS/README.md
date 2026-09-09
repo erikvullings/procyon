@@ -155,6 +155,7 @@ layers and never prerequisites for retrieval.
 - [x] 0212 Knowledge search toolbar and PDF sections *(needs 0211)*
 - [x] 0213 EPUB semantic indexing *(needs 0180, 0212)*
 - [x] 0214 Knowledge toolbar and preview polish *(needs 0212)*
+- [x] 0215 Knowledge results scroll and position fixes *(needs 0214)*
 
 ## File operations
 
