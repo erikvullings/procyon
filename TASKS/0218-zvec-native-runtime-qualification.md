@@ -111,4 +111,7 @@ subsystem and must not change either release gate.
   alone reproduced the ONNX Runtime/Ubuntu 22.04 link blocker. Every public or installer job stayed
   skipped. Dispatch-only continuation did not enable partial catalog signing and is removed so the
   final workflow reports this supported-target blocker as a failure; successful target payloads
-  remain retained.
+  remain retained. The signed runtime is 23,164,624 bytes with SHA-256
+  `77431044a055f64c359d8c70614d86d15c16f636b94a23e7afb3618c06f2d36c`; Apple submission
+  `2a374034-7207-4187-b3ff-ae4f720caa32` accepted the 20,883,412-byte ZIP with SHA-256
+  `73b452811684e8df5b5add22a9267c24a77d30affe0ec0d4f3bb208165524c94`.

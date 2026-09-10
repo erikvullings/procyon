@@ -176,6 +176,14 @@ verification. Apple accepted the ZIP containing those exact bytes, the recorder 
 and submission ID to both artifact hashes, and the production-trust smoke revalidated that record
 before the packaged protocol/model/component tests.
 
+| Retained macOS evidence | Value |
+| --- | --- |
+| Signed runtime bytes / SHA-256 | 23,164,624 / `77431044a055f64c359d8c70614d86d15c16f636b94a23e7afb3618c06f2d36c` |
+| Signed worker bytes / SHA-256 | 38,411,504 / `ae2092aae393df7f05e8013cee470e8ca4addd68615a74e580d263b8ccfda754` |
+| Apple notary submission | `2a374034-7207-4187-b3ff-ae4f720caa32` / `Accepted` |
+| Submitted ZIP bytes / SHA-256 | 20,883,412 / `73b452811684e8df5b5add22a9267c24a77d30affe0ec0d4f3bb208165524c94` |
+| Source revision / tree | `fa70ff3faa3974c64e2d12e45a205856c27303de` / clean |
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
