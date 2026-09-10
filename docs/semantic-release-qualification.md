@@ -2,7 +2,7 @@
 
 ## Decision
 
-**NO-GO as of 2026-09-08.** Do not set the protected repository variable
+**NO-GO as of 2026-09-10.** Do not set the protected repository variable
 `SEMANTIC_RELEASE_QUALIFIED` to `true`. Tagged desktop releases remain available, but skip semantic
 payload construction, catalog signing and publication, and catalog embedding. Managed semantic
 installation therefore remains unavailable in those installers. A manual workflow dispatch still
@@ -28,6 +28,7 @@ results are not substitutes for measurements from the exact signed production ar
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |
+| Linux x86-64 inference runtime | Microsoft ONNX Runtime `v1.28.0` CPU shared loader |
 | Optional OCR | user-installed OCRmyPDF stable `>=16.0.0,<18.0.0`, disabled by default |
 
 The final artifact IDs, byte lengths, SHA-256 digests, catalog revision, signature, and installer
@@ -71,6 +72,44 @@ The release build sets `ZVEC_AUTO_BUILD=0` and links only from the verified cach
 temporarily removes that cache, copies the content-addressed runtime under the platform loader
 name, and proves that the content-addressed worker reaches its argument parser. Later bundle smoke
 repeats the protocol handshake from an isolated loader directory.
+
+## Linux x86-64 ONNX Runtime input
+
+The Linux x86-64 worker uses a separately packaged Microsoft ONNX Runtime CPU shared loader.
+macOS arm64, Windows x86-64, and Linux arm64 retain their previously exercised static linkage.
+The dynamic input is target-specific and optional; it is not installed with the base desktop
+application and is not resolved from a host library.
+
+| Property | Pinned value |
+| --- | --- |
+| Release / source revision | `v1.28.0` / `da9b5e364c465de65c49d91e696cd6485270757f` |
+| Release asset | ID `489174677`, `onnxruntime-linux-x64-1.28.0.tgz` |
+| Archive bytes / SHA-256 | 9,125,960 / `a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407` |
+| Loader source file | `libonnxruntime.so.1.28.0` |
+| Loader bytes / SHA-256 | 24,268,848 / `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab` |
+| Runtime SONAME | `libonnxruntime.so.1` |
+| Required ABI maxima | GLIBC 2.27, GLIBCXX 3.4.21, CXXABI 1.3.11 |
+| Ubuntu 22.04 rejection ceilings | GLIBC 2.35, GLIBCXX 3.4.30, CXXABI 1.3.13 |
+| License / notices | MIT `LICENSE`, 1,073 bytes / `2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c`; `ThirdPartyNotices.txt`, 325,054 bytes / `0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2` |
+
+The exact pyke static archive remains useful negative evidence: its 10,060,013 bytes hash to
+`e454f710f8a49f53aa5b4ff51e3454ae1835777e431c6c35c5255ce6f205fd68`, and its extracted
+105,481,448-byte `libonnxruntime.a` hashes to
+`0bb8a9982b44df690195c2c34b75ca791c3b9f20070b8cecbd8f50c6264dd2e2`.
+The archive's objects directly reference `__isoc23_strtol`, `__isoc23_strtoll`,
+`__isoc23_strtoull`, and libstdc++ `_M_replace_cold`; the packaging regression check rejects
+those symbols and any ABI version above the Ubuntu 22.04 ceilings before catalog construction.
+
+The official archive also contains `libonnxruntime_providers_shared.so`, but the CPU loader has no
+`DT_NEEDED` dependency on it and Procyon enables no plugin execution provider. It is therefore not
+shipped. The isolated production smoke must load the exact packaged worker with only the cataloged
+ONNX and Zvec runtime bytes, proving that no omitted provider or build-cache library is required.
+
+Rejected alternatives were: moving x86-64 to Ubuntu 24.04, which hides the supported baseline;
+symbol shims; an environment-only host-library override; ONNX Runtime 1.27, an unnecessary native
+downgrade; a broad Cargo upgrade without evidence that it changes the incompatible native input;
+and a costly source build when Microsoft publishes a matching, checksum-addressable,
+redistributable CPU loader.
 
 `pnpm run semantic:qualification:check` statically verifies that manual dispatch cannot reach a
 GitHub Release upload, Homebrew push, or Chocolatey publication. The audit found and closed

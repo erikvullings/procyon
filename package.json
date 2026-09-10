@@ -19,6 +19,7 @@
     "semantic:qualification:check": "node scripts/check-semantic-qualification-workflow.mjs",
     "semantic:model:fetch": "node scripts/fetch-semantic-model.mjs",
     "semantic:model:verify": "node scripts/verify-semantic-model.mjs",
+    "semantic:onnx:prepare": "node scripts/onnx-runtime-qualification.mjs prepare",
     "semantic:zvec:prepare": "node scripts/zvec-runtime-qualification.mjs prepare",
     "test": "pnpm run test:rust && pnpm run test:frontend && pnpm run test:scripts",
     "test:rust": "cargo nextest run --workspace && cargo test --doc --workspace",

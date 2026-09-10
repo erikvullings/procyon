@@ -50,3 +50,11 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   `docs/semantic-release-qualification.md` as the operator record and made release publication
   fail closed behind the protected `SEMANTIC_RELEASE_QUALIFIED == 'true'` repository variable.
   Base desktop releases continue without a production semantic catalog while this task is blocked.
+- 2026-09-10 Copilot: The Linux x86-64 Ubuntu 22.04 production-link blocker found during task 0218
+  was traced to pyke's ONNX Runtime 1.28.0 static archive, not Zvec. The replacement is Microsoft's
+  official matching shared CPU loader, pinned by release asset, archive, source revision, loader,
+  license, and third-party-notice digests. Packaging rejects native inputs above Ubuntu 22.04's
+  glibc/libstdc++/CXXABI ceilings and installs the loader only as a separate optional semantic
+  component. This closes one production-payload construction gap only. The task remains blocked
+  and **NO-GO** until the exact production evaluation, installed lifecycle, accessibility,
+  privacy, and failure-mode criteria above all pass.

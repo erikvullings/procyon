@@ -6,6 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 import { fetchMultilingualModel } from './fetch-semantic-model.mjs';
 import {
+  ONNX_RUNTIME_COMPONENT_ID,
+  onnxRuntimeTarget,
+  preparePinnedOnnxRuntime,
+  writeOnnxRuntimeQualification,
+} from './onnx-runtime-qualification.mjs';
+import {
   nativeLibraryNames,
   preparePinnedZvecRuntime,
   verifyMacDeveloperIdSignature,
@@ -130,15 +136,15 @@ export function parseProductionBundleArguments(args) {
   return values;
 }
 
-function smokeExecutable(executable, runtime) {
+function smokeExecutable(executable, runtimeDirectories) {
   const environment = { ...process.env };
-  const runtimeDirectory = path.dirname(runtime);
+  const runtimePath = runtimeDirectories.join(path.delimiter);
   if (process.platform === 'darwin') {
-    environment.DYLD_LIBRARY_PATH = runtimeDirectory;
+    environment.DYLD_LIBRARY_PATH = runtimePath;
   } else if (process.platform === 'win32') {
-    environment.PATH = `${runtimeDirectory}${path.delimiter}${environment.PATH ?? ''}`;
+    environment.PATH = `${runtimePath}${path.delimiter}${environment.PATH ?? ''}`;
   } else {
-    environment.LD_LIBRARY_PATH = runtimeDirectory;
+    environment.LD_LIBRARY_PATH = runtimePath;
   }
   const result = spawnSync(executable, ['--release-smoke-check'], {
     cwd: repositoryRoot,
@@ -160,19 +166,38 @@ function artifactByComponent(bundle, componentId) {
   return path.join(bundle, 'artifacts', artifact.id);
 }
 
-function smokePackagedExecutableOffline(bundle, target, sourceRuntimeDirectory) {
+function optionalArtifactByComponent(bundle, componentId) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'catalog-input.json'), 'utf8'));
+  const artifact = manifest.catalog.artifacts.find(
+    (candidate) => candidate.component_id === componentId,
+  );
+  return artifact ? path.join(bundle, 'artifacts', artifact.id) : undefined;
+}
+
+function smokePackagedExecutableOffline(bundle, target, sourceRuntimeDirectories, onnxDescriptor) {
   const worker = artifactByComponent(bundle, 'procyon.semantic.worker');
   const runtime = artifactByComponent(bundle, 'procyon.semantic.zvec-runtime');
   const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'procyon-zvec-runtime-'));
   const isolatedRuntime = path.join(isolated, nativeLibraryNames(process.platform)[0]);
-  const hiddenSource = `${sourceRuntimeDirectory}.offline-smoke-hidden`;
   fs.copyFileSync(runtime, isolatedRuntime);
-  fs.rmSync(hiddenSource, { recursive: true, force: true });
-  fs.renameSync(sourceRuntimeDirectory, hiddenSource);
+  if (onnxDescriptor) {
+    const onnxRuntime = optionalArtifactByComponent(bundle, ONNX_RUNTIME_COMPONENT_ID);
+    if (!onnxRuntime) throw new Error('Linux x86-64 production bundle has no ONNX Runtime');
+    fs.copyFileSync(onnxRuntime, path.join(isolated, onnxDescriptor.loader.name));
+  }
+  const hiddenSources = sourceRuntimeDirectories.map(
+    (directory) => `${directory}.offline-smoke-hidden`,
+  );
+  for (let index = 0; index < sourceRuntimeDirectories.length; index += 1) {
+    fs.rmSync(hiddenSources[index], { recursive: true, force: true });
+    fs.renameSync(sourceRuntimeDirectories[index], hiddenSources[index]);
+  }
   try {
-    smokeExecutable(worker, isolatedRuntime);
+    smokeExecutable(worker, [isolated]);
   } finally {
-    fs.renameSync(hiddenSource, sourceRuntimeDirectory);
+    for (let index = sourceRuntimeDirectories.length - 1; index >= 0; index -= 1) {
+      fs.renameSync(hiddenSources[index], sourceRuntimeDirectories[index]);
+    }
     fs.rmSync(isolated, { recursive: true, force: true });
   }
   if (target.rustTarget !== zvecRuntimeTarget().rustTarget) {
@@ -191,6 +216,13 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     runtimeTarget,
     path.join(cargoTarget, 'semantic-zvec-runtime-cache'),
   );
+  const onnxDescriptor = onnxRuntimeTarget();
+  const preparedOnnxRuntime = onnxDescriptor
+    ? await preparePinnedOnnxRuntime(
+        onnxDescriptor,
+        path.join(cargoTarget, 'semantic-onnx-runtime-cache'),
+      )
+    : undefined;
   const modelCache = await fetchMultilingualModel(path.join(cargoTarget, 'semantic-model-cache'));
   run('rustup', ['target', 'add', target.rust]);
   run(
@@ -213,6 +245,13 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
         ...process.env,
         ZVEC_AUTO_BUILD: '0',
         ZVEC_LIB_DIR: preparedRuntime.directory,
+        ...(preparedOnnxRuntime
+          ? {
+              ORT_LIB_PATH: preparedOnnxRuntime.directory,
+              ORT_PREFER_DYNAMIC_LINK: '1',
+              ORT_SKIP_DOWNLOAD: '1',
+            }
+          : {}),
       },
     },
   );
@@ -226,9 +265,19 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
   fs.mkdirSync(runtimeDirectory, { recursive: true });
   const runtime = path.join(runtimeDirectory, runtimeTarget.loader.name);
   fs.copyFileSync(preparedRuntime.library, runtime);
+  const onnxRuntime = preparedOnnxRuntime
+    ? path.join(runtimeDirectory, onnxDescriptor.loader.sourceName)
+    : undefined;
+  if (onnxRuntime) {
+    fs.copyFileSync(preparedOnnxRuntime.library, onnxRuntime);
+    fs.copyFileSync(
+      preparedOnnxRuntime.library,
+      path.join(runtimeDirectory, onnxDescriptor.loader.name),
+    );
+  }
   const trust = applyPlatformSigning(target, executable, runtime);
   const dependencyEvidence = verifyRuntimeBinary(runtime, runtimeTarget);
-  smokeExecutable(executable, runtime);
+  smokeExecutable(executable, [runtimeDirectory]);
 
   run('cargo', [
     'run',
@@ -240,6 +289,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     '--',
     executable,
     runtime,
+    onnxRuntime ?? '-',
     modelCache,
     path.resolve(values.get('--output')),
     target.os,
@@ -250,7 +300,12 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     PRODUCTION_CHUNKER_IDENTITY,
   ]);
   const output = path.resolve(values.get('--output'));
-  smokePackagedExecutableOffline(output, runtimeTarget, preparedRuntime.directory);
+  smokePackagedExecutableOffline(
+    output,
+    runtimeTarget,
+    [preparedRuntime.directory, ...(preparedOnnxRuntime ? [preparedOnnxRuntime.directory] : [])],
+    onnxDescriptor,
+  );
   writeZvecRuntimeQualification({
     bundle: output,
     descriptor: runtimeTarget,
@@ -260,6 +315,15 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     signingStatus: trust.signingStatus,
     notarizationStatus: trust.notarizationStatus,
   });
+  if (onnxDescriptor && preparedOnnxRuntime) {
+    writeOnnxRuntimeQualification({
+      bundle: output,
+      descriptor: onnxDescriptor,
+      procyonRevision: sourceIdentity.revision,
+      workingTreeStatus: sourceIdentity.workingTree,
+      dependencyEvidence: preparedOnnxRuntime.dependencyEvidence,
+    });
+  }
   return output;
 }
 

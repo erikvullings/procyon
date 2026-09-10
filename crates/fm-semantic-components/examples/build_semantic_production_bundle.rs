@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! build_semantic_production_bundle \
-//!   <worker> <native-runtime> <model-cache> <output> \
+//!   <worker> <zvec-runtime> <onnx-runtime-or-dash> <model-cache> <output> \
 //!   <target-os> <target-arch> <release-base-url> \
 //!   <procyon-source-revision> <converter-identity> <chunker-identity>
 //! ```
@@ -31,6 +31,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut arguments,
         "native Zvec runtime library path",
     )?);
+    let onnx_runtime_library =
+        optional_path(required(&mut arguments, "ONNX Runtime library path or -")?);
     let model_cache_directory =
         PathBuf::from(required(&mut arguments, "verified model cache directory")?);
     let output_directory = PathBuf::from(required(&mut arguments, "bundle output directory")?);
@@ -52,6 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         chunker_identity,
         worker_executable,
         zvec_runtime_library,
+        onnx_runtime_library,
         model_cache_directory,
         release_base_url,
         output_directory: output_directory.clone(),
@@ -60,6 +63,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     build_production_release_bundle(&spec)?;
     println!("{}", output_directory.display());
     Ok(())
+}
+
+fn optional_path(value: String) -> Option<PathBuf> {
+    (value != "-").then(|| PathBuf::from(value))
 }
 
 fn required(
