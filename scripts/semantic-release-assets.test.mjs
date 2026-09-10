@@ -27,6 +27,10 @@ test('semantic release collection deduplicates identical model payloads and name
       path.join(payloads, `semantic-payloads-${target}`, 'artifacts', `worker-${target}`),
       target,
     );
+    fs.writeFileSync(
+      path.join(payloads, `semantic-payloads-${target}`, 'zvec-runtime-qualification.json'),
+      JSON.stringify({ target }),
+    );
     fs.mkdirSync(path.join(catalogs, `semantic-catalog-${target}`), { recursive: true });
     fs.writeFileSync(path.join(catalogs, `semantic-catalog-${target}`, 'catalog.json'), target);
     fs.writeFileSync(path.join(catalogs, `semantic-catalog-${target}`, 'catalog.sig'), target);
@@ -42,6 +46,8 @@ test('semantic release collection deduplicates identical model payloads and name
     'shared-model',
     'worker-linux-x86_64',
     'worker-windows-x86_64',
+    'zvec-runtime-qualification-linux-x86_64.json',
+    'zvec-runtime-qualification-windows-x86_64.json',
   ]);
 });
 
@@ -59,6 +65,10 @@ test('semantic release collection rejects conflicting bytes under one immutable 
     fs.writeFileSync(
       path.join(payloads, `semantic-payloads-${target}`, 'artifacts', 'same-id'),
       bytes,
+    );
+    fs.writeFileSync(
+      path.join(payloads, `semantic-payloads-${target}`, 'zvec-runtime-qualification.json'),
+      JSON.stringify({ target }),
     );
   }
   fs.mkdirSync(catalogs);

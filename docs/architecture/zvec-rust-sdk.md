@@ -22,11 +22,18 @@ an absolute build-directory rpath on macOS/Linux. Procyon therefore keeps `zvec-
 
 Reproducible release builds must:
 
-1. Obtain the exact target artifact through the signed semantic-component catalog.
-2. Verify its pinned checksum before invoking Cargo.
-3. Set `ZVEC_AUTO_BUILD=0` and `ZVEC_LIB_DIR` to the verified artifact.
+1. Obtain the exact target archive from the Zvec Rust v0.7.0 GitHub release during the release
+   build, never from the worker at runtime.
+2. Verify the pinned release asset ID, byte length, SHA-256, exact archive member set, `TARGET`
+   marker, loader byte length/SHA-256, binary format, architecture, and dynamic dependencies.
+3. Set `ZVEC_AUTO_BUILD=0` and `ZVEC_LIB_DIR` to that verified build cache before invoking Cargo.
 4. Copy the dylib/SO/DLL beside the packaged worker and set a relocatable runtime search path.
-5. Include and, where applicable, sign the native library and required notices.
+5. Record the immutable Apache-2.0 license and native NOTICE provenance and, where applicable, sign
+   and notarize the native library.
+
+`scripts/zvec-runtime-qualification.mjs` is the executable source of those pins. Cargo's own
+`bundled` downloader is intentionally disabled for release builds because it does not verify a
+published archive checksum before linking.
 
 Do not rely on the SDK's source-build fallback for cross-compilation. It invokes host CMake without
 a target toolchain file, target compiler, or target architecture settings.
@@ -40,6 +47,35 @@ a target toolchain file, target compiler, or target architecture settings.
 | Windows x64 MSVC | yes | 8,839,865 B | 26,570,240 B | qualified |
 | Linux x64 glibc | yes | 13,331,422 B | 36,854,864 B | qualified |
 | Linux arm64 glibc | yes | 11,784,274 B | 32,470,624 B | qualified |
+
+The exact release inputs are:
+
+| Target | GitHub asset ID | Archive SHA-256 | Loader SHA-256 |
+| --- | ---: | --- | --- |
+| macOS arm64 | `530247359` | `59c41dcbaab69b9fbcf3ca0f1997f58f189a025657fd09a464dca199107cdeb2` | `c9e4bf9387ef7261a284de407ec7e48ac9a48309d8daaa4c5ed85a8fa5bb4763` |
+| Windows x86-64 | `530247358` | `d8fe5585ad83066038f6e60990fe6e69528637a58fffc5024ca211c187a9d49a` | `3745106b3beee6be2d50ca678b46d3f0289afb5136ff51e1d1ec037a27b29e4a` |
+| Linux x86-64 | `530247354` | `7e9adbeadc42c772665efed45112220aa895d3f7963fa03c016102f2f414c37f` | `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5` |
+| Linux arm64 | `530247355` | `0195a85f07370d7bcbf26f990bf794e31430e00224c8b9303d43ea677db6f77d` | `621af6ba8249ce44dc17fb05da6c51c723cc466843e7f46ee44a40bd7eee1169` |
+
+The upstream GitHub release API publishes the archive digests. Loader digests were independently
+calculated from those checksum-verified archives and are pinned by Procyon. The release archives
+contain `TARGET` and the loader; Windows additionally contains the required
+`zvec_c_api.lib` import library (110,340 B,
+`404d08fc55680a1bbc4351041826d5b643ebeb1767ad19931cb9e077aa24f7f7`).
+
+The allowed unbundled dependencies are system-owned:
+
+- macOS arm64: CoreFoundation, `/usr/lib/libc++.1.dylib`, `/usr/lib/libSystem.B.dylib`.
+- Windows x86-64: `dbghelp.dll`, `KERNEL32.dll`, `ole32.dll`, `RPCRT4.dll`, `SHELL32.dll`,
+  `SHLWAPI.dll`.
+- Linux x86-64: the x86-64 loader plus glibc, libdl, libm, libpthread, and librt.
+- Linux arm64: the AArch64 loader plus glibc and libm.
+
+Release packaging fails if `otool -L`, `dumpbin /dependents`, or `readelf -d` reports a different
+set. Native Zvec's immutable Apache NOTICE is
+`332b1a498b446fab1232b671c2ba74102fc563c198dc6f53980d1282075958ad` (5,020 B) and carries the
+Unicode Character Database and pyglass attributions. Both upstream Apache license files hash to
+`43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1` (11,356 B).
 
 The Rust README claims macOS x64 support, but its v0.7.0 release has no x64 macOS artifact and the
 target is commented out of the SDK's release and CI matrices. Procyon must not advertise the

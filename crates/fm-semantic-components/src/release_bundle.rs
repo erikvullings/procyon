@@ -39,7 +39,9 @@ const PRODUCTION_ZVEC_VERSION: &str = "0.7.0";
 /// Credential-free public source of the pinned Zvec native runtime.
 const PRODUCTION_ZVEC_SOURCE_URL: &str = "https://github.com/zvec-ai/zvec-rust";
 /// Immutable upstream revision recorded for the pinned Zvec release.
-const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "v0.7.0";
+const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "733e0bc82e02a0c63202bff594a7f4530520dfd0";
+/// Native Zvec revision pinned by the Rust SDK's v0.7.0 submodule.
+const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "8321c1314a559fd5f909e92498f43e5194bf9b99";
 /// Credential-free public source of the pinned multilingual-E5 model.
 const PRODUCTION_MODEL_SOURCE_URL: &str = "https://huggingface.co/intfloat/multilingual-e5-small";
 /// Upstream repository slug recorded in the packed model's provenance string.
@@ -177,6 +179,14 @@ pub enum ProductionBundleError {
     /// The Zvec native runtime library path does not exist or is not a file.
     #[error("production Zvec native runtime library is unavailable")]
     RuntimeUnavailable,
+    /// The runtime path does not use the target platform's loader filename.
+    #[error("production Zvec runtime filename is `{actual}`; expected `{expected}`")]
+    RuntimeFileNameMismatch {
+        /// Exact platform loader filename required by the worker.
+        expected: &'static str,
+        /// Supplied path's filename.
+        actual: String,
+    },
     /// A pinned model-cache member was absent from the supplied directory.
     #[error("production model cache is missing the pinned member `{name}`")]
     ModelCacheMemberMissing {
@@ -244,6 +254,19 @@ fn build_bundle(
     }
     if !spec.zvec_runtime_library.is_file() {
         return Err(ProductionBundleError::RuntimeUnavailable);
+    }
+    let expected_runtime_name =
+        runtime_library_name(&spec.target_operating_system, &spec.target_architecture)?;
+    let actual_runtime_name = spec
+        .zvec_runtime_library
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if actual_runtime_name != expected_runtime_name {
+        return Err(ProductionBundleError::RuntimeFileNameMismatch {
+            expected: expected_runtime_name,
+            actual: actual_runtime_name.to_owned(),
+        });
     }
     verify_model_cache(&spec.model_cache_directory, pinned_files)?;
 
@@ -371,7 +394,12 @@ fn build_bundle(
         distribution_location(&spec.release_base_url, &runtime_id)?,
         LicenseInfo::new(
             "Apache-2.0",
-            "Zvec native runtime, redistributed unmodified at the pinned upstream release.",
+            format!(
+                "Zvec Rust SDK and native runtime at pinned commits \
+                 {PRODUCTION_ZVEC_SOURCE_REVISION} and \
+                 {PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION}. Redistribution preserves the \
+                 native NOTICE attributions for the Unicode Character Database and pyglass."
+            ),
         )?,
         runtime_checksum,
         resources(runtime_bytes.len(), RUNTIME_RAM_BYTES)?,
@@ -473,6 +501,18 @@ fn supported_target(
         });
     }
     Ok(TargetTriple::new(operating_system, architecture)?)
+}
+
+fn runtime_library_name(
+    operating_system: &str,
+    architecture: &str,
+) -> Result<&'static str, ProductionBundleError> {
+    supported_target(operating_system, architecture)?;
+    Ok(match operating_system {
+        "macos" => "libzvec_c_api.dylib",
+        "windows" => "zvec_c_api.dll",
+        _ => "libzvec_c_api.so",
+    })
 }
 
 fn distribution_location(
@@ -823,10 +863,19 @@ mod tests {
             runtime_provenance.source().as_str(),
             PRODUCTION_ZVEC_SOURCE_URL
         );
-        assert_eq!(runtime_provenance.source_revision().as_str(), "v0.7.0");
+        assert_eq!(
+            runtime_provenance.source_revision().as_str(),
+            PRODUCTION_ZVEC_SOURCE_REVISION
+        );
         assert_eq!(
             runtime_artifact.version().to_string(),
             PRODUCTION_ZVEC_VERSION
+        );
+        assert!(
+            runtime_artifact
+                .license()
+                .notice()
+                .contains(PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION)
         );
 
         let model_provenance = provenance
@@ -909,8 +958,33 @@ mod tests {
             let mut spec = base_spec(directory.path());
             spec.target_operating_system = os.into();
             spec.target_architecture = arch.into();
+            let runtime = directory
+                .path()
+                .join(runtime_library_name(os, arch).unwrap());
+            fs::write(&runtime, b"production zvec runtime payload").unwrap();
+            spec.zvec_runtime_library = runtime;
             build(&spec);
         }
+    }
+
+    #[test]
+    fn rejects_a_runtime_without_the_platform_loader_filename() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut spec = base_spec(directory.path());
+        let alias = directory.path().join("libzvec_c_api.dll");
+        fs::write(&alias, b"production zvec runtime payload").unwrap();
+        spec.target_operating_system = "windows".into();
+        spec.target_architecture = "x86_64".into();
+        spec.zvec_runtime_library = alias;
+
+        let error = build_bundle(&spec, &FIXTURE_MODEL_FILES).unwrap_err();
+        assert!(matches!(
+            error,
+            ProductionBundleError::RuntimeFileNameMismatch {
+                expected: "zvec_c_api.dll",
+                actual,
+            } if actual == "libzvec_c_api.dll"
+        ));
     }
 
     #[test]

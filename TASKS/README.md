@@ -133,6 +133,8 @@ semantic components are not installed.
 - [x] 0200 Opt-in multi-query grounded Ask *(needs 0199 and its go decision; single-query remains
   the default and fallback; developer UI removed after the restored handoff showed this experiment
   was not the requested alternative)*
+- [x] 0218 Zvec native-runtime qualification preparation *(needs 0195; immutable upstream
+  runtime inputs and non-published qualification evidence for blocked task 0198)*
 
 ## Structured knowledge search
 

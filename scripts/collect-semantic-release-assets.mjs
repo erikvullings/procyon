@@ -16,7 +16,8 @@ export function collectSemanticReleaseAssets(payloadRoot, catalogRoot, output) {
     .sort((left, right) => left.name.localeCompare(right.name));
   const seen = new Map();
   for (const directory of payloadDirectories) {
-    const artifacts = path.join(payloadRoot, directory.name, 'artifacts');
+    const payload = path.join(payloadRoot, directory.name);
+    const artifacts = path.join(payload, 'artifacts');
     for (const name of fs.readdirSync(artifacts).sort()) {
       const source = path.join(artifacts, name);
       const checksum = digest(source);
@@ -29,6 +30,11 @@ export function collectSemanticReleaseAssets(payloadRoot, catalogRoot, output) {
         seen.set(name, checksum);
       }
     }
+    const target = directory.name.replace(/^semantic-payloads-/u, '');
+    fs.copyFileSync(
+      path.join(payload, 'zvec-runtime-qualification.json'),
+      path.join(output, `zvec-runtime-qualification-${target}.json`),
+    );
   }
 
   const catalogDirectories = fs

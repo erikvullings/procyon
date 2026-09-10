@@ -1,6 +1,12 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+import {
+  preparePinnedZvecRuntime,
+  verifyZvecRuntimeQualification,
+} from './zvec-runtime-qualification.mjs';
 
 const bundle = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
@@ -22,10 +28,42 @@ if (!runtime) throw new Error('production catalog has no Zvec runtime artifact')
 const modelPack = path.join(bundle, 'artifacts', model.id);
 const workerExecutable = path.join(bundle, 'artifacts', worker.id);
 const nativeRuntime = path.join(bundle, 'artifacts', runtime.id);
+const qualification = verifyZvecRuntimeQualification(bundle, {
+  requireProductionTrust: process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1',
+});
+const cargoTarget = JSON.parse(
+  execFileSync('cargo', ['metadata', '--format-version=1', '--no-deps'], {
+    encoding: 'utf8',
+  }),
+).target_directory;
+const preparedRuntime = await preparePinnedZvecRuntime(
+  qualification.descriptor,
+  path.join(cargoTarget, 'semantic-zvec-runtime-cache'),
+);
+const runtimeLoaderEnvironment =
+  process.platform === 'darwin'
+    ? { DYLD_LIBRARY_PATH: preparedRuntime.directory }
+    : process.platform === 'win32'
+      ? { PATH: `${preparedRuntime.directory}${path.delimiter}${process.env.PATH ?? ''}` }
+      : { LD_LIBRARY_PATH: preparedRuntime.directory };
+const isolatedRuntimeDirectory = fs.mkdtempSync(
+  path.join(tmpdir(), 'procyon-packaged-zvec-runtime-'),
+);
+const isolatedNativeRuntime = path.join(
+  isolatedRuntimeDirectory,
+  qualification.report.loader.fileName,
+);
+fs.copyFileSync(nativeRuntime, isolatedNativeRuntime);
 
 function run(args, environment = {}) {
   const result = spawnSync('cargo', args, {
-    env: { ...process.env, ...environment },
+    env: {
+      ...process.env,
+      ZVEC_AUTO_BUILD: '0',
+      ZVEC_LIB_DIR: preparedRuntime.directory,
+      ...runtimeLoaderEnvironment,
+      ...environment,
+    },
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
@@ -34,39 +72,43 @@ function run(args, environment = {}) {
   }
 }
 
-run(
-  [
-    'test',
-    '--locked',
-    '-p',
-    'fm-semantic-worker',
-    '--features',
-    'semantic-runtime',
-    '--test',
-    'ipc',
-    'packaged_production_worker_starts_negotiates_and_shuts_down',
-    '--',
-    '--ignored',
-  ],
-  {
-    PROCYON_SEMANTIC_PRODUCTION_WORKER: workerExecutable,
-    PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME: nativeRuntime,
-    PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack,
-  },
-);
-run(
-  [
-    'test',
-    '--locked',
-    '-p',
-    'fm-semantic-worker',
-    '--features',
-    'semantic-runtime',
-    '--lib',
-    'production_model_pack_activates_offline',
-    '--',
-    '--ignored',
-  ],
-  { PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack },
-);
-run(['test', '--locked', '-p', 'fm-semantic-components']);
+try {
+  run(
+    [
+      'test',
+      '--locked',
+      '-p',
+      'fm-semantic-worker',
+      '--features',
+      'semantic-runtime',
+      '--test',
+      'ipc',
+      'packaged_production_worker_starts_negotiates_and_shuts_down',
+      '--',
+      '--ignored',
+    ],
+    {
+      PROCYON_SEMANTIC_PRODUCTION_WORKER: workerExecutable,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME: isolatedNativeRuntime,
+      PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack,
+    },
+  );
+  run(
+    [
+      'test',
+      '--locked',
+      '-p',
+      'fm-semantic-worker',
+      '--features',
+      'semantic-runtime',
+      '--lib',
+      'production_model_pack_activates_offline',
+      '--',
+      '--ignored',
+    ],
+    { PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack },
+  );
+  run(['test', '--locked', '-p', 'fm-semantic-components']);
+} finally {
+  fs.rmSync(isolatedRuntimeDirectory, { recursive: true, force: true });
+}
