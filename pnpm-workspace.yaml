@@ -6,7 +6,7 @@ overrides:
   '@codemirror/view': 6.43.9
 minimumReleaseAgeExclude:
   - jsdom@30.0.1
-  - mithril-materialized@3.17.7 || 3.17.9
+  - mithril-materialized@3.17.7 || 3.17.9 || 4.0.0
   - '@biomejs/biome@2.5.10'
   - '@biomejs/cli-darwin-arm64@2.5.10'
   - '@biomejs/cli-darwin-x64@2.5.10'

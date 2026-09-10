@@ -28,6 +28,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     sizeFormat: 'binary',
     showHiddenFiles: false,
     confirmPermanentDelete: true,
+    confirmFileOperations: true,
     defaultConflictPolicy: 'ask',
     operationConcurrency: 2,
     defaultPaneLayout: 'dual',

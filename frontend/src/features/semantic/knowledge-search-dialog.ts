@@ -1190,6 +1190,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
     const indexedTitle = row.sectionPath.join(' / ');
+    const relevanceStrength = row.finalRank <= 3 ? 'high' : row.finalRank <= 10 ? 'medium' : 'low';
+    const relevanceKey =
+      relevanceStrength === 'high'
+        ? 'resultRelevanceHigh'
+        : relevanceStrength === 'medium'
+          ? 'resultRelevanceMedium'
+          : 'resultRelevanceLow';
+    const relevance = t('knowledgeSearch', relevanceKey);
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
@@ -1202,23 +1210,33 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      indexedTitle === '' && position === ''
-        ? undefined
-        : m('.fm-knowledge-section-heading', [
-            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
-            position === ''
-              ? undefined
-              : m(
-                  'button.fm-knowledge-page-link',
-                  {
-                    type: 'button',
-                    disabled: !openable,
-                    'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
-                    onclick: () => void openSource(attrs, row),
-                  },
-                  position,
-                ),
-          ]),
+      m('.fm-knowledge-section-heading', [
+        indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
+        m('.fm-knowledge-section-metadata', [
+          position === ''
+            ? undefined
+            : m(
+                'button.fm-knowledge-page-link',
+                {
+                  type: 'button',
+                  disabled: !openable,
+                  'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
+                  onclick: () => void openSource(attrs, row),
+                },
+                position,
+              ),
+          tooltip(
+            relevance,
+            m('span.fm-knowledge-relevance-indicator', {
+              role: 'img',
+              tabindex: 0,
+              'aria-label': relevance,
+              'data-strength': relevanceStrength,
+            }),
+            { 'data-tooltip-placement': 'above' },
+          ),
+        ]),
+      ]),
       m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
       states.length === 0
         ? undefined

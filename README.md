@@ -212,12 +212,8 @@ Download packaged builds from [GitHub Releases](https://github.com/erikvullings/
 macOS and x86_64 Linux users can also install through Homebrew:
 
 ```bash
-brew tap erikvullings/tap
-brew install --cask procyon
+brew install --cask erikvullings/tap/procyon
 ```
-
-Homebrew 6.0 and later may require `brew trust erikvullings/tap` before installing from a
-third-party tap.
 
 Windows packages are published to Chocolatey after community moderation:
 

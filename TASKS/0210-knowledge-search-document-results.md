@@ -28,7 +28,10 @@ valid result therefore reports that the source could not be opened.
 - Always group evidence by document. Rank documents by their best search relevance, sort each
   document's evidence by source position, and render the retained content as sanitized Markdown.
 - Make the document title the source-opening control and remove per-chunk subject/need/rank
-  diagnostic lines from the default result surface.
+  diagnostic lines from the default result surface. Show each section's fused relevance as a
+  rank-coloured indicator beside its page or structural source reference, with a localized
+  qualitative label available on hover and keyboard focus instead of exposing the implementation-
+  specific reciprocal-rank-fusion score.
 - Resolve host-wide whole-library evidence through any currently authorized retained workspace
   scope while keeping server callers restricted to their authenticated workspace.
 - Refresh displayed retrieval capabilities from each completed search so stale startup capability

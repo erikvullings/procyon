@@ -772,7 +772,8 @@ const ACTION_KEYDOWN_ROUTES = [
                 ? context.getOpsController().duplicate(currentClipboard.locations)
                 : context.getOpsController().copy(currentClipboard.locations, active.location)
           )
-            .then(() => {
+            .then((operation) => {
+              if (operation === undefined) return;
               if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
               context.redraw();
             })

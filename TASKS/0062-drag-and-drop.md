@@ -91,3 +91,8 @@ from Finder/Explorer) and §33 step 10.
   Procyon. In-app pointer drags retain move-by-default behavior, show an explicit `-`/`+` operation
   badge, and refresh that feedback immediately on modifier keydown/keyup without requiring mouse
   movement. Interactive Finder/Explorer verification remains outstanding.
+- 2026-09-10 Copilot: Kept the ordinary arrow cursor for valid in-app move/copy drags. The previous
+  CSS `copy` cursor made macOS add its native green copy badge on top of Procyon's blue operation
+  badge; using the default cursor removes that duplicate while preserving Procyon's single `+`/`-`
+  indicator consistently across macOS, Windows, and Linux. Invalid targets retain the platform
+  `not-allowed` cursor so dragging onto the current folder still has explicit no-drop feedback.

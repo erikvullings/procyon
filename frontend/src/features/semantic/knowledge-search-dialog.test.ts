@@ -73,7 +73,7 @@ function button(label: string): HTMLButtonElement {
 /** Waits until the dialog finished loading its reported capabilities and roots. */
 async function ready(): Promise<void> {
   await vi.waitFor(() => {
-    expect(root.textContent).not.toContain('Loading knowledge search…');
+    expect(root.textContent).not.toContain('Loading semantic search…');
     expect(root.querySelector('.fm-knowledge-advanced')).not.toBeNull();
   });
   m.redraw.sync();
@@ -322,7 +322,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await search();
 
     expect(root.querySelector('.fm-knowledge-results-section')?.getAttribute('aria-label')).toBe(
-      'Knowledge search results',
+      'Semantic search results',
     );
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
     expect(root.querySelector('.fm-knowledge-document-list')).not.toBeNull();
@@ -351,6 +351,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             ...first,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: '## Su-Field model\n\nA **substance-field** section.',
+            fusedScore: 0.023456,
             sectionPath: ['Standards', 'Su-Field synthesis'],
             provenance:
               '{"kind":"exact","value":{"kind":"pdfBlock","page_number":167,"block_index":3}}',
@@ -361,6 +362,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             recordId: `${first.recordId}-page-168`,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: 'A continuation without an indexed heading.',
+            fusedScore: 0.012345,
+            finalRank: 8,
             sectionPath: [],
             provenance:
               '{"kind":"span","value":{"first":{"kind":"pdfBlock","page_number":168,"block_index":0},"last":{"kind":"pdfBlock","page_number":168,"block_index":2}}}',
@@ -387,6 +390,19 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const pages = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-page-link');
     expect(pages[0]?.textContent).toBe('Page 167');
     expect(pages[1]?.textContent).toBe('Page 168');
+    const relevance = [...root.querySelectorAll<HTMLElement>('.fm-knowledge-relevance-indicator')];
+    expect(relevance.map((indicator) => indicator.getAttribute('aria-label'))).toEqual([
+      'High relevance',
+      'Medium relevance',
+    ]);
+    expect(relevance.map((indicator) => indicator.tabIndex)).toEqual([0, 0]);
+    expect(relevance.map((indicator) => indicator.parentElement?.dataset.tooltip)).toEqual([
+      'High relevance',
+      'Medium relevance',
+    ]);
+    expect(relevance.map((indicator) => indicator.dataset.strength)).toEqual(['high', 'medium']);
+    expect(root.textContent).not.toContain('0.023');
+    expect(root.textContent).not.toContain('0.012');
     expect(root.textContent).not.toContain('Matching section');
     expect(root.querySelector('.fm-knowledge-result-markdown h2')?.textContent).toBe(
       'Su-Field model',
@@ -497,7 +513,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
-        'Knowledge search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
+        'Semantic search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
       ),
     );
   });
@@ -527,7 +543,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
-        'Knowledge search is not available right now.',
+        'Semantic search is not available right now.',
       ),
     );
   });

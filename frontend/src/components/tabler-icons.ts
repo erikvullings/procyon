@@ -85,6 +85,28 @@ export const folderOpenIcon = trustedStrokeIcon(
   'fm-icon-folder-open',
 );
 
+/** Directory hierarchy — include nested directories in a search. */
+export const directoryTreeIcon = (attrs?: IconAttrs): m.Children => {
+  const size = attrs?.size ?? 18;
+  return m(
+    `svg.fm-icon.fm-icon-tabler.fm-icon-directory-tree${
+      attrs?.className === undefined ? '' : `.${attrs.className}`
+    }`,
+    {
+      'aria-hidden': 'true',
+      viewBox: '1.5 0.5 12 15',
+      width: size,
+      height: size,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-linecap': 'square',
+    },
+    m('path', {
+      d: 'M2 1v11h4m-4 -7h4m0 -2h2l2 2h3v3h-7Zm0 7h2l2 2h3v3h-7Z',
+    }),
+  );
+};
+
 /** "columns" — open a saved search in the opposite pane. */
 export const columnsIcon = trustedStrokeIcon(
   '<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><path d="M12 4l0 16" />',

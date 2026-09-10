@@ -1,4 +1,9 @@
 import m, { type FactoryComponent } from 'mithril';
+import {
+  type Command,
+  Dialog,
+  CommandPalette as MaterializedCommandPaletteFactory,
+} from 'mithril-materialized';
 
 import { t } from '../../i18n';
 import type { ActionDescriptor, ActionInvocationContext, KeyChord } from '../../models';
@@ -110,205 +115,161 @@ function schemaProperties(schema: unknown): readonly [string, ParameterProperty]
     : [];
 }
 
-/** Custom keyboard-first command palette; intentionally not a Material dialog. */
+const MaterializedCommandPalette = MaterializedCommandPaletteFactory<string>();
+
+/** Adapts Procyon's action registry to mithril-materialized's accessible command palette. */
 export const CommandPalette: FactoryComponent<CommandPaletteAttrs> = () => {
-  let query = '';
-  let activeIndex = 0;
-  let previousFocus: HTMLElement | undefined;
   let parameterAction: ActionDescriptor | undefined;
-  let parameterValues: Record<string, string | boolean> = {};
+  let parameterValues: Record<string, string | number | boolean> = {};
+  let previousFocus: HTMLElement | undefined;
 
-  function close(attrs: CommandPaletteAttrs): void {
-    query = '';
-    activeIndex = 0;
+  const beginParameterEntry = (action: ActionDescriptor): void => {
+    parameterAction = action;
+    parameterValues = Object.fromEntries(
+      schemaProperties(action.parameterSchema).flatMap(([name, property]) =>
+        property.default === undefined ? [] : [[name, property.default] as const],
+      ),
+    );
+  };
+
+  const close = (attrs: CommandPaletteAttrs): void => {
+    const focusTarget = previousFocus;
     parameterAction = undefined;
-    attrs.onClose();
-    previousFocus?.focus();
+    parameterValues = {};
     previousFocus = undefined;
-  }
+    attrs.onClose();
+    focusTarget?.focus();
+  };
 
-  function invoke(attrs: CommandPaletteAttrs, item: PaletteAction): void {
-    if (!item.available) return;
-    if (schemaProperties(item.action.parameterSchema).length > 0) {
-      parameterAction = item.action;
-      parameterValues = {};
-      return;
-    }
-    attrs.onInvoke(item.action);
+  const submitParameters = (attrs: CommandPaletteAttrs): void => {
+    const action = parameterAction;
+    if (action === undefined) return;
+    const parameters = Object.fromEntries(
+      schemaProperties(action.parameterSchema).map(([name, property]) => [
+        name,
+        property.type === 'boolean'
+          ? parameterValues[name] === true
+          : (parameterValues[name] ?? ''),
+      ]),
+    );
+    attrs.onInvoke(action, parameters);
     close(attrs);
-  }
+  };
 
   return {
-    onupdate: ({ attrs }) => {
-      if (attrs.open && previousFocus === undefined)
-        previousFocus = document.activeElement as HTMLElement;
-    },
     view: ({ attrs }) => {
-      if (!attrs.open) return undefined;
-      const items = filterPaletteActions(
+      if (attrs.open && previousFocus === undefined) {
+        previousFocus = document.activeElement as HTMLElement;
+      }
+      const paletteActions = filterPaletteActions(
         attrs.actions,
-        query,
+        '',
         attrs.recency,
         attrs.availabilityContext,
       );
-      activeIndex = Math.min(activeIndex, Math.max(items.length - 1, 0));
-      const active = items[activeIndex];
+      const commands: readonly Command<string>[] = paletteActions.map((item) => ({
+        id: item.action.id,
+        label: item.action.title,
+        description:
+          item.unavailableReason === undefined
+            ? item.action.id
+            : `${item.action.id} · ${item.unavailableReason}`,
+        group: item.action.category,
+        shortcut: item.action.defaultShortcuts.map(formatShortcut).join(', '),
+        disabled: !item.available,
+        execute: () => {
+          if (schemaProperties(item.action.parameterSchema).length > 0) {
+            beginParameterEntry(item.action);
+          } else {
+            attrs.onInvoke(item.action);
+          }
+        },
+      }));
+      const commandsById = new Map(commands.map((command) => [command.id, command]));
       const parameterFields =
         parameterAction === undefined ? [] : schemaProperties(parameterAction.parameterSchema);
-      return m('.fm-command-palette-backdrop', { onclick: () => close(attrs) }, [
-        m(
-          '.fm-command-palette',
-          {
-            role: 'dialog',
-            'aria-modal': 'true',
-            'aria-label': t('shell', 'commandPalette'),
-            onclick: (event: MouseEvent) => event.stopPropagation(),
-            onkeydown: (event: KeyboardEvent) => {
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                close(attrs);
-                return;
-              }
-              if (event.key === 'Tab') {
-                event.preventDefault();
-                const palette = event.currentTarget as HTMLElement;
-                const focusable = [
-                  ...palette.querySelectorAll<HTMLElement>(
-                    'input:not([disabled]), button:not([disabled])',
-                  ),
-                ];
-                const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
-                const nextIndex = event.shiftKey
-                  ? (currentIndex - 1 + focusable.length) % focusable.length
-                  : (currentIndex + 1) % focusable.length;
-                focusable[nextIndex]?.focus();
-                return;
-              }
-              if (parameterAction !== undefined) return;
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                activeIndex = Math.min(activeIndex + 1, Math.max(items.length - 1, 0));
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault();
-                activeIndex = Math.max(activeIndex - 1, 0);
-              } else if (event.key === 'Enter' && active !== undefined) {
-                event.preventDefault();
-                invoke(attrs, active);
-              }
-            },
-          },
-          [
-            parameterAction === undefined
-              ? [
-                  m('input.fm-command-palette-input', {
-                    type: 'text',
-                    autofocus: true,
-                    role: 'combobox',
-                    'aria-autocomplete': 'list',
-                    'aria-controls': 'command-palette-results',
-                    'aria-expanded': 'true',
-                    'aria-activedescendant':
-                      active === undefined ? undefined : `command-palette-option-${activeIndex}`,
-                    placeholder: t('commandPalette', 'placeholder'),
-                    value: query,
-                    // autofocus alone is unreliable once the trigger button already holds focus.
-                    oncreate: ({ dom }) => (dom as HTMLInputElement).focus(),
-                    oninput: (event: InputEvent) => {
-                      query = (event.currentTarget as HTMLInputElement).value;
-                      activeIndex = 0;
-                    },
-                  }),
-                  m(
-                    '.fm-command-palette-status',
-                    { role: 'status', 'aria-live': 'polite' },
-                    t('commandPalette', 'commandsCount', items.length),
-                  ),
-                  m(
-                    'ul#command-palette-results.fm-command-palette-results',
-                    { role: 'listbox' },
-                    items.map((item, index) =>
-                      m(
-                        'li',
-                        {
-                          id: `command-palette-option-${index}`,
-                          role: 'option',
-                          'aria-selected': index === activeIndex ? 'true' : 'false',
-                          'aria-disabled': item.available ? undefined : 'true',
-                          class: index === activeIndex ? 'fm-command-palette-active' : undefined,
-                          onclick: () => invoke(attrs, item),
-                        },
-                        [
-                          m('span', [
-                            m('strong', item.action.title),
-                            m('small', `${item.action.category} · ${item.action.id}`),
-                          ]),
-                          m('span', [
-                            m('kbd', item.action.defaultShortcuts.map(formatShortcut).join(', ')),
-                            item.unavailableReason === undefined
-                              ? undefined
-                              : m('small.fm-command-palette-unavailable', item.unavailableReason),
-                          ]),
-                        ],
-                      ),
-                    ),
-                  ),
-                ]
-              : m(
-                  'form.fm-command-palette-parameters',
-                  {
-                    onsubmit: (event: SubmitEvent) => {
-                      event.preventDefault();
-                      const action = parameterAction;
-                      if (action === undefined) return;
-                      const parameters = Object.fromEntries(
-                        parameterFields.map(([name, property]) => [
-                          name,
-                          property.type === 'boolean'
-                            ? parameterValues[name] === true
-                            : (parameterValues[name] ?? ''),
-                        ]),
-                      );
-                      attrs.onInvoke(action, parameters);
-                      close(attrs);
-                    },
+
+      return [
+        attrs.open && parameterAction === undefined
+          ? m(MaterializedCommandPalette, {
+              className: 'fm-command-palette',
+              title: t('shell', 'commandPalette'),
+              placeholder: t('commandPalette', 'placeholder'),
+              emptyText: t('commandPalette', 'commandsCount', 0),
+              noResultsText: t('commandPalette', 'commandsCount', 0),
+              isOpen: true,
+              commands,
+              filterCommands: (_commands, query) =>
+                filterPaletteActions(
+                  attrs.actions,
+                  query,
+                  attrs.recency,
+                  attrs.availabilityContext,
+                ).flatMap(({ action }) => {
+                  const command = commandsById.get(action.id);
+                  return command === undefined ? [] : [command];
+                }),
+              onClose: (reason) => {
+                if (reason !== 'execution' || parameterAction === undefined) close(attrs);
+              },
+            })
+          : undefined,
+        parameterAction === undefined
+          ? undefined
+          : m(Dialog, {
+              className: 'fm-command-palette-parameters',
+              title: parameterAction.title,
+              isOpen: attrs.open,
+              showCloseButton: false,
+              closeOnButtonClick: false,
+              initialFocus: '.fm-command-palette-parameter-form input',
+              onToggle: (open: boolean) => {
+                if (!open) close(attrs);
+              },
+              content: m(
+                'form.fm-command-palette-parameter-form',
+                {
+                  onsubmit: (event: SubmitEvent) => {
+                    event.preventDefault();
+                    submitParameters(attrs);
                   },
-                  [
-                    m('h2', parameterAction.title),
-                    ...parameterFields.map(([name, property]) =>
-                      m('label', [
-                        property.title ?? name,
-                        m('input', {
-                          type:
-                            property.type === 'boolean'
-                              ? 'checkbox'
-                              : property.type === 'number' || property.type === 'integer'
-                                ? 'number'
-                                : 'text',
-                          required: (
-                            parameterAction?.parameterSchema as ParameterSchema | undefined
-                          )?.required?.includes(name),
-                          checked:
-                            property.type === 'boolean'
-                              ? parameterValues[name] === true
-                              : undefined,
-                          value:
-                            property.type === 'boolean'
-                              ? undefined
-                              : (parameterValues[name] ?? property.default ?? ''),
-                          oninput: (event: InputEvent) => {
-                            const input = event.currentTarget as HTMLInputElement;
-                            parameterValues[name] =
-                              property.type === 'boolean' ? input.checked : input.value;
-                          },
-                        }),
-                      ]),
-                    ),
-                    m('button', { type: 'submit' }, t('commandPalette', 'run')),
-                  ],
+                },
+                parameterFields.map(([name, property]) =>
+                  m('label', [
+                    property.title ?? name,
+                    m('input', {
+                      type:
+                        property.type === 'boolean'
+                          ? 'checkbox'
+                          : property.type === 'number' || property.type === 'integer'
+                            ? 'number'
+                            : 'text',
+                      required: (
+                        parameterAction?.parameterSchema as ParameterSchema | undefined
+                      )?.required?.includes(name),
+                      checked:
+                        property.type === 'boolean' ? parameterValues[name] === true : undefined,
+                      value:
+                        property.type === 'boolean' ? undefined : (parameterValues[name] ?? ''),
+                      oninput: (event: InputEvent) => {
+                        const input = event.currentTarget as HTMLInputElement;
+                        parameterValues[name] =
+                          property.type === 'boolean' ? input.checked : input.value;
+                      },
+                    }),
+                  ]),
                 ),
-          ],
-        ),
-      ]);
+              ),
+              secondaryAction: {
+                label: t('button', 'cancel'),
+                onclick: () => close(attrs),
+              },
+              primaryAction: {
+                label: t('commandPalette', 'run'),
+                onclick: () => submitParameters(attrs),
+              },
+            }),
+      ];
     },
   };
 };

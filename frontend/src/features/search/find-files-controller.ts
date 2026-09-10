@@ -97,9 +97,10 @@ export function searchQueryFromParams(
     mode !== 'content' || params.contentQuery === undefined
       ? undefined
       : {
-          ...(existing?.content ?? { caseSensitive: false, wholeWord: false }),
           query: params.contentQuery,
           regex: params.contentRegex,
+          caseSensitive: params.contentCaseSensitive,
+          wholeWord: params.contentWholeWord,
         };
 
   return {
@@ -316,6 +317,8 @@ export function createFindFilesController(
           mode: saved.query.mode ?? (saved.query.content === undefined ? 'name' : 'content'),
           filenameQuery: name,
           contentRegex: saved.query.content?.regex ?? false,
+          contentCaseSensitive: saved.query.content?.caseSensitive ?? false,
+          contentWholeWord: saved.query.content?.wholeWord ?? false,
           recurse: saved.query.scope.recurse,
           entryKinds: saved.query.entryKinds,
           mimeTypes: saved.query.mimeTypes,

@@ -1,5 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, ModalPanel, PaginationControls, Select, toast } from 'mithril-materialized';
+import {
+  FlatButton,
+  ModalPanel,
+  PaginationControls,
+  Select,
+  Skeleton,
+  toast,
+} from 'mithril-materialized';
 import {
   closeIcon,
   copyIcon,
@@ -282,7 +289,10 @@ function metadataField(label: string, value: string, href?: string): m.Children 
 function renderMetadataPanel(metadata: FileViewerMetadata | 'loading' | undefined): m.Children {
   if (metadata === undefined) return undefined;
   if (metadata === 'loading') {
-    return m('.fm-file-viewer-metadata', m('span', t('viewer', 'loadingMetadata')));
+    return m('.fm-file-viewer-metadata', [
+      m('span', { role: 'status' }, t('viewer', 'loadingMetadata')),
+      m(Skeleton, { count: 3, className: 'fm-file-viewer-metadata-skeleton' }),
+    ]);
   }
   const fields: m.Children[] = [];
   if (metadata.kind === 'image') {
@@ -363,7 +373,10 @@ function renderGitHistorySection(
 ): m.Children {
   if (gitHistory === undefined) return undefined;
   if (gitHistory === 'loading') {
-    return m('.fm-file-viewer-git-history', m('span', t('viewer', 'loadingHistory')));
+    return m('.fm-file-viewer-git-history', [
+      m('span', { role: 'status' }, t('viewer', 'loadingHistory')),
+      m(Skeleton, { count: 2, className: 'fm-file-viewer-history-skeleton' }),
+    ]);
   }
   if (gitHistory.length === 0) return undefined;
   return m('.fm-file-viewer-git-history', [

@@ -53,3 +53,6 @@ application-wide settings below; it no longer restores workspace content itself.
   on macOS; Windows and Linux were compile/CI-contract tested but not run interactively.
 - 2026-08-30: Added `core.extension` to the authoritative and mock default-column lists so new
   settings show Ext by default. Existing saved column choices are preserved.
+- 2026-11-14: Added the schema-v7 `confirmFileOperations` setting, enabled by default and exposed in
+  the settings editor. Copy, move and trash use it for a lightweight frontend confirmation; the
+  existing permanent-delete and conflict-resolution flows remain separate.

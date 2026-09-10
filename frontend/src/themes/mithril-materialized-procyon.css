@@ -66,14 +66,50 @@
 }
 
 /*
- * mm's own `.input-field > label:not(.label-icon).active` rule matches this
- * selector's specificity (3 classes, 1 type) and would otherwise win on
- * source order for any populated/focused field, re-floating the label with
- * `translateY(-14px) scale(0.8)` on top of the static layout above and
- * making it overlap the input's own text.
+ * mm's own `.input-field > label:not(.label-icon).active` rule must be matched
+ * at full specificity; otherwise it re-floats populated/focused labels with a
+ * transform on top of the static layout above.
  */
-.fm-app-shell .input-field > label.active {
+.fm-app-shell .input-field > label:not(.label-icon).active {
   transform: none;
+}
+
+.fm-command-palette .mm-command-palette-search-icon {
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  font-size: 0;
+}
+
+.fm-command-palette .mm-command-palette-search-icon::before {
+  position: absolute;
+  top: 0.05rem;
+  left: 0.05rem;
+  box-sizing: border-box;
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  content: "";
+}
+
+.fm-command-palette .mm-command-palette-search-icon::after {
+  position: absolute;
+  right: 0.05rem;
+  bottom: 0.1rem;
+  width: 0.45rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  content: "";
+  transform: rotate(45deg);
+  transform-origin: right center;
+}
+
+.fm-command-palette .mm-command-palette-command kbd {
+  border: 1px solid var(--fm-border);
+  background: var(--fm-selection-inactive);
+  color: var(--fm-text);
 }
 
 .fm-app-shell .input-field input:not([type="checkbox"]),
@@ -107,6 +143,27 @@
 .fm-app-shell .select-wrapper input.select-dropdown:focus,
 .fm-app-shell select.browser-default:focus {
   outline: none;
+}
+
+/* Text-entry focus keeps the same neutral border instead of mixing browser,
+ * Materialized, and feature-specific blue rings. */
+.fm-app-shell input:not([type]):focus,
+.fm-app-shell input[type="text"]:focus,
+.fm-app-shell input[type="search"]:focus,
+.fm-app-shell input[type="email"]:focus,
+.fm-app-shell input[type="url"]:focus,
+.fm-app-shell input[type="tel"]:focus,
+.fm-app-shell input[type="password"]:focus,
+.fm-app-shell input[type="number"]:focus,
+.fm-app-shell input[type="date"]:focus,
+.fm-app-shell input[type="time"]:focus,
+.fm-app-shell input[type="datetime-local"]:focus,
+.fm-app-shell input[type="month"]:focus,
+.fm-app-shell input[type="week"]:focus,
+.fm-app-shell textarea:focus {
+  border-color: var(--fm-border);
+  outline: none;
+  box-shadow: none;
 }
 
 .fm-app-shell .input-field input:not([type="checkbox"]),
@@ -241,8 +298,8 @@
 /* ModalPanel supplies these values inline; keep the search dialog compact and chrome-like. */
 /* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel inline layout */
 .fm-app-shell .modal.fm-find-files-modal {
-  width: min(32rem, calc(100vw - 2rem));
-  max-width: min(32rem, calc(100vw - 2rem)) !important;
+  width: min(48rem, calc(100vw - 2rem));
+  max-width: min(48rem, calc(100vw - 2rem)) !important;
   border-radius: 2px !important;
   background: var(--fm-surface-elevated) !important;
 }
@@ -276,6 +333,13 @@
 }
 
 /* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel inline layout */
+
+.fm-app-shell[data-mm-preset="compact-minimal"] .fm-find-files-advanced input.browser-default {
+  min-height: var(--fm-row-height);
+  height: var(--fm-row-height);
+  margin: 0;
+  padding-block: 0;
+}
 
 .fm-app-shell .dropdown-content {
   border: 1px solid var(--fm-border);

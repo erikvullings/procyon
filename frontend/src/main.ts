@@ -2,6 +2,7 @@ import 'mithril-materialized/core.css';
 import 'mithril-materialized/forms.css';
 import 'mithril-materialized/components.css';
 import 'mithril-materialized/utilities.css';
+import 'mithril-materialized/presets/compact-minimal.css';
 import './themes/theme.css';
 import './themes/mithril-materialized-procyon.css';
 
@@ -19,6 +20,7 @@ const root = document.getElementById('app');
 if (root === null) {
   throw new Error('index.html is missing the #app mount point');
 }
+root.dataset.mmPreset = 'compact-minimal';
 
 // Only the HTTP runtime talks to fm-server's authenticated `/api/v1`
 // surface (task 0064); the mock and Tauri runtimes have no session token to
