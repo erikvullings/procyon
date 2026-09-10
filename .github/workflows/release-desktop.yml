@@ -319,6 +319,9 @@ jobs:
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Install the configured macOS linker
+        if: matrix.target == 'macos-aarch64'
+        run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"

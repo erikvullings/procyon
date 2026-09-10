@@ -82,3 +82,15 @@ subsystem and must not change either release gate.
   The base macOS, Windows, and Linux installer jobs succeeded without semantic catalogs. The
   follow-up accepts and tests the package-manager separator, switches the arm64 payload to the
   upstream-proven `macos-15` label, and removes installer jobs from manual dispatch.
+- 2026-09-10 Copilot: Private run `34480698440` retained clean, fully smoked Windows x86-64 and
+  Linux arm64 payloads. Runtime IDs are
+  `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be` and
+  `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44`; worker IDs are
+  `procyon.semantic.worker.windows-x86_64.0.1.0.24.c4f491b1267419ac` and
+  `procyon.semantic.worker.linux-aarch64.0.1.0.24.d6d01578de0aa7fd`. Windows is explicitly
+  unsigned. macOS reached linking but the semantic job had not installed the lld path required by
+  `.cargo/config.toml`; the follow-up mirrors the existing desktop release's `brew install lld`.
+  Linux x86-64 verified Zvec, then remained blocked at worker link because the pinned ONNX Runtime
+  rc.13 archive references glibc 2.38 `__isoc23_*` and newer libstdc++ symbols unavailable on the
+  Ubuntu 22.04 desktop baseline. Moving that job to Ubuntu 24.04 would hide rather than qualify the
+  compatibility gap, so it remains an explicit task-0198 blocker.

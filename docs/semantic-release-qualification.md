@@ -102,12 +102,46 @@ The follow-up accepts one leading package-manager separator, covers it with a de
 and uses the standard `macos-15` arm64 runner label also used by upstream Zvec. Manual dispatch now
 runs only the private semantic payload, signing, catalog, and Actions-artifact assembly path.
 
+### Second private dispatch evidence
+
+Workflow run
+[`34480698440`](https://github.com/erikvullings/procyon/actions/runs/34480698440) exercised clean
+commit `1f2024c81d32193fc03c65c71680fbe387d9e030`. Every prerelease, desktop-installer, semantic
+publication, Homebrew, and Chocolatey job was skipped.
+
+Windows x86-64 and Linux arm64 completed archive/checksum/member/architecture/dependency
+verification, built with `ZVEC_AUTO_BUILD=0`, passed the cache-hidden packaged argument-parser
+check, passed the isolated packaged-worker protocol handshake and offline model activation, passed
+component lifecycle tests, and retained private payload artifacts:
+
+| Target | Runtime artifact | Worker artifact | Trust status |
+| --- | --- | --- | --- |
+| Windows x86-64 | `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be` | `procyon.semantic.worker.windows-x86_64.0.1.0.24.c4f491b1267419ac` | Unsigned, notarization not applicable |
+| Linux arm64 | `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44` | `procyon.semantic.worker.linux-aarch64.0.1.0.24.d6d01578de0aa7fd` | Platform signing/notarization not applicable |
+
+Both use model artifact
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`. The retained attestations
+record a clean source tree and the expected `dumpbin`/`readelf` dependency sets.
+
+macOS arm64 reached the final worker link but failed because the semantic matrix omitted the
+`brew install lld` step required by the repository's `.cargo/config.toml`; the configured
+`/opt/homebrew/opt/lld/bin/ld64.lld` therefore did not exist. The follow-up installs that exact
+linker before building.
+
+Linux x86-64 also reached the final worker link. Zvec itself had already passed pinned archive,
+loader, x86-64 architecture, and `readelf` dependency verification. The pinned ONNX Runtime rc.13
+static archive then failed to link on the required Ubuntu 22.04 baseline because it references
+glibc 2.38 `__isoc23_strtol`, `__isoc23_strtoll`, and `__isoc23_strtoull` plus newer libstdc++
+`basic_string::_M_replace_cold` symbols. Linux arm64 succeeds on Ubuntu 24.04. Building x86-64 on
+Ubuntu 24.04 would conceal the desktop's Ubuntu 22.04 compatibility gap, so this remains an exact
+production blocker rather than an unsupported compatibility claim.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
-| Signed production payload/catalog retained | Missing | Missing | Missing | Missing |
-| Packaged worker handshake and offline model activation | Not run on qualification artifact | Not run | Not run | Not run |
+| Signed production payload/catalog retained | Missing | Unsigned private payload retained; signed catalog missing | Blocked before payload by ONNX Runtime/Ubuntu 22.04 ABI | Private payload retained; signed catalog missing |
+| Packaged worker handshake and offline model activation | Not run on qualification artifact | Pass on private payload in run `34480698440` | Worker link blocked | Pass on private payload in run `34480698440` |
 | Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
