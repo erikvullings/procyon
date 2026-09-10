@@ -94,3 +94,12 @@ subsystem and must not change either release gate.
   rc.13 archive references glibc 2.38 `__isoc23_*` and newer libstdc++ symbols unavailable on the
   Ubuntu 22.04 desktop baseline. Moving that job to Ubuntu 24.04 would hide rather than qualify the
   compatibility gap, so it remains an explicit task-0198 blocker.
+- 2026-09-10 Copilot: Run `34482628513` proved the macOS arm64 bundle through Developer ID signing,
+  codesign verification, Apple notary acceptance, and submitted-ZIP/artifact digest binding.
+  Signed runtime and worker IDs were
+  `procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.69abaed8e9309eeb` and
+  `procyon.semantic.worker.macos-aarch64.0.1.0.24.73e5d803bfd2fe32`. The job then failed because
+  `spctl --type execute` correctly reports a standalone CLI is not an app, so smoke/upload did not
+  run. The follow-up removes that inapplicable app-bundle assessment while retaining strict
+  codesign and artifact-bound Apple acceptance. Dispatch-only payload continuation now lets signed
+  catalogs be retained for successful targets; tag builds remain fail-closed.

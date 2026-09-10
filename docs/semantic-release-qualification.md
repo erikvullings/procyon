@@ -136,6 +136,28 @@ glibc 2.38 `__isoc23_strtol`, `__isoc23_strtoll`, and `__isoc23_strtoull` plus n
 Ubuntu 24.04 would conceal the desktop's Ubuntu 22.04 compatibility gap, so this remains an exact
 production blocker rather than an unsupported compatibility claim.
 
+### Third private dispatch evidence
+
+Workflow run
+[`34482628513`](https://github.com/erikvullings/procyon/actions/runs/34482628513) exercised clean
+commit `a5cadd9a3848137d4cab614a5c0d0362a3c229fc`. Windows x86-64 and Linux arm64 again completed
+and retained their payloads; Linux x86-64 reproduced the same ONNX Runtime/Ubuntu 22.04 link
+blocker. Every public release, installer, Homebrew, and Chocolatey job remained skipped.
+
+macOS arm64 passed the pinned runtime verification, worker build, Developer ID signing, codesign
+verification, Apple notarization submission, accepted notary result, submitted-ZIP byte binding,
+and qualification-record update. Its signed content-addressed IDs were
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.69abaed8e9309eeb` and
+`procyon.semantic.worker.macos-aarch64.0.1.0.24.73e5d803bfd2fe32`. The job then failed before smoke
+and artifact retention because `spctl --assess --type execute` reports a standalone CLI as “code
+is valid but does not seem to be an app.” Gatekeeper app-bundle assessment is not applicable to
+these raw optional payloads; the follow-up removes that invalid check while retaining strict
+codesign verification and the artifact-bound accepted Apple receipt.
+
+Private dispatch payload failures now continue only far enough for the catalog matrix to sign
+successful target inputs. Tag builds do not continue on error, and publication still requires the
+entire payload and catalog matrices to succeed.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |

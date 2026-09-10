@@ -289,6 +289,7 @@ jobs:
     name: Semantic payloads (${{ matrix.target }})
     needs: [release]
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || (vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && needs.release.result == 'success')) }}
+    continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 120
@@ -412,7 +413,6 @@ jobs:
             "target/semantic-production-release/${{ matrix.target }}" \
             "$RUNNER_TEMP/semantic-notary-result.json" \
             "$RUNNER_TEMP/semantic-notary.zip"
-          spctl --assess --type execute --verbose=4 "$WORKER"
       - name: Smoke-test protocol, model activation, and component lifecycle
         env:
           PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST: "1"
