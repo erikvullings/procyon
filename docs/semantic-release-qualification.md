@@ -2,7 +2,7 @@
 
 ## Decision
 
-**NO-GO as of 2026-09-08.** Do not set the protected repository variable
+**NO-GO as of 2026-09-10.** Do not set the protected repository variable
 `SEMANTIC_RELEASE_QUALIFIED` to `true`. Tagged desktop releases remain available, but skip semantic
 payload construction, catalog signing and publication, and catalog embedding. Managed semantic
 installation therefore remains unavailable in those installers. A manual workflow dispatch still
@@ -18,7 +18,7 @@ results are not substitutes for measurements from the exact signed production ar
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | `ae1f811635f11b726262910d25b3aaae65e6654b` |
+| Procyon revision reviewed | `39d9d1077f8ed4374f991bb85259fcdd79410fa8` |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
@@ -28,6 +28,7 @@ results are not substitutes for measurements from the exact signed production ar
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |
+| Linux x86-64 inference runtime | Microsoft ONNX Runtime `v1.28.0` CPU shared loader |
 | Optional OCR | user-installed OCRmyPDF stable `>=16.0.0,<18.0.0`, disabled by default |
 
 The final artifact IDs, byte lengths, SHA-256 digests, catalog revision, signature, and installer
@@ -71,6 +72,44 @@ The release build sets `ZVEC_AUTO_BUILD=0` and links only from the verified cach
 temporarily removes that cache, copies the content-addressed runtime under the platform loader
 name, and proves that the content-addressed worker reaches its argument parser. Later bundle smoke
 repeats the protocol handshake from an isolated loader directory.
+
+## Linux x86-64 ONNX Runtime input
+
+The Linux x86-64 worker uses a separately packaged Microsoft ONNX Runtime CPU shared loader.
+macOS arm64, Windows x86-64, and Linux arm64 retain their previously exercised static linkage.
+The dynamic input is target-specific and optional; it is not installed with the base desktop
+application and is not resolved from a host library.
+
+| Property | Pinned value |
+| --- | --- |
+| Release / source revision | `v1.28.0` / `da9b5e364c465de65c49d91e696cd6485270757f` |
+| Release asset | ID `489174677`, `onnxruntime-linux-x64-1.28.0.tgz` |
+| Archive bytes / SHA-256 | 9,125,960 / `a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407` |
+| Loader source file | `libonnxruntime.so.1.28.0` |
+| Loader bytes / SHA-256 | 24,268,848 / `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab` |
+| Runtime SONAME | `libonnxruntime.so.1` |
+| Required ABI maxima | GLIBC 2.27, GLIBCXX 3.4.21, CXXABI 1.3.11 |
+| Ubuntu 22.04 rejection ceilings | GLIBC 2.35, GLIBCXX 3.4.30, CXXABI 1.3.13 |
+| License / notices | MIT `LICENSE`, 1,073 bytes / `2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c`; `ThirdPartyNotices.txt`, 325,054 bytes / `0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2` |
+
+The exact pyke static archive remains useful negative evidence: its 10,060,013 bytes hash to
+`e454f710f8a49f53aa5b4ff51e3454ae1835777e431c6c35c5255ce6f205fd68`, and its extracted
+105,481,448-byte `libonnxruntime.a` hashes to
+`0bb8a9982b44df690195c2c34b75ca791c3b9f20070b8cecbd8f50c6264dd2e2`.
+The archive's objects directly reference `__isoc23_strtol`, `__isoc23_strtoll`,
+`__isoc23_strtoull`, and libstdc++ `_M_replace_cold`; the packaging regression check rejects
+those symbols and any ABI version above the Ubuntu 22.04 ceilings before catalog construction.
+
+The official archive also contains `libonnxruntime_providers_shared.so`, but the CPU loader has no
+`DT_NEEDED` dependency on it and Procyon enables no plugin execution provider. It is therefore not
+shipped. The isolated production smoke must load the exact packaged worker with only the cataloged
+ONNX and Zvec runtime bytes, proving that no omitted provider or build-cache library is required.
+
+Rejected alternatives were: moving x86-64 to Ubuntu 24.04, which hides the supported baseline;
+symbol shims; an environment-only host-library override; ONNX Runtime 1.27, an unnecessary native
+downgrade; a broad Cargo upgrade without evidence that it changes the incompatible native input;
+and a costly source build when Microsoft publishes a matching, checksum-addressable,
+redistributable CPU loader.
 
 `pnpm run semantic:qualification:check` statically verifies that manual dispatch cannot reach a
 GitHub Release upload, Homebrew push, or Chocolatey publication. The audit found and closed
@@ -184,12 +223,51 @@ before the packaged protocol/model/component tests.
 | Submitted ZIP bytes / SHA-256 | 20,883,412 / `73b452811684e8df5b5add22a9267c24a77d30affe0ec0d4f3bb208165524c94` |
 | Source revision / tree | `fa70ff3faa3974c64e2d12e45a205856c27303de` / clean |
 
+### Linux ABI remediation dispatch evidence
+
+Private workflow run
+[`34509441435`](https://github.com/erikvullings/procyon/actions/runs/34509441435) exercised clean
+commit `39d9d1077f8ed4374f991bb85259fcdd79410fa8` on 2026-09-10. All four supported payload jobs
+passed. Prerelease creation, desktop installers, aggregate catalog signing, semantic publication,
+Homebrew, and Chocolatey were skipped; no public release or asset was created. Both
+`SEMANTIC_RELEASE_QUALIFIED` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` remained absent.
+
+Linux x86-64 ran on Ubuntu 22.04 and passed the pinned archive, source revision, license, notice,
+ELF architecture, SONAME, exact dependency, and ABI-ceiling checks. Cargo linked the worker
+dynamically to the verified Microsoft loader without enabling `ort`'s download or copy-dylib
+features. The build then hid both native caches, launched the exact packaged worker with only the
+content-addressed ONNX and Zvec bytes restored under their loader names, reached its parser,
+completed the protocol handshake, activated the production model offline, and passed the complete
+`fm-semantic-components` lifecycle suite. The downloaded private payload was independently
+reverified against both qualification records.
+
+| Linux x86-64 retained evidence | Value |
+| --- | --- |
+| Private Actions artifact | ID `10165415845`, 303,780,936 bytes, SHA-256 `c799240a76d83862767850e6c0ba5a05aaf3fa74ddbddceea7abc4be3ad6466c` |
+| Catalog revision | `procyon-linux-x86_64-0.1.0-24-5e51c2e39dbb4f3c8d8df785be841dd3` |
+| Worker | `procyon.semantic.worker.linux-x86_64.0.1.0.24.baf8a9db9cab9c16`, 15,144,128 bytes, SHA-256 `baf8a9db9cab9c167aa13112088aaf6d627c67ce12e4957f6266078c40352a7b` |
+| ONNX Runtime | `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499`, 24,268,848 bytes, SHA-256 `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab` |
+| Zvec runtime | `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`, 36,854,864 bytes, SHA-256 `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5` |
+| Model pack | `procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`, 487,353,895 bytes, SHA-256 `c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3` |
+
+The other target paths also remained healthy. macOS arm64 retained worker
+`procyon.semantic.worker.macos-aarch64.0.1.0.24.d8780bacc61653f9` (38,410,336 bytes, SHA-256
+`d8780bacc61653f9cb3850aeae99891754fdf53b175cc110f6b6e9813e009aad`) and signed Zvec runtime
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.a4d3635cbe5dbc68` (23,164,624 bytes,
+SHA-256 `a4d3635cbe5dbc6818af08feaa51c64a92bbe550bc469f887eb3f0cdabdf3ab2`). Apple accepted
+submission `9fba1cf3-e93e-46a3-9d23-1c7b68e928f0`, bound to a 20,882,722-byte ZIP with SHA-256
+`329e869f1f59383316ad5736ffea4657eca338e047e6dc12ebf42aff68f9ca36`. Windows x86-64
+retained unsigned worker `procyon.semantic.worker.windows-x86_64.0.1.0.24.30975f6ad8f49d1c`
+and Zvec runtime `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be`.
+Linux arm64 retained worker `procyon.semantic.worker.linux-aarch64.0.1.0.24.4bf8a63c58d300f8`
+and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44`.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
-| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Blocked before payload by ONNX Runtime/Ubuntu 22.04 ABI | Private payload retained; signed catalog missing |
-| Packaged worker handshake and offline model activation | Pass on private payload in run `34483603909` | Pass on private payload in run `34483603909` | Worker link blocked | Pass on private payload in run `34483603909` |
+| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
+| Packaged worker handshake and offline model activation | Pass on private payload in run `34509441435` | Pass on private payload in run `34509441435` | Pass on Ubuntu 22.04 private payload in run `34509441435` | Pass on private payload in run `34509441435` |
 | Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |

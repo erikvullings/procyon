@@ -4,6 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import {
+  ONNX_RUNTIME_COMPONENT_ID,
+  onnxRuntimeTarget,
+  preparePinnedOnnxRuntime,
+  verifyOnnxRuntimeQualification,
+} from './onnx-runtime-qualification.mjs';
+import {
   preparePinnedZvecRuntime,
   verifyZvecRuntimeQualification,
 } from './zvec-runtime-qualification.mjs';
@@ -22,15 +28,26 @@ const worker = manifest.catalog.artifacts.find(
 const runtime = manifest.catalog.artifacts.find(
   (artifact) => artifact.component_id === 'procyon.semantic.zvec-runtime',
 );
+const onnxRuntime = manifest.catalog.artifacts.find(
+  (artifact) => artifact.component_id === ONNX_RUNTIME_COMPONENT_ID,
+);
 if (!model) throw new Error('production catalog has no multilingual model artifact');
 if (!worker) throw new Error('production catalog has no worker artifact');
 if (!runtime) throw new Error('production catalog has no Zvec runtime artifact');
+const onnxDescriptor = onnxRuntimeTarget();
+if (onnxDescriptor && !onnxRuntime) {
+  throw new Error('Linux x86-64 production catalog has no ONNX Runtime artifact');
+}
+if (!onnxDescriptor && onnxRuntime) {
+  throw new Error('production catalog has an unexpected ONNX Runtime artifact');
+}
 const modelPack = path.join(bundle, 'artifacts', model.id);
 const workerExecutable = path.join(bundle, 'artifacts', worker.id);
 const nativeRuntime = path.join(bundle, 'artifacts', runtime.id);
 const qualification = verifyZvecRuntimeQualification(bundle, {
   requireProductionTrust: process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1',
 });
+if (onnxDescriptor) verifyOnnxRuntimeQualification(bundle);
 const cargoTarget = JSON.parse(
   execFileSync('cargo', ['metadata', '--format-version=1', '--no-deps'], {
     encoding: 'utf8',
@@ -40,12 +57,23 @@ const preparedRuntime = await preparePinnedZvecRuntime(
   qualification.descriptor,
   path.join(cargoTarget, 'semantic-zvec-runtime-cache'),
 );
+const preparedOnnxRuntime = onnxDescriptor
+  ? await preparePinnedOnnxRuntime(
+      onnxDescriptor,
+      path.join(cargoTarget, 'semantic-onnx-runtime-cache'),
+    )
+  : undefined;
+const nativeRuntimeDirectories = [
+  preparedRuntime.directory,
+  ...(preparedOnnxRuntime ? [preparedOnnxRuntime.directory] : []),
+];
+const nativeRuntimePath = nativeRuntimeDirectories.join(path.delimiter);
 const runtimeLoaderEnvironment =
   process.platform === 'darwin'
-    ? { DYLD_LIBRARY_PATH: preparedRuntime.directory }
+    ? { DYLD_LIBRARY_PATH: nativeRuntimePath }
     : process.platform === 'win32'
-      ? { PATH: `${preparedRuntime.directory}${path.delimiter}${process.env.PATH ?? ''}` }
-      : { LD_LIBRARY_PATH: preparedRuntime.directory };
+      ? { PATH: `${nativeRuntimePath}${path.delimiter}${process.env.PATH ?? ''}` }
+      : { LD_LIBRARY_PATH: nativeRuntimePath };
 const isolatedRuntimeDirectory = fs.mkdtempSync(
   path.join(tmpdir(), 'procyon-packaged-zvec-runtime-'),
 );
@@ -54,6 +82,12 @@ const isolatedNativeRuntime = path.join(
   qualification.report.loader.fileName,
 );
 fs.copyFileSync(nativeRuntime, isolatedNativeRuntime);
+if (onnxDescriptor) {
+  fs.copyFileSync(
+    path.join(bundle, 'artifacts', onnxRuntime.id),
+    path.join(isolatedRuntimeDirectory, onnxDescriptor.loader.name),
+  );
+}
 
 function run(args, environment = {}) {
   const result = spawnSync('cargo', args, {
@@ -61,6 +95,13 @@ function run(args, environment = {}) {
       ...process.env,
       ZVEC_AUTO_BUILD: '0',
       ZVEC_LIB_DIR: preparedRuntime.directory,
+      ...(preparedOnnxRuntime
+        ? {
+            ORT_LIB_PATH: preparedOnnxRuntime.directory,
+            ORT_PREFER_DYNAMIC_LINK: '1',
+            ORT_SKIP_DOWNLOAD: '1',
+          }
+        : {}),
       ...runtimeLoaderEnvironment,
       ...environment,
     },

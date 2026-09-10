@@ -121,7 +121,7 @@ notify = "8.2.0"
 objc2 = "0.6.4"
 objc2-app-kit = "0.3.2"
 objc2-foundation = "0.3.2"
-ort = "2.0.0-rc.13"
+ort = {version = "2.0.0-rc.13", default-features = false}
 quicklook = "0.2.2"
 openh264 = "0.9.8"
 percent-encoding = "2.3.2"

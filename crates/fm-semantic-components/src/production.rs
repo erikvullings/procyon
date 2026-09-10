@@ -25,6 +25,8 @@ pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
 pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 /// Logical component identity of the production Zvec native runtime.
 pub const PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.zvec-runtime";
+/// Logical component identity of the production ONNX Runtime loader.
+pub const PRODUCTION_ONNX_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.onnx-runtime";
 /// Logical component identity of the production multilingual model package.
 pub const PRODUCTION_MODEL_COMPONENT_ID: &str = "procyon.semantic.model.multilingual-e5-small";
 /// Exact upstream model identity selected for the first production profile.

@@ -115,3 +115,38 @@ subsystem and must not change either release gate.
   `77431044a055f64c359d8c70614d86d15c16f636b94a23e7afb3618c06f2d36c`; Apple submission
   `2a374034-7207-4187-b3ff-ae4f720caa32` accepted the 20,883,412-byte ZIP with SHA-256
   `73b452811684e8df5b5add22a9267c24a77d30affe0ec0d4f3bb208165524c94`.
+- 2026-09-10 Copilot: Linux x86-64 diagnosis proved the blocker was not Zvec, Docling ML, or the
+  selected linker. `ort` 2.0.0-rc.13 defaulted to pyke's checksum-pinned static
+  `ms@1.28.0` input because the production builder supplied no ONNX Runtime. The exact
+  10,060,013-byte archive
+  `e454f710f8a49f53aa5b4ff51e3454ae1835777e431c6c35c5255ce6f205fd68` contains a
+  105,481,448-byte `libonnxruntime.a`
+  (`0bb8a9982b44df690195c2c34b75ca791c3b9f20070b8cecbd8f50c6264dd2e2`) whose objects
+  directly reference `__isoc23_strtol`, `__isoc23_strtoll`, `__isoc23_strtoull`, and
+  libstdc++ `_M_replace_cold`. The Linux x86-64 builder now uses Microsoft's matching official
+  ONNX Runtime 1.28.0 CPU shared release as a separate content-addressed semantic runtime. Its
+  archive is asset `489174677`, 9,125,960 bytes, SHA-256
+  `a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407`; it embeds source
+  revision `da9b5e364c465de65c49d91e696cd6485270757f`. The loader is 24,268,848 bytes,
+  SHA-256 `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab`,
+  SONAME `libonnxruntime.so.1`, and requires at most GLIBC 2.27, GLIBCXX 3.4.21, and CXXABI
+  1.3.11. Qualification rejects requirements above Ubuntu 22.04's GLIBC 2.35, GLIBCXX 3.4.30,
+  or CXXABI 1.3.13 ceilings and rejects the exact C23/cold-replace symbols. The catalog, desktop
+  activation, offline smoke, release asset collection, license, and third-party-notice provenance
+  now include this optional runtime without changing the other targets or either release gate.
+- 2026-09-10 Copilot: Private workflow run `34509441435` exercised clean commit
+  `39d9d1077f8ed4374f991bb85259fcdd79410fa8` and passed all four payload jobs. Linux x86-64
+  built on Ubuntu 22.04, rejected no ABI/dependency rule, linked the verified shared loader, hid
+  both native build caches, reached the packaged worker parser, completed the packaged protocol
+  handshake and offline model activation, passed all component lifecycle tests, and retained
+  Actions artifact `10165415845` (303,780,936 bytes compressed, SHA-256
+  `c799240a76d83862767850e6c0ba5a05aaf3fa74ddbddceea7abc4be3ad6466c`). Its worker is
+  `procyon.semantic.worker.linux-x86_64.0.1.0.24.baf8a9db9cab9c16` (15,144,128 bytes,
+  SHA-256 `baf8a9db9cab9c167aa13112088aaf6d627c67ce12e4957f6266078c40352a7b`); its ONNX
+  artifact is `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499`; and its
+  Zvec artifact remains
+  `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`. macOS arm64 passed
+  Developer ID verification and Apple submission `9fba1cf3-e93e-46a3-9d23-1c7b68e928f0`;
+  Windows x86-64 remained accurately unsigned; Linux arm64 remained signing-not-applicable. Every
+  public release, installer, catalog-publication, Homebrew, and Chocolatey job was skipped. Both
+  qualification repository variables remained absent, so task 0198 is still **NO-GO**.

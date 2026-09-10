@@ -1,11 +1,11 @@
 //! Deterministic packer for one target's production semantic release bundle.
 //!
-//! A production release bundle contains exactly three payloads for one
-//! supported target: the semantic worker executable, the native Zvec
-//! runtime, and the pinned, evaluated multilingual-E5 model package. Unlike
-//! the developer bundle, it never packs the deterministic token-hashing
-//! fixture and every model pack member is verified against its exact known
-//! byte length and SHA-256 before it is packed.
+//! A production release bundle contains the semantic worker executable, the
+//! native Zvec runtime, the pinned multilingual-E5 model package, and any
+//! target-specific native inference loader required by that worker. Unlike the
+//! developer bundle, it never packs the deterministic token-hashing fixture
+//! and every model pack member is verified against its exact known byte length
+//! and SHA-256 before it is packed.
 //!
 //! The output is an *unsigned* [`ProductionCatalogManifest`] written next to
 //! its artifacts as `catalog-input.json`; a separate, isolated signing step
@@ -27,8 +27,8 @@ use crate::{
     CatalogError, CatalogManifest, ComponentId, ComponentResources, EmbeddingNormalization,
     LicenseInfo, ManifestRevision, ModelId, ModelIdentity, ModelManifest, ModelMetadata, ModelPack,
     ModelPackError, ModelPackKind, ModelPackSpec, ModelRevision, PRODUCTION_MODEL_COMPONENT_ID,
-    PRODUCTION_MODEL_ID, PRODUCTION_MODEL_REVISION, PRODUCTION_TOKENIZER_ID,
-    PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID,
+    PRODUCTION_MODEL_ID, PRODUCTION_MODEL_REVISION, PRODUCTION_ONNX_RUNTIME_COMPONENT_ID,
+    PRODUCTION_TOKENIZER_ID, PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID,
     ProductionArtifactProvenance, ProductionCatalogManifest, ProductionPipelineIdentity,
     ProtocolRange, RuntimeCompatibility, SemanticProfile, Sha256Digest, TargetTriple, TokenizerId,
     production_artifact_id, write_model_pack,
@@ -42,6 +42,12 @@ const PRODUCTION_ZVEC_SOURCE_URL: &str = "https://github.com/zvec-ai/zvec-rust";
 const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "733e0bc82e02a0c63202bff594a7f4530520dfd0";
 /// Native Zvec revision pinned by the Rust SDK's v0.7.0 submodule.
 const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "8321c1314a559fd5f909e92498f43e5194bf9b99";
+/// Microsoft ONNX Runtime release used by the Linux x86-64 dynamic loader.
+const PRODUCTION_ONNX_RUNTIME_VERSION: &str = "1.28.0";
+/// Credential-free public source of the pinned ONNX Runtime release.
+const PRODUCTION_ONNX_RUNTIME_SOURCE_URL: &str = "https://github.com/microsoft/onnxruntime";
+/// Immutable source revision recorded inside the official ONNX Runtime archive.
+const PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION: &str = "da9b5e364c465de65c49d91e696cd6485270757f";
 /// Credential-free public source of the pinned multilingual-E5 model.
 const PRODUCTION_MODEL_SOURCE_URL: &str = "https://huggingface.co/intfloat/multilingual-e5-small";
 /// Upstream repository slug recorded in the packed model's provenance string.
@@ -66,6 +72,8 @@ const PRODUCTION_MODEL_LANGUAGES: [&str; 12] = [
 const WORKER_RAM_BYTES: u64 = 64 * 1024 * 1024;
 /// Conservative peak resident bytes for the packaged native Zvec runtime.
 const RUNTIME_RAM_BYTES: u64 = 8 * 1024 * 1024;
+/// Conservative mapped/runtime overhead for the optional ONNX Runtime loader.
+const ONNX_RUNTIME_RAM_BYTES: u64 = 64 * 1024 * 1024;
 
 const WORKER_PROTOCOL_VERSION: u32 = 1;
 const INDEX_SCHEMA_VERSION: u32 = 2;
@@ -154,6 +162,8 @@ pub struct ProductionBundleSpec {
     pub worker_executable: PathBuf,
     /// Path to the native Zvec runtime library for this target.
     pub zvec_runtime_library: PathBuf,
+    /// Path to the verified ONNX Runtime loader when this target requires one.
+    pub onnx_runtime_library: Option<PathBuf>,
     /// Directory containing the verified pinned multilingual-E5 model cache.
     pub model_cache_directory: PathBuf,
     /// Trusted credential-free HTTPS base URL artifacts are distributed from.
@@ -183,6 +193,20 @@ pub enum ProductionBundleError {
     #[error("production Zvec runtime filename is `{actual}`; expected `{expected}`")]
     RuntimeFileNameMismatch {
         /// Exact platform loader filename required by the worker.
+        expected: &'static str,
+        /// Supplied path's filename.
+        actual: String,
+    },
+    /// Linux x86-64 requires a separately verified ONNX Runtime loader.
+    #[error("production ONNX Runtime loader is unavailable")]
+    OnnxRuntimeUnavailable,
+    /// Targets with a static ONNX Runtime must not receive a dynamic loader.
+    #[error("production target does not accept a separate ONNX Runtime loader")]
+    UnexpectedOnnxRuntime,
+    /// The supplied ONNX Runtime path did not use the pinned source filename.
+    #[error("production ONNX Runtime filename is `{actual}`; expected `{expected}`")]
+    OnnxRuntimeFileNameMismatch {
+        /// Exact filename in the pinned Microsoft release archive.
         expected: &'static str,
         /// Supplied path's filename.
         actual: String,
@@ -268,6 +292,31 @@ fn build_bundle(
             actual: actual_runtime_name.to_owned(),
         });
     }
+    let onnx_runtime_library = match (
+        requires_external_onnx_runtime(&spec.target_operating_system, &spec.target_architecture),
+        spec.onnx_runtime_library.as_ref(),
+    ) {
+        (true, Some(library)) if !library.is_file() => {
+            return Err(ProductionBundleError::OnnxRuntimeUnavailable);
+        }
+        (true, Some(library)) => {
+            let actual = library
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            let expected = onnx_runtime_source_name();
+            if actual != expected {
+                return Err(ProductionBundleError::OnnxRuntimeFileNameMismatch {
+                    expected,
+                    actual: actual.to_owned(),
+                });
+            }
+            Some(library)
+        }
+        (true, None) => return Err(ProductionBundleError::OnnxRuntimeUnavailable),
+        (false, Some(_)) => return Err(ProductionBundleError::UnexpectedOnnxRuntime),
+        (false, None) => None,
+    };
     verify_model_cache(&spec.model_cache_directory, pinned_files)?;
 
     let staging = spec.output_directory.with_extension("building");
@@ -301,6 +350,19 @@ fn build_bundle(
         runtime_checksum,
     )?;
     write_artifact(&staging, &runtime_id, &runtime_bytes)?;
+
+    let onnx_runtime = if let Some(library) = onnx_runtime_library {
+        let component = ComponentId::new(PRODUCTION_ONNX_RUNTIME_COMPONENT_ID)?;
+        let version = Version::parse(PRODUCTION_ONNX_RUNTIME_VERSION)
+            .expect("pinned ONNX Runtime version literal is valid");
+        let bytes = fs::read(library)?;
+        let checksum = Sha256Digest::calculate(&bytes);
+        let id = production_artifact_id(&component, Some(&target), &version, checksum)?;
+        write_artifact(&staging, &id, &bytes)?;
+        Some((component, version, bytes, checksum, id))
+    } else {
+        None
+    };
 
     let model_component = ComponentId::new(PRODUCTION_MODEL_COMPONENT_ID)?;
     let model_identity = ModelIdentity::new(
@@ -367,6 +429,19 @@ fn build_bundle(
         PRODUCTION_MODEL_RAM_BYTES,
     )?;
 
+    let mut worker_runtimes = vec![RuntimeCompatibility::new(
+        runtime_component.clone(),
+        VersionReq::parse(&format!("={PRODUCTION_ZVEC_VERSION}"))
+            .expect("pinned Zvec version literal is a valid requirement"),
+    )];
+    if let Some((component, version, _, _, _)) = &onnx_runtime {
+        worker_runtimes.push(RuntimeCompatibility::new(
+            component.clone(),
+            VersionReq::parse(&format!("={version}"))
+                .expect("pinned ONNX Runtime version is a valid requirement"),
+        ));
+    }
+
     let worker_artifact = CatalogArtifact::new(
         worker_id.clone(),
         worker_component,
@@ -382,7 +457,7 @@ fn build_bundle(
                 WORKER_PROTOCOL_VERSION,
                 WORKER_PROTOCOL_VERSION,
             )?),
-            Vec::new(),
+            worker_runtimes,
             INDEX_SCHEMA_VERSION,
         ),
     )?;
@@ -403,8 +478,36 @@ fn build_bundle(
         )?,
         runtime_checksum,
         resources(runtime_bytes.len(), RUNTIME_RAM_BYTES)?,
-        ArtifactCompatibility::new(Some(target), None, Vec::new(), INDEX_SCHEMA_VERSION),
+        ArtifactCompatibility::new(Some(target.clone()), None, Vec::new(), INDEX_SCHEMA_VERSION),
     )?;
+    let onnx_runtime_artifact = onnx_runtime
+        .as_ref()
+        .map(|(component, version, bytes, checksum, id)| {
+            CatalogArtifact::new(
+                id.clone(),
+                component.clone(),
+                ArtifactKind::Runtime,
+                version.clone(),
+                distribution_location(&spec.release_base_url, id)?,
+                LicenseInfo::new(
+                    "MIT",
+                    format!(
+                        "Microsoft ONNX Runtime CPU release {PRODUCTION_ONNX_RUNTIME_VERSION} at \
+                         pinned commit {PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION}; the official \
+                         archive's ThirdPartyNotices.txt is retained in qualification evidence."
+                    ),
+                )?,
+                *checksum,
+                resources(bytes.len(), ONNX_RUNTIME_RAM_BYTES)?,
+                ArtifactCompatibility::new(
+                    Some(target.clone()),
+                    None,
+                    Vec::new(),
+                    INDEX_SCHEMA_VERSION,
+                ),
+            )
+        })
+        .transpose()?;
     let model_artifact = CatalogArtifact::new(
         model_id.clone(),
         model_component,
@@ -427,18 +530,28 @@ fn build_bundle(
         .map(|profile| (*profile, model_identity.clone()))
         .collect();
 
-    let mut revision_material = Vec::with_capacity(3 * 32);
-    for checksum in [worker_checksum, runtime_checksum, model_checksum] {
+    let mut revision_material = Vec::with_capacity(4 * 32);
+    let mut revision_checksums = vec![worker_checksum, runtime_checksum];
+    if let Some((_, _, _, checksum, _)) = &onnx_runtime {
+        revision_checksums.push(*checksum);
+    }
+    revision_checksums.push(model_checksum);
+    for checksum in revision_checksums {
         revision_material.extend_from_slice(checksum.as_bytes());
     }
     let revision_checksum = Sha256Digest::calculate(&revision_material);
+    let mut artifacts = vec![worker_artifact, runtime_artifact];
+    if let Some(artifact) = onnx_runtime_artifact {
+        artifacts.push(artifact);
+    }
+    artifacts.push(model_artifact);
     let catalog = CatalogManifest::new(
         ManifestRevision::new(format!(
             "procyon-{target_label}-{}-{}",
             release_version,
             digest_prefix(revision_checksum)
         ))?,
-        vec![worker_artifact, runtime_artifact, model_artifact],
+        artifacts,
         vec![model_manifest],
         profiles,
     )?;
@@ -451,7 +564,7 @@ fn build_bundle(
         tokenizer,
         model_identity,
     )?;
-    let provenance = vec![
+    let mut provenance = vec![
         ProductionArtifactProvenance::new(
             worker_id,
             ArtifactLocation::new(PRODUCTION_PROCYON_SOURCE_URL)?,
@@ -462,12 +575,19 @@ fn build_bundle(
             ArtifactLocation::new(PRODUCTION_ZVEC_SOURCE_URL)?,
             ManifestRevision::new(PRODUCTION_ZVEC_SOURCE_REVISION)?,
         ),
-        ProductionArtifactProvenance::new(
-            model_id,
-            ArtifactLocation::new(PRODUCTION_MODEL_SOURCE_URL)?,
-            ManifestRevision::new(PRODUCTION_MODEL_REVISION)?,
-        ),
     ];
+    if let Some((_, _, _, _, id)) = onnx_runtime {
+        provenance.push(ProductionArtifactProvenance::new(
+            id,
+            ArtifactLocation::new(PRODUCTION_ONNX_RUNTIME_SOURCE_URL)?,
+            ManifestRevision::new(PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION)?,
+        ));
+    }
+    provenance.push(ProductionArtifactProvenance::new(
+        model_id,
+        ArtifactLocation::new(PRODUCTION_MODEL_SOURCE_URL)?,
+        ManifestRevision::new(PRODUCTION_MODEL_REVISION)?,
+    ));
     let manifest = ProductionCatalogManifest::new(catalog, pipeline, provenance)?;
 
     fs::write(
@@ -513,6 +633,14 @@ fn runtime_library_name(
         "windows" => "zvec_c_api.dll",
         _ => "libzvec_c_api.so",
     })
+}
+
+fn requires_external_onnx_runtime(operating_system: &str, architecture: &str) -> bool {
+    operating_system == "linux" && architecture == "x86_64"
+}
+
+fn onnx_runtime_source_name() -> &'static str {
+    "libonnxruntime.so.1.28.0"
 }
 
 fn distribution_location(
@@ -670,8 +798,10 @@ mod tests {
     fn base_spec(directory: &Path) -> ProductionBundleSpec {
         let worker = directory.join("fm-semantic-worker");
         let runtime = directory.join("libzvec_c_api.so");
+        let onnx_runtime = directory.join(onnx_runtime_source_name());
         fs::write(&worker, b"production worker payload").unwrap();
         fs::write(&runtime, b"production zvec runtime payload").unwrap();
+        fs::write(&onnx_runtime, b"production onnx runtime payload").unwrap();
         ProductionBundleSpec {
             target_operating_system: "linux".into(),
             target_architecture: "x86_64".into(),
@@ -680,6 +810,7 @@ mod tests {
             chunker_identity: "structural/2".into(),
             worker_executable: worker,
             zvec_runtime_library: runtime,
+            onnx_runtime_library: Some(onnx_runtime),
             model_cache_directory: write_fixture_model_cache(directory),
             release_base_url: ArtifactLocation::new("https://cdn.example.com/procyon/releases")
                 .unwrap(),
@@ -822,7 +953,7 @@ mod tests {
         );
 
         let provenance = manifest.provenance();
-        assert_eq!(provenance.len(), 3);
+        assert_eq!(provenance.len(), 4);
         let worker_artifact = manifest
             .catalog()
             .artifacts()
@@ -833,7 +964,17 @@ mod tests {
             .catalog()
             .artifacts()
             .iter()
-            .find(|artifact| matches!(artifact.kind(), ArtifactKind::Runtime))
+            .find(|artifact| {
+                artifact.component_id().as_str() == PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID
+            })
+            .unwrap();
+        let onnx_runtime_artifact = manifest
+            .catalog()
+            .artifacts()
+            .iter()
+            .find(|artifact| {
+                artifact.component_id().as_str() == PRODUCTION_ONNX_RUNTIME_COMPONENT_ID
+            })
             .unwrap();
         let model_artifact = manifest
             .catalog()
@@ -876,6 +1017,23 @@ mod tests {
                 .license()
                 .notice()
                 .contains(PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION)
+        );
+
+        let onnx_runtime_provenance = provenance
+            .iter()
+            .find(|record| record.artifact_id() == onnx_runtime_artifact.id())
+            .unwrap();
+        assert_eq!(
+            onnx_runtime_provenance.source().as_str(),
+            PRODUCTION_ONNX_RUNTIME_SOURCE_URL
+        );
+        assert_eq!(
+            onnx_runtime_provenance.source_revision().as_str(),
+            PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION
+        );
+        assert_eq!(
+            onnx_runtime_artifact.version().to_string(),
+            PRODUCTION_ONNX_RUNTIME_VERSION
         );
 
         let model_provenance = provenance
@@ -963,8 +1121,37 @@ mod tests {
                 .join(runtime_library_name(os, arch).unwrap());
             fs::write(&runtime, b"production zvec runtime payload").unwrap();
             spec.zvec_runtime_library = runtime;
+            spec.onnx_runtime_library = if requires_external_onnx_runtime(os, arch) {
+                let onnx_runtime = directory.path().join(onnx_runtime_source_name());
+                fs::write(&onnx_runtime, b"production onnx runtime payload").unwrap();
+                Some(onnx_runtime)
+            } else {
+                None
+            };
             build(&spec);
         }
+    }
+
+    #[test]
+    fn rejects_missing_or_wrong_linux_onnx_runtime_inputs() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut spec = base_spec(directory.path());
+        spec.onnx_runtime_library = None;
+        assert!(matches!(
+            build_bundle(&spec, &FIXTURE_MODEL_FILES),
+            Err(ProductionBundleError::OnnxRuntimeUnavailable)
+        ));
+
+        let wrong = directory.path().join("libonnxruntime.so");
+        fs::write(&wrong, b"production onnx runtime payload").unwrap();
+        spec.onnx_runtime_library = Some(wrong);
+        assert!(matches!(
+            build_bundle(&spec, &FIXTURE_MODEL_FILES),
+            Err(ProductionBundleError::OnnxRuntimeFileNameMismatch {
+                expected: "libonnxruntime.so.1.28.0",
+                ..
+            })
+        ));
     }
 
     #[test]
