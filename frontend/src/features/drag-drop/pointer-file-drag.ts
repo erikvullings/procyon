@@ -13,6 +13,8 @@ export interface PointerFileDragSource {
 }
 
 const targets = new WeakMap<HTMLElement, PointerFileDropTarget>();
+const EFFECT_INDICATOR_OFFSET_X = 14;
+const EFFECT_INDICATOR_OFFSET_Y = 16;
 let activeCleanup: (() => void) | undefined;
 let suppressClick = false;
 
@@ -82,9 +84,9 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     }
     effectIndicator ??= document.body.appendChild(document.createElement('span'));
     effectIndicator.className = `fm-file-drag-effect fm-file-drag-effect-${effect}`;
-    effectIndicator.textContent = effect === 'copy' ? '+' : '-';
-    effectIndicator.style.left = `${lastX + 4}px`;
-    effectIndicator.style.top = `${lastY + 4}px`;
+    effectIndicator.textContent = '';
+    effectIndicator.style.left = `${lastX + EFFECT_INDICATOR_OFFSET_X}px`;
+    effectIndicator.style.top = `${lastY + EFFECT_INDICATOR_OFFSET_Y}px`;
   };
 
   const highlight = (element?: HTMLElement): void => {

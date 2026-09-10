@@ -106,3 +106,10 @@ entry point, not just adding a content-matching mode to an existing dialog.
   match metadata (the VFS provider path has no mechanism for per-entry annotations). If the frontend
   needs match counts/context without the event stream, this would require extending the VFS or
   adding a dedicated annotations API.
+- 2026-11-14: Simplified Find Files to one combined filename/content form; content input selects
+  content mode while preserving the optional filename predicate. Size bounds now accept B/KB/MB/GB
+  units, date bounds use paired compact native pickers with explicit clear buttons, and MIME remains
+  free-form because providers can return arbitrary media types. The content field carries the same
+  `Aa`, `Ab`, and `.*` case/whole-word/regex toggles as Find in File. Semantic search stays in its
+  dedicated dialog. Recursion is exposed as an accessible folder-tree toggle beside Advanced
+  filters, and populated date fields use compact, borderless clear buttons.

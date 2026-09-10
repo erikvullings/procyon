@@ -1338,6 +1338,7 @@ export class MockFileManagerClient implements FileManagerClient {
     sizeFormat: 'binary',
     showHiddenFiles: false,
     confirmPermanentDelete: true,
+    confirmFileOperations: true,
     defaultConflictPolicy: 'ask',
     operationConcurrency: 2,
     defaultPaneLayout: 'dual',

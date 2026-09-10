@@ -115,9 +115,11 @@ import {
 } from '../features/operations/operation-state';
 import {
   createOperationsController,
+  type OperationConfirmationRequest,
   type OperationsController,
+  withOperationConfirmation,
 } from '../features/operations/operations-controller';
-import { isParentEntry, withParentEntry } from '../features/panes/parent-entry';
+import { isParentEntry } from '../features/panes/parent-entry';
 import {
   createTabController,
   type TabController,
@@ -2458,7 +2460,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let attrsClient: FileManagerClient;
   /** `dispose()` of the `buildControllers` registry set up in `oninit` (controller-registry.ts). */
   let disposeShellControllers: (() => void) | undefined;
+  let rawOpsController: OperationsController;
   let opsController: OperationsController;
+  let pendingOperationConfirmation:
+    | {
+        readonly request: OperationConfirmationRequest;
+        readonly resolve: (confirmed: boolean) => void;
+      }
+    | undefined;
   let workspaceController: WorkspaceController;
   let tabController: TabController;
   let settingsController: SettingsController;
@@ -3377,10 +3386,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       closeTabConfirmation = conf;
     },
     getDialogs: () => dialogs,
+    getOperationConfirmation: () => pendingOperationConfirmation?.request,
+    resolveOperationConfirmation: (confirmed) => {
+      const pending = pendingOperationConfirmation;
+      pendingOperationConfirmation = undefined;
+      pending?.resolve(confirmed);
+      m.redraw();
+    },
     getFormatSettings: () => currentEntryFormatSettings,
     getFindFilesController: () => findFilesController,
     getTabController: () => tabController,
-    getOpsController: () => opsController,
+    getOpsController: () => rawOpsController,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
     getActivePaneId: () => activeDirectory()?.paneId,
     navigateActiveLocation: async (location, preferredCursorName) => {
@@ -3427,7 +3443,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
       const shellControllers = buildControllers({
-        ops: { create: () => createOperationsController(attrs.client) },
+        ops: {
+          create: () => {
+            rawOpsController = createOperationsController(attrs.client);
+            return withOperationConfirmation(
+              rawOpsController,
+              () => currentSettings?.confirmFileOperations !== false,
+              (request) => {
+                pendingOperationConfirmation?.resolve(false);
+                return new Promise<boolean>((resolve) => {
+                  pendingOperationConfirmation = { request, resolve };
+                  m.redraw();
+                });
+              },
+            );
+          },
+        },
         workspace: {
           create: () => createWorkspaceController(attrs.client, workspaceControllerContext),
         },
@@ -3494,21 +3525,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   reconcileSelectionAfterEntryChange(paneId, tabId, previous.entries, view.entries);
                 }
                 if (view.entries.length === 0) {
-                  // The table still renders a synthetic ".." row (via `withParentEntry`) for any
-                  // location that isn't a filesystem root, even when the directory itself is
-                  // empty - so an empty directory must not be treated as "nothing to put the
-                  // cursor on": the cursor still needs to land on that ".." row when one is
-                  // rendered.
-                  const parentEntry =
-                    view.location === undefined
-                      ? undefined
-                      : withParentEntry(pathFromUri(view.location.uri), [])[0];
-                  selections.set(key, {
-                    selectedEntryIds: [],
-                    ...(parentEntry === undefined
-                      ? {}
-                      : { cursorEntryId: parentEntry.id, anchorEntryId: parentEntry.id }),
-                  });
+                  // Keep the synthetic ".." navigation row out of cursor/selection state. This
+                  // also avoids a transient empty first page leaving ".." focused after the real
+                  // entries arrive during workspace restoration.
+                  selections.set(key, { selectedEntryIds: [] });
                 } else if (
                   selections.get(key)?.cursorEntryId === undefined ||
                   previous?.location?.uri !== view.location?.uri
@@ -3659,6 +3679,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
     onremove: () => {
       removed = true;
+      pendingOperationConfirmation?.resolve(false);
+      pendingOperationConfirmation = undefined;
       dialogs.getState().pendingArchiveCredential?.resolve(false);
       dialogs.clearArchiveCredential();
       systemThemeQuery?.removeEventListener('change', handleSystemThemeChange);
@@ -3698,7 +3720,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
       return m(
         '.fm-app-shell',
-        { 'data-mac-titlebar-overlay': isMacOverlay ? 'true' : undefined },
+        {
+          'data-mac-titlebar-overlay': isMacOverlay ? 'true' : undefined,
+          'data-mm-preset': 'compact-minimal',
+        },
         [
           isWindowsTauriHost()
             ? m('.fm-windows-titlebar', [

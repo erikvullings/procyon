@@ -31,7 +31,10 @@ const REQUIRED_TOKENS = [
   '--fm-error',
   '--fm-warning',
   '--fm-success',
+  '--fm-cursor-row-background',
+  '--fm-tab-inactive-background',
   '--fm-row-height',
+  '--fm-header-height',
   '--fm-font-family',
   '--fm-font-size',
   '--fm-radius',
@@ -212,6 +215,22 @@ describe('theme stylesheet', () => {
     }
   });
 
+  it('keeps the cursor row label readable on its dark-blue highlight', () => {
+    const themes = [
+      themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/),
+      themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/),
+    ];
+
+    for (const theme of themes) {
+      expect(
+        contrastRatio(
+          tokenValue(theme, '--fm-cursor-row-text'),
+          tokenValue(theme, '--fm-cursor-row-background'),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('uses subtle selection backgrounds and a distinct brighter cursor highlight', () => {
     expect(themeCss).not.toMatch(/(?:^|\n)\.fm-selected-row\s*\{/);
     expect(themeCss).not.toMatch(/(?:^|\n)\.fm-cursor-row\s*\{/);
@@ -225,18 +244,42 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*18%/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:[^}]*48%[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
     );
     // The cursor row keeps a distinctive outline even when it's also marked, so the mark's amber
     // text color (above) isn't washed out by the cursor's own background/text override - and,
     // unlike the fill rules above, this one is deliberately not gated on `:focus-within`, so the
     // cursor position stays visible in a pane that lost focus to the tree sidebar.
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-accent\)/s,
+      /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-cursor-row-background\)/s,
     );
     expect(themeCss).toMatch(
       /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:/s,
     );
+  });
+
+  it('uses the same four-pixel-taller height for headers and the function-key footer', () => {
+    const lightTheme = themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/);
+    const functionBar = themeBlock(/\.fm-function-key-bar\s*\{([^}]*justify-content[^}]*)\}/);
+    const tabs = paneCss.match(/\.fm-pane-tabs\s*\{([^}]*display:\s*flex[^}]*)\}/s)?.[1];
+    const tab = paneCss.match(/\.fm-pane-tab\s*\{([^}]*)\}/s)?.[1];
+
+    expect(lightTheme).toContain('--fm-header-height: calc(var(--fm-row-height) + 4px)');
+    expect(functionBar).toContain('min-height: var(--fm-header-height)');
+    expect(functionBar).toContain('padding-block: 2px');
+    expect(tabs).toContain('box-sizing: border-box');
+    expect(tabs).toContain('height: var(--fm-header-height)');
+    expect(tab).toContain('height: var(--fm-header-height)');
+  });
+
+  it('keeps the command toolbar at header height with muted icons', () => {
+    const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
+    const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
+
+    expect(toolbar).toContain('height: var(--fm-header-height)');
+    expect(toolbar).toContain('min-height: var(--fm-header-height)');
+    expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
+    expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
   });
 
   it('does not highlight directory rows on mouse hover', () => {
@@ -245,6 +288,46 @@ describe('theme stylesheet', () => {
 
   it('keeps the arrow cursor over directory rows', () => {
     expect(directoryTableCss).toMatch(/\.fm-directory-row\s*[,{][^}]*cursor:\s*default/s);
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="move"\][^}]*cursor:\s*default\s*!important/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="copy"\][^}]*cursor:\s*default\s*!important/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="none"\][^}]*cursor:\s*not-allowed\s*!important/s,
+    );
+    expect(directoryTableCss).not.toMatch(/cursor:\s*(?:move|copy)\s*!important/);
+  });
+
+  it('centres pointer-drag operation signs with CSS geometry', () => {
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect::before,\s*\.fm-file-drag-effect-copy::after\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*left:\s*50%[^}]*transform:\s*translate\(-50%, -50%\)/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect::before\s*\{[^}]*width:\s*0\.55rem[^}]*height:\s*2px/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect-copy::after\s*\{[^}]*width:\s*2px[^}]*height:\s*0\.55rem/s,
+    );
+  });
+
+  it('keeps populated Materialized labels close to their settings controls', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell \.input-field > label:not\(\.label-icon\)\.active\s*\{[^}]*transform:\s*none/s,
+    );
+  });
+
+  it('uses a font-independent command-palette loupe and legible shortcut chips', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-search-icon\s*\{[^}]*font-size:\s*0/s,
+    );
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-search-icon::before/s,
+    );
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-command kbd\s*\{[^}]*background:\s*var\(--fm-selection-inactive\)[^}]*color:\s*var\(--fm-text\)/s,
+    );
   });
 
   it('keeps directory and viewer content inside its pane grid track', () => {
@@ -295,13 +378,15 @@ describe('theme stylesheet', () => {
     );
   });
 
-  it('distinguishes unselected tabs from the selected light-theme tab', () => {
+  it('uses Marta-like inactive tabs while preserving the selected-tab surface', () => {
+    const darkTheme = themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/);
     const tabRule = paneCss.match(/\.fm-pane-tab\s*\{([^}]*)\}/s)?.[1];
     const selectedTabRule = paneCss.match(
       /\.fm-pane-tab\[aria-selected="true"\]\s*\{([^}]*)\}/s,
     )?.[1];
 
-    expect(tabRule).toContain('background: var(--fm-background)');
+    expect(darkTheme).toContain('--fm-tab-inactive-background: #1d2026');
+    expect(tabRule).toContain('background: var(--fm-tab-inactive-background)');
     expect(selectedTabRule).toContain('background: var(--fm-surface-elevated)');
   });
 

@@ -358,10 +358,19 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         className: 'col s12 m6',
                         label: t('settings', 'confirmPermanentDelete'),
                         checked: activeDraft.confirmPermanentDelete,
-                        left: 'Off',
-                        right: 'On',
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
                         onchange: (checked: boolean) =>
                           update(current, { confirmPermanentDelete: checked }),
+                      }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'confirmFileOperations'),
+                        checked: activeDraft.confirmFileOperations,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { confirmFileOperations: checked }),
                       }),
                     ]),
 

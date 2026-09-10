@@ -12,7 +12,7 @@ Depends on: 0050
 and §36 item 8.
 
 ## Acceptance Criteria
-- `Ctrl/Cmd+P` opens a custom palette component (not a Material dialog — §14) listing all available
+- `Ctrl/Cmd+P` opens the shared `mithril-materialized` command palette, adapted to list all available
   actions from the registry.
 - Fuzzy filtering over title, id and category, with the shortcut shown per entry and results ranked
   by match quality then recency of use.
@@ -32,3 +32,6 @@ and §36 item 8.
 
 ## Agent Notes
 - 2026-08-01 Codex: Added a custom accessible command palette backed by the already-loaded action registry. It fuzzy-filters title/id/category, ranks by match quality and recency, displays shortcuts and disabled reasons, traps focus, restores prior focus, supports keyboard filtering/navigation/invocation/escape, and renders a typed form for supported object `parameterSchema` properties. Core create-directory remains a local semantic action; other palette invocations use the shared transport-neutral client with active pane/selection context. Verified 4 new focused palette tests and one AppShell keyboard-flow test via Vitest, full frontend Vitest (270 passed, 1 skipped), frontend typecheck, and Rust formatting/clippy. Root Biome lint has two pre-existing `!important` warnings in `frontend/src/features/panes/pane.css`; this task adds none.
+- 2026-09-10 Copilot: Migrated the bespoke dialog/listbox implementation to the typed
+  `mithril-materialized` 4 command palette while retaining Procyon's action availability, fuzzy
+  ranking, recency, shortcut display, parameter-schema form, and focus-return behavior.

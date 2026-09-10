@@ -23,7 +23,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 /// Current on-disk settings schema.
-pub const CURRENT_SCHEMA_VERSION: u32 = 6;
+pub const CURRENT_SCHEMA_VERSION: u32 = 7;
 /// Stable settings filename within the platform configuration directory.
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
 
@@ -209,6 +209,8 @@ pub struct Settings {
     pub show_hidden_files: bool,
     /// Whether permanent deletion requires confirmation.
     pub confirm_permanent_delete: bool,
+    /// Whether routine copy, move, and Trash operations require confirmation.
+    pub confirm_file_operations: bool,
     /// Default operation conflict policy.
     pub default_conflict_policy: ConflictPolicy,
     /// Maximum concurrent operations.
@@ -259,6 +261,7 @@ impl Default for Settings {
             size_format: SizeFormat::Binary,
             show_hidden_files: false,
             confirm_permanent_delete: true,
+            confirm_file_operations: true,
             default_conflict_policy: ConflictPolicy::Ask,
             operation_concurrency: 2,
             default_pane_layout: DefaultPaneLayout::Dual,
@@ -867,6 +870,15 @@ mod tests {
 
         assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(settings.saved_searches.is_empty());
+    }
+
+    #[test]
+    fn v6_fixture_enables_routine_operation_confirmation() {
+        let settings =
+            migrate(br#"{"schemaVersion":6,"theme":"dark"}"#).expect("migrate v6 settings");
+
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
+        assert!(settings.confirm_file_operations);
     }
 
     #[test]

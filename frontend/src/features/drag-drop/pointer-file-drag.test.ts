@@ -104,15 +104,20 @@ describe('pointer file drag', () => {
     );
 
     expect(document.documentElement.dataset.fileDragEffect).toBe('move');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+    const indicator = document.querySelector<HTMLElement>('.fm-file-drag-effect');
+    expect(indicator?.classList.contains('fm-file-drag-effect-move')).toBe(true);
+    expect(indicator?.textContent).toBe('');
+    expect(indicator?.style.left).toBe('44px');
+    expect(indicator?.style.top).toBe('26px');
 
     window.dispatchEvent(new KeyboardEvent('keydown', { altKey: true, key: 'Alt' }));
     expect(document.documentElement.dataset.fileDragEffect).toBe('copy');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('+');
+    expect(indicator?.classList.contains('fm-file-drag-effect-copy')).toBe(true);
+    expect(indicator?.textContent).toBe('');
 
     window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt' }));
     expect(document.documentElement.dataset.fileDragEffect).toBe('move');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+    expect(indicator?.classList.contains('fm-file-drag-effect-move')).toBe(true);
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
     expect(document.querySelector('.fm-file-drag-effect')).toBeNull();

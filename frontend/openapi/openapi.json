@@ -18764,6 +18764,7 @@
           "sizeFormat",
           "showHiddenFiles",
           "confirmPermanentDelete",
+          "confirmFileOperations",
           "defaultConflictPolicy",
           "operationConcurrency",
           "defaultPaneLayout",
@@ -18791,6 +18792,10 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "confirmFileOperations": {
+            "type": "boolean",
+            "description": "Confirm routine copy, move, and Trash operations before they start."
           },
           "confirmPermanentDelete": {
             "type": "boolean",

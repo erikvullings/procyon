@@ -44,3 +44,9 @@ exactly two panes (§5.3), but the first UI shows two.
   and main-window regions. Frontend typecheck, all 127 frontend tests, production build, repository
   lint, and the complete Rust/frontend/script test suite pass. The shared Tauri host startup test
   passes; Windows visual behaviour was not manually exercised on this macOS development host.
+- 2026-09-10 Copilot: Matched pane-tab headers to the 24px function-key footer height. Dark and
+  system-dark inactive tabs now use the sampled Marta shade `#1d2026` through the reusable
+  `--fm-tab-inactive-background` theme token; selected tabs retain the elevated surface colour.
+- 2026-09-10 Copilot: Matched the command toolbar to the shared 24px header height and muted its
+  icons with the inactive-tab text token. Synthetic `..` entries no longer receive keyboard cursor
+  state, preventing a transient empty startup page from leaving the parent row outlined.

@@ -389,7 +389,7 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-directory-tree')).toBeNull();
   });
 
-  it('places the cursor on the ".." row when entering an empty directory', async () => {
+  it('leaves the synthetic ".." row unfocused when entering an empty directory', async () => {
     mountShell('mock');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Empty'));
@@ -401,12 +401,8 @@ describe('AppShell', () => {
     const activePane = empty?.closest<HTMLElement>('.fm-pane');
     activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
-    // The directory itself has no entries, but the table still renders a synthetic ".." row
-    // (there's nothing else to land the keyboard cursor on) - regression test for the cursor
-    // silently disappearing instead of landing there.
-    await vi.waitFor(() =>
-      expect(activePane?.querySelector('.fm-cursor-row')?.textContent).toContain('..'),
-    );
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('..'));
+    expect(activePane?.querySelector('.fm-cursor-row')).toBeNull();
   });
 
   it('keeps keyboard focus and the active pane together after Tab', async () => {
@@ -427,9 +423,15 @@ describe('AppShell', () => {
   it('focuses the active pane when the workspace first appears', async () => {
     mountShell('mock');
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-workspace-pane')).toHaveLength(2));
+    await vi.waitFor(() => expect(root.textContent).toContain('Projects'));
 
     const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
     await vi.waitFor(() => expect(document.activeElement).toBe(activePane));
+    for (const parentRow of root.querySelectorAll<HTMLElement>('.fm-directory-row')) {
+      if (parentRow.querySelector('.fm-entry-name')?.textContent === '..') {
+        expect(parentRow.classList).not.toContain('fm-cursor-row');
+      }
+    }
   });
 
   it('restores keyboard focus to the active pane when the window regains focus', async () => {
@@ -1239,14 +1241,11 @@ describe('AppShell', () => {
     );
     m.redraw.sync();
 
-    const input = root.querySelector<HTMLInputElement>('.fm-command-palette-input');
+    const input = root.querySelector<HTMLInputElement>('.mm-command-palette-search input');
     expect(input).not.toBeNull();
-    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await vi.waitFor(() => expect(invokeAction).toHaveBeenCalledOnce());
-    // "Calculate Folder Size" (task 0071) sorts alphabetically first among the unfiltered,
-    // always-available action list, so one ArrowDown from the palette's initial state now lands
-    // there instead of "Clear selection".
+    // The materialized palette initially focuses the first available ranked command.
     expect(invokeAction).toHaveBeenCalledWith(
       expect.objectContaining({ actionId: 'core.calculateFolderSize' }),
     );
@@ -1256,7 +1255,7 @@ describe('AppShell', () => {
     );
     m.redraw.sync();
     root
-      .querySelector('.fm-command-palette-input')
+      .querySelector('.mm-command-palette-search input')
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
     expect(root.querySelector('.fm-command-palette')).toBeNull();
@@ -1274,7 +1273,7 @@ describe('AppShell', () => {
     );
     m.redraw.sync();
 
-    const input = root.querySelector<HTMLInputElement>('.fm-command-palette-input');
+    const input = root.querySelector<HTMLInputElement>('.mm-command-palette-search input');
     expect(input).not.toBeNull();
     if (input !== null) {
       input.value = 'directory tree';
@@ -1301,7 +1300,7 @@ describe('AppShell', () => {
         new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }),
       );
       m.redraw.sync();
-      const input = root.querySelector<HTMLInputElement>('.fm-command-palette-input');
+      const input = root.querySelector<HTMLInputElement>('.mm-command-palette-search input');
       if (input === null) throw new Error('command palette did not open');
       input.value = 'operations centre';
       input.dispatchEvent(new Event('input'));
@@ -1406,6 +1405,7 @@ describe('AppShell', () => {
     target?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true }));
 
+    await confirmRoutineOperation('Move');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     const request = startOperation.mock.calls[0]?.[0];
     if (request === undefined) throw new Error('move request missing');
@@ -1460,6 +1460,20 @@ describe('AppShell', () => {
     };
   }
 
+  async function confirmRoutineOperation(label: string): Promise<void> {
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
+    );
+    const modal = root.querySelector('.fm-operation-confirmation-modal.active');
+    const button = [...(modal?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === label,
+    );
+    if (!button) {
+      throw new Error(`confirmation button ${label} missing in: ${modal?.textContent ?? ''}`);
+    }
+    button.click();
+  }
+
   it('copies one selected file to the other pane with F5', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');
@@ -1472,6 +1486,8 @@ describe('AppShell', () => {
     file?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
 
+    expect(startOperation).not.toHaveBeenCalled();
+    await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'copy',
@@ -1551,6 +1567,8 @@ describe('AppShell', () => {
     expect(footerKey).not.toBeUndefined();
     footerKey?.click();
 
+    expect(startOperation).not.toHaveBeenCalled();
+    await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'copy',
@@ -1593,6 +1611,8 @@ describe('AppShell', () => {
     file?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8', bubbles: true }));
 
+    expect(startOperation).not.toHaveBeenCalled();
+    await confirmRoutineOperation('Move to Trash');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'trash',
@@ -1955,15 +1975,7 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
     );
     m.redraw.sync();
-    const contentMode = [
-      ...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button'),
-    ].find((button) => button.textContent === 'Content');
-    if (contentMode === undefined) {
-      throw new Error('content search mode missing');
-    }
-    contentMode.click();
-    m.redraw.sync();
-    const contentInput = root.querySelector<HTMLInputElement>('#find-files-query');
+    const contentInput = root.querySelector<HTMLInputElement>('#find-files-content-query');
     if (contentInput === null) throw new Error('find files input missing');
     contentInput.value = 'ERROR';
     contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -2250,6 +2262,7 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }),
     );
 
+    await confirmRoutineOperation('Move');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'move',
@@ -2318,6 +2331,7 @@ describe('AppShell', () => {
     target?.dispatchEvent(new Event('dragover', { bubbles: true, cancelable: true }));
     target?.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
 
+    await confirmRoutineOperation('Move');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'move',
@@ -2403,6 +2417,7 @@ describe('AppShell', () => {
     );
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 1 }));
 
+    await confirmRoutineOperation('Move');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'move',
@@ -2462,6 +2477,7 @@ describe('AppShell', () => {
       }),
     );
 
+    await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'copy',
@@ -2544,6 +2560,7 @@ describe('AppShell', () => {
       position: { x: 240, y: 120 },
     });
 
+    await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'copy',
@@ -3107,7 +3124,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('opens Search Knowledge in a transient pane tab without any generation profile', async () => {
+  it('opens Semantic Search in a transient pane tab without any generation profile', async () => {
     const client = new MockFileManagerClient();
     const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
     m.mount(root, {
@@ -3118,9 +3135,7 @@ describe('AppShell', () => {
     // Ask needs a generation profile; knowledge search must not.
     expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
     const trigger = await vi.waitFor(() => {
-      const button = root.querySelector<HTMLButtonElement>(
-        'button[aria-label="Search Knowledge…"]',
-      );
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Semantic Search…"]');
       expect(button).not.toBeNull();
       return button as HTMLButtonElement;
     });
@@ -3136,14 +3151,14 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(
       'Generate answer',
     );
-    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Search Knowledge');
+    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Semantic Search');
     expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'addTransientTab' }),
       undefined,
     );
 
     root
-      .querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Search Knowledge"]')
+      .querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Semantic Search"]')
       ?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search')).toBeNull());
   });
@@ -3156,7 +3171,7 @@ describe('AppShell', () => {
     });
     const trigger = await vi.waitFor(() => {
       const candidate = root.querySelector<HTMLButtonElement>(
-        'button[aria-label="Search Knowledge…"]',
+        'button[aria-label="Semantic Search…"]',
       );
       expect(candidate).not.toBeNull();
       return candidate as HTMLButtonElement;
@@ -3191,7 +3206,7 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-knowledge-search')).not.toBeNull();
   });
 
-  it('exposes Search Knowledge in the command palette with its shortcut (task 0206)', async () => {
+  it('exposes Semantic Search in the command palette with its shortcut (task 0206)', async () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
     });
@@ -3199,12 +3214,12 @@ describe('AppShell', () => {
 
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Search Knowledge…'),
+      expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Semantic Search…'),
     );
 
-    const entry = [...root.querySelectorAll<HTMLElement>('.fm-command-palette li')].find(
-      (candidate) => candidate.textContent?.includes('Search Knowledge…'),
-    );
+    const entry = [
+      ...root.querySelectorAll<HTMLElement>('.fm-command-palette .mm-command-palette-command'),
+    ].find((candidate) => candidate.textContent?.includes('Semantic Search…'));
     expect(entry?.textContent).toContain('client.searchKnowledge');
     expect(entry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+k');
   });
@@ -3220,11 +3235,11 @@ describe('AppShell', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
-    expect(root.querySelector('button[aria-label="Search Knowledge…"]')).toBeNull();
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
     expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
-      'Search Knowledge…',
+      'Semantic Search…',
     );
   });
 
@@ -3241,11 +3256,11 @@ describe('AppShell', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
-    expect(root.querySelector('button[aria-label="Search Knowledge…"]')).toBeNull();
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-command-palette')).not.toBeNull());
     expect(root.querySelector('.fm-command-palette')?.textContent ?? '').not.toContain(
-      'Search Knowledge…',
+      'Semantic Search…',
     );
   });
 
@@ -3282,12 +3297,14 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-command-palette')?.textContent).toContain('Ask your files'),
     );
-    const askPaletteEntry = [...root.querySelectorAll<HTMLElement>('.fm-command-palette li')].find(
-      (entry) => entry.textContent?.includes('Ask your files'),
-    );
+    const askPaletteEntry = [
+      ...root.querySelectorAll<HTMLElement>('.fm-command-palette .mm-command-palette-command'),
+    ].find((entry) => entry.textContent?.includes('Ask your files'));
     expect(askPaletteEntry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+f');
     root
-      .querySelector<HTMLElement>('.fm-command-palette-backdrop')
+      .querySelector<HTMLElement>('.fm-command-palette')
+      ?.closest('.modal-container')
+      ?.querySelector<HTMLElement>('.modal-overlay')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     m.redraw.sync();
 
@@ -3601,6 +3618,7 @@ describe('AppShell', () => {
       sizeFormat: 'binary',
       showHiddenFiles: false,
       confirmPermanentDelete: true,
+      confirmFileOperations: true,
       defaultConflictPolicy: 'ask',
       operationConcurrency: 2,
       defaultPaneLayout: 'dual',

@@ -46,12 +46,16 @@ import { CreateDirectoryDialog } from '../operations/create-directory-dialog';
 import { CreateFileDialog } from '../operations/create-file-dialog';
 import { MultiRenameDialog } from '../operations/multi-rename-dialog';
 import { OperationCentre } from '../operations/operation-centre';
+import { OperationConfirmationDialog } from '../operations/operation-confirmation-dialog';
 import {
   dismissOperation,
   type OperationCentreState,
   transitionOperationState,
 } from '../operations/operation-state';
-import type { OperationsController } from '../operations/operations-controller';
+import type {
+  OperationConfirmationRequest,
+  OperationsController,
+} from '../operations/operations-controller';
 import { PermanentDeleteDialog } from '../operations/permanent-delete-dialog';
 import { CloseLastTabDialog } from '../panes/close-last-tab-dialog';
 import type { TabController } from '../panes/tab-controller';
@@ -84,6 +88,8 @@ export interface AppDialogsContext {
   getFindFilesError(): string | undefined;
   getCloseTabConfirmation(): { readonly paneId: PaneId; readonly tabId: TabId } | undefined;
   setCloseTabConfirmation(conf?: { readonly paneId: PaneId; readonly tabId: TabId }): void;
+  getOperationConfirmation(): OperationConfirmationRequest | undefined;
+  resolveOperationConfirmation(confirmed: boolean): void;
   getDialogs(): DialogUIController;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
   getFormatSettings(): EntryFormatSettings;
@@ -170,8 +176,14 @@ export function renderAppDialogs(
 ): m.Children[] {
   const dialogs = ctx.getDialogs();
   const ds = dialogs.getState();
+  const operationConfirmation = ctx.getOperationConfirmation();
 
   return [
+    m(OperationConfirmationDialog, {
+      ...(operationConfirmation === undefined ? {} : { request: operationConfirmation }),
+      onConfirm: () => ctx.resolveOperationConfirmation(true),
+      onCancel: () => ctx.resolveOperationConfirmation(false),
+    }),
     ctx.getOperationCentreVisible()
       ? m(OperationCentre, {
           state: ctx.getOperations(),

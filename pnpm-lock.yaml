@@ -191,8 +191,8 @@ importers:
         specifier: ^2.3.8
         version: 2.3.8
       mithril-materialized:
-        specifier: ^3.17.9
-        version: 3.17.9
+        specifier: ^4.0.0
+        version: 4.0.0
       pdfjs-dist:
         specifier: 6.3.289
         version: 6.3.289
@@ -1662,8 +1662,8 @@ packages:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
     engines: {node: 18 || 20 || >=22}
 
-  mithril-materialized@3.17.9:
-    resolution: {integrity: sha512-nvE4/vty+Ju2xkT+9q3ww9vo0x2zonFU6A6gf335kl5XiRwkAnlE/MmGHCRwVsyE2mDnqcBCEkyVNb8p2pZkog==}
+  mithril-materialized@4.0.0:
+    resolution: {integrity: sha512-osq9Q25++xDRmyczM8AQsNok3GBmOcIH/MYJsAnFWAph+bTSC2d7Cwpncf2svWKAXlQ+w5iyqWcH3K1Ydk0LYA==}
 
   mithril@2.3.8:
     resolution: {integrity: sha512-za/Yo7qXEckjm5syrSfaaI9Utf4tCUT3T1IOIYqH6Lrj7G0OZuYYLAY9SV4ygoaAf0+CNqU92MBt+7pmo53JVQ==}
@@ -3362,7 +3362,7 @@ snapshots:
     dependencies:
       brace-expansion: 5.0.8
 
-  mithril-materialized@3.17.9:
+  mithril-materialized@4.0.0:
     dependencies:
       mithril: 2.3.8
 
