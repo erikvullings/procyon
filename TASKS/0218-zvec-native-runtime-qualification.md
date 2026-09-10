@@ -101,5 +101,14 @@ subsystem and must not change either release gate.
   `procyon.semantic.worker.macos-aarch64.0.1.0.24.73e5d803bfd2fe32`. The job then failed because
   `spctl --type execute` correctly reports a standalone CLI is not an app, so smoke/upload did not
   run. The follow-up removes that inapplicable app-bundle assessment while retaining strict
-  codesign and artifact-bound Apple acceptance. Dispatch-only payload continuation now lets signed
-  catalogs be retained for successful targets; tag builds remain fail-closed.
+  codesign and artifact-bound Apple acceptance.
+- 2026-09-10 Copilot: Final private run `34483603909` retained fully smoked payloads for macOS
+  arm64, Windows x86-64, and Linux arm64. The macOS runtime
+  `procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.77431044a055f64c` and worker
+  `procyon.semantic.worker.macos-aarch64.0.1.0.24.ae2092aae393df7f` passed Developer ID validation,
+  Apple notary acceptance, artifact-bound receipt recording, production-trust verification,
+  protocol handshake, offline model activation, lifecycle tests, and private upload. Linux x86-64
+  alone reproduced the ONNX Runtime/Ubuntu 22.04 link blocker. Every public or installer job stayed
+  skipped. Dispatch-only continuation did not enable partial catalog signing and is removed so the
+  final workflow reports this supported-target blocker as a failure; successful target payloads
+  remain retained.

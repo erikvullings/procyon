@@ -154,16 +154,34 @@ is valid but does not seem to be an app.” Gatekeeper app-bundle assessment is 
 these raw optional payloads; the follow-up removes that invalid check while retaining strict
 codesign verification and the artifact-bound accepted Apple receipt.
 
-Private dispatch payload failures now continue only far enough for the catalog matrix to sign
-successful target inputs. Tag builds do not continue on error, and publication still requires the
-entire payload and catalog matrices to succeed.
+The attempted dispatch-only continuation did not make the catalog matrix eligible because the
+matrix dependency still had a failed result. It is removed in the final workflow so a supported
+target failure remains visibly red. Successful per-target payload artifacts are retained before
+the aggregate failure; signed catalogs still require the complete supported matrix.
+
+### Final private dispatch evidence
+
+Workflow run
+[`34483603909`](https://github.com/erikvullings/procyon/actions/runs/34483603909) exercised clean
+commit `fa70ff3faa3974c64e2d12e45a205856c27303de`. macOS arm64, Windows x86-64, and Linux arm64
+all completed payload build, offline/package smoke, lifecycle tests, and private artifact upload.
+Linux x86-64 reproduced the documented ONNX Runtime/Ubuntu 22.04 link blocker. Prerelease, desktop
+installer, catalog, semantic publication, Homebrew, and Chocolatey jobs were all skipped; no public
+asset or release was created.
+
+The final macOS content-addressed IDs are
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.77431044a055f64c` and
+`procyon.semantic.worker.macos-aarch64.0.1.0.24.ae2092aae393df7f`. Both passed strict Developer ID
+verification. Apple accepted the ZIP containing those exact bytes, the recorder bound its digest
+and submission ID to both artifact hashes, and the production-trust smoke revalidated that record
+before the packaged protocol/model/component tests.
 
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
-| Signed production payload/catalog retained | Missing | Unsigned private payload retained; signed catalog missing | Blocked before payload by ONNX Runtime/Ubuntu 22.04 ABI | Private payload retained; signed catalog missing |
-| Packaged worker handshake and offline model activation | Not run on qualification artifact | Pass on private payload in run `34480698440` | Worker link blocked | Pass on private payload in run `34480698440` |
+| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Blocked before payload by ONNX Runtime/Ubuntu 22.04 ABI | Private payload retained; signed catalog missing |
+| Packaged worker handshake and offline model activation | Pass on private payload in run `34483603909` | Pass on private payload in run `34483603909` | Worker link blocked | Pass on private payload in run `34483603909` |
 | Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |

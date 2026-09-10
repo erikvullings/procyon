@@ -49,13 +49,6 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'semantic-payloads must allow non-published dispatches and require qualification for tag builds',
     );
   }
-  if (
-    !String(semanticPayloads?.['continue-on-error'] ?? '').includes(
-      "github.event_name == 'workflow_dispatch'",
-    )
-  ) {
-    failures.push('partial payload continuation must be restricted to private workflow_dispatch');
-  }
   const bundleStep = semanticPayloads?.steps?.find(
     (step) => step.name === 'Build verified semantic release payloads',
   );
