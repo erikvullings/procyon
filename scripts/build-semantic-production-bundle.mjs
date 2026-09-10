@@ -110,11 +110,12 @@ export function sourceBuildIdentity(
   return { revision, workingTree: dirty ? 'dirty' : 'clean' };
 }
 
-function parseArguments(args) {
+export function parseProductionBundleArguments(args) {
+  const normalizedArgs = args[0] === '--' ? args.slice(1) : args;
   const values = new Map();
-  for (let index = 0; index < args.length; index += 2) {
-    const name = args[index];
-    const value = args[index + 1];
+  for (let index = 0; index < normalizedArgs.length; index += 2) {
+    const name = normalizedArgs[index];
+    const value = normalizedArgs[index + 1];
     if (!name?.startsWith('--') || !value) {
       throw new Error(
         'Usage: build-semantic-production-bundle.mjs --output <dir> ' +
@@ -180,7 +181,7 @@ function smokePackagedExecutableOffline(bundle, target, sourceRuntimeDirectory) 
 }
 
 export async function buildSemanticProductionBundle(args = process.argv.slice(2)) {
-  const values = parseArguments(args);
+  const values = parseProductionBundleArguments(args);
   const sourceIdentity = sourceBuildIdentity(values.get('--source-revision'));
   const target = supportedSemanticTarget();
   const runtimeTarget = zvecRuntimeTarget();

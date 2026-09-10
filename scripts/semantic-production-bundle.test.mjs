@@ -5,6 +5,7 @@ import {
   nativeLibraryNames,
   PRODUCTION_CHUNKER_IDENTITY,
   PRODUCTION_CONVERTER_IDENTITY,
+  parseProductionBundleArguments,
   sourceBuildIdentity,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
@@ -37,6 +38,21 @@ test('production source identity requires a complete checked-out commit', () => 
     () => sourceBuildIdentity('0'.repeat(40), { requireClean: false }),
     /does not match checked-out HEAD/u,
   );
+});
+
+test('production bundle CLI accepts the package-manager argument separator', () => {
+  const values = parseProductionBundleArguments([
+    '--',
+    '--output',
+    'bundle',
+    '--release-base-url',
+    'https://qualification.invalid/revision',
+    '--source-revision',
+    'a'.repeat(40),
+  ]);
+  assert.equal(values.get('--output'), 'bundle');
+  assert.equal(values.get('--release-base-url'), 'https://qualification.invalid/revision');
+  assert.equal(values.get('--source-revision'), 'a'.repeat(40));
 });
 
 test('Zvec native library names are platform-specific', () => {

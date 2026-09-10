@@ -6,9 +6,10 @@
 `SEMANTIC_RELEASE_QUALIFIED` to `true`. Tagged desktop releases remain available, but skip semantic
 payload construction, catalog signing and publication, and catalog embedding. Managed semantic
 installation therefore remains unavailable in those installers. A manual workflow dispatch still
-builds non-published semantic payloads, signed catalogs, and ordinary catalog-free installers so
-operators can retain native artifact evidence without creating an installer that points at private
-or nonexistent release assets. Installed semantic qualification remains a separate task-0198 gap.
+builds non-published semantic payloads and signed catalogs so operators can retain native artifact
+evidence without creating an installer that points at private or nonexistent release assets.
+Desktop installer jobs are push-only. Installed semantic qualification remains a separate
+task-0198 gap.
 
 This report is the operator record for task 0198. A code-complete subsystem and developer-bundle
 results are not substitutes for measurements from the exact signed production artifacts.
@@ -76,9 +77,30 @@ GitHub Release upload, Homebrew push, or Chocolatey publication. The audit found
 unguarded Linux and Windows release-action steps plus the Chocolatey reusable job. On tag builds,
 semantic payload construction remains gated by
 `SEMANTIC_RELEASE_QUALIFIED == 'true'`; neither semantic release variable is changed here.
-Dispatch catalogs use the reserved `qualification.invalid` host and dispatch installers never embed
-them. This makes the non-publication boundary explicit rather than producing installers whose
-catalog URLs cannot resolve.
+Dispatch catalogs use the reserved `qualification.invalid` host and desktop installer jobs are
+disabled for dispatch. This makes the non-publication boundary explicit rather than producing
+installers whose catalog URLs cannot resolve.
+
+### First private dispatch evidence
+
+Workflow run
+[`34475811458`](https://github.com/erikvullings/procyon/actions/runs/34475811458) exercised commit
+`5eb184809796439fcdfd88231ad201fbc0850e0a` on 2026-09-10. The prerelease, semantic publication,
+Homebrew, and Chocolatey jobs were all skipped; no public release or semantic asset was created.
+The existing macOS, Windows, and Linux base-installer jobs completed successfully without embedding
+a semantic catalog.
+
+The semantic payload result was not artifact evidence:
+
+- Linux x86-64, Linux arm64, and Windows x86-64 reached `Build verified semantic release payloads`
+  and failed immediately because pnpm forwarded its conventional argument separator as a literal
+  `--`. The bundle parser rejected it before any runtime/model download or build.
+- macOS arm64 acquired no runner and executed no steps because `macos-14-xlarge` is unavailable to
+  this repository.
+
+The follow-up accepts one leading package-manager separator, covers it with a deterministic test,
+and uses the standard `macos-15` arm64 runner label also used by upstream Zvec. Manual dispatch now
+runs only the private semantic payload, signing, catalog, and Actions-artifact assembly path.
 
 ## Evidence status
 

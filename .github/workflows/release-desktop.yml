@@ -22,7 +22,7 @@ jobs:
   macos:
     name: Signed and notarized macOS bundles
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
@@ -173,12 +173,6 @@ jobs:
         with:
           files: |
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          name: signed-notarized-macos-${{ github.sha }}
-          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
-          if-no-files-found: error
       - name: Remove temporary signing credentials
         if: always()
         run: rm -f "$APPLE_API_KEY_PATH"
@@ -186,7 +180,7 @@ jobs:
   linux:
     name: Linux packages
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
@@ -240,19 +234,11 @@ jobs:
           files: |
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          name: linux-installers-${{ github.sha }}
-          path: |
-            target/release/bundle/deb/*.deb
-            target/release/bundle/appimage/*.AppImage
-          if-no-files-found: error
 
   windows:
     name: Unsigned Windows installers
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: windows-latest
     environment: desktop-release
     steps:
@@ -298,14 +284,6 @@ jobs:
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          name: unsigned-windows-installers-${{ github.sha }}
-          path: |
-            target/release/bundle/msi/*.msi
-            target/release/bundle/nsis/*-setup.exe
-          if-no-files-found: error
 
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
@@ -319,7 +297,7 @@ jobs:
       matrix:
         include:
           - target: macos-aarch64
-            runner: macos-14-xlarge
+            runner: macos-15
           - target: windows-x86_64
             runner: windows-latest
           - target: linux-x86_64

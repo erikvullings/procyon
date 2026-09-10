@@ -57,6 +57,9 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   }
   for (const jobName of ['macos', 'linux', 'windows']) {
     const job = workflow.jobs?.[jobName];
+    if (!excludesWorkflowDispatch(job?.if)) {
+      failures.push(`${jobName}: desktop installer job must stay disabled for workflow_dispatch`);
+    }
     for (const stepName of [
       `Embed the signed ${jobName === 'macos' ? 'macOS arm64' : jobName === 'linux' ? 'Linux x86-64' : 'Windows x86-64'} semantic catalog`,
       'Compile the production semantic catalog trust key',

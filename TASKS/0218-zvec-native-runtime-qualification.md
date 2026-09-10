@@ -59,9 +59,9 @@ subsystem and must not change either release gate.
   confirmed an arm64 Mach-O with only CoreFoundation, libc++, and libSystem dependencies.
 - 2026-09-10 Copilot: Static workflow proof found and closed three manual-dispatch publication
   paths: unguarded Linux and Windows GitHub Release actions and the Chocolatey reusable workflow.
-  Manual dispatch now retains installers and semantic inputs only as private Actions artifacts.
-  Its catalogs use `qualification.invalid` and are not embedded in dispatch installers, preventing
-  an installed build from pointing at deliberately unpublished bytes.
+  Manual dispatch now runs only the private semantic payload/catalog path. Its catalogs use
+  `qualification.invalid`; desktop installer jobs are push-only, preventing an installed build
+  from pointing at deliberately unpublished bytes.
 - 2026-09-10 Copilot: The unsigned local macOS arm64 production bundle built from the pinned 465 MiB
   multilingual model and verified runtime, hid the build-time Zvec cache while launching the exact
   content-addressed worker/runtime, reached the worker argument parser, completed the protocol
@@ -75,3 +75,10 @@ subsystem and must not change either release gate.
   assertions for the already-absent ADR/README sections. Task 0198 remains NO-GO because signed
   native-host artifacts and its installed quality/accessibility/privacy/failure matrix are still
   outstanding.
+- 2026-09-10 Copilot: Private workflow run `34475811458` proved that prerelease, semantic
+  publication, Homebrew, and Chocolatey stayed skipped. All four semantic payload jobs failed
+  before packaging: Linux x86-64, Linux arm64, and Windows x86-64 exposed a shared CLI defect where
+  pnpm forwarded a literal `--`; macOS acquired no `macos-14-xlarge` runner and executed no steps.
+  The base macOS, Windows, and Linux installer jobs succeeded without semantic catalogs. The
+  follow-up accepts and tests the package-manager separator, switches the arm64 payload to the
+  upstream-proven `macos-15` label, and removes installer jobs from manual dispatch.
