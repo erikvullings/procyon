@@ -22,7 +22,7 @@ jobs:
   macos:
     name: Signed and notarized macOS bundles
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
@@ -37,13 +37,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed macOS arm64 semantic catalog
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-macos-aarch64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
@@ -173,12 +173,6 @@ jobs:
         with:
           files: |
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          name: signed-notarized-macos-${{ github.sha }}
-          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
-          if-no-files-found: error
       - name: Remove temporary signing credentials
         if: always()
         run: rm -f "$APPLE_API_KEY_PATH"
@@ -186,7 +180,7 @@ jobs:
   linux:
     name: Linux packages
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
@@ -208,19 +202,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed Linux x86-64 semantic catalog
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-linux-x86_64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
           "$GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
+        if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
       - name: Record the measured Structured Knowledge Search decision
         env:
@@ -234,6 +229,7 @@ jobs:
       - name: Build Linux packages
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
         with:
           files: |
             target/release/bundle/deb/*.deb
@@ -242,7 +238,7 @@ jobs:
   windows:
     name: Unsigned Windows installers
     needs: [release, semantic-catalogs]
-    if: ${{ always() && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
     runs-on: windows-latest
     environment: desktop-release
     steps:
@@ -256,19 +252,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Embed the signed Windows x86-64 semantic catalog
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
         with:
           name: semantic-catalog-windows-x86_64
           path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
           "$env:GITHUB_ENV"
       - name: Require tag to match the Cargo-owned desktop version
+        if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$env:GITHUB_REF_NAME"
       - name: Record the measured Structured Knowledge Search decision
         env:
@@ -282,6 +279,7 @@ jobs:
       - name: Build unsigned Windows installers
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
         with:
           files: |
             target/release/bundle/msi/*.msi
@@ -299,7 +297,7 @@ jobs:
       matrix:
         include:
           - target: macos-aarch64
-            runner: macos-14-xlarge
+            runner: macos-15
           - target: windows-x86_64
             runner: windows-latest
           - target: linux-x86_64
@@ -316,6 +314,14 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Prove qualification dispatch cannot publish
+        run: node scripts/check-semantic-qualification-workflow.mjs
+      - name: Configure the MSVC tool environment
+        if: matrix.target == 'windows-x86_64'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install the configured macOS linker
+        if: matrix.target == 'macos-aarch64'
+        run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
@@ -368,12 +374,13 @@ jobs:
           chmod 600 "$APPLE_API_KEY_PATH"
       - name: Build verified semantic release payloads
         env:
+          PROCYON_REQUIRE_CLEAN_SOURCE: "1"
           PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
         run: >
           pnpm semantic:bundle:production --
           --output "target/semantic-production-release/${{ matrix.target }}"
           --release-base-url
-          "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          "${{ github.event_name == 'push' && format('https://github.com/{0}/releases/download/{1}', github.repository, github.ref_name) || format('https://qualification.invalid/{0}', github.sha) }}"
           --source-revision "${{ github.sha }}"
       - name: Notarize and verify macOS semantic executables
         if: matrix.target == 'macos-aarch64'
@@ -399,9 +406,15 @@ jobs:
             --issuer "$APPLE_API_ISSUER" \
             --wait \
             --timeout 45m \
-            --no-s3-acceleration
-          spctl --assess --type execute --verbose=4 "$WORKER"
+            --no-s3-acceleration \
+            --output-format json > "$RUNNER_TEMP/semantic-notary-result.json"
+          node scripts/zvec-runtime-qualification.mjs record-notarization \
+            "target/semantic-production-release/${{ matrix.target }}" \
+            "$RUNNER_TEMP/semantic-notary-result.json" \
+            "$RUNNER_TEMP/semantic-notary.zip"
       - name: Smoke-test protocol, model activation, and component lifecycle
+        env:
+          PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST: "1"
         run: >
           node scripts/smoke-semantic-production-bundle.mjs
           "target/semantic-production-release/${{ matrix.target }}"
@@ -512,6 +525,7 @@ jobs:
 
   chocolatey:
     needs: windows
+    if: github.event_name == 'push'
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
       release_tag: ${{ github.ref_name }}
