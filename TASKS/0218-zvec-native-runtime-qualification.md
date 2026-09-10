@@ -134,3 +134,19 @@ subsystem and must not change either release gate.
   or CXXABI 1.3.13 ceilings and rejects the exact C23/cold-replace symbols. The catalog, desktop
   activation, offline smoke, release asset collection, license, and third-party-notice provenance
   now include this optional runtime without changing the other targets or either release gate.
+- 2026-09-10 Copilot: Private workflow run `34509441435` exercised clean commit
+  `39d9d1077f8ed4374f991bb85259fcdd79410fa8` and passed all four payload jobs. Linux x86-64
+  built on Ubuntu 22.04, rejected no ABI/dependency rule, linked the verified shared loader, hid
+  both native build caches, reached the packaged worker parser, completed the packaged protocol
+  handshake and offline model activation, passed all component lifecycle tests, and retained
+  Actions artifact `10165415845` (303,780,936 bytes compressed, SHA-256
+  `c799240a76d83862767850e6c0ba5a05aaf3fa74ddbddceea7abc4be3ad6466c`). Its worker is
+  `procyon.semantic.worker.linux-x86_64.0.1.0.24.baf8a9db9cab9c16` (15,144,128 bytes,
+  SHA-256 `baf8a9db9cab9c167aa13112088aaf6d627c67ce12e4957f6266078c40352a7b`); its ONNX
+  artifact is `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499`; and its
+  Zvec artifact remains
+  `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`. macOS arm64 passed
+  Developer ID verification and Apple submission `9fba1cf3-e93e-46a3-9d23-1c7b68e928f0`;
+  Windows x86-64 remained accurately unsigned; Linux arm64 remained signing-not-applicable. Every
+  public release, installer, catalog-publication, Homebrew, and Chocolatey job was skipped. Both
+  qualification repository variables remained absent, so task 0198 is still **NO-GO**.

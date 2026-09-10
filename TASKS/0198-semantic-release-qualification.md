@@ -58,3 +58,8 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   component. This closes one production-payload construction gap only. The task remains blocked
   and **NO-GO** until the exact production evaluation, installed lifecycle, accessibility,
   privacy, and failure-mode criteria above all pass.
+- 2026-09-10 Copilot: Private run `34509441435` passed payload construction and isolated packaged
+  smoke on macOS arm64, Windows x86-64, Linux x86-64 Ubuntu 22.04, and Linux arm64. This closes the
+  native Linux x86-64 construction blocker only. No signed aggregate catalog, public semantic
+  asset, or catalog-embedded installer was produced, and all installed-app, task-0188 quality,
+  accessibility, privacy, and failure-mode rows remain outstanding.

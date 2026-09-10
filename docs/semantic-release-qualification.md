@@ -18,7 +18,7 @@ results are not substitutes for measurements from the exact signed production ar
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | `ae1f811635f11b726262910d25b3aaae65e6654b` |
+| Procyon revision reviewed | `39d9d1077f8ed4374f991bb85259fcdd79410fa8` |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
@@ -223,12 +223,51 @@ before the packaged protocol/model/component tests.
 | Submitted ZIP bytes / SHA-256 | 20,883,412 / `73b452811684e8df5b5add22a9267c24a77d30affe0ec0d4f3bb208165524c94` |
 | Source revision / tree | `fa70ff3faa3974c64e2d12e45a205856c27303de` / clean |
 
+### Linux ABI remediation dispatch evidence
+
+Private workflow run
+[`34509441435`](https://github.com/erikvullings/procyon/actions/runs/34509441435) exercised clean
+commit `39d9d1077f8ed4374f991bb85259fcdd79410fa8` on 2026-09-10. All four supported payload jobs
+passed. Prerelease creation, desktop installers, aggregate catalog signing, semantic publication,
+Homebrew, and Chocolatey were skipped; no public release or asset was created. Both
+`SEMANTIC_RELEASE_QUALIFIED` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` remained absent.
+
+Linux x86-64 ran on Ubuntu 22.04 and passed the pinned archive, source revision, license, notice,
+ELF architecture, SONAME, exact dependency, and ABI-ceiling checks. Cargo linked the worker
+dynamically to the verified Microsoft loader without enabling `ort`'s download or copy-dylib
+features. The build then hid both native caches, launched the exact packaged worker with only the
+content-addressed ONNX and Zvec bytes restored under their loader names, reached its parser,
+completed the protocol handshake, activated the production model offline, and passed the complete
+`fm-semantic-components` lifecycle suite. The downloaded private payload was independently
+reverified against both qualification records.
+
+| Linux x86-64 retained evidence | Value |
+| --- | --- |
+| Private Actions artifact | ID `10165415845`, 303,780,936 bytes, SHA-256 `c799240a76d83862767850e6c0ba5a05aaf3fa74ddbddceea7abc4be3ad6466c` |
+| Catalog revision | `procyon-linux-x86_64-0.1.0-24-5e51c2e39dbb4f3c8d8df785be841dd3` |
+| Worker | `procyon.semantic.worker.linux-x86_64.0.1.0.24.baf8a9db9cab9c16`, 15,144,128 bytes, SHA-256 `baf8a9db9cab9c167aa13112088aaf6d627c67ce12e4957f6266078c40352a7b` |
+| ONNX Runtime | `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499`, 24,268,848 bytes, SHA-256 `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab` |
+| Zvec runtime | `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`, 36,854,864 bytes, SHA-256 `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5` |
+| Model pack | `procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`, 487,353,895 bytes, SHA-256 `c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3` |
+
+The other target paths also remained healthy. macOS arm64 retained worker
+`procyon.semantic.worker.macos-aarch64.0.1.0.24.d8780bacc61653f9` (38,410,336 bytes, SHA-256
+`d8780bacc61653f9cb3850aeae99891754fdf53b175cc110f6b6e9813e009aad`) and signed Zvec runtime
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.a4d3635cbe5dbc68` (23,164,624 bytes,
+SHA-256 `a4d3635cbe5dbc6818af08feaa51c64a92bbe550bc469f887eb3f0cdabdf3ab2`). Apple accepted
+submission `9fba1cf3-e93e-46a3-9d23-1c7b68e928f0`, bound to a 20,882,722-byte ZIP with SHA-256
+`329e869f1f59383316ad5736ffea4657eca338e047e6dc12ebf42aff68f9ca36`. Windows x86-64
+retained unsigned worker `procyon.semantic.worker.windows-x86_64.0.1.0.24.30975f6ad8f49d1c`
+and Zvec runtime `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be`.
+Linux arm64 retained worker `procyon.semantic.worker.linux-aarch64.0.1.0.24.4bf8a63c58d300f8`
+and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44`.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
-| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Blocked before payload by ONNX Runtime/Ubuntu 22.04 ABI | Private payload retained; signed catalog missing |
-| Packaged worker handshake and offline model activation | Pass on private payload in run `34483603909` | Pass on private payload in run `34483603909` | Worker link blocked | Pass on private payload in run `34483603909` |
+| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
+| Packaged worker handshake and offline model activation | Pass on private payload in run `34509441435` | Pass on private payload in run `34509441435` | Pass on Ubuntu 22.04 private payload in run `34509441435` | Pass on private payload in run `34509441435` |
 | Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
