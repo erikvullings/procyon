@@ -1648,7 +1648,7 @@ mod tests {
         assert_eq!(job_id, "protocol-job");
 
         let mut completed = None;
-        for _ in 0..100 {
+        for _ in 0..1_000 {
             let job = backend
                 .job("tenant-a", "library-a", &job_id)
                 .expect("job read")

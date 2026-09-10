@@ -114,7 +114,11 @@ describe('AppShell native menu synchronisation (task 0206)', () => {
     await vi.waitFor(() => {
       const search = root.querySelector('.fm-knowledge-search');
       expect(search).not.toBeNull();
-      expect(search?.textContent).toContain('What are you looking for?');
+      expect(
+        search
+          ?.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects')
+          ?.getAttribute('aria-label'),
+      ).toBe('What are you looking for?');
     });
   });
 });
