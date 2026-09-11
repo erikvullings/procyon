@@ -92,11 +92,13 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   original display/full-text content is preserved and the `0.84`/`0.02` Ask thresholds are
   unchanged. Release remains NO-GO until task 0220 records reviewed before/after production
   evidence for this embedding-space migration.
-- 2026-09-11 Copilot: Private run `34630169354` passed exact packaged evaluation on macOS arm64,
+- 2026-09-11 Copilot: Rebased private run `34636435645` passed exact packaged evaluation and the
+  task-0219 worker lifecycle/privacy path on macOS arm64,
   Windows x86-64, Linux x86-64, and Linux arm64 at clean revision
-  `eef47b66fe9147131d41a108636d003011edb9b4`. All targets measured file/chunk recall@10
+  `1680eebc0864cde494816285a24d6e0378678de1`. All targets measured file/chunk recall@10
   `0.958333`, MRR `0.916667`, nDCG@10 `0.967762`, zero negative-control false positives, offline
   citation correctness `1.0`, and offline citation recall `0.923077`. The private aggregate remains
   NO-GO because generated-answer grounding, three specialized corpus setups, before/after
-  case-fold evidence, and the unrelated installed/accessibility/privacy/failure/manual gates are
-  incomplete. No public or installer job ran.
+  case-fold evidence, installed-package signing, accessibility, privacy/failure/manual gates are
+  incomplete. Catalog signing and installed continuation failed closed on the known missing
+  protected keys; no public or installer job ran.

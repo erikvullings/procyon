@@ -60,11 +60,11 @@ quality evidence without publishing semantic assets or changing either release-q
   correctness `1.0`, and offline citation recall `0.923077`. The unsigned dirty-tree report is
   private and explicitly non-production; summary, unavailable-source, concept-label, generated
   answer, and unrelated task-0198 gates remain blocked.
-- 2026-09-11 Copilot: Private run `34630169354` passed the exact packaged evaluator on every
-  supported target from clean revision `eef47b66fe9147131d41a108636d003011edb9b4`. The four
+- 2026-09-11 Copilot: Rebased private run `34636435645` passed the exact packaged evaluator on
+  every supported target from clean revision `1680eebc0864cde494816285a24d6e0378678de1`. The four
   target reports produced identical quality metrics and were retained as private Actions artifacts;
   a locally revalidated private aggregate has SHA-256
-  `ad6061f4824878ddaf44117c483545717276eced529dd461da637e02cb7ca524`.
+  `e5da4ac20368da8376775a8b9b4f6b6411dc338c788efa5f487b66a9f4fbf0d8`.
   The implementation slice is complete, but its measured decision is NO-GO and task 0198 remains
   blocked on the explicitly recorded specialized, generated-answer, lifecycle, accessibility,
   privacy, failure-mode, and release-owner evidence.
