@@ -5031,13 +5031,20 @@ fn verify_current_user_only_pipe(
     )
     .map_err(|_| ClientError::InsecureEndpoint)?;
     let dacl = descriptor.dacl().ok_or(ClientError::InsecureEndpoint)?;
-    let ace = dacl.get_ace(0).ok_or(ClientError::InsecureEndpoint)?;
-    if descriptor.owner() != Some(current_user.as_ref())
-        || dacl.len() != 1
-        || ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
-        || ace.sid() != Some(current_user.as_ref())
-        || !ace.mask().contains(AccessRights::GenericAll)
-    {
+    let mut current_user_has_full_access = false;
+    if descriptor.owner() != Some(current_user.as_ref()) || dacl.len() == 0 {
+        return Err(ClientError::InsecureEndpoint);
+    }
+    for index in 0..dacl.len() {
+        let ace = dacl.get_ace(index).ok_or(ClientError::InsecureEndpoint)?;
+        if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
+            || ace.sid() != Some(current_user.as_ref())
+        {
+            return Err(ClientError::InsecureEndpoint);
+        }
+        current_user_has_full_access |= ace.mask().contains(AccessRights::GenericAll);
+    }
+    if !current_user_has_full_access {
         return Err(ClientError::InsecureEndpoint);
     }
     Ok(())
