@@ -1,6 +1,6 @@
 # 0220 Exact-production semantic evaluation
 
-Status: in_progress
+Status: done
 Priority: high
 Subsystem: semantic, quality, release
 Depends on: 0188, 0195, 0196, 0218
@@ -60,3 +60,11 @@ quality evidence without publishing semantic assets or changing either release-q
   correctness `1.0`, and offline citation recall `0.923077`. The unsigned dirty-tree report is
   private and explicitly non-production; summary, unavailable-source, concept-label, generated
   answer, and unrelated task-0198 gates remain blocked.
+- 2026-09-11 Copilot: Private run `34630169354` passed the exact packaged evaluator on every
+  supported target from clean revision `eef47b66fe9147131d41a108636d003011edb9b4`. The four
+  target reports produced identical quality metrics and were retained as private Actions artifacts;
+  a locally revalidated private aggregate has SHA-256
+  `ad6061f4824878ddaf44117c483545717276eced529dd461da637e02cb7ca524`.
+  The implementation slice is complete, but its measured decision is NO-GO and task 0198 remains
+  blocked on the explicitly recorded specialized, generated-answer, lifecycle, accessibility,
+  privacy, failure-mode, and release-owner evidence.

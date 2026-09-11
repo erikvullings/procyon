@@ -263,13 +263,40 @@ and Zvec runtime `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3be
 Linux arm64 retained worker `procyon.semantic.worker.linux-aarch64.0.1.0.24.4bf8a63c58d300f8`
 and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44`.
 
+### Exact-production evaluation dispatch evidence
+
+Private workflow run
+[`34630169354`](https://github.com/erikvullings/procyon/actions/runs/34630169354) exercised
+clean revision `eef47b66fe9147131d41a108636d003011edb9b4`. All four supported payload jobs
+passed package construction, platform trust checks, cache-hidden protocol/model smoke, component
+lifecycle tests, the generated task-0188 corpus, case-variant equality checks, and private artifact
+upload. Every prerelease, installer, semantic-publication, Homebrew, and Chocolatey job was
+skipped. Both release-qualified repository variables were absent before dispatch.
+
+| Target | Private Actions artifact | Catalog revision | Worker | Native runtime |
+| --- | --- | --- | --- | --- |
+| macOS arm64 | `10276616842`, SHA-256 `33807cdac49d9f04b580926821871e1dc4f584d19e172902aa2abda983694080` | `procyon-macos-aarch64-0.1.0-25-6fbda7c8fe00155eb7f39d98cfdcb880` | `procyon.semantic.worker.macos-aarch64.0.1.0.25.96cbde15e54947c7` | `procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.74f329f08ed5325a` |
+| Windows x86-64 | `10276850922`, SHA-256 `6ac30e7d07f9ed8b192a61db48b47f60b9d712e34c913184dc9ffd7777896243` | `procyon-windows-x86_64-0.1.0-25-327fdfc7d8ad22eb75956fe198883531` | `procyon.semantic.worker.windows-x86_64.0.1.0.25.8601a064dc415f02` | `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be` |
+| Linux x86-64 | `10276446708`, SHA-256 `0619c95ccc23c2988de0d976f28fda221464bc396154a6dcb1d8a54c39a63510` | `procyon-linux-x86_64-0.1.0-25-d8c52948b8c8c59694d2911f4926ee82` | `procyon.semantic.worker.linux-x86_64.0.1.0.25.0149d3f2ae3e4a59` | Zvec `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`; ONNX `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499` |
+| Linux arm64 | `10275544164`, SHA-256 `c9ac4d810f96845ef20bdaeda555c387eea3883fcd9fc95cc10aa6b1d89fd7e8` | `procyon-linux-aarch64-0.1.0-25-31fce5c6b5c75fc3b69150c8d31ebcdc` | `procyon.semantic.worker.linux-aarch64.0.1.0.25.852ebcab94e9839e` | `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44` |
+
+Every target used model artifact
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507` (SHA-256
+`c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3`), corpus
+fingerprint `sha256:6e0c201a6393bdfad56999ecfa86d6b66387c8aa41c8809055bf14429755f3ca`,
+and release-candidate fingerprint
+`sha256:a7819e6e9d37bc472de54cfe83d8a62213c1bbd8c785250df575d8ca318150be`.
+The four reports were downloaded and revalidated locally into a private aggregate with SHA-256
+`ad6061f4824878ddaf44117c483545717276eced529dd461da637e02cb7ca524`.
+No query, excerpt, or source text is present in those reports.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
 | Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
 | Packaged worker handshake, offline activation, and crash/restart | Pass in run `34624618891` | Pass in run `34624618891` | Pass on Ubuntu 22.04 in run `34624618891` | Pass in run `34624618891` |
-| Exact task-0188 retrieval evaluation | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in |
+| Exact task-0188 retrieval evaluation | Packaged retrieval pass in run `34630169354`; specialized/manual gaps remain | Packaged retrieval pass in run `34630169354`; specialized/manual gaps remain | Packaged retrieval pass in run `34630169354`; specialized/manual gaps remain | Packaged retrieval pass in run `34630169354`; specialized/manual gaps remain |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
 | Corruption, offline, and low-disk | Not run | Not run | Not run | Not run |
@@ -417,8 +444,11 @@ summaries, scope isolation, unavailable-source discovery, concepts, multi-facet 
 negative control, and prompt-injection-shaped input. The release payload matrix now runs that
 corpus through the exact packaged worker/runtime/model/converter/chunker/Zvec path and retains
 opaque per-case evidence plus file recall@10, chunk recall@10, MRR, nDCG@10,
-negative-control false-positive rate, and citation metrics. No reviewed four-target aggregate is
-checked in yet, so the repository report remains **NO-GO**.
+negative-control false-positive rate, and citation metrics. Run `34630169354` measured the same
+results on all four targets: file recall@10 `0.958333`, chunk recall@10 `0.958333`, MRR `0.916667`,
+nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation correctness `1.0`,
+and offline citation recall `0.923077`. Generated-answer citation correctness remains unmeasured.
+The private aggregate is **NO-GO**, and the checked-in report remains a fail-closed template.
 
 The developer TRIZ observations (`0.905` for `Su-fields`, `0.881` for the cup/hot-liquid question,
 and `0.848`-`0.850` for hard unrelated controls) do not justify lowering the current `0.84`
