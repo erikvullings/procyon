@@ -5023,31 +5023,48 @@ fn verify_current_user_only_pipe(
 
     let LocalSocketStream::NamedPipe(pipe) = stream;
     let current_user = windows_permissions::utilities::current_process_sid()
-        .map_err(|_| ClientError::InsecureEndpoint)?;
+        .map_err(|_| insecure_pipe("current-user"))?;
     let descriptor = windows_permissions::wrappers::GetSecurityInfo(
         pipe.inner(),
         SeObjectType::SE_KERNEL_OBJECT,
         SecurityInformation::Owner | SecurityInformation::Dacl,
     )
-    .map_err(|_| ClientError::InsecureEndpoint)?;
-    let dacl = descriptor.dacl().ok_or(ClientError::InsecureEndpoint)?;
+    .map_err(|_| insecure_pipe("security-descriptor"))?;
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| insecure_pipe("missing-dacl"))?;
     let mut current_user_has_full_access = false;
-    if descriptor.owner() != Some(current_user.as_ref()) || dacl.len() == 0 {
-        return Err(ClientError::InsecureEndpoint);
+    if descriptor.owner() != Some(current_user.as_ref()) {
+        return Err(insecure_pipe("owner"));
+    }
+    if dacl.len() == 0 {
+        return Err(insecure_pipe("empty-dacl"));
     }
     for index in 0..dacl.len() {
-        let ace = dacl.get_ace(index).ok_or(ClientError::InsecureEndpoint)?;
-        if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
-            || ace.sid() != Some(current_user.as_ref())
-        {
-            return Err(ClientError::InsecureEndpoint);
+        let ace = dacl
+            .get_ace(index)
+            .ok_or_else(|| insecure_pipe("missing-ace"))?;
+        if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE {
+            return Err(insecure_pipe("ace-type"));
         }
-        current_user_has_full_access |= ace.mask().contains(AccessRights::GenericAll);
+        if ace.sid() != Some(current_user.as_ref()) {
+            return Err(insecure_pipe("ace-owner"));
+        }
+        current_user_has_full_access |= ace.mask().contains(AccessRights::GenericAll)
+            || ace.mask().contains(AccessRights::FileAllAccess);
     }
     if !current_user_has_full_access {
-        return Err(ClientError::InsecureEndpoint);
+        return Err(insecure_pipe("full-access"));
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn insecure_pipe(reason: &'static str) -> ClientError {
+    if cfg!(debug_assertions) {
+        eprintln!("semantic worker pipe security rejection: {reason}");
+    }
+    ClientError::InsecureEndpoint
 }
 
 #[cfg(unix)]
