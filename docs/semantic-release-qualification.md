@@ -267,7 +267,7 @@ and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
 | Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
-| Packaged worker handshake and offline model activation | Pass on private payload in run `34509441435` | Pass on private payload in run `34509441435` | Pass on Ubuntu 22.04 private payload in run `34509441435` | Pass on private payload in run `34509441435` |
+| Packaged worker handshake, offline activation, and crash/restart | Pass in run `34624618891` | Pass in run `34624618891` | Pass on Ubuntu 22.04 in run `34624618891` | Pass in run `34624618891` |
 | Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
@@ -276,7 +276,7 @@ and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249
 | Uninstall retention and deletion | Not run | Not run | Not run | Not run |
 | Keyboard and screen reader | Not run | Not run | Not run | Not run |
 | Consent, progress, error, citation opening, deletion | Not run | Not run | Not run | Not run |
-| Default-log and crash-report privacy inspection | Not run on packaged app | Not run | Not run | Not run |
+| Packaged worker/default evidence privacy scan | Pass in run `34624618891`; installed app not run | Pass in run `34624618891`; installed app not run | Pass in run `34624618891`; installed app not run | Pass in run `34624618891`; installed app not run |
 
 macOS x86-64 is unsupported because Zvec 0.7.0 has no matching runtime. The universal macOS desktop
 application must continue to report semantic functionality as unavailable on that architecture.
@@ -341,6 +341,45 @@ semantic updater. Those rows are `unsupported`, not fabricated passes. If a plat
 crash artifact or installer log, place it under the collected evidence root before scanning.
 Upgrade and rollback remain `blocked` until an exact signed preceding production candidate is
 provided; a fixture or developer bundle is not acceptable production evidence.
+
+### Automated payload and privacy evidence
+
+Private workflow run
+[`34624618891`](https://github.com/erikvullings/procyon/actions/runs/34624618891) exercised clean
+commit `1fb6f144eb977468ea0335de8e3f0ab4421a5ae3`. Its safety job proved both release variables
+absent and no dispatch-reachable publication path. All four payload jobs passed exact packaged
+worker startup, offline model activation, ingestion/query, forced crash/restart with durable
+reopen, corruption/rebuild tests, component lifecycle tests, and the nine-category privacy scan.
+Every prerelease, base-installer, public semantic publication, Homebrew, and Chocolatey job stayed
+skipped.
+
+| Target | Actions artifact | Compressed bytes / SHA-256 | Catalog revision | Worker |
+| --- | --- | --- | --- | --- |
+| macOS arm64 | `10273976490` | 297,030,751 / `cedcd7ac903673b90ce2521596c6911cc9a2e38f9976347433380da946838a20` | `procyon-macos-aarch64-0.1.0-25-efeffd56ee755a343b51687d513518bd` | `procyon.semantic.worker.macos-aarch64.0.1.0.25.c7d4446365a10c7a` / `c7d4446365a10c7a8bc6b982747572597a650c9221c2d3f7365d515027086c2a` |
+| Windows x86-64 | `10273787545` | 296,523,134 / `0a96382b070c8d3fe917b4bfa8dd5c8a45b74225a1cfd73866bf8429e6e8c912` | `procyon-windows-x86_64-0.1.0-25-c1e6d375f4703fde634e00612e0a44bd` | `procyon.semantic.worker.windows-x86_64.0.1.0.25.64d114762cbbc184` / `64d114762cbbc18420b5311680a3b37985770cb6f200a0a551d48167ed0bc5a3` |
+| Linux x86-64 | `10274656240` | 303,795,376 / `cc1119b9aab6da139c119e497bee50c33be2cb73ba1ef15f75fbb9b7584d76b3` | `procyon-linux-x86_64-0.1.0-25-11ce94ec411b60021c63ddd0cc13a56b` | `procyon.semantic.worker.linux-x86_64.0.1.0.25.1d06fc6e7055de49` / `1d06fc6e7055de49d2084963450dc070cdf7ad51f7e5020d1198273dca7578d5` |
+| Linux arm64 | `10273661828` | 303,506,504 / `472ed9a0126b4286eba7aa698847aac041dfedd4d890d470913dd9f353bd6793` | `procyon-linux-aarch64-0.1.0-25-1b2601b2f7c8a71439372024db1bbcf5` | `procyon.semantic.worker.linux-aarch64.0.1.0.25.e68f99ed5b2344a6` / `e68f99ed5b2344a6f2bc059c11b40da046b0eef22328df32b2fe54208c358b74` |
+
+Every target uses model artifact
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`
+(`c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3`).
+Zvec runtime digests are `2df52a19cc43a012592e39e6d34f71f6f15b0804e8cade0b2d960bb382e040ff`
+(macOS), `3745106b3beee6be2d50ca678b46d3f0289afb5136ff51e1d1ec037a27b29e4a`
+(Windows), `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5`
+(Linux x86-64), and
+`621af6ba8249ce44dc17fb05da6c51c723cc466843e7f46ee44a40bd7eee1169`
+(Linux arm64). Linux x86-64 additionally used ONNX Runtime
+`1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab`.
+
+The privacy result is **PASS** for every retained payload. Reports contain only the nine category
+names and category-bound hashes; no canary values are retained. The artifacts expire after seven
+days on 2026-09-18.
+
+Catalog signing then failed closed on every target because protected
+`SEMANTIC_CATALOG_SIGNING_KEY_BASE64` and `SEMANTIC_CATALOG_VERIFYING_KEY_BASE64` are not
+configured. Consequently no signed catalog or private catalog-enabled installer exists for this
+candidate, and installed package rows remain `blocked`. This is not a waiver: configure both
+matching protected values and rerun the same commit before performing installed and manual passes.
 
 ### Manual operator checklist
 

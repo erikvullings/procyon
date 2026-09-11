@@ -71,3 +71,12 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   This automation does not unblock 0198: exact production retrieval/Ask evaluation, an exact
   preceding-candidate upgrade/rollback, native VoiceOver/Narrator/Orca and keyboard UX passes, a
   completed private matrix run, and release-owner approval are still required.
+- 2026-09-11 Copilot: Private run `34624618891` passed the exact packaged worker/model/runtime
+  lifecycle and fail-closed privacy scan for all supported targets on commit
+  `1fb6f144eb977468ea0335de8e3f0ab4421a5ae3`. During qualification, Windows exposed and fixed a
+  named-pipe verification defect: Windows may normalize owner `GENERIC_ALL` to
+  `FILE_ALL_ACCESS`; the verifier now accepts either full-control representation while still
+  rejecting empty ACLs, deny/foreign ACEs, and foreign owners. Signed catalog and installed
+  package qualification then failed closed because the protected signing secret and verifying-key
+  variable are not configured. No release, public asset, base installer, Homebrew artifact, or
+  Chocolatey artifact was produced. Task 0198 remains **NO-GO**.

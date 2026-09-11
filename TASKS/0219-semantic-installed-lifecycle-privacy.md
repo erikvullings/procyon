@@ -1,6 +1,6 @@
 # 0219 Semantic installed lifecycle and privacy qualification
 
-Status: in_progress
+Status: blocked
 Priority: high
 Subsystem: quality, release, semantic
 Depends on: 0218
@@ -62,3 +62,15 @@ evidence.
   scanner and evidence integrity verifier, and the private four-target workflow continuation.
   The workflow repeats its non-publication and disabled-gate proofs before building any private
   catalog-enabled package.
+- 2026-09-11 Copilot: Private run `34624618891` on commit
+  `1fb6f144eb977468ea0335de8e3f0ab4421a5ae3` passed payload construction, offline model
+  activation, exact packaged-worker ingestion/query, forced crash/restart, derived-index
+  corruption/rebuild checks, and nine-category privacy scans on macOS arm64, Windows x86-64,
+  Linux x86-64 Ubuntu 22.04, and Linux arm64. Retained Actions artifacts are
+  `10273976490`, `10273787545`, `10274656240`, and `10273661828`, respectively. The run proved
+  every public/package-manager/base-installer publication job stayed skipped. Protected
+  `SEMANTIC_CATALOG_SIGNING_KEY_BASE64` and `SEMANTIC_CATALOG_VERIFYING_KEY_BASE64` were absent,
+  so catalog signing failed closed and installed catalog-enabled packages were not produced.
+  This task is blocked on that protected key configuration; task 0198 additionally remains blocked
+  on exact quality evaluation, preceding-candidate upgrade/rollback, manual accessibility, and
+  release-owner approval.
