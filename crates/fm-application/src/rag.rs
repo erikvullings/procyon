@@ -136,7 +136,7 @@ fn candidate_to_chunk(candidate: RagCandidate, request: &RagRetrievalRequest) ->
 
 /// Ask retrieval adapter over the same host-provided semantic capability used
 /// by search and indexing.
-pub(crate) struct SemanticRagRetrievalCapability {
+pub struct SemanticRagRetrievalCapability {
     semantic: SemanticService,
 }
 
@@ -163,8 +163,9 @@ struct IpcSemanticEvidence {
 }
 
 impl SemanticRagRetrievalCapability {
+    /// Creates the production Ask adapter over an activated semantic capability.
     #[must_use]
-    pub(crate) const fn new(semantic: SemanticService) -> Self {
+    pub const fn new(semantic: SemanticService) -> Self {
         Self { semantic }
     }
 }

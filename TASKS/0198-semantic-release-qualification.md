@@ -80,3 +80,15 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   package qualification then failed closed because the protected signing secret and verifying-key
   variable are not configured. No release, public asset, base installer, Homebrew artifact, or
   Chocolatey artifact was produced. Task 0198 remains **NO-GO**.
+- 2026-09-11 Copilot: Task 0220 adds the exact-production task-0188 runner and fail-closed report
+  validator. The private payload matrix now ingests the repository-owned generated corpus through
+  the packaged worker/runtime/model/converter/chunker/Zvec path and retains opaque per-case and
+  aggregate evidence. The checked-in report remains an explicit NO-GO template, both release
+  variables remain unchanged, and this task stays blocked on reviewed four-target metrics,
+  generated-answer grounding, installed lifecycle, accessibility, privacy, failure-mode, and
+  release-owner evidence.
+- 2026-09-11 Copilot: The production candidate now applies versioned Unicode default case folding
+  symmetrically to passage and query embeddings. Existing derived indexes are reset and rebuilt;
+  original display/full-text content is preserved and the `0.84`/`0.02` Ask thresholds are
+  unchanged. Release remains NO-GO until task 0220 records reviewed before/after production
+  evidence for this embedding-space migration.

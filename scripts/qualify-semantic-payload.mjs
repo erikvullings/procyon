@@ -56,7 +56,12 @@ const canaryFile = path.join(
 fs.writeFileSync(canaryFile, JSON.stringify(canaryMap), { mode: 0o600, flag: 'wx' });
 const result = spawnSync(
   process.execPath,
-  [path.join(repositoryRoot, 'scripts', 'smoke-semantic-production-bundle.mjs'), bundle],
+  [
+    path.join(repositoryRoot, 'scripts', 'smoke-semantic-production-bundle.mjs'),
+    bundle,
+    '--evaluation-report',
+    path.join(bundle, 'semantic-production-evaluation.json'),
+  ],
   {
     cwd: repositoryRoot,
     env: {

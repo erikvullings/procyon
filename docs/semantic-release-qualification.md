@@ -18,13 +18,14 @@ results are not substitutes for measurements from the exact signed production ar
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | `39d9d1077f8ed4374f991bb85259fcdd79410fa8` |
+| Procyon revision reviewed | Bound by each private report's `procyonRevision`; no reviewed four-target aggregate is checked in |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
 | Dimensions / normalization | 384 / L2 |
 | Converter | `docling-pdf/1036000+baseline/2` |
 | Chunker | `structural/3` |
+| Embedding preprocessing | Unicode default case folding `unicode-default-case-fold/1` for both passages and queries |
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |
@@ -268,7 +269,7 @@ and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249
 | --- | --- | --- | --- | --- |
 | Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
 | Packaged worker handshake, offline activation, and crash/restart | Pass in run `34624618891` | Pass in run `34624618891` | Pass on Ubuntu 22.04 in run `34624618891` | Pass in run `34624618891` |
-| Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
+| Exact task-0188 retrieval evaluation | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in | Automated packaged runner wired; no reviewed aggregate checked in |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
 | Corruption, offline, and low-disk | Not run | Not run | Not run | Not run |
@@ -410,30 +411,61 @@ reviewed as part of the complete task-0198 evidence set.
 
 ## Quality and threshold decision
 
-The checked-in task-0188 fixture defines 12 cases spanning multilingual retrieval, duplicates,
-boilerplate diversity, structural citations, edits, summaries, scope isolation, unavailable
-sources, concepts, multi-facet retrieval, a negative control, and prompt-injection-shaped input.
-No observations from the exact production package have been recorded, so file recall@10, chunk
-recall@10, MRR, nDCG@10, negative-control false-positive rate, and grounded-answer citation
-correctness are **not measured** for this candidate.
+The checked-in task-0188 fixture defines 12 cases and repository-owned generated source documents
+spanning multilingual retrieval, duplicates, boilerplate diversity, structural citations, edits,
+summaries, scope isolation, unavailable-source discovery, concepts, multi-facet retrieval, a
+negative control, and prompt-injection-shaped input. The release payload matrix now runs that
+corpus through the exact packaged worker/runtime/model/converter/chunker/Zvec path and retains
+opaque per-case evidence plus file recall@10, chunk recall@10, MRR, nDCG@10,
+negative-control false-positive rate, and citation metrics. No reviewed four-target aggregate is
+checked in yet, so the repository report remains **NO-GO**.
 
 The developer TRIZ observations (`0.905` for `Su-fields`, `0.881` for the cup/hot-liquid question,
 and `0.848`-`0.850` for hard unrelated controls) do not justify lowering the current `0.84`
-absolute floor. The candidate remains at `0.84` with a `0.02` relative window. This makes no
-pipeline, embedding-space, retained-vector, storage, or migration change. Any future threshold
+absolute floor. The evaluator therefore retains `0.84` with a `0.02` relative window and records
+zero storage or migration impact attributable to the threshold decision. Any future threshold
 change requires comparable before/after production observations and an explicit storage/migration
 statement.
 
+The candidate now case-folds both passage and query text before adding the model's role prefix.
+Original text remains unchanged for display, citation, and full-text search. This intentionally
+changes the embedding space from `preserve-case/1` to `unicode-default-case-fold/1`: the worker's
+active-index marker and library manifest force a clean derived-index rebuild, while steady-state
+storage policy is unchanged. Reviewed exact-production before/after evidence is not yet attached,
+so this migration is an additional explicit NO-GO reason rather than an inferred improvement.
+
 The bounded multi-query candidate remains developer-only and defaults to single-query because its
 checked-in report uses normalized fixture timings rather than production measurements.
+
+### Local exact-package dry run
+
+An unsigned, dirty-tree macOS arm64 dry run exercised the exact content-addressed release worker,
+model pack, Zvec loader, converter, chunker, native index, and application Ask packing path. It is
+retained privately with SHA-256
+`18afb459bf9c15b27d19009c4c11f29a6a8a9e2e3212f2c8f57e4c3014b22544` and is **not**
+production evidence. It measured file recall@10 `0.958333`, chunk recall@10 `0.958333`, MRR
+`0.916667`, nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation
+correctness `1.0`, and offline citation recall `0.923077`. Generated-answer citation metrics remain
+unmeasured. The report also correctly blocks the generated-summary, unavailable-source, and
+concept-label cases because their specialized production setup was not exercised.
+
+The dry-run catalog revision was
+`procyon-macos-aarch64-0.1.0-25-30196fb3aaca0290032cfd360b386bbf`; artifact IDs were
+`procyon.semantic.worker.macos-aarch64.0.1.0.25.7840c5049f2f08f9`,
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.c9e4bf9387ef7261`, and
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`. The run retained the
+`0.84`/`0.02` thresholds and declared the case-folded embedding index rebuild separately.
 
 ## Existing automated evidence
 
 Repository tests already cover deterministic metric calculation, scope isolation, bounded
 retrieval, catalog and payload integrity, interrupted download/resume, component lifecycle,
 low-disk admission, cancellation/recovery, deletion/retention, OCR process containment, and
-default-safe semantic diagnostics. Default diagnostic events have no free-text field and reject
-path-like values; sensitive capture requires a previewed, scoped, expiring grant.
+default-safe semantic diagnostics. The task-0188 report validator additionally rejects corpus or
+implementation drift, missing/duplicate/unknown cases, malformed ranks and citations, scope
+leakage, package identity drift, threshold changes, stale metrics, and forged decisions. Default
+diagnostic events have no free-text field and reject path-like values; sensitive capture requires
+a previewed, scoped, expiring grant.
 
 These tests reduce qualification risk but do not satisfy installed release testing, native
 assistive-technology review, packaged crash-report inspection, or exact production quality

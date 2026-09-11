@@ -173,7 +173,7 @@ artifacts/
 records each payload's credential-free HTTPS distribution location, SPDX license and notice, exact
 download/installed/RAM bytes, SHA-256, target, protocol, runtime requirements, and index schema.
 The production wrapper adds an immutable public source URL and source revision for every artifact,
-plus one exact worker-protocol/index-schema/converter/chunker/tokenizer/model identity. Production
+plus one exact worker-protocol/index-schema/converter/chunker/embedding-preprocessing/tokenizer/model identity. Production
 IDs use the `procyon.semantic.*` component namespaces and include target, package version, and a
 SHA-256 prefix; development IDs and the public developer key are never accepted as release trust.
 
@@ -358,6 +358,46 @@ Changes to model, chunker, converter, index, grouping, summary selection, or lab
 require a before/after `EvaluationChangeReport` with distinct fingerprints, the same cases/cutoff,
 an explicit migration description, and signed storage impact. Generated-answer fluency is not an
 evaluation metric.
+
+The exact-production task-0188 runner is part of the production bundle smoke:
+
+```bash
+node scripts/smoke-semantic-production-bundle.mjs \
+  target/semantic-production-release/<target> \
+  --evaluation-report <private-output>/semantic-production-evaluation.json
+```
+
+The evaluation option is stricter than an ordinary package smoke. It requires the retained Zvec
+and, where applicable, ONNX Runtime qualification records to verify with production trust, then
+launches the content-addressed worker against only the packaged native loaders and model. It builds
+an isolated library from the checked-in generated corpus, ingests through the production converter,
+structural chunker, multilingual embedder, SQLite catalog, and native Zvec index, and queries every
+case with the `0.84` absolute floor, `0.02` relative window, and production document/chunk caps.
+Runtime execution sets offline model flags and unusable loopback proxy endpoints; the worker has no
+telemetry or download path.
+
+Per-target reports contain only opaque case, file, chunk, source, artifact, and provenance
+identities plus scores and aggregate metrics. Queries, excerpts, and source text remain in the
+repository-owned corpus and are not copied into private evidence. The release workflow aggregates
+all four supported-target reports into its private Actions artifact. The checked-in
+`docs/evaluations/semantic-production-v1.json` remains a structurally valid NO-GO template until
+those private artifacts and every unrelated task-0198 criterion are reviewed. A release that sets
+`SEMANTIC_RELEASE_QUALIFIED=true` must pass
+`node scripts/check-semantic-release-preconditions.mjs`; changing the variable cannot override a
+stale, tampered, partial, non-production, or blocked report.
+
+Passage and query embeddings use Unicode default case folding before their model-owned `passage:`
+or `query:` prefix is added. The preprocessing identity
+`unicode-default-case-fold/1` is part of the signed production pipeline, embedding cache keys,
+library manifests, and the active-index marker. Upgrading from the legacy `preserve-case/1`
+identity discards and rebuilds the derived embedding index from preserved source content; display
+text and lexical/full-text content are not rewritten. Exact or quoted terms remain an explicit
+full-text/hybrid-search concern rather than a hidden casing signal in semantic ranking.
+
+Without a configured answer provider the runner records deterministic offline citation precision
+and recall over authorized, structurally attributable evidence. Generated-answer citation
+correctness remains `null` and release-blocking rather than being inferred from retrieval or
+fabricated as a pass.
 
 ## Storage and unsupported formats
 

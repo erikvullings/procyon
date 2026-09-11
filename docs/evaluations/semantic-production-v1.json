@@ -1,0 +1,72 @@
+{
+  "reportVersion": 1,
+  "corpusId": "task-0188-production-corpus-v1",
+  "corpusFingerprint": "sha256:6e0c201a6393bdfad56999ecfa86d6b66387c8aa41c8809055bf14429755f3ca",
+  "releaseCandidateFingerprint": "sha256:74634e269bcc49224365078a0108409b89770085c68d190f583821b3422c1b4e",
+  "measurementBasis": "No exact production measurements have been checked in. Private workflow evidence must be reviewed and reduced to opaque aggregate and per-case identities before this template can change.",
+  "limitations": [
+    "No supported-target production measurements are recorded in this checked-in template.",
+    "Generated-answer, installed lifecycle, accessibility, privacy, and failure-mode criteria remain unmeasured."
+  ],
+  "productionMeasurement": false,
+  "measurements": [],
+  "thresholdDecision": {
+    "previousAbsoluteFloor": 0.84,
+    "candidateAbsoluteFloor": 0.84,
+    "previousRelativeWindow": 0.02,
+    "candidateRelativeWindow": 0.02,
+    "storageImpactBytes": 0,
+    "migrationImpact": "No threshold change and no storage or migration impact attributable to the retained 0.84/0.02 policy."
+  },
+  "embeddingPreprocessingMigration": {
+    "baseline": "preserve-case/1",
+    "candidate": "unicode-default-case-fold/1",
+    "indexRebuildRequired": true,
+    "steadyStateStorageImpactBytes": 0,
+    "migrationImpact": "Existing embedding indexes are discarded and rebuilt from preserved source content; original display text and steady-state storage policy are unchanged.",
+    "baselineComparisonEvidence": null
+  },
+  "manualCriteria": [
+    {
+      "id": "accessibility",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "failure-modes",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "generated-answer-grounding",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "installed-lifecycle",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "privacy",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "release-owner-approval",
+      "status": "pending",
+      "evidence": null
+    }
+  ],
+  "blockingReasons": [
+    "Exact strict-production measurements are required for macOS arm64, Windows x86-64, Linux x86-64, and Linux arm64.",
+    "Reviewed before/after production evidence for Unicode case-folded embeddings is missing.",
+    "Task-0198 manual criterion `accessibility` remains pending.",
+    "Task-0198 manual criterion `failure-modes` remains pending.",
+    "Task-0198 manual criterion `generated-answer-grounding` remains pending.",
+    "Task-0198 manual criterion `installed-lifecycle` remains pending.",
+    "Task-0198 manual criterion `privacy` remains pending.",
+    "Task-0198 manual criterion `release-owner-approval` remains pending."
+  ],
+  "decision": "noGo"
+}

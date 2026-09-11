@@ -176,6 +176,16 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(smokeScript, /packaged_worker_ingests_recovers_after_crash_and_reopens_offline/);
   assert.match(smokeScript, /production_model_pack_activates_offline/);
   assert.match(smokeScript, /fm-semantic-components/);
+  assert.match(smokeScript, /evaluate_semantic_production/);
+  assert.match(JSON.stringify(payloads), /--evaluation-report/);
+  const payloadPrecondition = payloads.steps.find(
+    (step) => step.name === 'Verify exact-production semantic evaluation evidence',
+  );
+  assert.equal(
+    payloadPrecondition.if,
+    "github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
+  );
+  assert.match(payloadPrecondition.run, /check-semantic-release-preconditions\.mjs/);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
   assert.match(catalogs.if, /always\(\)/);
   assert.equal(catalogs.secrets, 'inherit');
@@ -200,6 +210,8 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(JSON.stringify(installed), /qualify-semantic-installed\.mjs/);
   assert.match(JSON.stringify(payloads), /retention-days.*7/);
   assert.match(JSON.stringify(installed), /retention-days.*7/);
+  assert.match(JSON.stringify(collect), /aggregate-semantic-production-evaluation\.mjs/);
+  assert.match(JSON.stringify(collect), /--approved-report/);
   for (const [jobName, catalogTarget] of [
     ['macos', 'macos-aarch64'],
     ['windows', 'windows-x86_64'],
@@ -213,10 +225,11 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     assert.match(JSON.stringify(job), /export-semantic-verifying-key\.mjs/);
     const semanticSteps = job.steps.filter(
       (step) =>
+        step.name === 'Verify exact-production semantic evaluation evidence' ||
         step.name?.startsWith('Embed the signed') ||
         step.name === 'Compile the production semantic catalog trust key',
     );
-    assert.equal(semanticSteps.length, 2);
+    assert.equal(semanticSteps.length, 3);
     for (const step of semanticSteps) {
       assert.equal(
         step.if,
@@ -230,6 +243,63 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     releaseText,
     /bundle\/(?:dmg|msi|nsis|deb|appimage).*semantic|semantic.*bundle\/(?:dmg|msi|nsis|deb|appimage)/i,
   );
+});
+
+test('semantic release preconditions require a current four-target measured go', () => {
+  const planned = JSON.parse(
+    execFileSync('node', ['scripts/check-semantic-release-preconditions.mjs', '--print-plan'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }),
+  );
+  assert.deepEqual(planned.arguments.slice(0, 7), [
+    'run',
+    '--quiet',
+    '--locked',
+    '-p',
+    'fm-application',
+    '--example',
+    'validate_semantic_release_report',
+  ]);
+
+  const current = spawnSync('node', ['scripts/check-semantic-release-preconditions.mjs'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.notEqual(current.status, 0);
+  assert.match(`${current.stdout}${current.stderr}`, /not a measured, four-target go/i);
+
+  const outputRoot = scratchDirectory('semantic-evaluation-report-');
+  const forged = JSON.parse(read('docs', 'evaluations', 'semantic-production-v1.json'));
+  forged.decision = 'go';
+  forged.productionMeasurement = true;
+  forged.blockingReasons = [];
+  forged.measurements = [{}, {}, {}, {}];
+  const forgedPath = join(outputRoot, 'forged-go.json');
+  writeFileSync(forgedPath, JSON.stringify(forged));
+  const forgedResult = spawnSync(
+    'node',
+    ['scripts/check-semantic-release-preconditions.mjs', '--report', forgedPath],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(forgedResult.status, 0);
+  assert.match(`${forgedResult.stdout}${forgedResult.stderr}`, /does not support a go/i);
+
+  const approvedMismatch = { ...forged, measurementBasis: 'different reviewed evidence' };
+  const approvedPath = join(outputRoot, 'approved.json');
+  writeFileSync(approvedPath, JSON.stringify(approvedMismatch));
+  const mismatch = spawnSync(
+    'node',
+    [
+      'scripts/check-semantic-release-preconditions.mjs',
+      '--report',
+      forgedPath,
+      '--approved-report',
+      approvedPath,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(mismatch.status, 0);
 });
 
 test('release desktop builds fail closed without a measured knowledge-search go decision', () => {

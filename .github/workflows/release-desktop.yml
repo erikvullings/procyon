@@ -59,6 +59,9 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify exact-production semantic evaluation evidence
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-semantic-release-preconditions.mjs
       - name: Embed the signed macOS arm64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -224,6 +227,9 @@ jobs:
             patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify exact-production semantic evaluation evidence
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-semantic-release-preconditions.mjs
       - name: Embed the signed Linux x86-64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -274,6 +280,9 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify exact-production semantic evaluation evidence
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-semantic-release-preconditions.mjs
       - name: Embed the signed Windows x86-64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -351,6 +360,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Prove qualification dispatch cannot publish
         run: node scripts/check-semantic-qualification-workflow.mjs
+      - name: Verify exact-production semantic evaluation evidence
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: node scripts/check-semantic-release-preconditions.mjs
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
@@ -455,6 +467,8 @@ jobs:
         run: >
           node scripts/smoke-semantic-production-bundle.mjs
           "target/semantic-production-release/${{ matrix.target }}"
+          --evaluation-report
+          "target/semantic-production-release/${{ matrix.target }}/semantic-production-evaluation.json"
       - name: Qualify packaged worker lifecycle and privacy
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -702,6 +716,18 @@ jobs:
         run: >
           node scripts/collect-semantic-release-assets.mjs
           semantic-payloads semantic-catalogs semantic-release-assets
+      - name: Aggregate private supported-target semantic evaluation
+        run: >
+          node scripts/aggregate-semantic-production-evaluation.mjs
+          semantic-payloads
+          semantic-release-assets/semantic-production-evaluation.json
+          docs/evaluations/semantic-production-v1.json
+      - name: Match evaluated payloads to the reviewed release evidence
+        if: github.event_name == 'push'
+        run: >
+          node scripts/check-semantic-release-preconditions.mjs
+          --report semantic-release-assets/semantic-production-evaluation.json
+          --approved-report docs/evaluations/semantic-production-v1.json
       - uses: actions/upload-artifact@v4
         with:
           name: semantic-release-assets-${{ github.sha }}

@@ -16,6 +16,7 @@
     "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
     "semantic:bundle:production": "node scripts/build-semantic-production-bundle.mjs",
     "semantic:catalog": "node scripts/semantic-production-catalog.mjs",
+    "semantic:evaluation:check": "node scripts/check-semantic-release-preconditions.mjs",
     "semantic:qualification:check": "node scripts/check-semantic-qualification-workflow.mjs",
     "semantic:model:fetch": "node scripts/fetch-semantic-model.mjs",
     "semantic:model:verify": "node scripts/verify-semantic-model.mjs",
