@@ -135,6 +135,9 @@ semantic components are not installed.
   was not the requested alternative)*
 - [x] 0218 Zvec native-runtime qualification preparation *(needs 0195; immutable upstream
   runtime inputs and non-published qualification evidence for blocked task 0198)*
+- [ ] 0219 Semantic installed lifecycle and privacy qualification *(blocked: all four packaged
+  payload/privacy paths pass; protected catalog signing and verification keys are not configured,
+  so exact installed packages cannot yet be exercised; manual accessibility remains separate)*
 
 ## Structured knowledge search
 

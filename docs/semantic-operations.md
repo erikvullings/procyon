@@ -220,9 +220,13 @@ The production identity contract pins `intfloat/multilingual-e5-small` at revisi
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
-Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
-installers for qualification without publishing them. Tagged releases do that work only when the
-protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
+Manual release-workflow dispatches build production payloads, signed catalogs, and private
+catalog-enabled installers for qualification without publishing them. Before any payload work, the
+workflow proves that no dispatch-reachable step can publish and that both semantic release
+variables are absent or false. The four target jobs retain exact package/catalog digests,
+installed-boundary logs, lifecycle results, and redacted privacy reports for seven days. Tagged
+releases do that work only when the protected repository variable
+`SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
 passes, leave that variable absent or false: ordinary tagged desktop installers are still produced,
 but contain no production semantic catalog or verification key and therefore keep managed semantic
 installation unavailable. Once qualified, each installer embeds only its matching `catalog.json`,
@@ -302,6 +306,12 @@ Default logs include only opaque IDs or hashes, stage, timing, counts, component
 identities, and redacted error categories. They exclude queries, excerpts, filenames, prompts,
 responses, credentials, headers, and HTTP bodies. A sensitive capture is local, previewed,
 category-scoped, and expires after at most 15 minutes.
+
+Private release qualification scans application, worker, installer, diagnostic, crash-equivalent,
+and command evidence for unique sensitive canaries. The scanner is binary-safe, recognizes common
+text encodings and path/transport transformations, retains only categories and hashes, verifies
+the post-scan evidence manifest, and deletes an authorized capture before upload. Any leak,
+unreadable path, symbolic link, stale capture, or evidence change fails the target job.
 
 Remote LLM requests always show their profile, locality, scope, minimized metadata, and exact
 content preview before transmission. The semantic worker itself has no network authority.

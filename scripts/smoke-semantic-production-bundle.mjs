@@ -77,6 +77,31 @@ const runtimeLoaderEnvironment =
 const isolatedRuntimeDirectory = fs.mkdtempSync(
   path.join(tmpdir(), 'procyon-packaged-zvec-runtime-'),
 );
+const generatedCanaryFile = process.env.PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE
+  ? undefined
+  : path.join(isolatedRuntimeDirectory, 'privacy-canaries.json');
+if (generatedCanaryFile) {
+  fs.writeFileSync(
+    generatedCanaryFile,
+    JSON.stringify({
+      query: 'qualification-query-canary',
+      excerpt: 'qualification-excerpt-canary',
+      'filename-path': 'qualification/filename-path-canary.txt',
+      prompt: 'qualification-prompt-canary',
+      response: 'qualification-response-canary',
+      credential: 'qualification-credential-canary',
+      token: 'qualification-token-canary',
+      'authorization-header': 'qualification-authorization-header-canary',
+      'model-payload': 'qualification-model-payload-canary',
+    }),
+    { mode: 0o600 },
+  );
+}
+const evidenceRoot = process.env.PROCYON_QUALIFICATION_EVIDENCE_ROOT
+  ? path.resolve(process.env.PROCYON_QUALIFICATION_EVIDENCE_ROOT)
+  : undefined;
+if (evidenceRoot) fs.mkdirSync(evidenceRoot, { recursive: true });
+let commandIndex = 0;
 const isolatedNativeRuntime = path.join(
   isolatedRuntimeDirectory,
   qualification.report.loader.fileName,
@@ -90,6 +115,10 @@ if (onnxDescriptor) {
 }
 
 function run(args, environment = {}) {
+  commandIndex += 1;
+  const output = evidenceRoot
+    ? fs.openSync(path.join(evidenceRoot, `worker-command-${commandIndex}.log`), 'w')
+    : undefined;
   const result = spawnSync('cargo', args, {
     env: {
       ...process.env,
@@ -105,11 +134,14 @@ function run(args, environment = {}) {
       ...runtimeLoaderEnvironment,
       ...environment,
     },
-    stdio: 'inherit',
+    stdio: output === undefined ? 'inherit' : ['ignore', output, output],
   });
+  if (output !== undefined) fs.closeSync(output);
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`cargo ${args.join(' ')} exited with status ${result.status ?? 'unknown'}`);
+    throw new Error(
+      `cargo ${args.join(' ')} exited with status ${result.status ?? 'unknown'}; output retained in qualification evidence`,
+    );
   }
 }
 
@@ -123,15 +155,17 @@ try {
       '--features',
       'semantic-runtime',
       '--test',
-      'ipc',
-      'packaged_production_worker_starts_negotiates_and_shuts_down',
+      'packaged_production',
+      'packaged_worker_ingests_recovers_after_crash_and_reopens_offline',
       '--',
       '--ignored',
     ],
     {
       PROCYON_SEMANTIC_PRODUCTION_WORKER: workerExecutable,
-      PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME: isolatedNativeRuntime,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
       PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack,
+      PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE:
+        process.env.PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE ?? generatedCanaryFile,
     },
   );
   run(
@@ -149,6 +183,23 @@ try {
     ],
     { PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack },
   );
+  for (const testName of [
+    'zvec_storage::tests::rebuilds_a_missing_derived_collection_from_authoritative_records',
+    'zvec_storage::tests::rejects_a_content_field_with_the_wrong_index_type',
+    'zvec_storage::tests::migration_rolls_back_an_unpublished_staging_directory_after_restart',
+    'zvec_storage::tests::abnormal_shutdown_recovers_committed_write',
+  ]) {
+    run([
+      'test',
+      '--locked',
+      '-p',
+      'fm-semantic-worker',
+      '--features',
+      'semantic-runtime',
+      '--lib',
+      testName,
+    ]);
+  }
   run(['test', '--locked', '-p', 'fm-semantic-components']);
 } finally {
   fs.rmSync(isolatedRuntimeDirectory, { recursive: true, force: true });
