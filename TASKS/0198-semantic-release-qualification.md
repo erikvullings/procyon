@@ -80,3 +80,25 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   package qualification then failed closed because the protected signing secret and verifying-key
   variable are not configured. No release, public asset, base installer, Homebrew artifact, or
   Chocolatey artifact was produced. Task 0198 remains **NO-GO**.
+- 2026-09-11 Copilot: Task 0220 adds the exact-production task-0188 runner and fail-closed report
+  validator. The private payload matrix now ingests the repository-owned generated corpus through
+  the packaged worker/runtime/model/converter/chunker/Zvec path and retains opaque per-case and
+  aggregate evidence. The checked-in report remains an explicit NO-GO template, both release
+  variables remain unchanged, and this task stays blocked on reviewed four-target metrics,
+  generated-answer grounding, installed lifecycle, accessibility, privacy, failure-mode, and
+  release-owner evidence.
+- 2026-09-11 Copilot: The production candidate now applies versioned Unicode default case folding
+  symmetrically to passage and query embeddings. Existing derived indexes are reset and rebuilt;
+  original display/full-text content is preserved and the `0.84`/`0.02` Ask thresholds are
+  unchanged. Release remains NO-GO until task 0220 records reviewed before/after production
+  evidence for this embedding-space migration.
+- 2026-09-11 Copilot: Rebased private run `34636435645` passed exact packaged evaluation and the
+  task-0219 worker lifecycle/privacy path on macOS arm64,
+  Windows x86-64, Linux x86-64, and Linux arm64 at clean revision
+  `1680eebc0864cde494816285a24d6e0378678de1`. All targets measured file/chunk recall@10
+  `0.958333`, MRR `0.916667`, nDCG@10 `0.967762`, zero negative-control false positives, offline
+  citation correctness `1.0`, and offline citation recall `0.923077`. The private aggregate remains
+  NO-GO because generated-answer grounding, three specialized corpus setups, before/after
+  case-fold evidence, installed-package signing, accessibility, privacy/failure/manual gates are
+  incomplete. Catalog signing and installed continuation failed closed on the known missing
+  protected keys; no public or installer job ran.

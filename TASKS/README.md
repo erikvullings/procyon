@@ -138,6 +138,10 @@ semantic components are not installed.
 - [ ] 0219 Semantic installed lifecycle and privacy qualification *(blocked: all four packaged
   payload/privacy paths pass; protected catalog signing and verification keys are not configured,
   so exact installed packages cannot yet be exercised; manual accessibility remains separate)*
+- [x] 0220 Exact-production semantic evaluation *(needs 0188, 0195, 0196, 0218; four-target private
+  measurements complete with an honest NO-GO; release publication remains disabled)*
+- [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
+  for document/query embeddings with a mandatory clean index rebuild)*
 
 ## Structured knowledge search
 

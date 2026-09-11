@@ -42,6 +42,10 @@ export function collectSemanticReleaseAssets(payloadRoot, catalogRoot, output) {
         path.join(output, `onnx-runtime-qualification-${target}.json`),
       );
     }
+    fs.copyFileSync(
+      path.join(payload, 'semantic-production-evaluation.json'),
+      path.join(output, `semantic-production-evaluation-${target}.json`),
+    );
   }
 
   const catalogDirectories = fs

@@ -12,7 +12,8 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use crate::embedding::{
-    EmbeddingCacheKey, EmbeddingError, EmbeddingModelIdentity, LocalEmbeddingRuntime,
+    EMBEDDING_PREPROCESSING_VERSION, EmbeddingCacheKey, EmbeddingError, EmbeddingModelIdentity,
+    LocalEmbeddingRuntime, case_fold_embedding_input,
 };
 use crate::semantic_storage::{
     LibraryIndexManifest, Occurrence, SemanticCatalog, StagedGeneration, StagedRecord, StorageError,
@@ -656,10 +657,11 @@ impl IngestionCoordinator {
         let keys = chunks
             .iter()
             .map(|chunk| {
+                let normalized = case_fold_embedding_input(&chunk.embedding_input);
                 EmbeddingCacheKey::calculate(
-                    &chunk.embedding_input,
+                    &normalized,
                     identity,
-                    identity.tokenizer.as_str(),
+                    EMBEDDING_PREPROCESSING_VERSION,
                     &fm_semantic_conversion::STRUCTURAL_CHUNKER_VERSION.to_string(),
                 )
             })
@@ -1150,6 +1152,7 @@ mod tests {
                         distance_metric: DistanceMetric::Cosine,
                         model_revision: "revision-a".into(),
                         tokenizer: "tokenizer-a".into(),
+                        embedding_preprocessing: "unicode-default-case-fold/1".into(),
                         converter_version: "baseline/1".into(),
                         chunker_version: "structural/2".into(),
                         normalization: VectorNormalization::L2,

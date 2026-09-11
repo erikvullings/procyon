@@ -104,12 +104,30 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   ) {
     failures.push('installed qualification must repeat safety proof before package execution');
   }
+  const payloadPrecondition = semanticPayloads?.steps?.find(
+    (step) => step.name === 'Verify exact-production semantic evaluation evidence',
+  );
+  if (
+    !String(payloadPrecondition?.run ?? '').includes('check-semantic-release-preconditions.mjs') ||
+    !excludesWorkflowDispatch(payloadPrecondition?.if)
+  ) {
+    failures.push(
+      'semantic-payloads must require checked-in production evaluation only for tag publication',
+    );
+  }
+  const smokeStep = semanticPayloads?.steps?.find(
+    (step) => step.name === 'Smoke-test protocol, model activation, and component lifecycle',
+  );
+  if (!String(smokeStep?.run ?? '').includes('--evaluation-report')) {
+    failures.push('semantic-payloads must retain an exact-production evaluation report');
+  }
   for (const jobName of ['macos', 'linux', 'windows']) {
     const job = workflow.jobs?.[jobName];
     if (!excludesWorkflowDispatch(job?.if)) {
       failures.push(`${jobName}: desktop installer job must stay disabled for workflow_dispatch`);
     }
     for (const stepName of [
+      'Verify exact-production semantic evaluation evidence',
       `Embed the signed ${jobName === 'macos' ? 'macOS arm64' : jobName === 'linux' ? 'Linux x86-64' : 'Windows x86-64'} semantic catalog`,
       'Compile the production semantic catalog trust key',
     ]) {
@@ -118,6 +136,34 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
         failures.push(`${jobName}: ${stepName} must stay disabled for workflow_dispatch`);
       }
     }
+  }
+  const collectSteps = workflow.jobs?.['semantic-collect']?.steps ?? [];
+  const aggregateStep = collectSteps.find(
+    (step) => step.name === 'Aggregate private supported-target semantic evaluation',
+  );
+  if (!String(aggregateStep?.run ?? '').includes('aggregate-semantic-production-evaluation.mjs')) {
+    failures.push('semantic-collect must retain one aggregate supported-target evaluation');
+  }
+  const matchIndex = collectSteps.findIndex(
+    (step) => step.name === 'Match evaluated payloads to the reviewed release evidence',
+  );
+  const uploadIndex = collectSteps.findIndex((step) => step.uses === 'actions/upload-artifact@v4');
+  const matchStep = collectSteps[matchIndex];
+  const semanticPublish = workflow.jobs?.['semantic-publish'];
+  if (
+    matchIndex < 0 ||
+    uploadIndex < 0 ||
+    matchIndex >= uploadIndex ||
+    !excludesWorkflowDispatch(matchStep?.if) ||
+    !String(matchStep?.run ?? '').includes('check-semantic-release-preconditions.mjs') ||
+    !String(matchStep?.run ?? '').includes('--approved-report') ||
+    !excludesWorkflowDispatch(semanticPublish?.if) ||
+    !Array.isArray(semanticPublish?.needs) ||
+    !semanticPublish.needs.includes('semantic-collect')
+  ) {
+    failures.push(
+      'semantic publication must match freshly evaluated payloads to reviewed evidence before release',
+    );
   }
   if (failures.length > 0) {
     throw new Error(

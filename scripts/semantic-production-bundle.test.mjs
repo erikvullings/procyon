@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -9,6 +12,7 @@ import {
   sourceBuildIdentity,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
+import { resolveModelPack } from './verify-semantic-model.mjs';
 
 test('semantic production targets map only supported native platform pairs', () => {
   assert.deepEqual(supportedSemanticTarget('darwin', 'arm64'), {
@@ -67,4 +71,25 @@ test('production bundle records the compiled structural chunker identity', () =>
 
 test('production bundle records the EPUB-capable baseline converter identity', () => {
   assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/1036000+baseline/2');
+});
+
+test('model verification resolves the content-addressed developer artifact', () => {
+  const bundle = fs.mkdtempSync(path.join(tmpdir(), 'semantic-model-verification-'));
+  const artifact = 'procyon.dev.model.multilingual-e5-small.v1.sha256.abc123';
+  fs.mkdirSync(path.join(bundle, 'artifacts'));
+  fs.writeFileSync(path.join(bundle, 'artifacts', artifact), 'model');
+  fs.writeFileSync(
+    path.join(bundle, 'catalog.json'),
+    JSON.stringify({
+      artifacts: [
+        {
+          id: artifact,
+          component_id: 'procyon.dev.model.multilingual-e5-small',
+        },
+      ],
+    }),
+  );
+
+  assert.equal(resolveModelPack(bundle), path.join(bundle, 'artifacts', artifact));
+  fs.rmSync(bundle, { recursive: true, force: true });
 });

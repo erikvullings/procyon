@@ -38,6 +38,9 @@ pub struct LibraryIndexManifest {
     pub model_revision: String,
     /// Exact immutable tokenizer identity and revision.
     pub tokenizer: String,
+    /// Versioned normalization applied before every passage and query embedding.
+    #[serde(default = "legacy_embedding_preprocessing")]
+    pub embedding_preprocessing: String,
     /// Conversion contract version.
     pub converter_version: String,
     /// Structural chunking contract version.
@@ -53,6 +56,7 @@ impl LibraryIndexManifest {
             || [
                 self.model_revision.as_str(),
                 self.tokenizer.as_str(),
+                self.embedding_preprocessing.as_str(),
                 self.converter_version.as_str(),
                 self.chunker_version.as_str(),
             ]
@@ -81,6 +85,9 @@ impl LibraryIndexManifest {
         if self.tokenizer != requested.tokenizer {
             fields.push("tokenizer");
         }
+        if self.embedding_preprocessing != requested.embedding_preprocessing {
+            fields.push("embedding_preprocessing");
+        }
         if self.converter_version != requested.converter_version {
             fields.push("converter_version");
         }
@@ -92,6 +99,10 @@ impl LibraryIndexManifest {
         }
         fields
     }
+}
+
+fn legacy_embedding_preprocessing() -> String {
+    "preserve-case/1".into()
 }
 
 /// Measured derived-index strategy for a library size.
@@ -2625,6 +2636,7 @@ mod tests {
             distance_metric: DistanceMetric::Cosine,
             model_revision: "model-sha256-abc".into(),
             tokenizer: "tokenizer-r1".into(),
+            embedding_preprocessing: "unicode-default-case-fold/1".into(),
             converter_version: "plain/1".into(),
             chunker_version: "structural/2".into(),
             normalization: VectorNormalization::L2,
@@ -2723,6 +2735,30 @@ mod tests {
             Err(StorageError::MigrationRequired {
                 incompatible_fields
             }) if incompatible_fields == vec!["dimensions", "model_revision"]
+        ));
+    }
+
+    #[test]
+    fn legacy_case_sensitive_manifest_requires_embedding_rebuild() {
+        let current = manifest();
+        let mut legacy_json = serde_json::to_value(&current).expect("serialize manifest");
+        legacy_json
+            .as_object_mut()
+            .expect("manifest object")
+            .remove("embedding_preprocessing");
+        let legacy: LibraryIndexManifest =
+            serde_json::from_value(legacy_json).expect("legacy manifest");
+        assert_eq!(legacy.embedding_preprocessing, "preserve-case/1");
+
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &legacy)
+            .expect("legacy registration");
+        assert!(matches!(
+            catalog.register_library("tenant-a", "library-a", &current),
+            Err(StorageError::MigrationRequired {
+                incompatible_fields
+            }) if incompatible_fields == vec!["embedding_preprocessing"]
         ));
     }
 

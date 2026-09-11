@@ -15,8 +15,17 @@ import {
 } from './zvec-runtime-qualification.mjs';
 
 const bundle = path.resolve(process.argv[2] ?? '');
+const evaluationArgument = process.argv.indexOf('--evaluation-report');
+const evaluationReport =
+  evaluationArgument >= 0 ? path.resolve(process.argv[evaluationArgument + 1] ?? '') : undefined;
 if (!process.argv[2]) {
-  throw new Error('Usage: smoke-semantic-production-bundle.mjs <bundle-directory>');
+  throw new Error(
+    'Usage: smoke-semantic-production-bundle.mjs <bundle-directory> ' +
+      '[--evaluation-report <private-report.json>]',
+  );
+}
+if (evaluationArgument >= 0 && !process.argv[evaluationArgument + 1]) {
+  throw new Error('--evaluation-report requires a path');
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'catalog-input.json'), 'utf8'));
 const model = manifest.catalog.artifacts.find(
@@ -44,8 +53,9 @@ if (!onnxDescriptor && onnxRuntime) {
 const modelPack = path.join(bundle, 'artifacts', model.id);
 const workerExecutable = path.join(bundle, 'artifacts', worker.id);
 const nativeRuntime = path.join(bundle, 'artifacts', runtime.id);
+const productionTrustRequired = process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1';
 const qualification = verifyZvecRuntimeQualification(bundle, {
-  requireProductionTrust: process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1',
+  requireProductionTrust: productionTrustRequired,
 });
 if (onnxDescriptor) verifyOnnxRuntimeQualification(bundle);
 const cargoTarget = JSON.parse(
@@ -145,6 +155,30 @@ function run(args, environment = {}) {
   }
 }
 
+function runEvaluation(executable, report) {
+  const result = spawnSync(executable, [bundle, report], {
+    env: {
+      ...process.env,
+      ...runtimeLoaderEnvironment,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
+      PROCYON_SEMANTIC_PRODUCTION_TRUST_VERIFIED: productionTrustRequired ? '1' : '0',
+      HF_HUB_OFFLINE: '1',
+      TRANSFORMERS_OFFLINE: '1',
+      HTTP_PROXY: 'http://127.0.0.1:9',
+      HTTPS_PROXY: 'http://127.0.0.1:9',
+      ALL_PROXY: 'http://127.0.0.1:9',
+      NO_PROXY: '',
+    },
+    stdio: 'inherit',
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `packaged semantic evaluation exited with status ${result.status ?? 'unknown'}`,
+    );
+  }
+}
+
 try {
   run(
     [
@@ -201,6 +235,28 @@ try {
     ]);
   }
   run(['test', '--locked', '-p', 'fm-semantic-components']);
+  if (evaluationReport) {
+    run([
+      'build',
+      '--quiet',
+      '--locked',
+      '-p',
+      'fm-application',
+      '--example',
+      'evaluate_semantic_production',
+    ]);
+    runEvaluation(
+      path.join(
+        cargoTarget,
+        'debug',
+        'examples',
+        process.platform === 'win32'
+          ? 'evaluate_semantic_production.exe'
+          : 'evaluate_semantic_production',
+      ),
+      evaluationReport,
+    );
+  }
 } finally {
   fs.rmSync(isolatedRuntimeDirectory, { recursive: true, force: true });
 }

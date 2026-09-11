@@ -6,6 +6,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
+/// Versioned normalization applied symmetrically before passage and query embeddings.
+pub const EMBEDDING_PREPROCESSING_VERSION: &str = "unicode-default-case-fold/1";
+
+/// Applies Unicode default case folding without changing stored or displayed source text.
+#[must_use]
+pub fn case_fold_embedding_input(input: &str) -> String {
+    caseless::default_case_fold_str(input)
+}
+
 /// Immutable identity of the exact embedding model and tokenizer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EmbeddingModelIdentity {
@@ -231,7 +240,7 @@ impl EmbeddingCacheKey {
     pub fn calculate(
         normalized_input: &str,
         identity: &EmbeddingModelIdentity,
-        tokenizer_settings: &str,
+        preprocessing_version: &str,
         chunker_version: &str,
     ) -> Self {
         let mut hasher = Sha256::new();
@@ -240,7 +249,7 @@ impl EmbeddingCacheKey {
             identity.model_id.as_str(),
             identity.model_revision.as_str(),
             identity.tokenizer.as_str(),
-            tokenizer_settings,
+            preprocessing_version,
             chunker_version,
         ] {
             hasher.update((part.len() as u64).to_le_bytes());
@@ -506,10 +515,20 @@ mod tests {
     #[test]
     fn cache_key_binds_every_embedding_input() {
         let identity = identity();
-        let base = EmbeddingCacheKey::calculate("body", &identity, "lowercase", "structural/2");
+        let base = EmbeddingCacheKey::calculate(
+            "body",
+            &identity,
+            EMBEDDING_PREPROCESSING_VERSION,
+            "structural/2",
+        );
         assert_eq!(
             base,
-            EmbeddingCacheKey::calculate("body", &identity, "lowercase", "structural/2")
+            EmbeddingCacheKey::calculate(
+                "body",
+                &identity,
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/2"
+            )
         );
         assert_ne!(
             base,
@@ -518,6 +537,51 @@ mod tests {
         assert_ne!(
             base,
             EmbeddingCacheKey::calculate("body", &identity, "lowercase", "structural/3")
+        );
+    }
+
+    #[test]
+    fn unicode_default_case_folding_is_stable_and_not_ascii_only() {
+        assert_eq!(
+            case_fold_embedding_input("TRIZ Triz triz"),
+            "triz triz triz"
+        );
+        assert_eq!(case_fold_embedding_input("Straße"), "strasse");
+        assert_eq!(case_fold_embedding_input("Teſt Caſe"), "test case");
+        assert_eq!(
+            case_fold_embedding_input(&case_fold_embedding_input("İSTANBUL")),
+            case_fold_embedding_input("İSTANBUL")
+        );
+    }
+
+    #[test]
+    fn case_folded_cache_keys_ignore_casing_but_bind_the_policy_version() {
+        let identity = identity();
+        let upper = case_fold_embedding_input("TRIZ Straße");
+        let lower = case_fold_embedding_input("triz STRASSE");
+        assert_eq!(upper, lower);
+        assert_eq!(
+            EmbeddingCacheKey::calculate(
+                &upper,
+                &identity,
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/3"
+            ),
+            EmbeddingCacheKey::calculate(
+                &lower,
+                &identity,
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/3"
+            )
+        );
+        assert_ne!(
+            EmbeddingCacheKey::calculate(
+                &upper,
+                &identity,
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/3"
+            ),
+            EmbeddingCacheKey::calculate(&upper, &identity, "preserve-case/1", "structural/3")
         );
     }
 }
