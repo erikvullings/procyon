@@ -270,3 +270,14 @@ work is wiring a `KeyChord` and, where needed, a couple lines of dispatch logic.
   authored by this task and both unrelated to keybindings): `pnpm exec tsc --noEmit` (clean),
   `pnpm vitest run` on `dispatcher.test.ts`, `backend-event-handler.test.ts`, `app-shell.test.ts`,
   and the keybinding-specific tests in `pane.test.ts` (all passing).
+
+- 2026-09-11 follow-up (modal usability): Made the F1 shortcuts dialog use Materialized's fixed
+  footer layout so its Close button remains visible while the shortcut table scrolls. Escape now
+  dismisses the dialog even when the shortcut-capture input has focus; app-level keybindings are
+  blocked whenever any active dialog is open, including the brief case where focus remains outside
+  the modal. The same Escape contract now cancels the conflict dialog safely. Added a shared,
+  theme-compatible horizontal inset for ordinary text inputs and focused regressions for the modal
+  footer, Escape routing, conflict cancellation, and input padding. A subsequent density pass keeps
+  the Filter and shortcut lookup controls side-by-side, moves vertical overflow exclusively to the
+  shortcut list, compacts the table rows, and initially focuses the Filter so Escape works
+  immediately after opening the dialog from the native Help menu.

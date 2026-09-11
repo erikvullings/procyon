@@ -179,6 +179,18 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toContain(
       '[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.active',
     );
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell\s+input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-list\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-table\s+td\s*\{[^}]*padding:\s*0\.2rem\s+0\.4rem/s,
+    );
     expect(materializedCss).toContain('position: static');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');
     expect(materializedCss).toMatch(

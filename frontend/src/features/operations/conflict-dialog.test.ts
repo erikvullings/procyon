@@ -1,9 +1,18 @@
+import m from 'mithril';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatConflictMetadata } from './conflict-dialog';
+import type { OperationId } from '../../models';
+import { ConflictDialog, formatConflictMetadata } from './conflict-dialog';
+
+let mountedRoot: HTMLElement | undefined;
 
 describe('formatConflictMetadata', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    if (mountedRoot !== undefined) {
+      m.mount(mountedRoot, null);
+      mountedRoot.remove();
+      mountedRoot = undefined;
+    }
   });
 
   it('uses compact bytes and second-precision timestamps in the local time zone', () => {
@@ -40,5 +49,31 @@ describe('formatConflictMetadata', () => {
         kind: 'file',
       }),
     ).toBe('untitled · size unavailable · modified time unavailable');
+  });
+
+  it('cancels the pending operation when Escape closes the modal', () => {
+    const onResolve = vi.fn();
+    mountedRoot = document.createElement('div');
+    document.body.appendChild(mountedRoot);
+    m.mount(mountedRoot, {
+      view: () =>
+        m(ConflictDialog, {
+          conflict: {
+            operationId: 'operation-1' as OperationId,
+            conflictId: 'conflict-1',
+            message: 'Destination exists.',
+            source: { name: 'source.txt', kind: 'file' },
+            destination: { name: 'source.txt', kind: 'file' },
+          },
+          onResolve,
+        }),
+    });
+    m.redraw.sync();
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+
+    expect(onResolve).toHaveBeenCalledWith('cancelOperation', false);
   });
 });

@@ -51,7 +51,10 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         isOpen: true,
         showCloseButton: false,
         closeOnBackdropClick: false,
-        closeOnEsc: false,
+        closeOnEsc: true,
+        onToggle: (open: boolean) => {
+          if (!open) resolve('cancelOperation');
+        },
         description: m('div', [
           m('p', conflict.message),
           m('dl.fm-conflict-dialog-entries', [

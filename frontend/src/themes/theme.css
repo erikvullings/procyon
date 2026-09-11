@@ -1618,18 +1618,44 @@ input[type="text"].fm-shortcuts-help-search {
   border-radius: var(--fm-radius);
   outline: 0;
   padding: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
   background: var(--fm-surface);
   color: var(--fm-text);
   font: inherit;
 }
 
-.fm-shortcuts-help-capture {
-  display: grid;
-  gap: 0.35rem;
-  margin-bottom: 1rem;
+.modal.fm-shortcuts-help-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Materialized's fixed-footer rule sets overflow-y directly at equal specificity. */
+  overflow-y: hidden !important;
 }
 
+.modal.fm-shortcuts-help-modal .modal-content > div,
+.fm-shortcuts-help-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fm-shortcuts-help-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  margin-bottom: 0.5rem;
+}
+
+.fm-shortcuts-help-filter,
+.fm-shortcuts-help-capture {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fm-shortcuts-help-filter label,
 .fm-shortcuts-help-capture label {
   color: var(--fm-text-muted);
   font-size: 0.85rem;
@@ -1653,6 +1679,21 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-size: 0.85rem;
 }
 
+.fm-shortcuts-help-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.fm-shortcuts-help-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fm-shortcuts-help-table td {
+  padding: 0.2rem 0.4rem;
+  line-height: 1.2;
+}
+
 .fm-shortcuts-help-table td:last-child {
   white-space: nowrap;
 }
@@ -1660,6 +1701,13 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-shortcuts-help-table small {
   display: block;
   color: var(--fm-text-muted);
+  line-height: 1.15;
+}
+
+@media (max-width: 40rem) {
+  .fm-shortcuts-help-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 .fm-context-menu-backdrop {

@@ -127,6 +127,10 @@
   font: inherit;
 }
 
+.fm-app-shell input[type="text"]:not(.browser-default) {
+  padding-inline: 0.55rem;
+}
+
 .fm-app-shell .input-field input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
