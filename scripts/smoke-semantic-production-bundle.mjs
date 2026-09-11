@@ -155,6 +155,30 @@ function run(args, environment = {}) {
   }
 }
 
+function runEvaluation(executable, report) {
+  const result = spawnSync(executable, [bundle, report], {
+    env: {
+      ...process.env,
+      ...runtimeLoaderEnvironment,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
+      PROCYON_SEMANTIC_PRODUCTION_TRUST_VERIFIED: productionTrustRequired ? '1' : '0',
+      HF_HUB_OFFLINE: '1',
+      TRANSFORMERS_OFFLINE: '1',
+      HTTP_PROXY: 'http://127.0.0.1:9',
+      HTTPS_PROXY: 'http://127.0.0.1:9',
+      ALL_PROXY: 'http://127.0.0.1:9',
+      NO_PROXY: '',
+    },
+    stdio: 'inherit',
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `packaged semantic evaluation exited with status ${result.status ?? 'unknown'}`,
+    );
+  }
+}
+
 try {
   run(
     [
@@ -212,29 +236,25 @@ try {
   }
   run(['test', '--locked', '-p', 'fm-semantic-components']);
   if (evaluationReport) {
-    run(
-      [
-        'run',
-        '--quiet',
-        '--locked',
-        '-p',
-        'fm-application',
-        '--example',
-        'evaluate_semantic_production',
-        '--',
-        bundle,
-        evaluationReport,
-      ],
-      {
-        PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
-        PROCYON_SEMANTIC_PRODUCTION_TRUST_VERIFIED: productionTrustRequired ? '1' : '0',
-        HF_HUB_OFFLINE: '1',
-        TRANSFORMERS_OFFLINE: '1',
-        HTTP_PROXY: 'http://127.0.0.1:9',
-        HTTPS_PROXY: 'http://127.0.0.1:9',
-        ALL_PROXY: 'http://127.0.0.1:9',
-        NO_PROXY: '',
-      },
+    run([
+      'build',
+      '--quiet',
+      '--locked',
+      '-p',
+      'fm-application',
+      '--example',
+      'evaluate_semantic_production',
+    ]);
+    runEvaluation(
+      path.join(
+        cargoTarget,
+        'debug',
+        'examples',
+        process.platform === 'win32'
+          ? 'evaluate_semantic_production.exe'
+          : 'evaluate_semantic_production',
+      ),
+      evaluationReport,
     );
   }
 } finally {

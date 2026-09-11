@@ -442,7 +442,7 @@ checked-in report uses normalized fixture timings rather than production measure
 An unsigned, dirty-tree macOS arm64 dry run exercised the exact content-addressed release worker,
 model pack, Zvec loader, converter, chunker, native index, and application Ask packing path. It is
 retained privately with SHA-256
-`18afb459bf9c15b27d19009c4c11f29a6a8a9e2e3212f2c8f57e4c3014b22544` and is **not**
+`65c7d7a06d034460fb0c359937b92ed930d9817721d98840baadc82898d8ec70` and is **not**
 production evidence. It measured file recall@10 `0.958333`, chunk recall@10 `0.958333`, MRR
 `0.916667`, nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation
 correctness `1.0`, and offline citation recall `0.923077`. Generated-answer citation metrics remain
