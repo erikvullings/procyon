@@ -63,3 +63,11 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   native Linux x86-64 construction blocker only. No signed aggregate catalog, public semantic
   asset, or catalog-embedded installer was produced, and all installed-app, task-0188 quality,
   accessibility, privacy, and failure-mode rows remain outstanding.
+- 2026-09-11 Copilot: Task 0219 added a dispatch-only, read-only installed qualification
+  continuation for the exact private four-target payload/catalog matrix. It builds catalog-enabled
+  packages without publication, crosses DMG/MSI/DEB/AppImage boundaries, exercises the signed
+  component lifecycle and packaged worker crash/restart, and scans retained evidence with unique
+  sensitive canaries. Reports distinguish pass, manual-required, unsupported, blocked, and fail.
+  This automation does not unblock 0198: exact production retrieval/Ask evaluation, an exact
+  preceding-candidate upgrade/rollback, native VoiceOver/Narrator/Orca and keyboard UX passes, a
+  completed private matrix run, and release-owner approval are still required.

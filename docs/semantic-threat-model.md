@@ -47,6 +47,14 @@ alphabet. Sensitive capture requires a `DiagnosticCaptureGrant`: the user previe
 and warning, grants at most 15 minutes, and the grant authorizes only named categories until its
 expiry. Capture data is never uploaded automatically.
 
+Private release qualification seeds unique category canaries through the packaged worker and scans
+retained application, worker, installer, diagnostic, and crash-equivalent evidence as raw bytes and
+common text/path encodings. Reports contain only category names and category-bound SHA-256
+fingerprints. Captures are excluded only when their exact path and category were previewed, their
+grant is no longer than 15 minutes and still active at scan time, and the file is removed before
+retention. Files containing an unauthorized canary are removed rather than uploaded. Unreadable
+evidence, symlinks, expired scope, leakage, or post-scan mutation fails closed.
+
 ## End-to-end deletion proof
 
 An exclusion begins by preventing new reads and ingestion for the scope. The durable deletion

@@ -27,6 +27,10 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   const failures = [];
   for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
     const jobExcludesDispatch = excludesWorkflowDispatch(job.if);
+    const contentsPermission = job.permissions?.contents ?? workflow.permissions?.contents;
+    if (!jobExcludesDispatch && contentsPermission === 'write') {
+      failures.push(`${jobName}: workflow_dispatch can receive contents: write`);
+    }
     if (String(job.uses ?? '').includes('publish-chocolatey') && !jobExcludesDispatch) {
       failures.push(`${jobName}: reusable publication workflow can run on workflow_dispatch`);
     }
@@ -55,6 +59,51 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   if (!String(bundleStep?.run ?? '').includes('https://qualification.invalid/')) {
     failures.push('workflow_dispatch catalogs must use an explicitly non-published artifact URL');
   }
+  const safety = workflow.jobs?.['qualification-safety'];
+  if (
+    String(safety?.if ?? '') !== "github.event_name == 'workflow_dispatch'" ||
+    safety?.permissions?.contents !== 'read'
+  ) {
+    failures.push('qualification-safety must be dispatch-only with read-only contents permission');
+  }
+  const safetyCommands = (safety?.steps ?? []).map((step) => String(step.run ?? '')).join('\n');
+  if (!safetyCommands.includes('--dispatch-environment')) {
+    failures.push('qualification-safety must prove both release gates are disabled');
+  }
+  if (
+    !Array.isArray(semanticPayloads?.needs) ||
+    !semanticPayloads.needs.includes('qualification-safety')
+  ) {
+    failures.push('semantic-payloads must depend on qualification-safety');
+  }
+  const semanticCommands = (semanticPayloads?.steps ?? [])
+    .map((step) => String(step.run ?? ''))
+    .join('\n');
+  if (!semanticCommands.includes('qualify-semantic-payload.mjs')) {
+    failures.push('semantic-payloads must run worker qualification per target');
+  }
+  const installedQualification = workflow.jobs?.['semantic-installed-qualification'];
+  const installedGate = String(installedQualification?.if ?? '');
+  if (
+    !installedGate.includes("github.event_name == 'workflow_dispatch'") ||
+    !installedGate.includes('always()') ||
+    installedQualification?.permissions?.contents !== 'read' ||
+    !Array.isArray(installedQualification?.needs) ||
+    !installedQualification.needs.includes('qualification-safety')
+  ) {
+    failures.push(
+      'semantic-installed-qualification must be dispatch-only, read-only, safety-gated, and resilient to sibling failures',
+    );
+  }
+  const installedCommands = (installedQualification?.steps ?? [])
+    .map((step) => String(step.run ?? ''))
+    .join('\n');
+  if (
+    !installedCommands.includes('qualify-semantic-installed.mjs') ||
+    !installedCommands.includes('--dispatch-environment')
+  ) {
+    failures.push('installed qualification must repeat safety proof before package execution');
+  }
   for (const jobName of ['macos', 'linux', 'windows']) {
     const job = workflow.jobs?.[jobName];
     if (!excludesWorkflowDispatch(job?.if)) {
@@ -81,7 +130,38 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   };
 }
 
+export function assertQualificationDispatchEnvironment({
+  eventName,
+  semanticReleaseQualified,
+  knowledgeSearchReleaseQualified,
+}) {
+  if (eventName !== 'workflow_dispatch') {
+    throw new Error('installed semantic qualification is restricted to workflow_dispatch');
+  }
+  for (const [name, value] of [
+    ['SEMANTIC_RELEASE_QUALIFIED', semanticReleaseQualified],
+    ['KNOWLEDGE_SEARCH_RELEASE_QUALIFIED', knowledgeSearchReleaseQualified],
+  ]) {
+    const normalized = String(value ?? '').trim();
+    if (normalized !== '' && normalized !== 'false') {
+      throw new Error(`${name} must be absent or false during private qualification`);
+    }
+  }
+  return {
+    workflowDispatchOnly: true,
+    semanticReleaseQualified: false,
+    knowledgeSearchReleaseQualified: false,
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const proof = checkSemanticQualificationWorkflow(process.argv[2]);
+  const proof =
+    process.argv[2] === '--dispatch-environment'
+      ? assertQualificationDispatchEnvironment({
+          eventName: process.env.GITHUB_EVENT_NAME,
+          semanticReleaseQualified: process.env.SEMANTIC_RELEASE_QUALIFIED_VALUE,
+          knowledgeSearchReleaseQualified: process.env.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE,
+        })
+      : checkSemanticQualificationWorkflow(process.argv[2]);
   console.log(JSON.stringify(proof));
 }

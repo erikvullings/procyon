@@ -284,6 +284,85 @@ Windows installers and payloads remain unsigned under the existing desktop relea
 limitation must be presented in release notes and must not be mistaken for a qualified signed
 artifact.
 
+## Automated installed lifecycle and privacy matrix
+
+Task 0219 adds a private `workflow_dispatch` continuation to the existing release workflow. The
+continuation cannot start until `scripts/check-semantic-qualification-workflow.mjs` proves that no
+dispatch-reachable step can publish and that both `SEMANTIC_RELEASE_QUALIFIED` and
+`KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or exactly `false`. Qualification jobs have
+read-only repository permission. They upload seven-day Actions artifacts only; they do not create
+or modify a GitHub Release, Homebrew tap, Chocolatey package, repository variable, or public asset.
+
+The matrix preserves the production target contract:
+
+| Qualification target | Runner and package boundary | Trust statement |
+| --- | --- | --- |
+| macOS arm64 | `macos-15`; signed app inside the generated DMG, copied from a mounted image and launched from an isolated user-data root | Developer ID signing and Apple notarization remain mandatory |
+| Windows x86-64 | `windows-latest`; generated MSI installed silently, launched, and uninstalled with retained MSI logs | Intentionally unsigned under the current release policy |
+| Linux x86-64 | `ubuntu-22.04`; generated DEB extracted and AppImage expanded, each launched under Xvfb | Ubuntu 22.04 remains the ABI baseline |
+| Linux arm64 | `ubuntu-24.04-arm`; generated DEB and AppImage boundaries launched under Xvfb | Signing is not applicable |
+
+Each target consumes the exact private payload and signed catalog produced earlier in the same
+workflow. `qualify_semantic_lifecycle` verifies the detached signature and complete payload set,
+then exercises absent state, low disk before any artifact read, an interrupted local artifact read
+and byte-range resume, first install without network access, application-manager restart, installed
+payload tampering and recovery, serialized concurrent lifecycle access, uninstall with retention,
+explicit derived-data deletion, and clean reinstall. Catalog tampering and streamed payload
+tampering fail before activation. The packaged worker test ingests and queries through the exact
+worker/runtime/model, forcibly terminates that worker, reconnects to a new process, and verifies
+the durable index after restart.
+
+Every retained report uses schema version 1 and records target, source revision, runner/OS, exact
+catalog and package digests, stage, sanitized command, result, redacted evidence path, and rollback
+instruction. Result values are restricted to:
+
+| Result | Meaning |
+| --- | --- |
+| `pass` | Automated evidence completed against the named bytes and host |
+| `manual-required` | Native human interaction or assistive technology is required |
+| `unsupported` | The platform or product intentionally has no such boundary |
+| `blocked` | Required exact input or approval was unavailable |
+| `fail` | An automated stage or privacy check failed |
+
+The privacy runner creates unique values for query, excerpt, filename/path, prompt, response,
+credential, token, authorization header, and model-payload categories. Values pass through the
+packaged worker's normal ingest/query path and representative failure/restart path. Collected
+application, worker, installer, diagnostic, and command evidence is scanned as bytes for UTF-8,
+UTF-16LE/BE, slash and backslash paths, percent encoding, JSON escaping, base64/base64url, and
+hex, including matches split across read boundaries. The report contains only category names and
+category-bound SHA-256 fingerprints. Symlinks, unreadable inputs, changed/missing/added evidence,
+and unscoped or expired capture fail closed. Evidence files containing a canary are removed before
+failure reports can be uploaded. An authorized diagnostic capture must be previewed,
+category-scoped, no longer than 15 minutes, valid at scan time, and is deleted before evidence is
+retained.
+
+Forced termination does not guarantee an operating-system crash dump, and Procyon has no automatic
+semantic updater. Those rows are `unsupported`, not fabricated passes. If a platform produces a
+crash artifact or installer log, place it under the collected evidence root before scanning.
+Upgrade and rollback remain `blocked` until an exact signed preceding production candidate is
+provided; a fixture or developer bundle is not acceptable production evidence.
+
+### Manual operator checklist
+
+Automation does not establish native accessibility or comprehension. For each retained package,
+record operator, date, hardware, OS build, package/catalog digests, assistive-technology version,
+result, defect link, and evidence location for:
+
+1. VoiceOver on macOS, Narrator on Windows, and Orca on Linux: application structure, dialog
+   title, control name/role/state, status updates, errors, result evidence, and citations.
+2. Keyboard-only install consent, settings entry, enrolment-tree navigation, model choice,
+   progress cancellation, error recovery, citation opening, focus restoration, retention choice,
+   explicit deletion, and uninstall.
+3. Consent and privacy wording at default zoom and 200%, light/dark/high-contrast settings, and
+   reduced motion.
+4. Screen-reader announcement of download/storage estimates, offline or low-disk failure,
+   cancellation, worker restart, unavailable source, and deletion completion.
+5. Confirmation that retained-index uninstall and explicit-delete uninstall communicate different
+   outcomes and that a clean reinstall/rebuild remains understandable.
+
+Use `docs/architecture/accessibility.md` for the general interaction procedures. A checklist row
+remains `manual-required` until a human records actual results from the native packaged build.
+
 The upstream slim runtime archives do not carry native Zvec's `LICENSE` or `NOTICE` files. The
 catalog and qualification record therefore preserve immutable URLs, byte lengths, and SHA-256
 digests for both Apache licenses and the native NOTICE, including its Unicode Character Database
