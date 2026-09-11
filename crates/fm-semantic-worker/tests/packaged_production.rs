@@ -103,7 +103,15 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
             "qualification-ingestion",
             IngestionScope::new("qualification-tenant", "qualification-library"),
             "qualification-document",
-            BTreeMap::from([("source-name".to_owned(), canaries["filename-path"].clone())]),
+            BTreeMap::from([
+                (
+                    "occurrence_id".to_owned(),
+                    "qualification-occurrence".to_owned(),
+                ),
+                ("source_id".to_owned(), "qualification-source".to_owned()),
+                ("root_id".to_owned(), "qualification-root".to_owned()),
+                ("source-name".to_owned(), canaries["filename-path"].clone()),
+            ]),
             "text/plain",
             content.into_bytes(),
         )

@@ -479,6 +479,7 @@ jobs:
           path: |
             target/semantic-production-release/${{ matrix.target }}/qualification-worker/privacy-report.json
             target/semantic-production-release/${{ matrix.target }}/qualification-worker/qualification-report.json
+            target/semantic-production-release/${{ matrix.target }}/qualification-worker/safe-evidence/
           if-no-files-found: warn
           retention-days: 7
       - name: Remove temporary macOS signing credentials
@@ -672,8 +673,7 @@ jobs:
           path: |
             target/semantic-installed-qualification/${{ matrix.target }}/privacy-report.json
             target/semantic-installed-qualification/${{ matrix.target }}/summary.json
-            target/semantic-installed-qualification/${{ matrix.target }}/collected/qualification-report.json
-            target/semantic-installed-qualification/${{ matrix.target }}/collected/lifecycle-report.json
+            target/semantic-installed-qualification/${{ matrix.target }}/safe-evidence/
           if-no-files-found: warn
           retention-days: 7
       - name: Remove temporary macOS signing credentials

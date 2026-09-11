@@ -90,6 +90,10 @@ fs.writeFileSync(
   path.join(qualificationRoot, 'privacy-report.json'),
   `${JSON.stringify(privacy, null, 2)}\n`,
 );
+fs.cpSync(collected, path.join(qualificationRoot, 'safe-evidence'), {
+  recursive: true,
+  errorOnExist: true,
+});
 fs.writeFileSync(
   path.join(qualificationRoot, 'qualification-report.json'),
   `${JSON.stringify(

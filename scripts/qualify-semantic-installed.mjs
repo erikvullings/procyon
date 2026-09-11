@@ -332,6 +332,10 @@ const privacy = await scanSemanticPrivacyEvidence({
 });
 await verifySemanticPrivacyEvidence({ root: collected, report: privacy });
 writeFileSync(path.join(evidence, 'privacy-report.json'), `${JSON.stringify(privacy, null, 2)}\n`);
+fs.cpSync(collected, path.join(evidence, 'safe-evidence'), {
+  recursive: true,
+  errorOnExist: true,
+});
 
 const failed = stages.filter(({ status }) => status !== 'pass');
 const summary = {
