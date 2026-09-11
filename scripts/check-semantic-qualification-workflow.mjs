@@ -147,9 +147,7 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   const matchIndex = collectSteps.findIndex(
     (step) => step.name === 'Match evaluated payloads to the reviewed release evidence',
   );
-  const uploadIndex = collectSteps.findIndex(
-    (step) => step.uses === 'actions/upload-artifact@v4',
-  );
+  const uploadIndex = collectSteps.findIndex((step) => step.uses === 'actions/upload-artifact@v4');
   const matchStep = collectSteps[matchIndex];
   const semanticPublish = workflow.jobs?.['semantic-publish'];
   if (
