@@ -662,7 +662,9 @@ test('desktop package smoke crosses native installer boundaries and retains isol
   assert.match(smoke, /dpkg-deb/);
   assert.match(smoke, /--appimage-extract/);
   assert.match(smoke, /xvfb-run/);
-  assert.match(smoke, /statSync\(candidate\)\.isFile\(\)/);
+  assert.match(smoke, /metadata\.isFile\(\)/);
+  assert.match(smoke, /metadata\.mode & 0o111/);
+  assert.match(smoke, /lstatSync\(right\)\.size - lstatSync\(left\)\.size/);
   assert.match(smoke, /FM_LOG_FILE/);
   assert.match(smoke, /PROCYON_QUALIFICATION_EVIDENCE_ROOT/);
   assert.match(smoke, /PROCYON_QUALIFICATION_CATALOG_DIRECTORY/);
@@ -680,6 +682,8 @@ test('installed semantic qualification has portable cleanup and AppImage build p
   assert.doesNotMatch(qualification, /\bfs\./);
   assert.match(qualification, /\bcpSync\(collected, path\.join\(evidence, 'safe-evidence'\)/);
   assert.match(linuxDependencies.run, /\bxdg-utils\b/);
+  assert.match(JSON.stringify(installed), /runner\.temp.*semantic-installed-qualification/);
+  assert.doesNotMatch(JSON.stringify(installed), /target\/semantic-installed-qualification/);
 });
 
 test('README documents release versioning, package managers, smoke checks, and no auto-update', () => {

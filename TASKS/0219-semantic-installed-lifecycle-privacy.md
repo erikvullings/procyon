@@ -102,3 +102,13 @@ evidence.
   directory instead of the `procyon` executable because its lookup did not require a regular file;
   `xvfb-run` consequently exited 126. The lookup now requires a file while retaining the
   resource-directory exclusion.
+- 2026-09-12 Copilot: Run
+  [`34706893999`](https://github.com/erikvullings/procyon/actions/runs/34706893999) at
+  `fcee871980d8c5d9f08c2ffd6866be1119456463` passed all payload and catalog jobs after adding
+  bounded, `Retry-After`-aware retries that retain exact size and SHA-256 verification. Windows
+  x86-64 passed the complete installed qualification. macOS arm64 restored stale qualification
+  evidence from the Rust cache and correctly refused to overwrite it; evidence now lives under
+  `runner.temp`, outside cached build output. Both Linux targets passed lifecycle, diagnostics,
+  cancellation/restart, and privacy but selected an executable resource/launcher that delegated
+  unsupported macOS-style `open -a` arguments to `xdg-open`. Linux package smoke now selects the
+  largest executable regular-file candidate named `Procyon`, excluding resources.

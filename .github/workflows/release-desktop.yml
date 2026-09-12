@@ -670,13 +670,13 @@ jobs:
           --bundle semantic-release-input
           --catalog apps/fm-desktop/src-tauri/resources/semantic
           --public-key "${{ runner.temp }}/semantic-catalog.pub"
-          --evidence "target/semantic-installed-qualification/${{ matrix.target }}"
+          --evidence "${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: semantic-installed-qualification-${{ matrix.target }}
           path: |
-            target/semantic-installed-qualification/${{ matrix.target }}/
+            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/
             target/release/bundle/
           if-no-files-found: error
           retention-days: 7
@@ -686,9 +686,9 @@ jobs:
         with:
           name: semantic-installed-qualification-failure-${{ matrix.target }}
           path: |
-            target/semantic-installed-qualification/${{ matrix.target }}/privacy-report.json
-            target/semantic-installed-qualification/${{ matrix.target }}/summary.json
-            target/semantic-installed-qualification/${{ matrix.target }}/safe-evidence/
+            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/privacy-report.json
+            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/summary.json
+            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/safe-evidence/
           if-no-files-found: warn
           retention-days: 7
       - name: Remove temporary macOS signing credentials
