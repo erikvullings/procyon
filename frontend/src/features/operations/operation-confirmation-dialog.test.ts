@@ -33,7 +33,9 @@ describe('OperationConfirmationDialog', () => {
     });
     m.redraw.sync();
 
-    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Copy 1 item?');
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.querySelector('h4')?.textContent).toBe('Copy');
+    expect(dialog?.textContent).toContain('Copy 1 item?');
     const route = document.querySelector('.fm-operation-confirmation-route');
     expect(route?.textContent).toContain('Source');
     expect(route?.textContent).toContain('file:///source folder#one');
@@ -45,6 +47,10 @@ describe('OperationConfirmationDialog', () => {
       new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
     );
     expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent?.trim()).toBe('Copy');
     [...document.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Copy')
       ?.click();
@@ -70,7 +76,9 @@ describe('OperationConfirmationDialog', () => {
     });
     m.redraw.sync();
 
-    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Move 3 items?');
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.querySelector('h4')?.textContent).toBe('Move');
+    expect(dialog?.textContent).toContain('Move 3 items?');
     const sourceLocations = [
       ...document.querySelectorAll('.fm-operation-confirmation-source code'),
     ].map((element) => element.textContent);
@@ -89,9 +97,9 @@ describe('OperationConfirmationDialog', () => {
     });
     m.redraw.sync();
 
-    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
-      'Move 1 item to Trash?',
-    );
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.querySelector('h4')?.textContent).toBe('Move to Trash');
+    expect(dialog?.textContent).toContain('Move 1 item to Trash?');
     const trash = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.trim() === 'Move to Trash',
     );

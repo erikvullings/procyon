@@ -997,6 +997,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * before the app lost focus (often nowhere useful), so the cursor row still *looks* highlighted
    * but arrow keys silently do nothing until the user clicks a row to re-establish focus manually. */
   function handleWindowFocus(): void {
+    const openModals = document.querySelectorAll<HTMLElement>('.modal.active[aria-modal="true"]');
+    const openModal = openModals.item(openModals.length - 1);
+    if (openModal !== null) {
+      if (!openModal.contains(document.activeElement)) {
+        const defaultAction =
+          openModal.querySelector<HTMLElement>('.mm-dialog-primary-action:not([disabled])') ??
+          openModal.querySelector<HTMLElement>('.fm-permanent-delete-confirm:not([disabled])');
+        const firstControl = openModal.querySelector<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+        );
+        (defaultAction ?? firstControl ?? openModal).focus();
+      }
+      return;
+    }
     const activePaneId = workspace?.activePaneId;
     if (activePaneId === undefined) return;
     if (focusPane !== undefined) focusPane(activePaneId);

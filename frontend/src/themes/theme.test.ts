@@ -92,6 +92,10 @@ describe('theme stylesheet', () => {
       /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\]\s+input\[type=["']checkbox["']\]\s*\+\s*span:not\(\.lever\)\s*\{([^}]*)\}/,
     )?.[1];
     expect(checkbox).toContain('line-height: 16px');
+    const focusedCheckbox = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\]\s+input\[type=["']checkbox["']\]:focus\s*\+\s*span:not\(\.lever\)\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(focusedCheckbox).toContain('font-weight: 600');
   });
 
   it('contains long operation source previews within their card', () => {

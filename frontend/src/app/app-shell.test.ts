@@ -1487,6 +1487,13 @@ describe('AppShell', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
 
     expect(startOperation).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe('Copy'));
+    window.dispatchEvent(new Event('focus'));
+    expect(document.activeElement?.textContent?.trim()).toBe('Copy');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
     await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({

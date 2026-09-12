@@ -3,6 +3,7 @@ import { AlertDialog } from 'mithril-materialized';
 import { arrowRightIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { ConflictResolution, OperationConflict } from '../../models';
+import { createDialogFocusCycle } from './dialog-focus';
 
 export interface ConflictDialogAttrs {
   readonly conflict: OperationConflict | undefined;
@@ -39,7 +40,9 @@ export function formatConflictMetadata(entry: OperationConflict['source']): stri
  */
 export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
   let applyToAllSimilar = false;
+  const focusCycle = createDialogFocusCycle('.mm-dialog-primary-action');
   return {
+    onremove: focusCycle.unmount,
     view: ({ attrs }) => {
       const conflict = attrs.conflict;
       if (conflict === undefined) return undefined;
@@ -51,37 +54,45 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         className: 'fm-operation-confirmation-modal fm-conflict-dialog',
         isOpen: true,
         closeOnEsc: false,
-        initialFocus: '.mm-dialog-primary-action',
-        description: m('.fm-operation-confirmation-description', [
-          m(
-            'p.fm-operation-confirmation-summary',
-            t('operation', 'destinationExists', { name: conflict.destination.name }),
-          ),
-          m('.fm-operation-confirmation-route', [
-            m('.fm-operation-confirmation-endpoint', [
-              m('span.fm-operation-confirmation-label', t('operation', 'source')),
-              m('code', formatConflictMetadata(conflict.source)),
-            ]),
+        initialFocus: false,
+        trapFocus: false,
+        description: m(
+          '.fm-operation-confirmation-description',
+          {
+            oncreate: ({ dom }) => focusCycle.mount(dom),
+            onremove: focusCycle.unmount,
+          },
+          [
             m(
-              '.fm-operation-confirmation-arrow',
-              { 'aria-hidden': 'true' },
-              arrowRightIcon({ size: 18 }),
+              'p.fm-operation-confirmation-summary',
+              t('operation', 'destinationExists', { name: conflict.destination.name }),
             ),
-            m('.fm-operation-confirmation-endpoint', [
-              m('span.fm-operation-confirmation-label', t('operation', 'destination')),
-              m('code', formatConflictMetadata(conflict.destination)),
+            m('.fm-operation-confirmation-route', [
+              m('.fm-operation-confirmation-endpoint', [
+                m('span.fm-operation-confirmation-label', t('operation', 'source')),
+                m('code', formatConflictMetadata(conflict.source)),
+              ]),
+              m(
+                '.fm-operation-confirmation-arrow',
+                { 'aria-hidden': 'true' },
+                arrowRightIcon({ size: 18 }),
+              ),
+              m('.fm-operation-confirmation-endpoint', [
+                m('span.fm-operation-confirmation-label', t('operation', 'destination')),
+                m('code', formatConflictMetadata(conflict.destination)),
+              ]),
             ]),
-          ]),
-          m('label.fm-conflict-dialog-checkbox', [
-            m('input', {
-              type: 'checkbox',
-              onchange: (event: Event) => {
-                applyToAllSimilar = (event.currentTarget as HTMLInputElement).checked;
-              },
-            }),
-            m('span', t('operation', 'applyToAllSimilar')),
-          ]),
-        ]),
+            m('label.fm-conflict-dialog-checkbox', [
+              m('input', {
+                type: 'checkbox',
+                onchange: (event: Event) => {
+                  applyToAllSimilar = (event.currentTarget as HTMLInputElement).checked;
+                },
+              }),
+              m('span', t('operation', 'applyToAllSimilar')),
+            ]),
+          ],
+        ),
         actions: [
           { label: t('button', 'skip'), onclick: () => resolve('skip') },
           { label: t('button', 'renameNew'), onclick: () => resolve('renameNew') },

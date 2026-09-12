@@ -4,6 +4,7 @@ import { arrowRightIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import { parentLocation } from '../navigation/navigation';
+import { createDialogFocusCycle } from './dialog-focus';
 import type { OperationConfirmationRequest } from './operations-controller';
 
 export interface OperationConfirmationDialogAttrs {
@@ -68,37 +69,53 @@ function transferDescription(request: OperationConfirmationRequest): m.Children 
 /** Confirmation before starting a routine copy, move, or Trash operation. */
 export const OperationConfirmationDialog: FactoryComponent<
   OperationConfirmationDialogAttrs
-> = () => ({
-  view: ({ attrs }) => {
-    const request = attrs.request;
-    const kind = request?.kind ?? 'copy';
-    return m(AlertDialog, {
-      className: 'fm-operation-confirmation-modal',
-      title: t('operation', 'confirmOperationTitle'),
-      description:
+> = () => {
+  const focusCycle = createDialogFocusCycle('.mm-dialog-primary-action');
+  return {
+    onremove: focusCycle.unmount,
+    view: ({ attrs }) => {
+      const request = attrs.request;
+      const kind = request?.kind ?? 'copy';
+      const description =
         request === undefined
           ? undefined
           : kind === 'trash'
             ? t('operation', 'confirmTrashSummary', {
                 items: itemCount(request.sources.length),
               })
-            : transferDescription(request),
-      isOpen: request !== undefined,
-      closeOnEsc: true,
-      closeOnButtonClick: false,
-      initialFocus: '.mm-dialog-primary-action',
-      onClose: (reason: ModalCloseReason) => {
-        if (reason !== 'programmatic') attrs.onCancel();
-      },
-      secondaryAction: {
-        label: t('button', 'cancel'),
-        onclick: attrs.onCancel,
-      },
-      primaryAction: {
-        label: t('operation', kind),
-        destructive: kind === 'trash',
-        onclick: attrs.onConfirm,
-      },
-    });
-  },
-});
+            : transferDescription(request);
+      return m(AlertDialog, {
+        className: 'fm-operation-confirmation-modal',
+        title: t('operation', kind),
+        description:
+          description === undefined
+            ? undefined
+            : m(
+                '.fm-operation-confirmation-focus-scope',
+                {
+                  oncreate: ({ dom }) => focusCycle.mount(dom),
+                  onremove: focusCycle.unmount,
+                },
+                description,
+              ),
+        isOpen: request !== undefined,
+        closeOnEsc: true,
+        closeOnButtonClick: false,
+        initialFocus: false,
+        trapFocus: false,
+        onClose: (reason: ModalCloseReason) => {
+          if (reason !== 'programmatic') attrs.onCancel();
+        },
+        secondaryAction: {
+          label: t('button', 'cancel'),
+          onclick: attrs.onCancel,
+        },
+        primaryAction: {
+          label: t('operation', kind),
+          destructive: kind === 'trash',
+          onclick: attrs.onConfirm,
+        },
+      });
+    },
+  };
+};

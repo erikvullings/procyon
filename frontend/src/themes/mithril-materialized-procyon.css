@@ -289,6 +289,17 @@
   line-height: 16px;
 }
 
+.fm-app-shell[data-mm-preset="compact-minimal"] input[type="checkbox"]:focus + span:not(.lever) {
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  input[type="checkbox"]:focus
+  + span:not(.lever)::before {
+  border-color: var(--fm-accent);
+}
+
 .fm-app-shell .switch label .switch-value {
   top: -1px;
 }

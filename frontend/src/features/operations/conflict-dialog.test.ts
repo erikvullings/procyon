@@ -83,5 +83,13 @@ describe('formatConflictMetadata', () => {
     expect(document.activeElement).toBe(
       document.querySelector('.fm-conflict-dialog-checkbox input[type="checkbox"]'),
     );
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent).toBe('Skip');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent).toBe('Rename');
   });
 });
