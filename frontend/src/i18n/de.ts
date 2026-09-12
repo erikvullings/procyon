@@ -340,9 +340,9 @@ export const de = {
     confirmDeleteMessage:
       'Dadurch wird "{name}" endgültig gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.',
     confirmOperationTitle: 'Vorgang bestätigen',
-    confirmCopySummary: '{count} Element(e) nach {destination} kopieren?',
-    confirmMoveSummary: '{count} Element(e) nach {destination} verschieben?',
-    confirmTrashSummary: '{count} Element(e) in den Papierkorb verschieben?',
+    confirmCopySummary: '{items} kopieren?',
+    confirmMoveSummary: '{items} verschieben?',
+    confirmTrashSummary: '{items} in den Papierkorb verschieben?',
     copy: 'Kopieren',
     move: 'Verschieben',
     trash: 'In den Papierkorb',

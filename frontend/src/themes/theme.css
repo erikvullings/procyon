@@ -302,6 +302,68 @@ main.fm-workspace {
   color: var(--fm-error);
 }
 
+.fm-operation-confirmation-modal {
+  --mm-modal-width: min(40rem, calc(100vw - 2rem));
+  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
+}
+
+.fm-operation-confirmation-summary {
+  margin: 0 0 0.6rem;
+}
+
+.fm-operation-confirmation-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.fm-operation-confirmation-endpoint {
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+}
+
+.fm-operation-confirmation-label {
+  display: block;
+  margin-block-end: 0.2rem;
+  color: var(--fm-text-muted);
+  font-size: 0.82rem;
+}
+
+.fm-operation-confirmation-locations {
+  display: grid;
+  gap: 0.2rem;
+  max-height: 6rem;
+  overflow-y: auto;
+}
+
+.fm-operation-confirmation-endpoint code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--fm-text);
+  font-family: var(--fm-font-mono);
+  font-size: 0.85rem;
+}
+
+.fm-operation-confirmation-arrow {
+  display: grid;
+  color: var(--fm-accent);
+  place-items: center;
+}
+
+@media (max-width: 40rem) {
+  .fm-operation-confirmation-route {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fm-operation-confirmation-arrow {
+    transform: rotate(90deg);
+  }
+}
+
 /* Directory-tree sidebar (task 0139): a fixed-width column beside the pane split, sized so
  * `.fm-workspace-layout` (flex: 1 1 auto) fills the remaining width the same way it filled the
  * whole row before the sidebar existed. */

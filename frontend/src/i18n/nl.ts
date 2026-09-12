@@ -341,9 +341,9 @@ export const nl = {
     confirmDeleteMessage:
       'Dit zal "{name}" permanent verwijderen. Deze actie kan niet ongedaan worden gemaakt.',
     confirmOperationTitle: 'Bewerking bevestigen',
-    confirmCopySummary: '{count} item(s) kopiëren naar {destination}?',
-    confirmMoveSummary: '{count} item(s) verplaatsen naar {destination}?',
-    confirmTrashSummary: '{count} item(s) naar de prullenmand verplaatsen?',
+    confirmCopySummary: '{items} kopiëren?',
+    confirmMoveSummary: '{items} verplaatsen?',
+    confirmTrashSummary: '{items} naar de prullenmand verplaatsen?',
     copy: 'Kopiëren',
     move: 'Verplaatsen',
     trash: 'Naar prullenmand',
