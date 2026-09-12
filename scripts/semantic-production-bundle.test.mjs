@@ -12,7 +12,21 @@ import {
   sourceBuildIdentity,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
+import { modelDownloadRetryDelay } from './fetch-semantic-model.mjs';
 import { resolveModelPack } from './verify-semantic-model.mjs';
+
+test('model downloads honor bounded Retry-After delays', () => {
+  const response = (retryAfter) => ({
+    headers: new Headers(retryAfter ? { 'retry-after': retryAfter } : {}),
+  });
+  assert.equal(modelDownloadRetryDelay(response('7'), 0), 7_000);
+  assert.equal(modelDownloadRetryDelay(response('120'), 0), 60_000);
+  assert.equal(
+    modelDownloadRetryDelay(response('Sat, 12 Sep 2026 16:00:09 GMT'), 0, 1_789_228_800_000),
+    9_000,
+  );
+  assert.equal(modelDownloadRetryDelay(response(), 2), 8_000);
+});
 
 test('semantic production targets map only supported native platform pairs', () => {
   assert.deepEqual(supportedSemanticTarget('darwin', 'arm64'), {
