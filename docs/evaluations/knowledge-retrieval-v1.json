@@ -4,7 +4,7 @@
   "corpusFingerprint": "sha256:e8aeb9f6ec0c85073015cd3e6efe3e8a63a7a8e90164eb219a7d698285f3641a",
   "plannerVersion": "structured-knowledge-planner/1",
   "fusionVersion": "reciprocal-rank-fusion/60",
-  "releaseCandidateFingerprint": "sha256:ea4715d83bf555b8c481acefded0d9fcba606a8739cdfe031e0faae466152777",
+  "releaseCandidateFingerprint": "sha256:b96d4922a7417b9ec341fdab2cd1f6ef6ebc8696285a87382c531e7e70fe3fcd",
   "measurementBasis": "Deterministic repository fixture: production planner, coordinator, catalog, fusion, and evidence materialization, with a deterministic lexical surrogate embedding model and the `in-process-surrogate/1` candidate index backend instead of a production multilingual model and the native Zvec collection. Latency is planning plus retrieval, single-run wall clock on one developer machine, not production or cross-platform hardware.",
   "limitations": [
     "The embedding model is a deterministic term-frequency/inverse-document-frequency surrogate. Cross-language matching exists only where the corpus declares an alias, so no conclusion about a production multilingual model can be drawn from the multilingual cases.",
@@ -18,7 +18,7 @@
   "strategies": [
     {
       "strategy": "wholeQuestionVector",
-      "pipelineFingerprint": "sha256:8f23a1f2e91fa24c3327cbe4c1f4d3fafe11fab0a820659e95484378b16575f8",
+      "pipelineFingerprint": "sha256:0d3c661b5415d171beff9b12ae453188f9d17f75f7364521fe1d8f2b96a1fecc",
       "metrics": {
         "evaluatedCases": 13,
         "scoredCases": 10,
@@ -54,7 +54,7 @@
     },
     {
       "strategy": "subjectVector",
-      "pipelineFingerprint": "sha256:8fe5fcf88771d258d4f60a9e0958ce3e82fe5ad38461505f1b725ae140d00024",
+      "pipelineFingerprint": "sha256:3ae7c86edcd56fe12e66851e1da2f7588489fc1b854176c1faa661f5e6b94985",
       "metrics": {
         "evaluatedCases": 13,
         "scoredCases": 10,
@@ -90,7 +90,7 @@
     },
     {
       "strategy": "structuredSubjectNeedVector",
-      "pipelineFingerprint": "sha256:a915706cb2b116549e5686f328ce97f0cf1631e05b56de06305c8762887aca09",
+      "pipelineFingerprint": "sha256:459f0165c26fe1991b6eea5723b40336a44112dd69bd3c594dfa682bd0043445",
       "metrics": {
         "evaluatedCases": 13,
         "scoredCases": 10,
@@ -126,7 +126,7 @@
     },
     {
       "strategy": "structuredFullText",
-      "pipelineFingerprint": "sha256:2af92e7d5f1641b3701e1765b8898d50f5d94b714c61c228b4cf114117f538f8",
+      "pipelineFingerprint": "sha256:2f246d7f8c87115fed6f2a944c83e939d8f83daa53489f61bd66aa7d1e6d380f",
       "metrics": {
         "evaluatedCases": 13,
         "scoredCases": 10,
@@ -162,7 +162,7 @@
     },
     {
       "strategy": "structuredHybrid",
-      "pipelineFingerprint": "sha256:266511eb3fce9c3482bcc9517a87dab54d5e56bfadaa03960673df2eb1515ea1",
+      "pipelineFingerprint": "sha256:af6f217a529fa3a0d6480d806691362a4fcecd5851d417c64a31cbc3cb659517",
       "metrics": {
         "evaluatedCases": 13,
         "scoredCases": 10,

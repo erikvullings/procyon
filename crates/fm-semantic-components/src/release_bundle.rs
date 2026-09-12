@@ -561,6 +561,7 @@ fn build_bundle(
         INDEX_SCHEMA_VERSION,
         spec.converter_identity.clone(),
         spec.chunker_identity.clone(),
+        crate::PRODUCTION_EMBEDDING_PREPROCESSING_IDENTITY,
         tokenizer,
         model_identity,
     )?;

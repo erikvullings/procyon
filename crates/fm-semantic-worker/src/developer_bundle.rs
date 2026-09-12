@@ -23,8 +23,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::developer_onnx::OnnxEmbeddingBackend;
 use crate::embedding::{
-    CpuEmbeddingBackend, CpuEmbeddingLoader, CuratedModelPackage, EmbeddingError,
-    EmbeddingModelIdentity, EmbeddingResourceProfile, LocalEmbeddingRuntime, VectorNormalization,
+    CpuEmbeddingBackend, CpuEmbeddingLoader, CuratedModelPackage, EMBEDDING_PREPROCESSING_VERSION,
+    EmbeddingError, EmbeddingModelIdentity, EmbeddingResourceProfile, LocalEmbeddingRuntime,
+    VectorNormalization, case_fold_embedding_input,
 };
 use crate::ingestion::{
     DerivedIndex, EmbeddingProvider, IngestionCoordinator, IngestionEventSink, IngestionProgress,
@@ -218,6 +219,7 @@ fn developer_manifest(identity: &EmbeddingModelIdentity) -> LibraryIndexManifest
         distance_metric: DistanceMetric::Cosine,
         model_revision: identity.model_revision.clone(),
         tokenizer: identity.tokenizer.clone(),
+        embedding_preprocessing: EMBEDDING_PREPROCESSING_VERSION.into(),
         converter_version: DEFAULT_CONVERTER_PIPELINE_VERSION.into(),
         chunker_version: STRUCTURAL_CHUNKER_VERSION.to_string(),
         normalization: VectorNormalization::L2,
@@ -400,8 +402,11 @@ fn prepare_active_model_index(
 
     let model_directory = model.index_directory(data_directory);
     let identity = format!(
-        "{}\n{}\n{}\n",
-        model.identity.model_id, model.identity.model_revision, DEFAULT_CONVERTER_PIPELINE_VERSION
+        "{}\n{}\n{}\n{}\n",
+        model.identity.model_id,
+        model.identity.model_revision,
+        DEFAULT_CONVERTER_PIPELINE_VERSION,
+        EMBEDDING_PREPROCESSING_VERSION,
     );
     let marker = data_directory.join(MARKER_NAME);
     let reindex_pending = std::fs::read(data_directory.join(REINDEX_PENDING_NAME)).ok();
@@ -453,11 +458,11 @@ impl CpuEmbeddingLoader for OnnxPackLoader {
     }
 }
 
-/// Applies the model's asymmetric input role prefix before embedding.
+/// Case-folds input and applies the model's asymmetric role prefix before embedding.
 ///
 /// Instruction-tuned retrieval models such as E5 expect queries and indexed
 /// passages to be marked differently. The prefix is data owned by the installed
-/// model pack, so a model that needs none is passed through unchanged.
+/// model pack. Original source text remains unchanged in the semantic catalog.
 struct RolePrefixedEmbedder {
     inner: Arc<LocalEmbeddingRuntime>,
     prefix: String,
@@ -465,9 +470,6 @@ struct RolePrefixedEmbedder {
 
 impl RolePrefixedEmbedder {
     fn wrap(inner: &Arc<LocalEmbeddingRuntime>, prefix: &str) -> Arc<dyn EmbeddingProvider> {
-        if prefix.is_empty() {
-            return Arc::clone(inner) as Arc<dyn EmbeddingProvider>;
-        }
         Arc::new(Self {
             inner: Arc::clone(inner),
             prefix: prefix.to_owned(),
@@ -487,10 +489,14 @@ impl EmbeddingProvider for RolePrefixedEmbedder {
     ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         let prefixed = inputs
             .iter()
-            .map(|input| format!("{}{input}", self.prefix))
+            .map(|input| prepared_embedding_input(&self.prefix, input))
             .collect::<Vec<_>>();
         self.inner.embed(&prefixed, cancellation)
     }
+}
+
+fn prepared_embedding_input(prefix: &str, input: &str) -> String {
+    format!("{prefix}{}", case_fold_embedding_input(input))
 }
 
 struct DeveloperResources {
@@ -1278,6 +1284,18 @@ mod tests {
         assert_eq!(prefixed.identity(), runtime.identity());
     }
 
+    #[test]
+    fn query_and_passage_inputs_share_unicode_case_folding_before_role_prefixes() {
+        assert_eq!(
+            prepared_embedding_input("query: ", "TRIZ Straße"),
+            "query: triz strasse"
+        );
+        assert_eq!(
+            prepared_embedding_input("passage: ", "Triz STRASSE"),
+            "passage: triz strasse"
+        );
+    }
+
     /// Runs the real pinned multilingual model. Ignored by default so no
     /// ordinary unit run depends on a multi-hundred-megabyte download; see
     /// `required_model_pack` for how to run it.
@@ -1323,6 +1341,20 @@ mod tests {
                 &cancellation,
             )
             .expect("passage embeddings");
+        let query_case_variant = queries
+            .embed(
+                &["HOE HERSTEL IK EEN LEKKENDE KRAAN".to_owned()],
+                &cancellation,
+            )
+            .expect("case-folded query embedding");
+        let passage_case_variant = passages
+            .embed(
+                &["HOW TO REPAIR A DRIPPING TAP IN YOUR KITCHEN SINK.".to_owned()],
+                &cancellation,
+            )
+            .expect("case-folded passage embedding");
+        assert_eq!(query, query_case_variant);
+        assert_eq!(corpus[0], passage_case_variant[0]);
 
         for vector in query.iter().chain(corpus.iter()) {
             assert_eq!(vector.len(), 384);
@@ -1460,11 +1492,40 @@ mod tests {
                 &CancellationToken::new(),
             )
             .expect("cross-language query");
+        let differently_cased = query
+            .query(
+                WorkerQueryInput {
+                    tenant_id: "tenant-multilingual".into(),
+                    library_id: "library-multilingual".into(),
+                    query: "HOW DO I FIX A DRIPPING KITCHEN TAP".into(),
+                    concept_query: None,
+                    maximum_results: 10,
+                },
+                &CancellationToken::new(),
+            )
+            .expect("case-folded cross-language query");
 
         assert_eq!(
             results.first().map(|result| result.document_id.as_str()),
             Some("document-tap"),
             "an English query did not retrieve the relevant Dutch document"
+        );
+        assert!(
+            results
+                .first()
+                .is_some_and(|result| result.excerpt.starts_with("Een lekkende")),
+            "embedding case folding must not alter displayed source text"
+        );
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| (&result.document_id, result.score))
+                .collect::<Vec<_>>(),
+            differently_cased
+                .iter()
+                .map(|result| (&result.document_id, result.score))
+                .collect::<Vec<_>>(),
+            "query casing changed the production-model ranking"
         );
     }
 
@@ -1547,10 +1608,40 @@ mod tests {
 
     #[test]
     fn developer_manifest_identifies_the_docling_first_pipeline() {
+        let manifest = developer_manifest(&development_embedding_identity());
         assert_eq!(
-            developer_manifest(&development_embedding_identity()).converter_version,
+            manifest.converter_version,
             DEFAULT_CONVERTER_PIPELINE_VERSION
         );
+        assert_eq!(
+            manifest.embedding_preprocessing,
+            EMBEDDING_PREPROCESSING_VERSION
+        );
+    }
+
+    #[test]
+    fn case_folding_policy_change_resets_the_embedding_index() {
+        let directory = TestDirectory::new("casefold-reset");
+        drop(DeveloperWorker::open(&directory.0, None).expect("developer worker"));
+        let model_directory = fixture_index_directory(&directory.0);
+        std::fs::write(
+            model_directory.join("case-sensitive-content"),
+            b"legacy vectors",
+        )
+        .expect("legacy content");
+        std::fs::write(
+            directory.0.join("active-model-index"),
+            format!(
+                "{DEVELOPMENT_MODEL_ID}\n{DEVELOPMENT_MODEL_REVISION}\n{DEFAULT_CONVERTER_PIPELINE_VERSION}\n"
+            ),
+        )
+        .expect("pre-casefold active-model marker");
+
+        drop(DeveloperWorker::open(&directory.0, None).expect("case-folded worker"));
+
+        assert!(!model_directory.join("case-sensitive-content").exists());
+        assert!(model_directory.join("catalog.sqlite").is_file());
+        assert!(model_directory.join("zvec").is_dir());
     }
 
     #[test]

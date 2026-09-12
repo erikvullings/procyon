@@ -15,8 +15,17 @@ import {
 } from './zvec-runtime-qualification.mjs';
 
 const bundle = path.resolve(process.argv[2] ?? '');
+const evaluationArgument = process.argv.indexOf('--evaluation-report');
+const evaluationReport =
+  evaluationArgument >= 0 ? path.resolve(process.argv[evaluationArgument + 1] ?? '') : undefined;
 if (!process.argv[2]) {
-  throw new Error('Usage: smoke-semantic-production-bundle.mjs <bundle-directory>');
+  throw new Error(
+    'Usage: smoke-semantic-production-bundle.mjs <bundle-directory> ' +
+      '[--evaluation-report <private-report.json>]',
+  );
+}
+if (evaluationArgument >= 0 && !process.argv[evaluationArgument + 1]) {
+  throw new Error('--evaluation-report requires a path');
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'catalog-input.json'), 'utf8'));
 const model = manifest.catalog.artifacts.find(
@@ -44,8 +53,9 @@ if (!onnxDescriptor && onnxRuntime) {
 const modelPack = path.join(bundle, 'artifacts', model.id);
 const workerExecutable = path.join(bundle, 'artifacts', worker.id);
 const nativeRuntime = path.join(bundle, 'artifacts', runtime.id);
+const productionTrustRequired = process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1';
 const qualification = verifyZvecRuntimeQualification(bundle, {
-  requireProductionTrust: process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1',
+  requireProductionTrust: productionTrustRequired,
 });
 if (onnxDescriptor) verifyOnnxRuntimeQualification(bundle);
 const cargoTarget = JSON.parse(
@@ -77,6 +87,31 @@ const runtimeLoaderEnvironment =
 const isolatedRuntimeDirectory = fs.mkdtempSync(
   path.join(tmpdir(), 'procyon-packaged-zvec-runtime-'),
 );
+const generatedCanaryFile = process.env.PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE
+  ? undefined
+  : path.join(isolatedRuntimeDirectory, 'privacy-canaries.json');
+if (generatedCanaryFile) {
+  fs.writeFileSync(
+    generatedCanaryFile,
+    JSON.stringify({
+      query: 'qualification-query-canary',
+      excerpt: 'qualification-excerpt-canary',
+      'filename-path': 'qualification/filename-path-canary.txt',
+      prompt: 'qualification-prompt-canary',
+      response: 'qualification-response-canary',
+      credential: 'qualification-credential-canary',
+      token: 'qualification-token-canary',
+      'authorization-header': 'qualification-authorization-header-canary',
+      'model-payload': 'qualification-model-payload-canary',
+    }),
+    { mode: 0o600 },
+  );
+}
+const evidenceRoot = process.env.PROCYON_QUALIFICATION_EVIDENCE_ROOT
+  ? path.resolve(process.env.PROCYON_QUALIFICATION_EVIDENCE_ROOT)
+  : undefined;
+if (evidenceRoot) fs.mkdirSync(evidenceRoot, { recursive: true });
+let commandIndex = 0;
 const isolatedNativeRuntime = path.join(
   isolatedRuntimeDirectory,
   qualification.report.loader.fileName,
@@ -90,6 +125,10 @@ if (onnxDescriptor) {
 }
 
 function run(args, environment = {}) {
+  commandIndex += 1;
+  const output = evidenceRoot
+    ? fs.openSync(path.join(evidenceRoot, `worker-command-${commandIndex}.log`), 'w')
+    : undefined;
   const result = spawnSync('cargo', args, {
     env: {
       ...process.env,
@@ -105,11 +144,38 @@ function run(args, environment = {}) {
       ...runtimeLoaderEnvironment,
       ...environment,
     },
+    stdio: output === undefined ? 'inherit' : ['ignore', output, output],
+  });
+  if (output !== undefined) fs.closeSync(output);
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `cargo ${args.join(' ')} exited with status ${result.status ?? 'unknown'}; output retained in qualification evidence`,
+    );
+  }
+}
+
+function runEvaluation(executable, report) {
+  const result = spawnSync(executable, [bundle, report], {
+    env: {
+      ...process.env,
+      ...runtimeLoaderEnvironment,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
+      PROCYON_SEMANTIC_PRODUCTION_TRUST_VERIFIED: productionTrustRequired ? '1' : '0',
+      HF_HUB_OFFLINE: '1',
+      TRANSFORMERS_OFFLINE: '1',
+      HTTP_PROXY: 'http://127.0.0.1:9',
+      HTTPS_PROXY: 'http://127.0.0.1:9',
+      ALL_PROXY: 'http://127.0.0.1:9',
+      NO_PROXY: '',
+    },
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`cargo ${args.join(' ')} exited with status ${result.status ?? 'unknown'}`);
+    throw new Error(
+      `packaged semantic evaluation exited with status ${result.status ?? 'unknown'}`,
+    );
   }
 }
 
@@ -123,15 +189,17 @@ try {
       '--features',
       'semantic-runtime',
       '--test',
-      'ipc',
-      'packaged_production_worker_starts_negotiates_and_shuts_down',
+      'packaged_production',
+      'packaged_worker_ingests_recovers_after_crash_and_reopens_offline',
       '--',
       '--ignored',
     ],
     {
       PROCYON_SEMANTIC_PRODUCTION_WORKER: workerExecutable,
-      PROCYON_SEMANTIC_PRODUCTION_NATIVE_RUNTIME: isolatedNativeRuntime,
+      PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
       PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack,
+      PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE:
+        process.env.PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE ?? generatedCanaryFile,
     },
   );
   run(
@@ -149,7 +217,46 @@ try {
     ],
     { PROCYON_SEMANTIC_PRODUCTION_MODEL_PACK: modelPack },
   );
+  for (const testName of [
+    'zvec_storage::tests::rebuilds_a_missing_derived_collection_from_authoritative_records',
+    'zvec_storage::tests::rejects_a_content_field_with_the_wrong_index_type',
+    'zvec_storage::tests::migration_rolls_back_an_unpublished_staging_directory_after_restart',
+    'zvec_storage::tests::abnormal_shutdown_recovers_committed_write',
+  ]) {
+    run([
+      'test',
+      '--locked',
+      '-p',
+      'fm-semantic-worker',
+      '--features',
+      'semantic-runtime',
+      '--lib',
+      testName,
+    ]);
+  }
   run(['test', '--locked', '-p', 'fm-semantic-components']);
+  if (evaluationReport) {
+    run([
+      'build',
+      '--quiet',
+      '--locked',
+      '-p',
+      'fm-application',
+      '--example',
+      'evaluate_semantic_production',
+    ]);
+    runEvaluation(
+      path.join(
+        cargoTarget,
+        'debug',
+        'examples',
+        process.platform === 'win32'
+          ? 'evaluate_semantic_production.exe'
+          : 'evaluate_semantic_production',
+      ),
+      evaluationReport,
+    );
+  }
 } finally {
   fs.rmSync(isolatedRuntimeDirectory, { recursive: true, force: true });
 }

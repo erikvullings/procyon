@@ -59,6 +59,7 @@ jobs:
           name: ${{ inputs.signed-catalog-artifact }}
           path: semantic-signed-catalog/
           if-no-files-found: error
+          retention-days: 7
       - name: Remove temporary catalog credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/semantic-catalog.key" "$RUNNER_TEMP/semantic-catalog.pub"

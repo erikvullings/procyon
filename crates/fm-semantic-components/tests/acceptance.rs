@@ -369,6 +369,7 @@ fn fixture_production_manifest(
         7,
         "docling-pdf/1036000+baseline/2",
         "structural/3",
+        "unicode-default-case-fold/1",
         model.tokenizer().clone(),
         model.identity().clone(),
     )?;
@@ -409,6 +410,10 @@ fn production_catalog_generation_is_deterministic_and_records_pipeline_provenanc
         "docling-pdf/1036000+baseline/2"
     );
     assert_eq!(first.pipeline().chunker(), "structural/3");
+    assert_eq!(
+        first.pipeline().embedding_preprocessing(),
+        "unicode-default-case-fold/1"
+    );
     assert_eq!(first.provenance().len(), 3);
 }
 
@@ -469,23 +474,36 @@ fn production_catalog_rejects_incomplete_provenance_and_identity_drift() {
 }
 
 #[test]
-fn production_catalog_rejects_a_signed_converter_or_chunker_for_another_host_pipeline() {
+fn production_catalog_rejects_a_signed_pipeline_for_another_host() {
     let signing_key = SigningKey::from_bytes(&[29_u8; 32]);
     let manifest = fixture_production_manifest(false).expect("production manifest");
     let expected_model = fixture_model_metadata();
-    for (converter, chunker, expected_field) in [
+    for (converter, chunker, preprocessing, expected_field) in [
         (
             "docling-pdf/1036001+baseline/2",
             "structural/3",
+            "unicode-default-case-fold/1",
             "converter",
         ),
-        ("docling-pdf/1036000+baseline/2", "structural/4", "chunker"),
+        (
+            "docling-pdf/1036000+baseline/2",
+            "structural/4",
+            "unicode-default-case-fold/1",
+            "chunker",
+        ),
+        (
+            "docling-pdf/1036000+baseline/2",
+            "structural/3",
+            "preserve-case/1",
+            "embedding preprocessing",
+        ),
     ] {
         let incompatible = ProductionPipelineIdentity::new(
             1,
             7,
             converter,
             chunker,
+            preprocessing,
             expected_model.tokenizer().clone(),
             expected_model.identity().clone(),
         )

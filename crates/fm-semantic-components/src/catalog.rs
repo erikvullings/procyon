@@ -1103,6 +1103,8 @@ pub struct ProductionPipelineIdentity {
     index_schema_version: u32,
     converter: String,
     chunker: String,
+    #[serde(default = "legacy_embedding_preprocessing")]
+    embedding_preprocessing: String,
     tokenizer: TokenizerId,
     model: ModelIdentity,
 }
@@ -1119,6 +1121,7 @@ impl ProductionPipelineIdentity {
         index_schema_version: u32,
         converter: impl Into<String>,
         chunker: impl Into<String>,
+        embedding_preprocessing: impl Into<String>,
         tokenizer: TokenizerId,
         model: ModelIdentity,
     ) -> Result<Self, CatalogError> {
@@ -1133,13 +1136,16 @@ impl ProductionPipelineIdentity {
         }
         let converter = converter.into();
         let chunker = chunker.into();
+        let embedding_preprocessing = embedding_preprocessing.into();
         validate_pipeline_identity(&converter, "converter")?;
         validate_pipeline_identity(&chunker, "chunker")?;
+        validate_pipeline_identity(&embedding_preprocessing, "embedding preprocessing")?;
         Ok(Self {
             worker_protocol_version,
             index_schema_version,
             converter,
             chunker,
+            embedding_preprocessing,
             tokenizer,
             model,
         })
@@ -1169,6 +1175,12 @@ impl ProductionPipelineIdentity {
         &self.chunker
     }
 
+    /// Returns the exact normalization applied before passage and query embeddings.
+    #[must_use]
+    pub fn embedding_preprocessing(&self) -> &str {
+        &self.embedding_preprocessing
+    }
+
     /// Returns the exact tokenizer identity.
     #[must_use]
     pub const fn tokenizer(&self) -> &TokenizerId {
@@ -1187,11 +1199,16 @@ impl ProductionPipelineIdentity {
             self.index_schema_version,
             self.converter.clone(),
             self.chunker.clone(),
+            self.embedding_preprocessing.clone(),
             self.tokenizer.clone(),
             self.model.clone(),
         )
         .map(drop)
     }
+}
+
+fn legacy_embedding_preprocessing() -> String {
+    "preserve-case/1".into()
 }
 
 /// Auditable upstream source for one immutable production payload.
@@ -1493,8 +1510,8 @@ impl TrustedCatalog {
     /// # Errors
     ///
     /// Returns a typed compatibility error when a correctly signed catalog
-    /// targets a different converter, chunker, tokenizer, model, protocol, or
-    /// index schema than this host supports.
+    /// targets a different converter, chunker, embedding preprocessing,
+    /// tokenizer, model, protocol, or index schema than this host supports.
     pub fn verify_production_for_pipeline(
         signed: SignedProductionCatalogManifest,
         key: &VerifyingKey,
@@ -1542,6 +1559,8 @@ impl TrustedCatalog {
             "converter"
         } else if actual.chunker != expected.chunker {
             "chunker"
+        } else if actual.embedding_preprocessing != expected.embedding_preprocessing {
+            "embedding preprocessing"
         } else if actual.tokenizer != expected.tokenizer {
             "tokenizer"
         } else {

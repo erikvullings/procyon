@@ -158,6 +158,7 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   const smokeScript = read('scripts', 'smoke-semantic-production-bundle.mjs');
   const payloads = release.jobs['semantic-payloads'];
   const catalogs = release.jobs['semantic-catalogs'];
+  const collect = release.jobs['semantic-collect'];
   const publish = release.jobs['semantic-publish'];
 
   assert.ok(payloads, 'expected a semantic payload build matrix');
@@ -172,15 +173,27 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(JSON.stringify(payloads), /semantic:bundle:production/);
   assert.match(JSON.stringify(payloads), /smoke-semantic-production-bundle/);
   assert.match(smokeScript, /cargo.*test/s);
-  assert.match(smokeScript, /packaged_production_worker_starts_negotiates_and_shuts_down/);
+  assert.match(smokeScript, /packaged_worker_ingests_recovers_after_crash_and_reopens_offline/);
   assert.match(smokeScript, /production_model_pack_activates_offline/);
   assert.match(smokeScript, /fm-semantic-components/);
+  assert.match(smokeScript, /evaluate_semantic_production/);
+  assert.match(JSON.stringify(payloads), /--evaluation-report/);
+  const payloadPrecondition = payloads.steps.find(
+    (step) => step.name === 'Verify exact-production semantic evaluation evidence',
+  );
+  assert.equal(
+    payloadPrecondition.if,
+    "github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
+  );
+  assert.match(payloadPrecondition.run, /check-semantic-release-preconditions\.mjs/);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
-  assert.match(catalogs.if, /needs\.semantic-payloads\.result == 'success'/);
+  assert.match(catalogs.if, /always\(\)/);
   assert.equal(catalogs.secrets, 'inherit');
-  assert.deepEqual(publish.needs, ['semantic-payloads', 'semantic-catalogs']);
-  assert.match(publish.if, /needs\.semantic-payloads\.result == 'success'/);
-  assert.match(publish.if, /needs\.semantic-catalogs\.result == 'success'/);
+  assert.match(JSON.stringify(catalogs), /semantic-catalog-\$\{\{ matrix.target \}\}/);
+  assert.equal(collect.permissions.contents, 'read');
+  assert.deepEqual(publish.needs, ['release', 'semantic-collect']);
+  assert.match(publish.if, /github\.event_name == 'push'/);
+  assert.equal(publish.permissions.contents, 'write');
   assert.match(JSON.stringify(payloads), /semantic-payloads-\$\{\{ matrix.target \}\}/);
   assert.match(JSON.stringify(payloads), /check-desktop-release\.mjs/);
   assert.equal(payloads.environment, 'desktop-release');
@@ -190,8 +203,15 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(JSON.stringify(payloads), /notarytool submit/);
   assert.match(JSON.stringify(payloads), /procyon\.semantic\.worker\.\*/);
   assert.match(JSON.stringify(payloads), /procyon\.semantic\.zvec-runtime\.\*/);
-  assert.match(JSON.stringify(catalogs), /semantic-catalog-\$\{\{ matrix.target \}\}/);
   assert.match(JSON.stringify(publish), /softprops\/action-gh-release@v2/);
+  const installed = release.jobs['semantic-installed-qualification'];
+  assert.match(installed.if, /always\(\)/);
+  assert.equal(installed.permissions.contents, 'read');
+  assert.match(JSON.stringify(installed), /qualify-semantic-installed\.mjs/);
+  assert.match(JSON.stringify(payloads), /retention-days.*7/);
+  assert.match(JSON.stringify(installed), /retention-days.*7/);
+  assert.match(JSON.stringify(collect), /aggregate-semantic-production-evaluation\.mjs/);
+  assert.match(JSON.stringify(collect), /--approved-report/);
   for (const [jobName, catalogTarget] of [
     ['macos', 'macos-aarch64'],
     ['windows', 'windows-x86_64'],
@@ -205,14 +225,15 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     assert.match(JSON.stringify(job), /export-semantic-verifying-key\.mjs/);
     const semanticSteps = job.steps.filter(
       (step) =>
+        step.name === 'Verify exact-production semantic evaluation evidence' ||
         step.name?.startsWith('Embed the signed') ||
         step.name === 'Compile the production semantic catalog trust key',
     );
-    assert.equal(semanticSteps.length, 2);
+    assert.equal(semanticSteps.length, 3);
     for (const step of semanticSteps) {
       assert.equal(
         step.if,
-        "github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
+        "github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
       );
     }
     assert.doesNotMatch(JSON.stringify(job), /SEMANTIC_CATALOG_SIGNING_KEY_BASE64/);
@@ -222,6 +243,63 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     releaseText,
     /bundle\/(?:dmg|msi|nsis|deb|appimage).*semantic|semantic.*bundle\/(?:dmg|msi|nsis|deb|appimage)/i,
   );
+});
+
+test('semantic release preconditions require a current four-target measured go', () => {
+  const planned = JSON.parse(
+    execFileSync('node', ['scripts/check-semantic-release-preconditions.mjs', '--print-plan'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }),
+  );
+  assert.deepEqual(planned.arguments.slice(0, 7), [
+    'run',
+    '--quiet',
+    '--locked',
+    '-p',
+    'fm-application',
+    '--example',
+    'validate_semantic_release_report',
+  ]);
+
+  const current = spawnSync('node', ['scripts/check-semantic-release-preconditions.mjs'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.notEqual(current.status, 0);
+  assert.match(`${current.stdout}${current.stderr}`, /not a measured, four-target go/i);
+
+  const outputRoot = scratchDirectory('semantic-evaluation-report-');
+  const forged = JSON.parse(read('docs', 'evaluations', 'semantic-production-v1.json'));
+  forged.decision = 'go';
+  forged.productionMeasurement = true;
+  forged.blockingReasons = [];
+  forged.measurements = [{}, {}, {}, {}];
+  const forgedPath = join(outputRoot, 'forged-go.json');
+  writeFileSync(forgedPath, JSON.stringify(forged));
+  const forgedResult = spawnSync(
+    'node',
+    ['scripts/check-semantic-release-preconditions.mjs', '--report', forgedPath],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(forgedResult.status, 0);
+  assert.match(`${forgedResult.stdout}${forgedResult.stderr}`, /does not support a go/i);
+
+  const approvedMismatch = { ...forged, measurementBasis: 'different reviewed evidence' };
+  const approvedPath = join(outputRoot, 'approved.json');
+  writeFileSync(approvedPath, JSON.stringify(approvedMismatch));
+  const mismatch = spawnSync(
+    'node',
+    [
+      'scripts/check-semantic-release-preconditions.mjs',
+      '--report',
+      forgedPath,
+      '--approved-report',
+      approvedPath,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(mismatch.status, 0);
 });
 
 test('release desktop builds fail closed without a measured knowledge-search go decision', () => {
@@ -423,20 +501,30 @@ test('developer semantic bundle exposes the native runtime under its loader file
 test('release verification key exporter writes only a validated public key as hex', () => {
   const outputRoot = mkdtempSync(join(tmpdir(), 'procyon-semantic-key-'));
   const environmentFile = join(outputRoot, 'github.env');
+  const publicKeyFile = join(outputRoot, 'semantic-catalog.pub');
+  const signingKeyFile = join(outputRoot, 'semantic-catalog.key');
   const key = Buffer.alloc(32, 0x2a);
+  const signingKey = Buffer.alloc(32, 0x3b);
 
-  execFileSync('node', ['scripts/export-semantic-verifying-key.mjs', environmentFile], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      VERIFYING_KEY_BASE64: key.toString('base64'),
+  execFileSync(
+    'node',
+    ['scripts/export-semantic-verifying-key.mjs', environmentFile, publicKeyFile, signingKeyFile],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        VERIFYING_KEY_BASE64: key.toString('base64'),
+        SIGNING_KEY_BASE64: signingKey.toString('base64'),
+      },
     },
-  });
+  );
 
   assert.equal(
     readFileSync(environmentFile, 'utf8'),
     `PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX=${key.toString('hex')}\n`,
   );
+  assert.deepEqual(readFileSync(publicKeyFile), key);
+  assert.deepEqual(readFileSync(signingKeyFile), signingKey);
   assert.throws(
     () =>
       execFileSync('node', ['scripts/export-semantic-verifying-key.mjs', environmentFile], {
@@ -565,6 +653,19 @@ test('desktop CI runs platform packaging smoke tests after building', () => {
     .map((step) => step.run)
     .filter((command) => typeof command === 'string');
   assert.ok(commands.some((command) => /smoke-desktop-package\.mjs/.test(command)));
+});
+
+test('desktop package smoke crosses native installer boundaries and retains isolated logs', () => {
+  const smoke = read('scripts', 'smoke-desktop-package.mjs');
+  assert.match(smoke, /hdiutil.*attach/s);
+  assert.match(smoke, /msiexec\.exe/);
+  assert.match(smoke, /dpkg-deb/);
+  assert.match(smoke, /--appimage-extract/);
+  assert.match(smoke, /xvfb-run/);
+  assert.match(smoke, /FM_LOG_FILE/);
+  assert.match(smoke, /PROCYON_QUALIFICATION_EVIDENCE_ROOT/);
+  assert.match(smoke, /PROCYON_QUALIFICATION_CATALOG_DIRECTORY/);
+  assert.match(smoke, /installed semantic\/\$\{name\} differs/);
 });
 
 test('README documents release versioning, package managers, smoke checks, and no auto-update', () => {

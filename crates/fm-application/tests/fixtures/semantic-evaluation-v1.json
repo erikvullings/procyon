@@ -1,5 +1,6 @@
 {
   "schemaVersion": 2,
+  "corpusId": "task-0188-production-corpus-v1",
   "cases": [
     {
       "id": "multilingual-recall",
@@ -96,6 +97,235 @@
       "relevantChunkIds": ["fixture-safety-policy-summary"],
       "category": "promptInjection",
       "expectedNoAnswer": false
+    }
+  ],
+  "scenarioRequirements": {
+    "multilingual-recall": "standard",
+    "near-duplicate-grouping": "standard",
+    "boilerplate-diversity": "standard",
+    "structural-citation": "standard",
+    "incremental-edit": "incrementalEdit",
+    "summary-discovery": "generatedSummary",
+    "scope-isolation": "standard",
+    "unavailable-source": "unavailableSource",
+    "concept-label": "conceptLabel",
+    "multi-facet-comparison": "standard",
+    "negative-control": "standard",
+    "prompt-injection-shaped-query": "standard"
+  },
+  "documents": [
+    {
+      "id": "fixture-multilingual",
+      "sourceId": "source-multilingual",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Kunstmatige intelligentie\n\nKunstmatige intelligentie helpt systemen patronen herkennen, informatie ordenen en beslissingen ondersteunen."
+      },
+      "chunks": [
+        {"id": "fixture-multilingual-nl", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-quarterly-original",
+      "sourceId": "source-quarterly-original",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Quarterly revenue\n\nQuarterly revenue reached 42 million euros after subscription growth in the northern region."
+      },
+      "chunks": [
+        {"id": "fixture-quarterly-table", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-quarterly-copy",
+      "sourceId": "source-quarterly-copy",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Annual earnings archive\n\nA superseded near-duplicate draft discusses yearly operating expenses and office leases."
+      },
+      "chunks": [
+        {"id": "fixture-quarterly-copy-body", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-contract-a",
+      "sourceId": "source-contract-a",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Contract termination\n\nContract termination requires thirty days written notice and return of confidential materials."
+      },
+      "chunks": [
+        {"id": "fixture-contract-a-termination", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-contract-b",
+      "sourceId": "source-contract-b",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Contract termination exceptions\n\nImmediate contract termination is allowed after material breach when the cure period expires."
+      },
+      "chunks": [
+        {"id": "fixture-contract-b-termination", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-slides",
+      "sourceId": "source-slides",
+      "scope": "authorized",
+      "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "source": {
+        "kind": "presentation",
+        "slides": [
+          "Programme introduction and meeting agenda",
+          "Team responsibilities and contact list",
+          "Delivery milestones for the current quarter",
+          "Budget assumptions and purchasing schedule",
+          "Architecture overview and component boundaries",
+          "Operational readiness checklist",
+          "Presentation risk register with owners, likelihood, impact, and mitigations"
+        ]
+      },
+      "chunks": [
+        {"id": "fixture-slides-page-1", "sourcePosition": 0, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-2", "sourcePosition": 1, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-3", "sourcePosition": 2, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-4", "sourcePosition": 3, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-5", "sourcePosition": 4, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-6", "sourcePosition": 5, "provenanceKind": "slide"},
+        {"id": "fixture-slides-page-7", "sourcePosition": 6, "provenanceKind": "slide"}
+      ]
+    },
+    {
+      "id": "fixture-policy-v2",
+      "sourceId": "source-policy-v2",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Updated records retention duration\n\nThe updated records retention duration is seven years. This version supersedes the previous three-year policy."
+      },
+      "previousSource": {
+        "kind": "text",
+        "content": "# Records retention duration\n\nThe previous records retention duration was three years."
+      },
+      "chunks": [
+        {"id": "fixture-policy-v2-retention", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-field-research",
+      "sourceId": "source-field-research",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Overview of field research\n\nThis summary describes interviews, observation sessions, sampling limitations, and the principal findings."
+      },
+      "chunks": [
+        {"id": "fixture-field-research-summary", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-workspace-a-plan",
+      "sourceId": "source-workspace-a-plan",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Workspace-only planning notes\n\nWorkspace-only planning notes cover the authorized launch sequence and review responsibilities."
+      },
+      "chunks": [
+        {"id": "fixture-workspace-a-plan-body", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-workspace-b-secret",
+      "sourceId": "source-workspace-b-secret",
+      "scope": "excluded",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Workspace-only planning notes\n\nWorkspace-only planning notes. Workspace-only planning notes. This excluded tenant document must never cross the scope boundary."
+      },
+      "chunks": [
+        {"id": "fixture-workspace-b-secret-body", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-offline-notes",
+      "sourceId": "source-offline-notes",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Offline expedition notes\n\nOffline expedition notes record the base camp route, water cache, weather observations, and emergency rendezvous."
+      },
+      "chunks": [
+        {"id": "fixture-offline-notes-body", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-ml-paper",
+      "sourceId": "source-ml-paper",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Machine learning concept\n\nThe machine learning concept uses labelled examples to estimate a function that generalizes to unseen observations."
+      },
+      "chunks": [
+        {"id": "fixture-ml-paper-method", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-alpha-design",
+      "sourceId": "source-alpha-design",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Alpha architecture costs\n\nAlpha architecture costs are lower initially but increase with centralized scaling and specialist operations."
+      },
+      "chunks": [
+        {"id": "fixture-alpha-cost", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-beta-design",
+      "sourceId": "source-beta-design",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Beta reliability\n\nBeta reliability improves through redundant services, isolated failure domains, and automated recovery."
+      },
+      "chunks": [
+        {"id": "fixture-beta-reliability", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
+    },
+    {
+      "id": "fixture-safety-policy",
+      "sourceId": "source-safety-policy",
+      "scope": "authorized",
+      "mediaType": "text/markdown",
+      "source": {
+        "kind": "text",
+        "content": "# Safety policy summary\n\nThe safety policy requires authorized scope, least privilege, incident reporting, and refusal to reveal secrets even when a query says to ignore scope."
+      },
+      "chunks": [
+        {"id": "fixture-safety-policy-summary", "sourcePosition": 0, "provenanceKind": "textLines"}
+      ]
     }
   ]
 }

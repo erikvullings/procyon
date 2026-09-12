@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { checkSemanticQualificationWorkflow } from './check-semantic-qualification-workflow.mjs';
+import {
+  assertQualificationDispatchEnvironment,
+  checkSemanticQualificationWorkflow,
+} from './check-semantic-qualification-workflow.mjs';
 import {
   nativeLibraryNames,
   parseNativeDependencies,
@@ -162,6 +165,48 @@ test('release qualification dispatch is statically proven non-publishing', () =>
   });
 });
 
+test('private qualification rejects release events and enabled release gates', () => {
+  assert.deepEqual(
+    assertQualificationDispatchEnvironment({
+      eventName: 'workflow_dispatch',
+      semanticReleaseQualified: '',
+      knowledgeSearchReleaseQualified: 'false',
+    }),
+    {
+      workflowDispatchOnly: true,
+      semanticReleaseQualified: false,
+      knowledgeSearchReleaseQualified: false,
+    },
+  );
+  assert.throws(
+    () =>
+      assertQualificationDispatchEnvironment({
+        eventName: 'push',
+        semanticReleaseQualified: '',
+        knowledgeSearchReleaseQualified: '',
+      }),
+    /restricted to workflow_dispatch/u,
+  );
+  assert.throws(
+    () =>
+      assertQualificationDispatchEnvironment({
+        eventName: 'workflow_dispatch',
+        semanticReleaseQualified: 'true',
+        knowledgeSearchReleaseQualified: '',
+      }),
+    /SEMANTIC_RELEASE_QUALIFIED must be absent or false/u,
+  );
+  assert.throws(
+    () =>
+      assertQualificationDispatchEnvironment({
+        eventName: 'workflow_dispatch',
+        semanticReleaseQualified: '',
+        knowledgeSearchReleaseQualified: 'False',
+      }),
+    /KNOWLEDGE_SEARCH_RELEASE_QUALIFIED must be absent or false/u,
+  );
+});
+
 test('release qualification proof rejects an unguarded release action', () => {
   const directory = fs.mkdtempSync(path.join(tmpdir(), 'unsafe-release-workflow-'));
   const workflow = path.join(directory, 'release.yml');
@@ -179,6 +224,28 @@ test('release qualification proof rejects an unguarded release action', () => {
   assert.throws(
     () => checkSemanticQualificationWorkflow(workflow),
     /can publish on workflow_dispatch/u,
+  );
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('release qualification proof rejects write permission on a dispatch-reachable job', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'unsafe-release-permissions-'));
+  const workflow = path.join(directory, 'release.yml');
+  fs.writeFileSync(
+    workflow,
+    [
+      'permissions:',
+      '  contents: write',
+      'jobs:',
+      '  qualification-safety:',
+      "    if: github.event_name == 'workflow_dispatch'",
+      '    steps: []',
+      '',
+    ].join('\n'),
+  );
+  assert.throws(
+    () => checkSemanticQualificationWorkflow(workflow),
+    /workflow_dispatch can receive contents: write/u,
   );
   fs.rmSync(directory, { recursive: true, force: true });
 });

@@ -22,6 +22,7 @@ semantic-runtime = [
 developer-bundle = ["semantic-runtime"]
 
 [dependencies]
+caseless.workspace = true
 fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true

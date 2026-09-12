@@ -18,13 +18,14 @@ results are not substitutes for measurements from the exact signed production ar
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | `39d9d1077f8ed4374f991bb85259fcdd79410fa8` |
+| Procyon revision reviewed | Bound by each private report's `procyonRevision`; no reviewed four-target aggregate is checked in |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
 | Dimensions / normalization | 384 / L2 |
 | Converter | `docling-pdf/1036000+baseline/2` |
 | Chunker | `structural/3` |
+| Embedding preprocessing | Unicode default case folding `unicode-default-case-fold/1` for both passages and queries |
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |
@@ -262,13 +263,42 @@ and Zvec runtime `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3be
 Linux arm64 retained worker `procyon.semantic.worker.linux-aarch64.0.1.0.24.4bf8a63c58d300f8`
 and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44`.
 
+### Exact-production evaluation dispatch evidence
+
+Private workflow run
+[`34636435645`](https://github.com/erikvullings/procyon/actions/runs/34636435645) exercised
+clean revision `1680eebc0864cde494816285a24d6e0378678de1`. All four supported payload jobs
+passed package construction, platform trust checks, cache-hidden protocol/model smoke, component
+lifecycle and privacy tests, the generated task-0188 corpus, case-variant equality checks, and
+private artifact upload. Catalog signing and installed-package continuation failed closed because
+the protected signing secret and verifying-key variable remain unavailable. Every prerelease,
+installer, semantic-publication, Homebrew, and Chocolatey job was skipped. Both release-qualified
+repository variables were absent before dispatch.
+
+| Target | Private Actions artifact | Catalog revision | Worker | Native runtime |
+| --- | --- | --- | --- | --- |
+| macOS arm64 | `10278167897`, SHA-256 `fc4225aae56bb89f305f76a30cdd654789ef5c5c86a3f7b92e94aeeff3be49ef` | `procyon-macos-aarch64-0.1.0-25-24f657849ad0b0d7b4809dab9ceac269` | `procyon.semantic.worker.macos-aarch64.0.1.0.25.7562bb74a14aac02` | `procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.6c11e76150de84a5` |
+| Windows x86-64 | `10279205804`, SHA-256 `fbc59476f165c9df458d3fc582ac5a5966db03740165bf55502d4380238601bc` | `procyon-windows-x86_64-0.1.0-25-c95c566e92f274441279085150e42115` | `procyon.semantic.worker.windows-x86_64.0.1.0.25.966f3ea63d4cba4b` | `procyon.semantic.zvec-runtime.windows-x86_64.0.7.0.3745106b3beee6be` |
+| Linux x86-64 | `10278119285`, SHA-256 `d37959037d20ebed913fc1aafd93b21631b975049080bfefb16416b1de4dd6ef` | `procyon-linux-x86_64-0.1.0-25-ece6702f31d6dc036cc6dcf591d9e956` | `procyon.semantic.worker.linux-x86_64.0.1.0.25.f4e3bda772147ce3` | Zvec `procyon.semantic.zvec-runtime.linux-x86_64.0.7.0.89eac719eb426a20`; ONNX `procyon.semantic.onnx-runtime.linux-x86_64.1.28.0.1461ef7cc3d9e499` |
+| Linux arm64 | `10278233631`, SHA-256 `500fec169bf4b67f6102956fd16a51762031ef0f8dc96160907d0e2fdb12fd3d` | `procyon-linux-aarch64-0.1.0-25-228b265a24572a2b07db8a5e707090ce` | `procyon.semantic.worker.linux-aarch64.0.1.0.25.cb6d1bb16aa83f95` | `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249ce44` |
+
+Every target used model artifact
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507` (SHA-256
+`c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3`), corpus
+fingerprint `sha256:6e0c201a6393bdfad56999ecfa86d6b66387c8aa41c8809055bf14429755f3ca`,
+and release-candidate fingerprint
+`sha256:1a39813e8f05450174a592d38c9331b4bbd478932baf1019d87c1779a7801e86`.
+The four reports were downloaded and revalidated locally into a private aggregate with SHA-256
+`e5da4ac20368da8376775a8b9b4f6b6411dc338c788efa5f487b66a9f4fbf0d8`.
+No query, excerpt, or source text is present in those reports.
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
 | Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
-| Packaged worker handshake and offline model activation | Pass on private payload in run `34509441435` | Pass on private payload in run `34509441435` | Pass on Ubuntu 22.04 private payload in run `34509441435` | Pass on private payload in run `34509441435` |
-| Exact task-0188 retrieval evaluation | Not run | Not run | Not run | Not run |
+| Packaged worker handshake, offline activation, and crash/restart | Pass in combined run `34636435645` | Pass in combined run `34636435645` | Pass on Ubuntu 22.04 in combined run `34636435645` | Pass in combined run `34636435645` |
+| Exact task-0188 retrieval evaluation | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain |
 | Installed/absent and first-run | Not run | Not run | Not run | Not run |
 | Upgrade and rollback | Not run | Not run | Not run | Not run |
 | Corruption, offline, and low-disk | Not run | Not run | Not run | Not run |
@@ -276,13 +306,131 @@ and Zvec runtime `procyon.semantic.zvec-runtime.linux-aarch64.0.7.0.621af6ba8249
 | Uninstall retention and deletion | Not run | Not run | Not run | Not run |
 | Keyboard and screen reader | Not run | Not run | Not run | Not run |
 | Consent, progress, error, citation opening, deletion | Not run | Not run | Not run | Not run |
-| Default-log and crash-report privacy inspection | Not run on packaged app | Not run | Not run | Not run |
+| Packaged worker/default evidence privacy scan | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run |
 
 macOS x86-64 is unsupported because Zvec 0.7.0 has no matching runtime. The universal macOS desktop
 application must continue to report semantic functionality as unavailable on that architecture.
 Windows installers and payloads remain unsigned under the existing desktop release policy; that
 limitation must be presented in release notes and must not be mistaken for a qualified signed
 artifact.
+
+## Automated installed lifecycle and privacy matrix
+
+Task 0219 adds a private `workflow_dispatch` continuation to the existing release workflow. The
+continuation cannot start until `scripts/check-semantic-qualification-workflow.mjs` proves that no
+dispatch-reachable step can publish and that both `SEMANTIC_RELEASE_QUALIFIED` and
+`KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or exactly `false`. Qualification jobs have
+read-only repository permission. They upload seven-day Actions artifacts only; they do not create
+or modify a GitHub Release, Homebrew tap, Chocolatey package, repository variable, or public asset.
+
+The matrix preserves the production target contract:
+
+| Qualification target | Runner and package boundary | Trust statement |
+| --- | --- | --- |
+| macOS arm64 | `macos-15`; signed app inside the generated DMG, copied from a mounted image and launched from an isolated user-data root | Developer ID signing and Apple notarization remain mandatory |
+| Windows x86-64 | `windows-latest`; generated MSI installed silently, launched, and uninstalled with retained MSI logs | Intentionally unsigned under the current release policy |
+| Linux x86-64 | `ubuntu-22.04`; generated DEB extracted and AppImage expanded, each launched under Xvfb | Ubuntu 22.04 remains the ABI baseline |
+| Linux arm64 | `ubuntu-24.04-arm`; generated DEB and AppImage boundaries launched under Xvfb | Signing is not applicable |
+
+Each target consumes the exact private payload and signed catalog produced earlier in the same
+workflow. `qualify_semantic_lifecycle` verifies the detached signature and complete payload set,
+then exercises absent state, low disk before any artifact read, an interrupted local artifact read
+and byte-range resume, first install without network access, application-manager restart, installed
+payload tampering and recovery, serialized concurrent lifecycle access, uninstall with retention,
+explicit derived-data deletion, and clean reinstall. Catalog tampering and streamed payload
+tampering fail before activation. The packaged worker test ingests and queries through the exact
+worker/runtime/model, forcibly terminates that worker, reconnects to a new process, and verifies
+the durable index after restart.
+
+Every retained report uses schema version 1 and records target, source revision, runner/OS, exact
+catalog and package digests, stage, sanitized command, result, redacted evidence path, and rollback
+instruction. Result values are restricted to:
+
+| Result | Meaning |
+| --- | --- |
+| `pass` | Automated evidence completed against the named bytes and host |
+| `manual-required` | Native human interaction or assistive technology is required |
+| `unsupported` | The platform or product intentionally has no such boundary |
+| `blocked` | Required exact input or approval was unavailable |
+| `fail` | An automated stage or privacy check failed |
+
+The privacy runner creates unique values for query, excerpt, filename/path, prompt, response,
+credential, token, authorization header, and model-payload categories. Values pass through the
+packaged worker's normal ingest/query path and representative failure/restart path. Collected
+application, worker, installer, diagnostic, and command evidence is scanned as bytes for UTF-8,
+UTF-16LE/BE, slash and backslash paths, percent encoding, JSON escaping, base64/base64url, and
+hex, including matches split across read boundaries. The report contains only category names and
+category-bound SHA-256 fingerprints. Symlinks, unreadable inputs, changed/missing/added evidence,
+and unscoped or expired capture fail closed. Evidence files containing a canary are removed before
+failure reports can be uploaded. An authorized diagnostic capture must be previewed,
+category-scoped, no longer than 15 minutes, valid at scan time, and is deleted before evidence is
+retained.
+
+Forced termination does not guarantee an operating-system crash dump, and Procyon has no automatic
+semantic updater. Those rows are `unsupported`, not fabricated passes. If a platform produces a
+crash artifact or installer log, place it under the collected evidence root before scanning.
+Upgrade and rollback remain `blocked` until an exact signed preceding production candidate is
+provided; a fixture or developer bundle is not acceptable production evidence.
+
+### Automated payload and privacy evidence
+
+Private workflow run
+[`34624618891`](https://github.com/erikvullings/procyon/actions/runs/34624618891) exercised clean
+commit `1fb6f144eb977468ea0335de8e3f0ab4421a5ae3`. Its safety job proved both release variables
+absent and no dispatch-reachable publication path. All four payload jobs passed exact packaged
+worker startup, offline model activation, ingestion/query, forced crash/restart with durable
+reopen, corruption/rebuild tests, component lifecycle tests, and the nine-category privacy scan.
+Every prerelease, base-installer, public semantic publication, Homebrew, and Chocolatey job stayed
+skipped.
+
+| Target | Actions artifact | Compressed bytes / SHA-256 | Catalog revision | Worker |
+| --- | --- | --- | --- | --- |
+| macOS arm64 | `10273976490` | 297,030,751 / `cedcd7ac903673b90ce2521596c6911cc9a2e38f9976347433380da946838a20` | `procyon-macos-aarch64-0.1.0-25-efeffd56ee755a343b51687d513518bd` | `procyon.semantic.worker.macos-aarch64.0.1.0.25.c7d4446365a10c7a` / `c7d4446365a10c7a8bc6b982747572597a650c9221c2d3f7365d515027086c2a` |
+| Windows x86-64 | `10273787545` | 296,523,134 / `0a96382b070c8d3fe917b4bfa8dd5c8a45b74225a1cfd73866bf8429e6e8c912` | `procyon-windows-x86_64-0.1.0-25-c1e6d375f4703fde634e00612e0a44bd` | `procyon.semantic.worker.windows-x86_64.0.1.0.25.64d114762cbbc184` / `64d114762cbbc18420b5311680a3b37985770cb6f200a0a551d48167ed0bc5a3` |
+| Linux x86-64 | `10274656240` | 303,795,376 / `cc1119b9aab6da139c119e497bee50c33be2cb73ba1ef15f75fbb9b7584d76b3` | `procyon-linux-x86_64-0.1.0-25-11ce94ec411b60021c63ddd0cc13a56b` | `procyon.semantic.worker.linux-x86_64.0.1.0.25.1d06fc6e7055de49` / `1d06fc6e7055de49d2084963450dc070cdf7ad51f7e5020d1198273dca7578d5` |
+| Linux arm64 | `10273661828` | 303,506,504 / `472ed9a0126b4286eba7aa698847aac041dfedd4d890d470913dd9f353bd6793` | `procyon-linux-aarch64-0.1.0-25-1b2601b2f7c8a71439372024db1bbcf5` | `procyon.semantic.worker.linux-aarch64.0.1.0.25.e68f99ed5b2344a6` / `e68f99ed5b2344a6f2bc059c11b40da046b0eef22328df32b2fe54208c358b74` |
+
+Every target uses model artifact
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`
+(`c6a9b539cad7f507e4f09b172a93f47f51c598f7377581792a23bf74fbdd80b3`).
+Zvec runtime digests are `2df52a19cc43a012592e39e6d34f71f6f15b0804e8cade0b2d960bb382e040ff`
+(macOS), `3745106b3beee6be2d50ca678b46d3f0289afb5136ff51e1d1ec037a27b29e4a`
+(Windows), `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5`
+(Linux x86-64), and
+`621af6ba8249ce44dc17fb05da6c51c723cc466843e7f46ee44a40bd7eee1169`
+(Linux arm64). Linux x86-64 additionally used ONNX Runtime
+`1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab`.
+
+The privacy result is **PASS** for every retained payload. Reports contain only the nine category
+names and category-bound hashes; no canary values are retained. The artifacts expire after seven
+days on 2026-09-18.
+
+Catalog signing then failed closed on every target because protected
+`SEMANTIC_CATALOG_SIGNING_KEY_BASE64` and `SEMANTIC_CATALOG_VERIFYING_KEY_BASE64` are not
+configured. Consequently no signed catalog or private catalog-enabled installer exists for this
+candidate, and installed package rows remain `blocked`. This is not a waiver: configure both
+matching protected values and rerun the same commit before performing installed and manual passes.
+
+### Manual operator checklist
+
+Automation does not establish native accessibility or comprehension. For each retained package,
+record operator, date, hardware, OS build, package/catalog digests, assistive-technology version,
+result, defect link, and evidence location for:
+
+1. VoiceOver on macOS, Narrator on Windows, and Orca on Linux: application structure, dialog
+   title, control name/role/state, status updates, errors, result evidence, and citations.
+2. Keyboard-only install consent, settings entry, enrolment-tree navigation, model choice,
+   progress cancellation, error recovery, citation opening, focus restoration, retention choice,
+   explicit deletion, and uninstall.
+3. Consent and privacy wording at default zoom and 200%, light/dark/high-contrast settings, and
+   reduced motion.
+4. Screen-reader announcement of download/storage estimates, offline or low-disk failure,
+   cancellation, worker restart, unavailable source, and deletion completion.
+5. Confirmation that retained-index uninstall and explicit-delete uninstall communicate different
+   outcomes and that a clean reinstall/rebuild remains understandable.
+
+Use `docs/architecture/accessibility.md` for the general interaction procedures. A checklist row
+remains `manual-required` until a human records actual results from the native packaged build.
 
 The upstream slim runtime archives do not carry native Zvec's `LICENSE` or `NOTICE` files. The
 catalog and qualification record therefore preserve immutable URLs, byte lengths, and SHA-256
@@ -292,30 +440,64 @@ reviewed as part of the complete task-0198 evidence set.
 
 ## Quality and threshold decision
 
-The checked-in task-0188 fixture defines 12 cases spanning multilingual retrieval, duplicates,
-boilerplate diversity, structural citations, edits, summaries, scope isolation, unavailable
-sources, concepts, multi-facet retrieval, a negative control, and prompt-injection-shaped input.
-No observations from the exact production package have been recorded, so file recall@10, chunk
-recall@10, MRR, nDCG@10, negative-control false-positive rate, and grounded-answer citation
-correctness are **not measured** for this candidate.
+The checked-in task-0188 fixture defines 12 cases and repository-owned generated source documents
+spanning multilingual retrieval, duplicates, boilerplate diversity, structural citations, edits,
+summaries, scope isolation, unavailable-source discovery, concepts, multi-facet retrieval, a
+negative control, and prompt-injection-shaped input. The release payload matrix now runs that
+corpus through the exact packaged worker/runtime/model/converter/chunker/Zvec path and retains
+opaque per-case evidence plus file recall@10, chunk recall@10, MRR, nDCG@10,
+negative-control false-positive rate, and citation metrics. Run `34636435645` measured the same
+results on all four targets: file recall@10 `0.958333`, chunk recall@10 `0.958333`, MRR `0.916667`,
+nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation correctness `1.0`,
+and offline citation recall `0.923077`. Generated-answer citation correctness remains unmeasured.
+The private aggregate is **NO-GO**, and the checked-in report remains a fail-closed template.
 
 The developer TRIZ observations (`0.905` for `Su-fields`, `0.881` for the cup/hot-liquid question,
 and `0.848`-`0.850` for hard unrelated controls) do not justify lowering the current `0.84`
-absolute floor. The candidate remains at `0.84` with a `0.02` relative window. This makes no
-pipeline, embedding-space, retained-vector, storage, or migration change. Any future threshold
+absolute floor. The evaluator therefore retains `0.84` with a `0.02` relative window and records
+zero storage or migration impact attributable to the threshold decision. Any future threshold
 change requires comparable before/after production observations and an explicit storage/migration
 statement.
 
+The candidate now case-folds both passage and query text before adding the model's role prefix.
+Original text remains unchanged for display, citation, and full-text search. This intentionally
+changes the embedding space from `preserve-case/1` to `unicode-default-case-fold/1`: the worker's
+active-index marker and library manifest force a clean derived-index rebuild, while steady-state
+storage policy is unchanged. Reviewed exact-production before/after evidence is not yet attached,
+so this migration is an additional explicit NO-GO reason rather than an inferred improvement.
+
 The bounded multi-query candidate remains developer-only and defaults to single-query because its
 checked-in report uses normalized fixture timings rather than production measurements.
+
+### Local exact-package dry run
+
+An unsigned, dirty-tree macOS arm64 dry run exercised the exact content-addressed release worker,
+model pack, Zvec loader, converter, chunker, native index, and application Ask packing path. It is
+retained privately with SHA-256
+`65c7d7a06d034460fb0c359937b92ed930d9817721d98840baadc82898d8ec70` and is **not**
+production evidence. It measured file recall@10 `0.958333`, chunk recall@10 `0.958333`, MRR
+`0.916667`, nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation
+correctness `1.0`, and offline citation recall `0.923077`. Generated-answer citation metrics remain
+unmeasured. The report also correctly blocks the generated-summary, unavailable-source, and
+concept-label cases because their specialized production setup was not exercised.
+
+The dry-run catalog revision was
+`procyon-macos-aarch64-0.1.0-25-30196fb3aaca0290032cfd360b386bbf`; artifact IDs were
+`procyon.semantic.worker.macos-aarch64.0.1.0.25.7840c5049f2f08f9`,
+`procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.c9e4bf9387ef7261`, and
+`procyon.semantic.model.multilingual-e5-small.1.0.0.c6a9b539cad7f507`. The run retained the
+`0.84`/`0.02` thresholds and declared the case-folded embedding index rebuild separately.
 
 ## Existing automated evidence
 
 Repository tests already cover deterministic metric calculation, scope isolation, bounded
 retrieval, catalog and payload integrity, interrupted download/resume, component lifecycle,
 low-disk admission, cancellation/recovery, deletion/retention, OCR process containment, and
-default-safe semantic diagnostics. Default diagnostic events have no free-text field and reject
-path-like values; sensitive capture requires a previewed, scoped, expiring grant.
+default-safe semantic diagnostics. The task-0188 report validator additionally rejects corpus or
+implementation drift, missing/duplicate/unknown cases, malformed ranks and citations, scope
+leakage, package identity drift, threshold changes, stale metrics, and forged decisions. Default
+diagnostic events have no free-text field and reject path-like values; sensitive capture requires
+a previewed, scoped, expiring grant.
 
 These tests reduce qualification risk but do not satisfy installed release testing, native
 assistive-technology review, packaged crash-report inspection, or exact production quality

@@ -63,3 +63,42 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   native Linux x86-64 construction blocker only. No signed aggregate catalog, public semantic
   asset, or catalog-embedded installer was produced, and all installed-app, task-0188 quality,
   accessibility, privacy, and failure-mode rows remain outstanding.
+- 2026-09-11 Copilot: Task 0219 added a dispatch-only, read-only installed qualification
+  continuation for the exact private four-target payload/catalog matrix. It builds catalog-enabled
+  packages without publication, crosses DMG/MSI/DEB/AppImage boundaries, exercises the signed
+  component lifecycle and packaged worker crash/restart, and scans retained evidence with unique
+  sensitive canaries. Reports distinguish pass, manual-required, unsupported, blocked, and fail.
+  This automation does not unblock 0198: exact production retrieval/Ask evaluation, an exact
+  preceding-candidate upgrade/rollback, native VoiceOver/Narrator/Orca and keyboard UX passes, a
+  completed private matrix run, and release-owner approval are still required.
+- 2026-09-11 Copilot: Private run `34624618891` passed the exact packaged worker/model/runtime
+  lifecycle and fail-closed privacy scan for all supported targets on commit
+  `1fb6f144eb977468ea0335de8e3f0ab4421a5ae3`. During qualification, Windows exposed and fixed a
+  named-pipe verification defect: Windows may normalize owner `GENERIC_ALL` to
+  `FILE_ALL_ACCESS`; the verifier now accepts either full-control representation while still
+  rejecting empty ACLs, deny/foreign ACEs, and foreign owners. Signed catalog and installed
+  package qualification then failed closed because the protected signing secret and verifying-key
+  variable are not configured. No release, public asset, base installer, Homebrew artifact, or
+  Chocolatey artifact was produced. Task 0198 remains **NO-GO**.
+- 2026-09-11 Copilot: Task 0220 adds the exact-production task-0188 runner and fail-closed report
+  validator. The private payload matrix now ingests the repository-owned generated corpus through
+  the packaged worker/runtime/model/converter/chunker/Zvec path and retains opaque per-case and
+  aggregate evidence. The checked-in report remains an explicit NO-GO template, both release
+  variables remain unchanged, and this task stays blocked on reviewed four-target metrics,
+  generated-answer grounding, installed lifecycle, accessibility, privacy, failure-mode, and
+  release-owner evidence.
+- 2026-09-11 Copilot: The production candidate now applies versioned Unicode default case folding
+  symmetrically to passage and query embeddings. Existing derived indexes are reset and rebuilt;
+  original display/full-text content is preserved and the `0.84`/`0.02` Ask thresholds are
+  unchanged. Release remains NO-GO until task 0220 records reviewed before/after production
+  evidence for this embedding-space migration.
+- 2026-09-11 Copilot: Rebased private run `34636435645` passed exact packaged evaluation and the
+  task-0219 worker lifecycle/privacy path on macOS arm64,
+  Windows x86-64, Linux x86-64, and Linux arm64 at clean revision
+  `1680eebc0864cde494816285a24d6e0378678de1`. All targets measured file/chunk recall@10
+  `0.958333`, MRR `0.916667`, nDCG@10 `0.967762`, zero negative-control false positives, offline
+  citation correctness `1.0`, and offline citation recall `0.923077`. The private aggregate remains
+  NO-GO because generated-answer grounding, three specialized corpus setups, before/after
+  case-fold evidence, installed-package signing, accessibility, privacy/failure/manual gates are
+  incomplete. Catalog signing and installed continuation failed closed on the known missing
+  protected keys; no public or installer job ran.
