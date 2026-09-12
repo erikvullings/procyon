@@ -126,7 +126,8 @@ semantic components are not installed.
 - [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
 - [ ] 0198 Semantic release qualification *(blocked: production artifact evaluation and
-  macOS/Windows/Linux installed and manual evidence remain outstanding; the release workflow now
+  exact preceding-candidate rollback, generated-answer/specialized-corpus quality, native manual
+  accessibility/UX evidence, and release-owner approval remain outstanding; the release workflow
   fails closed unless `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
@@ -135,9 +136,9 @@ semantic components are not installed.
   was not the requested alternative)*
 - [x] 0218 Zvec native-runtime qualification preparation *(needs 0195; immutable upstream
   runtime inputs and non-published qualification evidence for blocked task 0198)*
-- [ ] 0219 Semantic installed lifecycle and privacy qualification *(blocked: all four packaged
-  payload/privacy paths pass; protected catalog signing and verification keys are not configured,
-  so exact installed packages cannot yet be exercised; manual accessibility remains separate)*
+- [x] 0219 Semantic installed lifecycle and privacy qualification *(private four-target installed
+  lifecycle, package launch, failure-mode, and privacy matrix passed; manual accessibility remains
+  part of blocked task 0198)*
 - [x] 0220 Exact-production semantic evaluation *(needs 0188, 0195, 0196, 0218; four-target private
   measurements complete with an honest NO-GO; release publication remains disabled)*
 - [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding

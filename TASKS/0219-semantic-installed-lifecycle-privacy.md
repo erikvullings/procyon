@@ -1,6 +1,6 @@
 # 0219 Semantic installed lifecycle and privacy qualification
 
-Status: blocked
+Status: completed
 Priority: high
 Subsystem: quality, release, semantic
 Depends on: 0218
@@ -74,3 +74,52 @@ evidence.
   This task is blocked on that protected key configuration; task 0198 additionally remains blocked
   on exact quality evaluation, preceding-candidate upgrade/rollback, manual accessibility, and
   release-owner approval.
+- 2026-09-12 Copilot: Protected catalog configuration is now working. Private run
+  [`34685936935`](https://github.com/erikvullings/procyon/actions/runs/34685936935) at
+  `2b122250b99e132d3d4d95a56227e714fc784888` passed the safety proof, all four exact payload jobs,
+  and all four signed-catalog jobs. Every prerelease, public semantic asset, base installer,
+  Homebrew, and Chocolatey publication job stayed skipped. Installed qualification reached package
+  execution: macOS arm64, Windows x86-64, and Linux x86-64 then failed at
+  `scripts/qualify-semantic-installed.mjs` because the filename-canary cleanup referenced an
+  undefined `fs` binding; Linux arm64 failed earlier because AppImage construction could not find
+  `/usr/bin/xdg-open`. Work resumed to fix both harness/environment defects without changing either
+  release gate.
+- 2026-09-12 Copilot: Follow-up private run
+  [`34700439424`](https://github.com/erikvullings/procyon/actions/runs/34700439424) at
+  `4a2f49979ae1cffc52151ff581a70a9d9226fa69` proved the `xdg-utils` fix: Linux arm64 built its
+  private catalog-enabled AppImage and all four targets reached and completed the installed
+  lifecycle, package smoke, and privacy scan stages. All four then failed while copying already
+  verified evidence because a second stale `fs.cpSync` namespace reference remained. The run again
+  kept every publication and base-installer job skipped. The cleanup regression was strengthened
+  to reject any undeclared `fs.*` use in the harness before another dispatch.
+- 2026-09-12 Copilot: Corrected run
+  [`34704518856`](https://github.com/erikvullings/procyon/actions/runs/34704518856) at
+  `f5aef31768105345003358950f63cbaf8ed22b4b` passed the complete installed qualification on macOS
+  arm64, including signed catalog lifecycle, private DMG launch, and privacy evidence. Windows
+  x86-64 and Linux arm64 payload construction were rate-limited by upstream Hugging Face HTTP 429
+  responses and therefore produced no installed result. Linux x86-64 passed lifecycle,
+  diagnostics, cancellation/restart, and privacy, but package smoke selected the `/usr/lib/Procyon`
+  directory instead of the `procyon` executable because its lookup did not require a regular file;
+  `xvfb-run` consequently exited 126. The lookup now requires a file while retaining the
+  resource-directory exclusion.
+- 2026-09-12 Copilot: Run
+  [`34706893999`](https://github.com/erikvullings/procyon/actions/runs/34706893999) at
+  `fcee871980d8c5d9f08c2ffd6866be1119456463` passed all payload and catalog jobs after adding
+  bounded, `Retry-After`-aware retries that retain exact size and SHA-256 verification. Windows
+  x86-64 passed the complete installed qualification. macOS arm64 restored stale qualification
+  evidence from the Rust cache and correctly refused to overwrite it; evidence now lives under
+  `runner.temp`, outside cached build output. Both Linux targets passed lifecycle, diagnostics,
+  cancellation/restart, and privacy but selected an executable resource/launcher that delegated
+  unsupported macOS-style `open -a` arguments to `xdg-open`. Linux package smoke now selects the
+  largest executable regular-file candidate named `Procyon`, excluding resources.
+- 2026-09-12 Copilot: Final private run
+  [`34711114776`](https://github.com/erikvullings/procyon/actions/runs/34711114776) at
+  `758672988429928b2227a7e8f1d8c8fa3adb06d7` passed the safety proof, all four payloads, all four
+  signed catalogs, and complete installed qualification on macOS arm64, Windows x86-64, Linux
+  x86-64, and Linux arm64. Every target reports `automatedStatus`, installed/default evidence
+  privacy, exact lifecycle, diagnostics, cancellation/restart, and installed-package smoke as
+  `pass`. The run retained private seven-day evidence only; prerelease, public semantic
+  publication, base installers, Homebrew, and Chocolatey all remained skipped, and both release
+  gates remained absent. Task 0219 is complete. Task 0198 remains NO-GO on the exact preceding
+  production-candidate upgrade/rollback, generated-answer and specialized-corpus quality evidence,
+  native accessibility/keyboard/consent UX passes, and release-owner approval.

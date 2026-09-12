@@ -3,6 +3,7 @@ import {
   closeSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -192,10 +193,17 @@ async function smokeLinux() {
   const appImageRoot = mkdtempSync(join(tmpdir(), 'procyon-appimage-install-'));
   try {
     run('dpkg-deb', ['--extract', deb, installRoot]);
-    const executable = filesBelow(installRoot).find((candidate) => {
-      const name = basename(candidate).toLowerCase();
-      return name === 'procyon' && !candidate.includes('/resources/');
-    });
+    const executable = filesBelow(installRoot)
+      .filter((candidate) => {
+        const metadata = lstatSync(candidate);
+        return (
+          basename(candidate).toLowerCase() === 'procyon' &&
+          !candidate.includes('/resources/') &&
+          metadata.isFile() &&
+          (metadata.mode & 0o111) !== 0
+        );
+      })
+      .sort((left, right) => lstatSync(right).size - lstatSync(left).size)[0];
     if (!executable) throw new Error('DEB did not install a Procyon executable');
     assertEmbeddedCatalog(installRoot);
     await assertLaunches(

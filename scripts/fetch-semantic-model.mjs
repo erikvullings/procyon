@@ -77,10 +77,37 @@ function isAlreadyCached(destination, descriptor) {
   return digestOf(destination) === descriptor.sha256;
 }
 
+const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
+
+export function modelDownloadRetryDelay(response, attempt, now = Date.now()) {
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 60_000);
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return Math.min(Math.max(date - now, 0), 60_000);
+  }
+  return Math.min(2_000 * 2 ** attempt, 30_000);
+}
+
 async function download(url, destination, descriptor) {
   const partial = `${destination}.partial`;
   fs.rmSync(partial, { force: true });
-  const response = await fetch(url, { redirect: 'follow' });
+  let response;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    // eslint-disable-next-line no-await-in-loop -- retries must remain sequential and bounded.
+    response = await fetch(url, { redirect: 'follow' });
+    if (response.ok && response.body) break;
+    if (!retryableStatuses.has(response.status) || attempt === 3) {
+      throw new Error(`${url} returned HTTP ${response.status}`);
+    }
+    const delay = modelDownloadRetryDelay(response, attempt);
+    process.stderr.write(
+      `  ${descriptor.name}: HTTP ${response.status}; retrying in ${delay} ms\n`,
+    );
+    // eslint-disable-next-line no-await-in-loop -- the upstream retry window must elapse first.
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
   if (!response.ok || !response.body) {
     throw new Error(`${url} returned HTTP ${response.status}`);
   }

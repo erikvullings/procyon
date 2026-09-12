@@ -292,21 +292,39 @@ The four reports were downloaded and revalidated locally into a private aggregat
 `e5da4ac20368da8376775a8b9b4f6b6411dc338c788efa5f487b66a9f4fbf0d8`.
 No query, excerpt, or source text is present in those reports.
 
+Private run
+[`34711114776`](https://github.com/erikvullings/procyon/actions/runs/34711114776) completed the
+automated installed matrix at clean revision
+`758672988429928b2227a7e8f1d8c8fa3adb06d7`. The safety job, all four payload jobs, all four signed
+catalog jobs, and all four installed qualification jobs passed. Every target reported
+`automatedStatus: pass`, `privacyStatus: pass`, `workerPrivacyStatus: pass`, and pass results for
+exact lifecycle, diagnostic capture, cancellation/restart, and installed-package smoke. The
+workflow retained only private seven-day Actions artifacts. Prerelease, public semantic
+publication, base installer, Homebrew, and Chocolatey jobs were skipped, and both release gates
+remained absent.
+
+| Target | Catalog revision | Qualified private package SHA-256 |
+| --- | --- | --- |
+| macOS arm64 | `procyon-macos-aarch64-0.1.0-25-2628a4e715da50a1576131f54e62e35d` | DMG `b3067b0a4e021602ecd45297a261a6a70fb0df00580a8d6649f3bb5f8cf2257f` |
+| Windows x86-64 | `procyon-windows-x86_64-0.1.0-25-a02654ad641e50f90967a1260837df0e` | MSI `2fa191dc8a6396076ede8462e3aadc0883a98e676c03175e04a4a989c6a705dc`; NSIS `4098790dcb7e6aaf95fe48f584c33b36aee6ac787318059b9246432b6200ef9d` |
+| Linux x86-64 | `procyon-linux-x86_64-0.1.0-25-ece6702f31d6dc036cc6dcf591d9e956` | AppImage `80a74a8d0a4851b2ba59dda56b3c5f8855fc51e32a14efe088f9d5a06c02dde0`; DEB `b3fdcb11c25964ae81232baf970d5e4c646780f2bfaa4adefe3bb2a08bf5c986` |
+| Linux arm64 | `procyon-linux-aarch64-0.1.0-25-228b265a24572a2b07db8a5e707090ce` | AppImage `4089daefd363bf19868c0e8d3aae3485c37d7045e3741c13d47d2615a76d6fd5`; DEB `fafa67dde6bf05e2e0a568d46026ec0418be148fd84bc82182a79f3dc0a4c3c5` |
+
 ## Evidence status
 
 | Gate | macOS arm64 | Windows x86-64 | Linux x86-64 | Linux arm64 |
 | --- | --- | --- | --- | --- |
-| Signed production payload/catalog retained | Developer ID signed and Apple-notarized private payload retained; signed catalog missing | Unsigned private payload retained; signed catalog missing | Private payload retained; signing not applicable; signed catalog missing | Private payload retained; signed catalog missing |
-| Packaged worker handshake, offline activation, and crash/restart | Pass in combined run `34636435645` | Pass in combined run `34636435645` | Pass on Ubuntu 22.04 in combined run `34636435645` | Pass in combined run `34636435645` |
+| Signed production payload/catalog retained | Private Developer ID signed and Apple-notarized payload plus signed catalog passed in run `34711114776` | Unsigned private payload plus signed catalog passed in run `34711114776` | Private payload plus signed catalog passed in run `34711114776`; signing not applicable | Private payload plus signed catalog passed in run `34711114776`; signing not applicable |
+| Packaged worker handshake, offline activation, and crash/restart | Pass in runs `34636435645` and `34711114776` | Pass in runs `34636435645` and `34711114776` | Pass on Ubuntu 22.04 in runs `34636435645` and `34711114776` | Pass in runs `34636435645` and `34711114776` |
 | Exact task-0188 retrieval evaluation | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain | Packaged retrieval pass in run `34636435645`; specialized/manual gaps remain |
-| Installed/absent and first-run | Not run | Not run | Not run | Not run |
-| Upgrade and rollback | Not run | Not run | Not run | Not run |
-| Corruption, offline, and low-disk | Not run | Not run | Not run | Not run |
-| Cancellation and crash/restart | Not run | Not run | Not run | Not run |
-| Uninstall retention and deletion | Not run | Not run | Not run | Not run |
-| Keyboard and screen reader | Not run | Not run | Not run | Not run |
-| Consent, progress, error, citation opening, deletion | Not run | Not run | Not run | Not run |
-| Packaged worker/default evidence privacy scan | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run | Pass in combined run `34636435645`; installed app not run |
+| Installed/absent and first-run | Automated pass in run `34711114776` | Automated pass in run `34711114776` | Automated pass in run `34711114776` | Automated pass in run `34711114776` |
+| Upgrade and rollback | Exact preceding production candidate unavailable; blocked | Exact preceding production candidate unavailable; blocked | Exact preceding production candidate unavailable; blocked | Exact preceding production candidate unavailable; blocked |
+| Corruption, offline, and low-disk | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` |
+| Cancellation and crash/restart | Automated pass in run `34711114776` | Automated pass in run `34711114776` | Automated pass in run `34711114776` | Automated pass in run `34711114776` |
+| Uninstall retention and deletion | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` | Automated lifecycle pass in run `34711114776` |
+| Keyboard and screen reader | Manual-required: VoiceOver | Manual-required: Narrator | Manual-required: Orca | Manual-required: Orca |
+| Consent, progress, error, citation opening, deletion | Manual-required | Manual-required | Manual-required | Manual-required |
+| Packaged worker/default evidence privacy scan | Pass in run `34711114776` | Pass in run `34711114776` | Pass in run `34711114776` | Pass in run `34711114776` |
 
 macOS x86-64 is unsupported because Zvec 0.7.0 has no matching runtime. The universal macOS desktop
 application must continue to report semantic functionality as unavailable on that architecture.

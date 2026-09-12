@@ -102,3 +102,16 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   case-fold evidence, installed-package signing, accessibility, privacy/failure/manual gates are
   incomplete. Catalog signing and installed continuation failed closed on the known missing
   protected keys; no public or installer job ran.
+- 2026-09-12 Copilot: Private run
+  [`34711114776`](https://github.com/erikvullings/procyon/actions/runs/34711114776) passed signed
+  catalog construction and automated installed qualification on macOS arm64, Windows x86-64,
+  Linux x86-64, and Linux arm64 at
+  `758672988429928b2227a7e8f1d8c8fa3adb06d7`. Every target passed exact lifecycle, diagnostic
+  capture, cancellation/restart, native package launch, inherited worker privacy, and installed
+  evidence privacy. All publication and base-installer jobs stayed skipped and both release
+  variables remained absent. This closes task 0219's automated installed matrix, but task 0198
+  remains blocked and **NO-GO**: no exact preceding production candidate was available for
+  upgrade/rollback; generated-answer grounding, specialized-corpus and reviewed case-fold
+  before/after evidence remain incomplete; native VoiceOver/Narrator/Orca, keyboard, consent,
+  progress/error, citation, retention/deletion passes remain manual-required; and release-owner
+  approval has not been recorded.
