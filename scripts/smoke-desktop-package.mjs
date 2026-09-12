@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -194,7 +195,9 @@ async function smokeLinux() {
     run('dpkg-deb', ['--extract', deb, installRoot]);
     const executable = filesBelow(installRoot).find((candidate) => {
       const name = basename(candidate).toLowerCase();
-      return name === 'procyon' && !candidate.includes('/resources/');
+      return (
+        name === 'procyon' && !candidate.includes('/resources/') && statSync(candidate).isFile()
+      );
     });
     if (!executable) throw new Error('DEB did not install a Procyon executable');
     assertEmbeddedCatalog(installRoot);

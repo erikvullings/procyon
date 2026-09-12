@@ -662,6 +662,7 @@ test('desktop package smoke crosses native installer boundaries and retains isol
   assert.match(smoke, /dpkg-deb/);
   assert.match(smoke, /--appimage-extract/);
   assert.match(smoke, /xvfb-run/);
+  assert.match(smoke, /statSync\(candidate\)\.isFile\(\)/);
   assert.match(smoke, /FM_LOG_FILE/);
   assert.match(smoke, /PROCYON_QUALIFICATION_EVIDENCE_ROOT/);
   assert.match(smoke, /PROCYON_QUALIFICATION_CATALOG_DIRECTORY/);

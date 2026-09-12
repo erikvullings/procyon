@@ -92,3 +92,13 @@ evidence.
   verified evidence because a second stale `fs.cpSync` namespace reference remained. The run again
   kept every publication and base-installer job skipped. The cleanup regression was strengthened
   to reject any undeclared `fs.*` use in the harness before another dispatch.
+- 2026-09-12 Copilot: Corrected run
+  [`34704518856`](https://github.com/erikvullings/procyon/actions/runs/34704518856) at
+  `f5aef31768105345003358950f63cbaf8ed22b4b` passed the complete installed qualification on macOS
+  arm64, including signed catalog lifecycle, private DMG launch, and privacy evidence. Windows
+  x86-64 and Linux arm64 payload construction were rate-limited by upstream Hugging Face HTTP 429
+  responses and therefore produced no installed result. Linux x86-64 passed lifecycle,
+  diagnostics, cancellation/restart, and privacy, but package smoke selected the `/usr/lib/Procyon`
+  directory instead of the `procyon` executable because its lookup did not require a regular file;
+  `xvfb-run` consequently exited 126. The lookup now requires a file while retaining the
+  resource-directory exclusion.
