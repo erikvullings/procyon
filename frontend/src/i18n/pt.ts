@@ -339,8 +339,8 @@ export const pt = {
     confirmDeleteMessage:
       'Isto irá eliminar permanentemente "{name}". Esta ação não pode ser anulada.',
     confirmOperationTitle: 'Confirmar operação',
-    confirmCopySummary: 'Copiar {count} item(ns) para {destination}?',
-    confirmMoveSummary: 'Mover {count} item(ns) para {destination}?',
+    confirmCopySummary: 'Copiar {count} item(ns)?',
+    confirmMoveSummary: 'Mover {count} item(ns)?',
     confirmTrashSummary: 'Mover {count} item(ns) para o lixo?',
     copy: 'Copiar',
     move: 'Mover',

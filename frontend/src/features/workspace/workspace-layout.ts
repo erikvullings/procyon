@@ -397,6 +397,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         key: paneId,
         'data-pane-id': paneId,
         'data-active': String(active),
+        role: 'region',
+        'aria-label': tabTitle,
+        ...(active ? { 'aria-current': 'true' } : {}),
         tabindex: active ? 0 : -1,
         oncreate: ({ dom }) => paneElements.set(paneId, dom as HTMLElement),
         // Guard against removal firing *after* a replacement node's `oncreate` (possible since

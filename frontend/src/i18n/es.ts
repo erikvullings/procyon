@@ -336,8 +336,8 @@ export const es = {
     confirmDeleteMessage:
       'Esto eliminará permanentemente "{name}". Esta acción no se puede deshacer.',
     confirmOperationTitle: 'Confirmar operación',
-    confirmCopySummary: '¿Copiar {count} elemento(s) a {destination}?',
-    confirmMoveSummary: '¿Mover {count} elemento(s) a {destination}?',
+    confirmCopySummary: '¿Copiar {count} elemento(s)?',
+    confirmMoveSummary: '¿Mover {count} elemento(s)?',
     confirmTrashSummary: '¿Mover {count} elemento(s) a la papelera?',
     copy: 'Copiar',
     move: 'Mover',

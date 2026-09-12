@@ -339,8 +339,8 @@ export const fr = {
     confirmDeleteMessage:
       'Cela supprimera définitivement « {name} ». Cette action est irréversible.',
     confirmOperationTitle: "Confirmer l'opération",
-    confirmCopySummary: 'Copier {count} élément(s) vers {destination} ?',
-    confirmMoveSummary: 'Déplacer {count} élément(s) vers {destination} ?',
+    confirmCopySummary: 'Copier {count} élément(s) ?',
+    confirmMoveSummary: 'Déplacer {count} élément(s) ?',
     confirmTrashSummary: 'Déplacer {count} élément(s) vers la corbeille ?',
     copy: 'Copier',
     move: 'Déplacer',

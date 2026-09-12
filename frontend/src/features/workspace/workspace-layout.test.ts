@@ -388,6 +388,20 @@ describe('WorkspaceLayoutView pane focus', () => {
     expect(document.activeElement).toBe(root.querySelector('[data-pane-id="right"] > .fm-pane'));
   });
 
+  it('exposes the active pane as the current named region', () => {
+    mount(attrs());
+
+    const left = root.querySelector<HTMLElement>('[data-pane-id="left"]');
+    const right = root.querySelector<HTMLElement>('[data-pane-id="right"]');
+
+    expect(left?.getAttribute('role')).toBe('region');
+    expect(left?.getAttribute('aria-label')).toBe('Home');
+    expect(left?.getAttribute('aria-current')).toBe('true');
+    expect(right?.getAttribute('role')).toBe('region');
+    expect(right?.getAttribute('aria-label')).toBe('Downloads');
+    expect(right?.hasAttribute('aria-current')).toBe(false);
+  });
+
   it('activates the pane that receives keyboard focus', () => {
     const onActivatePane = vi.fn<(paneId: PaneId) => void>();
     mount(attrs({ onActivatePane }));
