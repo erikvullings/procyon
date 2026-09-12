@@ -668,6 +668,18 @@ test('desktop package smoke crosses native installer boundaries and retains isol
   assert.match(smoke, /installed semantic\/\$\{name\} differs/);
 });
 
+test('installed semantic qualification has portable cleanup and AppImage build prerequisites', () => {
+  const qualification = read('scripts', 'qualify-semantic-installed.mjs');
+  const installed = workflow('release-desktop.yml').jobs['semantic-installed-qualification'];
+  const linuxDependencies = installed.steps.find(
+    (step) => step.name === 'Install Linux package and launch dependencies',
+  );
+
+  assert.match(qualification, /\brmSync\(filenameCanaryFile, \{ force: true \}\)/);
+  assert.doesNotMatch(qualification, /\bfs\.rmSync\(/);
+  assert.match(linuxDependencies.run, /\bxdg-utils\b/);
+});
+
 test('README documents release versioning, package managers, smoke checks, and no auto-update', () => {
   const readme = read('README.md');
   assert.match(readme, /## Desktop releases/);

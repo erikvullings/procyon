@@ -1,6 +1,6 @@
 # 0219 Semantic installed lifecycle and privacy qualification
 
-Status: blocked
+Status: in_progress
 Priority: high
 Subsystem: quality, release, semantic
 Depends on: 0218
@@ -74,3 +74,13 @@ evidence.
   This task is blocked on that protected key configuration; task 0198 additionally remains blocked
   on exact quality evaluation, preceding-candidate upgrade/rollback, manual accessibility, and
   release-owner approval.
+- 2026-09-12 Copilot: Protected catalog configuration is now working. Private run
+  [`34685936935`](https://github.com/erikvullings/procyon/actions/runs/34685936935) at
+  `2b122250b99e132d3d4d95a56227e714fc784888` passed the safety proof, all four exact payload jobs,
+  and all four signed-catalog jobs. Every prerelease, public semantic asset, base installer,
+  Homebrew, and Chocolatey publication job stayed skipped. Installed qualification reached package
+  execution: macOS arm64, Windows x86-64, and Linux x86-64 then failed at
+  `scripts/qualify-semantic-installed.mjs` because the filename-canary cleanup referenced an
+  undefined `fs` binding; Linux arm64 failed earlier because AppImage construction could not find
+  `/usr/bin/xdg-open`. Work resumed to fix both harness/environment defects without changing either
+  release gate.

@@ -555,6 +555,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
+            xdg-utils \
             xvfb
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

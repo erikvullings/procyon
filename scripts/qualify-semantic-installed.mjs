@@ -8,6 +8,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -235,7 +236,7 @@ stages.push(
     },
   ),
 );
-fs.rmSync(filenameCanaryFile, { force: true });
+rmSync(filenameCanaryFile, { force: true });
 
 const packages = await packageEvidence();
 const catalogManifest = JSON.parse(readFileSync(path.join(catalog, 'catalog.json'), 'utf8'));
