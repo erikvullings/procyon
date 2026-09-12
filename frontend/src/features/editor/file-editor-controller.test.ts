@@ -74,4 +74,27 @@ describe('file editor controller', () => {
     await controller.save();
     expect(states.at(-1)).toMatchObject({ conflict: true, dirty: true });
   });
+
+  it('localizes binary-file load failures', async () => {
+    const states: FileEditorState[] = [];
+    const controller = createFileEditorController({
+      client: {
+        loadEditableFile: vi
+          .fn()
+          .mockRejectedValue(
+            new Error('binary files cannot be edited in-app; use the external editor'),
+          ),
+        saveEditableFile: vi.fn(),
+      },
+      entry,
+      update: (state) => states.push(state),
+    });
+
+    await vi.waitFor(() => expect(states.at(-1)?.status).toBe('error'));
+    expect(states.at(-1)).toMatchObject({
+      status: 'error',
+      message: 'Binary files cannot be edited in Procyon.',
+    });
+    controller.dispose();
+  });
 });

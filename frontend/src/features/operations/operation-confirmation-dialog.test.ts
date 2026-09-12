@@ -40,7 +40,7 @@ describe('OperationConfirmationDialog', () => {
     expect(route?.textContent).toContain('Destination');
     expect(route?.textContent).toContain('file:///target folder');
     expect(route?.textContent).not.toContain('%20');
-    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
+    expect(document.activeElement?.textContent?.trim()).toBe('Copy');
     [...document.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Copy')
       ?.click();

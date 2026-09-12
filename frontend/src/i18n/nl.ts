@@ -1662,6 +1662,7 @@ export const nl = {
     cancel: 'Annuleren',
     saveChangesBeforeClosing: 'Wijzigingen opslaan voordat u sluit?',
     discard: 'Negeren',
+    binaryNotEditable: 'Binaire bestanden kunnen niet in Procyon worden bewerkt.',
     unableToLoad: 'Kan bestand niet laden',
     saveFailed: 'Opslaan mislukt',
     invalidJson: 'Ongeldige JSON blijft ongewijzigd.',

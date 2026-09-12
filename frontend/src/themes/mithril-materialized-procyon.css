@@ -26,6 +26,11 @@
   box-shadow: none;
 }
 
+.fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat:focus {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
 .fm-app-shell .btn-flat,
 .fm-app-shell button.btn-flat {
   border-color: transparent;

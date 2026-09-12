@@ -86,6 +86,7 @@ export const OperationConfirmationDialog: FactoryComponent<
       isOpen: request !== undefined,
       closeOnEsc: true,
       closeOnButtonClick: false,
+      initialFocus: '.mm-dialog-primary-action',
       onClose: (reason: ModalCloseReason) => {
         if (reason !== 'programmatic') attrs.onCancel();
       },

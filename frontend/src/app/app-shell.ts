@@ -1320,10 +1320,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       entry,
       update: (state) => {
         const existing = editorByPane.get(paneId);
-        if (existing !== undefined) {
+        if (existing === undefined) return;
+        if (state.status === 'error') {
+          existing.controller.dispose();
+          editorByPane.delete(paneId);
+          toast({ html: state.message });
+        } else {
           existing.state = state;
-          m.redraw();
         }
+        m.redraw();
       },
     });
     editorByPane.set(paneId, { controller, state: { status: 'loading', entry } });

@@ -1643,6 +1643,7 @@ export const en = {
     cancel: 'Cancel',
     saveChangesBeforeClosing: 'Save changes before closing?',
     discard: 'Discard',
+    binaryNotEditable: 'Binary files cannot be edited in Procyon.',
     unableToLoad: 'Unable to load file',
     saveFailed: 'Save failed',
     invalidJson: 'Invalid JSON remains unchanged.',

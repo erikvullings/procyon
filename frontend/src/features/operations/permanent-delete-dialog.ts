@@ -27,8 +27,8 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
     removeFocusTrap();
     if (!open) return;
     const dialog = dom.closest('[role="dialog"]');
-    const cancel = dialog?.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel');
-    cancel?.focus();
+    const confirm = dialog?.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm');
+    confirm?.focus();
     keydownHandler = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || dialog === null) return;
       const focusable = [

@@ -77,6 +77,14 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('theme stylesheet', () => {
+  it('shows one visible focus treatment for dialog actions', () => {
+    const focus = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset='compact-minimal'\][^{]*button\.btn-flat:focus\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(focus).toContain('outline: 2px solid var(--fm-accent)');
+    expect(focus).toContain('outline-offset: 2px');
+  });
+
   it('contains long operation source previews within their card', () => {
     expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('flex-direction: column');
     expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('overflow: hidden');

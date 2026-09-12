@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('PermanentDeleteDialog', () => {
-  it('states exact totals and defaults focus to cancel', () => {
+  it('states exact totals and defaults focus to permanent delete', () => {
     m.mount(root, {
       view: () =>
         m(PermanentDeleteDialog, {
@@ -34,10 +34,10 @@ describe('PermanentDeleteDialog', () => {
 
     expect(root.textContent).toContain('12 items (4 K)');
     expect(root.textContent).toContain('irreversible');
-    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(document.activeElement?.textContent).toBe('Delete permanently');
   });
 
-  it('moves Tab from cancel to permanent delete', () => {
+  it('moves Tab from permanent delete to cancel', () => {
     m.mount(root, {
       view: () =>
         m(PermanentDeleteDialog, {
@@ -52,12 +52,13 @@ describe('PermanentDeleteDialog', () => {
     });
     m.redraw.sync();
 
-    const cancel = root.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel');
     const confirm = root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm');
-    cancel?.dispatchEvent(
+    confirm?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
     );
-    expect(document.activeElement).toBe(confirm);
+    expect(document.activeElement).toBe(
+      root.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel'),
+    );
   });
 
   it('cycles Tab only between cancel and permanent delete', () => {
@@ -75,15 +76,18 @@ describe('PermanentDeleteDialog', () => {
     });
     m.redraw.sync();
 
-    const cancel = root.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel');
     const confirm = root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm');
-    cancel?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
-    );
     confirm?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
     );
-    expect(document.activeElement).toBe(cancel);
+    expect(document.activeElement).toBe(
+      root.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel'),
+    );
   });
 
   it('closes immediately after permanent delete is confirmed', () => {

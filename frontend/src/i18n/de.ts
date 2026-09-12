@@ -1002,6 +1002,7 @@ export const de = {
     cancel: 'Abbrechen',
     saveChangesBeforeClosing: 'Änderungen vor dem Schließen speichern?',
     discard: 'Verwerfen',
+    binaryNotEditable: 'Binärdateien können in Procyon nicht bearbeitet werden.',
     unableToLoad: 'Datei kann nicht geladen werden',
     saveFailed: 'Speichern fehlgeschlagen',
     invalidJson: 'Ungültiges JSON bleibt unverändert.',

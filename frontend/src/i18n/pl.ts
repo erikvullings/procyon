@@ -991,6 +991,7 @@ export const pl = {
     cancel: 'Anuluj',
     saveChangesBeforeClosing: 'Zapisać zmiany przed zamknięciem?',
     discard: 'Odrzuć',
+    binaryNotEditable: 'Plików binarnych nie można edytować w Procyon.',
     unableToLoad: 'Nie można wczytać pliku',
     saveFailed: 'Zapis nie powiódł się',
     invalidJson: 'Nieprawidłowy JSON pozostaje niezmieniony.',

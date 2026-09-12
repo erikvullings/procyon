@@ -995,6 +995,7 @@ export const fr = {
     cancel: 'Annuler',
     saveChangesBeforeClosing: 'Enregistrer les modifications avant de fermer ?',
     discard: 'Ignorer',
+    binaryNotEditable: 'Les fichiers binaires ne peuvent pas être modifiés dans Procyon.',
     unableToLoad: 'Impossible de charger le fichier',
     saveFailed: "Échec de l'enregistrement",
     invalidJson: 'Le JSON non valide reste inchangé.',
