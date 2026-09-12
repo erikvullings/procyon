@@ -41,6 +41,10 @@ describe('OperationConfirmationDialog', () => {
     expect(route?.textContent).toContain('file:///target folder');
     expect(route?.textContent).not.toContain('%20');
     expect(document.activeElement?.textContent?.trim()).toBe('Copy');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
     [...document.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Copy')
       ?.click();

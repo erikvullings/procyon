@@ -77,12 +77,21 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('theme stylesheet', () => {
-  it('shows one visible focus treatment for dialog actions', () => {
+  it('shows one solid focus treatment for dialog actions', () => {
     const focus = materializedCss.match(
-      /\.fm-app-shell\[data-mm-preset='compact-minimal'\][^{]*button\.btn-flat:focus\s*\{([^}]*)\}/,
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\][^{]*button\.btn-flat:focus\s*\{([^}]*)\}/,
     )?.[1];
-    expect(focus).toContain('outline: 2px solid var(--fm-accent)');
-    expect(focus).toContain('outline-offset: 2px');
+    expect(focus).toContain('background: var(--fm-accent)');
+    expect(focus).toContain('color: var(--fm-surface)');
+    expect(focus).toContain('font-weight: 600');
+    expect(focus).toContain('outline: none');
+  });
+
+  it('optically aligns compact checkbox labels with their controls', () => {
+    const checkbox = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\]\s+input\[type=["']checkbox["']\]\s*\+\s*span:not\(\.lever\)\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(checkbox).toContain('line-height: 16px');
   });
 
   it('contains long operation source previews within their card', () => {
@@ -155,12 +164,9 @@ describe('theme stylesheet', () => {
     );
   });
 
-  it('shows the keyboard-focused permanent-delete action in the error colour', () => {
-    expect(themeCss).toMatch(
-      /\.fm-permanent-delete-modal\s+\.fm-permanent-delete-confirm:focus\s*\{[^}]*color:\s*var\(--fm-error\)/s,
-    );
-    expect(themeCss).not.toMatch(
-      /\.fm-permanent-delete-modal\s+\.fm-permanent-delete-confirm:focus\s*\{[^}]*outline:\s*2px/s,
+  it('shows destructive focused dialog actions with the shared solid error treatment', () => {
+    expect(materializedCss).toMatch(
+      /button\.btn-flat\[data-destructive=["']true["']\]:focus,[^{]*button\.fm-permanent-delete-confirm:focus\s*\{[^}]*background:\s*var\(--fm-error\)[^}]*color:\s*var\(--fm-surface\)/s,
     );
   });
 

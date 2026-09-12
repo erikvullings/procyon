@@ -28,7 +28,6 @@ interface UnsavedChangesDialogAttrs {
 type CloseChoice = 'save' | 'discard' | 'cancel';
 
 const UnsavedChangesDialog: FactoryComponent<UnsavedChangesDialogAttrs> = () => {
-  let selected: CloseChoice = 'save';
   let wasOpen = false;
   let keydownHandler: ((event: KeyboardEvent) => void) | undefined;
 
@@ -49,7 +48,6 @@ const UnsavedChangesDialog: FactoryComponent<UnsavedChangesDialogAttrs> = () => 
       .map((choice) => dialog.querySelector<HTMLButtonElement>(`.fm-file-editor-close-${choice}`))
       .filter((button): button is HTMLButtonElement => button !== null && !button.disabled);
     if (!wasOpen) {
-      selected = 'save';
       buttons[0]?.focus();
     }
     wasOpen = true;
@@ -62,16 +60,9 @@ const UnsavedChangesDialog: FactoryComponent<UnsavedChangesDialogAttrs> = () => 
       event.preventDefault();
       const next = buttons[nextIndex];
       next?.focus();
-      selected =
-        choices.find((choice) => next?.classList.contains(`fm-file-editor-close-${choice}`)) ??
-        'save';
-      m.redraw();
     };
     document.addEventListener('keydown', keydownHandler);
   };
-
-  const choiceClass = (choice: CloseChoice) =>
-    `fm-file-editor-close-choice fm-file-editor-close-${choice}${selected === choice ? ' is-selected' : ''}`;
 
   return {
     view: ({ attrs }) =>
@@ -97,18 +88,18 @@ const UnsavedChangesDialog: FactoryComponent<UnsavedChangesDialogAttrs> = () => 
         buttons: [
           {
             label: t('editor', 'yes'),
-            className: choiceClass('save'),
+            className: 'fm-file-editor-close-choice fm-file-editor-close-save',
             disabled: attrs.saving,
             onclick: attrs.onSave,
           },
           {
             label: t('editor', 'no'),
-            className: choiceClass('discard'),
+            className: 'fm-file-editor-close-choice fm-file-editor-close-discard',
             onclick: attrs.onDiscard,
           },
           {
             label: t('editor', 'cancel'),
-            className: choiceClass('cancel'),
+            className: 'fm-file-editor-close-choice fm-file-editor-close-cancel',
             onclick: attrs.onCancel,
           },
         ],

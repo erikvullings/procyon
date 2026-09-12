@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
-import { ModalPanel } from 'mithril-materialized';
+import { AlertDialog } from 'mithril-materialized';
+import { arrowRightIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { ConflictResolution, OperationConflict } from '../../models';
 
@@ -16,10 +17,10 @@ function formatLocalCompact(date: Date): string {
 
 /** Compact, stable metadata for comparing two conflicting entries. */
 export function formatConflictMetadata(entry: OperationConflict['source']): string {
-  const size = entry.size === undefined ? 'size unavailable' : `${entry.size}b`;
+  const size = entry.size === undefined ? t('operation', 'sizeUnavailable') : `${entry.size} B`;
   const date =
     entry.modifiedAt === undefined
-      ? 'modified time unavailable'
+      ? t('operation', 'modifiedTimeUnavailable')
       : formatLocalCompact(new Date(entry.modifiedAt));
   return `${entry.name} · ${size} · ${date}`;
 }
@@ -44,21 +45,32 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
       if (conflict === undefined) return undefined;
       const resolve = (resolution: ConflictResolution) =>
         attrs.onResolve(resolution, applyToAllSimilar);
-      return m(ModalPanel, {
+      return m(AlertDialog, {
         id: 'conflict-dialog',
         title: t('operation', 'resolveConflict'),
-        className: 'fm-conflict-dialog',
+        className: 'fm-operation-confirmation-modal fm-conflict-dialog',
         isOpen: true,
-        showCloseButton: false,
-        closeOnBackdropClick: false,
         closeOnEsc: false,
-        description: m('div', [
-          m('p', conflict.message),
-          m('dl.fm-conflict-dialog-entries', [
-            m('dt', t('operation', 'source')),
-            m('dd', formatConflictMetadata(conflict.source)),
-            m('dt', t('operation', 'destination')),
-            m('dd', formatConflictMetadata(conflict.destination)),
+        initialFocus: '.mm-dialog-primary-action',
+        description: m('.fm-operation-confirmation-description', [
+          m(
+            'p.fm-operation-confirmation-summary',
+            t('operation', 'destinationExists', { name: conflict.destination.name }),
+          ),
+          m('.fm-operation-confirmation-route', [
+            m('.fm-operation-confirmation-endpoint', [
+              m('span.fm-operation-confirmation-label', t('operation', 'source')),
+              m('code', formatConflictMetadata(conflict.source)),
+            ]),
+            m(
+              '.fm-operation-confirmation-arrow',
+              { 'aria-hidden': 'true' },
+              arrowRightIcon({ size: 18 }),
+            ),
+            m('.fm-operation-confirmation-endpoint', [
+              m('span.fm-operation-confirmation-label', t('operation', 'destination')),
+              m('code', formatConflictMetadata(conflict.destination)),
+            ]),
           ]),
           m('label.fm-conflict-dialog-checkbox', [
             m('input', {
@@ -70,12 +82,19 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
             m('span', t('operation', 'applyToAllSimilar')),
           ]),
         ]),
-        buttons: [
-          { label: t('operation', 'cancelOperation'), onclick: () => resolve('cancelOperation') },
+        actions: [
           { label: t('button', 'skip'), onclick: () => resolve('skip') },
           { label: t('button', 'renameNew'), onclick: () => resolve('renameNew') },
-          { label: t('button', 'overwrite'), onclick: () => resolve('overwrite') },
         ],
+        secondaryAction: {
+          label: t('button', 'cancel'),
+          onclick: () => resolve('cancelOperation'),
+        },
+        primaryAction: {
+          label: t('button', 'overwrite'),
+          destructive: true,
+          onclick: () => resolve('overwrite'),
+        },
       });
     },
   };

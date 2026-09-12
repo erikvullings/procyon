@@ -2875,7 +2875,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Resolve conflict'));
     root.querySelector<HTMLInputElement>('.fm-conflict-dialog input')?.click();
     const rename = [...root.querySelectorAll<HTMLButtonElement>('.fm-conflict-dialog button')].find(
-      (button) => button.textContent === 'Rename new',
+      (button) => button.textContent === 'Rename',
     );
     rename?.click();
 
