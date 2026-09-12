@@ -1,6 +1,6 @@
 # 0219 Semantic installed lifecycle and privacy qualification
 
-Status: in_progress
+Status: completed
 Priority: high
 Subsystem: quality, release, semantic
 Depends on: 0218
@@ -112,3 +112,14 @@ evidence.
   cancellation/restart, and privacy but selected an executable resource/launcher that delegated
   unsupported macOS-style `open -a` arguments to `xdg-open`. Linux package smoke now selects the
   largest executable regular-file candidate named `Procyon`, excluding resources.
+- 2026-09-12 Copilot: Final private run
+  [`34711114776`](https://github.com/erikvullings/procyon/actions/runs/34711114776) at
+  `758672988429928b2227a7e8f1d8c8fa3adb06d7` passed the safety proof, all four payloads, all four
+  signed catalogs, and complete installed qualification on macOS arm64, Windows x86-64, Linux
+  x86-64, and Linux arm64. Every target reports `automatedStatus`, installed/default evidence
+  privacy, exact lifecycle, diagnostics, cancellation/restart, and installed-package smoke as
+  `pass`. The run retained private seven-day evidence only; prerelease, public semantic
+  publication, base installers, Homebrew, and Chocolatey all remained skipped, and both release
+  gates remained absent. Task 0219 is complete. Task 0198 remains NO-GO on the exact preceding
+  production-candidate upgrade/rollback, generated-answer and specialized-corpus quality evidence,
+  native accessibility/keyboard/consent UX passes, and release-owner approval.
