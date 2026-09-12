@@ -84,3 +84,11 @@ evidence.
   undefined `fs` binding; Linux arm64 failed earlier because AppImage construction could not find
   `/usr/bin/xdg-open`. Work resumed to fix both harness/environment defects without changing either
   release gate.
+- 2026-09-12 Copilot: Follow-up private run
+  [`34700439424`](https://github.com/erikvullings/procyon/actions/runs/34700439424) at
+  `4a2f49979ae1cffc52151ff581a70a9d9226fa69` proved the `xdg-utils` fix: Linux arm64 built its
+  private catalog-enabled AppImage and all four targets reached and completed the installed
+  lifecycle, package smoke, and privacy scan stages. All four then failed while copying already
+  verified evidence because a second stale `fs.cpSync` namespace reference remained. The run again
+  kept every publication and base-installer job skipped. The cleanup regression was strengthened
+  to reject any undeclared `fs.*` use in the harness before another dispatch.

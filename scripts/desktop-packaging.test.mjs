@@ -676,7 +676,8 @@ test('installed semantic qualification has portable cleanup and AppImage build p
   );
 
   assert.match(qualification, /\brmSync\(filenameCanaryFile, \{ force: true \}\)/);
-  assert.doesNotMatch(qualification, /\bfs\.rmSync\(/);
+  assert.doesNotMatch(qualification, /\bfs\./);
+  assert.match(qualification, /\bcpSync\(collected, path\.join\(evidence, 'safe-evidence'\)/);
   assert.match(linuxDependencies.run, /\bxdg-utils\b/);
 });
 

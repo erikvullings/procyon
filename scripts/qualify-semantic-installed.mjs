@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
+  cpSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -333,7 +334,7 @@ const privacy = await scanSemanticPrivacyEvidence({
 });
 await verifySemanticPrivacyEvidence({ root: collected, report: privacy });
 writeFileSync(path.join(evidence, 'privacy-report.json'), `${JSON.stringify(privacy, null, 2)}\n`);
-fs.cpSync(collected, path.join(evidence, 'safe-evidence'), {
+cpSync(collected, path.join(evidence, 'safe-evidence'), {
   recursive: true,
   errorOnExist: true,
 });
