@@ -34,6 +34,13 @@ export interface FileEditorController {
   dispose(): void;
 }
 
+function loadErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  return message.includes('binary files cannot be edited') || message.includes('not valid UTF-8')
+    ? t('editor', 'binaryNotEditable')
+    : t('editor', 'unableToLoad');
+}
+
 export function createFileEditorController(options: {
   client: Pick<FileManagerClient, 'loadEditableFile' | 'saveEditableFile'>;
   entry: EntrySummary;
@@ -83,7 +90,7 @@ export function createFileEditorController(options: {
       publish({
         status: 'error',
         entry: options.entry,
-        message: error instanceof Error ? error.message : t('editor', 'unableToLoad'),
+        message: loadErrorMessage(error),
       });
     }
   };

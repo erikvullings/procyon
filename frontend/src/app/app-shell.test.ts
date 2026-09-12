@@ -1487,6 +1487,13 @@ describe('AppShell', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
 
     expect(startOperation).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe('Copy'));
+    window.dispatchEvent(new Event('focus'));
+    expect(document.activeElement?.textContent?.trim()).toBe('Copy');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
     await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
@@ -1849,6 +1856,31 @@ describe('AppShell', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', bubbles: true }));
     await vi.waitFor(() => expect(root.querySelector('.fm-file-editor')).not.toBeNull());
     expect(invokeAction).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast without leaving an editor pane when F4 targets a binary file', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'loadEditableFile').mockRejectedValue(
+      new Error('binary files cannot be edited in-app; use the external editor'),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    const file = [...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].find(
+      (row) => row.textContent?.includes('.env'),
+    );
+    file?.click();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('.toast')?.textContent).toContain(
+        'Binary files cannot be edited in Procyon.',
+      ),
+    );
+    expect(root.querySelector('.fm-file-editor')).toBeNull();
+    Toast.dismissAll();
+    await vi.waitFor(() => expect(document.getElementById('toast-container')).toBeNull());
   });
 
   it('opens the Lister viewer in the opposite pane with F3 (task 0088)', async () => {
@@ -2850,7 +2882,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Resolve conflict'));
     root.querySelector<HTMLInputElement>('.fm-conflict-dialog input')?.click();
     const rename = [...root.querySelectorAll<HTMLButtonElement>('.fm-conflict-dialog button')].find(
-      (button) => button.textContent === 'Rename new',
+      (button) => button.textContent === 'Rename',
     );
     rename?.click();
 

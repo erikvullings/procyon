@@ -39,6 +39,44 @@
   background: var(--fm-hover);
 }
 
+.fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fm-text);
+  font-weight: 400;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer
+  button.btn-flat:hover:not(:focus) {
+  border-color: transparent;
+  background: var(--fm-hover);
+  color: var(--fm-text);
+  font-weight: 400;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat:focus {
+  border-color: var(--fm-accent);
+  outline: none;
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+  font-weight: 600;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer
+  button.btn-flat[data-destructive="true"]:focus,
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer
+  button.fm-permanent-delete-confirm:focus {
+  border-color: var(--fm-error);
+  background: var(--fm-error);
+  color: var(--fm-surface);
+}
+
 .fm-app-shell .input-field {
   display: flex;
   flex-direction: column;
@@ -245,6 +283,21 @@
 .fm-app-shell .switch label span:not(.lever) {
   font-size: 0.92rem;
   line-height: 1.15;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"] input[type="checkbox"] + span:not(.lever) {
+  line-height: 16px;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"] input[type="checkbox"]:focus + span:not(.lever) {
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  input[type="checkbox"]:focus
+  + span:not(.lever)::before {
+  border-color: var(--fm-accent);
 }
 
 .fm-app-shell .switch label .switch-value {
