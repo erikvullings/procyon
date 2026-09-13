@@ -495,6 +495,15 @@ describe('theme stylesheet', () => {
     expect(menuRule).not.toMatch(/\bmax-width:/);
   });
 
+  it('keeps the add-favourite controls compact', () => {
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add\s*>\s*input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add-button\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
+  });
+
   it('allows a longer favourites list before scrolling', () => {
     const menuRule = paneCss.match(/\.fm-favourites-menu\s*\{([^}]*)\}/s)?.[1];
 
