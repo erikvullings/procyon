@@ -1,5 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import { AlertDialog } from 'mithril-materialized';
+import { AlertDialog, type ModalCloseReason } from 'mithril-materialized';
 import { arrowRightIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { ConflictResolution, OperationConflict } from '../../models';
@@ -40,7 +40,7 @@ export function formatConflictMetadata(entry: OperationConflict['source']): stri
  */
 export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
   let applyToAllSimilar = false;
-  const focusCycle = createDialogFocusCycle('.mm-dialog-primary-action');
+  const focusCycle = createDialogFocusCycle('.fm-conflict-recommended');
   return {
     onremove: focusCycle.unmount,
     view: ({ attrs }) => {
@@ -53,9 +53,12 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         title: t('operation', 'resolveConflict'),
         className: 'fm-operation-confirmation-modal fm-conflict-dialog',
         isOpen: true,
-        closeOnEsc: false,
+        closeOnEsc: true,
         initialFocus: false,
         trapFocus: false,
+        onClose: (reason: ModalCloseReason) => {
+          if (reason !== 'action') resolve('cancelOperation');
+        },
         description: m(
           '.fm-operation-confirmation-description',
           {
@@ -64,7 +67,7 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
           },
           [
             m(
-              'p.fm-operation-confirmation-summary',
+              'p.fm-operation-confirmation-summary.fm-conflict-dialog-problem',
               t('operation', 'destinationExists', { name: conflict.destination.name }),
             ),
             m('.fm-operation-confirmation-route', [
@@ -82,6 +85,7 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
                 m('code', formatConflictMetadata(conflict.destination)),
               ]),
             ]),
+            m('p.fm-conflict-dialog-recommendation', t('operation', 'conflictRecommendation')),
             m('label.fm-conflict-dialog-checkbox', [
               m('input', {
                 type: 'checkbox',
@@ -95,7 +99,11 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         ),
         actions: [
           { label: t('button', 'skip'), onclick: () => resolve('skip') },
-          { label: t('button', 'renameNew'), onclick: () => resolve('renameNew') },
+          {
+            label: t('button', 'renameNew'),
+            className: 'fm-conflict-recommended',
+            onclick: () => resolve('renameNew'),
+          },
         ],
         secondaryAction: {
           label: t('button', 'cancel'),

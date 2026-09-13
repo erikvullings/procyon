@@ -1,8 +1,9 @@
 //! `GET /api/v1/diagnostics` - Diagnostics view for troubleshooting (spec §30).
 
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::StatusCode};
 use fm_transport_dto::{
-    ConnectionStateDto, DiagnosticsDto, OperationQueueStatusDto, PluginStatusDto,
+    ConnectionStateDto, DiagnosticErrorDto, DiagnosticsDto, OperationQueueStatusDto,
+    PluginStatusDto,
 };
 
 /// Provides comprehensive diagnostics information for troubleshooting and bug reports.
@@ -63,7 +64,7 @@ pub(crate) async fn get_diagnostics(
     };
 
     // Get recent errors from error buffer
-    let recent_errors = state.error_buffer.get_all();
+    let recent_errors = state.error_buffer.recent();
 
     // Convert platform to string representation
     let platform_str = match runtime_capabilities.platform {
@@ -84,4 +85,27 @@ pub(crate) async fn get_diagnostics(
         recent_errors,
         operation_queue_status,
     })
+}
+
+/// Retains one redacted frontend error for the diagnostics view and structured host log.
+#[utoipa::path(
+    post,
+    path = "/api/v1/diagnostics/frontend-errors",
+    operation_id = "recordFrontendDiagnostic",
+    request_body = DiagnosticErrorDto,
+    responses((status = 204, description = "Frontend diagnostic recorded"))
+)]
+pub(crate) async fn record_frontend_diagnostic(
+    State(state): State<crate::state::AppState>,
+    Json(error): Json<DiagnosticErrorDto>,
+) -> StatusCode {
+    let error = state.error_buffer.record_frontend(error);
+    tracing::error!(
+        target: "frontend",
+        code = %error.code,
+        context = error.context.as_deref().unwrap_or_default(),
+        message = %error.message,
+        "frontend diagnostic"
+    );
+    StatusCode::NO_CONTENT
 }

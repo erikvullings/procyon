@@ -89,6 +89,8 @@ export const nl = {
     readOnly: 'alleen-lezen',
   },
   pane: {
+    leftPane: 'Links',
+    rightPane: 'Rechts',
     favourites: 'Favorieten',
     addCurrentLocation: 'Huidige locatie toevoegen',
     favouriteName: 'Favoriet naam',
@@ -335,6 +337,10 @@ export const nl = {
     modifiedTimeUnavailable: 'Wijzigingstijd niet beschikbaar',
     source: 'Bron',
     destination: 'Bestemming',
+    conflictRecommendation:
+      'Veiligste keuze: geef het binnenkomende item een andere naam om beide te behouden.',
+    failureRecovery:
+      'Controleer de toegang en beschikbare ruimte en voer de bewerking daarna opnieuw uit.',
     createDirectory: 'Map aanmaken',
     createDirectoryName: 'Mapnaam',
     createFile: 'Bestand aanmaken',

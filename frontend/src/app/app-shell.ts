@@ -7,7 +7,6 @@ import packageJson from '../../package.json' with { type: 'json' };
 
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
-  activityIcon,
   arrowLeftIcon,
   arrowRightIcon,
   closeIcon,
@@ -59,7 +58,6 @@ import {
   differingEntryIds,
   initialComparisonState,
 } from '../features/comparison/comparison-state';
-import { DiagnosticsViewComponent } from '../features/diagnostics/diagnostics-view';
 import { type AppDialogsContext, renderAppDialogs } from '../features/dialogs/app-dialogs';
 import { createDialogUIController } from '../features/dialogs/dialog-ui-controller';
 import type { FinderTagsLoader } from '../features/directory-table/finder-tags-loader';
@@ -152,7 +150,7 @@ import {
   type SettingsController,
   type SettingsControllerContext,
 } from '../features/settings/settings-controller';
-import { SettingsEditor } from '../features/settings/settings-editor';
+import { SettingsEditor, type SettingsSection } from '../features/settings/settings-editor';
 import {
   type SortColumn,
   type SortModel,
@@ -183,6 +181,7 @@ import { actionTitle, t } from '../i18n';
 import {
   type FunctionKeyModifiers,
   footerFunctionKeyBindings,
+  getLiveBindings,
   hasPrimaryModifier,
   type KeybindingRuntime,
 } from '../keybindings/dispatcher';
@@ -216,6 +215,7 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../models';
+
 import {
   type AppState,
   applyAppPatches,
@@ -410,9 +410,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsUpdateQueue = Promise.resolve();
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
-  let diagnosticsDialogOpen = false;
+  let settingsInitialSection: SettingsSection = 'appearance';
   let aboutDialogOpen = false;
-  let diagnosticsDisclosureElement: HTMLDetailsElement | undefined;
   let workspaceDisclosureElement: HTMLDetailsElement | undefined;
   let registeredActions: readonly ActionDescriptor[] = [];
   let systemLocations: readonly SystemLocation[] = [];
@@ -468,6 +467,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       ...action,
       title: actionTitle(action.id, action.title),
     }));
+  }
+
+  function keybindingActions(): readonly ActionDescriptor[] {
+    const actions = localisedRegisteredActions();
+    if (actions.some((action) => action.id === 'core.showShortcutsHelp')) return actions;
+    return [
+      ...actions,
+      {
+        id: 'core.showShortcutsHelp',
+        title: t('keybindingsHelp', 'title'),
+        category: 'navigation',
+        defaultShortcuts: [{ key: 'F1' }],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+    ];
   }
 
   /** Purely frontend UI actions with no backend action-registry counterpart,
@@ -614,10 +629,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       openSettingsDialog();
     },
     openDiagnostics: () => {
-      if (diagnosticsDisclosureElement === undefined) return;
-      diagnosticsDisclosureElement.open = true;
-      diagnosticsDialogOpen = true;
-      m.redraw();
+      openSettingsDialog('diagnostics');
     },
     openShortcutsHelp: () => {
       shortcutsHelpOpen = true;
@@ -973,8 +985,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   /** Opens the Settings dialog (Cmd+,/Ctrl+,) - mirrors the settings toolbar button's "open"
    * branch (`settingsDisclosureElement.open = true`) rather than toggling, so pressing the
    * shortcut again while already open is a harmless no-op instead of closing it. */
-  function openSettingsDialog(): void {
-    if (settingsDisclosureElement === undefined || settingsDialogOpen) return;
+  function openSettingsDialog(section: SettingsSection = 'appearance'): void {
+    settingsInitialSection = section;
+    if (settingsDisclosureElement === undefined) return;
+    if (settingsDialogOpen) {
+      m.redraw();
+      return;
+    }
     settingsDisclosureElement.open = true;
     settingsDialogOpen = true;
     m.redraw();
@@ -2124,6 +2141,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (treeSidebarOpen) {
       syncDirectoryTreeToActiveLocation();
       requestAnimationFrame(() => focusDirectoryTree?.());
+    } else {
+      requestAnimationFrame(() => {
+        const activePaneId = workspace?.activePaneId;
+        if (activePaneId !== undefined) focusPane?.(activePaneId);
+      });
     }
   }
 
@@ -2250,12 +2272,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function functionKeyTitle(binding: {
+    readonly actionId: string;
     readonly shortcut: string;
     readonly title: string;
   }): string {
+    if (binding.actionId === 'core.showShortcutsHelp') return t('menu', 'help');
     if (binding.shortcut === 'ALT+F3') return t('action', 'openExternally');
     if (binding.shortcut === 'ALT+SHIFT+F4') return t('action', 'externalEdit');
     return binding.title;
+  }
+
+  function displayShortcut(shortcut: string): string {
+    return shortcut
+      .split('+')
+      .map((part) => {
+        if (part === 'CTRL') return platform === 'macos' ? 'Cmd' : 'Ctrl';
+        if (part === 'ALT') return platform === 'macos' ? 'Option' : 'Alt';
+        if (part === 'SHIFT') return 'Shift';
+        return part.length === 1 ? part.toUpperCase() : part;
+      })
+      .join('+');
+  }
+
+  function labelWithShortcut(label: string, shortcut: string | undefined): string {
+    return shortcut === undefined ? label : `${label} (${displayShortcut(shortcut)})`;
   }
 
   /** The pane currently showing an open F3 viewer, if any - mirrors `globalKeydownHandlerContext
@@ -2661,7 +2701,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getWorkspace: () => workspace,
     getSelections: () => selections,
     getDirectories: () => directories,
-    getRegisteredActions: () => registeredActions,
+    getRegisteredActions: keybindingActions,
     clipboard,
     getFindFilesOpen: () => findFilesOpen,
     getViewer: (paneId) => {
@@ -3737,6 +3777,38 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // plain "Transparent" title bar still let the OS render its own vibrancy behind it.
       // The web build doesn't need this: the browser tab already shows the title.
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
+      const localisedActions = keybindingActions();
+      const keybindingContext = {
+        scope: 'table' as const,
+        platform,
+        runtime: attrs.runtime === 'http' ? ('browser' as const) : ('desktop' as const),
+      };
+      const footerBindings = footerFunctionKeyBindings(
+        localisedActions,
+        currentSettings?.keybindings ?? {},
+        keybindingContext,
+        (action) =>
+          evaluateActionAvailability(
+            action.id === 'core.edit' || action.id === 'core.view'
+              ? {
+                  ...action,
+                  contextRequirements: {
+                    ...action.contextRequirements,
+                    featureAvailable: true,
+                  },
+                }
+              : action,
+            actionCommandController.commandAvailabilityContext(),
+          ).available,
+        functionKeyModifiers,
+      );
+      const liveShortcuts = getLiveBindings(
+        localisedActions,
+        currentSettings?.keybindings ?? {},
+        keybindingContext,
+      );
+      const shortcutFor = (actionId: string): string | undefined =>
+        liveShortcuts.find((binding) => binding.actionId === actionId)?.shortcut;
       return m(
         '.fm-app-shell',
         {
@@ -3854,51 +3926,67 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ),
             ]),
-            tooltip(
-              t('shell', 'findFiles'),
-              m(
-                IconButton,
-                {
-                  disabled: activeDirectory() === undefined,
-                  'aria-label': t('shell', 'findFiles'),
-                  onclick: () => {
-                    findFilesController.openFindFiles();
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
+            m('.fm-search-controls', [
+              tooltip(
+                labelWithShortcut(t('shell', 'findFiles'), shortcutFor('core.findFiles')),
+                m(
+                  IconButton,
+                  {
+                    disabled: activeDirectory() === undefined,
+                    'aria-label': t('shell', 'findFiles'),
+                    onclick: () => {
+                      findFilesController.openFindFiles();
+                    },
                   },
-                },
-                searchIcon(),
+                  searchIcon(),
+                ),
               ),
-            ),
-            knowledgeSearchAvailable
-              ? tooltip(
-                  t('knowledgeSearch', 'openTitle'),
-                  m(
-                    IconButton,
-                    {
-                      className: 'fm-knowledge-search-trigger',
-                      'aria-label': t('knowledgeSearch', 'openTitle'),
-                      onclick: openKnowledgeSearch,
-                    },
-                    contentSearchIcon(),
-                  ),
-                )
-              : undefined,
-            semanticAssistantAvailable
-              ? tooltip(
-                  t('ragAsk', 'openAssistant'),
-                  m(
-                    IconButton,
-                    {
-                      className: 'fm-rag-ask-trigger',
-                      disabled: activeDirectory() === undefined,
-                      'aria-label': t('ragAsk', 'openAssistant'),
-                      onclick: openSemanticAssistant,
-                    },
-                    messageCircleIcon(),
-                  ),
-                )
-              : undefined,
+              knowledgeSearchAvailable
+                ? tooltip(
+                    labelWithShortcut(
+                      t('knowledgeSearch', 'openTitle'),
+                      shortcutFor('client.searchKnowledge'),
+                    ),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-knowledge-search-trigger',
+                        'aria-label': t('knowledgeSearch', 'openTitle'),
+                        onclick: openKnowledgeSearch,
+                      },
+                      contentSearchIcon(),
+                    ),
+                  )
+                : undefined,
+              semanticAssistantAvailable
+                ? tooltip(
+                    labelWithShortcut(
+                      t('ragAsk', 'openAssistant'),
+                      shortcutFor('client.semanticAssistant'),
+                    ),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-rag-ask-trigger',
+                        disabled: activeDirectory() === undefined,
+                        'aria-label': t('ragAsk', 'openAssistant'),
+                        onclick: openSemanticAssistant,
+                      },
+                      messageCircleIcon(),
+                    ),
+                  )
+                : undefined,
+            ]),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
-              t('shell', 'comparePanes'),
+              labelWithShortcut(t('shell', 'comparePanes'), shortcutFor('core.compareDirectories')),
               m(
                 IconButton,
                 {
@@ -3910,7 +3998,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             tooltip(
-              t('shell', 'commandPalette'),
+              labelWithShortcut(
+                t('shell', 'commandPalette'),
+                `${platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
+              ),
               m(
                 IconButton,
                 {
@@ -3924,6 +4015,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 commandIcon(),
               ),
             ),
+            m('.fm-toolbar-spacer', { 'aria-hidden': 'true' }),
             tooltip(
               t('shell', 'workspaceSwitcherLabel', { name: workspace?.name ?? t('shell', 'none') }),
               m(
@@ -4024,8 +4116,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ],
             ),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
-              t('shell', 'operationCentre'),
+              labelWithShortcut(t('shell', 'operationCentre'), 'Alt+Z'),
               m(
                 IconButton,
                 {
@@ -4039,75 +4135,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             tooltip(
-              t('shell', 'diagnostics'),
-              m(
-                IconButton,
-                {
-                  className: 'fm-diagnostics-button',
-                  'aria-label': t('shell', 'diagnostics'),
-                  onclick: () => {
-                    if (diagnosticsDisclosureElement === undefined) return;
-                    diagnosticsDisclosureElement.open = !diagnosticsDisclosureElement.open;
-                    diagnosticsDialogOpen = diagnosticsDisclosureElement.open;
-                    m.redraw();
-                  },
-                },
-                activityIcon(),
+              labelWithShortcut(
+                t('shell', 'openSettings'),
+                `${platform === 'macos' ? 'Cmd' : 'Ctrl'}+,`,
               ),
-            ),
-            m(
-              'details.fm-diagnostics-disclosure',
-              {
-                oncreate: ({ dom }) => {
-                  diagnosticsDisclosureElement = dom as HTMLDetailsElement;
-                },
-                onremove: () => {
-                  diagnosticsDisclosureElement = undefined;
-                },
-              },
-              [
-                m('summary.fm-disclosure-summary-hidden'),
-                m(
-                  '.fm-diagnostics-editor',
-                  {
-                    role: 'dialog',
-                    'aria-label': t('shell', 'systemDiagnostics'),
-                    onclick: (event: MouseEvent) => {
-                      if (event.target === event.currentTarget) {
-                        if (diagnosticsDisclosureElement !== undefined)
-                          diagnosticsDisclosureElement.open = false;
-                        diagnosticsDialogOpen = false;
-                      }
-                    },
-                  },
-                  [
-                    m('.fm-settings-editor-panel', [
-                      m('.fm-settings-editor-heading', [
-                        m('strong', t('shell', 'systemDiagnostics')),
-                        m(
-                          'button',
-                          {
-                            type: 'button',
-                            'aria-label': t('shell', 'closeDiagnostics'),
-                            onclick: () => {
-                              if (diagnosticsDisclosureElement !== undefined)
-                                diagnosticsDisclosureElement.open = false;
-                              diagnosticsDialogOpen = false;
-                            },
-                          },
-                          closeIcon(),
-                        ),
-                      ]),
-                      diagnosticsDialogOpen
-                        ? m(DiagnosticsViewComponent, { client: attrsClient })
-                        : undefined,
-                    ]),
-                  ],
-                ),
-              ],
-            ),
-            tooltip(
-              t('shell', 'openSettings'),
               m(
                 IconButton,
                 {
@@ -4115,6 +4146,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   'aria-label': t('shell', 'settings'),
                   onclick: () => {
                     if (settingsDisclosureElement === undefined) return;
+                    settingsInitialSection = 'appearance';
                     settingsDisclosureElement.open = !settingsDisclosureElement.open;
                     settingsDialogOpen = settingsDisclosureElement.open;
                     if (!settingsDialogOpen && currentSettings !== undefined) {
@@ -4180,6 +4212,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                           ? m(SettingsEditor, {
                               client: attrs.client,
                               settings: currentSettings,
+                              initialSection: settingsInitialSection,
                               ...(workspace === undefined
                                 ? {}
                                 : { activeWorkspaceId: workspace.id }),
@@ -4234,44 +4267,52 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               if (!treeSidebarOpen || treeRootLocation === undefined) return undefined;
               const treeRoot = treeRootLocation;
               const activeLocationUri = activeDirectory()?.location.uri;
-              return m('.fm-directory-tree-sidebar', [
-                m('.fm-directory-tree-header', [
-                  m('span', t('tree', 'directoryTree')),
-                  m(
-                    'button.fm-directory-tree-close',
-                    {
-                      type: 'button',
-                      'aria-label': t('tree', 'toggleSidebar'),
-                      onclick: toggleDirectoryTree,
+              return m.fragment({}, [
+                m('button.fm-directory-tree-backdrop', {
+                  type: 'button',
+                  tabindex: -1,
+                  'aria-hidden': 'true',
+                  onclick: toggleDirectoryTree,
+                }),
+                m('.fm-directory-tree-sidebar', [
+                  m('.fm-directory-tree-header', [
+                    m('span', t('tree', 'directoryTree')),
+                    m(
+                      'button.fm-directory-tree-close',
+                      {
+                        type: 'button',
+                        'aria-label': t('tree', 'toggleSidebar'),
+                        onclick: toggleDirectoryTree,
+                      },
+                      closeIcon({ size: 13 }),
+                    ),
+                  ]),
+                  m(DirectoryTree, {
+                    root: { location: treeRoot, name: treeRootName(treeRoot) },
+                    state: treeState,
+                    ...(activeLocationUri === undefined ? {} : { activeLocationUri }),
+                    onToggleExpand: (location: Location) => {
+                      toggleTreeNode(location);
+                      m.redraw();
                     },
-                    closeIcon({ size: 13 }),
-                  ),
+                    onActivate: (location: Location) => {
+                      const active = activeDirectory();
+                      if (active === undefined) return;
+                      void navigation?.navigate(active.paneId, location);
+                    },
+                    onTabOut: (direction) => {
+                      const paneOrder = workspace?.paneOrder;
+                      if (paneOrder === undefined || paneOrder.length === 0) return;
+                      const targetPaneId =
+                        direction === 1 ? paneOrder[0] : paneOrder[paneOrder.length - 1];
+                      if (targetPaneId !== undefined)
+                        globalKeydownHandlerContext.focusPane(targetPaneId);
+                    },
+                    registerFocus: (focus) => {
+                      focusDirectoryTree = focus;
+                    },
+                  } satisfies DirectoryTreeAttrs),
                 ]),
-                m(DirectoryTree, {
-                  root: { location: treeRoot, name: treeRootName(treeRoot) },
-                  state: treeState,
-                  ...(activeLocationUri === undefined ? {} : { activeLocationUri }),
-                  onToggleExpand: (location: Location) => {
-                    toggleTreeNode(location);
-                    m.redraw();
-                  },
-                  onActivate: (location: Location) => {
-                    const active = activeDirectory();
-                    if (active === undefined) return;
-                    void navigation?.navigate(active.paneId, location);
-                  },
-                  onTabOut: (direction) => {
-                    const paneOrder = workspace?.paneOrder;
-                    if (paneOrder === undefined || paneOrder.length === 0) return;
-                    const targetPaneId =
-                      direction === 1 ? paneOrder[0] : paneOrder[paneOrder.length - 1];
-                    if (targetPaneId !== undefined)
-                      globalKeydownHandlerContext.focusPane(targetPaneId);
-                  },
-                  registerFocus: (focus) => {
-                    focusDirectoryTree = focus;
-                  },
-                } satisfies DirectoryTreeAttrs),
               ]);
             })(),
             workspace === undefined
@@ -4514,41 +4555,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),
           m(
             '.fm-function-key-bar',
-            footerFunctionKeyBindings(
-              localisedRegisteredActions(),
-              currentSettings?.keybindings ?? {},
-              {
-                scope: 'table',
-                platform,
-                runtime: attrs.runtime === 'http' ? 'browser' : 'desktop',
-              },
-              (action) =>
-                evaluateActionAvailability(
-                  action.id === 'core.edit' || action.id === 'core.view'
-                    ? {
-                        ...action,
-                        contextRequirements: {
-                          ...action.contextRequirements,
-                          featureAvailable: true,
-                        },
-                      }
-                    : action,
-                  actionCommandController.commandAvailabilityContext(),
-                ).available,
-              functionKeyModifiers,
-            ).map((binding) =>
-              m(
-                'span.fm-function-key',
-                {
-                  key: binding.actionId,
-                  role: 'button',
-                  tabindex: binding.actionAvailable ? 0 : -1,
-                  'aria-disabled': binding.actionAvailable ? undefined : 'true',
-                  onclick: binding.actionAvailable
-                    ? () => invokeFunctionKeyShortcut(binding.shortcut)
-                    : undefined,
-                },
-                `${binding.key} ${functionKeyTitle(binding)}`,
+            m(
+              '.fm-function-key-list',
+              footerBindings.map((binding) =>
+                m(
+                  'span.fm-function-key',
+                  {
+                    key: binding.actionId,
+                    role: 'button',
+                    tabindex: binding.actionAvailable ? 0 : -1,
+                    'aria-disabled': binding.actionAvailable ? undefined : 'true',
+                    onclick: binding.actionAvailable
+                      ? () => invokeFunctionKeyShortcut(binding.shortcut)
+                      : undefined,
+                  },
+                  `${binding.key} ${functionKeyTitle(binding)}`,
+                ),
               ),
             ),
           ),

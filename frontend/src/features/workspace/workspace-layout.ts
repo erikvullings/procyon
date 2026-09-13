@@ -1,4 +1,5 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
+import { t } from '../../i18n';
 import { dispatchKeybinding, type KeybindingRuntime } from '../../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -47,6 +48,7 @@ import type { SelectionAction } from '../selection/selection';
 import './workspace-layout.css';
 
 const MIN_PANE_WIDTH = 240;
+const CENTER_SNAP_THRESHOLD = 0.02;
 
 /** Directory-session and view data supplied for one workspace pane. */
 export interface WorkspacePaneContent {
@@ -198,7 +200,11 @@ export function constrainSplitRatio(
     return 0.5;
   }
   const minimumRatio = Math.min(minimumPaneWidth / containerWidth, 0.5);
-  return Math.min(1 - minimumRatio, Math.max(minimumRatio, pointerOffset / containerWidth));
+  const constrained = Math.min(
+    1 - minimumRatio,
+    Math.max(minimumRatio, pointerOffset / containerWidth),
+  );
+  return Math.abs(constrained - 0.5) <= CENTER_SNAP_THRESHOLD ? 0.5 : constrained;
 }
 
 export function pathFromUri(uri: string): string {
@@ -291,6 +297,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
   let initialFocusFrame: number | undefined;
   let pendingLayoutUpdate: { attrs: WorkspaceLayoutViewAttrs; layout: WorkspaceLayout } | undefined;
   let stopDragging: (() => void) | undefined;
+  let draggingSplitPath: string | undefined;
   /** Latest render's attrs, for `registerFocusPane`'s callback (invoked outside any render). */
   let latestAttrs: WorkspaceLayoutViewAttrs | undefined;
   function replaceSplit(
@@ -339,11 +346,16 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     event: PointerEvent,
     attrs: WorkspaceLayoutViewAttrs,
     split: Extract<WorkspaceLayout, { type: 'split' }>,
+    path: string,
   ): void {
     event.preventDefault();
     stopDragging?.();
+    draggingSplitPath = path;
+    (event.currentTarget as HTMLElement).focus();
+    m.redraw();
     const container = (event.currentTarget as HTMLElement).parentElement;
     if (container === null) {
+      draggingSplitPath = undefined;
       return;
     }
     const move = (moveEvent: PointerEvent): void => {
@@ -361,10 +373,39 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     stopDragging = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      draggingSplitPath = undefined;
       stopDragging = undefined;
+      m.redraw();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
+  }
+
+  function resizeSplitFromKeyboard(
+    event: KeyboardEvent,
+    attrs: WorkspaceLayoutViewAttrs,
+    split: Extract<WorkspaceLayout, { type: 'split' }>,
+  ): void {
+    const horizontal = split.axis === 'horizontal';
+    const decrease = horizontal ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
+    const increase = horizontal ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
+    if (!decrease && !increase) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const container = (event.currentTarget as HTMLElement).parentElement;
+    const bounds = container?.getBoundingClientRect();
+    const extent = horizontal ? bounds?.width : bounds?.height;
+    const step = event.shiftKey ? 0.05 : 0.01;
+    const requestedRatio = split.ratio + (increase ? step : -step);
+    const ratio =
+      extent !== undefined && extent > 0
+        ? constrainSplitRatio(requestedRatio * extent, extent)
+        : Math.min(0.95, Math.max(0.05, requestedRatio));
+    const nextLayout = replaceSplit(displayedLayout ?? attrs.workspace.layout, split, ratio);
+    displayedLayout = nextLayout;
+    scheduleLayoutUpdate(attrs, nextLayout);
+    m.redraw();
   }
 
   function focusAndActivate(attrs: WorkspaceLayoutViewAttrs, paneId: PaneId): void {
@@ -397,6 +438,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         key: paneId,
         'data-pane-id': paneId,
         'data-active': String(active),
+        role: 'region',
+        'aria-label': tabTitle,
+        ...(active ? { 'aria-current': 'true' } : {}),
         tabindex: active ? 0 : -1,
         oncreate: ({ dom }) => paneElements.set(paneId, dom as HTMLElement),
         // Guard against removal firing *after* a replacement node's `oncreate` (possible since
@@ -674,6 +718,8 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     if (layout.type === 'pane') {
       return renderPane(attrs, layout.paneId);
     }
+    const firstPercentage = Math.round(layout.ratio * 100);
+    const splitLabel = `${firstPercentage}% / ${100 - firstPercentage}%`;
     return m(
       '.fm-workspace-split',
       {
@@ -687,6 +733,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         // `applyRemoteWorkspaceSnapshot`).
         key: path,
         class: `fm-workspace-split--${layout.axis}`,
+        'data-contains-active': String(
+          paneIdsInLayout(layout).includes(attrs.workspace.activePaneId),
+        ),
         style:
           layout.axis === 'horizontal'
             ? { gridTemplateColumns: `${layout.ratio}fr auto ${1 - layout.ratio}fr` }
@@ -698,11 +747,48 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           key: `${path}.splitter`,
           role: 'separator',
           'aria-orientation': layout.axis === 'horizontal' ? 'vertical' : 'horizontal',
+          'aria-valuemin': 0,
+          'aria-valuemax': 100,
+          'aria-valuenow': firstPercentage,
+          'aria-valuetext': splitLabel,
+          'data-dragging': String(draggingSplitPath === path),
+          'data-split-label': splitLabel,
           tabindex: 0,
-          onpointerdown: (event: PointerEvent) => beginSplitDrag(event, attrs, layout),
+          onkeydown: (event: KeyboardEvent) => resizeSplitFromKeyboard(event, attrs, layout),
+          onpointerdown: (event: PointerEvent) => beginSplitDrag(event, attrs, layout, path),
         }),
         renderLayout(attrs, layout.second, `${path}.second`),
       ],
+    );
+  }
+
+  function renderCompactPaneSwitcher(attrs: WorkspaceLayoutViewAttrs): m.Children {
+    const paneIds = paneIdsInLayout(attrs.workspace.layout);
+    if (paneIds.length < 2) return undefined;
+    return m(
+      'nav.fm-compact-pane-switcher',
+      { key: 'compact-pane-switcher', 'aria-label': t('action', 'switchPane') },
+      paneIds.map((paneId, index) => {
+        const pane = attrs.workspace.panesById[paneId];
+        const tab = pane?.tabsById[pane.activeTabId];
+        if (pane === undefined || tab === undefined) return undefined;
+        const content = attrs.paneContent(paneId);
+        const title = connectionRootTitle(tab.location, tab.title, content.connections);
+        const side = t('pane', index === 0 ? 'leftPane' : 'rightPane');
+        const active = attrs.workspace.activePaneId === paneId;
+        return m(
+          'button.fm-compact-pane-switch',
+          {
+            key: paneId,
+            type: 'button',
+            'data-active': String(active),
+            'aria-pressed': String(active),
+            'aria-label': `${side}: ${title}`,
+            onclick: () => attrs.onActivatePane(paneId),
+          },
+          [m('span.fm-compact-pane-side', side), m('span.fm-compact-pane-title', { title }, title)],
+        );
+      }),
     );
   }
 
@@ -737,6 +823,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         displayedLayout = sourceLayout;
       }
       return m('.fm-workspace-layout', { 'aria-label': `${attrs.workspace.name} workspace` }, [
+        renderCompactPaneSwitcher(attrs),
         renderLayout(attrs, displayedLayout ?? attrs.workspace.layout),
       ]);
     },

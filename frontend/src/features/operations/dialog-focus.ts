@@ -11,6 +11,16 @@ export function createDialogFocusCycle(initialFocus: string) {
   let dialog: HTMLElement | null = null;
 
   const onKeydown = (event: KeyboardEvent) => {
+    if (
+      event.key === 'Enter' &&
+      document.activeElement instanceof HTMLButtonElement &&
+      dialog?.contains(document.activeElement)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      document.activeElement.click();
+      return;
+    }
     if (event.key !== 'Tab' || dialog === null) return;
     const controls = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
       (element) => element.getAttribute('aria-hidden') !== 'true',

@@ -68,7 +68,7 @@
 .fm-disk-usage-label {
   fill: var(--fm-disk-usage-label);
   font-family: var(--fm-font-family);
-  font-size: 12px;
+  font-size: var(--fm-type-label);
   font-weight: 650;
   pointer-events: none;
   letter-spacing: 0.01em;

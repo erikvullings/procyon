@@ -62,7 +62,7 @@
   padding: 0.1rem 0.5rem;
   background: var(--fm-hover);
   color: var(--fm-text-muted);
-  font-size: 0.75em;
+  font-size: var(--fm-type-label);
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -70,14 +70,14 @@
 .fm-connections-status-label {
   flex: 0 0 auto;
   color: var(--fm-text-muted);
-  font-size: 0.85em;
+  font-size: var(--fm-type-label);
 }
 
 .fm-onedrive-identity,
 .fm-onedrive-authorization-status {
   flex: 1 0 100%;
   color: var(--fm-text-muted);
-  font-size: 0.85em;
+  font-size: var(--fm-type-label);
 }
 
 .fm-onedrive-help {

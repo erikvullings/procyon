@@ -170,6 +170,12 @@ The diagnostics view (`frontend/src/features/diagnostics/`) provides a user-frie
   - Display operation queue metrics
   - **Copy for Bug Report** button: exports redacted diagnostics to clipboard
 
+At frontend startup, Procyon records uncaught JavaScript errors, unhandled promise rejections, and
+explicit `console.error` calls through `FileManagerClient`. Both runtime hosts redact and retain
+these reports in the same 50-entry diagnostics buffer. Tauri additionally writes them to its
+structured rolling log, so an error remains inspectable after **View > Reload** restarts the
+webview.
+
 ### Usage
 
 ```typescript
@@ -229,11 +235,12 @@ async fn test_with_logging() {
 
 ### Rolling File Log
 
-When running in desktop mode, logs can be written to a rolling file:
+Desktop mode writes a rolling daily log by default under the operating system's application-data
+directory:
 
-```bash
-RUST_LOG=info fm-server 2>&1 | tee logs/fm-server-$(date +%Y%m%d-%H%M%S).log
-```
+- macOS: `~/Library/Application Support/fm/fm-desktop.log.YYYY-MM-DD`
+- Windows: `%APPDATA%\fm\fm-desktop.log.YYYY-MM-DD`
+- Linux: `~/.local/share/fm/fm-desktop.log.YYYY-MM-DD`
 
 ### Environment Setup
 
@@ -241,7 +248,7 @@ Add to `.env` or launch script:
 
 ```bash
 export RUST_LOG=info,fm_server=debug
-export FM_LOG_DIR=$HOME/.file-manager/logs
+export FM_LOG_FILE=$HOME/.local/share/fm/fm-desktop.log
 ```
 
 ## Browser Mode (Server)

@@ -35,14 +35,9 @@ function itemCount(count: number): string {
 }
 
 function transferDescription(request: OperationConfirmationRequest): m.Children {
-  const kind = request.kind === 'move' ? 'confirmMoveSummary' : 'confirmCopySummary';
   const destination = request.destination;
   if (destination === undefined) return undefined;
   return m('.fm-operation-confirmation-description', [
-    m(
-      'p.fm-operation-confirmation-summary',
-      t('operation', kind, { items: itemCount(request.sources.length) }),
-    ),
     m('.fm-operation-confirmation-route', [
       m('.fm-operation-confirmation-endpoint.fm-operation-confirmation-source', [
         m('span.fm-operation-confirmation-label', t('operation', 'source')),
@@ -76,19 +71,27 @@ export const OperationConfirmationDialog: FactoryComponent<
     view: ({ attrs }) => {
       const request = attrs.request;
       const kind = request?.kind ?? 'copy';
-      const description =
+      const title =
         request === undefined
-          ? undefined
-          : kind === 'trash'
-            ? t('operation', 'confirmTrashSummary', {
+          ? t('operation', kind)
+          : t(
+              'operation',
+              kind === 'trash'
+                ? 'confirmTrashSummary'
+                : kind === 'move'
+                  ? 'confirmMoveSummary'
+                  : 'confirmCopySummary',
+              {
                 items: itemCount(request.sources.length),
-              })
-            : transferDescription(request);
+              },
+            );
+      const description =
+        request === undefined || kind === 'trash' ? undefined : transferDescription(request);
       return m(AlertDialog, {
         className: 'fm-operation-confirmation-modal',
-        title: t('operation', kind),
+        title,
         description:
-          description === undefined
+          request === undefined
             ? undefined
             : m(
                 '.fm-operation-confirmation-focus-scope',

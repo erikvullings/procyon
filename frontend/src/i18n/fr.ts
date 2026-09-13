@@ -90,6 +90,8 @@ export const fr = {
     readOnly: 'lecture seule',
   },
   pane: {
+    leftPane: 'Gauche',
+    rightPane: 'Droite',
     favourites: 'Favoris',
     addCurrentLocation: "Ajouter l'emplacement actuel",
     favouriteName: 'Nom du favori',
@@ -333,6 +335,9 @@ export const fr = {
     modifiedTimeUnavailable: 'Date de modification indisponible',
     source: 'Source',
     destination: 'Destination',
+    conflictRecommendation:
+      "Choix le plus sûr : renommer l'élément entrant pour conserver les deux.",
+    failureRecovery: "Vérifiez l'accès et l'espace disponible, puis relancez l'opération.",
     createDirectory: 'Créer un répertoire',
     createDirectoryName: 'Nom du répertoire',
     createFile: 'Créer un fichier',

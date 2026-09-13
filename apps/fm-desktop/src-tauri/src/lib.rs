@@ -31,6 +31,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// service).
 pub struct AppState {
     pub(crate) service: Arc<FileManagerService>,
+    pub(crate) diagnostic_errors: fm_application::diagnostics::DiagnosticErrorBuffer,
     pub(crate) rag_cancellations: Mutex<HashMap<uuid::Uuid, Option<CancellationToken>>>,
     pub(crate) semantic_managed_components: bool,
     pub(crate) semantic_reindex_pending_marker: Option<std::path::PathBuf>,
@@ -169,6 +170,7 @@ pub fn run() {
             let semantic_ocr_shutdown = CancellationToken::new();
             app.manage(AppState {
                 service: Arc::clone(&service),
+                diagnostic_errors: fm_application::diagnostics::DiagnosticErrorBuffer::default(),
                 rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
@@ -460,6 +462,7 @@ pub fn run() {
             commands::set_caption_colours,
             commands::set_window_decorations,
             commands::get_diagnostics,
+            commands::record_frontend_diagnostic,
             commands::subscribe_native_menu_actions,
             commands::initialize_window_handle,
             commands::set_native_menu,
@@ -586,6 +589,7 @@ mod tests {
                         fm_application::semantic_library::SemanticLibraryService::deterministic_mock(),
                     ),
                 ),
+                diagnostic_errors: fm_application::diagnostics::DiagnosticErrorBuffer::default(),
                 rag_cancellations: Mutex::new(HashMap::new()),
                 semantic_managed_components: semantic_developer_bundle,
                 semantic_reindex_pending_marker: None,
@@ -763,6 +767,7 @@ mod tests {
                 commands::cancel_onedrive_authorization,
                 commands::set_window_decorations,
                 commands::get_diagnostics,
+                commands::record_frontend_diagnostic,
                 commands::subscribe_native_menu_actions,
                 commands::initialize_window_handle,
                 commands::set_native_menu,
@@ -817,6 +822,65 @@ mod tests {
 
         assert_eq!(response.runtime, RuntimeKindDto::Tauri);
         app.state::<AppState>();
+    }
+
+    #[test]
+    fn frontend_diagnostics_survive_in_the_tauri_host_buffer() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "record_frontend_diagnostic".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::Json(serde_json::json!({
+                    "error": {
+                        "timestamp": "2026-09-13T19:36:45Z",
+                        "message": "failed at /Users/alice/project/src/main.ts",
+                        "code": "FRONTEND_UNCAUGHT_ERROR",
+                        "context": "token: secret-value"
+                    }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("frontend diagnostic command must be registered");
+
+        let diagnostics = get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "get_diagnostics".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: local_protocol_url(),
+                body: InvokeBody::default(),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("diagnostics command must be registered")
+        .deserialize::<fm_transport_dto::DiagnosticsDto>()
+        .expect("diagnostics response must deserialize");
+
+        assert_eq!(diagnostics.recent_errors.len(), 1);
+        assert!(
+            !diagnostics.recent_errors[0]
+                .message
+                .contains("/Users/alice")
+        );
+        assert!(
+            !diagnostics.recent_errors[0]
+                .context
+                .as_deref()
+                .unwrap_or_default()
+                .contains("secret-value")
+        );
     }
 
     /// Every knowledge command must be registered and usable on the desktop

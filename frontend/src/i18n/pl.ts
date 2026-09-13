@@ -89,6 +89,8 @@ export const pl = {
     readOnly: 'tylko do odczytu',
   },
   pane: {
+    leftPane: 'Lewy',
+    rightPane: 'Prawy',
     favourites: 'Ulubione',
     addCurrentLocation: 'Dodaj bieżącą lokalizację',
     favouriteName: 'Nazwa ulubionego',
@@ -330,6 +332,9 @@ export const pl = {
     modifiedTimeUnavailable: 'Czas modyfikacji niedostępny',
     source: 'Źródło',
     destination: 'Cel',
+    conflictRecommendation:
+      'Najbezpieczniejszy wybór: zmień nazwę elementu przychodzącego, aby zachować oba.',
+    failureRecovery: 'Sprawdź dostęp i wolne miejsce, a następnie uruchom operację ponownie.',
     createDirectory: 'Utwórz katalog',
     createDirectoryName: 'Nazwa katalogu',
     createFile: 'Utwórz plik',

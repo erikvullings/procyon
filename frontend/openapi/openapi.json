@@ -1325,6 +1325,27 @@
         }
       }
     },
+    "/api/v1/diagnostics/frontend-errors": {
+      "post": {
+        "summary": "Retains one redacted frontend error for the diagnostics view and structured host log.",
+        "operationId": "recordFrontendDiagnostic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticErrorDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Frontend diagnostic recorded"
+          }
+        }
+      }
+    },
     "/api/v1/directories/activity": {
       "post": {
         "summary": "Marks whether a pane is currently in the foreground, so a poll-tracked\ndirectory watch (SFTP, FTP, ...) can poll less often while backgrounded\n(task 0109).",

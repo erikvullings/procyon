@@ -89,6 +89,8 @@ export const it = {
     readOnly: 'sola lettura',
   },
   pane: {
+    leftPane: 'Sinistra',
+    rightPane: 'Destra',
     favourites: 'Preferiti',
     addCurrentLocation: 'Aggiungi posizione corrente',
     favouriteName: 'Nome del preferito',
@@ -330,6 +332,10 @@ export const it = {
     modifiedTimeUnavailable: 'Ora di modifica non disponibile',
     source: 'Origine',
     destination: 'Destinazione',
+    conflictRecommendation:
+      "Scelta più sicura: rinomina l'elemento in arrivo per conservarli entrambi.",
+    failureRecovery:
+      "Controlla l'accesso e lo spazio disponibile, quindi esegui di nuovo l'operazione.",
     createDirectory: 'Crea cartella',
     createDirectoryName: 'Nome della cartella',
     createFile: 'Crea file',

@@ -16,6 +16,18 @@ const fileViewerCss = readFileSync(
   join(process.cwd(), 'src/features/preview/file-viewer.css'),
   'utf8',
 );
+const connectionEditorCss = readFileSync(
+  join(process.cwd(), 'src/features/connections/connection-editor.css'),
+  'utf8',
+);
+const diagnosticsCss = readFileSync(
+  join(process.cwd(), 'src/features/diagnostics/diagnostics-view.css'),
+  'utf8',
+);
+const sessionTokenGateCss = readFileSync(
+  join(process.cwd(), 'src/app/session-token-gate.css'),
+  'utf8',
+);
 
 const REQUIRED_TOKENS = [
   '--fm-background',
@@ -37,6 +49,10 @@ const REQUIRED_TOKENS = [
   '--fm-header-height',
   '--fm-font-family',
   '--fm-font-size',
+  '--fm-type-body',
+  '--fm-type-heading',
+  '--fm-type-label',
+  '--fm-type-title',
   '--fm-radius',
   '--fm-shadow',
 ] as const;
@@ -134,6 +150,20 @@ describe('theme stylesheet', () => {
     }
   });
 
+  it('uses the shared compact type floor for functional labels', () => {
+    expect(themeCss).toContain('--fm-type-label: max(0.92rem, 12px)');
+    for (const stylesheet of [
+      themeCss,
+      materializedCss,
+      directoryTableCss,
+      connectionEditorCss,
+      diagnosticsCss,
+      sessionTokenGateCss,
+    ]) {
+      expect(stylesheet).not.toMatch(/font-size:\s*0\.75(?:r?em)/);
+    }
+  });
+
   it('provides explicit light and dark themes plus a system-dark fallback', () => {
     expect(themeCss).toMatch(/:root,\s*\[data-theme=["']light["']\]/);
     expect(themeCss).toMatch(/\[data-theme=["']dark["']\]/);
@@ -197,6 +227,18 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toContain(
       '[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.active',
     );
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell\s+input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-list\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-table\s+td\s*\{[^}]*padding:\s*0\.2rem\s+0\.4rem/s,
+    );
     expect(materializedCss).toContain('position: static');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');
     expect(materializedCss).toMatch(
@@ -259,7 +301,10 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*18%/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s+:is\([^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\)\s*\{[^}]*color:\s*inherit/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*42%/s,
     );
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
@@ -272,7 +317,10 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-cursor-row-background\)/s,
     );
     expect(themeCss).toMatch(
-      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\.fm-selected-row\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within[^}]*\.fm-selected-row:not\(\.fm-cursor-row\)\s*\{[^}]*background:/s,
     );
   });
 
@@ -290,6 +338,22 @@ describe('theme stylesheet', () => {
     expect(tab).toContain('height: var(--fm-header-height)');
   });
 
+  it('aligns breadcrumb text and pane actions to one compact row geometry', () => {
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb,\s*\.fm-path-editor\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-tab-new[^)]*\.fm-pane-view-mode[^)]*\.fm-pane-tab-favourites[^)]*\)\s*\{[^}]*width:\s*var\(--fm-row-height\) !important[^}]*height:\s*var\(--fm-row-height\) !important/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-view-mode[^)]*\)\s+\.fm-icon\s*\{[^}]*width:\s*16px[^}]*height:\s*16px[^}]*transform:\s*none/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-segment,\s*\.fm-breadcrumb-scheme,\s*\.fm-path-input\s*\{[^}]*transform:\s*translateY\(-2px\)/s,
+    );
+    expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);
+  });
+
   it('keeps the command toolbar at header height with muted icons', () => {
     const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
     const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
@@ -298,6 +362,21 @@ describe('theme stylesheet', () => {
     expect(toolbar).toContain('min-height: var(--fm-header-height)');
     expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
     expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
+  });
+
+  it('uses full touch targets for the command toolbar on coarse pointers', () => {
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar\s*\{[^}]*height:\s*44px[^}]*overflow-x:\s*auto[^}]*--mm-control-height:\s*44px/s,
+    );
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar button\s*\{[^}]*width:\s*44px !important[^}]*height:\s*44px !important[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s,
+    );
+  });
+
+  it('gives conflict resolution more width without overflowing narrow viewports', () => {
+    expect(themeCss).toMatch(
+      /\.modal\.fm-conflict-dialog\s*\{[^}]*width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-height:\s*calc\(100vh - 2rem\) !important/s,
+    );
   });
 
   it('does not highlight directory rows on mouse hover', () => {
@@ -414,6 +493,15 @@ describe('theme stylesheet', () => {
     expect(menuRule).toContain('width: min(18rem, calc(100vw - 0.5rem))');
     expect(menuRule).not.toMatch(/\bmin-width:/);
     expect(menuRule).not.toMatch(/\bmax-width:/);
+  });
+
+  it('keeps the add-favourite controls compact', () => {
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add\s*>\s*input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add-button\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
   });
 
   it('allows a longer favourites list before scrolling', () => {

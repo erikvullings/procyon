@@ -60,6 +60,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -203,7 +204,7 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
-import { defaultKnowledgeSearchOptions } from '../../models';
+import { defaultKnowledgeSearchOptions, sanitizeFrontendDiagnostic } from '../../models';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import {
@@ -294,6 +295,7 @@ export type MockClientMethod =
   | 'resumeSemanticLibrary'
   | 'updateSemanticEligibilityOverrides'
   | 'getDiagnostics'
+  | 'recordFrontendDiagnostic'
   | 'getSystemLocations'
   | 'getVolumes'
   | 'getHomeDirectory'
@@ -1262,6 +1264,7 @@ function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatu
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
+  private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
 
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
@@ -2378,7 +2381,7 @@ export class MockFileManagerClient implements FileManagerClient {
         statusMessage: 'Mock',
       },
       loadedPlugins: [],
-      recentErrors: [],
+      recentErrors: structuredClone(this.frontendDiagnostics),
       operationQueueStatus: {
         queuedCount: 0,
         runningCount: 0,
@@ -2387,6 +2390,13 @@ export class MockFileManagerClient implements FileManagerClient {
         totalPendingSize: 0,
       },
     }));
+  }
+
+  recordFrontendDiagnostic(error: FrontendDiagnostic, signal?: AbortSignal): Promise<void> {
+    return this.perform('recordFrontendDiagnostic', signal, () => {
+      this.frontendDiagnostics.unshift(sanitizeFrontendDiagnostic(error));
+      this.frontendDiagnostics.splice(50);
+    });
   }
 
   getVolumes(signal?: AbortSignal): Promise<Volume[]> {

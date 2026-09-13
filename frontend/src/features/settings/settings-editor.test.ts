@@ -137,6 +137,17 @@ describe('SettingsEditor', () => {
     expect(root.querySelector('input[type="number"]')).toBeNull();
   });
 
+  it('shows diagnostics in its own settings section', async () => {
+    mountEditor();
+
+    openSection('Diagnostics');
+
+    expect(root.querySelector<HTMLElement>('.fm-settings-editor-body')?.dataset.section).toBe(
+      'diagnostics',
+    );
+    await vi.waitFor(() => expect(root.querySelector('.diagnostics-view')).not.toBeNull());
+  });
+
   it('shows only semantic activation until components are installed', async () => {
     const { client } = mountEditor();
     const status = vi.spyOn(client, 'getSemanticComponentStatus');

@@ -165,6 +165,10 @@
   font: inherit;
 }
 
+.fm-app-shell input[type="text"]:not(.browser-default) {
+  padding-inline: 0.55rem;
+}
+
 .fm-app-shell .input-field input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
@@ -281,7 +285,7 @@
 }
 
 .fm-app-shell .switch label span:not(.lever) {
-  font-size: 0.92rem;
+  font-size: var(--fm-type-label);
   line-height: 1.15;
 }
 
@@ -376,7 +380,7 @@
 
 .fm-app-shell .modal.fm-find-files-modal .modal-content h4 {
   margin: 0 2rem 0.5rem 0 !important;
-  font-size: 1rem !important;
+  font-size: var(--fm-type-title) !important;
   font-weight: 600;
   line-height: var(--fm-row-height);
 }
@@ -405,7 +409,17 @@
   min-height: var(--fm-row-height);
 }
 
+.fm-app-shell .select-wrapper .dropdown-content li {
+  display: flex;
+  align-items: stretch;
+}
+
 .fm-app-shell .dropdown-content li > span {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--fm-row-height);
   padding: 0.25rem 0.5rem;
   color: var(--fm-text);
   font-size: inherit;
@@ -475,7 +489,7 @@
 
 .fm-app-shell .fm-settings-section-heading {
   margin: 0.55rem 0 0.15rem;
-  font-size: 1rem;
+  font-size: var(--fm-type-title);
   line-height: 1.2;
 }
 
@@ -484,7 +498,7 @@
 }
 
 .fm-app-shell .fm-settings-editor-heading strong {
-  font-size: 1.1rem;
+  font-size: var(--fm-type-heading);
   line-height: 1.2;
 }
 
@@ -502,6 +516,6 @@
 .fm-app-shell .input-field .helper-text {
   min-height: 0;
   margin-top: 0.15rem;
-  font-size: 0.75rem;
+  font-size: var(--fm-type-label);
   line-height: 1.2;
 }

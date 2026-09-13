@@ -14,6 +14,7 @@ mod comparison_mapping;
 mod connection_dto;
 mod connection_facade;
 mod content_streaming;
+pub mod diagnostics;
 mod directory;
 mod disk_usage;
 mod disk_usage_coordinator;

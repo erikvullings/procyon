@@ -87,6 +87,8 @@ use crate::{
     terminal::{TerminalError, TerminalEvent, TerminalRegistry},
 };
 
+const RELOAD_WEBVIEW_MENU_ID: &str = "ui.reloadWebview";
+
 /// Opens (or reuses) an embedded terminal session for `location` - a local
 /// PTY for a `file:` location, or a remote PTY over SSH (task 0105) for a
 /// `sftp:` one. A local location whose native path cannot be resolved falls
@@ -429,7 +431,7 @@ pub(crate) async fn get_diagnostics(
                 error_count: 0,
             })
             .collect(),
-        recent_errors: Vec::<DiagnosticErrorDto>::new(),
+        recent_errors: state.diagnostic_errors.recent(),
         operation_queue_status: OperationQueueStatusDto {
             queued_count,
             running_count,
@@ -438,6 +440,19 @@ pub(crate) async fn get_diagnostics(
             total_pending_size: 0,
         },
     })
+}
+
+/// Retains one redacted frontend error and writes it to the rolling desktop log.
+#[tauri::command]
+pub(crate) fn record_frontend_diagnostic(state: State<'_, AppState>, error: DiagnosticErrorDto) {
+    let error = state.diagnostic_errors.record_frontend(error);
+    tracing::error!(
+        target: "frontend",
+        code = %error.code,
+        context = error.context.as_deref().unwrap_or_default(),
+        message = %error.message,
+        "frontend diagnostic"
+    );
 }
 
 /// Converts a `#rgb`/`#rrggbb` CSS colour into a Win32 `COLORREF` (`0x00bbggrr`).
@@ -2972,19 +2987,19 @@ pub(crate) fn subscribe_native_menu_actions(
 }
 
 /// Builds the callback [`set_native_menu`] hands to
-/// `FileManagerService::install_native_menu`: forwards each click's action
-/// id over whichever channel is currently subscribed, or does nothing if
-/// the frontend hasn't subscribed yet - installing a menu before that
-/// happens still succeeds, it just has nowhere to report clicks to yet.
+/// `FileManagerService::install_native_menu`: handles host recovery actions
+/// directly and forwards ordinary action ids over the current frontend channel.
 fn native_menu_action_callback(
     channel: Option<Channel<NativeMenuActionEvent>>,
+    reload_webview: Arc<dyn Fn() + Send + Sync>,
 ) -> Arc<dyn Fn(String) + Send + Sync> {
-    match channel {
-        Some(channel) => Arc::new(move |id: String| {
+    Arc::new(move |id: String| {
+        if id == RELOAD_WEBVIEW_MENU_ID {
+            reload_webview();
+        } else if let Some(channel) = &channel {
             let _ = channel.send(NativeMenuActionEvent { id });
-        }),
-        None => Arc::new(|_id: String| {}),
-    }
+        }
+    })
 }
 
 /// Initializes the platform-specific window handle for native integrations
@@ -3039,7 +3054,9 @@ pub(crate) async fn set_native_menu<R: Runtime>(
     spec: fm_domain::NativeMenuSpec,
 ) -> Result<(), ApplicationErrorDto> {
     let service = Arc::clone(&state.service);
-    let on_action = native_menu_action_callback(registry.get());
+    let reload_app = app.clone();
+    let reload_webview = Arc::new(move || reload_focused_webview(&reload_app));
+    let on_action = native_menu_action_callback(registry.get(), reload_webview);
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let result = service.install_native_menu(&spec, on_action);
@@ -3050,6 +3067,19 @@ pub(crate) async fn set_native_menu<R: Runtime>(
         .await
         .map_err(|_| fm_application::ApplicationError::Internal.into_dto(Uuid::new_v4()))?
         .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+fn reload_focused_webview<R: Runtime>(app: &AppHandle<R>) {
+    let windows = app.webview_windows();
+    let window = windows
+        .values()
+        .find(|window| window.is_focused().unwrap_or(false))
+        .or_else(|| windows.values().next());
+    if let Some(window) = window
+        && let Err(error) = window.reload()
+    {
+        tracing::error!(%error, window = window.label(), "failed to reload webview");
+    }
 }
 
 #[cfg(test)]
@@ -3152,7 +3182,7 @@ mod tests {
             Ok(())
         });
 
-        let callback = native_menu_action_callback(Some(channel));
+        let callback = native_menu_action_callback(Some(channel), Arc::new(|| {}));
         callback("core.preferences".to_owned());
 
         assert_eq!(
@@ -3165,8 +3195,24 @@ mod tests {
     fn native_menu_action_callback_is_a_no_op_without_a_subscription() {
         // Installing a menu before the frontend subscribes must still succeed silently rather
         // than panicking or erroring - there is simply nowhere to report clicks to yet.
-        let callback = native_menu_action_callback(None);
+        let callback = native_menu_action_callback(None, Arc::new(|| {}));
         callback("core.copy".to_owned());
+    }
+
+    #[test]
+    fn native_menu_reload_is_handled_by_the_host_without_frontend_subscription() {
+        let reloads = Arc::new(Mutex::new(0));
+        let reloads_for_callback = Arc::clone(&reloads);
+        let callback = native_menu_action_callback(
+            None,
+            Arc::new(move || {
+                *reloads_for_callback.lock().expect("reload lock") += 1;
+            }),
+        );
+
+        callback(RELOAD_WEBVIEW_MENU_ID.to_owned());
+
+        assert_eq!(*reloads.lock().expect("reload lock"), 1);
     }
 
     #[test]

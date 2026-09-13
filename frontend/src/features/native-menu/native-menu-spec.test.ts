@@ -214,6 +214,18 @@ describe('buildNativeMenuSpec', () => {
     ]);
   });
 
+  it('offers a host-level Reload action in the View menu', () => {
+    const viewMenu = buildNativeMenuSpec(inputs()).menus.find((menu) => menu.title === 'View');
+    expect(viewMenu?.items[0]).toEqual({
+      kind: 'action',
+      id: 'ui.reloadWebview',
+      title: 'Reload',
+      shortcut: { key: 'r', meta: true },
+      enabled: true,
+      checked: false,
+    });
+  });
+
   it('uses native responder-chain Copy and Paste roles on macOS', () => {
     const editMenu = buildNativeMenuSpec(
       inputs({
@@ -242,6 +254,8 @@ describe('buildNativeMenuSpec', () => {
       (menu) => menu.title === 'View',
     );
     expect(viewMenu?.items.map((item) => (item.kind === 'action' ? item.id : item.kind))).toEqual([
+      'ui.reloadWebview',
+      'separator',
       'core.sortByName',
       'core.sortByExtension',
       'core.sortByDate',

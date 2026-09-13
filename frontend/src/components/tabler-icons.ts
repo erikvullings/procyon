@@ -143,6 +143,14 @@ export const listIcon = trustedStrokeIcon(
   'fm-icon-list',
 );
 
+/** "adjustments-horizontal" — grouped tools and utilities. */
+export const adjustmentsHorizontalIcon = trustedStrokeIcon(
+  '<path d="M4 6l5 0" /><path d="M15 6l5 0" /><path d="M9 4l0 4" />' +
+    '<path d="M4 12l9 0" /><path d="M17 12l3 0" /><path d="M13 10l0 4" />' +
+    '<path d="M4 18l3 0" /><path d="M11 18l9 0" /><path d="M7 16l0 4" />',
+  'fm-icon-adjustments-horizontal',
+);
+
 /** "menu-2" — compact document-navigation menu. */
 export const menuIcon = trustedStrokeIcon(
   '<path d="M4 6l16 0" /><path d="M4 12l16 0" /><path d="M4 18l16 0" />',

@@ -88,6 +88,8 @@ export const en = {
     readOnly: 'read-only',
   },
   pane: {
+    leftPane: 'Left',
+    rightPane: 'Right',
     favourites: 'Favourites',
     addCurrentLocation: 'Add current location',
     favouriteName: 'Favourite name',
@@ -332,6 +334,8 @@ export const en = {
     modifiedTimeUnavailable: 'Modified time unavailable',
     source: 'Source',
     destination: 'Destination',
+    conflictRecommendation: 'Safest choice: rename the incoming item to keep both.',
+    failureRecovery: 'Check access and available space, then run the operation again.',
     createDirectory: 'Create directory',
     createDirectoryName: 'Directory name',
     createFile: 'Create file',
