@@ -146,7 +146,7 @@ export function getLiveBindings(
   });
 }
 
-const FOOTER_SHORTCUT_PATTERN = /^F(?:2|3|4|5|6|7|8)$/u;
+const FOOTER_SHORTCUT_PATTERN = /^F(?:1|2|3|4|5|6|7|8)$/u;
 
 /** One entry in the footer function-key hint bar. */
 export interface FunctionKeyBinding {
@@ -164,7 +164,7 @@ export interface FunctionKeyModifiers {
 }
 
 /**
- * Lists the footer's function-key hints (F2-F8) for the active modifier
+ * Lists the footer's function-key hints (F1-F8) for the active modifier
  * layer, sorted in ascending F-key order; `actionAvailable` says whether
  * the bound action can run right
  * now (see `evaluateActionAvailability`). Actions that are permanently

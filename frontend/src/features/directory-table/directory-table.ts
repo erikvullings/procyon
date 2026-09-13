@@ -418,14 +418,20 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
     label: t('table', 'ext'),
     cellClass: 'fm-directory-type',
     minWidth: 48,
-    render: typeLabel,
+    render: (entry) => {
+      const value = typeLabel(entry);
+      return value === '' ? '' : m('span', { title: value }, value);
+    },
   },
   {
     id: 'core.size',
     label: t('table', 'size'),
     cellClass: 'fm-directory-size',
-    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) =>
-      isParentEntry(entry.id) || entry.kind === 'symlink' ? '' : formatEntrySize(entry, settings),
+    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) => {
+      if (isParentEntry(entry.id) || entry.kind === 'symlink') return '';
+      const value = formatEntrySize(entry, settings);
+      return m('span', { title: value }, value);
+    },
   },
   {
     id: 'core.gitStatus',
@@ -450,8 +456,18 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
     id: 'core.modified',
     label: t('table', 'modified'),
     cellClass: 'fm-directory-modified',
-    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) =>
-      isParentEntry(entry.id) ? '' : formatEntryModifiedAt(entry.modifiedAt, settings),
+    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) => {
+      if (isParentEntry(entry.id)) return '';
+      const value = formatEntryModifiedAt(entry.modifiedAt, settings);
+      const compactValue = formatEntryModifiedAt(entry.modifiedAt, {
+        ...settings,
+        dateFormat: 'short',
+      });
+      return m('span', { title: value }, [
+        m('span.fm-directory-modified-full', value),
+        m('span.fm-directory-modified-compact', { 'aria-hidden': 'true' }, compactValue),
+      ]);
+    },
   },
 ];
 
@@ -460,8 +476,11 @@ export const SAMPLE_FILE_AGE_COLUMN: DirectoryColumnDescriptor = {
   id: fileAgeColumn.id,
   label: t('table', 'age'),
   cellClass: 'fm-directory-file-age',
-  render: (entry, _nameMatchPrefix, _formatSettings, now = Date.now()) =>
-    isParentEntry(entry.id) ? '' : fileAgeColumn.display(entry.modifiedAt, now),
+  render: (entry, _nameMatchPrefix, _formatSettings, now = Date.now()) => {
+    if (isParentEntry(entry.id)) return '';
+    const value = fileAgeColumn.display(entry.modifiedAt, now);
+    return m('span', { title: value }, value);
+  },
 };
 
 function stateView(attrs: DirectoryTableAttrs, rowHeight: number): m.Children | undefined {
@@ -549,7 +568,13 @@ function headerView(
 ): m.Children {
   return m(
     '.fm-directory-header',
-    { role: 'row', style: { gridTemplateColumns: gridTemplate(columns, widths) } },
+    {
+      role: 'row',
+      style: {
+        gridTemplateColumns: gridTemplate(columns, widths),
+        ...directoryGridStyle(columns),
+      },
+    },
     columns.map((column) =>
       m(
         `button.fm-directory-cell.${column.cellClass}`,
@@ -640,6 +665,23 @@ function gridTemplate(
       return `${Math.max(column.minWidth ?? MIN_COLUMN_WIDTH, width)}px`;
     })
     .join(' ');
+}
+
+function compactGridTemplate(columns: readonly DirectoryColumnDescriptor[]): string {
+  const fallbacks: Record<string, string> = {
+    'core.name': 'minmax(7rem, 1fr)',
+    'core.extension': 'minmax(2.5rem, 0.18fr)',
+    'core.size': 'minmax(3.75rem, 0.22fr)',
+    'core.gitStatus': 'minmax(1.75rem, 0.1fr)',
+    'core.modified': 'minmax(6.5rem, 0.42fr)',
+  };
+  return columns.map((column) => fallbacks[column.id] ?? 'minmax(4rem, 0.2fr)').join(' ');
+}
+
+function directoryGridStyle(columns: readonly DirectoryColumnDescriptor[]): {
+  '--fm-compact-directory-grid-template': string;
+} {
+  return { '--fm-compact-directory-grid-template': compactGridTemplate(columns) };
 }
 
 /**
@@ -922,6 +964,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   height: `${rowHeight}px`,
                   transform: `translateY(${window.offsetTop + (index - window.start) * rowHeight}px)`,
                   gridTemplateColumns: gridTemplate(columns, columnWidths),
+                  ...directoryGridStyle(columns),
                 },
               },
               columns.map((column) =>
@@ -995,6 +1038,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 height: `${fillerHeight}px`,
                 transform: `translateY(${fillerTop}px)`,
                 gridTemplateColumns: gridTemplate(columns, columnWidths),
+                ...directoryGridStyle(columns),
               },
             }),
           );

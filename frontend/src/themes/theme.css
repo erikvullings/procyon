@@ -782,6 +782,11 @@ main.fm-workspace {
   flex: 1 1 auto;
 }
 
+.fm-search-controls {
+  display: flex;
+  align-items: center;
+}
+
 .fm-workspace-toolbar .fm-icon {
   color: var(--fm-text-muted);
 }
@@ -3016,9 +3021,51 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-variant-numeric: tabular-nums;
 }
 
+.fm-function-key-list {
+  display: contents;
+}
+
 .fm-function-key[aria-disabled="true"] {
   color: var(--fm-text-muted);
   opacity: 0.5;
+}
+
+@media (max-width: 720px) {
+  .fm-function-key-bar {
+    justify-content: stretch;
+    padding: 3px 0.4rem;
+  }
+
+  .fm-function-key-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.3rem;
+    width: 100%;
+  }
+
+  .fm-function-key {
+    display: grid;
+    align-items: center;
+    min-width: 0;
+    min-height: 2rem;
+    padding-inline: 0.35rem;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fm-function-key:hover,
+  .fm-function-key:focus-visible {
+    background: var(--fm-hover);
+  }
+}
+
+@media (max-width: 720px) and (pointer: coarse) {
+  .fm-function-key {
+    min-width: 0;
+    min-height: 44px;
+  }
 }
 
 /* The filled/tinted treatment requires the pane to both be `activePaneId` (`data-active`) AND
@@ -3028,8 +3075,20 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * further down, which is unconditional on focus - the same "not focused, but still showing
  * where the cursor is" treatment used for the grid view's cursor tile. */
 .fm-pane[data-active="true"]:focus-within .fm-selected-row {
-  background: color-mix(in srgb, var(--fm-selection) 18%, transparent);
+  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
   color: var(--fm-selected-row-text);
+}
+
+.fm-pane[data-active="true"]:focus-within
+  .fm-selected-row
+  :is(
+    .fm-entry-name,
+    .fm-directory-type,
+    .fm-directory-size,
+    .fm-directory-modified,
+    .fm-directory-file-age
+  ) {
+  color: inherit;
 }
 
 .fm-pane[data-active="true"]:focus-within .fm-cursor-row:not(.fm-selected-row) {
@@ -3038,22 +3097,27 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 /* The cursor row always gets a distinctive outline (Marta convention), regardless of whether
-   it's also marked - so the cursor position stays visible without the tinted cursor background
-   above washing out the amber "selected" text color a marked row needs to keep. Unlike the fill
-   rules above, this one is deliberately not gated on `:focus-within`: it is also what keeps the
-   cursor position visible in a pane that lost DOM focus to the directory-tree sidebar. */
+   it's also marked. Unlike the fill rules above, this one is deliberately not gated on
+   `:focus-within`, so the cursor position stays visible when focus moves to the directory tree. */
 .fm-pane[data-active="true"] .fm-cursor-row {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
 }
 
-[data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row {
-  background: color-mix(in srgb, var(--fm-background) 55%, var(--fm-surface));
+[data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {
+  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .fm-pane[data-active="true"]:focus-within .fm-selected-row {
-    background: color-mix(in srgb, var(--fm-background) 55%, var(--fm-surface));
+  :root:not([data-theme])
+    .fm-pane[data-active="true"]:focus-within
+    .fm-selected-row:not(.fm-cursor-row) {
+    background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
   }
+}
+
+.fm-pane[data-active="true"]:focus-within .fm-cursor-row.fm-selected-row {
+  background-color: var(--fm-cursor-row-background);
+  color: var(--fm-cursor-row-text);
 }
 
 .fm-plugin-list {

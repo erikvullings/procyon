@@ -409,7 +409,17 @@
   min-height: var(--fm-row-height);
 }
 
+.fm-app-shell .select-wrapper .dropdown-content li {
+  display: flex;
+  align-items: stretch;
+}
+
 .fm-app-shell .dropdown-content li > span {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--fm-row-height);
   padding: 0.25rem 0.5rem;
   color: var(--fm-text);
   font-size: inherit;

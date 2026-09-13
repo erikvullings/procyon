@@ -301,7 +301,10 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*18%/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s+:is\([^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\)\s*\{[^}]*color:\s*inherit/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*42%/s,
     );
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
@@ -314,7 +317,10 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-cursor-row-background\)/s,
     );
     expect(themeCss).toMatch(
-      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\.fm-selected-row\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within[^}]*\.fm-selected-row:not\(\.fm-cursor-row\)\s*\{[^}]*background:/s,
     );
   });
 

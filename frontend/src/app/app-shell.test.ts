@@ -184,6 +184,17 @@ async function openWorkspaceSwitcher(container: HTMLElement = root): Promise<voi
   await vi.waitFor(() => expect(container.querySelector('.fm-workspace-switcher')).not.toBeNull());
 }
 
+async function toolbarButton(
+  label: string,
+  container: HTMLElement = root,
+): Promise<HTMLButtonElement> {
+  return vi.waitFor(() => {
+    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    expect(button).not.toBeNull();
+    return button as HTMLButtonElement;
+  });
+}
+
 async function openOperationCentre(container: HTMLElement = root): Promise<void> {
   await vi.waitFor(() =>
     expect(
@@ -1087,7 +1098,8 @@ describe('AppShell', () => {
     const toolbar = root.querySelector('.fm-workspace-toolbar');
     expect(toolbar).not.toBeNull();
     expect(root.querySelector('.fm-navigation-controls')).not.toBeNull();
-    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(2);
+    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(3);
+    expect(toolbar?.querySelector('.fm-search-controls')).not.toBeNull();
     expect(toolbar?.querySelector('.fm-toolbar-spacer')).not.toBeNull();
     expect(
       toolbar
@@ -1099,9 +1111,40 @@ describe('AppShell', () => {
         ?.querySelector('.fm-toolbar-spacer')
         ?.compareDocumentPosition(toolbar.querySelector('.fm-settings-button') as Node),
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(toolbar?.querySelector('.fm-toolbar-tools-button')).toBeNull();
+    expect(toolbar?.querySelector('.fm-knowledge-search-trigger')).not.toBeNull();
+    expect(toolbar?.querySelector('.fm-diagnostics-button')).toBeNull();
+    expect(
+      toolbar?.querySelector('.fm-command-palette-trigger')?.closest<HTMLElement>('.fm-tooltip')
+        ?.dataset.tooltip,
+    ).toMatch(/Command palette \((?:Ctrl|Cmd)\+P\)/);
+    expect(
+      toolbar?.querySelector('.fm-settings-button')?.closest<HTMLElement>('.fm-tooltip')?.dataset
+        .tooltip,
+    ).toMatch(/Open settings \((?:Ctrl|Cmd)\+,\)/);
     expect(root.querySelector('.fm-operation-centre')).toBeNull();
     expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F5 Copy');
     expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F6 Move');
+  });
+
+  it('keeps every function-key action available in the compact command grid', async () => {
+    mountShell('mock');
+
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-workspace-pane')).toHaveLength(2));
+    expect(
+      [...root.querySelectorAll('.fm-function-key-list .fm-function-key')].map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual([
+      'F1 Help',
+      'F2 Rename',
+      'F3 View',
+      'F4 Edit',
+      'F5 Copy',
+      'F6 Move',
+      'F7 New folder',
+      'F8 Delete',
+    ]);
   });
 
   it('toggles and persists the hidden operation centre from the toolbar and Alt+Z', async () => {
@@ -3189,11 +3232,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
     // Ask needs a generation profile; knowledge search must not.
     expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
-    const trigger = await vi.waitFor(() => {
-      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Semantic Search…"]');
-      expect(button).not.toBeNull();
-      return button as HTMLButtonElement;
-    });
+    const trigger = await toolbarButton('Semantic Search…');
 
     trigger.click();
 
@@ -3224,13 +3263,7 @@ describe('AppShell', () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client }),
     });
-    const trigger = await vi.waitFor(() => {
-      const candidate = root.querySelector<HTMLButtonElement>(
-        'button[aria-label="Semantic Search…"]',
-      );
-      expect(candidate).not.toBeNull();
-      return candidate as HTMLButtonElement;
-    });
+    const trigger = await toolbarButton('Semantic Search…');
     trigger.click();
     const subject = await vi.waitFor(() => {
       const candidate = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
@@ -3342,11 +3375,7 @@ describe('AppShell', () => {
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
-    await vi.waitFor(() => {
-      const button = root.querySelector<HTMLButtonElement>('button[aria-label="Ask your files"]');
-      expect(button).not.toBeNull();
-      expect(button?.textContent).toBe('');
-    });
+    expect(await toolbarButton('Ask your files')).toBeInstanceOf(HTMLButtonElement);
 
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() =>

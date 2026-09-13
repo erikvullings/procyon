@@ -219,6 +219,10 @@
   );
 }
 
+.fm-directory-row:not(.fm-selected-row):not(.fm-cursor-row):hover {
+  background: var(--fm-hover);
+}
+
 .fm-directory-cell {
   overflow: hidden;
   box-sizing: border-box;
@@ -228,9 +232,20 @@
 }
 
 .fm-directory-name {
+  position: relative;
   display: flex;
+  align-self: stretch;
   align-items: center;
   gap: 0.375rem;
+}
+
+.fm-selected-row .fm-directory-name::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 2px;
+  width: 2px;
+  background: var(--fm-selected-row-text);
+  content: "";
 }
 
 .fm-entry-icon {
@@ -242,6 +257,8 @@
   overflow: hidden;
   flex: 1 1 auto;
   min-width: 0;
+  color: var(--fm-text);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -306,8 +323,19 @@ img.fm-native-entry-icon {
 }
 
 .fm-directory-size {
+  color: var(--fm-text-muted);
   text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+.fm-directory-type,
+.fm-directory-modified,
+.fm-directory-file-age {
+  color: var(--fm-text-muted);
+}
+
+.fm-directory-modified-compact {
+  display: none;
 }
 
 .fm-directory-git-status {
@@ -344,6 +372,33 @@ img.fm-native-entry-icon {
  * formatted string's digit count varies (e.g. "Aug 6" vs "Aug 16"). */
 .fm-directory-modified {
   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .fm-directory-header,
+  .fm-directory-row {
+    grid-template-columns: var(--fm-compact-directory-grid-template) !important;
+  }
+
+  .fm-directory-cell {
+    padding-inline: 0.3rem;
+  }
+
+  .fm-directory-header {
+    font-size: 0.84em;
+  }
+
+  .fm-directory-row {
+    font-size: 0.9em;
+  }
+
+  .fm-directory-modified-full {
+    display: none;
+  }
+
+  .fm-directory-modified-compact {
+    display: inline;
+  }
 }
 
 .fm-hidden-entry {
