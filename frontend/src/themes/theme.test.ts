@@ -16,6 +16,18 @@ const fileViewerCss = readFileSync(
   join(process.cwd(), 'src/features/preview/file-viewer.css'),
   'utf8',
 );
+const connectionEditorCss = readFileSync(
+  join(process.cwd(), 'src/features/connections/connection-editor.css'),
+  'utf8',
+);
+const diagnosticsCss = readFileSync(
+  join(process.cwd(), 'src/features/diagnostics/diagnostics-view.css'),
+  'utf8',
+);
+const sessionTokenGateCss = readFileSync(
+  join(process.cwd(), 'src/app/session-token-gate.css'),
+  'utf8',
+);
 
 const REQUIRED_TOKENS = [
   '--fm-background',
@@ -37,6 +49,10 @@ const REQUIRED_TOKENS = [
   '--fm-header-height',
   '--fm-font-family',
   '--fm-font-size',
+  '--fm-type-body',
+  '--fm-type-heading',
+  '--fm-type-label',
+  '--fm-type-title',
   '--fm-radius',
   '--fm-shadow',
 ] as const;
@@ -110,6 +126,20 @@ describe('theme stylesheet', () => {
   it('defines every file-manager design token', () => {
     for (const token of REQUIRED_TOKENS) {
       expect(themeCss).toContain(`${token}:`);
+    }
+  });
+
+  it('uses the shared compact type floor for functional labels', () => {
+    expect(themeCss).toContain('--fm-type-label: max(0.92rem, 12px)');
+    for (const stylesheet of [
+      themeCss,
+      materializedCss,
+      directoryTableCss,
+      connectionEditorCss,
+      diagnosticsCss,
+      sessionTokenGateCss,
+    ]) {
+      expect(stylesheet).not.toMatch(/font-size:\s*0\.75(?:r?em)/);
     }
   });
 

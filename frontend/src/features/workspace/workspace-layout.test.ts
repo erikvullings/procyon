@@ -193,6 +193,24 @@ afterEach(() => {
 });
 
 describe('WorkspaceLayoutView pane focus', () => {
+  it('offers an explicit compact-mode switcher for the left and right panes', () => {
+    const onActivatePane = vi.fn<(paneId: PaneId) => void>();
+    mount(attrs({ onActivatePane }));
+
+    const switcher = root.querySelector<HTMLElement>('.fm-compact-pane-switcher');
+    const buttons = [...(switcher?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+
+    expect(switcher?.getAttribute('aria-label')).toBe('Switch pane');
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Left: Home',
+      'Right: Downloads',
+    ]);
+    expect(buttons.map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+
+    buttons[1]?.click();
+    expect(onActivatePane).toHaveBeenCalledWith('right');
+  });
+
   it('uses the saved connection name for a remote root title', () => {
     const workspace = projection();
     const left = workspace.panesById.left;

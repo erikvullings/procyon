@@ -19,19 +19,19 @@
 
 .fm-session-token-gate__card h1 {
   margin: 0 0 0.5rem;
-  font-size: 1.25rem;
+  font-size: var(--fm-type-heading);
 }
 
 .fm-session-token-gate__card p {
   margin: 0 0 1rem;
   color: var(--fm-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--fm-type-body);
 }
 
 .fm-session-token-gate__error {
   margin: -0.5rem 0 1rem;
   color: var(--fm-error);
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-session-token-gate__actions {

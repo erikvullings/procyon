@@ -234,6 +234,46 @@ describe('OperationCentre states', () => {
     ).not.toBeNull();
   });
 
+  it('announces failures with retained transfer context and a recovery path', () => {
+    const failed: Operation = {
+      ...operation('failed'),
+      sources: [
+        {
+          id: 'report',
+          location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+        },
+      ],
+    };
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: {
+            ...createOperationsState([failed]),
+            failuresById: {
+              failed: {
+                code: 'permissionDenied',
+                message: 'Could not copy report.pdf.',
+                details: { reason: 'Permission denied' },
+              },
+            },
+          },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const failure = root.querySelector('[data-operation-id="failed"] .fm-operation-failure');
+    expect(failure?.getAttribute('role')).toBe('alert');
+    expect(failure?.textContent).toContain('Could not copy report.pdf.');
+    expect(failure?.textContent).toContain('file:///Documents/report.pdf');
+    expect(failure?.textContent).toContain('file:///Archive');
+    expect(failure?.textContent).toContain(
+      'Check access and available space, then run the operation again.',
+    );
+  });
+
   it('makes partial results explicit for a cancelled operation', () => {
     m.mount(root, {
       view: () =>

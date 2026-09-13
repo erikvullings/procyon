@@ -398,7 +398,7 @@ img.fm-native-entry-icon {
   padding: 0 0.4rem;
   border: 1px solid var(--fm-border);
   border-radius: 0.25rem;
-  font-size: 0.75rem;
+  font-size: var(--fm-type-label);
   line-height: 1.4;
   white-space: nowrap;
 }

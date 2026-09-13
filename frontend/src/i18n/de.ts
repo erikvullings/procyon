@@ -91,6 +91,8 @@ export const de = {
     readOnly: 'schreibgeschützt',
   },
   pane: {
+    leftPane: 'Links',
+    rightPane: 'Rechts',
     favourites: 'Favoriten',
     addCurrentLocation: 'Aktuellen Ort hinzufügen',
     favouriteName: 'Favoritenname',
@@ -331,6 +333,10 @@ export const de = {
     resolveConflict: 'Konflikt lösen',
     source: 'Quelle',
     destination: 'Ziel',
+    conflictRecommendation:
+      'Sicherste Wahl: Das eingehende Element umbenennen, um beide zu behalten.',
+    failureRecovery:
+      'Zugriff und verfügbaren Speicherplatz prüfen, dann den Vorgang erneut ausführen.',
     createDirectory: 'Verzeichnis erstellen',
     createDirectoryName: 'Verzeichnisname',
     createFile: 'Datei erstellen',

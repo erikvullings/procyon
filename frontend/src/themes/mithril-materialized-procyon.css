@@ -247,7 +247,7 @@
 }
 
 .fm-app-shell .switch label span:not(.lever) {
-  font-size: 0.92rem;
+  font-size: var(--fm-type-label);
   line-height: 1.15;
 }
 
@@ -327,7 +327,7 @@
 
 .fm-app-shell .modal.fm-find-files-modal .modal-content h4 {
   margin: 0 2rem 0.5rem 0 !important;
-  font-size: 1rem !important;
+  font-size: var(--fm-type-title) !important;
   font-weight: 600;
   line-height: var(--fm-row-height);
 }
@@ -426,7 +426,7 @@
 
 .fm-app-shell .fm-settings-section-heading {
   margin: 0.55rem 0 0.15rem;
-  font-size: 1rem;
+  font-size: var(--fm-type-title);
   line-height: 1.2;
 }
 
@@ -435,7 +435,7 @@
 }
 
 .fm-app-shell .fm-settings-editor-heading strong {
-  font-size: 1.1rem;
+  font-size: var(--fm-type-heading);
   line-height: 1.2;
 }
 
@@ -453,6 +453,6 @@
 .fm-app-shell .input-field .helper-text {
   min-height: 0;
   margin-top: 0.15rem;
-  font-size: 0.75rem;
+  font-size: var(--fm-type-label);
   line-height: 1.2;
 }

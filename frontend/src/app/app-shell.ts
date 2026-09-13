@@ -2105,6 +2105,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (treeSidebarOpen) {
       syncDirectoryTreeToActiveLocation();
       requestAnimationFrame(() => focusDirectoryTree?.());
+    } else {
+      requestAnimationFrame(() => {
+        const activePaneId = workspace?.activePaneId;
+        if (activePaneId !== undefined) focusPane?.(activePaneId);
+      });
     }
   }
 
@@ -3835,6 +3840,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ),
             ]),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
               t('shell', 'findFiles'),
               m(
@@ -3905,6 +3914,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 commandIcon(),
               ),
             ),
+            m('.fm-toolbar-spacer', { 'aria-hidden': 'true' }),
             tooltip(
               t('shell', 'workspaceSwitcherLabel', { name: workspace?.name ?? t('shell', 'none') }),
               m(
@@ -4005,6 +4015,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ],
             ),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
               t('shell', 'operationCentre'),
               m(
@@ -4215,44 +4229,52 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               if (!treeSidebarOpen || treeRootLocation === undefined) return undefined;
               const treeRoot = treeRootLocation;
               const activeLocationUri = activeDirectory()?.location.uri;
-              return m('.fm-directory-tree-sidebar', [
-                m('.fm-directory-tree-header', [
-                  m('span', t('tree', 'directoryTree')),
-                  m(
-                    'button.fm-directory-tree-close',
-                    {
-                      type: 'button',
-                      'aria-label': t('tree', 'toggleSidebar'),
-                      onclick: toggleDirectoryTree,
+              return m.fragment({}, [
+                m('button.fm-directory-tree-backdrop', {
+                  type: 'button',
+                  tabindex: -1,
+                  'aria-hidden': 'true',
+                  onclick: toggleDirectoryTree,
+                }),
+                m('.fm-directory-tree-sidebar', [
+                  m('.fm-directory-tree-header', [
+                    m('span', t('tree', 'directoryTree')),
+                    m(
+                      'button.fm-directory-tree-close',
+                      {
+                        type: 'button',
+                        'aria-label': t('tree', 'toggleSidebar'),
+                        onclick: toggleDirectoryTree,
+                      },
+                      closeIcon({ size: 13 }),
+                    ),
+                  ]),
+                  m(DirectoryTree, {
+                    root: { location: treeRoot, name: treeRootName(treeRoot) },
+                    state: treeState,
+                    ...(activeLocationUri === undefined ? {} : { activeLocationUri }),
+                    onToggleExpand: (location: Location) => {
+                      toggleTreeNode(location);
+                      m.redraw();
                     },
-                    closeIcon({ size: 13 }),
-                  ),
+                    onActivate: (location: Location) => {
+                      const active = activeDirectory();
+                      if (active === undefined) return;
+                      void navigation?.navigate(active.paneId, location);
+                    },
+                    onTabOut: (direction) => {
+                      const paneOrder = workspace?.paneOrder;
+                      if (paneOrder === undefined || paneOrder.length === 0) return;
+                      const targetPaneId =
+                        direction === 1 ? paneOrder[0] : paneOrder[paneOrder.length - 1];
+                      if (targetPaneId !== undefined)
+                        globalKeydownHandlerContext.focusPane(targetPaneId);
+                    },
+                    registerFocus: (focus) => {
+                      focusDirectoryTree = focus;
+                    },
+                  } satisfies DirectoryTreeAttrs),
                 ]),
-                m(DirectoryTree, {
-                  root: { location: treeRoot, name: treeRootName(treeRoot) },
-                  state: treeState,
-                  ...(activeLocationUri === undefined ? {} : { activeLocationUri }),
-                  onToggleExpand: (location: Location) => {
-                    toggleTreeNode(location);
-                    m.redraw();
-                  },
-                  onActivate: (location: Location) => {
-                    const active = activeDirectory();
-                    if (active === undefined) return;
-                    void navigation?.navigate(active.paneId, location);
-                  },
-                  onTabOut: (direction) => {
-                    const paneOrder = workspace?.paneOrder;
-                    if (paneOrder === undefined || paneOrder.length === 0) return;
-                    const targetPaneId =
-                      direction === 1 ? paneOrder[0] : paneOrder[paneOrder.length - 1];
-                    if (targetPaneId !== undefined)
-                      globalKeydownHandlerContext.focusPane(targetPaneId);
-                  },
-                  registerFocus: (focus) => {
-                    focusDirectoryTree = focus;
-                  },
-                } satisfies DirectoryTreeAttrs),
               ]);
             })(),
             workspace === undefined

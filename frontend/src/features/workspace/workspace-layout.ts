@@ -1,4 +1,5 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
+import { t } from '../../i18n';
 import { dispatchKeybinding, type KeybindingRuntime } from '../../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -690,6 +691,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         // `applyRemoteWorkspaceSnapshot`).
         key: path,
         class: `fm-workspace-split--${layout.axis}`,
+        'data-contains-active': String(
+          paneIdsInLayout(layout).includes(attrs.workspace.activePaneId),
+        ),
         style:
           layout.axis === 'horizontal'
             ? { gridTemplateColumns: `${layout.ratio}fr auto ${1 - layout.ratio}fr` }
@@ -706,6 +710,36 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         }),
         renderLayout(attrs, layout.second, `${path}.second`),
       ],
+    );
+  }
+
+  function renderCompactPaneSwitcher(attrs: WorkspaceLayoutViewAttrs): m.Children {
+    const paneIds = paneIdsInLayout(attrs.workspace.layout);
+    if (paneIds.length < 2) return undefined;
+    return m(
+      'nav.fm-compact-pane-switcher',
+      { key: 'compact-pane-switcher', 'aria-label': t('action', 'switchPane') },
+      paneIds.map((paneId, index) => {
+        const pane = attrs.workspace.panesById[paneId];
+        const tab = pane?.tabsById[pane.activeTabId];
+        if (pane === undefined || tab === undefined) return undefined;
+        const content = attrs.paneContent(paneId);
+        const title = connectionRootTitle(tab.location, tab.title, content.connections);
+        const side = t('pane', index === 0 ? 'leftPane' : 'rightPane');
+        const active = attrs.workspace.activePaneId === paneId;
+        return m(
+          'button.fm-compact-pane-switch',
+          {
+            key: paneId,
+            type: 'button',
+            'data-active': String(active),
+            'aria-pressed': String(active),
+            'aria-label': `${side}: ${title}`,
+            onclick: () => attrs.onActivatePane(paneId),
+          },
+          [m('span.fm-compact-pane-side', side), m('span.fm-compact-pane-title', { title }, title)],
+        );
+      }),
     );
   }
 
@@ -740,6 +774,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         displayedLayout = sourceLayout;
       }
       return m('.fm-workspace-layout', { 'aria-label': `${attrs.workspace.name} workspace` }, [
+        renderCompactPaneSwitcher(attrs),
         renderLayout(attrs, displayedLayout ?? attrs.workspace.layout),
       ]);
     },

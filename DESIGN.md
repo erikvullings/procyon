@@ -154,10 +154,10 @@ The palette is a low-chroma blue-gray field with precise blue interaction signal
 **Character:** The primary type is compact, neutral, and highly legible at small sizes. Monospace is functional rather than decorative: use it for terminals, code, checksums, and aligned technical values, not for general application chrome.
 
 ### Hierarchy
-- **Headline** (600, 1.05rem, 1.2): Dialog titles and the highest local heading. Procyon has no oversized application display tier.
-- **Title** (600, 13px, 1.2): Active tabs, pane titles, table headings, and compact section titles.
-- **Body** (400, 13px, 1.35): Default controls, file metadata, settings copy, and operational messages.
-- **Label** (400, 0.82rem, 1.15): Static field labels and secondary control text, using muted ink.
+- **Headline** (600, `var(--fm-type-heading)` / 1.05rem, 1.2): Dialog titles and the highest local heading. Procyon has no oversized application display tier.
+- **Title** (600, `var(--fm-type-title)` / 1rem, 1.2): Active tabs, pane titles, table headings, and compact section titles.
+- **Body** (400, `var(--fm-type-body)` / 1rem, 1.35): Default controls, file metadata, settings copy, and operational messages.
+- **Label** (400, `var(--fm-type-label)` / max(0.92rem, 12px), 1.15): Static field labels and secondary control text, using muted ink. The 12px floor keeps functional text legible under the compact root font setting.
 - **Mono** (400, 0.85rem, 1.35): Terminal content, source text, hashes, and technical identifiers.
 
 ### Named Rules

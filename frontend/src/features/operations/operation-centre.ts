@@ -349,8 +349,26 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                       ]),
                   failure === undefined
                     ? undefined
-                    : m('.fm-operation-failure', [
-                        m('span', failure.message),
+                    : m('.fm-operation-failure', { role: 'alert' }, [
+                        m('strong.fm-operation-failure-message', failure.message),
+                        m('dl.fm-operation-failure-context', [
+                          operation.sources.length === 0
+                            ? undefined
+                            : [
+                                m('dt', t('operation', 'source')),
+                                m(
+                                  'dd',
+                                  operation.sources.map((source) => source.location.uri).join(', '),
+                                ),
+                              ],
+                          operation.destination === undefined
+                            ? undefined
+                            : [
+                                m('dt', t('operation', 'destination')),
+                                m('dd', operation.destination.uri),
+                              ],
+                        ]),
+                        m('p.fm-operation-failure-recovery', t('operation', 'failureRecovery')),
                         m('details', [
                           m('summary', t('button', 'details')),
                           m(

@@ -359,6 +359,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => {
       expect(root.querySelector('.fm-directory-tree')).not.toBeNull();
     });
+    expect(root.querySelector('.fm-directory-tree-backdrop')).not.toBeNull();
     // The active pane's current location (mock:///) is the tree's root itself here, so only the
     // root row is shown until it is expanded (lazy expansion) - it must be selected, though.
     expect(root.querySelector('.fm-directory-tree .fm-tree-row-selected')).not.toBeNull();
@@ -387,6 +388,15 @@ describe('AppShell', () => {
     root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
     m.redraw.sync();
     expect(root.querySelector('.fm-directory-tree')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(activePane));
+
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-directory-tree')).not.toBeNull());
+    root.querySelector<HTMLElement>('.fm-directory-tree-backdrop')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-directory-tree')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(activePane));
   });
 
   it('leaves the synthetic ".." row unfocused when entering an empty directory', async () => {
@@ -1074,8 +1084,21 @@ describe('AppShell', () => {
 
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-workspace-pane')).toHaveLength(2));
     expect(root.querySelector('.fm-app-bar')).toBeNull();
-    expect(root.querySelector('.fm-workspace-toolbar')).not.toBeNull();
+    const toolbar = root.querySelector('.fm-workspace-toolbar');
+    expect(toolbar).not.toBeNull();
     expect(root.querySelector('.fm-navigation-controls')).not.toBeNull();
+    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(2);
+    expect(toolbar?.querySelector('.fm-toolbar-spacer')).not.toBeNull();
+    expect(
+      toolbar
+        ?.querySelector('.fm-command-palette-trigger')
+        ?.compareDocumentPosition(toolbar.querySelector('.fm-toolbar-spacer') as Node),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      toolbar
+        ?.querySelector('.fm-toolbar-spacer')
+        ?.compareDocumentPosition(toolbar.querySelector('.fm-settings-button') as Node),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(root.querySelector('.fm-operation-centre')).toBeNull();
     expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F5 Copy');
     expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F6 Move');

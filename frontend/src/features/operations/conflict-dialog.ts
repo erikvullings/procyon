@@ -49,6 +49,8 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         title: t('operation', 'resolveConflict'),
         className: 'fm-conflict-dialog',
         isOpen: true,
+        role: 'alertdialog',
+        initialFocus: '.fm-conflict-recommended',
         showCloseButton: false,
         closeOnBackdropClick: false,
         closeOnEsc: true,
@@ -56,13 +58,14 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
           if (!open) resolve('cancelOperation');
         },
         description: m('div', [
-          m('p', conflict.message),
+          m('p.fm-conflict-dialog-problem', conflict.message),
           m('dl.fm-conflict-dialog-entries', [
             m('dt', t('operation', 'source')),
             m('dd', formatConflictMetadata(conflict.source)),
             m('dt', t('operation', 'destination')),
             m('dd', formatConflictMetadata(conflict.destination)),
           ]),
+          m('p.fm-conflict-dialog-recommendation', t('operation', 'conflictRecommendation')),
           m('label.fm-conflict-dialog-checkbox', [
             m('input', {
               type: 'checkbox',
@@ -76,7 +79,11 @@ export const ConflictDialog: FactoryComponent<ConflictDialogAttrs> = () => {
         buttons: [
           { label: t('operation', 'cancelOperation'), onclick: () => resolve('cancelOperation') },
           { label: t('button', 'skip'), onclick: () => resolve('skip') },
-          { label: t('button', 'renameNew'), onclick: () => resolve('renameNew') },
+          {
+            label: t('button', 'renameNew'),
+            className: 'fm-conflict-recommended',
+            onclick: () => resolve('renameNew'),
+          },
           { label: t('button', 'overwrite'), onclick: () => resolve('overwrite') },
         ],
       });

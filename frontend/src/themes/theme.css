@@ -36,6 +36,10 @@
   --fm-header-height: calc(var(--fm-row-height) + 4px);
   --fm-font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --fm-font-size: 13px;
+  --fm-type-body: 1rem;
+  --fm-type-heading: 1.05rem;
+  --fm-type-label: max(0.92rem, 12px);
+  --fm-type-title: 1rem;
   /* xterm.js otherwise defaults to "courier-new, courier, monospace" (task: keep the terminal's
    * font matching the rest of the app rather than falling back to a distinctly larger-looking
    * Courier New). */
@@ -259,7 +263,7 @@ textarea {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
   height: 100vh;
-  min-width: 520px;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -372,6 +376,37 @@ main.fm-workspace {
   width: 220px;
   min-width: 0;
   height: 100%;
+}
+
+.fm-directory-tree-backdrop {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  main.fm-workspace {
+    position: relative;
+  }
+
+  .fm-directory-tree-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgb(0 0 0 / 32%);
+    cursor: default;
+  }
+
+  .fm-directory-tree-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 9;
+    width: min(20rem, calc(100% - 2.5rem));
+    box-shadow: 4px 0 18px rgb(0 0 0 / 28%);
+  }
 }
 
 .fm-operation-centre {
@@ -677,6 +712,18 @@ main.fm-workspace {
   --mm-control-height: var(--fm-header-height);
 }
 
+.fm-toolbar-separator {
+  width: 1px;
+  height: 1rem;
+  margin-inline: 0.25rem;
+  background: var(--fm-border);
+}
+
+.fm-toolbar-spacer {
+  min-width: 0.25rem;
+  flex: 1 1 auto;
+}
+
 .fm-workspace-toolbar .fm-icon {
   color: var(--fm-text-muted);
 }
@@ -824,7 +871,7 @@ main.fm-workspace {
 
 .fm-windows-titlebar-controls button {
   width: 46px;
-  font-size: 1rem;
+  font-size: var(--fm-type-body);
 }
 
 .fm-windows-titlebar-controls button:hover,
@@ -1006,7 +1053,7 @@ main.fm-workspace {
 }
 
 .fm-settings-editor .fm-settings-section-heading.col {
-  font-size: 1rem;
+  font-size: var(--fm-type-title);
   font-weight: 600;
   margin: 0.75rem 0 0.35rem 0;
   padding-inline: 0;
@@ -1146,7 +1193,7 @@ main.fm-workspace {
 
 .fm-semantic-management h6 {
   margin: 0.65rem 0 0.4rem;
-  font-size: 0.9rem;
+  font-size: var(--fm-type-title);
   font-weight: 600;
 }
 
@@ -1341,7 +1388,7 @@ main.fm-workspace {
 .fm-semantic-profile-status {
   width: fit-content;
   color: var(--fm-accent);
-  font-size: 0.75rem;
+  font-size: var(--fm-type-label);
   font-weight: 600;
 }
 
@@ -1366,7 +1413,7 @@ main.fm-workspace {
 .fm-semantic-component-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-semantic-component-table th,
@@ -2028,12 +2075,45 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-operation-failure {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
   color: var(--fm-error);
+}
+
+.fm-operation-failure-message {
+  overflow-wrap: anywhere;
+}
+
+.fm-operation-failure-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.15rem 0.5rem;
+  margin: 0;
+  color: var(--fm-text);
+  font-size: var(--fm-type-label);
+}
+
+.fm-operation-failure-context dt {
+  color: var(--fm-text-muted);
+}
+
+.fm-operation-failure-context dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--fm-font-mono);
+}
+
+.fm-operation-failure-recovery {
+  margin: 0;
+  color: var(--fm-text);
 }
 
 .fm-operation-failure pre {
   margin: 0.25rem 0 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .modal.fm-rag-ask-modal {
@@ -2066,7 +2146,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-rag-section-heading h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fm-type-title);
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2273,13 +2353,13 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-search :is(h3, h4) {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fm-type-title);
   font-weight: 400;
   line-height: 1.35;
 }
 
 .fm-knowledge-search h4 {
-  font-size: 0.9375rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-knowledge-composer {
@@ -3034,7 +3114,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 /* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
 .fm-app-shell .modal-content h4 {
   margin: 0 0 0.6rem 0 !important;
-  font-size: 1.1rem;
+  font-size: var(--fm-type-heading);
   font-weight: 600;
 }
 
@@ -3055,7 +3135,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .modal.fm-dense-modal .modal-content h4 {
   margin: 0 0 0.6rem 0 !important;
-  font-size: 1.05rem !important;
+  font-size: var(--fm-type-heading) !important;
 }
 
 .modal.fm-dense-modal .modal-footer {
@@ -3877,7 +3957,40 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-conflict-dialog-entries dd {
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-conflict-dialog-problem {
+  margin-block: 0 0.5rem;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.fm-conflict-dialog-recommendation {
+  margin: 0.5rem 0;
+  color: var(--fm-text);
+}
+
+.fm-conflict-dialog .fm-conflict-recommended {
+  font-weight: 600;
+}
+
+@media (max-width: 40rem) {
+  .modal.fm-conflict-dialog .modal-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    padding: 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .modal.fm-conflict-dialog .modal-footer > button {
+    min-width: 0;
+    margin: 0;
+    padding-inline: 0.5rem;
+  }
 }
 
 .fm-conflict-dialog-checkbox {
@@ -3963,7 +4076,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .checksum-results__header h2,
 .duplicate-review__header h2 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--fm-type-title);
 }
 
 .checksum-results__progress,

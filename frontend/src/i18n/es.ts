@@ -89,6 +89,8 @@ export const es = {
     readOnly: 'solo lectura',
   },
   pane: {
+    leftPane: 'Izquierda',
+    rightPane: 'Derecha',
     favourites: 'Favoritos',
     addCurrentLocation: 'Añadir ubicación actual',
     favouriteName: 'Nombre del favorito',
@@ -327,6 +329,10 @@ export const es = {
     resolveConflict: 'Resolver conflicto',
     source: 'Origen',
     destination: 'Destino',
+    conflictRecommendation:
+      'Opción más segura: cambia el nombre del elemento entrante para conservar ambos.',
+    failureRecovery:
+      'Comprueba el acceso y el espacio disponible y, después, vuelve a ejecutar la operación.',
     createDirectory: 'Crear directorio',
     createDirectoryName: 'Nombre del directorio',
     createFile: 'Crear archivo',
