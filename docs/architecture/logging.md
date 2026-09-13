@@ -174,7 +174,7 @@ At frontend startup, Procyon records uncaught JavaScript errors, unhandled promi
 explicit `console.error` calls through `FileManagerClient`. Both runtime hosts redact and retain
 these reports in the same 50-entry diagnostics buffer. Tauri additionally writes them to its
 structured rolling log, so an error remains inspectable after **View > Reload** restarts the
-webview.
+webview. Release builds do not expose Tauri DevTools or the **Inspect Element** context-menu action.
 
 ### Usage
 
