@@ -421,6 +421,10 @@ button.fm-breadcrumb-scheme:hover {
   line-height: 1;
 }
 
+.fm-breadcrumb-row .fm-pane-tab-favourites {
+  margin-inline-end: 0.25rem;
+}
+
 .fm-breadcrumb-row
   :is(
     .fm-pane-tab-new,
