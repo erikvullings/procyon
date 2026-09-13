@@ -42,7 +42,10 @@ use state::AppState;
 fn api_router() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(routes::api_doc())
         .routes(utoipa_axum::routes!(routes::health::get_health))
-        .routes(utoipa_axum::routes!(routes::diagnostics::get_diagnostics))
+        .routes(utoipa_axum::routes!(
+            routes::diagnostics::get_diagnostics,
+            routes::diagnostics::record_frontend_diagnostic
+        ))
         .routes(utoipa_axum::routes!(routes::events::get_events))
         .routes(utoipa_axum::routes!(
             routes::runtime::get_runtime_capabilities
@@ -417,7 +420,7 @@ pub fn build_router_with_service_and_session(
         service,
         cors_allowed_origins: Arc::from(config.cors_allowed_origins.clone()),
         session_end: session.cancellation,
-        error_buffer: state::ErrorBuffer::new(),
+        error_buffer: fm_application::diagnostics::DiagnosticErrorBuffer::default(),
         connection_state: state::ConnectionState::new(),
         session_manager: Arc::new(auth::SessionManager::new(
             config.session_secret.clone(),

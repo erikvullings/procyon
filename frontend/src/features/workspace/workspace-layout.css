@@ -36,16 +36,6 @@
   outline: none;
 }
 
-.fm-workspace-pane[data-active="true"] {
-  z-index: 1;
-  outline: 1px solid color-mix(in srgb, var(--fm-accent) 48%, transparent);
-  outline-offset: -1px;
-}
-
-.fm-workspace-pane[data-active="true"] .fm-pane-tabs {
-  box-shadow: inset 0 2px var(--fm-accent);
-}
-
 @media (forced-colors: active) {
   .fm-workspace-pane[data-active="true"] {
     outline: 2px solid Highlight;
@@ -61,6 +51,32 @@
   position: relative;
   z-index: 2;
   background: var(--fm-border);
+}
+
+.fm-workspace-splitter::before {
+  content: attr(data-split-label);
+  display: none;
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+  color: var(--fm-text);
+  font-size: var(--fm-type-label);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.fm-workspace-splitter[data-dragging="true"]::before,
+.fm-workspace-splitter:focus-visible::before {
+  display: block;
 }
 
 .fm-workspace-split--horizontal > .fm-workspace-splitter {

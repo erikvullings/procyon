@@ -11,10 +11,14 @@ import m from 'mithril';
 import { createFileManagerClient } from './api/client/create-client';
 import { AppShell } from './app/app-shell';
 import { SessionTokenGate } from './app/session-token-gate';
+import { installFrontendDiagnostics } from './features/diagnostics/frontend-diagnostics';
 import { resolveRuntimeKind } from './utilities/runtime';
 
 const runtime = resolveRuntimeKind(import.meta.env.VITE_RUNTIME);
 const client = createFileManagerClient(runtime);
+const frontendDiagnostics = installFrontendDiagnostics(client, {
+  deferUntilReady: runtime === 'http',
+});
 
 const root = document.getElementById('app');
 if (root === null) {
@@ -28,13 +32,17 @@ root.dataset.mmPreset = 'compact-minimal';
 m.mount(root, {
   view: () =>
     runtime === 'http'
-      ? m(SessionTokenGate, { children: () => m(AppShell, { runtime, client }) })
+      ? m(SessionTokenGate, {
+          children: () => m(AppShell, { runtime, client }),
+          onReady: frontendDiagnostics.flush,
+        })
       : m(AppShell, { runtime, client }),
 });
 
 if (import.meta.hot !== undefined) {
   import.meta.hot.dispose(() => {
     m.mount(root, null);
+    frontendDiagnostics.uninstall();
     client.disconnect();
   });
 }

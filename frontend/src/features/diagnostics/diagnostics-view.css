@@ -145,9 +145,14 @@
 
 .error-context {
   display: block;
+  max-height: 12rem;
+  overflow: auto;
   margin-top: 0.5rem;
   color: var(--fm-text-muted);
-  font-style: italic;
+  font-family: var(--fm-font-mono);
+  font-size: var(--fm-type-label);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .diagnostics-view.error {

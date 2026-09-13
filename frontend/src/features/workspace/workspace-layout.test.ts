@@ -681,6 +681,95 @@ describe('splitter constraints', () => {
     expect(constrainSplitRatio(500, 1_000, 240)).toBeCloseTo(0.5);
   });
 
+  it('snaps close pointer positions to an exact half split', () => {
+    expect(constrainSplitRatio(481, 1_000, 240)).toBe(0.5);
+    expect(constrainSplitRatio(519, 1_000, 240)).toBe(0.5);
+    expect(constrainSplitRatio(521, 1_000, 240)).toBeCloseTo(0.521);
+  });
+
+  it('announces both pane percentages and exposes live drag feedback', () => {
+    mount(attrs());
+    const split = root.querySelector<HTMLElement>('.fm-workspace-split');
+    const splitter = root.querySelector<HTMLElement>('.fm-workspace-splitter');
+    vi.spyOn(split as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 0,
+      top: 0,
+      right: 1_100,
+      bottom: 600,
+      left: 100,
+      width: 1_000,
+      height: 600,
+      toJSON: () => ({}),
+    });
+
+    expect(splitter?.getAttribute('aria-valuenow')).toBe('50');
+    expect(splitter?.getAttribute('aria-valuetext')).toBe('50% / 50%');
+
+    splitter?.dispatchEvent(new MouseEvent('pointerdown', { clientX: 600, bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-workspace-splitter')?.getAttribute('data-dragging')).toBe(
+      'true',
+    );
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 800 }));
+    m.redraw.sync();
+
+    const draggedSplitter = root.querySelector('.fm-workspace-splitter');
+    expect(draggedSplitter?.getAttribute('aria-valuetext')).toBe('70% / 30%');
+    expect(draggedSplitter?.getAttribute('data-split-label')).toBe('70% / 30%');
+
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-workspace-splitter')?.getAttribute('data-dragging')).toBe(
+      'false',
+    );
+  });
+
+  it('resizes the split by one percent with the keyboard and five percent with Shift', () => {
+    vi.useFakeTimers();
+    const onUpdateLayout = vi.fn<(layout: WorkspaceProjection['layout']) => void>();
+    mount(attrs({ onUpdateLayout }));
+    const split = root.querySelector<HTMLElement>('.fm-workspace-split');
+    const splitter = root.querySelector<HTMLElement>('.fm-workspace-splitter');
+    vi.spyOn(split as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 1_000,
+      bottom: 600,
+      left: 0,
+      width: 1_000,
+      height: 600,
+      toJSON: () => ({}),
+    });
+
+    splitter?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+    );
+    m.redraw.sync();
+    expect(root.querySelector('.fm-workspace-splitter')?.getAttribute('aria-valuetext')).toBe(
+      '50% / 50%',
+    );
+    root.querySelector<HTMLElement>('.fm-workspace-splitter')?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    m.redraw.sync();
+    expect(root.querySelector('.fm-workspace-splitter')?.getAttribute('aria-valuetext')).toBe(
+      '55% / 45%',
+    );
+
+    vi.advanceTimersByTime(500);
+    expect(onUpdateLayout).toHaveBeenCalledExactlyOnceWith({
+      ...projection().layout,
+      ratio: 0.55,
+    });
+  });
+
   it('debounces a dragged ratio before emitting the updated layout', () => {
     vi.useFakeTimers();
     const onUpdateLayout = vi.fn<(layout: WorkspaceProjection['layout']) => void>();

@@ -588,6 +588,33 @@ describe('navigation controller', () => {
     });
   });
 
+  it('restores the current directory and rejects an explicitly transactional navigation failure', async () => {
+    const context = setup();
+    vi.mocked(context.client.listDirectory).mockImplementation(async (request) =>
+      snapshot(request.requestId, 'file:///home/erik', ['Documents']),
+    );
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+    await controller.load('left');
+    const currentView = context.views.at(-1);
+    vi.mocked(context.client.navigatePane).mockRejectedValue(new Error('Path does not exist'));
+
+    await expect(
+      controller.navigate('left', { providerId: 'local', uri: 'file:///missing' }, undefined, {
+        preserveCurrentOnError: true,
+      }),
+    ).rejects.toThrow('Path does not exist');
+
+    expect(context.views.at(-1)).toBe(currentView);
+    expect(context.getWorkspace().panesById.left?.tabsById.tab?.location.uri).toBe(
+      'file:///home/erik',
+    );
+  });
+
   it('retries navigatePane once after a transient platform failure', async () => {
     const context = setup();
     const nextLocation = { providerId: 'local', uri: 'file:///home/erik/Documents' } as const;

@@ -224,6 +224,7 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
                     ' ',
                     m('span.timestamp', new Date(error.timestamp).toLocaleString()),
                     m('p', error.message),
+                    error.context === undefined ? undefined : m('pre.error-context', error.context),
                   ]),
                 ),
               ),
@@ -266,7 +267,12 @@ async function copyDiagnosticsToClipboard(diag: DiagnosticsView): Promise<void> 
     ),
     '',
     `=== Recent Errors (${diag.recentErrors.length}) ===`,
-    ...diag.recentErrors.map((e) => `  [${e.timestamp}] ${e.code}: ${e.message}`),
+    ...diag.recentErrors.map(
+      (error) =>
+        `  [${error.timestamp}] ${error.code}: ${error.message}${
+          error.context === undefined ? '' : `\n    ${error.context.replaceAll('\n', '\n    ')}`
+        }`,
+    ),
   ]
     .filter((l) => l !== null)
     .join('\n');

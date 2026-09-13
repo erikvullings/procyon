@@ -338,6 +338,21 @@ describe('theme stylesheet', () => {
     expect(tab).toContain('height: var(--fm-header-height)');
   });
 
+  it('aligns breadcrumb text and pane actions to one compact row geometry', () => {
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb,\s*\.fm-path-editor\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-tab-new[^)]*\.fm-pane-view-mode[^)]*\.fm-pane-tab-favourites[^)]*\)\s*\{[^}]*width:\s*var\(--fm-row-height\) !important[^}]*height:\s*var\(--fm-row-height\) !important/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-view-mode[^)]*\)\s+\.fm-icon\s*\{[^}]*width:\s*16px[^}]*height:\s*16px[^}]*transform:\s*none/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-segment,\s*\.fm-breadcrumb-scheme,\s*\.fm-path-input\s*\{[^}]*transform:\s*translateY\(-2px\)/s,
+    );
+  });
+
   it('keeps the command toolbar at header height with muted icons', () => {
     const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
     const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
@@ -346,6 +361,21 @@ describe('theme stylesheet', () => {
     expect(toolbar).toContain('min-height: var(--fm-header-height)');
     expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
     expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
+  });
+
+  it('uses full touch targets for the command toolbar on coarse pointers', () => {
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar\s*\{[^}]*height:\s*44px[^}]*overflow-x:\s*auto[^}]*--mm-control-height:\s*44px/s,
+    );
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar button\s*\{[^}]*width:\s*44px !important[^}]*height:\s*44px !important[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s,
+    );
+  });
+
+  it('gives conflict resolution more width without overflowing narrow viewports', () => {
+    expect(themeCss).toMatch(
+      /\.modal\.fm-conflict-dialog\s*\{[^}]*width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-height:\s*calc\(100vh - 2rem\) !important/s,
+    );
   });
 
   it('does not highlight directory rows on mouse hover', () => {

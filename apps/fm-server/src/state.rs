@@ -1,60 +1,16 @@
 //! Shared Axum handler state (spec §7: handlers only call the service).
 
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
 use fm_application::FileManagerService;
+use fm_application::diagnostics::DiagnosticErrorBuffer;
 use fm_application::semantic_library::SemanticAccessContext;
-use fm_transport_dto::DiagnosticErrorDto;
 use tokio_util::sync::CancellationToken;
 
 use crate::auth::SessionManager;
 use crate::rate_limit::MutationLimiter;
-
-/// Bounded error buffer for diagnostics (max 50 entries).
-#[derive(Clone)]
-pub(crate) struct ErrorBuffer {
-    entries: Arc<Mutex<VecDeque<DiagnosticErrorDto>>>,
-    #[allow(dead_code)]
-    max_size: usize,
-}
-
-impl ErrorBuffer {
-    /// Create a new error buffer with the default capacity (50).
-    pub(crate) fn new() -> Self {
-        Self {
-            entries: Arc::new(Mutex::new(VecDeque::new())),
-            max_size: 50,
-        }
-    }
-
-    /// Add an error to the buffer, removing the oldest if full.
-    #[allow(dead_code)]
-    pub(crate) fn push(&self, error: DiagnosticErrorDto) {
-        if let Ok(mut entries) = self.entries.lock() {
-            if entries.len() >= self.max_size {
-                entries.pop_front();
-            }
-            entries.push_back(error);
-        }
-    }
-
-    /// Get all buffered errors in order.
-    pub(crate) fn get_all(&self) -> Vec<DiagnosticErrorDto> {
-        self.entries
-            .lock()
-            .map(|entries| entries.iter().cloned().collect())
-            .unwrap_or_default()
-    }
-}
-
-impl Default for ErrorBuffer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Connection state tracking for diagnostics (spec §30).
 #[derive(Clone)]
@@ -136,7 +92,7 @@ pub(crate) struct AppState {
     pub(crate) service: Arc<FileManagerService>,
     pub(crate) cors_allowed_origins: Arc<[String]>,
     pub(crate) session_end: CancellationToken,
-    pub(crate) error_buffer: ErrorBuffer,
+    pub(crate) error_buffer: DiagnosticErrorBuffer,
     pub(crate) connection_state: ConnectionState,
     /// Validates session tokens for every `/api/v1` route except health and
     /// docs (task 0064). Extracted directly by the `require_session`

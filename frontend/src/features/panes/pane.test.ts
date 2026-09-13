@@ -617,6 +617,7 @@ beforeEach(() => {
 afterEach(() => {
   m.mount(root, null);
   root.remove();
+  document.getElementById('toast-container')?.remove();
 });
 
 describe('breadcrumbSegments', () => {
@@ -1064,6 +1065,26 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-path-input')).toBeNull());
   });
 
+  it('cancels an edited path when focus leaves the input without navigating', () => {
+    const onNavigate = vi.fn();
+    mount(attrs({ onNavigate }));
+
+    root
+      .querySelector<HTMLElement>('.fm-breadcrumb')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.fm-path-input');
+    if (input === null) return;
+    input.value = '/draft/path';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.blur();
+    m.redraw.sync();
+
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+    expect(root.querySelector('.fm-breadcrumb')?.textContent).toContain('home');
+  });
+
   it('navigates to a clicked breadcrumb target', async () => {
     const onNavigate = vi.fn();
     mount(attrs({ onNavigate }));
@@ -1073,7 +1094,7 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/home'));
   });
 
-  it('shows rejected paths inline without replacing the current directory', async () => {
+  it('shows rejected paths in a localized toast without replacing the current directory', async () => {
     mount(attrs({ onNavigate: () => Promise.reject(new Error('Path does not exist')) }));
 
     root
@@ -1087,8 +1108,10 @@ describe('Pane breadcrumb editing', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-path-error')?.textContent).toBe('Path does not exist'),
+      expect(document.querySelector('.toast')?.textContent).toBe('Unable to open path'),
     );
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+    expect(root.querySelector('.fm-path-error')).toBeNull();
     expect(root.querySelector('.fm-entry-name [title="one.txt"]')).not.toBeNull();
   });
 

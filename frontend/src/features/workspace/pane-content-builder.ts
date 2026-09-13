@@ -433,7 +433,9 @@ export function createPaneContentBuilder(
         if (tab !== undefined) {
           await context
             .getNavigation()
-            .navigate(paneId, context.locationForPath(tab.location, path));
+            .navigate(paneId, context.locationForPath(tab.location, path), undefined, {
+              preserveCurrentOnError: true,
+            });
         }
       },
       onNavigateLocation: async (location) => {

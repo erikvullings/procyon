@@ -8,6 +8,7 @@ export * from './document-summary';
 export * from './entry';
 export * from './events';
 export * from './finder-tags';
+export * from './frontend-diagnostic';
 export * from './ids';
 export * from './knowledge';
 export * from './llm-profile';

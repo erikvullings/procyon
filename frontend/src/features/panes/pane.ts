@@ -1,5 +1,5 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
-import { IconButton, ModalPanel } from 'mithril-materialized';
+import { IconButton, ModalPanel, toast } from 'mithril-materialized';
 import {
   arrowsSortIcon,
   gridDotsIcon,
@@ -518,8 +518,6 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
 export const Pane: FactoryComponent<PaneAttrs> = () => {
   let editing = false;
   let draftPath = '';
-  let pathError: string | undefined;
-  let inputElement: HTMLInputElement | undefined;
   let favouritesOpen = false;
   let favouriteLabel = '';
   let favouriteError: string | undefined;
@@ -641,40 +639,32 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   function beginEditing(path: string): void {
     editing = true;
     draftPath = path;
-    pathError = undefined;
     m.redraw();
   }
 
   function cancelEditing(): void {
     editing = false;
-    pathError = undefined;
     m.redraw();
   }
 
-  async function navigate(path: string, attrs: PaneAttrs, keepEditing: boolean): Promise<void> {
+  async function navigate(path: string, attrs: PaneAttrs, fromEditor: boolean): Promise<void> {
     if (!isAcceptedPath(path)) {
-      pathError = 'Enter an absolute path or a path beginning with ~';
+      if (fromEditor) editing = false;
+      toast({ html: t('pane', 'unableToOpenPath') });
       m.redraw();
       return;
     }
-    pathError = undefined;
     try {
       await attrs.navigation.onNavigate(path);
-      editing = keepEditing ? false : editing;
-    } catch (error: unknown) {
-      pathError = errorMessage(error);
-      editing = keepEditing || editing;
+      if (fromEditor) editing = false;
+    } catch {
+      if (fromEditor) editing = false;
+      toast({ html: t('pane', 'unableToOpenPath') });
     }
     m.redraw();
   }
 
   return {
-    onupdate: () => {
-      if (editing && inputElement !== undefined && document.activeElement !== inputElement) {
-        inputElement.focus();
-        inputElement.select();
-      }
-    },
     onremove: () => {
       typeaheadCtrl.clearTimer();
     },
@@ -716,7 +706,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       }
       if (attrs.filter.filterOpen && editing) {
         editing = false;
-        pathError = undefined;
       }
       const pathChanged = typeaheadPath !== attrs.path;
       if (pathChanged) {
@@ -1410,15 +1399,14 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     m('input[type=text].fm-path-input', {
                       value: draftPath,
                       'aria-label': t('pane', 'path'),
-                      'aria-invalid': pathError === undefined ? undefined : 'true',
                       oncreate: (vnode: VnodeDOM) => {
-                        inputElement = vnode.dom as HTMLInputElement;
-                        inputElement.focus();
-                        inputElement.select();
+                        const input = vnode.dom as HTMLInputElement;
+                        input.focus();
+                        input.select();
                       },
+                      onblur: cancelEditing,
                       oninput: (event: InputEvent) => {
                         draftPath = (event.currentTarget as HTMLInputElement).value;
-                        pathError = undefined;
                       },
                       onkeydown: (event: KeyboardEvent) => {
                         event.stopPropagation();
@@ -1430,9 +1418,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                         }
                       },
                     }),
-                    pathError === undefined
-                      ? undefined
-                      : m('.fm-path-error', { role: 'alert' }, pathError),
                   ])
                 : m(
                     'nav.fm-breadcrumb',
@@ -1505,9 +1490,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                             ),
                           )
                         : undefined,
-                      pathError === undefined
-                        ? undefined
-                        : m('.fm-path-error', { role: 'alert' }, pathError),
                     ],
                   ),
             tooltip(

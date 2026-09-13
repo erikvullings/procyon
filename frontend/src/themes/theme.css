@@ -1022,6 +1022,31 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
+@media (pointer: coarse) {
+  .fm-workspace-toolbar {
+    height: 44px;
+    min-height: 44px;
+    padding-inline: 0.25rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    --mm-control-height: 44px;
+  }
+
+  .fm-workspace-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fm-workspace-toolbar button {
+    justify-content: center;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 !important;
+  }
+}
+
 .fm-settings-editor {
   position: fixed;
   z-index: 20;
@@ -4060,7 +4085,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 /* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
 .modal.fm-conflict-dialog {
-  max-width: min(30rem, calc(100vw - 2rem)) !important;
+  width: min(44rem, calc(100vw - 2rem)) !important;
+  max-width: min(44rem, calc(100vw - 2rem)) !important;
+  max-height: calc(100vh - 2rem) !important;
 }
 
 /* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */

@@ -48,6 +48,7 @@ import type { SelectionAction } from '../selection/selection';
 import './workspace-layout.css';
 
 const MIN_PANE_WIDTH = 240;
+const CENTER_SNAP_THRESHOLD = 0.02;
 
 /** Directory-session and view data supplied for one workspace pane. */
 export interface WorkspacePaneContent {
@@ -199,7 +200,11 @@ export function constrainSplitRatio(
     return 0.5;
   }
   const minimumRatio = Math.min(minimumPaneWidth / containerWidth, 0.5);
-  return Math.min(1 - minimumRatio, Math.max(minimumRatio, pointerOffset / containerWidth));
+  const constrained = Math.min(
+    1 - minimumRatio,
+    Math.max(minimumRatio, pointerOffset / containerWidth),
+  );
+  return Math.abs(constrained - 0.5) <= CENTER_SNAP_THRESHOLD ? 0.5 : constrained;
 }
 
 export function pathFromUri(uri: string): string {
@@ -292,6 +297,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
   let initialFocusFrame: number | undefined;
   let pendingLayoutUpdate: { attrs: WorkspaceLayoutViewAttrs; layout: WorkspaceLayout } | undefined;
   let stopDragging: (() => void) | undefined;
+  let draggingSplitPath: string | undefined;
   /** Latest render's attrs, for `registerFocusPane`'s callback (invoked outside any render). */
   let latestAttrs: WorkspaceLayoutViewAttrs | undefined;
   function replaceSplit(
@@ -340,11 +346,16 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     event: PointerEvent,
     attrs: WorkspaceLayoutViewAttrs,
     split: Extract<WorkspaceLayout, { type: 'split' }>,
+    path: string,
   ): void {
     event.preventDefault();
     stopDragging?.();
+    draggingSplitPath = path;
+    (event.currentTarget as HTMLElement).focus();
+    m.redraw();
     const container = (event.currentTarget as HTMLElement).parentElement;
     if (container === null) {
+      draggingSplitPath = undefined;
       return;
     }
     const move = (moveEvent: PointerEvent): void => {
@@ -362,10 +373,39 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     stopDragging = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
+      draggingSplitPath = undefined;
       stopDragging = undefined;
+      m.redraw();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
+  }
+
+  function resizeSplitFromKeyboard(
+    event: KeyboardEvent,
+    attrs: WorkspaceLayoutViewAttrs,
+    split: Extract<WorkspaceLayout, { type: 'split' }>,
+  ): void {
+    const horizontal = split.axis === 'horizontal';
+    const decrease = horizontal ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
+    const increase = horizontal ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
+    if (!decrease && !increase) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const container = (event.currentTarget as HTMLElement).parentElement;
+    const bounds = container?.getBoundingClientRect();
+    const extent = horizontal ? bounds?.width : bounds?.height;
+    const step = event.shiftKey ? 0.05 : 0.01;
+    const requestedRatio = split.ratio + (increase ? step : -step);
+    const ratio =
+      extent !== undefined && extent > 0
+        ? constrainSplitRatio(requestedRatio * extent, extent)
+        : Math.min(0.95, Math.max(0.05, requestedRatio));
+    const nextLayout = replaceSplit(displayedLayout ?? attrs.workspace.layout, split, ratio);
+    displayedLayout = nextLayout;
+    scheduleLayoutUpdate(attrs, nextLayout);
+    m.redraw();
   }
 
   function focusAndActivate(attrs: WorkspaceLayoutViewAttrs, paneId: PaneId): void {
@@ -678,6 +718,8 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     if (layout.type === 'pane') {
       return renderPane(attrs, layout.paneId);
     }
+    const firstPercentage = Math.round(layout.ratio * 100);
+    const splitLabel = `${firstPercentage}% / ${100 - firstPercentage}%`;
     return m(
       '.fm-workspace-split',
       {
@@ -705,8 +747,15 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           key: `${path}.splitter`,
           role: 'separator',
           'aria-orientation': layout.axis === 'horizontal' ? 'vertical' : 'horizontal',
+          'aria-valuemin': 0,
+          'aria-valuemax': 100,
+          'aria-valuenow': firstPercentage,
+          'aria-valuetext': splitLabel,
+          'data-dragging': String(draggingSplitPath === path),
+          'data-split-label': splitLabel,
           tabindex: 0,
-          onpointerdown: (event: PointerEvent) => beginSplitDrag(event, attrs, layout),
+          onkeydown: (event: KeyboardEvent) => resizeSplitFromKeyboard(event, attrs, layout),
+          onpointerdown: (event: PointerEvent) => beginSplitDrag(event, attrs, layout, path),
         }),
         renderLayout(attrs, layout.second, `${path}.second`),
       ],

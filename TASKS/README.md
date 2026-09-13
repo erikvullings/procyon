@@ -72,6 +72,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0068 Recursive filesystem search
 - [x] 0162 Smart folders and saved searches *(needs 0030, 0068, 0089)*
 - [x] 0166 Native indexed search *(needs 0058, 0068, 0089)*
+- [x] 0223 Workspace chrome and splitter polish *(needs 0025, 0026, 0045, 0094, 0222)*
 - [ ] 0169 Saved advanced filter presets *(needs 0030, 0067)*
 - [x] 0069 Tabs per pane
 - [x] 0070 Favourites, bookmarks and recent locations
@@ -357,6 +358,7 @@ dev-only inspector.
 - [x] 0064 Browser/server mode security hardening (§22)
 - [x] 0065 Performance fixtures and benchmarks (§28)
 - [x] 0073 Diagnostics view and structured logging (§30)
+- [x] 0224 Frontend diagnostics and native reload *(needs 0015, 0073, 0133)*
 - [x] 0098 Frontend i18n with translate.js
 - [ ] 0066 Accessibility review (§29) *(in_progress — automated axe-core phase complete; manual
   keyboard/screen-reader passes still outstanding)*
