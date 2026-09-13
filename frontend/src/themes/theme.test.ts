@@ -351,9 +351,7 @@ describe('theme stylesheet', () => {
     expect(paneCss).toMatch(
       /\.fm-breadcrumb-segment,\s*\.fm-breadcrumb-scheme,\s*\.fm-path-input\s*\{[^}]*transform:\s*translateY\(-2px\)/s,
     );
-    expect(paneCss).toMatch(
-      /\.fm-breadcrumb-row\s+\.fm-pane-tab-favourites\s*\{[^}]*margin-inline-end:\s*0\.25rem/s,
-    );
+    expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);
   });
 
   it('keeps the command toolbar at header height with muted icons', () => {

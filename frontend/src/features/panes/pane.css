@@ -283,6 +283,7 @@
   align-items: stretch;
   min-width: 0;
   height: var(--fm-row-height);
+  padding-inline-end: 0.25rem;
   /* Not `overflow: hidden` - the view/sort/favourites dropdown menus are positioned absolute
    * inside this row and extend below it; the breadcrumb text itself is already clipped by
    * `.fm-breadcrumb-segments`'s own `overflow: hidden`, so this row doesn't need to clip too. */
@@ -419,10 +420,6 @@ button.fm-breadcrumb-scheme:hover {
   margin-right: 0;
   padding: 0 !important;
   line-height: 1;
-}
-
-.fm-breadcrumb-row .fm-pane-tab-favourites {
-  margin-inline-end: 0.25rem;
 }
 
 .fm-breadcrumb-row
