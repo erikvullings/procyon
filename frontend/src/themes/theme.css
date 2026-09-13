@@ -302,8 +302,66 @@ main.fm-workspace {
   padding-inline-end: 32px;
 }
 
-.fm-permanent-delete-modal .fm-permanent-delete-confirm:focus {
-  color: var(--fm-error);
+.fm-operation-confirmation-modal {
+  --mm-modal-width: min(40rem, calc(100vw - 2rem));
+  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
+}
+
+.fm-operation-confirmation-summary {
+  margin: 0 0 0.6rem;
+}
+
+.fm-operation-confirmation-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.fm-operation-confirmation-endpoint {
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+}
+
+.fm-operation-confirmation-label {
+  display: block;
+  margin-block-end: 0.2rem;
+  color: var(--fm-text-muted);
+  font-size: 0.82rem;
+}
+
+.fm-operation-confirmation-locations {
+  display: grid;
+  gap: 0.2rem;
+  max-height: 6rem;
+  overflow-y: auto;
+}
+
+.fm-operation-confirmation-endpoint code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--fm-text);
+  font-family: var(--fm-font-mono);
+  font-size: 0.85rem;
+}
+
+.fm-operation-confirmation-arrow {
+  display: grid;
+  color: var(--fm-accent);
+  place-items: center;
+}
+
+@media (max-width: 40rem) {
+  .fm-operation-confirmation-route {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fm-operation-confirmation-arrow {
+    transform: rotate(90deg);
+  }
 }
 
 .fm-operation-confirmation-modal {
@@ -3999,13 +4057,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.4rem;
   margin-top: 0.5rem;
   font-size: 0.85rem;
-}
-
-/* Match the row-height inputs; box uses border-box so its 18px footprint fits inside. */
-.fm-app-shell .fm-conflict-dialog-checkbox input[type="checkbox"] + span:not(.lever) {
-  height: 20px;
-  line-height: 20px;
-  padding-left: 24px;
 }
 
 /* Recolors mm's checkbox to theme tokens; see the multi-rename checkbox rules above. */

@@ -1,18 +1,20 @@
 import m from 'mithril';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OperationConflict, OperationId } from '../../models';
 import { ConflictDialog, formatConflictMetadata } from './conflict-dialog';
 
-let mountedRoot: HTMLElement | undefined;
+let root: HTMLElement;
+
+beforeEach(() => {
+  root = document.createElement('div');
+  document.body.appendChild(root);
+});
 
 describe('formatConflictMetadata', () => {
   afterEach(() => {
+    m.mount(root, null);
+    root.remove();
     vi.unstubAllEnvs();
-    if (mountedRoot !== undefined) {
-      m.mount(mountedRoot, null);
-      mountedRoot.remove();
-      mountedRoot = undefined;
-    }
     document.querySelector('[data-test-conflict-trigger]')?.remove();
   });
 
@@ -28,7 +30,7 @@ describe('formatConflictMetadata', () => {
         modifiedAt: '2026-07-30T14:17:06.901716538Z',
         kind: 'file',
       }),
-    ).toBe('locations.md · 1648b · 2026-07-30 10:17:06');
+    ).toBe('locations.md · 1648 B · 2026-07-30 10:17:06');
   });
 
   it('renders a different local time in a different time zone for the same instant', () => {
@@ -40,7 +42,7 @@ describe('formatConflictMetadata', () => {
         modifiedAt: '2026-07-30T14:17:06.901716538Z',
         kind: 'file',
       }),
-    ).toBe('locations.md · 1648b · 2026-07-30 23:17:06');
+    ).toBe('locations.md · 1648 B · 2026-07-30 23:17:06');
   });
 
   it('reports missing size and modified time explicitly', () => {
@@ -49,7 +51,49 @@ describe('formatConflictMetadata', () => {
         name: 'untitled',
         kind: 'file',
       }),
-    ).toBe('untitled · size unavailable · modified time unavailable');
+    ).toBe('untitled · Size unavailable · Modified time unavailable');
+  });
+
+  it('uses the shared dialog layout, localized labels, and recommends keeping both', () => {
+    const onResolve = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(ConflictDialog, {
+          conflict: {
+            operationId: 'operation-1',
+            conflictId: 'conflict-1',
+            message: 'raw backend message',
+            source: { name: 'report.pdf', kind: 'file', size: 6 },
+            destination: { name: 'report.pdf', kind: 'file', size: 8 },
+          },
+          onResolve,
+        }),
+    });
+    m.redraw.sync();
+
+    const dialog = root.querySelector('[role="alertdialog"]');
+    expect(dialog?.classList.contains('fm-operation-confirmation-modal')).toBe(true);
+    expect(dialog?.textContent).toContain('report.pdf already exists.');
+    expect(dialog?.textContent).not.toContain('raw backend message');
+    expect(dialog?.textContent).toContain('Safest choice: rename the incoming item to keep both.');
+    expect(
+      Array.from(dialog?.querySelectorAll('button') ?? []).map((button) => button.textContent),
+    ).toEqual(['Skip', 'Rename', 'Cancel', 'Overwrite']);
+    expect(document.activeElement?.textContent).toBe('Rename');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement?.textContent).toBe('Overwrite');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement).toBe(
+      document.querySelector('.fm-conflict-dialog-checkbox input[type="checkbox"]'),
+    );
   });
 
   it('cancels the pending operation when Escape closes the modal', async () => {
@@ -68,9 +112,7 @@ describe('formatConflictMetadata', () => {
     trigger.dataset.testConflictTrigger = '';
     document.body.appendChild(trigger);
     trigger.focus();
-    mountedRoot = document.createElement('div');
-    document.body.appendChild(mountedRoot);
-    m.mount(mountedRoot, {
+    m.mount(root, {
       view: () =>
         m(ConflictDialog, {
           conflict,
@@ -90,9 +132,7 @@ describe('formatConflictMetadata', () => {
   });
 
   it('announces the problem and focuses the safest conflict resolution', async () => {
-    mountedRoot = document.createElement('div');
-    document.body.appendChild(mountedRoot);
-    m.mount(mountedRoot, {
+    m.mount(root, {
       view: () =>
         m(ConflictDialog, {
           conflict: {
@@ -108,14 +148,14 @@ describe('formatConflictMetadata', () => {
     m.redraw.sync();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    const dialog = mountedRoot.querySelector('[role="alertdialog"]');
+    const dialog = root.querySelector('[role="alertdialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog?.querySelector('.fm-conflict-dialog-problem')?.textContent).toBe(
-      'Destination exists.',
+      'existing-report.txt already exists.',
     );
     expect(dialog?.textContent).toContain('Safest choice: rename the incoming item to keep both.');
     const recommended = dialog?.querySelector<HTMLButtonElement>('.fm-conflict-recommended');
-    expect(recommended?.textContent).toBe('Rename new');
+    expect(recommended?.textContent).toBe('Rename');
     expect(document.activeElement).toBe(recommended);
   });
 });

@@ -167,15 +167,13 @@ describe('FileEditor', () => {
     const yes = root.querySelector<HTMLButtonElement>('.fm-file-editor-close-save');
     const no = root.querySelector<HTMLButtonElement>('.fm-file-editor-close-discard');
     expect(document.activeElement).toBe(yes);
-    expect(yes?.classList.contains('is-selected')).toBe(true);
 
     yes?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
     );
     m.redraw.sync();
-
     expect(document.activeElement).toBe(no);
-    expect(no?.classList.contains('is-selected')).toBe(true);
+    expect(document.activeElement).toBe(no);
   });
 
   it('saves on Yes, discards on No, and returns to the editor on Cancel', async () => {

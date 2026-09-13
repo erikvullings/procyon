@@ -2,12 +2,14 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
+  cpSync,
   createReadStream,
   existsSync,
   mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -235,7 +237,7 @@ stages.push(
     },
   ),
 );
-fs.rmSync(filenameCanaryFile, { force: true });
+rmSync(filenameCanaryFile, { force: true });
 
 const packages = await packageEvidence();
 const catalogManifest = JSON.parse(readFileSync(path.join(catalog, 'catalog.json'), 'utf8'));
@@ -332,7 +334,7 @@ const privacy = await scanSemanticPrivacyEvidence({
 });
 await verifySemanticPrivacyEvidence({ root: collected, report: privacy });
 writeFileSync(path.join(evidence, 'privacy-report.json'), `${JSON.stringify(privacy, null, 2)}\n`);
-fs.cpSync(collected, path.join(evidence, 'safe-evidence'), {
+cpSync(collected, path.join(evidence, 'safe-evidence'), {
   recursive: true,
   errorOnExist: true,
 });

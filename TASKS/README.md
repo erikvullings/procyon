@@ -126,7 +126,8 @@ semantic components are not installed.
 - [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
 - [ ] 0198 Semantic release qualification *(blocked: production artifact evaluation and
-  macOS/Windows/Linux installed and manual evidence remain outstanding; the release workflow now
+  exact preceding-candidate rollback, generated-answer/specialized-corpus quality, native manual
+  accessibility/UX evidence, and release-owner approval remain outstanding; the release workflow
   fails closed unless `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
@@ -135,9 +136,9 @@ semantic components are not installed.
   was not the requested alternative)*
 - [x] 0218 Zvec native-runtime qualification preparation *(needs 0195; immutable upstream
   runtime inputs and non-published qualification evidence for blocked task 0198)*
-- [ ] 0219 Semantic installed lifecycle and privacy qualification *(blocked: all four packaged
-  payload/privacy paths pass; protected catalog signing and verification keys are not configured,
-  so exact installed packages cannot yet be exercised; manual accessibility remains separate)*
+- [x] 0219 Semantic installed lifecycle and privacy qualification *(private four-target installed
+  lifecycle, package launch, failure-mode, and privacy matrix passed; manual accessibility remains
+  part of blocked task 0198)*
 - [x] 0220 Exact-production semantic evaluation *(needs 0188, 0195, 0196, 0218; four-target private
   measurements complete with an honest NO-GO; release publication remains disabled)*
 - [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
@@ -187,16 +188,17 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0046 Operation cancellation, pause and resume
 - [x] 0047 Operation queue and history
 - [x] 0048 In-application clipboard copy / cut / paste
+- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
+  drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
 - [x] 0075 Directory comparison and synchronization
 - [x] 0077 Checksums and duplicate-file detection
+- [x] 0093 Copy filename and path actions
 - [x] 0160 Safe operation undo
 - [ ] 0161 Saved synchronization profiles *(needs 0030, 0075)*
 - [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
 - [ ] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [ ] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
-- [x] 0093 Copy filename and path actions
-- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
-  drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
+- [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
 
 ## Actions, shortcuts & command palette
 

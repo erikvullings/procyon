@@ -662,10 +662,28 @@ test('desktop package smoke crosses native installer boundaries and retains isol
   assert.match(smoke, /dpkg-deb/);
   assert.match(smoke, /--appimage-extract/);
   assert.match(smoke, /xvfb-run/);
+  assert.match(smoke, /metadata\.isFile\(\)/);
+  assert.match(smoke, /metadata\.mode & 0o111/);
+  assert.match(smoke, /lstatSync\(right\)\.size - lstatSync\(left\)\.size/);
   assert.match(smoke, /FM_LOG_FILE/);
   assert.match(smoke, /PROCYON_QUALIFICATION_EVIDENCE_ROOT/);
   assert.match(smoke, /PROCYON_QUALIFICATION_CATALOG_DIRECTORY/);
   assert.match(smoke, /installed semantic\/\$\{name\} differs/);
+});
+
+test('installed semantic qualification has portable cleanup and AppImage build prerequisites', () => {
+  const qualification = read('scripts', 'qualify-semantic-installed.mjs');
+  const installed = workflow('release-desktop.yml').jobs['semantic-installed-qualification'];
+  const linuxDependencies = installed.steps.find(
+    (step) => step.name === 'Install Linux package and launch dependencies',
+  );
+
+  assert.match(qualification, /\brmSync\(filenameCanaryFile, \{ force: true \}\)/);
+  assert.doesNotMatch(qualification, /\bfs\./);
+  assert.match(qualification, /\bcpSync\(collected, path\.join\(evidence, 'safe-evidence'\)/);
+  assert.match(linuxDependencies.run, /\bxdg-utils\b/);
+  assert.match(JSON.stringify(installed), /runner\.temp.*semantic-installed-qualification/);
+  assert.doesNotMatch(JSON.stringify(installed), /target\/semantic-installed-qualification/);
 });
 
 test('README documents release versioning, package managers, smoke checks, and no auto-update', () => {
