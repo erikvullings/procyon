@@ -64,7 +64,7 @@ release-qualified repository variables absent or `false` until the final approva
 
 ### B. Prepare one immutable alpha candidate
 
-- [ ] Merge the qualification tooling and commit `fd775a2` into `main`, prepare the next numeric
+- [x] Merge the qualification tooling and commit `fd775a2` into `main`, prepare the next numeric
   alpha version, refresh generated evaluation fingerprints, and require normal CI to pass on the
   clean candidate revision.
 - [x] Use the public base-only v26 installer as the user-visible upgrade/rollback baseline. A prior
@@ -358,3 +358,9 @@ qualification; a private qualification run must never publish assets.
   ordinary Procyon process is closed and the helper-managed isolated profile is used. A separate
   account remains safer but is not mandatory; the normal application-data profile must never be
   used for qualification.
+- 2026-09-14 Copilot: Completed Part B. PR #46 merged candidate `0.1.0-27` into `main` at immutable
+  revision `9ed1dff617487980f4997a39e20e3fb6cd417942`; clean post-merge CI run `34836497504`
+  passed dependency audit, frontend, Rust on macOS/Linux/Windows, and macOS/Windows installer
+  builds. Public prerelease `v0.1.0-26` is retained as the base-only rollback baseline. Protected
+  semantic catalog and Apple signing/notarization configuration is present, while both
+  release-qualified variables remain absent.
