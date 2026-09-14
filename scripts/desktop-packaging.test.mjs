@@ -140,13 +140,13 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
-    "${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}",
+    `\${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}`,
   );
   assert.equal(release.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(
     release.jobs.chocolatey.if,
-    "${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}",
+    `\${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}`,
   );
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
   assert.equal(release.jobs.chocolatey.with.release_tag, `\${{ github.ref_name }}`);
