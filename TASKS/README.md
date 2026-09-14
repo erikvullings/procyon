@@ -126,10 +126,9 @@ semantic components are not installed.
 - [x] 0196 Release desktop semantic activation
 - [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
-- [ ] 0198 Semantic release qualification *(blocked: production artifact evaluation and
-  exact preceding-candidate rollback, generated-answer/specialized-corpus quality, native manual
-  accessibility/UX evidence, and release-owner approval remain outstanding; the release workflow
-  fails closed unless `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`)*
+- [ ] 0198 Semantic release qualification *(in progress: experimental OSS alpha tooling and checklist require
+  four-platform automation, an isolated-user macOS installer/VoiceOver pass, private provisioning,
+  honest tier-aware evidence, and release-owner approval; publication stays fail-closed)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
 - [x] 0200 Opt-in multi-query grounded Ask *(needs 0199 and its go decision; single-query remains
@@ -144,6 +143,8 @@ semantic components are not installed.
   measurements complete with an honest NO-GO; release publication remains disabled)*
 - [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
   for document/query embeddings with a mandatory clean index rebuild)*
+- [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
+  accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
 
 ## Structured knowledge search
 

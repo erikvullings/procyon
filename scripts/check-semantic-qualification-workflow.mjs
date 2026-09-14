@@ -104,6 +104,39 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   ) {
     failures.push('installed qualification must repeat safety proof before package execution');
   }
+  const helperStep = installedQualification?.steps?.find(
+    (step) => step.name === 'Build private macOS qualification helper',
+  );
+  const kitStep = installedQualification?.steps?.find(
+    (step) => step.name === 'Assemble private macOS operator kit',
+  );
+  const kitCommands = String(kitStep?.run ?? '');
+  if (
+    String(helperStep?.if ?? '') !== "matrix.target == 'macos-aarch64'" ||
+    !String(helperStep?.run ?? '').includes('--example semantic_qualification_kit') ||
+    String(kitStep?.if ?? '') !== "matrix.target == 'macos-aarch64'" ||
+    !kitCommands.includes('semantic-release-input/artifacts/*') ||
+    !kitCommands.includes('catalog.json') ||
+    !kitCommands.includes('catalog.sig') ||
+    !kitCommands.includes('semantic-catalog.pub') ||
+    !kitCommands.includes('find target/release/bundle/dmg') ||
+    !kitCommands.includes('SHA256SUMS') ||
+    !kitCommands.includes('semantic_qualification_kit install') ||
+    !kitCommands.includes('semantic_qualification_kit" cleanup')
+  ) {
+    failures.push(
+      'macOS installed qualification must package the helper, exact payloads, signed catalog, public key, DMG, checksums, and cleanup instructions',
+    );
+  }
+  if (
+    /PROCYON_SEMANTIC_DEVELOPER_BUNDLE|SIGNING_KEY|gh\s+release|action-gh-release/u.test(
+      `${String(helperStep?.run ?? '')}\n${kitCommands}`,
+    )
+  ) {
+    failures.push(
+      'private macOS operator kit must not contain developer overrides, signing secrets, or publication commands',
+    );
+  }
   const payloadPrecondition = semanticPayloads?.steps?.find(
     (step) => step.name === 'Verify exact-production semantic evaluation evidence',
   );

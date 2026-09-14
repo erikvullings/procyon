@@ -61,7 +61,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify exact-production semantic evaluation evidence
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: node scripts/check-semantic-release-preconditions.mjs
+        run: >
+          node scripts/check-semantic-release-preconditions.mjs
+          --policy experimental-alpha
       - name: Embed the signed macOS arm64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -229,7 +231,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify exact-production semantic evaluation evidence
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: node scripts/check-semantic-release-preconditions.mjs
+        run: >
+          node scripts/check-semantic-release-preconditions.mjs
+          --policy experimental-alpha
       - name: Embed the signed Linux x86-64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -282,7 +286,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify exact-production semantic evaluation evidence
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: node scripts/check-semantic-release-preconditions.mjs
+        run: >
+          node scripts/check-semantic-release-preconditions.mjs
+          --policy experimental-alpha
       - name: Embed the signed Windows x86-64 semantic catalog
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         uses: actions/download-artifact@v5
@@ -362,7 +368,9 @@ jobs:
         run: node scripts/check-semantic-qualification-workflow.mjs
       - name: Verify exact-production semantic evaluation evidence
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: node scripts/check-semantic-release-preconditions.mjs
+        run: >
+          node scripts/check-semantic-release-preconditions.mjs
+          --policy experimental-alpha
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
@@ -671,6 +679,59 @@ jobs:
           --catalog apps/fm-desktop/src-tauri/resources/semantic
           --public-key "${{ runner.temp }}/semantic-catalog.pub"
           --evidence "${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}"
+      - name: Build private macOS qualification helper
+        if: matrix.target == 'macos-aarch64'
+        run: cargo build --release -p fm-semantic-components --example semantic_qualification_kit
+      - name: Assemble private macOS operator kit
+        if: matrix.target == 'macos-aarch64'
+        shell: bash
+        run: |
+          KIT="$RUNNER_TEMP/semantic-installed-qualification/${{ matrix.target }}/operator-kit"
+          mkdir -p "$KIT/artifacts"
+          cp target/release/examples/semantic_qualification_kit "$KIT/"
+          cp apps/fm-desktop/src-tauri/resources/semantic/catalog.json "$KIT/"
+          cp apps/fm-desktop/src-tauri/resources/semantic/catalog.sig "$KIT/"
+          cp "$RUNNER_TEMP/semantic-catalog.pub" "$KIT/catalog.pub"
+          cp semantic-release-input/artifacts/* "$KIT/artifacts/"
+          DMG_PATH="$(find target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$DMG_PATH"
+          cp "$DMG_PATH" "$KIT/"
+          cat > "$KIT/README.txt" <<'EOF'
+          PRIVATE MACOS ARM64 SEMANTIC QUALIFICATION KIT
+
+          Use only while signed in as the dedicated macOS qualification user. The profile path
+          must be a new directory strictly beneath that user's home and must not be the home or
+          the normal Library/Application Support/fm directory.
+
+            KIT="$(pwd)"
+            HOME_DIR="$HOME"
+            PROFILE="$HOME/qualification-profiles/procyon-semantic-alpha"
+            shasum -a 256 --check SHA256SUMS
+            DMG="$(find . -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+            test -n "$DMG"
+            codesign --verify --strict --verbose=2 "$DMG"
+            xcrun stapler validate "$DMG"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG"
+            hdiutil verify "$DMG"
+            ./semantic_qualification_kit install "$HOME_DIR" "$PROFILE" \
+              catalog.json catalog.sig artifacts catalog.pub
+            env HOME="$PROFILE" /Applications/Procyon.app/Contents/MacOS/Procyon
+
+          Close Procyon before cleanup, then run:
+
+            "$KIT/semantic_qualification_kit" cleanup "$HOME_DIR" "$PROFILE"
+
+          The helper accepts no signing credential and performs no network access. It verifies the
+          detached production catalog signature, exact private artifact set, macOS arm64 target,
+          production pipeline, checksums, and activation before writing ComponentManager state at
+          PROFILE/Library/Application Support/fm. Cleanup refuses an unmarked or symlinked tree.
+          EOF
+          (
+            cd "$KIT"
+            find . -type f ! -name SHA256SUMS -print0 |
+              LC_ALL=C sort -z |
+              xargs -0 shasum -a 256 > SHA256SUMS
+          )
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -727,6 +788,7 @@ jobs:
         if: github.event_name == 'push'
         run: >
           node scripts/check-semantic-release-preconditions.mjs
+          --policy experimental-alpha
           --report semantic-release-assets/semantic-production-evaluation.json
           --approved-report docs/evaluations/semantic-production-v1.json
       - uses: actions/upload-artifact@v4

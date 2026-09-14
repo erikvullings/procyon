@@ -1,11 +1,16 @@
 // Fails closed unless the checked-in task-0198 report records a recomputed,
-// supported-target production go.
+// supported-target go under the explicitly selected evidence policy.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const reportArgument = process.argv.indexOf('--report');
 const approvedArgument = process.argv.indexOf('--approved-report');
+const policyArgument = process.argv.indexOf('--policy');
+const evidencePolicy = policyArgument >= 0 ? process.argv[policyArgument + 1] : 'production-stable';
+if (!['production-stable', 'experimental-alpha'].includes(evidencePolicy)) {
+  throw new Error(`unsupported semantic evidence policy: ${evidencePolicy ?? '<missing>'}`);
+}
 const reportPath =
   reportArgument >= 0
     ? process.argv[reportArgument + 1]
@@ -25,6 +30,8 @@ const plan = {
           '--example',
           'validate_semantic_release_report',
           '--',
+          '--policy',
+          evidencePolicy,
           reportPath,
         ],
 };
@@ -39,10 +46,14 @@ if (reportPath === undefined) {
 if (approvedArgument >= 0 && approvedPath === undefined) {
   throw new Error('--approved-report requires a path');
 }
+if (policyArgument >= 0 && process.argv[policyArgument + 1] === undefined) {
+  throw new Error('--policy requires a policy');
+}
 
 const reportBytes = readFileSync(reportPath, 'utf8');
 const report = JSON.parse(reportBytes);
 if (
+  report.evidencePolicy !== evidencePolicy ||
   report.decision !== 'go' ||
   report.productionMeasurement !== true ||
   !Array.isArray(report.measurements) ||
@@ -69,4 +80,4 @@ if (validation.status !== 0) {
   process.stderr.write(`${validation.stdout ?? ''}${validation.stderr ?? ''}`);
   throw new Error('the repository semantic evaluation evidence does not support a go');
 }
-console.log('Verified a measured semantic production go decision.');
+console.log(`Verified a measured semantic ${policy} go decision.`);

@@ -15,7 +15,7 @@ use crate::semantic_evaluation::{
 /// Version of the checked-in production corpus.
 pub const PRODUCTION_CORPUS_SCHEMA_VERSION: u32 = 2;
 /// Version of the release evidence report.
-pub const PRODUCTION_REPORT_VERSION: u32 = 1;
+pub const PRODUCTION_REPORT_VERSION: u32 = 2;
 /// Fixed retrieval cutoff required by task 0198.
 pub const PRODUCTION_RETRIEVAL_CUTOFF: usize = 10;
 
@@ -29,14 +29,23 @@ const SUPPORTED_TARGETS: [&str; 4] = [
     "macos-aarch64",
     "windows-x86_64",
 ];
-const REQUIRED_MANUAL_CRITERIA: [&str; 6] = [
-    "accessibility",
+const REQUIRED_MANUAL_CRITERIA: [&str; 5] = [
     "failure-modes",
     "generated-answer-grounding",
     "installed-lifecycle",
     "privacy",
     "release-owner-approval",
 ];
+const REQUIRED_DEFERRED_ALPHA_CRITERIA: [&str; 3] = [
+    "linux-aarch64-manual-accessibility-ux",
+    "linux-x86_64-manual-accessibility-ux",
+    "windows-x86_64-manual-accessibility-ux",
+];
+const MACOS_ALPHA_MANUAL_CRITERION: &str = "macos-aarch64-manual";
+const WINDOWS_ALPHA_MANUAL_LIMITATION: &str =
+    "Windows x86-64 manual accessibility and UX remain deferred.";
+const LINUX_ALPHA_MANUAL_LIMITATION: &str =
+    "Linux x86-64 and Linux arm64 manual accessibility and UX remain deferred.";
 const REQUIRED_COMPONENTS: [&str; 3] = [
     "procyon.semantic.model.multilingual-e5-small",
     "procyon.semantic.worker",
@@ -530,6 +539,8 @@ pub enum ManualCriterionStatus {
     Pending,
     /// Evidence was recorded and approved.
     Passed,
+    /// The limitation is documented but remains untested.
+    Deferred,
 }
 
 /// One manual release criterion that automated retrieval cannot establish.
@@ -554,12 +565,25 @@ pub enum ProductionEvaluationDecision {
     NoGo,
 }
 
+/// Evidence bar under which a semantic release report is evaluated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProductionEvidencePolicy {
+    /// Full production/stable evidence; deferred rows never qualify.
+    #[serde(rename = "production-stable")]
+    ProductionStable,
+    /// First opt-in OSS alpha with explicitly deferred Windows/Linux manual checks.
+    #[serde(rename = "experimental-alpha")]
+    ExperimentalAlpha,
+}
+
 /// Aggregate, operator-readable semantic release report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProductionEvaluationReport {
     /// Report schema version.
     pub report_version: u32,
+    /// Explicit release evidence bar used to derive this report.
+    pub evidence_policy: ProductionEvidencePolicy,
     /// Checked-in corpus identity.
     pub corpus_id: String,
     /// Digest of parsed cases and generated source inputs.
@@ -621,6 +645,28 @@ impl ProductionEvaluationReport {
         corpus: &ProductionEvaluationCorpus,
         measurement_basis: impl Into<String>,
         limitations: Vec<String>,
+        measurements: Vec<ProductionTargetMeasurement>,
+        embedding_preprocessing_migration: EmbeddingPreprocessingMigration,
+        manual_criteria: Vec<ManualCriterion>,
+    ) -> Self {
+        Self::from_measurements_for_policy(
+            corpus,
+            ProductionEvidencePolicy::ProductionStable,
+            measurement_basis,
+            limitations,
+            measurements,
+            embedding_preprocessing_migration,
+            manual_criteria,
+        )
+    }
+
+    /// Builds a report under an explicit release evidence policy.
+    #[must_use]
+    pub fn from_measurements_for_policy(
+        corpus: &ProductionEvaluationCorpus,
+        evidence_policy: ProductionEvidencePolicy,
+        measurement_basis: impl Into<String>,
+        limitations: Vec<String>,
         mut measurements: Vec<ProductionTargetMeasurement>,
         embedding_preprocessing_migration: EmbeddingPreprocessingMigration,
         manual_criteria: Vec<ManualCriterion>,
@@ -629,6 +675,8 @@ impl ProductionEvaluationReport {
         let production_measurement = has_all_production_targets(&measurements);
         let threshold_decision = ThresholdDecision::default();
         let blocking_reasons = blocking_reasons(
+            evidence_policy,
+            &limitations,
             &measurements,
             production_measurement,
             &threshold_decision,
@@ -642,6 +690,7 @@ impl ProductionEvaluationReport {
         };
         Self {
             report_version: PRODUCTION_REPORT_VERSION,
+            evidence_policy,
             corpus_id: corpus.corpus_id.clone(),
             corpus_fingerprint: corpus.fingerprint(),
             release_candidate_fingerprint: release_candidate_fingerprint(),
@@ -662,6 +711,8 @@ impl ProductionEvaluationReport {
     pub fn pending_manual_criteria() -> Vec<ManualCriterion> {
         REQUIRED_MANUAL_CRITERIA
             .iter()
+            .chain([&MACOS_ALPHA_MANUAL_CRITERION])
+            .chain(REQUIRED_DEFERRED_ALPHA_CRITERIA.iter())
             .map(|id| ManualCriterion {
                 id: (*id).into(),
                 status: ManualCriterionStatus::Pending,
@@ -690,6 +741,24 @@ impl ProductionEvaluationReport {
         &self,
         corpus: &ProductionEvaluationCorpus,
     ) -> Result<(), ProductionEvaluationError> {
+        self.validate_for_policy(corpus, self.evidence_policy)
+    }
+
+    /// Recomputes the report under the caller-selected policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the report declares another policy or its evidence is invalid.
+    pub fn validate_for_policy(
+        &self,
+        corpus: &ProductionEvaluationCorpus,
+        evidence_policy: ProductionEvidencePolicy,
+    ) -> Result<(), ProductionEvaluationError> {
+        if self.evidence_policy != evidence_policy {
+            return Err(ProductionEvaluationError::InvalidReport(
+                "the report evidence policy does not match the requested release policy".into(),
+            ));
+        }
         corpus.validate()?;
         if self.report_version != PRODUCTION_REPORT_VERSION {
             return Err(ProductionEvaluationError::UnsupportedSchema(
@@ -718,6 +787,7 @@ impl ProductionEvaluationReport {
         validate_threshold_decision(&self.threshold_decision)?;
         validate_embedding_migration(&self.embedding_preprocessing_migration)?;
         validate_manual_criteria(&self.manual_criteria)?;
+        validate_manual_criteria_for_policy(evidence_policy, &self.manual_criteria)?;
         let mut targets = BTreeSet::new();
         let mut revisions = BTreeSet::new();
         let mut model_artifacts = BTreeSet::new();
@@ -755,6 +825,8 @@ impl ProductionEvaluationReport {
             ));
         }
         let expected = blocking_reasons(
+            evidence_policy,
+            &self.limitations,
             &self.measurements,
             production_measurement,
             &self.threshold_decision,
@@ -1228,6 +1300,8 @@ fn validate_embedding_migration(
 fn validate_manual_criteria(criteria: &[ManualCriterion]) -> Result<(), ProductionEvaluationError> {
     let expected = REQUIRED_MANUAL_CRITERIA
         .into_iter()
+        .chain([MACOS_ALPHA_MANUAL_CRITERION])
+        .chain(REQUIRED_DEFERRED_ALPHA_CRITERIA)
         .collect::<BTreeSet<_>>();
     let actual = criteria
         .iter()
@@ -1238,15 +1312,32 @@ fn validate_manual_criteria(criteria: &[ManualCriterion]) -> Result<(), Producti
             "the complete task-0198 manual criteria set is required".into(),
         ));
     }
-    if criteria.iter().any(|criterion| {
-        criterion.status == ManualCriterionStatus::Passed
-            && criterion
-                .evidence
-                .as_deref()
-                .is_none_or(|evidence| !valid_id(evidence))
+    if criteria.iter().any(|criterion| match criterion.status {
+        ManualCriterionStatus::Passed | ManualCriterionStatus::Deferred => criterion
+            .evidence
+            .as_deref()
+            .is_none_or(|evidence| !valid_id(evidence)),
+        ManualCriterionStatus::Pending => criterion.evidence.is_some(),
     }) {
         return Err(ProductionEvaluationError::InvalidReport(
-            "passed manual criteria require an opaque evidence identity".into(),
+            "manual criterion status and opaque evidence identity are inconsistent".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_manual_criteria_for_policy(
+    evidence_policy: ProductionEvidencePolicy,
+    criteria: &[ManualCriterion],
+) -> Result<(), ProductionEvaluationError> {
+    if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
+        && criteria.iter().any(|criterion| {
+            REQUIRED_DEFERRED_ALPHA_CRITERIA.contains(&criterion.id.as_str())
+                && criterion.status == ManualCriterionStatus::Passed
+        })
+    {
+        return Err(ProductionEvaluationError::InvalidReport(
+            "experimental-alpha Windows and Linux manual rows must be explicitly deferred".into(),
         ));
     }
     Ok(())
@@ -1265,6 +1356,8 @@ fn has_all_production_targets(measurements: &[ProductionTargetMeasurement]) -> b
 }
 
 fn blocking_reasons(
+    evidence_policy: ProductionEvidencePolicy,
+    limitations: &[String],
     measurements: &[ProductionTargetMeasurement],
     production_measurement: bool,
     threshold: &ThresholdDecision,
@@ -1336,15 +1429,40 @@ fn blocking_reasons(
             ));
         }
     }
+    if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
+        && !alpha_manual_limitations_are_documented(limitations)
+    {
+        reasons.push(
+            "Experimental-alpha evidence must document deferred Windows and Linux manual accessibility and UX limitations.".into(),
+        );
+    }
     for criterion in manual_criteria {
-        if criterion.status != ManualCriterionStatus::Passed {
+        let is_deferred_alpha_criterion =
+            REQUIRED_DEFERRED_ALPHA_CRITERIA.contains(&criterion.id.as_str());
+        let expected_status = if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
+            && is_deferred_alpha_criterion
+        {
+            ManualCriterionStatus::Deferred
+        } else {
+            ManualCriterionStatus::Passed
+        };
+        if criterion.status != expected_status {
             reasons.push(format!(
-                "Task-0198 manual criterion `{}` remains pending.",
-                criterion.id
+                "Task-0198 manual criterion `{}` must be {:?} under the {:?} evidence policy.",
+                criterion.id, expected_status, evidence_policy
             ));
         }
     }
     reasons
+}
+
+fn alpha_manual_limitations_are_documented(limitations: &[String]) -> bool {
+    [
+        WINDOWS_ALPHA_MANUAL_LIMITATION,
+        LINUX_ALPHA_MANUAL_LIMITATION,
+    ]
+    .iter()
+    .all(|required| limitations.iter().any(|limitation| limitation == required))
 }
 
 /// Fingerprints every source that can change conversion, chunking, embedding,
@@ -1672,6 +1790,88 @@ mod tests {
         ]
     }
 
+    fn qualifying_measurements(
+        corpus: &ProductionEvaluationCorpus,
+    ) -> Vec<ProductionTargetMeasurement> {
+        let templates = observations();
+        let observations = corpus
+            .cases
+            .iter()
+            .map(|case| {
+                let mut observation = templates[usize::from(case.expected_no_answer)].clone();
+                observation.case_id.clone_from(&case.id);
+                observation
+            })
+            .collect::<Vec<_>>();
+        SUPPORTED_TARGETS
+            .into_iter()
+            .map(|target| {
+                ProductionTargetMeasurement::new(
+                    corpus,
+                    identity(target),
+                    true,
+                    observations.clone(),
+                )
+                .expect("qualifying target measurement")
+            })
+            .collect()
+    }
+
+    fn qualifying_corpus() -> ProductionEvaluationCorpus {
+        let mut corpus = corpus();
+        for index in 2..=10 {
+            let id = format!("positive-{index}");
+            let mut case = corpus.cases[0].clone();
+            case.id.clone_from(&id);
+            corpus.cases.push(case);
+            corpus
+                .scenario_requirements
+                .insert(id, ProductionScenario::Standard);
+        }
+        corpus
+    }
+
+    fn passed_manual_criterion(id: &str) -> ManualCriterion {
+        ManualCriterion {
+            id: id.into(),
+            status: ManualCriterionStatus::Passed,
+            evidence: Some(format!("{id}-evidence")),
+        }
+    }
+
+    fn qualifying_alpha_report(corpus: &ProductionEvaluationCorpus) -> ProductionEvaluationReport {
+        let mut criteria = REQUIRED_MANUAL_CRITERIA
+            .into_iter()
+            .chain([MACOS_ALPHA_MANUAL_CRITERION])
+            .map(passed_manual_criterion)
+            .collect::<Vec<_>>();
+        criteria.extend(
+            REQUIRED_DEFERRED_ALPHA_CRITERIA
+                .into_iter()
+                .map(|id| ManualCriterion {
+                    id: id.into(),
+                    status: ManualCriterionStatus::Deferred,
+                    evidence: Some(format!("{id}-limitation")),
+                }),
+        );
+        let migration = EmbeddingPreprocessingMigration {
+            baseline_comparison_evidence: Some("reviewed-comparison".into()),
+            ..EmbeddingPreprocessingMigration::default()
+        };
+        ProductionEvaluationReport::from_measurements_for_policy(
+            corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            "exact packaged four-platform automation and macOS arm64 manual pass",
+            vec![
+                WINDOWS_ALPHA_MANUAL_LIMITATION.into(),
+                LINUX_ALPHA_MANUAL_LIMITATION.into(),
+            ],
+            qualifying_measurements(corpus),
+            migration,
+            criteria,
+        )
+    }
+
     #[test]
     fn exact_case_coverage_and_metrics_are_recomputed() {
         let corpus = corpus();
@@ -1863,6 +2063,141 @@ mod tests {
     }
 
     #[test]
+    fn experimental_alpha_accepts_deferred_windows_and_linux_manual_rows() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+
+        report
+            .validate_for_policy(&corpus, ProductionEvidencePolicy::ExperimentalAlpha)
+            .expect("alpha evidence policy");
+        assert_eq!(
+            report.decision,
+            ProductionEvaluationDecision::Go,
+            "{:?}",
+            report.blocking_reasons
+        );
+    }
+
+    #[test]
+    fn experimental_alpha_rejects_deferred_rows_disguised_as_passes() {
+        let corpus = qualifying_corpus();
+        let mut report = qualifying_alpha_report(&corpus);
+        let criterion = report
+            .manual_criteria
+            .iter_mut()
+            .find(|criterion| criterion.id == "windows-x86_64-manual-accessibility-ux")
+            .expect("Windows manual row");
+        criterion.status = ManualCriterionStatus::Passed;
+        report = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            report.limitations,
+            report.measurements,
+            report.embedding_preprocessing_migration,
+            report.manual_criteria,
+        );
+
+        assert!(matches!(
+            report.validate_for_policy(&corpus, ProductionEvidencePolicy::ExperimentalAlpha),
+            Err(ProductionEvaluationError::InvalidReport(_))
+        ));
+    }
+
+    #[test]
+    fn experimental_alpha_report_cannot_qualify_as_production_stable() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+
+        assert!(matches!(
+            report.validate_for_policy(&corpus, ProductionEvidencePolicy::ProductionStable),
+            Err(ProductionEvaluationError::InvalidReport(_))
+        ));
+    }
+
+    #[test]
+    fn experimental_alpha_recomputes_required_evidence_instead_of_trusting_go_fields() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+        let mut criteria = report.manual_criteria;
+        criteria
+            .iter_mut()
+            .find(|criterion| criterion.id == MACOS_ALPHA_MANUAL_CRITERION)
+            .expect("macOS manual row")
+            .status = ManualCriterionStatus::Pending;
+        let mut incomplete = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            Vec::new(),
+            report.measurements.into_iter().skip(1).collect(),
+            report.embedding_preprocessing_migration,
+            criteria,
+        );
+        incomplete.decision = ProductionEvaluationDecision::Go;
+        incomplete.blocking_reasons.clear();
+
+        assert!(matches!(
+            incomplete.validate_for_policy(&corpus, ProductionEvidencePolicy::ExperimentalAlpha),
+            Err(ProductionEvaluationError::InvalidReport(_))
+        ));
+    }
+
+    #[test]
+    fn experimental_alpha_requires_macos_owner_and_platform_limitations() {
+        let corpus = qualifying_corpus();
+        for id in [MACOS_ALPHA_MANUAL_CRITERION, "release-owner-approval"] {
+            let report = qualifying_alpha_report(&corpus);
+            let mut criteria = report.manual_criteria;
+            criteria
+                .iter_mut()
+                .find(|criterion| criterion.id == id)
+                .expect("required alpha row")
+                .status = ManualCriterionStatus::Pending;
+            let incomplete = ProductionEvaluationReport::from_measurements_for_policy(
+                &corpus,
+                ProductionEvidencePolicy::ExperimentalAlpha,
+                report.measurement_basis,
+                report.limitations,
+                report.measurements,
+                report.embedding_preprocessing_migration,
+                criteria,
+            );
+            assert_eq!(incomplete.decision, ProductionEvaluationDecision::NoGo);
+        }
+
+        let report = qualifying_alpha_report(&corpus);
+        let undocumented = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            Vec::new(),
+            report.measurements,
+            report.embedding_preprocessing_migration,
+            report.manual_criteria,
+        );
+        assert_eq!(undocumented.decision, ProductionEvaluationDecision::NoGo);
+        assert!(
+            undocumented
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("document deferred Windows and Linux"))
+        );
+
+        let report = qualifying_alpha_report(&corpus);
+        let misleading = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            vec!["Windows and Linux manual testing is not deferred.".into()],
+            report.measurements,
+            report.embedding_preprocessing_migration,
+            report.manual_criteria,
+        );
+        assert_eq!(misleading.decision, ProductionEvaluationDecision::NoGo);
+    }
+
+    #[test]
     fn corpus_fingerprint_changes_with_source_or_labels() {
         let original = corpus();
         let mut changed = original.clone();
@@ -1906,6 +2241,10 @@ mod tests {
             "../../../docs/evaluations/semantic-production-v1.json"
         ))
         .expect("checked-in semantic template");
+        assert_eq!(
+            report.release_candidate_fingerprint,
+            release_candidate_fingerprint()
+        );
         report
             .validate(&corpus)
             .expect("current fail-closed template");

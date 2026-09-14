@@ -194,6 +194,7 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
     "github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
   );
   assert.match(payloadPrecondition.run, /check-semantic-release-preconditions\.mjs/);
+  assert.match(payloadPrecondition.run, /--policy experimental-alpha/);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
   assert.match(catalogs.if, /always\(\)/);
   assert.equal(catalogs.secrets, 'inherit');
@@ -220,6 +221,7 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(JSON.stringify(installed), /retention-days.*7/);
   assert.match(JSON.stringify(collect), /aggregate-semantic-production-evaluation\.mjs/);
   assert.match(JSON.stringify(collect), /--approved-report/);
+  assert.match(JSON.stringify(collect), /--policy experimental-alpha/);
   for (const [jobName, catalogTarget] of [
     ['macos', 'macos-aarch64'],
     ['windows', 'windows-x86_64'],
@@ -244,6 +246,12 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
         "github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
       );
     }
+    assert.match(
+      semanticSteps.find(
+        (step) => step.name === 'Verify exact-production semantic evaluation evidence',
+      ).run,
+      /--policy experimental-alpha/,
+    );
     assert.doesNotMatch(JSON.stringify(job), /SEMANTIC_CATALOG_SIGNING_KEY_BASE64/);
   }
   assert.match(releaseText, /vars\.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64/);
@@ -269,6 +277,36 @@ test('semantic release preconditions require a current four-target measured go',
     '--example',
     'validate_semantic_release_report',
   ]);
+  assert.deepEqual(planned.arguments.slice(7, 11), [
+    '--',
+    '--policy',
+    'production-stable',
+    join(repoRoot, 'docs', 'evaluations', 'semantic-production-v1.json'),
+  ]);
+
+  const alphaPlan = JSON.parse(
+    execFileSync(
+      'node',
+      [
+        'scripts/check-semantic-release-preconditions.mjs',
+        '--policy',
+        'experimental-alpha',
+        '--print-plan',
+      ],
+      { cwd: repoRoot, encoding: 'utf8' },
+    ),
+  );
+  assert.deepEqual(alphaPlan.arguments.slice(7, 10), ['--', '--policy', 'experimental-alpha']);
+  const unknownPolicy = spawnSync(
+    'node',
+    ['scripts/check-semantic-release-preconditions.mjs', '--policy', 'alpha'],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(unknownPolicy.status, 0);
+  assert.match(
+    `${unknownPolicy.stdout}${unknownPolicy.stderr}`,
+    /unsupported semantic evidence policy/i,
+  );
 
   const current = spawnSync('node', ['scripts/check-semantic-release-preconditions.mjs'], {
     cwd: repoRoot,
