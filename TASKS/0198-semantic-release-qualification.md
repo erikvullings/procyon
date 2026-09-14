@@ -395,3 +395,13 @@ qualification; a private qualification run must never publish assets.
   The aggregate remains intentionally NO-GO pending Part D, release-owner approval, and the
   production/stable-only specialized-corpus, generated-answer, case-fold, and native
   Windows/Linux manual evidence tracked by task 0225.
+- 2026-09-14 Copilot: Part D rejected private candidate `0.1.0-27` during real installed-app
+  folder enrolment. The signed hardened macOS worker aborted before `main` because its
+  `@rpath/libzvec_c_api.dylib` dependency had no `LC_RPATH`; macOS does not honor the launcher's
+  `DYLD_LIBRARY_PATH` for this process. Consent persisted, but indexing failed closed as
+  `semantic capability is unavailable`. The fix makes every semantic-runtime worker carry
+  `LC_RPATH @loader_path`, stages the verified worker beside the verified native libraries, and
+  makes production bundle construction reject a macOS worker without that load command. A local
+  exact-shape launch created the authenticated IPC socket without any loader environment
+  override. Candidate `0.1.0-27` remains NO-GO; Parts C and D must be rerun against a new immutable
+  candidate before any semantic publication.

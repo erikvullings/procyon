@@ -136,6 +136,21 @@ export function parseProductionBundleArguments(args) {
   return values;
 }
 
+export function requireRelocatableWorkerLoaderPath(operatingSystem, loaderCommands) {
+  if (operatingSystem === 'macos' && !/\bpath @loader_path \(offset \d+\)/u.test(loaderCommands)) {
+    throw new Error('macOS production semantic worker is missing LC_RPATH @loader_path');
+  }
+}
+
+function verifyProductionWorkerLoaderPath(target, executable) {
+  if (target.os !== 'macos') return;
+  const loaderCommands = execFileSync('otool', ['-l', executable], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  });
+  requireRelocatableWorkerLoaderPath(target.os, loaderCommands);
+}
+
 function smokeExecutable(executable, runtimeDirectories) {
   const environment = { ...process.env };
   const runtimePath = runtimeDirectories.join(path.delimiter);
@@ -260,6 +275,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     'release',
     process.platform === 'win32' ? 'fm-semantic-worker.exe' : 'fm-semantic-worker',
   );
+  verifyProductionWorkerLoaderPath(target, executable);
   const runtimeDirectory = path.join(buildRoot, 'semantic-zvec-runtime');
   fs.rmSync(runtimeDirectory, { recursive: true, force: true });
   fs.mkdirSync(runtimeDirectory, { recursive: true });

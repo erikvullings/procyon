@@ -9,6 +9,7 @@ import {
   PRODUCTION_CHUNKER_IDENTITY,
   PRODUCTION_CONVERTER_IDENTITY,
   parseProductionBundleArguments,
+  requireRelocatableWorkerLoaderPath,
   sourceBuildIdentity,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
@@ -77,6 +78,29 @@ test('Zvec native library names are platform-specific', () => {
   assert.deepEqual(nativeLibraryNames('darwin'), ['libzvec_c_api.dylib']);
   assert.deepEqual(nativeLibraryNames('win32'), ['zvec_c_api.dll']);
   assert.deepEqual(nativeLibraryNames('linux'), ['libzvec_c_api.so']);
+});
+
+test('macOS production workers require a loader-relative native-library path', () => {
+  assert.doesNotThrow(() =>
+    requireRelocatableWorkerLoaderPath(
+      'macos',
+      [
+        'Load command 22',
+        '          cmd LC_RPATH',
+        '      cmdsize 32',
+        '         path @loader_path (offset 12)',
+      ].join('\n'),
+    ),
+  );
+  assert.throws(
+    () =>
+      requireRelocatableWorkerLoaderPath(
+        'macos',
+        'Load command 22\n          cmd LC_CODE_SIGNATURE',
+      ),
+    /missing LC_RPATH @loader_path/u,
+  );
+  assert.doesNotThrow(() => requireRelocatableWorkerLoaderPath('linux', ''));
 });
 
 test('production bundle records the compiled structural chunker identity', () => {

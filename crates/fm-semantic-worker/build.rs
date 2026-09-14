@@ -1,7 +1,7 @@
-//! Adds a relocatable native-library lookup path to developer worker binaries.
+//! Adds a relocatable native-library lookup path to semantic worker binaries.
 
 fn main() {
-    if std::env::var_os("CARGO_FEATURE_DEVELOPER_BUNDLE").is_none() {
+    if std::env::var_os("CARGO_FEATURE_SEMANTIC_RUNTIME").is_none() {
         return;
     }
     match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {

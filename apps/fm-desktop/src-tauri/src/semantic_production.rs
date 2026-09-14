@@ -261,11 +261,15 @@ fn managed_worker_resolver(
         if let Some(onnx_runtime) = onnx_runtime.as_deref() {
             native_payloads.push((onnx_runtime, onnx_runtime_file_name()));
         }
-        prepare_native_library_directory(&native_library_directory, &native_payloads)?;
+        let launch_executable = prepare_worker_launch_directory(
+            &native_library_directory,
+            &executable,
+            &native_payloads,
+        )?;
         let ocrmypdf_executable =
             configured_ocrmypdf_executable(ocr_policy.as_ref(), ocr_probe.as_ref());
         Ok(fm_semantic_worker::ManagedWorkerLaunch::new(
-            executable,
+            launch_executable,
             data_directory.clone(),
             native_library_directory.clone(),
             model_pack,
@@ -298,34 +302,46 @@ fn required_verified_payload(
         .ok_or_else(|| format!("the trusted {label} generation is not installed"))
 }
 
-fn prepare_native_library_directory(
+fn prepare_worker_launch_directory(
     directory: &Path,
+    executable: &Path,
     payloads: &[(&Path, &str)],
-) -> Result<(), String> {
+) -> Result<PathBuf, String> {
     let staging = directory.with_extension("building");
     let _ = fs::remove_dir_all(&staging);
     fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
     let result = (|| {
+        let executable_name = executable
+            .file_name()
+            .ok_or_else(|| "verified worker payload has no file name".to_owned())?;
+        let staged_executable = staging.join(executable_name);
+        copy_verified_payload(executable, &staged_executable, "worker executable")?;
         for (payload, loader_name) in payloads {
             let loader = staging.join(loader_name);
-            fs::copy(payload, &loader).map_err(|error| error.to_string())?;
-            if fs::read(payload).map_err(|error| error.to_string())?
-                != fs::read(&loader).map_err(|error| error.to_string())?
-            {
-                return Err(format!(
-                    "assembled native dependency {loader_name} differs from its verified payload"
-                ));
-            }
+            copy_verified_payload(payload, &loader, loader_name)?;
         }
         if directory.exists() {
             fs::remove_dir_all(directory).map_err(|error| error.to_string())?;
         }
-        fs::rename(&staging, directory).map_err(|error| error.to_string())
+        fs::rename(&staging, directory).map_err(|error| error.to_string())?;
+        Ok(directory.join(executable_name))
     })();
     if result.is_err() {
         let _ = fs::remove_dir_all(staging);
     }
     result
+}
+
+fn copy_verified_payload(source: &Path, destination: &Path, label: &str) -> Result<(), String> {
+    fs::copy(source, destination).map_err(|error| error.to_string())?;
+    if fs::read(source).map_err(|error| error.to_string())?
+        != fs::read(destination).map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "assembled {label} differs from its verified payload"
+        ));
+    }
+    Ok(())
 }
 
 struct HttpArtifact {
@@ -659,25 +675,30 @@ mod tests {
     }
 
     #[test]
-    fn assembles_only_verified_native_payload_bytes_for_worker_launch() {
+    fn assembles_verified_worker_and_native_payloads_in_one_launch_directory() {
         let root = tempfile::tempdir().expect("root");
+        let worker = root.path().join("worker");
         let first = root.path().join("first");
         let second = root.path().join("second");
         let native = root.path().join("worker-native");
+        fs::write(&worker, b"worker").expect("worker payload");
         fs::write(&first, b"zvec").expect("first payload");
         fs::write(&second, b"onnx").expect("second payload");
         fs::create_dir(&native).expect("stale native directory");
         fs::write(native.join("stale"), b"stale").expect("stale payload");
 
-        prepare_native_library_directory(
+        let launch_executable = prepare_worker_launch_directory(
             &native,
+            &worker,
             &[
                 (first.as_path(), "libzvec_c_api.so"),
                 (second.as_path(), "libonnxruntime.so.1"),
             ],
         )
-        .expect("native assembly");
+        .expect("worker launch assembly");
 
+        assert_eq!(launch_executable, native.join("worker"));
+        assert_eq!(fs::read(launch_executable).unwrap(), b"worker");
         assert_eq!(fs::read(native.join("libzvec_c_api.so")).unwrap(), b"zvec");
         assert_eq!(
             fs::read(native.join("libonnxruntime.so.1")).unwrap(),
