@@ -74,16 +74,16 @@ release-qualified repository variables absent or `false` until the final approva
 
 ### C. Run the private four-platform matrix
 
-- [ ] Run `pnpm run semantic:qualification:check`.
-- [ ] Dispatch `gh workflow run release-desktop.yml --ref main` from the immutable candidate and
+- [x] Run `pnpm run semantic:qualification:check`.
+- [x] Dispatch `gh workflow run release-desktop.yml --ref main` from the immutable candidate and
   record the run ID.
-- [ ] Require qualification safety, all four payloads, all four signed catalogs, all four automated
+- [x] Require qualification safety, all four payloads, all four signed catalogs, all four automated
   installed lifecycle/privacy jobs, and private aggregation to pass. All public/package-manager
   jobs must remain skipped.
-- [ ] Download every private artifact before its seven-day expiry and independently verify source
+- [x] Download every private artifact before its seven-day expiry and independently verify source
   revision, target, signature, checksum, package, catalog, model, runtime, converter, chunker, and
   retrieval-policy identities.
-- [ ] Review the exact four-target retrieval metrics and negative controls. Keep the `0.84`
+- [x] Review the exact four-target retrieval metrics and negative controls. Keep the `0.84`
   absolute floor and `0.02` relative window unless measured evidence justifies a change.
 
 ### D. Perform the macOS installer pass without a VM
@@ -138,9 +138,9 @@ qualification; a private qualification run must never publish assets.
 
 ### 1. Freeze the next candidate and retain the rollback baseline
 
-- [ ] Merge commit `fd775a2` (settings preservation across upgrades) into `main` and require all
+- [x] Merge commit `fd775a2` (settings preservation across upgrades) into `main` and require all
   normal CI jobs to pass.
-- [ ] Prepare the next numeric alpha candidate (expected `0.1.0-27`), refresh both semantic
+- [x] Prepare the next numeric alpha candidate (expected `0.1.0-27`), refresh both semantic
   evaluation fingerprints changed by the version bump, and land it on a clean immutable `main`
   revision.
 - [ ] Download the private run `34711114776` payloads, signed catalogs, packages, and reports
@@ -149,9 +149,9 @@ qualification; a private qualification run must never publish assets.
 - [ ] Designate those retained `0.1.0-25` signed artifacts as the preceding semantic candidate.
   If any required byte is unavailable or fails its recorded digest, generate and retain a new
   baseline candidate before testing the next candidate; do not substitute developer-bundle bytes.
-- [ ] Confirm the `desktop-release` environment still has the matching catalog signing secret,
+- [x] Confirm the `desktop-release` environment still has the matching catalog signing secret,
   catalog verifying-key variable, and Apple signing/notarization credentials.
-- [ ] Confirm `SEMANTIC_RELEASE_QUALIFIED` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or
+- [x] Confirm `SEMANTIC_RELEASE_QUALIFIED` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or
   exactly `false`.
 
 ### 2. Close the remaining qualification-tooling gaps
@@ -179,19 +179,19 @@ qualification; a private qualification run must never publish assets.
 
 ### 3. Generate and retain the private current-candidate installers
 
-- [ ] Run `pnpm run semantic:qualification:check` locally and confirm the workflow-dispatch graph
+- [x] Run `pnpm run semantic:qualification:check` locally and confirm the workflow-dispatch graph
   has no GitHub Release, Homebrew, Chocolatey, or repository-variable mutation path.
-- [ ] Dispatch from the immutable candidate revision:
+- [x] Dispatch from the immutable candidate revision:
   `gh workflow run release-desktop.yml --ref main`.
-- [ ] Record the run ID and follow it with `gh run watch <run-id> --exit-status`.
+- [x] Record the run ID and follow it with `gh run watch <run-id> --exit-status`.
 - [ ] Require the safety job, all four payload jobs, all four signed-catalog jobs, all four
   installed-qualification jobs, and private aggregate collection to pass. Publication and ordinary
   release/package-manager jobs must remain skipped.
 - [ ] Download all `semantic-payloads-*`, `semantic-catalog-*`,
   `semantic-installed-qualification-*`, and aggregate artifacts before their seven-day expiry.
-- [ ] Independently verify every signature, artifact/package checksum, target, source revision,
+- [x] Independently verify every signature, artifact/package checksum, target, source revision,
   model/runtime/converter/chunker identity, and catalog revision against the retained reports.
-- [ ] Require identical supported-target quality metrics or investigate and rerun from a new
+- [x] Require identical supported-target quality metrics or investigate and rerun from a new
   immutable revision. No failed or partially rerun target may be combined with another revision.
 - [ ] Reduce the private evidence to the opaque checked-in aggregate/per-case format; never commit
   raw queries, excerpts, prompts, responses, filenames, or source documents.
@@ -364,3 +364,34 @@ qualification; a private qualification run must never publish assets.
   builds. Public prerelease `v0.1.0-26` is retained as the base-only rollback baseline. Protected
   semantic catalog and Apple signing/notarization configuration is present, while both
   release-qualified variables remain absent.
+- 2026-09-14 Copilot: Audited the deferred production/stable checklist against current evidence.
+  Marked only the merged CI-green candidate, refreshed fingerprints, protected signing
+  configuration, disabled release gates, private-dispatch safety proof, and dispatch of run
+  `34853108775` from `main` revision `5ed349bba6d6a395cd50c96cfd4f132502d09880` complete.
+  Predecessor artifact retention, cross-platform manual kits, upgrade/rollback automation,
+  specialized/generated-answer evidence, native accessibility, and publication remain unchecked.
+- 2026-09-14 Copilot: Completed Part C for private run `34853108775`, attempt 2, from immutable
+  revision `5ed349bba6d6a395cd50c96cfd4f132502d09880`. Safety, all four production payloads, all four
+  signed catalogs, and all four installed lifecycle/privacy jobs passed; release, semantic
+  publication, Homebrew, and Chocolatey jobs remained skipped. The first Linux x86-64 attempt
+  reached a signed catalog and built release binary/DEB before external `linuxdeploy` failed; the
+  same-revision retry passed without mixing evidence from another candidate.
+- 2026-09-14 Copilot: Retained all 12 private artifacts (4 payload, 4 catalog, 4 installed
+  qualification; 4.3 GiB extracted) outside the repository at
+  `qualification-run-34853108775`. Recorded byte lengths and SHA-256 values for 1,487 files in
+  private manifests (`RETAINED-SHA256SUMS`
+  `0507776569703044922cbacb7d22ca5abb2c479b68d9635c27f9f00683a8def2`;
+  `RETAINED-FILE-SIZES`
+  `553967746c90381c2ff4ad71a3bb905ca3fd6be81b95d05be269214997204fd2`).
+  Independently verified every detached catalog signature and exact payload set with the protected
+  public key, reconciled installed reports to catalog/signature digests, and confirmed all
+  lifecycle and privacy stages passed. The retained macOS operator kit and DMG checksum, image
+  integrity, Developer ID signature, notarization, and stapling also passed.
+- 2026-09-14 Copilot: Local four-target aggregation succeeded with production-package identity.
+  Every target recorded file/chunk recall@10 `0.958333`, MRR `0.916667`, nDCG@10 `0.967762`,
+  negative-control false-positive rate `0`, offline citation correctness `1.0`, and offline
+  citation recall `0.923077`; pipeline/model/runtime/converter/chunker and retrieval policy
+  identities matched, so the `0.84` absolute floor and `0.02` relative window remain unchanged.
+  The aggregate remains intentionally NO-GO pending Part D, release-owner approval, and the
+  production/stable-only specialized-corpus, generated-answer, case-fold, and native
+  Windows/Linux manual evidence tracked by task 0225.
