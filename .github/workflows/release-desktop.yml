@@ -755,7 +755,7 @@ jobs:
   homebrew:
     name: Publish cross-platform Homebrew cask
     needs: [macos, linux]
-    if: github.event_name == 'push'
+    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}
     runs-on: macos-latest
     environment: desktop-release
     steps:
@@ -805,7 +805,7 @@ jobs:
 
   chocolatey:
     needs: windows
-    if: github.event_name == 'push'
+    if: ${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
       release_tag: ${{ github.ref_name }}
