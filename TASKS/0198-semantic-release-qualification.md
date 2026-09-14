@@ -405,3 +405,8 @@ qualification; a private qualification run must never publish assets.
   exact-shape launch created the authenticated IPC socket without any loader environment
   override. Candidate `0.1.0-27` remains NO-GO; Parts C and D must be rerun against a new immutable
   candidate before any semantic publication.
+- 2026-09-14 Copilot: PR #49 merged the signed-worker loader fix to `main` at
+  `36c4111d0513f395e3bbbfa0435c14801621c534`; all required CI jobs passed, including both desktop
+  installer builds. Prepared replacement candidate `0.1.0-28` and refreshed both release-candidate
+  fingerprints. It remains private and NO-GO until clean candidate CI and affected Parts C-D
+  reruns pass.
