@@ -67,9 +67,9 @@ release-qualified repository variables absent or `false` until the final approva
 - [ ] Merge the qualification tooling and commit `fd775a2` into `main`, prepare the next numeric
   alpha version, refresh generated evaluation fingerprints, and require normal CI to pass on the
   clean candidate revision.
-- [ ] Use the public base-only v26 installer as the user-visible upgrade/rollback baseline. A prior
+- [x] Use the public base-only v26 installer as the user-visible upgrade/rollback baseline. A prior
   semantic-to-semantic candidate is not required for the first public semantic alpha.
-- [ ] Confirm catalog signing, verifying-key, and Apple signing/notarization configuration remains
+- [x] Confirm catalog signing, verifying-key, and Apple signing/notarization configuration remains
   available while both release-qualified variables remain absent or exactly `false`.
 
 ### C. Run the private four-platform matrix
@@ -88,11 +88,12 @@ release-qualified repository variables absent or `false` until the final approva
 
 ### D. Perform the macOS installer pass without a VM
 
-- [ ] Create a separate standard macOS user account for qualification. Do not launch the candidate
-  against the operator's normal `~/Library/Application Support/fm` profile.
-- [ ] From that account, install/launch public base-only v26 once, then install the private alpha
-  DMG over it. Verify DMG checksum, signature, notarization, stapling, app launch, and preservation
-  of ordinary settings/workspaces.
+- [ ] Use either a separate standard macOS account or the current account with the helper-managed
+  isolated profile and every ordinary Procyon instance closed. Never launch the candidate against
+  the operator's normal `~/Library/Application Support/fm` profile.
+- [ ] Install/launch public base-only v26 once, then install the private alpha DMG over it. Back up
+  the existing application first when using the current account. Verify DMG checksum, signature,
+  notarization, stapling, app launch, and preservation of ordinary settings/workspaces.
 - [ ] Provision components with the private qualification kit and exercise consent, estimates,
   activation, folder enrolment, indexing progress, cancellation/resume, restart, Semantic Search,
   Ask Your Files, citations, negative controls, and offline/error behavior.
@@ -347,3 +348,13 @@ qualification; a private qualification run must never publish assets.
   VM requirement, four-platform automation remains mandatory, and Windows/Linux native manual
   accessibility becomes an explicit task-0225 stable-release follow-up. The validator must encode
   this tier honestly rather than treating deferred evidence as passed.
+- 2026-09-14 Copilot: Prepared candidate `0.1.0-27` after landing the alpha policy and private
+  macOS provisioning kit. Public prerelease `v0.1.0-26` remains the base-only rollback baseline.
+  The `desktop-release` environment still exposes the semantic verifying key and catalog-signing
+  secret plus all Apple signing/notarization secrets; both release-qualified variables remain
+  absent. Final candidate immutability and normal CI remain pending until the candidate PR is
+  merged to `main`.
+- 2026-09-14 Copilot: Relaxed the macOS alpha pass to allow the current OS account when every
+  ordinary Procyon process is closed and the helper-managed isolated profile is used. A separate
+  account remains safer but is not mandatory; the normal application-data profile must never be
+  used for qualification.
