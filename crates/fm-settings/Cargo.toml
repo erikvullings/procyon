@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 dirs.workspace = true
 fm-domain.workspace = true
+fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

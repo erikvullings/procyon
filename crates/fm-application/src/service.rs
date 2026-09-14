@@ -21,7 +21,7 @@ use fm_platform::{FallbackPlatformAdapter, PlatformAdapter};
 use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
 use fm_search::{SearchEngine, SearchFileSystemProvider, SearchResultsStore};
 use fm_search_acceleration::{SearchAcceleration, UnsupportedSearchAccelerator};
-use fm_settings::{Settings, SettingsStore};
+use fm_settings::{Settings, SettingsError, SettingsStore};
 use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
@@ -442,14 +442,21 @@ impl FileManagerService {
                 llm_policy,
             )
         });
-        let loaded = settings_store
-            .load()
-            .unwrap_or_else(|_| fm_settings::LoadOutcome {
+        let loaded = match settings_store.load() {
+            Ok(loaded) => loaded,
+            Err(error @ SettingsError::NewerSchema { .. }) => fm_settings::LoadOutcome {
+                settings: Settings::default(),
+                warning: Some(format!(
+                    "{error}. The settings file was left unchanged; close this older Procyon version before changing settings."
+                )),
+            },
+            Err(_) => fm_settings::LoadOutcome {
                 settings: Settings::default(),
                 warning: Some(
                     "Settings could not be read. Application defaults were loaded.".into(),
                 ),
-            });
+            },
+        };
         if let Some(message) = loaded.warning {
             events.publish(
                 EventAudience::Global,
