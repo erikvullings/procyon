@@ -165,6 +165,19 @@ test('release qualification dispatch is statically proven non-publishing', () =>
   });
 });
 
+test('private macOS operator kit is exact-production, secret-free, and non-publishing', () => {
+  assert.doesNotThrow(() => checkSemanticQualificationWorkflow());
+  const source = fs.readFileSync(path.resolve('.github/workflows/release-desktop.yml'), 'utf8');
+  assert.match(source, /semantic-release-input\/artifacts\/\*/u);
+  assert.match(source, /semantic_qualification_kit install/u);
+  assert.match(source, /semantic_qualification_kit" cleanup/u);
+  const kitBlock = source.slice(source.indexOf('- name: Assemble private macOS operator kit'));
+  assert.doesNotMatch(
+    kitBlock.slice(0, kitBlock.indexOf('- uses: actions/upload-artifact@v4')),
+    /PROCYON_SEMANTIC_DEVELOPER_BUNDLE|CATALOG_SIGNING_KEY|gh release/u,
+  );
+});
+
 test('private qualification rejects release events and enabled release gates', () => {
   assert.deepEqual(
     assertQualificationDispatchEnvironment({

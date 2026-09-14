@@ -1,8 +1,9 @@
 {
-  "reportVersion": 1,
+  "reportVersion": 2,
+  "evidencePolicy": "production-stable",
   "corpusId": "task-0188-production-corpus-v1",
   "corpusFingerprint": "sha256:6e0c201a6393bdfad56999ecfa86d6b66387c8aa41c8809055bf14429755f3ca",
-  "releaseCandidateFingerprint": "sha256:7e9ed92dd6e77d8ed925dfaab1ea3b84c97a48bf362ad9c7a071c4d02f1083e3",
+  "releaseCandidateFingerprint": "sha256:6ce96abbfbfd62149c063b7f9c551d04a56bd2d0dbafda56aece2ed411985696",
   "measurementBasis": "No exact production measurements have been checked in. Private workflow evidence must be reviewed and reduced to opaque aggregate and per-case identities before this template can change.",
   "limitations": [
     "No supported-target production measurements are recorded in this checked-in template.",
@@ -28,11 +29,6 @@
   },
   "manualCriteria": [
     {
-      "id": "accessibility",
-      "status": "pending",
-      "evidence": null
-    },
-    {
       "id": "failure-modes",
       "status": "pending",
       "evidence": null
@@ -56,17 +52,40 @@
       "id": "release-owner-approval",
       "status": "pending",
       "evidence": null
+    },
+    {
+      "id": "macos-aarch64-manual",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "linux-aarch64-manual-accessibility-ux",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "linux-x86_64-manual-accessibility-ux",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "windows-x86_64-manual-accessibility-ux",
+      "status": "pending",
+      "evidence": null
     }
   ],
   "blockingReasons": [
     "Exact strict-production measurements are required for macOS arm64, Windows x86-64, Linux x86-64, and Linux arm64.",
     "Reviewed before/after production evidence for Unicode case-folded embeddings is missing.",
-    "Task-0198 manual criterion `accessibility` remains pending.",
-    "Task-0198 manual criterion `failure-modes` remains pending.",
-    "Task-0198 manual criterion `generated-answer-grounding` remains pending.",
-    "Task-0198 manual criterion `installed-lifecycle` remains pending.",
-    "Task-0198 manual criterion `privacy` remains pending.",
-    "Task-0198 manual criterion `release-owner-approval` remains pending."
+    "Task-0198 manual criterion `failure-modes` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `generated-answer-grounding` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `installed-lifecycle` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `privacy` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `release-owner-approval` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `macos-aarch64-manual` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `linux-aarch64-manual-accessibility-ux` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `linux-x86_64-manual-accessibility-ux` must be Passed under the ProductionStable evidence policy.",
+    "Task-0198 manual criterion `windows-x86_64-manual-accessibility-ux` must be Passed under the ProductionStable evidence policy."
   ],
   "decision": "noGo"
 }

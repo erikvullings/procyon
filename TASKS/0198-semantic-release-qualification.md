@@ -1,15 +1,16 @@
 # 0198 Semantic release qualification
 
-Status: blocked
+Status: in_progress
 Priority: high
 Subsystem: quality, release
 Depends on: 0195, 0196
 
 ## Context
 
-Qualify the complete production semantic distribution before including it in a Procyon desktop
-release. Feature-level tests and the macOS arm64 developer corpus are not substitutes for installed
-artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode evidence.
+Qualify the first opt-in semantic distribution for an explicitly experimental Procyon OSS alpha.
+Feature-level tests and the macOS arm64 developer corpus are not substitutes for installed
+artifact, cross-platform automation, retrieval-quality, privacy, and failure-mode evidence.
+Production/stable qualification continues in task 0225.
 
 ## Acceptance Criteria
 
@@ -19,16 +20,19 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
 - Calibrate absolute and relative Ask similarity thresholds from the labelled report. Do not lower
   the current `0.84` absolute floor merely to increase result count; document before/after quality
   and storage/migration impact for any threshold or pipeline change.
-- Complete installed/absent, first-run, upgrade, rollback, corruption, offline, low-disk,
-  cancellation, crash/restart, and deletion/retention tests on supported macOS, Windows, and Linux
-  release builds.
-- Complete manual keyboard, screen-reader, consent, progress, error, citation-opening, and data
-  deletion passes on each supported desktop platform.
+- Complete automated installed/absent, first-run, corruption, offline, low-disk, cancellation,
+  crash/restart, and deletion/retention tests on supported macOS, Windows, and Linux release builds.
+- Complete an installed upgrade/rollback and manual keyboard, VoiceOver, consent, progress, error,
+  citation-opening, and data-deletion pass on macOS arm64 using an isolated OS user account.
+- Record Windows and Linux manual accessibility/UX as explicitly untested in the alpha report and
+  release notes; these remain mandatory for production/stable qualification under task 0225.
 - Confirm default logs and crash reports contain no query, excerpt, filename, prompt, response,
   credential, token, or model payload content.
 - Publish an operator-readable qualification report identifying exact artifact/catalog versions,
   known limitations, unsupported targets, and rollback instructions.
-- Only after all release gates pass, enable the production catalog in the normal desktop release
+- Encode the experimental-alpha evidence policy in the fail-closed validator so deferred rows
+  cannot be represented as passes or accidentally satisfy a stable-release policy.
+- Only after all alpha gates pass, enable the production catalog in the normal desktop release
   workflow and verify the produced installers against the published catalog.
 
 ## Implementation Notes
@@ -38,6 +42,223 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   evaluation fingerprint.
 - OCRmyPDF qualification is added when 0197 ships and does not block semantic search/Ask for
   searchable documents.
+
+## Experimental OSS alpha qualification checklist
+
+These are the blocking gates for the first public, opt-in semantic alpha. Keep both
+release-qualified repository variables absent or `false` until the final approval group.
+
+### A. Make private installer testing practical and honest
+
+- [x] Produce a private macOS qualification kit that provisions the exact signed production
+  payloads for the catalog-enabled release app without public publication, developer-bundle
+  overrides, embedded secrets, or weakened release checks.
+- [x] Make the kit operate only in a dedicated macOS test user's application-data directory and
+  provide a targeted cleanup command for that profile.
+- [x] Add an explicit `experimental-alpha` evidence policy to the report schema and fail-closed
+  validator. It must require four-platform automated PASS, macOS arm64 manual PASS, release-owner
+  approval, and documented Windows/Linux manual limitations; it must not interpret deferred rows
+  as passed or permit the same report to qualify a stable release.
+- [x] Add regression tests for kit integrity/target matching, alpha-policy validation, publication
+  isolation, and cleanup containment.
+
+### B. Prepare one immutable alpha candidate
+
+- [ ] Merge the qualification tooling and commit `fd775a2` into `main`, prepare the next numeric
+  alpha version, refresh generated evaluation fingerprints, and require normal CI to pass on the
+  clean candidate revision.
+- [ ] Use the public base-only v26 installer as the user-visible upgrade/rollback baseline. A prior
+  semantic-to-semantic candidate is not required for the first public semantic alpha.
+- [ ] Confirm catalog signing, verifying-key, and Apple signing/notarization configuration remains
+  available while both release-qualified variables remain absent or exactly `false`.
+
+### C. Run the private four-platform matrix
+
+- [ ] Run `pnpm run semantic:qualification:check`.
+- [ ] Dispatch `gh workflow run release-desktop.yml --ref main` from the immutable candidate and
+  record the run ID.
+- [ ] Require qualification safety, all four payloads, all four signed catalogs, all four automated
+  installed lifecycle/privacy jobs, and private aggregation to pass. All public/package-manager
+  jobs must remain skipped.
+- [ ] Download every private artifact before its seven-day expiry and independently verify source
+  revision, target, signature, checksum, package, catalog, model, runtime, converter, chunker, and
+  retrieval-policy identities.
+- [ ] Review the exact four-target retrieval metrics and negative controls. Keep the `0.84`
+  absolute floor and `0.02` relative window unless measured evidence justifies a change.
+
+### D. Perform the macOS installer pass without a VM
+
+- [ ] Create a separate standard macOS user account for qualification. Do not launch the candidate
+  against the operator's normal `~/Library/Application Support/fm` profile.
+- [ ] From that account, install/launch public base-only v26 once, then install the private alpha
+  DMG over it. Verify DMG checksum, signature, notarization, stapling, app launch, and preservation
+  of ordinary settings/workspaces.
+- [ ] Provision components with the private qualification kit and exercise consent, estimates,
+  activation, folder enrolment, indexing progress, cancellation/resume, restart, Semantic Search,
+  Ask Your Files, citations, negative controls, and offline/error behavior.
+- [ ] Verify worker restart, corrupt-component rejection/recovery, retained-data uninstall,
+  explicit-delete uninstall, reinstall, and rollback to the base-only installer.
+- [ ] Complete keyboard-only and VoiceOver checks for control names/roles/states, status/error
+  announcements, citation opening, focus restoration, and deletion completion. Check critical
+  consent/error screens at 200% zoom.
+- [ ] Inspect default app/worker/installer logs, Diagnostics output, and available crash artifacts
+  for query, excerpt, filename/path, prompt, response, credential, token, authorization-header, or
+  model-payload leakage.
+- [ ] Record operator, date, hardware, macOS build, VoiceOver version, exact digests, results,
+  defects, and private evidence location.
+
+### E. Approve and publish the experimental alpha
+
+- [ ] Fix every alpha-blocking defect and rerun affected automated/manual rows on one immutable
+  candidate.
+- [ ] Update the qualification report and checked-in opaque evaluation evidence with four exact
+  production measurements, macOS manual evidence, the `experimental-alpha` tier, honest deferred
+  Windows/Linux rows, known limitations, and rollback instructions.
+- [ ] Run the alpha-aware semantic precondition validator and obtain explicit dated release-owner
+  approval for the named revision and artifacts.
+- [ ] Set only `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require
+  semantic publication plus all desktop installer jobs to pass.
+- [ ] Verify the public macOS installer from the test account downloads only the published signed
+  payloads and reproduces the qualified Search/Ask smoke. Verify the Windows/Linux installer
+  digests and automated smoke reports.
+- [ ] State prominently in release notes that semantic functionality is experimental and opt-in,
+  Windows/Linux manual accessibility testing is pending, Windows artifacts are unsigned, and
+  macOS x86-64 semantic runtime is unsupported.
+- [ ] On any public verification failure, reset `SEMANTIC_RELEASE_QUALIFIED=false` and issue a
+  base-only corrective alpha.
+
+## Deferred production/stable checklist
+
+The production-grade checklist below is retained as the source for task 0225. Its unchecked rows do
+not block the experimental OSS alpha defined above.
+
+Keep both release-qualified repository variables absent or `false` while executing private
+qualification; a private qualification run must never publish assets.
+
+### 1. Freeze the next candidate and retain the rollback baseline
+
+- [ ] Merge commit `fd775a2` (settings preservation across upgrades) into `main` and require all
+  normal CI jobs to pass.
+- [ ] Prepare the next numeric alpha candidate (expected `0.1.0-27`), refresh both semantic
+  evaluation fingerprints changed by the version bump, and land it on a clean immutable `main`
+  revision.
+- [ ] Download the private run `34711114776` payloads, signed catalogs, packages, and reports
+  before their seven-day retention expires. Store them in an access-controlled location outside
+  the repository and record their artifact IDs, byte lengths, and SHA-256 digests.
+- [ ] Designate those retained `0.1.0-25` signed artifacts as the preceding semantic candidate.
+  If any required byte is unavailable or fails its recorded digest, generate and retain a new
+  baseline candidate before testing the next candidate; do not substitute developer-bundle bytes.
+- [ ] Confirm the `desktop-release` environment still has the matching catalog signing secret,
+  catalog verifying-key variable, and Apple signing/notarization credentials.
+- [ ] Confirm `SEMANTIC_RELEASE_QUALIFIED` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or
+  exactly `false`.
+
+### 2. Close the remaining qualification-tooling gaps
+
+- [ ] Extend the private installed-qualification workflow to accept the exact retained preceding
+  package/catalog/payload set and automate: preceding install, current upgrade with retained
+  enrolment/index, rollback, and current reinstall. Run this on macOS arm64, Windows x86-64,
+  Linux x86-64, and Linux arm64.
+- [ ] Add regression tests proving the upgrade input is immutable, signed, target-matched, and
+  rejected on missing bytes or digest/catalog drift.
+- [ ] Produce a private manual-test kit for each platform that provisions the exact signed
+  production components for the catalog-enabled release application without publishing them.
+  It must not use `PROCYON_SEMANTIC_DEVELOPER_BUNDLE`, weaken release-build checks, expose signing
+  material, or silently replace the production download lifecycle.
+- [ ] Document a one-command cleanup for the manual-test kit that removes only its isolated test
+  profile and leaves the operator's ordinary Procyon settings and semantic library untouched.
+- [ ] Add exact-production setup and observations for the generated-summary, unavailable-source,
+  and concept-label corpus cases currently blocked by missing specialized setup.
+- [ ] Run grounded answer generation through the production Ask packing path and record
+  deterministic citation correctness/recall without retaining prompts, responses, queries, or
+  source content.
+- [ ] Produce reviewed before/after `preserve-case/1` versus
+  `unicode-default-case-fold/1` evidence on the same production corpus and artifacts. Record
+  quality deltas, mandatory index rebuild behavior, and storage impact.
+
+### 3. Generate and retain the private current-candidate installers
+
+- [ ] Run `pnpm run semantic:qualification:check` locally and confirm the workflow-dispatch graph
+  has no GitHub Release, Homebrew, Chocolatey, or repository-variable mutation path.
+- [ ] Dispatch from the immutable candidate revision:
+  `gh workflow run release-desktop.yml --ref main`.
+- [ ] Record the run ID and follow it with `gh run watch <run-id> --exit-status`.
+- [ ] Require the safety job, all four payload jobs, all four signed-catalog jobs, all four
+  installed-qualification jobs, and private aggregate collection to pass. Publication and ordinary
+  release/package-manager jobs must remain skipped.
+- [ ] Download all `semantic-payloads-*`, `semantic-catalog-*`,
+  `semantic-installed-qualification-*`, and aggregate artifacts before their seven-day expiry.
+- [ ] Independently verify every signature, artifact/package checksum, target, source revision,
+  model/runtime/converter/chunker identity, and catalog revision against the retained reports.
+- [ ] Require identical supported-target quality metrics or investigate and rerun from a new
+  immutable revision. No failed or partially rerun target may be combined with another revision.
+- [ ] Reduce the private evidence to the opaque checked-in aggregate/per-case format; never commit
+  raw queries, excerpts, prompts, responses, filenames, or source documents.
+
+### 4. Perform the macOS arm64 installer and manual UX pass
+
+- [ ] Use a disposable macOS arm64 VM or separate test user. Do not test against the operator's
+  existing `~/Library/Application Support/fm` data.
+- [ ] Verify the DMG digest, mounted app signature, notarization, stapling, and catalog signature
+  before copying the app into `/Applications`.
+- [ ] Launch the installed app with the isolated private manual-test profile and provision semantic
+  components through the qualification kit. Confirm the base app remains usable before components
+  are installed.
+- [ ] Exercise first consent, storage/download estimates, model activation, folder enrolment,
+  initial indexing, progress, cancellation, resume, and restart.
+- [ ] Verify Semantic Search and Ask Your Files against the qualification corpus, including
+  multilingual queries, negative controls, unavailable sources, generated summaries, concept
+  labels, citation opening, and focus restoration.
+- [ ] Verify offline activation/error behavior, low-disk rejection, corrupt-payload rejection,
+  worker crash/restart recovery, and a clean rebuild after derived-index corruption.
+- [ ] Verify upgrade from the retained preceding candidate, rollback, and re-upgrade without
+  losing consent, enrolment policy, or source data and without reusing an incompatible index.
+- [ ] Verify uninstall with retained semantic data, reinstall, explicit semantic-data deletion,
+  and uninstall with deletion as distinct and understandable flows.
+- [ ] Complete keyboard-only navigation and VoiceOver checks for control name/role/state, dialog
+  titles, status announcements, errors, citations, focus restoration, and deletion completion.
+- [ ] Repeat consent and critical flows at 200% zoom, light/dark/high-contrast appearance, and
+  reduced motion.
+- [ ] Inspect default app/worker/installer logs, Diagnostics output, and any crash artifacts for
+  query, excerpt, filename/path, prompt, response, credential, token, authorization header, or
+  model-payload leakage.
+- [ ] Record operator, date, hardware, macOS build, VoiceOver version, package/catalog/payload
+  digests, each result, defect links, and private evidence location.
+
+### 5. Complete the Windows and Linux native manual matrix
+
+- [ ] Repeat the installer, semantic UX, keyboard, privacy, failure, retention/deletion, and
+  upgrade/rollback checklist on Windows x86-64 with Narrator. Record that the current Windows
+  installer/payload policy is unsigned as an explicit known limitation.
+- [ ] Repeat it on Linux x86-64 at the Ubuntu 22.04 ABI baseline with Orca.
+- [ ] Repeat it on Linux arm64 with Orca.
+- [ ] Record macOS x86-64 as unsupported because Zvec 0.7.0 has no matching runtime, and verify
+  the universal macOS app reports semantic functionality as unavailable on that architecture.
+- [ ] Fix every release-blocking defect and rerun the affected automated and manual rows against
+  one new immutable candidate. Do not waive a failure by editing the report.
+
+### 6. Approve and publish only after every gate passes
+
+- [ ] Update `docs/semantic-release-qualification.md` with the exact reviewed revision, artifact
+  and installer identities, four-platform results, known limitations, and tested rollback steps.
+- [ ] Update `docs/evaluations/semantic-production-v1.json` to contain four exact production
+  measurements, completed manual criteria, case-fold comparison evidence, no blocking reasons,
+  `productionMeasurement: true`, and `decision: "go"`.
+- [ ] Run `pnpm run semantic:evaluation:check`; it must pass without bypasses or report edits made
+  solely to satisfy the validator.
+- [ ] Obtain an explicit dated release-owner approval referencing the immutable report and
+  candidate revision.
+- [ ] Set only `SEMANTIC_RELEASE_QUALIFIED=true`. Keep
+  `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=false` unless its separate release evidence also supports GO.
+- [ ] Create and push the matching numeric alpha tag. Require semantic payload/catalog publication
+  and all desktop installer jobs to pass.
+- [ ] On clean supported hosts, download the public release assets and verify that each installer
+  embeds the matching signed catalog and public key, downloads only the published immutable
+  payloads, activates Semantic Search/Ask, and reproduces the qualified smoke behavior.
+- [ ] Verify release notes identify macOS x86-64 as unsupported, Windows signing limitations,
+  component sizes, privacy/local-processing behavior, and rollback instructions.
+- [ ] If any public verification fails, immediately set `SEMANTIC_RELEASE_QUALIFIED=false`, stop
+  further package-manager rollout, retain evidence, and issue a base-only corrective release.
 
 ## Agent Notes
 
@@ -115,3 +336,14 @@ artifact, upgrade, cross-platform, retrieval-quality, privacy, and failure-mode 
   before/after evidence remain incomplete; native VoiceOver/Narrator/Orca, keyboard, consent,
   progress/error, citation, retention/deletion passes remain manual-required; and release-owner
   approval has not been recorded.
+- 2026-09-14 Copilot: Added the ordered operator checklist above after the macOS developer bundle
+  passed. The existing private four-target automated matrix remains valid evidence, but a
+  catalog-enabled qualification installer cannot currently activate components on its own because
+  dispatch catalogs intentionally use `qualification.invalid` URLs. Group 2 therefore requires a
+  private exact-production provisioning kit before asking the operator to perform manual semantic
+  UX checks. The task remains blocked and NO-GO.
+- 2026-09-14 Copilot: The release owner selected an experimental OSS alpha bar instead of the
+  production-grade checklist. Added the blocking A-E checklist: a separate macOS user replaces the
+  VM requirement, four-platform automation remains mandatory, and Windows/Linux native manual
+  accessibility becomes an explicit task-0225 stable-release follow-up. The validator must encode
+  this tier honestly rather than treating deferred evidence as passed.
