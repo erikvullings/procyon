@@ -88,16 +88,16 @@ release-qualified repository variables absent or `false` until the final approva
 
 ### D. Perform the macOS installer pass without a VM
 
-- [ ] Use either a separate standard macOS account or the current account with the helper-managed
+- [x] Use either a separate standard macOS account or the current account with the helper-managed
   isolated profile and every ordinary Procyon instance closed. Never launch the candidate against
   the operator's normal `~/Library/Application Support/fm` profile.
-- [ ] Install/launch public base-only v26 once, then install the private alpha DMG over it. Back up
+- [x] Install/launch public base-only v26 once, then install the private alpha DMG over it. Back up
   the existing application first when using the current account. Verify DMG checksum, signature,
   notarization, stapling, app launch, and preservation of ordinary settings/workspaces.
 - [ ] Provision components with the private qualification kit and exercise consent, estimates,
   activation, folder enrolment, indexing progress, cancellation/resume, restart, Semantic Search,
   Ask Your Files, citations, negative controls, and offline/error behavior.
-- [ ] Verify worker restart, corrupt-component rejection/recovery, retained-data uninstall,
+- [x] Verify worker restart, corrupt-component rejection/recovery, retained-data uninstall,
   explicit-delete uninstall, reinstall, and rollback to the base-only installer.
 - [ ] Complete keyboard-only and VoiceOver checks for control names/roles/states, status/error
   announcements, citation opening, focus restoration, and deletion completion. Check critical
@@ -212,9 +212,9 @@ qualification; a private qualification run must never publish assets.
   labels, citation opening, and focus restoration.
 - [ ] Verify offline activation/error behavior, low-disk rejection, corrupt-payload rejection,
   worker crash/restart recovery, and a clean rebuild after derived-index corruption.
-- [ ] Verify upgrade from the retained preceding candidate, rollback, and re-upgrade without
+- [x] Verify upgrade from the retained preceding candidate, rollback, and re-upgrade without
   losing consent, enrolment policy, or source data and without reusing an incompatible index.
-- [ ] Verify uninstall with retained semantic data, reinstall, explicit semantic-data deletion,
+- [x] Verify uninstall with retained semantic data, reinstall, explicit semantic-data deletion,
   and uninstall with deletion as distinct and understandable flows.
 - [ ] Complete keyboard-only navigation and VoiceOver checks for control name/role/state, dialog
   titles, status announcements, errors, citations, focus restoration, and deletion completion.
@@ -482,3 +482,45 @@ qualification; a private qualification run must never publish assets.
   production and knowledge-retrieval candidate fingerprints. It remains NO-GO pending normal CI,
   the private four-platform payload/catalog/installed matrix, and affected Part D installed-app
   reruns. Both public release gates remain disabled and no assets are approved for publication.
+- 2026-09-15 Copilot: PR #54 merged candidate `0.1.0-31` to `main` at
+  `7b2bef1241958b03c2d3d1015ee3264aa855a3e2`. Private workflow `34990760800` passed all four
+  payload, all four signed-catalog, and all four installed-qualification rows. Public prerelease,
+  semantic asset collection/publication, Windows/macOS/Linux installer publication, Homebrew, and
+  Chocolatey jobs remained skipped; both semantic release variables remained absent. Downloaded
+  only the macOS arm64 installed-qualification artifact. Every `SHA256SUMS` entry passed, the DMG
+  checksum and image verified, stapling validation succeeded, Gatekeeper accepted both the DMG and
+  mounted app as notarized Developer ID software, the app signature passed deep strict validation,
+  and its bundle version is `0.1.0-31`. The catalog revision is
+  `procyon-macos-aarch64-0.1.0-31-abd82adc1f1c027d9a465d71953daa86`, catalog SHA-256
+  `c2340716ca7df018d5e0e0b75ebd21c6b3486bbdefdf414ebe8e619c7c5acda7`, signature SHA-256
+  `8c12cfdee5f90112c1af7b3996a72d7b320e871cc0d4ca7c1dc5f06ab734c2d1`, worker SHA-256
+  `bcacbac3fc3beb43308ae142f0c23c38180dc48153b402d12ac024170ef62e95`, Zvec runtime SHA-256
+  `44ae3339bfc9bd1d09efa75c5adadb30ff23adddfbb4251bd2adc0747e33372a`, and DMG SHA-256
+  `d8649d93e228150243eedeef9b2cd0ea4696f06c7309ea9d3589a0927549746a`. Candidate v31 remains
+  NO-GO until the affected explicit-delete and remaining Part D manual rows pass; the report's
+  separate stable-only production-evaluation and release-owner blockers remain expected.
+- 2026-09-15 Copilot: Installed the verified signed/notarized v31 bundle into `/Applications` and
+  upgraded only the helper-owned isolated profile's component-manager state and signed
+  worker/runtime generations. Startup reconciliation preserved library
+  `4dc1924a-9902-5ec4-adaf-971236d8fdc0`, root
+  `be47a576-922e-41b3-8047-7ef3947e3b4a`, folder consent, and three occurrences with zero failures.
+  The repaired `Delete index` flow then passed in the real app: its accessible status announced
+  `Components and index deleted`, the worker exited, `worker.pid` disappeared, installed-component
+  state became empty, active model/index schema were cleared, and the Zvec active-index marker was
+  removed. Restarting v31 did not relaunch the worker or recreate component/index state.
+  Reinstalling the exact signed v31 components from a clean helper-owned staging profile reused the
+  existing enrolled root without renewed consent, rebuilt the deliberately deleted derived index,
+  and advanced indexed generation from `8` before deletion to `11` with one root, three occurrences,
+  and zero failures. The staging profile was then removed by the qualification helper.
+- 2026-09-15 Copilot: The uninstall options expose complete accessible names for both title and
+  description. At native installed-app scale, each option measured 37 px high with 6 px between
+  rows and 5 px before the confirmation action, so the reported overlap is fixed. The installed
+  Tauri WebView did not respond to the documented `Cmd++` page-zoom shortcut and its accessibility
+  geometry remained unchanged; do not mark the separate 200% zoom row passed from this evidence.
+- 2026-09-15 Copilot: Rolled the installed app back from signed v31 to the retained signed/notarized
+  public base-only v26 bundle and launched it against the same isolated profile. No semantic worker
+  started, and hashes for ordinary top-level profile files plus component-manager, library policy,
+  consent/catalog, and indexed-generation state remained unchanged. Restored the signed v31 app,
+  which reconciled the same root with three occurrences and zero failures and restarted the exact
+  verified v31 worker/runtime. `/Applications/Procyon.app` is left at `0.1.0-31`; the normal profile
+  was never launched by v27-v31.
