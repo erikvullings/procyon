@@ -464,3 +464,21 @@ qualification; a private qualification run must never publish assets.
   (`3bb4328c8ee89121710557d57a109b299d712b33a2310c5974941575ab7754d5`) recovered startup
   reconciliation to one root, three occurrences, and zero failures. The corrupt-component
   rejection, user-visible error, accessibility role, and recovery rows now pass for v30.
+- 2026-09-15 Copilot: Candidate `0.1.0-30` passed retained-data uninstall and reinstall against the
+  helper-owned profile. `Retain index` removed the managed worker/runtime/model while preserving
+  library policy, folder consent, root identity, and logical index data; reinstalling the exact
+  signed components resumed the same enrolled root without renewed consent and advanced it to
+  indexed generation `8`. Whole-tree Zvec byte equality is not a valid retention invariant because
+  normal worker shutdown compacts or rewrites storage files.
+- 2026-09-15 Copilot: Candidate `0.1.0-30` remains NO-GO after `Delete index` deterministically
+  failed without mutation. The desktop quiescer rejected the live `worker.pid` and instructed the
+  operator to restart, but startup reconciliation immediately relaunched the worker and recreated
+  that marker. The application facade now performs the existing bounded semantic-worker restart
+  operation before component-manager quiescence and deletion, with a regression proving this
+  ordering; Semantic settings also gives each uninstall radio title and description an independent,
+  zoom-safe layout row. These changes require a replacement signed candidate and affected Part D
+  rerun before the explicit-delete row can pass.
+- 2026-09-15 Copilot: Prepared private replacement candidate `0.1.0-31` with refreshed semantic
+  production and knowledge-retrieval candidate fingerprints. It remains NO-GO pending normal CI,
+  the private four-platform payload/catalog/installed matrix, and affected Part D installed-app
+  reruns. Both public release gates remain disabled and no assets are approved for publication.

@@ -559,7 +559,7 @@ impl ComponentQuiescer for DesktopQuiescer {
     fn quiesce(&self) -> Result<(), QuiesceError> {
         if self.runtime_directory.join("worker.pid").exists() {
             return Err(QuiesceError::new(
-                "close and restart Procyon before uninstalling the active semantic worker",
+                "the semantic worker remained active after bounded shutdown; close all Procyon processes and retry",
             ));
         }
         Ok(())

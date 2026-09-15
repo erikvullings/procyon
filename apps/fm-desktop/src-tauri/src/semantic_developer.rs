@@ -383,7 +383,7 @@ impl ComponentQuiescer for DeveloperQuiescer {
     fn quiesce(&self) -> Result<(), QuiesceError> {
         if self.runtime_directory.join("worker.pid").exists() {
             return Err(QuiesceError::new(
-                "close and restart Procyon before uninstalling the active developer worker",
+                "the developer worker remained active after bounded shutdown; close all Procyon processes and retry",
             ));
         }
         Ok(())

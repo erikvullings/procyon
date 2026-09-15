@@ -1207,7 +1207,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               m('summary', t('semanticComponents', 'uninstallSummary')),
               m('fieldset.fm-semantic-uninstall-options', [
                 m('legend', t('semanticComponents', 'uninstallDecisionLegend')),
-                m('label', [
+                m('label.fm-semantic-uninstall-option', [
                   m('input#fm-semantic-uninstall-retain', {
                     type: 'radio',
                     name: 'fm-semantic-uninstall-decision',
@@ -1217,12 +1217,12 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       uninstallDecision = 'retain';
                     },
                   }),
-                  m('span', [
+                  m('span.fm-semantic-uninstall-copy', [
                     m('strong', t('semanticComponents', 'retainIndex')),
                     m('small', t('semanticComponents', 'retainIndexDescription')),
                   ]),
                 ]),
-                m('label', [
+                m('label.fm-semantic-uninstall-option', [
                   m('input#fm-semantic-uninstall-delete', {
                     type: 'radio',
                     name: 'fm-semantic-uninstall-decision',
@@ -1232,7 +1232,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       uninstallDecision = 'delete';
                     },
                   }),
-                  m('span', [
+                  m('span.fm-semantic-uninstall-copy', [
                     m('strong', t('semanticComponents', 'deleteIndex')),
                     m('small', t('semanticComponents', 'deleteIndexDescription')),
                   ]),
