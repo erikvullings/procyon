@@ -221,6 +221,30 @@ async fn negotiates_and_rejects_an_invalid_launch_secret() {
 }
 
 #[tokio::test]
+async fn long_runtime_directory_starts_and_accepts_authenticated_connections() {
+    let directory = test_directory("long-runtime-directory");
+    let runtime = directory
+        .join("qualification-profiles/procyon-semantic-alpha")
+        .join("Library/Application Support/fm/semantic/worker-runtime");
+    let endpoint = Endpoint::for_runtime_directory(&runtime);
+    let secret = LaunchSecret::generate();
+    let task =
+        tokio::spawn(WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone())).run());
+    wait_for_endpoint(&endpoint).await;
+
+    let client = WorkerClient::connect(&endpoint, secret)
+        .await
+        .expect("connect through shortened endpoint");
+    assert_eq!(client.protocol_version(), 1);
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+
+    let Endpoint::Unix(path) = endpoint;
+    std::fs::remove_dir(path.parent().expect("short endpoint parent"))
+        .expect("remove short endpoint directory");
+}
+
+#[tokio::test]
 #[ignore = "requires production worker, native runtime, and model-pack artifact paths"]
 async fn packaged_production_worker_starts_negotiates_and_shuts_down() {
     let worker = PathBuf::from(
