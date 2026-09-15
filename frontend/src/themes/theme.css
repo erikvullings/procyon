@@ -1438,25 +1438,12 @@ main.fm-workspace {
   gap: 0.4rem;
 }
 
-.fm-semantic-profile-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  cursor: pointer;
-}
-
 .fm-semantic-profile-copy {
   display: grid;
   gap: 0.1rem;
 }
 
-.fm-app-shell .fm-semantic-profile-option > .fm-semantic-profile-copy {
-  display: grid;
-  height: auto;
-  line-height: 1.35;
-}
-
-.fm-app-shell .fm-semantic-uninstall-option {
+.fm-app-shell .fm-semantic-radio-option {
   position: relative;
   display: block;
   min-height: 2.75rem;
@@ -1464,7 +1451,7 @@ main.fm-workspace {
   cursor: pointer;
 }
 
-.fm-app-shell .fm-semantic-uninstall-option > input[type="radio"] + .fm-semantic-uninstall-copy {
+.fm-app-shell .fm-semantic-radio-option > input[type="radio"] + .fm-semantic-radio-copy {
   display: grid;
   height: auto;
   min-height: 2rem;
@@ -1473,8 +1460,8 @@ main.fm-workspace {
   line-height: 1.25;
 }
 
-.fm-semantic-uninstall-copy > strong,
-.fm-semantic-uninstall-copy > small {
+.fm-semantic-radio-copy > strong,
+.fm-semantic-radio-copy > small {
   display: block;
   line-height: 1.25;
 }
