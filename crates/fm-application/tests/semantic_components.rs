@@ -755,6 +755,36 @@ async fn managed_status_keeps_disk_categories_stable_after_interleaved_writes() 
 }
 
 #[tokio::test]
+async fn managed_status_rejects_a_corrupted_installed_component() {
+    let directory = project_temp_dir("managed-corrupt-status-");
+    let (capability, _) =
+        managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+    let service = SemanticComponentService::new(capability);
+    let offer = service
+        .installation_offer(fm_semantic_components::SemanticProfile::CompactMultilingual)
+        .await
+        .unwrap();
+    service.install_or_enable(offer.consent()).await.unwrap();
+    let manager = ComponentManager::new(
+        SemanticStateStore::new(directory.path().join("config")),
+        directory.path().join("app-data"),
+    );
+    let state = manager.state().unwrap();
+    let worker = state
+        .installed_components()
+        .iter()
+        .find(|component| matches!(component.kind(), ArtifactKind::Worker))
+        .unwrap();
+    std::fs::write(worker.installed_path(), b"tampered worker").unwrap();
+
+    assert!(matches!(
+        service.status().await,
+        Err(SemanticComponentError::ArtifactVerificationFailed { artifact_id })
+            if artifact_id == "fixture-worker"
+    ));
+}
+
+#[tokio::test]
 async fn managed_lifecycle_uses_distinct_pause_remove_move_and_uninstall_operations() {
     let directory = project_temp_dir("managed-lifecycle-");
     let (capability, _) =

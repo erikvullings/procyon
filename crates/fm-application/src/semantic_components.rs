@@ -2661,9 +2661,28 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
     async fn status(&self) -> Result<SemanticComponentStatus, SemanticComponentError> {
         let _mutation = self.mutation.lock().await;
         let manager = self.manager.clone();
-        let (state, report) =
-            run_component_blocking(move || manager.state_and_status().map_err(map_status_error))
-                .await?;
+        let catalog = Arc::clone(&self.catalog);
+        let (state, report) = run_component_blocking(move || {
+            let (state, report) = manager.state_and_status().map_err(map_status_error)?;
+            for component in state.installed_components() {
+                let artifact = catalog.artifact(component.artifact_id()).ok_or_else(|| {
+                    SemanticComponentError::Catalog {
+                        message: format!(
+                            "installed artifact `{}` is absent from the trusted catalog",
+                            component.artifact_id().as_str()
+                        ),
+                    }
+                })?;
+                manager
+                    .verified_installed_payload(artifact)
+                    .map_err(map_install_error)?
+                    .ok_or_else(|| SemanticComponentError::ArtifactVerificationFailed {
+                        artifact_id: artifact.id().as_str().to_owned(),
+                    })?;
+            }
+            Ok((state, report))
+        })
+        .await?;
         let observed = self
             .lifecycle
             .lock()

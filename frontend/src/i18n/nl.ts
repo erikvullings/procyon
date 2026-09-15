@@ -1154,6 +1154,8 @@ export const nl = {
     title: 'Semantische onderdelen',
     loading: 'Status van semantische onderdelen laden…',
     loadError: 'Status van semantische onderdelen laden mislukt: {error}',
+    loadErrorRecovery:
+      'Herstel of installeer de semantische onderdelen opnieuw en probeer het daarna opnieuw. Geïndexeerde bestanden en maptoestemming blijven ongewijzigd.',
     retry: 'Opnieuw',
     unknownError: 'Onbekende fout bij semantische onderdelen',
     unavailableTitle: 'Semantische onderdelen niet beschikbaar',

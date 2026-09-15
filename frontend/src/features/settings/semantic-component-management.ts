@@ -1511,6 +1511,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               error: loadError ?? t('semanticComponents', 'unknownError'),
             }),
           ),
+          m('p', t('semanticComponents', 'loadErrorRecovery')),
           m(
             'button',
             {
