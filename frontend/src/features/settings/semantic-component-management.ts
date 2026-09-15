@@ -151,7 +151,7 @@ function profileChoices(
     profiles.length === 0
       ? m('p.fm-semantic-empty', t('semanticComponents', 'noProfiles'))
       : profiles.map((profile) =>
-          m('label.fm-semantic-profile-option', [
+          m('label.fm-semantic-radio-option.fm-semantic-profile-option', [
             m('input', {
               type: 'radio',
               name,
@@ -159,7 +159,7 @@ function profileChoices(
               checked: selected === profile.profile,
               onchange: () => onchange(profile.profile),
             }),
-            m('span.fm-semantic-profile-copy', [
+            m('span.fm-semantic-radio-copy.fm-semantic-profile-copy', [
               m('strong', profileName(profile.profile)),
               modelSelectionMatchesProfile(activeModel, profile)
                 ? m(
@@ -1207,7 +1207,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               m('summary', t('semanticComponents', 'uninstallSummary')),
               m('fieldset.fm-semantic-uninstall-options', [
                 m('legend', t('semanticComponents', 'uninstallDecisionLegend')),
-                m('label.fm-semantic-uninstall-option', [
+                m('label.fm-semantic-radio-option.fm-semantic-uninstall-option', [
                   m('input#fm-semantic-uninstall-retain', {
                     type: 'radio',
                     name: 'fm-semantic-uninstall-decision',
@@ -1217,12 +1217,12 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       uninstallDecision = 'retain';
                     },
                   }),
-                  m('span.fm-semantic-uninstall-copy', [
+                  m('span.fm-semantic-radio-copy.fm-semantic-uninstall-copy', [
                     m('strong', t('semanticComponents', 'retainIndex')),
                     m('small', t('semanticComponents', 'retainIndexDescription')),
                   ]),
                 ]),
-                m('label.fm-semantic-uninstall-option', [
+                m('label.fm-semantic-radio-option.fm-semantic-uninstall-option', [
                   m('input#fm-semantic-uninstall-delete', {
                     type: 'radio',
                     name: 'fm-semantic-uninstall-decision',
@@ -1232,7 +1232,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       uninstallDecision = 'delete';
                     },
                   }),
-                  m('span.fm-semantic-uninstall-copy', [
+                  m('span.fm-semantic-radio-copy.fm-semantic-uninstall-copy', [
                     m('strong', t('semanticComponents', 'deleteIndex')),
                     m('small', t('semanticComponents', 'deleteIndexDescription')),
                   ]),

@@ -180,6 +180,11 @@ describe('SemanticComponentManagement', () => {
       '.fm-semantic-install .fm-semantic-profile-option input[type="radio"]',
     );
     expect(profileOptions).toHaveLength(3);
+    expect(
+      root.querySelectorAll(
+        '.fm-semantic-install .fm-semantic-radio-option > input[type="radio"] + .fm-semantic-radio-copy',
+      ),
+    ).toHaveLength(3);
     expect(profileOptions[0]?.checked).toBe(true);
     expect(root.textContent).toContain('Recommended');
     expect(createOffer).not.toHaveBeenCalled();
@@ -393,6 +398,11 @@ describe('SemanticComponentManagement', () => {
     expect(root.textContent).toContain('Delete index');
     expect(root.querySelectorAll('.fm-semantic-uninstall-option')).toHaveLength(2);
     expect(root.querySelectorAll('.fm-semantic-uninstall-copy')).toHaveLength(2);
+    expect(
+      root.querySelectorAll(
+        '.fm-semantic-uninstall-options .fm-semantic-radio-option > input[type="radio"] + .fm-semantic-radio-copy',
+      ),
+    ).toHaveLength(2);
     root.querySelector<HTMLInputElement>('#fm-semantic-uninstall-delete')?.click();
     m.redraw.sync();
     button('Confirm uninstall').click();
