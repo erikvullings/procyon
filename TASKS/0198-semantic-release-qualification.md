@@ -420,3 +420,8 @@ qualification; a private qualification run must never publish assets.
   stable per-user endpoint accepted authenticated connections and exited cleanly against the same
   profile. Candidate `0.1.0-28` is therefore NO-GO. The regression suite now covers both endpoint
   selection and a real server/client round trip from a qualification-profile-shaped runtime path.
+- 2026-09-15 Copilot: PR #51 merged the long Unix-endpoint fix to `main` at
+  `d7065696951cdaa91abdce47429fa4623f0e81c9`; all required CI jobs passed, including both desktop
+  installer builds. Prepared private replacement candidate `0.1.0-29` and refreshed both
+  release-candidate fingerprints. It remains NO-GO until clean candidate CI and the affected
+  private matrix and Part D rows pass.
