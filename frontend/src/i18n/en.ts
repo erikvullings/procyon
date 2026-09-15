@@ -1137,6 +1137,8 @@ export const en = {
     title: 'Semantic components',
     loading: 'Loading semantic component status…',
     loadError: 'Could not load semantic component status: {error}',
+    loadErrorRecovery:
+      'Restore or reinstall the semantic components, then retry. Indexed files and folder consent remain unchanged.',
     retry: 'Retry',
     unknownError: 'Unknown semantic component error',
     unavailableTitle: 'Semantic components unavailable',

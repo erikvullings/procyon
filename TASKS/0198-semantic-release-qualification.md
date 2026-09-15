@@ -425,3 +425,11 @@ qualification; a private qualification run must never publish assets.
   installer builds. Prepared private replacement candidate `0.1.0-29` and refreshed both
   release-candidate fingerprints. It remains NO-GO until clean candidate CI and the affected
   private matrix and Part D rows pass.
+- 2026-09-15 Copilot: Candidate `0.1.0-29` passed normal CI and private four-platform workflow
+  `34954466515` at revision `1c4855daf8542add6e0aedff09b9d3a7dd092b56`. The real installed
+  macOS app completed generation `1` for all three qualification documents, persisted indexed
+  generation `1`, paused/resumed ingestion, and restarted with one root, three occurrences, and
+  zero failures. Corrupting the installed worker was rejected by launch verification, and restoring
+  the exact signed catalog bytes recovered reconciliation. However, the Semantic settings UI still
+  reported `Installed and enabled` with no error or announcement while the worker was invalid.
+  Candidate `0.1.0-29` is NO-GO pending a status-integrity fix and rerun of the affected Part D rows.

@@ -153,6 +153,9 @@ describe('SemanticComponentManagement', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toContain('offline'),
     );
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Restore or reinstall the semantic components',
+    );
     button('Retry').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Not installed'));
 
