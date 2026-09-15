@@ -1315,6 +1315,12 @@ impl FileManagerService {
         index_decision: SemanticIndexRetentionDecision,
     ) -> Result<SemanticUninstallReceipt, SemanticComponentError> {
         self.ensure_semantic_component_mutation(SemanticComponentOperation::UninstallComponents)?;
+        self.semantic
+            .restart(Duration::from_secs(10))
+            .await
+            .map_err(|error| SemanticComponentError::Indexing {
+                message: format!("semantic worker could not be stopped before uninstall: {error}"),
+            })?;
         self.semantic_components
             .uninstall_components(index_decision)
             .await

@@ -391,6 +391,8 @@ describe('SemanticComponentManagement', () => {
     expect(button('Confirm uninstall').disabled).toBe(true);
     expect(root.textContent).toContain('Retain index');
     expect(root.textContent).toContain('Delete index');
+    expect(root.querySelectorAll('.fm-semantic-uninstall-option')).toHaveLength(2);
+    expect(root.querySelectorAll('.fm-semantic-uninstall-copy')).toHaveLength(2);
     root.querySelector<HTMLInputElement>('#fm-semantic-uninstall-delete')?.click();
     m.redraw.sync();
     button('Confirm uninstall').click();

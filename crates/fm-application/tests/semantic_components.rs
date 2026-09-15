@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use ed25519_dalek::{Signer, SigningKey};
 use fm_application::FileManagerService;
+use fm_application::semantic::{FakeSemanticCapability, SemanticHealth};
 use fm_application::semantic_components::{
     AdministratorProvisionedSemanticComponentCapability, DesktopSemanticDistribution,
     FakeSemanticComponentCapability, FakeSemanticComponentScenario,
@@ -938,6 +939,54 @@ async fn managed_uninstall_quiesces_and_clears_an_existing_pause_guard() {
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn service_stops_the_semantic_worker_before_either_uninstall_flow() {
+    for index_decision in [
+        SemanticIndexRetentionDecision::Retain,
+        SemanticIndexRetentionDecision::Delete,
+    ] {
+        let directory = project_temp_dir("managed-uninstall-worker-");
+        let (components, _) =
+            managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+        let semantic = Arc::new(FakeSemanticCapability::new());
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            directory.path().join("workspaces"),
+            directory.path().join("settings"),
+        )
+        .with_semantic_component_capability(components)
+        .with_semantic_capability(semantic);
+        let offer = service
+            .semantic_component_installation_offer(
+                fm_semantic_components::SemanticProfile::CompactMultilingual,
+            )
+            .await
+            .unwrap();
+        service
+            .semantic_component_install_or_enable(offer.consent())
+            .await
+            .unwrap();
+
+        service
+            .semantic_component_uninstall(index_decision)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            service.semantic_health().await.unwrap(),
+            SemanticHealth::Draining
+        );
+        assert!(
+            service
+                .semantic_component_status()
+                .await
+                .unwrap()
+                .components()
+                .is_empty()
+        );
+    }
 }
 
 #[tokio::test]

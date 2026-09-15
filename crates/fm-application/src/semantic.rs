@@ -572,6 +572,10 @@ impl SemanticCapability for FakeSemanticCapability {
         self.draining.store(true, Ordering::Relaxed);
         Ok(())
     }
+
+    async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.shutdown(grace).await
+    }
 }
 
 /// Lazy IPC-backed semantic capability.
