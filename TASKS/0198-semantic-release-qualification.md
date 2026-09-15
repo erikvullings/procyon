@@ -410,3 +410,13 @@ qualification; a private qualification run must never publish assets.
   installer builds. Prepared replacement candidate `0.1.0-28` and refreshed both release-candidate
   fingerprints. It remains private and NO-GO until clean candidate CI and affected Parts C-D
   reruns pass.
+- 2026-09-14 Copilot: Replacement candidate `0.1.0-28` passed normal CI and private four-platform
+  workflow `34899128175` at revision `24029a2a5bc07e12ab76b20c476c11f65b586a70`. The signed,
+  notarized macOS installer and exact catalog payloads passed independent integrity checks.
+  Installed-app enrolment persisted consent and created the production Zvec index, but the worker
+  still failed before accepting IPC: the isolated profile produced a 142-byte Unix-domain socket
+  path, exceeding macOS `SUN_LEN`. Running the exact signed worker with the installed launch
+  arguments reproduced `path must be shorter than SUN_LEN`; a rebuilt worker using the shortened,
+  stable per-user endpoint accepted authenticated connections and exited cleanly against the same
+  profile. Candidate `0.1.0-28` is therefore NO-GO. The regression suite now covers both endpoint
+  selection and a real server/client round trip from a qualification-profile-shaped runtime path.

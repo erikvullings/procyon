@@ -96,7 +96,27 @@ impl Endpoint {
     pub fn for_runtime_directory(directory: &Path) -> Self {
         #[cfg(unix)]
         {
-            Self::Unix(directory.join("semantic-worker.sock"))
+            use std::os::unix::ffi::OsStrExt as _;
+
+            const SAFE_SOCKET_PATH_BYTES: usize = 96;
+            let local = directory.join("semantic-worker.sock");
+            if local.as_os_str().as_bytes().len() <= SAFE_SOCKET_PATH_BYTES {
+                return Self::Unix(local);
+            }
+
+            let key = directory
+                .as_os_str()
+                .as_bytes()
+                .iter()
+                .fold(14695981039346656037_u64, |hash, byte| {
+                    (hash ^ u64::from(*byte)).wrapping_mul(1099511628211)
+                });
+            let uid = rustix::process::geteuid().as_raw();
+            Self::Unix(
+                Path::new("/tmp")
+                    .join(format!("procyon-semantic-{uid}-{key:016x}"))
+                    .join("worker.sock"),
+            )
         }
         #[cfg(windows)]
         {
@@ -963,6 +983,25 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt as _;
+
+    #[cfg(unix)]
+    #[test]
+    fn long_runtime_directories_use_a_short_per_user_socket_path() {
+        let runtime = Path::new("/Users/qualification-user/qualification-profiles")
+            .join("procyon-semantic-alpha/Library/Application Support/fm/semantic/worker-runtime");
+
+        let Endpoint::Unix(path) = Endpoint::for_runtime_directory(&runtime);
+
+        assert!(path.as_os_str().as_bytes().len() <= 96);
+        assert!(path.starts_with("/tmp"));
+        assert_eq!(path.file_name().unwrap(), "worker.sock");
+        assert_eq!(
+            Endpoint::for_runtime_directory(&runtime),
+            Endpoint::for_runtime_directory(&runtime)
+        );
+    }
 
     #[test]
     fn managed_launch_passes_a_discovered_ocrmypdf_executable_as_a_fixed_argument() {
