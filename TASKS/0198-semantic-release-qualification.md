@@ -433,3 +433,9 @@ qualification; a private qualification run must never publish assets.
   the exact signed catalog bytes recovered reconciliation. However, the Semantic settings UI still
   reported `Installed and enabled` with no error or announcement while the worker was invalid.
   Candidate `0.1.0-29` is NO-GO pending a status-integrity fix and rerun of the affected Part D rows.
+- 2026-09-15 Copilot: Fixed the status-integrity defect in `972ef18`. Managed component status now
+  re-verifies every active installed payload against the trusted catalog and returns a typed
+  integrity failure for changed bytes. Semantic settings renders that failure as an announced
+  recovery alert and no longer claims the components are installed and enabled. Preparing private
+  replacement candidate `0.1.0-30`; it remains NO-GO until candidate CI, the private matrix, and
+  the affected installed-app qualification rows pass.
