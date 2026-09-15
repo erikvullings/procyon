@@ -439,3 +439,28 @@ qualification; a private qualification run must never publish assets.
   recovery alert and no longer claims the components are installed and enabled. Preparing private
   replacement candidate `0.1.0-30`; it remains NO-GO until candidate CI, the private matrix, and
   the affected installed-app qualification rows pass.
+- 2026-09-15 Copilot: PR #53 merged replacement candidate `0.1.0-30` to `main` at
+  `d8aefafbae25e1132b81cca8f4ae3a4a7379e8d2`. Private workflow `34964980701` passed all four
+  payload, signed-catalog, and installed-qualification rows. Public prerelease, semantic asset
+  collection/publication, desktop installer publication, Homebrew, and Chocolatey jobs remained
+  skipped; both release variables remained absent. The retained macOS arm64 operator kit passed
+  every recorded SHA-256 check. Its catalog revision is
+  `procyon-macos-aarch64-0.1.0-30-d9f7ba0344e0dd22aa81adc06c916240`, catalog SHA-256
+  `bc7523ce2a04b8d91827e169bc390ba3e0e9432c59e22569042ebbf79d5e3855`, worker SHA-256
+  `3bb4328c8ee89121710557d57a109b299d712b33a2310c5974941575ab7754d5`, and DMG SHA-256
+  `8fd8f403233c494ff309f0b294a7d32471bd357e13f38b733558a4ffbf7834cc`. Candidate
+  `0.1.0-30` remains NO-GO pending the affected Part D installed-app rerun and remaining manual
+  qualification rows.
+- 2026-09-15 Copilot: Installed the retained signed/notarized `0.1.0-30` DMG into `/Applications`
+  while preserving the helper-owned isolated profile and retaining the installed v29 bundle as
+  evidence. The exact v30 worker/runtime generations reconciled the existing root with three
+  occurrences and zero failures without losing consent or the Zvec index. Appending one null byte
+  changed the worker SHA-256 to
+  `531e4f3a00a6657870edbe2059bb953b9d83a56dd966e1ffa73efa75ec08e0c1`.
+  On restart, Settings -> Semantic no longer reported `Installed and enabled`: its live alert named
+  artifact `procyon.semantic.worker.macos-aarch64.0.1.0.30.3bb4328c8ee89121` as failing integrity
+  validation, offered Retry, and instructed the user to restore/reinstall while explicitly stating
+  that indexed files and folder consent remain unchanged. Restoring the exact signed worker
+  (`3bb4328c8ee89121710557d57a109b299d712b33a2310c5974941575ab7754d5`) recovered startup
+  reconciliation to one root, three occurrences, and zero failures. The corrupt-component
+  rejection, user-visible error, accessibility role, and recovery rows now pass for v30.
