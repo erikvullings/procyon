@@ -526,10 +526,10 @@ qualification; a private qualification run must never publish assets.
   which reconciled the same root with three occurrences and zero failures and restarted the exact
   verified v31 worker/runtime. `/Applications/Procyon.app` is left at `0.1.0-31`; the normal profile
   was never launched by v27-v31.
-- 2026-09-15 release owner: Confirmed the first experimental-alpha policy defers generated-answer
+- 2026-09-16 release owner: Confirmed the first experimental-alpha policy defers generated-answer
   grounding and reviewed preserve-case versus Unicode case-fold comparison to production/stable
   task 0225. The alpha report must mark generated-answer grounding explicitly deferred, document
   both limitations, and cannot qualify under the production-stable validator.
-- 2026-09-15 release owner: Requested native Tauri `Ctrl/Cmd +/-` page-zoom support but deferred
+- 2026-09-16 release owner: Requested native Tauri `Ctrl/Cmd +/-` page-zoom support but deferred
   the 200% installed-app layout pass. The accessibility row remains pending and release-blocking;
   enabling the host capability is not qualification evidence.
