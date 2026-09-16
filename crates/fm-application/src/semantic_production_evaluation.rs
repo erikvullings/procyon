@@ -42,10 +42,14 @@ const REQUIRED_DEFERRED_ALPHA_CRITERIA: [&str; 3] = [
     "windows-x86_64-manual-accessibility-ux",
 ];
 const MACOS_ALPHA_MANUAL_CRITERION: &str = "macos-aarch64-manual";
+const GENERATED_ANSWER_GROUNDING_CRITERION: &str = "generated-answer-grounding";
 const WINDOWS_ALPHA_MANUAL_LIMITATION: &str =
     "Windows x86-64 manual accessibility and UX remain deferred.";
 const LINUX_ALPHA_MANUAL_LIMITATION: &str =
     "Linux x86-64 and Linux arm64 manual accessibility and UX remain deferred.";
+const GENERATED_ANSWER_ALPHA_LIMITATION: &str =
+    "Generated-answer grounding remains deferred to production/stable qualification.";
+const CASE_FOLD_ALPHA_LIMITATION: &str = "Reviewed before/after Unicode case-fold comparison remains deferred to production/stable qualification.";
 const REQUIRED_COMPONENTS: [&str; 3] = [
     "procyon.semantic.model.multilingual-e5-small",
     "procyon.semantic.worker",
@@ -1332,12 +1336,12 @@ fn validate_manual_criteria_for_policy(
 ) -> Result<(), ProductionEvaluationError> {
     if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
         && criteria.iter().any(|criterion| {
-            REQUIRED_DEFERRED_ALPHA_CRITERIA.contains(&criterion.id.as_str())
+            is_deferred_alpha_criterion(&criterion.id)
                 && criterion.status == ManualCriterionStatus::Passed
         })
     {
         return Err(ProductionEvaluationError::InvalidReport(
-            "experimental-alpha Windows and Linux manual rows must be explicitly deferred".into(),
+            "experimental-alpha stable-only manual rows must be explicitly deferred".into(),
         ));
     }
     Ok(())
@@ -1376,7 +1380,9 @@ fn blocking_reasons(
                 .into(),
         );
     }
-    if migration.baseline_comparison_evidence.is_none() {
+    if evidence_policy == ProductionEvidencePolicy::ProductionStable
+        && migration.baseline_comparison_evidence.is_none()
+    {
         reasons.push(
             "Reviewed before/after production evidence for Unicode case-folded embeddings is missing."
                 .into(),
@@ -1437,10 +1443,8 @@ fn blocking_reasons(
         );
     }
     for criterion in manual_criteria {
-        let is_deferred_alpha_criterion =
-            REQUIRED_DEFERRED_ALPHA_CRITERIA.contains(&criterion.id.as_str());
         let expected_status = if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
-            && is_deferred_alpha_criterion
+            && is_deferred_alpha_criterion(&criterion.id)
         {
             ManualCriterionStatus::Deferred
         } else {
@@ -1460,9 +1464,15 @@ fn alpha_manual_limitations_are_documented(limitations: &[String]) -> bool {
     [
         WINDOWS_ALPHA_MANUAL_LIMITATION,
         LINUX_ALPHA_MANUAL_LIMITATION,
+        GENERATED_ANSWER_ALPHA_LIMITATION,
+        CASE_FOLD_ALPHA_LIMITATION,
     ]
     .iter()
     .all(|required| limitations.iter().any(|limitation| limitation == required))
+}
+
+fn is_deferred_alpha_criterion(id: &str) -> bool {
+    id == GENERATED_ANSWER_GROUNDING_CRITERION || REQUIRED_DEFERRED_ALPHA_CRITERIA.contains(&id)
 }
 
 /// Fingerprints every source that can change conversion, chunking, embedding,
@@ -1843,7 +1853,17 @@ mod tests {
         let mut criteria = REQUIRED_MANUAL_CRITERIA
             .into_iter()
             .chain([MACOS_ALPHA_MANUAL_CRITERION])
-            .map(passed_manual_criterion)
+            .map(|id| {
+                if id == GENERATED_ANSWER_GROUNDING_CRITERION {
+                    ManualCriterion {
+                        id: id.into(),
+                        status: ManualCriterionStatus::Deferred,
+                        evidence: Some("generated-answer-grounding-limitation".into()),
+                    }
+                } else {
+                    passed_manual_criterion(id)
+                }
+            })
             .collect::<Vec<_>>();
         criteria.extend(
             REQUIRED_DEFERRED_ALPHA_CRITERIA
@@ -1854,10 +1874,6 @@ mod tests {
                     evidence: Some(format!("{id}-limitation")),
                 }),
         );
-        let migration = EmbeddingPreprocessingMigration {
-            baseline_comparison_evidence: Some("reviewed-comparison".into()),
-            ..EmbeddingPreprocessingMigration::default()
-        };
         ProductionEvaluationReport::from_measurements_for_policy(
             corpus,
             ProductionEvidencePolicy::ExperimentalAlpha,
@@ -1865,9 +1881,11 @@ mod tests {
             vec![
                 WINDOWS_ALPHA_MANUAL_LIMITATION.into(),
                 LINUX_ALPHA_MANUAL_LIMITATION.into(),
+                GENERATED_ANSWER_ALPHA_LIMITATION.into(),
+                CASE_FOLD_ALPHA_LIMITATION.into(),
             ],
             qualifying_measurements(corpus),
-            migration,
+            EmbeddingPreprocessingMigration::default(),
             criteria,
         )
     }
@@ -2063,7 +2081,7 @@ mod tests {
     }
 
     #[test]
-    fn experimental_alpha_accepts_deferred_windows_and_linux_manual_rows() {
+    fn experimental_alpha_defers_stable_only_evidence() {
         let corpus = qualifying_corpus();
         let report = qualifying_alpha_report(&corpus);
 
@@ -2076,32 +2094,81 @@ mod tests {
             "{:?}",
             report.blocking_reasons
         );
+        assert_eq!(
+            report
+                .manual_criteria
+                .iter()
+                .find(|criterion| criterion.id == "generated-answer-grounding")
+                .expect("generated-answer criterion")
+                .status,
+            ManualCriterionStatus::Deferred
+        );
+        assert_eq!(
+            report
+                .embedding_preprocessing_migration
+                .baseline_comparison_evidence,
+            None
+        );
     }
 
     #[test]
     fn experimental_alpha_rejects_deferred_rows_disguised_as_passes() {
         let corpus = qualifying_corpus();
-        let mut report = qualifying_alpha_report(&corpus);
-        let criterion = report
-            .manual_criteria
-            .iter_mut()
-            .find(|criterion| criterion.id == "windows-x86_64-manual-accessibility-ux")
-            .expect("Windows manual row");
-        criterion.status = ManualCriterionStatus::Passed;
-        report = ProductionEvaluationReport::from_measurements_for_policy(
+        for id in [
+            "generated-answer-grounding",
+            "windows-x86_64-manual-accessibility-ux",
+        ] {
+            let mut report = qualifying_alpha_report(&corpus);
+            report
+                .manual_criteria
+                .iter_mut()
+                .find(|criterion| criterion.id == id)
+                .expect("deferred alpha row")
+                .status = ManualCriterionStatus::Passed;
+            let report = ProductionEvaluationReport::from_measurements_for_policy(
+                &corpus,
+                ProductionEvidencePolicy::ExperimentalAlpha,
+                report.measurement_basis,
+                report.limitations,
+                report.measurements,
+                report.embedding_preprocessing_migration,
+                report.manual_criteria,
+            );
+
+            assert!(matches!(
+                report.validate_for_policy(&corpus, ProductionEvidencePolicy::ExperimentalAlpha),
+                Err(ProductionEvaluationError::InvalidReport(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn production_stable_still_requires_generated_answer_and_case_fold_evidence() {
+        let corpus = qualifying_corpus();
+        let alpha = qualifying_alpha_report(&corpus);
+        let report = ProductionEvaluationReport::from_measurements_for_policy(
             &corpus,
-            ProductionEvidencePolicy::ExperimentalAlpha,
-            report.measurement_basis,
-            report.limitations,
-            report.measurements,
-            report.embedding_preprocessing_migration,
-            report.manual_criteria,
+            ProductionEvidencePolicy::ProductionStable,
+            alpha.measurement_basis,
+            alpha.limitations,
+            alpha.measurements,
+            alpha.embedding_preprocessing_migration,
+            alpha.manual_criteria,
         );
 
-        assert!(matches!(
-            report.validate_for_policy(&corpus, ProductionEvidencePolicy::ExperimentalAlpha),
-            Err(ProductionEvaluationError::InvalidReport(_))
-        ));
+        assert_eq!(report.decision, ProductionEvaluationDecision::NoGo);
+        assert!(
+            report
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("Unicode case-folded embeddings"))
+        );
+        assert!(
+            report
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("generated-answer-grounding"))
+        );
     }
 
     #[test]
