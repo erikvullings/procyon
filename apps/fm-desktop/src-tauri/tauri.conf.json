@@ -19,7 +19,8 @@
         "height": 800,
         "backgroundColor": "#ffffff",
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "zoomHotkeysEnabled": true
       }
     ],
     "security": {

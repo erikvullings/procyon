@@ -70,6 +70,16 @@ test('Tauri targets installable macOS, Windows, and Linux bundle formats', () =>
   assert.deepEqual(config.bundle.targets, ['app', 'dmg', 'msi', 'nsis', 'deb', 'appimage']);
 });
 
+test('Tauri windows enable native page zoom hotkeys', () => {
+  const config = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
+  const capability = JSON.parse(
+    read('apps', 'fm-desktop', 'src-tauri', 'capabilities', 'default.json'),
+  );
+
+  assert.equal(config.app.windows[0].zoomHotkeysEnabled, true);
+  assert.ok(capability.permissions.includes('core:webview:allow-set-webview-zoom'));
+});
+
 test('desktop archive support statically links liblzma', () => {
   const workspaceCargo = read('Cargo.toml');
   assert.match(workspaceCargo, /xz2 = \{version = "0\.1", features = \["static"\]\}/);
