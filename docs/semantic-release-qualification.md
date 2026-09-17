@@ -2,23 +2,27 @@
 
 ## Decision
 
-**GO for the `v0.1.0-32` experimental alpha as of 2026-09-17.** Exact private workflow
+**NO-GO for the `v0.1.0-33` recovery candidate as of 2026-09-17.** The workspace version and
+release-candidate fingerprint changed after the public semantic-collection workflow defect was
+fixed. A fresh private four-target run and reviewed `experimental-alpha` GO report are required
+before either release gate may be enabled or `v0.1.0-33` may be tagged.
+
+The withdrawn `v0.1.0-32` candidate remains useful historical evidence. Exact private workflow
 [`35247197346`](https://github.com/erikvullings/procyon/actions/runs/35247197346) passed the
 four-target payload, signed-catalog, installed lifecycle, failure-mode, and privacy matrix for
 immutable revision `10613c716023f86074c67a4bb32780382f1b3623`. The checked-in typed report uses
-the `experimental-alpha` evidence policy, contains four exact production measurements and no
-blockers, and records a `go` decision.
+the fail-closed v33 template now; the previously reviewed v32 report cannot authorize v33.
 
 This is not production/stable approval. Generated-answer grounding, reviewed case-fold comparison,
 generated-summary/unavailable-source/concept-label production setups, 200% installed-app layout
 validation, and native Windows/Linux accessibility and UX remain explicitly deferred to task 0225.
-Do not enable `SEMANTIC_RELEASE_QUALIFIED` until the focused report PR containing this evidence is
-reviewed and merged. Keep `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` absent or `false`.
+Keep `SEMANTIC_RELEASE_QUALIFIED=false` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` absent or `false`
+until the v33 evidence report is reviewed and merged.
 
 This report is the operator record for task 0198. A code-complete subsystem and developer-bundle
 results are not substitutes for measurements from the exact signed production artifacts.
 
-## Candidate identity
+## Prior v32 qualified identity
 
 | Property | Candidate |
 | --- | --- |

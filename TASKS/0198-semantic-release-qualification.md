@@ -634,3 +634,7 @@ qualification; a private qualification run must never publish assets.
   both payloads and catalogs and evaluates their successful results under `always()`. Public runs
   intentionally reuse the exact private installed-qualification evidence rather than rerunning
   those four private-only jobs.
+- 2026-09-17 release owner: Approved `0.1.0-33` as the clean recovery candidate after PR #64
+  fixes the public semantic-collection graph. Keep `v0.1.0-32` immutable and withdrawn, run one
+  fresh private qualification for the new version/fingerprint, and do not publish until its exact
+  four-target evidence produces a reviewed GO report.
