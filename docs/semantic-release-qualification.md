@@ -484,7 +484,9 @@ v32's multi-facet Beta reliability chunk scored `0.856455` and was excluded by t
 `0.02` strongest-candidate window (`0.872621` effective cutoff), producing citation recall
 `0.923077` with no irrelevant citations. The release owner approved this alpha policy on
 2026-09-17; generated-answer grounding, the reviewed case-fold comparison, 200% layout validation,
-and native Windows/Linux accessibility remain deferred to task 0225.
+native Windows/Linux accessibility, and the specialized generated-summary, unavailable-source, and
+concept-label production scenarios remain deferred to task 0225. Ordinary and incremental-edit
+production scenarios remain mandatory for experimental alpha.
 
 The candidate now case-folds both passage and query text before adding the model's role prefix.
 Original text remains unchanged for display, citation, and full-text search. This intentionally
