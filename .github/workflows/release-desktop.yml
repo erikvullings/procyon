@@ -759,8 +759,8 @@ jobs:
 
   semantic-collect:
     name: Collect semantic release assets
-    needs: [semantic-payloads]
-    if: ${{ needs.semantic-payloads.result == 'success' }}
+    needs: [semantic-payloads, semantic-catalogs]
+    if: ${{ always() && needs.semantic-payloads.result == 'success' && needs.semantic-catalogs.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

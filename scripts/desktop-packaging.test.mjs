@@ -209,6 +209,10 @@ test('release workflow builds, verifies, signs, and publishes optional semantic 
   assert.match(catalogs.if, /always\(\)/);
   assert.equal(catalogs.secrets, 'inherit');
   assert.match(JSON.stringify(catalogs), /semantic-catalog-\$\{\{ matrix.target \}\}/);
+  assert.deepEqual(collect.needs, ['semantic-payloads', 'semantic-catalogs']);
+  assert.match(collect.if, /always\(\)/);
+  assert.match(collect.if, /needs\.semantic-payloads\.result == 'success'/);
+  assert.match(collect.if, /needs\.semantic-catalogs\.result == 'success'/);
   assert.equal(collect.permissions.contents, 'read');
   assert.deepEqual(publish.needs, ['release', 'semantic-collect']);
   assert.match(publish.if, /github\.event_name == 'push'/);

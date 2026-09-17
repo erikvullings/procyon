@@ -623,3 +623,14 @@ qualification; a private qualification run must never publish assets.
   blockers, and passes the fail-closed `experimental-alpha` validator as GO. Publication remains
   blocked until this focused report PR is reviewed and merged; neither gate, tag, nor public asset
   has been changed.
+- 2026-09-17 Copilot: PR #63 merged the reviewed GO report and `v0.1.0-32` triggered exact public
+  run `35261725956` at `9c0f9e7684529f5b4f12b41ae927b27125a0f88e`. Payloads and signed
+  catalogs passed 4/4, but GitHub skipped semantic collection and publication: the collection job
+  omitted `always()`, so the intentionally skipped private-safety ancestor propagated through the
+  successful public payload matrix. The job also downloaded catalogs without declaring them as a
+  dependency. The semantic gate was reset to `false`, monitoring was cleared, the run was
+  cancelled before package publication, and the empty prerelease was withdrawn to draft. No
+  rerun, redispatch, retag, or force-update occurred. The corrective workflow now explicitly needs
+  both payloads and catalogs and evaluates their successful results under `always()`. Public runs
+  intentionally reuse the exact private installed-qualification evidence rather than rerunning
+  those four private-only jobs.
