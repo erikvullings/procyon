@@ -638,3 +638,17 @@ qualification; a private qualification run must never publish assets.
   fixes the public semantic-collection graph. Keep `v0.1.0-32` immutable and withdrawn, run one
   fresh private qualification for the new version/fingerprint, and do not publish until its exact
   four-target evidence produces a reviewed GO report.
+- 2026-09-17 Copilot: PR #65 merged `0.1.0-33` at immutable revision
+  `020ac3bf021bf129934f88020fc8dcd4e786e4a2`. The single approved private workflow
+  [`35271430396`](https://github.com/erikvullings/procyon/actions/runs/35271430396) passed private
+  safety, payloads 4/4, signed catalogs 4/4, installed qualifications 4/4, and private aggregation;
+  every public/package publication job remained skipped and both release paths stayed disabled.
+  Retained all 13 artifacts outside the repository (1,514 files, 5,289,796,435 bytes) with SHA and
+  size manifest digests `c695d4be67b6f7b3246911d976acbd7aabd470766d53daaee3939eb57603227a`
+  and `3e751dccc25862ad388ad814c3b02e1e9b44404176aa909b6a95f86ba635b23f`.
+  All detached signatures, exact payload sets, installed lifecycle/privacy summaries, operator-kit
+  checksums, DMG integrity, notarization, stapling, Gatekeeper assessment, and mounted app signature
+  verified independently. Exact evidence generates a four-target `experimental-alpha` GO report
+  for fingerprint `sha256:1d963240ffe79d46983f6b2332e11fa82d7587b28639a38dbd97388a04837f5a`
+  with zero blockers. Publication remains blocked until the focused report PR is reviewed and
+  merged.
