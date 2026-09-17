@@ -477,6 +477,15 @@ zero storage or migration impact attributable to the threshold decision. Any fut
 change requires comparable before/after production observations and an explicit storage/migration
 statement.
 
+For the first experimental alpha, deterministic offline citation correctness remains exactly
+`1.0`, while citation recall must meet the existing `0.80` chunk-recall floor. Production/stable
+qualification continues to require citation recall `1.0`. This tiering does not change retrieval:
+v32's multi-facet Beta reliability chunk scored `0.856455` and was excluded by the unchanged
+`0.02` strongest-candidate window (`0.872621` effective cutoff), producing citation recall
+`0.923077` with no irrelevant citations. The release owner approved this alpha policy on
+2026-09-17; generated-answer grounding, the reviewed case-fold comparison, 200% layout validation,
+and native Windows/Linux accessibility remain deferred to task 0225.
+
 The candidate now case-folds both passage and query text before adding the model's role prefix.
 Original text remains unchanged for display, citation, and full-text search. This intentionally
 changes the embedding space from `preserve-case/1` to `unicode-default-case-fold/1`: the worker's

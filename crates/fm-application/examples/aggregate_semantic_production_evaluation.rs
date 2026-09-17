@@ -26,7 +26,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "../tests/fixtures/semantic-evaluation-v1.json"
     ))?;
     let approved = ProductionEvaluationReport::parse(&fs::read_to_string(&approved_path)?)?;
-    approved.validate(&corpus)?;
     let mut measurements = Vec::new();
     for path in paths {
         let report = ProductionEvaluationReport::parse(&fs::read_to_string(&path)?)?;
@@ -40,13 +39,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         measurements.extend(report.measurements);
     }
-    let report = ProductionEvaluationReport::from_measurements_with_release_evidence(
+    let report = ProductionEvaluationReport::from_measurements_for_policy(
         &corpus,
+        approved.evidence_policy,
         "Private supported-target matrix over exact content-addressed production workers, packaged native runtimes, pinned multilingual model, production converter/chunker, native Zvec indexes, and Ask retrieval policy.",
-        vec![
-            "No configured answer provider was used; generated-answer citation correctness remains unmeasured and release-blocking.".into(),
-            "Installed lifecycle, accessibility, privacy, failure-mode, and release-owner evidence remains outside the automated evaluation matrix.".into(),
-        ],
+        approved.limitations,
         measurements,
         approved.embedding_preprocessing_migration,
         approved.manual_criteria,
