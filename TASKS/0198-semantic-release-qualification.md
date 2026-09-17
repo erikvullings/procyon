@@ -533,3 +533,7 @@ qualification; a private qualification run must never publish assets.
 - 2026-09-16 release owner: Requested native Tauri `Ctrl/Cmd +/-` page-zoom support but deferred
   the 200% installed-app layout pass. The accessibility row remains pending and release-blocking;
   enabling the host capability is not qualification evidence.
+- 2026-09-16 release owner: Approved preparing `0.1.0-32` as the first public experimental semantic
+  prerelease for cross-platform testing. The 200% and Windows/Linux manual checks remain explicit
+  production/stable follow-ups; publication still requires the exact v32 four-platform automated
+  qualification and fail-closed experimental-alpha report.
