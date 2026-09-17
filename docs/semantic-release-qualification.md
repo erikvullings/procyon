@@ -2,14 +2,18 @@
 
 ## Decision
 
-**NO-GO as of 2026-09-10.** Do not set the protected repository variable
-`SEMANTIC_RELEASE_QUALIFIED` to `true`. Tagged desktop releases remain available, but skip semantic
-payload construction, catalog signing and publication, and catalog embedding. Managed semantic
-installation therefore remains unavailable in those installers. A manual workflow dispatch still
-builds non-published semantic payloads and signed catalogs so operators can retain native artifact
-evidence without creating an installer that points at private or nonexistent release assets.
-Desktop installer jobs are push-only. Installed semantic qualification remains a separate
-task-0198 gap.
+**GO for the `v0.1.0-32` experimental alpha as of 2026-09-17.** Exact private workflow
+[`35247197346`](https://github.com/erikvullings/procyon/actions/runs/35247197346) passed the
+four-target payload, signed-catalog, installed lifecycle, failure-mode, and privacy matrix for
+immutable revision `10613c716023f86074c67a4bb32780382f1b3623`. The checked-in typed report uses
+the `experimental-alpha` evidence policy, contains four exact production measurements and no
+blockers, and records a `go` decision.
+
+This is not production/stable approval. Generated-answer grounding, reviewed case-fold comparison,
+generated-summary/unavailable-source/concept-label production setups, 200% installed-app layout
+validation, and native Windows/Linux accessibility and UX remain explicitly deferred to task 0225.
+Do not enable `SEMANTIC_RELEASE_QUALIFIED` until the focused report PR containing this evidence is
+reviewed and merged. Keep `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` absent or `false`.
 
 This report is the operator record for task 0198. A code-complete subsystem and developer-bundle
 results are not substitutes for measurements from the exact signed production artifacts.
@@ -18,7 +22,7 @@ results are not substitutes for measurements from the exact signed production ar
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | Bound by each private report's `procyonRevision`; no reviewed four-target aggregate is checked in |
+| Procyon revision reviewed | `10613c716023f86074c67a4bb32780382f1b3623` |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
@@ -32,9 +36,31 @@ results are not substitutes for measurements from the exact signed production ar
 | Linux x86-64 inference runtime | Microsoft ONNX Runtime `v1.28.0` CPU shared loader |
 | Optional OCR | user-installed OCRmyPDF stable `>=16.0.0,<18.0.0`, disabled by default |
 
-The final artifact IDs, byte lengths, SHA-256 digests, catalog revision, signature, and installer
-digests are intentionally blank until a qualification run produces and retains them. Do not
-substitute developer catalog identities.
+The exact run retained 12 artifacts containing 1,486 files and 4,529,763,280 bytes outside the
+repository under `qualification-run-35247197346`. The sorted retention-manifest digests are
+`cf1c8eb295270dbfbb787430973917ed6a1670cfcb72db4de8635d9461e644f4` for
+`RETAINED-SHA256SUMS` and
+`08d1ccdfa94d2e76dea5fef54c816a9f9e7a4d6d500a836128d3971c2930a625` for
+`RETAINED-FILE-SIZES`. Every retained file reverified.
+
+| Target | Catalog revision | Catalog SHA-256 | Signature SHA-256 |
+| --- | --- | --- | --- |
+| Linux arm64 | `procyon-linux-aarch64-0.1.0-32-58a407edc7c86ec2bb50947e38724daa` | `7954d382266f0d093181898aa1ee5ab8ae3b7e25010f03e18af7f72cd755f6b1` | `1116393db7456c48e9df267d4190ae7ff5ac04adcbf4d06f896ea32a218e5118` |
+| Linux x86-64 | `procyon-linux-x86_64-0.1.0-32-ee1b9709d3670813da7d5946835c1ce0` | `c0de471357b3f689f8912abafdb5e66b585ac6ac81478ba0e33eaa305ac505dc` | `fcc4e8c75cd691fc4c80bd7b13ee0f2511b2b6d270e70fcf4d5775d0cff934f8` |
+| macOS arm64 | `procyon-macos-aarch64-0.1.0-32-a546f69cddc42b9000bdab8d6d8c49cc` | `26a1443efe3069b4452d15e0819b80e8cea6f38663198b0bc427c7e8a157238f` | `55ef53c1fa3b1d0b315eadffd92410bbf69a23f9eca253ea522ee7b787d49296` |
+| Windows x86-64 | `procyon-windows-x86_64-0.1.0-32-4387dae10775b583c6a2b40004fdac2e` | `ad8a1fd15cee44a06c64a78dd850c309743844abe6d7c2f7a09f81e5dbb78f75` | `628a0e42198c1cd90ee619e4df04bccccdc4ccf2af1d9f38d13b1752f04dc37d` |
+
+The protected public key independently verified every detached signature and exact payload set.
+All installed reports bind to the reviewed revision and pass lifecycle, failure, package, app
+privacy, and worker-privacy checks. Every target measured file/chunk recall@10
+`0.9583333333333334`, MRR `0.9166666666666666`, nDCG@10 `0.9677622660637882`, zero
+negative-control false positives, offline citation correctness `1.0`, and offline citation recall
+`0.9230769230769231`.
+
+The retained macOS DMG is 43,124,379 bytes with SHA-256
+`1b6f89720bc0dd726d8418134a05d78ce26eea40f381e8e387022af24bd986e2`. Operator-kit
+checksums, image integrity, notarization, stapling, Gatekeeper assessment, and the mounted app's
+deep strict signature verification all passed.
 
 ## Zvec native-runtime qualification inputs
 
