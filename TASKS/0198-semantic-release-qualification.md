@@ -567,3 +567,41 @@ qualification; a private qualification run must never publish assets.
   This scoring change refreshes the release-candidate fingerprint, so private run `35213304875`
   remains retained reviewed evidence but cannot authorize the corrected revision. A new immutable
   candidate CI and private qualification are required before generating the GO report.
+- 2026-09-17 Copilot: PR #61 merged the corrected experimental-alpha policy at immutable revision
+  `fe77786592636d5540d59db458e5d17f829b500a`. Exact private workflow
+  [`35226068036`](https://github.com/erikvullings/procyon/actions/runs/35226068036) then passed
+  private safety, payloads 4/4, signed catalogs 4/4, and installed qualifications 4/4; every
+  release/package publication job remained skipped and both release gates remained absent.
+  Retained all 12 artifacts outside the repository (1,486 files, 4,529,778,107 bytes) with
+  `RETAINED-SHA256SUMS`
+  `a9480194dd68b38b92f3b52dcd7c97fb608bf3945e44c5eefe454e9dee8047b6` and
+  `RETAINED-FILE-SIZES`
+  `0f325ffbb8c2a26bec00e6d1791aef5490e4973ed164549d12856352969c2d72`.
+  All retained digests, four detached signatures, exact catalog payload sets, installed
+  lifecycle/privacy summaries, macOS operator-kit checksums, DMG integrity, notarization,
+  stapling, Gatekeeper assessment, and mounted app signature were independently verified.
+- 2026-09-17 Copilot: Generated the checked-in four-target report from the exact run
+  `35226068036` inputs and the recorded release-owner approval. The report binds to fingerprint
+  `sha256:97899d4adc899e181e3feed875c477594c37150d103d73b95d8281508b8a06e9`,
+  records identical target metrics, explicitly defers generated-answer, reviewed case-fold,
+  specialized task-0225 scenarios, 200% layout, and Windows/Linux native manual evidence, and
+  validates as an `experimental-alpha` GO with zero blockers. The precondition wrapper's success
+  message used an undefined variable after typed validation; the focused report change corrects it
+  and adds success-path coverage. Publication remains blocked until this report PR is reviewed and
+  merged; neither gate, tag, nor public asset has been changed.
+- 2026-09-17 Copilot: Report-PR validation exposed a pre-existing circular gate in the
+  fingerprinted `semantic_production_evaluation.rs`: its repository-report test requires the
+  canonical report to remain `NoGo`, while the release workflow requires that same canonical file
+  to be the reviewed `experimental-alpha` `Go`. Updating the assertion changes a source included
+  in `release_candidate_fingerprint()`, so it would invalidate exact run `35226068036`; leaving it
+  unchanged makes normal Rust CI fail on the GO report. No report PR was opened, and no gate, tag,
+  publication, rerun, or duplicate dispatch occurred. The retained evidence and generated report
+  remain available outside git. Resolving the circular test requires a focused source change and,
+  because the source is fingerprinted, fresh exact private evidence unless the release owner
+  explicitly changes that requirement.
+- 2026-09-17 release owner: Authorized a focused prerequisite fix for the circular
+  repository-report test followed by exactly one fresh private qualification run. The prerequisite
+  keeps the canonical report fail-closed at NO-GO, makes the test accept either a fully validated
+  NO-GO template or measured GO report, and fixes the precondition wrapper's success message. Do
+  not enable either gate, tag, publish, rerun `35226068036`, or dispatch the replacement private
+  workflow more than once.
