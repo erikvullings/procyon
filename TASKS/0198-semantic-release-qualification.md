@@ -112,12 +112,12 @@ release-qualified repository variables absent or `false` until the final approva
 
 ### E. Approve and publish the experimental alpha
 
-- [ ] Fix every alpha-blocking defect and rerun affected automated/manual rows on one immutable
+- [x] Fix every alpha-blocking defect and rerun affected automated/manual rows on one immutable
   candidate.
-- [ ] Update the qualification report and checked-in opaque evaluation evidence with four exact
+- [x] Update the qualification report and checked-in opaque evaluation evidence with four exact
   production measurements, macOS manual evidence, the `experimental-alpha` tier, honest deferred
   Windows/Linux rows, known limitations, and rollback instructions.
-- [ ] Run the alpha-aware semantic precondition validator and obtain explicit dated release-owner
+- [x] Run the alpha-aware semantic precondition validator and obtain explicit dated release-owner
   approval for the named revision and artifacts.
 - [ ] Set only `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require
   semantic publication plus all desktop installer jobs to pass.
@@ -605,3 +605,21 @@ qualification; a private qualification run must never publish assets.
   NO-GO template or measured GO report, and fixes the precondition wrapper's success message. Do
   not enable either gate, tag, publish, rerun `35226068036`, or dispatch the replacement private
   workflow more than once.
+- 2026-09-17 Copilot: PR #62 merged the circular-test fix at immutable revision
+  `10613c716023f86074c67a4bb32780382f1b3623`. The one authorized replacement private workflow
+  [`35247197346`](https://github.com/erikvullings/procyon/actions/runs/35247197346) passed safety,
+  payloads 4/4, signed catalogs 4/4, and installed qualifications 4/4 while every public/package
+  publication job stayed skipped and both gates remained absent. Retained and reverified all 1,486
+  files; the SHA and size manifest digests are
+  `cf1c8eb295270dbfbb787430973917ed6a1670cfcb72db4de8635d9461e644f4` and
+  `08d1ccdfa94d2e76dea5fef54c816a9f9e7a4d6d500a836128d3971c2930a625`.
+  Independently verified all four detached signatures and payload sets, all installed
+  lifecycle/privacy summaries, and the macOS DMG checksum, image, notarization, stapling,
+  Gatekeeper result, and mounted app signature.
+- 2026-09-17 Copilot: Generated the canonical report from exact run `35247197346` and the recorded
+  owner approval. It binds to fingerprint
+  `sha256:5959df73fbd01471e637df2a566d7b8f2e3ee6e4f43a9e7d26a379d2c1a2789c`,
+  contains four production measurements, records every approved task-0225 deferral, has zero
+  blockers, and passes the fail-closed `experimental-alpha` validator as GO. Publication remains
+  blocked until this focused report PR is reviewed and merged; neither gate, tag, nor public asset
+  has been changed.
