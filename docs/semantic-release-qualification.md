@@ -2,31 +2,27 @@
 
 ## Decision
 
-**NO-GO for the `v0.1.0-33` recovery candidate as of 2026-09-17.** The workspace version and
-release-candidate fingerprint changed after the public semantic-collection workflow defect was
-fixed. A fresh private four-target run and reviewed `experimental-alpha` GO report are required
-before either release gate may be enabled or `v0.1.0-33` may be tagged.
-
-The withdrawn `v0.1.0-32` candidate remains useful historical evidence. Exact private workflow
-[`35247197346`](https://github.com/erikvullings/procyon/actions/runs/35247197346) passed the
+**GO for the `v0.1.0-33` experimental alpha as of 2026-09-17.** Exact private workflow
+[`35271430396`](https://github.com/erikvullings/procyon/actions/runs/35271430396) passed the
 four-target payload, signed-catalog, installed lifecycle, failure-mode, and privacy matrix for
-immutable revision `10613c716023f86074c67a4bb32780382f1b3623`. The checked-in typed report uses
-the fail-closed v33 template now; the previously reviewed v32 report cannot authorize v33.
+immutable revision `020ac3bf021bf129934f88020fc8dcd4e786e4a2`. The checked-in typed report uses
+the `experimental-alpha` evidence policy, contains four exact production measurements and no
+blockers, and records a `go` decision.
 
 This is not production/stable approval. Generated-answer grounding, reviewed case-fold comparison,
 generated-summary/unavailable-source/concept-label production setups, 200% installed-app layout
 validation, and native Windows/Linux accessibility and UX remain explicitly deferred to task 0225.
 Keep `SEMANTIC_RELEASE_QUALIFIED=false` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` absent or `false`
-until the v33 evidence report is reviewed and merged.
+until this focused evidence report is reviewed and merged.
 
 This report is the operator record for task 0198. A code-complete subsystem and developer-bundle
 results are not substitutes for measurements from the exact signed production artifacts.
 
-## Prior v32 qualified identity
+## Candidate identity
 
 | Property | Candidate |
 | --- | --- |
-| Procyon revision reviewed | `10613c716023f86074c67a4bb32780382f1b3623` |
+| Procyon revision reviewed | `020ac3bf021bf129934f88020fc8dcd4e786e4a2` |
 | Model | `intfloat/multilingual-e5-small` |
 | Model revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Tokenizer | `xlm-roberta-sentencepiece.614241f6` |
@@ -40,19 +36,19 @@ results are not substitutes for measurements from the exact signed production ar
 | Linux x86-64 inference runtime | Microsoft ONNX Runtime `v1.28.0` CPU shared loader |
 | Optional OCR | user-installed OCRmyPDF stable `>=16.0.0,<18.0.0`, disabled by default |
 
-The exact run retained 12 artifacts containing 1,486 files and 4,529,763,280 bytes outside the
-repository under `qualification-run-35247197346`. The sorted retention-manifest digests are
-`cf1c8eb295270dbfbb787430973917ed6a1670cfcb72db4de8635d9461e644f4` for
+The exact run retained 13 artifacts containing 1,514 files and 5,289,796,435 bytes outside the
+repository under `qualification-run-35271430396`. The sorted retention-manifest digests are
+`c695d4be67b6f7b3246911d976acbd7aabd470766d53daaee3939eb57603227a` for
 `RETAINED-SHA256SUMS` and
-`08d1ccdfa94d2e76dea5fef54c816a9f9e7a4d6d500a836128d3971c2930a625` for
+`3e751dccc25862ad388ad814c3b02e1e9b44404176aa909b6a95f86ba635b23f` for
 `RETAINED-FILE-SIZES`. Every retained file reverified.
 
 | Target | Catalog revision | Catalog SHA-256 | Signature SHA-256 |
 | --- | --- | --- | --- |
-| Linux arm64 | `procyon-linux-aarch64-0.1.0-32-58a407edc7c86ec2bb50947e38724daa` | `7954d382266f0d093181898aa1ee5ab8ae3b7e25010f03e18af7f72cd755f6b1` | `1116393db7456c48e9df267d4190ae7ff5ac04adcbf4d06f896ea32a218e5118` |
-| Linux x86-64 | `procyon-linux-x86_64-0.1.0-32-ee1b9709d3670813da7d5946835c1ce0` | `c0de471357b3f689f8912abafdb5e66b585ac6ac81478ba0e33eaa305ac505dc` | `fcc4e8c75cd691fc4c80bd7b13ee0f2511b2b6d270e70fcf4d5775d0cff934f8` |
-| macOS arm64 | `procyon-macos-aarch64-0.1.0-32-a546f69cddc42b9000bdab8d6d8c49cc` | `26a1443efe3069b4452d15e0819b80e8cea6f38663198b0bc427c7e8a157238f` | `55ef53c1fa3b1d0b315eadffd92410bbf69a23f9eca253ea522ee7b787d49296` |
-| Windows x86-64 | `procyon-windows-x86_64-0.1.0-32-4387dae10775b583c6a2b40004fdac2e` | `ad8a1fd15cee44a06c64a78dd850c309743844abe6d7c2f7a09f81e5dbb78f75` | `628a0e42198c1cd90ee619e4df04bccccdc4ccf2af1d9f38d13b1752f04dc37d` |
+| Linux arm64 | `procyon-linux-aarch64-0.1.0-33-b8ffa1554487878a7d0e301442aea895` | `bbfab8a40d8913a69c28421e5c6c7ed822e1964c318d70533118576656b6809e` | `db86d09a2e1115329d589b4f8100be9e4fc159ec64a7e2bb92f261249a08a98b` |
+| Linux x86-64 | `procyon-linux-x86_64-0.1.0-33-5825a1dab4718512e4d13cf86d397b17` | `838e3a4ea2e9ecd476187e2cac965595f891f9e586766a97a7e60891f1fa7bc3` | `a663cbf8441029638017151e8b6aeb68d865457b4213bb4aef03ea005a7ea286` |
+| macOS arm64 | `procyon-macos-aarch64-0.1.0-33-a2d09a7cde502340e961cb7e129187db` | `eaa98c97b01dae301bf8e3571f68273fdbf021c01ebcdbe8ca6f1ba5c4132bac` | `0870525071a29c87ce724cd62b7483fd8349d03275cba4b66ea7861989241636` |
+| Windows x86-64 | `procyon-windows-x86_64-0.1.0-33-b2adffd90ad9563398144c5242770be6` | `a42b181b9616a3df3d23ebbd8073813f7da36ed9bd04e02770ddc1227f82581f` | `32491ab13e52f3af8c9a6639822a25455ddd1e7b30a6aedc801c0a11c596f79d` |
 
 The protected public key independently verified every detached signature and exact payload set.
 All installed reports bind to the reviewed revision and pass lifecycle, failure, package, app
@@ -61,8 +57,8 @@ privacy, and worker-privacy checks. Every target measured file/chunk recall@10
 negative-control false positives, offline citation correctness `1.0`, and offline citation recall
 `0.9230769230769231`.
 
-The retained macOS DMG is 43,124,379 bytes with SHA-256
-`1b6f89720bc0dd726d8418134a05d78ce26eea40f381e8e387022af24bd986e2`. Operator-kit
+The retained macOS DMG is 43,124,571 bytes with SHA-256
+`8312c5b0c8493827be886f036cf5a3208effbb0e5db24ad4b23712f1f7e313ad`. Operator-kit
 checksums, image integrity, notarization, stapling, Gatekeeper assessment, and the mounted app's
 deep strict signature verification all passed.
 
