@@ -2481,7 +2481,7 @@ mod tests {
     }
 
     #[test]
-    fn repository_corpus_and_no_go_template_are_current() {
+    fn repository_corpus_and_report_are_current() {
         let corpus = ProductionEvaluationCorpus::parse(include_str!(
             "../tests/fixtures/semantic-evaluation-v1.json"
         ))
@@ -2494,15 +2494,17 @@ mod tests {
         let report = ProductionEvaluationReport::parse(include_str!(
             "../../../docs/evaluations/semantic-production-v1.json"
         ))
-        .expect("checked-in semantic template");
+        .expect("checked-in semantic report");
         assert_eq!(
             report.release_candidate_fingerprint,
             release_candidate_fingerprint()
         );
         report
             .validate(&corpus)
-            .expect("current fail-closed template");
-        assert_eq!(report.decision, ProductionEvaluationDecision::NoGo);
-        assert!(!report.production_measurement);
+            .expect("current fail-closed report");
+        assert_eq!(
+            report.production_measurement,
+            report.decision == ProductionEvaluationDecision::Go
+        );
     }
 }

@@ -80,4 +80,4 @@ if (validation.status !== 0) {
   process.stderr.write(`${validation.stdout ?? ''}${validation.stderr ?? ''}`);
   throw new Error('the repository semantic evaluation evidence does not support a go');
 }
-console.log(`Verified a measured semantic ${policy} go decision.`);
+console.log(`Verified a measured semantic ${evidencePolicy} go decision.`);

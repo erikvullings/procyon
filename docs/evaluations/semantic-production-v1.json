@@ -3,7 +3,7 @@
   "evidencePolicy": "production-stable",
   "corpusId": "task-0188-production-corpus-v1",
   "corpusFingerprint": "sha256:6e0c201a6393bdfad56999ecfa86d6b66387c8aa41c8809055bf14429755f3ca",
-  "releaseCandidateFingerprint": "sha256:97899d4adc899e181e3feed875c477594c37150d103d73b95d8281508b8a06e9",
+  "releaseCandidateFingerprint": "sha256:5959df73fbd01471e637df2a566d7b8f2e3ee6e4f43a9e7d26a379d2c1a2789c",
   "measurementBasis": "No exact production measurements have been checked in. Private workflow evidence must be reviewed and reduced to opaque aggregate and per-case identities before this template can change.",
   "limitations": [
     "No supported-target production measurements are recorded in this checked-in template.",

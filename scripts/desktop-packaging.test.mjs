@@ -307,6 +307,10 @@ test('semantic release preconditions require a current four-target measured go',
     ),
   );
   assert.deepEqual(alphaPlan.arguments.slice(7, 10), ['--', '--policy', 'experimental-alpha']);
+  assert.match(
+    read('scripts', 'check-semantic-release-preconditions.mjs'),
+    /semantic \$\{evidencePolicy\} go decision/u,
+  );
   const unknownPolicy = spawnSync(
     'node',
     ['scripts/check-semantic-release-preconditions.mjs', '--policy', 'alpha'],
@@ -327,6 +331,7 @@ test('semantic release preconditions require a current four-target measured go',
 
   const outputRoot = scratchDirectory('semantic-evaluation-report-');
   const forged = JSON.parse(read('docs', 'evaluations', 'semantic-production-v1.json'));
+  forged.evidencePolicy = 'experimental-alpha';
   forged.decision = 'go';
   forged.productionMeasurement = true;
   forged.blockingReasons = [];
@@ -335,7 +340,13 @@ test('semantic release preconditions require a current four-target measured go',
   writeFileSync(forgedPath, JSON.stringify(forged));
   const forgedResult = spawnSync(
     'node',
-    ['scripts/check-semantic-release-preconditions.mjs', '--report', forgedPath],
+    [
+      'scripts/check-semantic-release-preconditions.mjs',
+      '--policy',
+      'experimental-alpha',
+      '--report',
+      forgedPath,
+    ],
     { cwd: repoRoot, encoding: 'utf8' },
   );
   assert.notEqual(forgedResult.status, 0);
