@@ -537,3 +537,26 @@ qualification; a private qualification run must never publish assets.
   prerelease for cross-platform testing. The 200% and Windows/Linux manual checks remain explicit
   production/stable follow-ups; publication still requires the exact v32 four-platform automated
   qualification and fail-closed experimental-alpha report.
+- 2026-09-17 Copilot: Candidate `0.1.0-32` merged to `main` at
+  `46eb7fce34cd68dbb03617275a664b0f96edef8d`. Exact private workflow
+  [`35193552706`](https://github.com/erikvullings/procyon/actions/runs/35193552706) passed all four
+  payload, signed-catalog, and installed-qualification rows; every public/package publication job
+  remained skipped and both release gates remained absent. Retained all 12 artifacts outside the
+  repository with `RETAINED-SHA256SUMS`
+  `029a1ee90593fd9463583ad81fc9346ef66efc85ab3773876dd3190a0b25e159` and
+  `RETAINED-FILE-SIZES`
+  `01e2b32483f4b5879cdcb60e2091dfc2d86480e9da731d3887cae360bf893e87`.
+  All 13 payload checksums and four detached catalog signatures verified independently. The
+  signed/notarized v32 macOS app reconciled a safe clone of the populated isolated library with one
+  root, three occurrences, zero failures, and indexed generation `13`; the original profile and
+  normal profile were untouched.
+- 2026-09-17 release owner: Approved the reviewed v32 experimental-alpha evidence and selected an
+  alpha citation policy that requires deterministic citation correctness `1.0` and citation recall
+  at least the existing chunk-recall floor `0.80`; production/stable remains `1.0`. Exact v32
+  measurements are identical on all four targets: file/chunk recall@10 `0.958333`, MRR `0.916667`,
+  nDCG@10 `0.967762`, negative-control false-positive rate `0`, offline citation correctness `1.0`,
+  and offline citation recall `0.923077`. The missing multi-facet Beta citation scored `0.856455`
+  and was honestly excluded by the unchanged `0.84` absolute floor plus `0.02` strongest-candidate
+  window (`0.872621` effective cutoff). Changing the validator invalidates the candidate
+  fingerprint, so run `35193552706` cannot authorize publication of the follow-up revision; a new
+  immutable candidate CI and private qualification are required. No release gate or tag was set.

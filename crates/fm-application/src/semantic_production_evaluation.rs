@@ -1414,7 +1414,15 @@ fn blocking_reasons(
                 measurement.identity.target
             ));
         }
-        if metrics.offline_citation_correctness != 1.0 || metrics.offline_citation_recall != 1.0 {
+        let minimum_offline_citation_recall =
+            if evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha {
+                MINIMUM_CHUNK_RECALL
+            } else {
+                1.0
+            };
+        if metrics.offline_citation_correctness != 1.0
+            || metrics.offline_citation_recall < minimum_offline_citation_recall
+        {
             reasons.push(format!(
                 "{} deterministic citation evidence was incomplete or irrelevant.",
                 measurement.identity.target
@@ -2108,6 +2116,109 @@ mod tests {
                 .embedding_preprocessing_migration
                 .baseline_comparison_evidence,
             None
+        );
+    }
+
+    #[test]
+    fn experimental_alpha_allows_offline_citation_recall_above_the_chunk_recall_floor() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+        let mut measurements = report.measurements;
+        for measurement in &mut measurements {
+            measurement.observations[0].offline_citations.clear();
+            *measurement = ProductionTargetMeasurement::new(
+                &corpus,
+                measurement.identity.clone(),
+                true,
+                measurement.observations.clone(),
+            )
+            .expect("measurement with partial citation recall");
+            assert!(measurement.metrics.offline_citation_recall >= MINIMUM_CHUNK_RECALL);
+            assert!(measurement.metrics.offline_citation_recall < 1.0);
+        }
+        let report = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            report.limitations,
+            measurements,
+            report.embedding_preprocessing_migration,
+            report.manual_criteria,
+        );
+
+        assert_eq!(
+            report.decision,
+            ProductionEvaluationDecision::Go,
+            "{:?}",
+            report.blocking_reasons
+        );
+    }
+
+    #[test]
+    fn production_stable_requires_complete_offline_citation_recall() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+        let mut measurements = report.measurements;
+        for measurement in &mut measurements {
+            measurement.observations[0].offline_citations.clear();
+            *measurement = ProductionTargetMeasurement::new(
+                &corpus,
+                measurement.identity.clone(),
+                true,
+                measurement.observations.clone(),
+            )
+            .expect("measurement with partial citation recall");
+        }
+        let reasons = blocking_reasons(
+            ProductionEvidencePolicy::ProductionStable,
+            &report.limitations,
+            &measurements,
+            true,
+            &ThresholdDecision::default(),
+            &report.embedding_preprocessing_migration,
+            &report.manual_criteria,
+        );
+
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("deterministic citation evidence"))
+        );
+    }
+
+    #[test]
+    fn experimental_alpha_rejects_offline_citation_recall_below_the_chunk_recall_floor() {
+        let corpus = qualifying_corpus();
+        let report = qualifying_alpha_report(&corpus);
+        let mut measurements = report.measurements;
+        for measurement in &mut measurements {
+            for observation in measurement.observations.iter_mut().take(4) {
+                observation.offline_citations.clear();
+            }
+            *measurement = ProductionTargetMeasurement::new(
+                &corpus,
+                measurement.identity.clone(),
+                true,
+                measurement.observations.clone(),
+            )
+            .expect("measurement below the citation recall floor");
+            assert!(measurement.metrics.offline_citation_recall < MINIMUM_CHUNK_RECALL);
+        }
+        let report = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            report.measurement_basis,
+            report.limitations,
+            measurements,
+            report.embedding_preprocessing_migration,
+            report.manual_criteria,
+        );
+
+        assert!(
+            report
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("deterministic citation evidence"))
         );
     }
 
