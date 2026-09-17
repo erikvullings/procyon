@@ -50,6 +50,7 @@ const LINUX_ALPHA_MANUAL_LIMITATION: &str =
 const GENERATED_ANSWER_ALPHA_LIMITATION: &str =
     "Generated-answer grounding remains deferred to production/stable qualification.";
 const CASE_FOLD_ALPHA_LIMITATION: &str = "Reviewed before/after Unicode case-fold comparison remains deferred to production/stable qualification.";
+const SPECIALIZED_SCENARIO_ALPHA_LIMITATION: &str = "Generated-summary, unavailable-source, and concept-label production scenarios remain deferred to production/stable qualification.";
 const REQUIRED_COMPONENTS: [&str; 3] = [
     "procyon.semantic.model.multilingual-e5-small",
     "procyon.semantic.worker",
@@ -679,10 +680,10 @@ impl ProductionEvaluationReport {
         let production_measurement = has_all_production_targets(&measurements);
         let threshold_decision = ThresholdDecision::default();
         let blocking_reasons = blocking_reasons(
+            corpus,
             evidence_policy,
             &limitations,
             &measurements,
-            production_measurement,
             &threshold_decision,
             &embedding_preprocessing_migration,
             &manual_criteria,
@@ -829,10 +830,10 @@ impl ProductionEvaluationReport {
             ));
         }
         let expected = blocking_reasons(
+            corpus,
             evidence_policy,
             &self.limitations,
             &self.measurements,
-            production_measurement,
             &self.threshold_decision,
             &self.embedding_preprocessing_migration,
             &self.manual_criteria,
@@ -1360,15 +1361,16 @@ fn has_all_production_targets(measurements: &[ProductionTargetMeasurement]) -> b
 }
 
 fn blocking_reasons(
+    corpus: &ProductionEvaluationCorpus,
     evidence_policy: ProductionEvidencePolicy,
     limitations: &[String],
     measurements: &[ProductionTargetMeasurement],
-    production_measurement: bool,
     threshold: &ThresholdDecision,
     migration: &EmbeddingPreprocessingMigration,
     manual_criteria: &[ManualCriterion],
 ) -> Vec<String> {
     let mut reasons = Vec::new();
+    let production_measurement = has_all_production_targets(measurements);
     if !production_measurement {
         reasons.push(
             "Exact strict-production measurements are required for macOS arm64, Windows x86-64, Linux x86-64, and Linux arm64.".into(),
@@ -1391,7 +1393,20 @@ fn blocking_reasons(
     for measurement in measurements {
         let metrics = &measurement.metrics;
         for observation in &measurement.observations {
-            if !observation.production_scenario_exercised {
+            if !observation.production_scenario_exercised
+                && !(evidence_policy == ProductionEvidencePolicy::ExperimentalAlpha
+                    && corpus
+                        .scenario_requirements
+                        .get(&observation.case_id)
+                        .is_some_and(|scenario| {
+                            matches!(
+                                scenario,
+                                ProductionScenario::GeneratedSummary
+                                    | ProductionScenario::UnavailableSource
+                                    | ProductionScenario::ConceptLabel
+                            )
+                        }))
+            {
                 reasons.push(format!(
                     "{} did not exercise the declared production scenario for case `{}`.",
                     measurement.identity.target, observation.case_id
@@ -1474,6 +1489,7 @@ fn alpha_manual_limitations_are_documented(limitations: &[String]) -> bool {
         LINUX_ALPHA_MANUAL_LIMITATION,
         GENERATED_ANSWER_ALPHA_LIMITATION,
         CASE_FOLD_ALPHA_LIMITATION,
+        SPECIALIZED_SCENARIO_ALPHA_LIMITATION,
     ]
     .iter()
     .all(|required| limitations.iter().any(|limitation| limitation == required))
@@ -1891,6 +1907,7 @@ mod tests {
                 LINUX_ALPHA_MANUAL_LIMITATION.into(),
                 GENERATED_ANSWER_ALPHA_LIMITATION.into(),
                 CASE_FOLD_ALPHA_LIMITATION.into(),
+                SPECIALIZED_SCENARIO_ALPHA_LIMITATION.into(),
             ],
             qualifying_measurements(corpus),
             EmbeddingPreprocessingMigration::default(),
@@ -2170,10 +2187,10 @@ mod tests {
             .expect("measurement with partial citation recall");
         }
         let reasons = blocking_reasons(
+            &corpus,
             ProductionEvidencePolicy::ProductionStable,
             &report.limitations,
             &measurements,
-            true,
             &ThresholdDecision::default(),
             &report.embedding_preprocessing_migration,
             &report.manual_criteria,
@@ -2279,6 +2296,65 @@ mod tests {
                 .blocking_reasons
                 .iter()
                 .any(|reason| reason.contains("generated-answer-grounding"))
+        );
+    }
+
+    #[test]
+    fn experimental_alpha_defers_specialized_scenarios_but_stable_requires_them() {
+        let mut corpus = qualifying_corpus();
+        let specialized = [
+            ("positive-2", ProductionScenario::GeneratedSummary),
+            ("positive-3", ProductionScenario::UnavailableSource),
+            ("positive-4", ProductionScenario::ConceptLabel),
+        ];
+        for (case_id, scenario) in specialized {
+            corpus
+                .scenario_requirements
+                .insert(case_id.into(), scenario);
+        }
+
+        let alpha = qualifying_alpha_report(&corpus);
+        let mut measurements = alpha.measurements;
+        for measurement in &mut measurements {
+            for observation in &mut measurement.observations {
+                if specialized
+                    .iter()
+                    .any(|(case_id, _)| observation.case_id == *case_id)
+                {
+                    observation.production_scenario_exercised = false;
+                }
+            }
+        }
+        let alpha = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ExperimentalAlpha,
+            alpha.measurement_basis,
+            alpha.limitations,
+            measurements.clone(),
+            alpha.embedding_preprocessing_migration.clone(),
+            alpha.manual_criteria.clone(),
+        );
+        assert_eq!(
+            alpha.decision,
+            ProductionEvaluationDecision::Go,
+            "{:?}",
+            alpha.blocking_reasons
+        );
+
+        let stable = ProductionEvaluationReport::from_measurements_for_policy(
+            &corpus,
+            ProductionEvidencePolicy::ProductionStable,
+            alpha.measurement_basis,
+            alpha.limitations,
+            measurements,
+            alpha.embedding_preprocessing_migration,
+            alpha.manual_criteria,
+        );
+        assert!(
+            stable
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("declared production scenario"))
         );
     }
 

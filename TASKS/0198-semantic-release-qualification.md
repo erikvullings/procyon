@@ -560,3 +560,10 @@ qualification; a private qualification run must never publish assets.
   window (`0.872621` effective cutoff). Changing the validator invalidates the candidate
   fingerprint, so run `35193552706` cannot authorize publication of the follow-up revision; a new
   immutable candidate CI and private qualification are required. No release gate or tag was set.
+- 2026-09-17 release owner: Confirmed that the generated-summary, unavailable-source, and
+  concept-label production scenarios belong to stable follow-up task 0225 and must not block the
+  first experimental alpha. The alpha validator now defers only those typed specialized scenarios;
+  ordinary and incremental-edit scenarios remain mandatory, and production/stable remains strict.
+  This scoring change refreshes the release-candidate fingerprint, so private run `35213304875`
+  remains retained reviewed evidence but cannot authorize the corrected revision. A new immutable
+  candidate CI and private qualification are required before generating the GO report.

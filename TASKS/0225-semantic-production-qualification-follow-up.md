@@ -43,3 +43,6 @@ reasonably block the first alpha.
 - 2026-09-14 Copilot: Split from task 0198 when the release owner selected a proportionate OSS
   alpha gate: automated evidence on all supported targets plus a manual macOS arm64 pass. This task
   owns the stricter stable-release work and starts only after the first semantic alpha ships.
+- 2026-09-17 Copilot: The experimental-alpha validator now explicitly defers the typed
+  `GeneratedSummary`, `UnavailableSource`, and `ConceptLabel` production scenarios while retaining
+  them as production/stable blockers. Standard and incremental-edit scenarios are not deferred.
