@@ -230,6 +230,52 @@ describe('DirectoryTable rows', () => {
     expect(onDrop).toHaveBeenCalledWith(0, expect.any(Event));
   });
 
+  it('does not move the cursor when native drag-out returns a delayed click', () => {
+    const onCursorChange = vi.fn();
+    const onPointerDragOut = vi.fn();
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([entry()]),
+      onCursorChange,
+      onPointerDragStart: vi.fn(),
+      onPointerDragOut,
+    });
+
+    const row = root.querySelector<HTMLElement>('.fm-directory-row');
+    row?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: -1, clientY: 10, pointerId: 1 }),
+    );
+    row?.click();
+
+    expect(onPointerDragOut).toHaveBeenCalledExactlyOnceWith(0);
+    expect(onCursorChange).not.toHaveBeenCalled();
+
+    row?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 2,
+      }),
+    );
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }));
+    row?.click();
+    expect(onCursorChange).toHaveBeenCalledExactlyOnceWith(0, {
+      ctrlKey: false,
+      shiftKey: false,
+    });
+  });
+
   it('clips the final filler stripe to the unused viewport height', () => {
     mount({
       state: { type: 'loaded' },

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { beginPointerFileDrag, registerPointerFileDropTarget } from './pointer-file-drag';
+import {
+  beginPointerFileDrag,
+  consumePointerFileDragClick,
+  registerPointerFileDropTarget,
+} from './pointer-file-drag';
 
 describe('pointer file drag', () => {
   afterEach(() => {
@@ -121,5 +125,33 @@ describe('pointer file drag', () => {
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
     expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
+  });
+
+  it('suppresses a delayed click after native handoff but preserves the next intentional click', () => {
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 4 }),
+      {
+        index: 0,
+        onStart: vi.fn(),
+        onNativeDragOut: vi.fn(),
+      },
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: -1, clientY: 10, pointerId: 4 }),
+    );
+
+    expect(consumePointerFileDragClick()).toBe(true);
+    expect(consumePointerFileDragClick()).toBe(false);
+
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 5 }),
+      {
+        index: 0,
+        onStart: vi.fn(),
+        onNativeDragOut: vi.fn(),
+      },
+    );
+    expect(consumePointerFileDragClick()).toBe(false);
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 5 }));
   });
 });

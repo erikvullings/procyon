@@ -96,3 +96,9 @@ from Finder/Explorer) and §33 step 10.
   badge; using the default cursor removes that duplicate while preserving Procyon's single `+`/`-`
   indicator consistently across macOS, Windows, and Linux. Invalid targets retain the platform
   `not-allowed` cursor so dragging onto the current folder still has explicit no-drop feedback.
+- 2026-09-12 Copilot: Fixed native drag-out returning focus with a delayed compatibility click.
+  Native handoff now suppresses that click exactly once; a fresh pointer-down clears suppression,
+  so the next intentional click still works. This prevents the delayed click from moving the
+  cursor/selecting the dragged row and consequently triggering cursor-driven virtual-list
+  scrolling. Added helper and directory-table regression coverage; interactive Finder/Explorer
+  verification remains outstanding.
