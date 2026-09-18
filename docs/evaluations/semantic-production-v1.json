@@ -19,10 +19,10 @@
   "measurements": [
     {
       "identity": {
-        "procyonRevision": "020ac3bf021bf129934f88020fc8dcd4e786e4a2",
+        "procyonRevision": "059572e4503f8f1c2079f218b1da66d730d759d6",
         "target": "linux-aarch64",
         "catalogRevision": "procyon-linux-aarch64-0.1.0-33-b8ffa1554487878a7d0e301442aea895",
-        "catalogInputSha256": "sha256:c6edc0df0d4cbeb268bce6b366e5169ece4f1b717fd52fa3a85fbef55c503ad3",
+        "catalogInputSha256": "sha256:047dae21664e8ebe9fc0a219ba1d638bd4ca20cecab8a6dc25d7ec9750ddc5c0",
         "pipeline": {
           "worker_protocol_version": 1,
           "index_schema_version": 2,
@@ -66,7 +66,7 @@
             "byteLength": 32470624
           }
         ],
-        "zvecQualificationSha256": "sha256:97c356c947ff93546c6beacab5541d9fc00a60ca8eea6b19e34611de52c1f197",
+        "zvecQualificationSha256": "sha256:1f45bdee3a62585b073cdc594b3e6024f8cbf53a172baba88f308516080171ce",
         "onnxQualificationSha256": null
       },
       "productionPackage": true,
@@ -2739,10 +2739,10 @@
     },
     {
       "identity": {
-        "procyonRevision": "020ac3bf021bf129934f88020fc8dcd4e786e4a2",
+        "procyonRevision": "059572e4503f8f1c2079f218b1da66d730d759d6",
         "target": "linux-x86_64",
         "catalogRevision": "procyon-linux-x86_64-0.1.0-33-5825a1dab4718512e4d13cf86d397b17",
-        "catalogInputSha256": "sha256:a56702ae815fddfa8406ff426824521470d315e1d0d80bb067b8164071884bec",
+        "catalogInputSha256": "sha256:4652cc69d7bdc081414aba9f0c9e1985143a9f2702233a4595fb8bb99d2ea648",
         "pipeline": {
           "worker_protocol_version": 1,
           "index_schema_version": 2,
@@ -2793,8 +2793,8 @@
             "byteLength": 36854864
           }
         ],
-        "zvecQualificationSha256": "sha256:d8e2e5406e5a4209d82d4f6019282804184dde5c56c6c821388f8be874073789",
-        "onnxQualificationSha256": "sha256:e4769acaf6d2ee1c2d83338c3036333b68142c08ec9d3181e2a8cf63df0351af"
+        "zvecQualificationSha256": "sha256:785862ae3fbae5e9d20ca615e6788358626c2a928fab384abab3201b3d72d269",
+        "onnxQualificationSha256": "sha256:00a5f865f2b72d0fd4ed2cc00ac4a40c964900bfa086c2fe2cea8ae9f36103ff"
       },
       "productionPackage": true,
       "observations": [
@@ -5466,10 +5466,10 @@
     },
     {
       "identity": {
-        "procyonRevision": "020ac3bf021bf129934f88020fc8dcd4e786e4a2",
+        "procyonRevision": "059572e4503f8f1c2079f218b1da66d730d759d6",
         "target": "macos-aarch64",
-        "catalogRevision": "procyon-macos-aarch64-0.1.0-33-a2d09a7cde502340e961cb7e129187db",
-        "catalogInputSha256": "sha256:724b1a7faa6644e06f132b97c39179541c811a22a3b0427fb514074dc0801e9a",
+        "catalogRevision": "procyon-macos-aarch64-0.1.0-33-5bd1ab503a1ab36bf788978da0f73dfc",
+        "catalogInputSha256": "sha256:ce87892ed1a28a007053eb85c57a2b2c46844a40722cc32ef01a7345868a7576",
         "pipeline": {
           "worker_protocol_version": 1,
           "index_schema_version": 2,
@@ -5500,20 +5500,20 @@
           },
           {
             "componentId": "procyon.semantic.worker",
-            "artifactId": "procyon.semantic.worker.macos-aarch64.0.1.0.33.edca82d904935b17",
+            "artifactId": "procyon.semantic.worker.macos-aarch64.0.1.0.33.1e3d68246fb1d32f",
             "version": "0.1.0-33",
-            "sha256": "sha256:edca82d904935b17ca86091a8922f99f57ce1de11735adee8ef2c4cc68b25e6c",
+            "sha256": "sha256:1e3d68246fb1d32fb01e26820d9ef830585a62b8bfa29840a0266399527948c7",
             "byteLength": 38215824
           },
           {
             "componentId": "procyon.semantic.zvec-runtime",
-            "artifactId": "procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.47fde5399b71b17c",
+            "artifactId": "procyon.semantic.zvec-runtime.macos-aarch64.0.7.0.e44576afc2e033a2",
             "version": "0.7.0",
-            "sha256": "sha256:47fde5399b71b17ce9b68ffdaf1a0772679db22f02c4cbc9ac7d160014675571",
+            "sha256": "sha256:e44576afc2e033a2b081277d025b367ff48aa1c0a8a49be9e7c0b2b21da33087",
             "byteLength": 23164624
           }
         ],
-        "zvecQualificationSha256": "sha256:8dcf578f09181b7924fc6fb2838afc6b86bc2f1a5876ad53a72fd5be03ba355b",
+        "zvecQualificationSha256": "sha256:5f6bb8bd304842df8a20113e201bb89948f799ec950969c9ad1c8fc6245ca678",
         "onnxQualificationSha256": null
       },
       "productionPackage": true,
@@ -8186,10 +8186,10 @@
     },
     {
       "identity": {
-        "procyonRevision": "020ac3bf021bf129934f88020fc8dcd4e786e4a2",
+        "procyonRevision": "059572e4503f8f1c2079f218b1da66d730d759d6",
         "target": "windows-x86_64",
-        "catalogRevision": "procyon-windows-x86_64-0.1.0-33-b2adffd90ad9563398144c5242770be6",
-        "catalogInputSha256": "sha256:4403eb49fe3a6509708be119ad9a8e4a9d5140153b2544e3e73ac8eb27eb4d35",
+        "catalogRevision": "procyon-windows-x86_64-0.1.0-33-f2c187a1cc1566f55bb870cda5210314",
+        "catalogInputSha256": "sha256:3002ee1001850fbfbb1332e72113c01ba265a6e91ab00e66d417f7c7e47011bf",
         "pipeline": {
           "worker_protocol_version": 1,
           "index_schema_version": 2,
@@ -8220,9 +8220,9 @@
           },
           {
             "componentId": "procyon.semantic.worker",
-            "artifactId": "procyon.semantic.worker.windows-x86_64.0.1.0.33.41c149e373b56e68",
+            "artifactId": "procyon.semantic.worker.windows-x86_64.0.1.0.33.1e178d18f708bd3d",
             "version": "0.1.0-33",
-            "sha256": "sha256:41c149e373b56e685823cdf6b22743a2756f8978bf7808d8e778d909b2501a92",
+            "sha256": "sha256:1e178d18f708bd3d8daed1abc1a3dc91431a6a6f5a1ce8d4f2069c6cd4c6e76a",
             "byteLength": 32697856
           },
           {
@@ -8233,7 +8233,7 @@
             "byteLength": 26570240
           }
         ],
-        "zvecQualificationSha256": "sha256:8567c550f4d5ebce62f5b9717d95e249274c63baeeb2610215bdc85b112389d3",
+        "zvecQualificationSha256": "sha256:3236a854c1f28d100e513dedb3c2b2f623f048e4353232207137ea1e3c599bcc",
         "onnxQualificationSha256": null
       },
       "productionPackage": true,
@@ -8247,7 +8247,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.9169963002204895,
+              "score": 0.9169962406158447,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -8260,7 +8260,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.9169963002204895,
+              "score": 0.9169962406158447,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -8282,7 +8282,7 @@
             {
               "chunkId": "fixture-slides-page-3",
               "fileId": "fixture-slides",
-              "score": 0.7873821258544922,
+              "score": 0.787382185459137,
               "tokenCount": 6,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8293,7 +8293,7 @@
             {
               "chunkId": "fixture-slides-page-5",
               "fileId": "fixture-slides",
-              "score": 0.7663818001747131,
+              "score": 0.7663817405700684,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8359,7 +8359,7 @@
             {
               "chunkId": "fixture-quarterly-copy-body",
               "fileId": "fixture-quarterly-copy",
-              "score": 0.7212470173835754,
+              "score": 0.7212470769882202,
               "tokenCount": 11,
               "sourceId": "source-quarterly-copy",
               "provenanceKind": "textLines",
@@ -8370,7 +8370,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7155191898345947,
+              "score": 0.7155190706253052,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -8425,7 +8425,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.6976179480552673,
+              "score": 0.6976180076599121,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -8445,8 +8445,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.9169963002204895,
-          "effectiveMinimumScore": 0.8969963192939758,
+          "strongestScore": 0.9169962406158447,
+          "effectiveMinimumScore": 0.896996259689331,
           "offlineCitations": [
             {
               "label": "C1",
@@ -8536,7 +8536,7 @@
             {
               "chunkId": "fixture-slides-page-7",
               "fileId": "fixture-slides",
-              "score": 0.7795596122741699,
+              "score": 0.7795597314834595,
               "tokenCount": 9,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8558,7 +8558,7 @@
             {
               "chunkId": "fixture-beta-reliability",
               "fileId": "fixture-beta-design",
-              "score": 0.7676646709442139,
+              "score": 0.7676647305488586,
               "tokenCount": 12,
               "sourceId": "source-beta-design",
               "provenanceKind": "textLines",
@@ -8591,7 +8591,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.762296736240387,
+              "score": 0.7622967958450317,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -8657,7 +8657,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.754469633102417,
+              "score": 0.7544696927070618,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -8690,7 +8690,7 @@
             {
               "chunkId": "fixture-contract-a-termination",
               "fileId": "fixture-contract-a",
-              "score": 0.8966036438941956,
+              "score": 0.8966035842895508,
               "tokenCount": 12,
               "sourceId": "source-contract-a",
               "provenanceKind": "textLines",
@@ -8714,7 +8714,7 @@
             {
               "chunkId": "fixture-contract-a-termination",
               "fileId": "fixture-contract-a",
-              "score": 0.8966036438941956,
+              "score": 0.8966035842895508,
               "tokenCount": 12,
               "sourceId": "source-contract-a",
               "provenanceKind": "textLines",
@@ -8736,7 +8736,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7772203087806702,
+              "score": 0.7772203683853149,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -8747,7 +8747,7 @@
             {
               "chunkId": "fixture-slides-page-2",
               "fileId": "fixture-slides",
-              "score": 0.7745261192321777,
+              "score": 0.7745260000228882,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8769,7 +8769,7 @@
             {
               "chunkId": "fixture-slides-page-6",
               "fileId": "fixture-slides",
-              "score": 0.7673673629760742,
+              "score": 0.7673674821853638,
               "tokenCount": 3,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8802,7 +8802,7 @@
             {
               "chunkId": "fixture-slides-page-4",
               "fileId": "fixture-slides",
-              "score": 0.7646082639694214,
+              "score": 0.7646083235740662,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8846,7 +8846,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.734440267086029,
+              "score": 0.7344402074813843,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -8890,7 +8890,7 @@
             {
               "chunkId": "fixture-ml-paper-method",
               "fileId": "fixture-ml-paper",
-              "score": 0.7188903093338013,
+              "score": 0.7188902497291565,
               "tokenCount": 16,
               "sourceId": "source-ml-paper",
               "provenanceKind": "textLines",
@@ -8899,8 +8899,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.8966036438941956,
-          "effectiveMinimumScore": 0.8766036629676819,
+          "strongestScore": 0.8966035842895508,
+          "effectiveMinimumScore": 0.8766036033630371,
           "offlineCitations": [
             {
               "label": "C1",
@@ -8929,7 +8929,7 @@
             {
               "chunkId": "fixture-slides-page-7",
               "fileId": "fixture-slides",
-              "score": 0.8885476589202881,
+              "score": 0.8885475993156433,
               "tokenCount": 9,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8942,7 +8942,7 @@
             {
               "chunkId": "fixture-slides-page-7",
               "fileId": "fixture-slides",
-              "score": 0.8885476589202881,
+              "score": 0.8885475993156433,
               "tokenCount": 9,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -8975,7 +8975,7 @@
             {
               "chunkId": "fixture-slides-page-1",
               "fileId": "fixture-slides",
-              "score": 0.7874150276184082,
+              "score": 0.7874149084091187,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9019,7 +9019,7 @@
             {
               "chunkId": "fixture-field-research-summary",
               "fileId": "fixture-field-research",
-              "score": 0.7731896042823792,
+              "score": 0.7731895446777344,
               "tokenCount": 12,
               "sourceId": "source-field-research",
               "provenanceKind": "textLines",
@@ -9030,7 +9030,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7689582705497742,
+              "score": 0.768958330154419,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9041,7 +9041,7 @@
             {
               "chunkId": "fixture-offline-notes-body",
               "fileId": "fixture-offline-notes",
-              "score": 0.7630611062049866,
+              "score": 0.7630611658096313,
               "tokenCount": 15,
               "sourceId": "source-offline-notes",
               "provenanceKind": "textLines",
@@ -9085,7 +9085,7 @@
             {
               "chunkId": "fixture-contract-b-termination",
               "fileId": "fixture-contract-b",
-              "score": 0.752760648727417,
+              "score": 0.7527607083320618,
               "tokenCount": 13,
               "sourceId": "source-contract-b",
               "provenanceKind": "textLines",
@@ -9107,7 +9107,7 @@
             {
               "chunkId": "fixture-beta-reliability",
               "fileId": "fixture-beta-design",
-              "score": 0.7477399110794067,
+              "score": 0.7477399706840515,
               "tokenCount": 12,
               "sourceId": "source-beta-design",
               "provenanceKind": "textLines",
@@ -9118,7 +9118,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7242773771286011,
+              "score": 0.7242772579193115,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -9127,8 +9127,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.8885476589202881,
-          "effectiveMinimumScore": 0.8685476779937744,
+          "strongestScore": 0.8885475993156433,
+          "effectiveMinimumScore": 0.8685476183891296,
           "offlineCitations": [
             {
               "label": "C1",
@@ -9150,7 +9150,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.9407363533973694,
+              "score": 0.9407364130020142,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9163,7 +9163,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.9407363533973694,
+              "score": 0.9407364130020142,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9273,7 +9273,7 @@
             {
               "chunkId": "fixture-slides-page-4",
               "fileId": "fixture-slides",
-              "score": 0.7704162001609802,
+              "score": 0.7704161405563354,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9317,7 +9317,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.731874406337738,
+              "score": 0.7318742871284485,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -9328,7 +9328,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.7265618443489075,
+              "score": 0.7265617847442627,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -9339,7 +9339,7 @@
             {
               "chunkId": "fixture-ml-paper-method",
               "fileId": "fixture-ml-paper",
-              "score": 0.7214521765708923,
+              "score": 0.7214521169662476,
               "tokenCount": 16,
               "sourceId": "source-ml-paper",
               "provenanceKind": "textLines",
@@ -9348,8 +9348,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.9407363533973694,
-          "effectiveMinimumScore": 0.9207363724708557,
+          "strongestScore": 0.9407364130020142,
+          "effectiveMinimumScore": 0.9207364320755005,
           "offlineCitations": [
             {
               "label": "C1",
@@ -9371,7 +9371,7 @@
             {
               "chunkId": "fixture-field-research-summary",
               "fileId": "fixture-field-research",
-              "score": 0.9073905944824219,
+              "score": 0.9073904752731323,
               "tokenCount": 12,
               "sourceId": "source-field-research",
               "provenanceKind": "textLines",
@@ -9384,7 +9384,7 @@
             {
               "chunkId": "fixture-field-research-summary",
               "fileId": "fixture-field-research",
-              "score": 0.9073905944824219,
+              "score": 0.9073904752731323,
               "tokenCount": 12,
               "sourceId": "source-field-research",
               "provenanceKind": "textLines",
@@ -9395,7 +9395,7 @@
             {
               "chunkId": "fixture-slides-page-5",
               "fileId": "fixture-slides",
-              "score": 0.8160902857780457,
+              "score": 0.8160903453826904,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9461,7 +9461,7 @@
             {
               "chunkId": "fixture-slides-page-7",
               "fileId": "fixture-slides",
-              "score": 0.7835308313369751,
+              "score": 0.7835307717323303,
               "tokenCount": 9,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9472,7 +9472,7 @@
             {
               "chunkId": "fixture-ml-paper-method",
               "fileId": "fixture-ml-paper",
-              "score": 0.7813925743103027,
+              "score": 0.7813926339149475,
               "tokenCount": 16,
               "sourceId": "source-ml-paper",
               "provenanceKind": "textLines",
@@ -9494,7 +9494,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7683634757995605,
+              "score": 0.7683635950088501,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9549,7 +9549,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7358420491218567,
+              "score": 0.7358419895172119,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -9569,8 +9569,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.9073905944824219,
-          "effectiveMinimumScore": 0.8873906135559082,
+          "strongestScore": 0.9073904752731323,
+          "effectiveMinimumScore": 0.8873904943466187,
           "offlineCitations": [
             {
               "label": "C1",
@@ -9671,7 +9671,7 @@
             {
               "chunkId": "fixture-slides-page-4",
               "fileId": "fixture-slides",
-              "score": 0.781405508518219,
+              "score": 0.7814054489135742,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9682,7 +9682,7 @@
             {
               "chunkId": "fixture-field-research-summary",
               "fileId": "fixture-field-research",
-              "score": 0.7800363898277283,
+              "score": 0.780036449432373,
               "tokenCount": 12,
               "sourceId": "source-field-research",
               "provenanceKind": "textLines",
@@ -9715,7 +9715,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7611832022666931,
+              "score": 0.7611832618713379,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9726,7 +9726,7 @@
             {
               "chunkId": "fixture-contract-b-termination",
               "fileId": "fixture-contract-b",
-              "score": 0.7470700740814209,
+              "score": 0.7470701932907104,
               "tokenCount": 13,
               "sourceId": "source-contract-b",
               "provenanceKind": "textLines",
@@ -9737,7 +9737,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7442115545272827,
+              "score": 0.7442114353179932,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -9870,7 +9870,7 @@
             {
               "chunkId": "fixture-slides-page-3",
               "fileId": "fixture-slides",
-              "score": 0.7666634917259216,
+              "score": 0.7666634321212769,
               "tokenCount": 6,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -9903,7 +9903,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7586385011672974,
+              "score": 0.7586386203765869,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -9925,7 +9925,7 @@
             {
               "chunkId": "fixture-quarterly-table",
               "fileId": "fixture-quarterly-original",
-              "score": 0.7482025027275085,
+              "score": 0.7482024431228638,
               "tokenCount": 13,
               "sourceId": "source-quarterly-original",
               "provenanceKind": "textLines",
@@ -9980,7 +9980,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7269458770751953,
+              "score": 0.7269458174705505,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -10002,7 +10002,7 @@
             {
               "chunkId": "fixture-beta-reliability",
               "fileId": "fixture-beta-design",
-              "score": 0.7176418304443359,
+              "score": 0.7176417708396912,
               "tokenCount": 12,
               "sourceId": "source-beta-design",
               "provenanceKind": "textLines",
@@ -10080,7 +10080,7 @@
             {
               "chunkId": "fixture-slides-page-1",
               "fileId": "fixture-slides",
-              "score": 0.7700857520103455,
+              "score": 0.7700856924057007,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -10124,7 +10124,7 @@
             {
               "chunkId": "fixture-workspace-a-plan-body",
               "fileId": "fixture-workspace-a-plan",
-              "score": 0.7610905170440674,
+              "score": 0.7610905766487122,
               "tokenCount": 11,
               "sourceId": "source-workspace-a-plan",
               "provenanceKind": "textLines",
@@ -10135,7 +10135,7 @@
             {
               "chunkId": "fixture-field-research-summary",
               "fileId": "fixture-field-research",
-              "score": 0.7603178024291992,
+              "score": 0.7603177428245544,
               "tokenCount": 12,
               "sourceId": "source-field-research",
               "provenanceKind": "textLines",
@@ -10168,7 +10168,7 @@
             {
               "chunkId": "fixture-safety-policy-summary",
               "fileId": "fixture-safety-policy",
-              "score": 0.7423574924468994,
+              "score": 0.7423574328422546,
               "tokenCount": 23,
               "sourceId": "source-safety-policy",
               "provenanceKind": "textLines",
@@ -10179,7 +10179,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.741995096206665,
+              "score": 0.7419952154159546,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -10190,7 +10190,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7412323355674744,
+              "score": 0.7412322759628296,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -10255,7 +10255,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.8926211595535278,
+              "score": 0.8926210403442383,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -10268,7 +10268,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.8926211595535278,
+              "score": 0.8926210403442383,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -10367,7 +10367,7 @@
             {
               "chunkId": "fixture-contract-b-termination",
               "fileId": "fixture-contract-b",
-              "score": 0.756176233291626,
+              "score": 0.7561761736869812,
               "tokenCount": 13,
               "sourceId": "source-contract-b",
               "provenanceKind": "textLines",
@@ -10378,7 +10378,7 @@
             {
               "chunkId": "fixture-slides-page-4",
               "fileId": "fixture-slides",
-              "score": 0.7557092905044556,
+              "score": 0.7557093501091003,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -10400,7 +10400,7 @@
             {
               "chunkId": "fixture-ml-paper-method",
               "fileId": "fixture-ml-paper",
-              "score": 0.7517398595809937,
+              "score": 0.7517397999763489,
               "tokenCount": 16,
               "sourceId": "source-ml-paper",
               "provenanceKind": "textLines",
@@ -10433,7 +10433,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.7317802906036377,
+              "score": 0.7317803502082825,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -10444,7 +10444,7 @@
             {
               "chunkId": "fixture-contract-a-termination",
               "fileId": "fixture-contract-a",
-              "score": 0.7300986051559448,
+              "score": 0.7300986647605896,
               "tokenCount": 12,
               "sourceId": "source-contract-a",
               "provenanceKind": "textLines",
@@ -10453,8 +10453,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.8926211595535278,
-          "effectiveMinimumScore": 0.8726211786270142,
+          "strongestScore": 0.8926210403442383,
+          "effectiveMinimumScore": 0.8726210594177246,
           "offlineCitations": [
             {
               "label": "C1",
@@ -10508,7 +10508,7 @@
             {
               "chunkId": "fixture-contract-b-termination",
               "fileId": "fixture-contract-b",
-              "score": 0.7527619004249573,
+              "score": 0.7527618408203125,
               "tokenCount": 13,
               "sourceId": "source-contract-b",
               "provenanceKind": "textLines",
@@ -10541,7 +10541,7 @@
             {
               "chunkId": "fixture-slides-page-2",
               "fileId": "fixture-slides",
-              "score": 0.7397939562797546,
+              "score": 0.7397938966751099,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -10574,7 +10574,7 @@
             {
               "chunkId": "fixture-quarterly-copy-body",
               "fileId": "fixture-quarterly-copy",
-              "score": 0.7306313514709473,
+              "score": 0.7306314706802368,
               "tokenCount": 11,
               "sourceId": "source-quarterly-copy",
               "provenanceKind": "textLines",
@@ -10585,7 +10585,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7305972576141357,
+              "score": 0.7305973768234253,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -10607,7 +10607,7 @@
             {
               "chunkId": "fixture-alpha-cost",
               "fileId": "fixture-alpha-design",
-              "score": 0.7183923125267029,
+              "score": 0.7183922529220581,
               "tokenCount": 14,
               "sourceId": "source-alpha-design",
               "provenanceKind": "textLines",
@@ -10640,7 +10640,7 @@
             {
               "chunkId": "fixture-safety-policy-summary",
               "fileId": "fixture-safety-policy",
-              "score": 0.6983505487442017,
+              "score": 0.6983506083488464,
               "tokenCount": 23,
               "sourceId": "source-safety-policy",
               "provenanceKind": "textLines",
@@ -10675,7 +10675,7 @@
             {
               "chunkId": "fixture-safety-policy-summary",
               "fileId": "fixture-safety-policy",
-              "score": 0.9140910506248474,
+              "score": 0.9140911102294922,
               "tokenCount": 23,
               "sourceId": "source-safety-policy",
               "provenanceKind": "textLines",
@@ -10688,7 +10688,7 @@
             {
               "chunkId": "fixture-safety-policy-summary",
               "fileId": "fixture-safety-policy",
-              "score": 0.9140910506248474,
+              "score": 0.9140911102294922,
               "tokenCount": 23,
               "sourceId": "source-safety-policy",
               "provenanceKind": "textLines",
@@ -10710,7 +10710,7 @@
             {
               "chunkId": "fixture-workspace-a-plan-body",
               "fileId": "fixture-workspace-a-plan",
-              "score": 0.8158344626426697,
+              "score": 0.8158345222473145,
               "tokenCount": 11,
               "sourceId": "source-workspace-a-plan",
               "provenanceKind": "textLines",
@@ -10721,7 +10721,7 @@
             {
               "chunkId": "fixture-quarterly-copy-body",
               "fileId": "fixture-quarterly-copy",
-              "score": 0.8055576086044312,
+              "score": 0.8055577278137207,
               "tokenCount": 11,
               "sourceId": "source-quarterly-copy",
               "provenanceKind": "textLines",
@@ -10732,7 +10732,7 @@
             {
               "chunkId": "fixture-slides-page-7",
               "fileId": "fixture-slides",
-              "score": 0.8048181533813477,
+              "score": 0.8048182725906372,
               "tokenCount": 9,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -10754,7 +10754,7 @@
             {
               "chunkId": "fixture-slides-page-5",
               "fileId": "fixture-slides",
-              "score": 0.7975760698318481,
+              "score": 0.7975761890411377,
               "tokenCount": 5,
               "sourceId": "source-slides",
               "provenanceKind": "slide",
@@ -10776,7 +10776,7 @@
             {
               "chunkId": "fixture-offline-notes-body",
               "fileId": "fixture-offline-notes",
-              "score": 0.7862117290496826,
+              "score": 0.7862118482589722,
               "tokenCount": 15,
               "sourceId": "source-offline-notes",
               "provenanceKind": "textLines",
@@ -10787,7 +10787,7 @@
             {
               "chunkId": "fixture-multilingual-nl",
               "fileId": "fixture-multilingual",
-              "score": 0.7802716493606567,
+              "score": 0.7802717685699463,
               "tokenCount": 11,
               "sourceId": "source-multilingual",
               "provenanceKind": "textLines",
@@ -10798,7 +10798,7 @@
             {
               "chunkId": "fixture-contract-b-termination",
               "fileId": "fixture-contract-b",
-              "score": 0.7775430679321289,
+              "score": 0.7775431871414185,
               "tokenCount": 13,
               "sourceId": "source-contract-b",
               "provenanceKind": "textLines",
@@ -10809,7 +10809,7 @@
             {
               "chunkId": "fixture-contract-a-termination",
               "fileId": "fixture-contract-a",
-              "score": 0.7768844366073608,
+              "score": 0.7768845558166504,
               "tokenCount": 12,
               "sourceId": "source-contract-a",
               "provenanceKind": "textLines",
@@ -10820,7 +10820,7 @@
             {
               "chunkId": "fixture-ml-paper-method",
               "fileId": "fixture-ml-paper",
-              "score": 0.7733128070831299,
+              "score": 0.7733129262924194,
               "tokenCount": 16,
               "sourceId": "source-ml-paper",
               "provenanceKind": "textLines",
@@ -10831,7 +10831,7 @@
             {
               "chunkId": "fixture-policy-v2-retention",
               "fileId": "fixture-policy-v2",
-              "score": 0.7697849273681641,
+              "score": 0.7697850465774536,
               "tokenCount": 15,
               "sourceId": "source-policy-v2",
               "provenanceKind": "textLines",
@@ -10842,7 +10842,7 @@
             {
               "chunkId": "fixture-beta-reliability",
               "fileId": "fixture-beta-design",
-              "score": 0.7467653155326843,
+              "score": 0.7467653751373291,
               "tokenCount": 12,
               "sourceId": "source-beta-design",
               "provenanceKind": "textLines",
@@ -10864,7 +10864,7 @@
             {
               "chunkId": "fixture-quarterly-table",
               "fileId": "fixture-quarterly-original",
-              "score": 0.7331666946411133,
+              "score": 0.7331668138504028,
               "tokenCount": 13,
               "sourceId": "source-quarterly-original",
               "provenanceKind": "textLines",
@@ -10873,8 +10873,8 @@
               "generated": false
             }
           ],
-          "strongestScore": 0.9140910506248474,
-          "effectiveMinimumScore": 0.8940910696983337,
+          "strongestScore": 0.9140911102294922,
+          "effectiveMinimumScore": 0.8940911293029785,
           "offlineCitations": [
             {
               "label": "C1",
