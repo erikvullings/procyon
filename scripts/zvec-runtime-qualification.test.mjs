@@ -13,6 +13,7 @@ import {
   nativeLibraryNames,
   parseNativeDependencies,
   recordAcceptedMacNotarization,
+  tarExtractionArgs,
   verifyArchiveMembers,
   verifyNativeArchitecture,
   verifyPinnedFile,
@@ -22,11 +23,18 @@ import {
 test('passes repository-local archive paths to GNU tar on Windows', () => {
   const repository = 'D:\\a\\procyon\\procyon';
   const archive = `${repository}\\target\\semantic-zvec-runtime-cache\\archives\\zvec.tar.gz`;
+  const staging = `${repository}\\target\\semantic-zvec-runtime-cache\\0.7.0\\x86_64-pc-windows-msvc.extracting`;
 
   assert.equal(
     archivePathForTar(archive, repository, 'win32'),
     'target/semantic-zvec-runtime-cache/archives/zvec.tar.gz',
   );
+  assert.deepEqual(tarExtractionArgs(archive, staging, repository, 'win32'), [
+    '-xzf',
+    'target/semantic-zvec-runtime-cache/archives/zvec.tar.gz',
+    '-C',
+    'target/semantic-zvec-runtime-cache/0.7.0/x86_64-pc-windows-msvc.extracting',
+  ]);
   assert.equal(archivePathForTar('/tmp/zvec.tar.gz', '/workspace', 'linux'), '/tmp/zvec.tar.gz');
 });
 
