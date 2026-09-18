@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { semanticCatalogSourceRevision } from './create-semantic-component-release-manifest.mjs';
+
 const defaultManifestPath = fileURLToPath(
   new URL('../docs/evaluations/semantic-component-release-v1.json', import.meta.url),
 );
@@ -32,6 +34,7 @@ export function semanticComponentReleasePlan(manifest, target) {
   const baseUrl = `https://github.com/${repository}/releases/download/${releaseTag}`;
   return {
     target,
+    repository,
     sourceRevision,
     releaseTag,
     catalogRevision: requireString(targetEvidence.catalogRevision, 'catalogRevision'),
@@ -54,7 +57,7 @@ export function verifySemanticCatalogBytes(plan, catalogBytes, signatureBytes) {
   if (envelope.catalog?.revision !== plan.catalogRevision) {
     throw new Error(`semantic component ${plan.target} catalog revision does not match approval`);
   }
-  if (envelope.catalog?.production?.source_revision !== plan.sourceRevision) {
+  if (semanticCatalogSourceRevision(envelope, plan.repository) !== plan.sourceRevision) {
     throw new Error(`semantic component ${plan.target} source revision does not match approval`);
   }
   for (const artifact of envelope.catalog?.artifacts ?? []) {

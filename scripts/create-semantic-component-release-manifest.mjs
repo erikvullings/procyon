@@ -9,6 +9,23 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+export function semanticCatalogSourceRevision(envelope, repository) {
+  const workers = (envelope.catalog?.artifacts ?? []).filter(
+    (artifact) => artifact.component_id === 'procyon.semantic.worker',
+  );
+  if (workers.length !== 1 || typeof workers[0].id !== 'string') {
+    throw new Error('semantic catalog must contain exactly one Procyon worker artifact');
+  }
+  const source = `https://github.com/${repository}`;
+  const provenance = (envelope.provenance ?? []).filter(
+    (record) => record.artifact_id === workers[0].id && record.source === source,
+  );
+  if (provenance.length !== 1 || typeof provenance[0].source_revision !== 'string') {
+    throw new Error('semantic catalog must contain exactly one Procyon worker provenance record');
+  }
+  return provenance[0].source_revision;
+}
+
 export function createSemanticComponentReleaseManifest({
   assetsRoot,
   evaluation,
@@ -22,7 +39,7 @@ export function createSemanticComponentReleaseManifest({
     const catalogBytes = fs.readFileSync(path.join(assetsRoot, `semantic-catalog-${target}.json`));
     const signatureBytes = fs.readFileSync(path.join(assetsRoot, `semantic-catalog-${target}.sig`));
     const envelope = JSON.parse(catalogBytes.toString('utf8'));
-    if (envelope.catalog?.production?.source_revision !== sourceRevision) {
+    if (semanticCatalogSourceRevision(envelope, repository) !== sourceRevision) {
       throw new Error(`semantic component ${target} does not match source revision`);
     }
     targets[target] = {
