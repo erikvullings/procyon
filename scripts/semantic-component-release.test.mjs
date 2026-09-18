@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { createSemanticComponentReleaseManifest } from './create-semantic-component-release-manifest.mjs';
+import {
+  createSemanticComponentReleaseManifest,
+  semanticCatalogSourceRevision,
+} from './create-semantic-component-release-manifest.mjs';
 import {
   semanticComponentReleasePlan,
   verifySemanticCatalogBytes,
@@ -24,14 +27,21 @@ const catalog = Buffer.from(
       artifacts: [
         {
           id: 'worker.abc',
+          component_id: 'procyon.semantic.worker',
           location:
             'https://github.com/erikvullings/procyon/releases/download/semantic-v1/worker.abc',
           checksum: [...Buffer.from(sha256(payload), 'hex')],
           resources: { download_bytes: payload.byteLength },
         },
       ],
-      production: { source_revision: 'abc123' },
     },
+    provenance: [
+      {
+        artifact_id: 'worker.abc',
+        source: 'https://github.com/erikvullings/procyon',
+        source_revision: 'abc123',
+      },
+    ],
   })}\n`,
 );
 const signature = Buffer.from('detached-signature');
@@ -108,6 +118,27 @@ test('unapproved or incomplete component releases fail closed', () => {
   );
 });
 
+test('catalog source identity requires one matching Procyon worker provenance record', () => {
+  const envelope = JSON.parse(catalog.toString());
+  assert.equal(semanticCatalogSourceRevision(envelope, 'erikvullings/procyon'), 'abc123');
+  assert.throws(
+    () => semanticCatalogSourceRevision({ ...envelope, provenance: [] }, 'erikvullings/procyon'),
+    /exactly one Procyon worker provenance/u,
+  );
+  assert.throws(
+    () =>
+      semanticCatalogSourceRevision(
+        { ...envelope, provenance: [...envelope.provenance, ...envelope.provenance] },
+        'erikvullings/procyon',
+      ),
+    /exactly one Procyon worker provenance/u,
+  );
+  assert.throws(
+    () => semanticCatalogSourceRevision(envelope, 'other/repository'),
+    /exactly one Procyon worker provenance/u,
+  );
+});
+
 test('publication verifies every payload against its catalog fingerprint', (context) => {
   const root = mkdtempSync(join(tmpdir(), 'semantic-component-payload-'));
   context.after(() => rmSync(root, { force: true, recursive: true }));
@@ -131,7 +162,7 @@ test('qualification emits a reviewable lock over every catalog and signature', (
       catalog
         .toString()
         .replace('"catalog-linux"', `"catalog-${target}"`)
-        .replace('"worker.abc"', `"worker.${target}"`)
+        .replaceAll('"worker.abc"', `"worker.${target}"`)
         .replace('/worker.abc"', `/worker.${target}"`),
     );
     writeFileSync(join(root, `semantic-catalog-${target}.json`), targetCatalog);
