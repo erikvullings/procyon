@@ -30,8 +30,14 @@ function isSafelyIdempotent(command: WorkspaceCommand): boolean {
 }
 
 /** True for a stale-projection conflict raised by any workspace-mutating client call. */
-export function isWorkspaceRevisionConflict(error: unknown): error is ApiError {
-  return error instanceof ApiError && error.code === 'workspaceRevisionConflict';
+export function isWorkspaceRevisionConflict(error: unknown): boolean {
+  if (error instanceof ApiError) return error.code === 'workspaceRevisionConflict';
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'workspaceRevisionConflict'
+  );
 }
 
 /**

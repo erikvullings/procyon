@@ -46,6 +46,18 @@ function archiveEntry(name = 'notes.zip'): EntrySummary {
   };
 }
 
+function parentEntry(): EntrySummary {
+  return {
+    id: 'fm:parent:/workspace/project' as EntryId,
+    location: { providerId: 'local', uri: '/workspace/project' },
+    name: '..',
+    kind: 'directory',
+    hidden: false,
+    readOnly: true,
+    metadataRevision: 0,
+  };
+}
+
 function context(overrides: Partial<CommandAvailabilityContext> = {}): CommandAvailabilityContext {
   return {
     selectedEntries: [],
@@ -206,6 +218,22 @@ describe('command availability', () => {
         (item) => item.action.id,
       ),
     ).toEqual(['core.copyName', 'core.copyPath', 'core.copyRelativePath', 'core.rename']);
+  });
+
+  it('offers only full and relative path copying for the synthetic parent row', () => {
+    const actions = [
+      action('core.open', { requiresSingleSelection: true }),
+      action('core.copyName', { requiresSelection: true }),
+      action('core.copyPath', { requiresSelection: true }),
+      action('core.copyRelativePath', { requiresSelection: true }),
+      action('core.rename', { requiresSingleSelection: true }),
+    ];
+
+    expect(
+      menuActionsForContext(actions, context({ selectedEntries: [parentEntry()] })).map(
+        (item) => item.action.id,
+      ),
+    ).toEqual(['core.copyPath', 'core.copyRelativePath']);
   });
 
   it('includes core.pack and core.moveToArchive for any selection, single or multiple', () => {

@@ -83,3 +83,7 @@ core actions, not the plugin.
   availability, and documented the behavior. Verified 5 task-specific tests
   (3 clipboard formatting/writing, 1 menu-availability, 1 action-registry),
   `pnpm --dir frontend typecheck`, `pnpm run lint`, and `pnpm test`.
+- 2026-09-18 Copilot: The synthetic `..` row now has a restricted context menu containing Copy
+  Full Path and Copy Relative Path. Formatting resolves the full parent path from the active
+  directory and returns `..` for the relative path without enabling mutation actions on the
+  presentation-only row.

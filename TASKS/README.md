@@ -275,6 +275,7 @@ The Lua plugin runtime, sample plugins, and icon-theme plugins.
 - [x] 0057 Plugin management UI
 - [x] 0092 Catppuccin icon theme *(after 0085)*
 - [x] 0095 Distributable icon theme plugins *(after 0053, 0085, 0092)*
+- [ ] 0226 Sandboxed JavaScript and SPA plugins *(needs 0053, 0054, 0057)*
 
 ## Remote & cloud connections
 

@@ -9,6 +9,7 @@ import {
   checkSemanticQualificationWorkflow,
 } from './check-semantic-qualification-workflow.mjs';
 import {
+  archivePathForTar,
   nativeLibraryNames,
   parseNativeDependencies,
   recordAcceptedMacNotarization,
@@ -17,6 +18,17 @@ import {
   verifyPinnedFile,
   zvecRuntimeTarget,
 } from './zvec-runtime-qualification.mjs';
+
+test('passes repository-local archive paths to GNU tar on Windows', () => {
+  const repository = 'D:\\a\\procyon\\procyon';
+  const archive = `${repository}\\target\\semantic-zvec-runtime-cache\\archives\\zvec.tar.gz`;
+
+  assert.equal(
+    archivePathForTar(archive, repository, 'win32'),
+    'target/semantic-zvec-runtime-cache/archives/zvec.tar.gz',
+  );
+  assert.equal(archivePathForTar('/tmp/zvec.tar.gz', '/workspace', 'linux'), '/tmp/zvec.tar.gz');
+});
 
 test('pins every supported Zvec runtime to immutable upstream bytes', () => {
   const targets = [

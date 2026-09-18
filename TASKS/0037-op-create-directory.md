@@ -41,3 +41,5 @@ simplest, to prove the whole path from keypress to event-driven refresh.
 - 2026-09-02: The New Folder dialog now accepts slash-separated paths such as `parent/child`,
   explicitly enabling the existing intermediate-directory operation option while preserving
   cross-platform validation and single-folder defaults.
+- 2026-09-18 Copilot: Disabled browser/WebView capitalization, autocorrection, completion, and
+  spellchecking on the F7 folder-name field so names are preserved exactly as typed.

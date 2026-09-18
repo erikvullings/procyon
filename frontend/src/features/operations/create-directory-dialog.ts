@@ -105,6 +105,10 @@ export const CreateDirectoryDialog: FactoryComponent<CreateDirectoryDialogAttrs>
             type: 'text',
             value: name,
             required: true,
+            autocomplete: 'off',
+            autocapitalize: 'none',
+            autocorrect: 'off',
+            spellcheck: 'false',
             'aria-invalid': error === undefined ? undefined : 'true',
             oninput: (event: InputEvent) => {
               name = (event.currentTarget as HTMLInputElement).value;
