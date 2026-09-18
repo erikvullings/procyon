@@ -264,6 +264,20 @@ export function archivePathForTar(
   return relative.replaceAll('\\', '/');
 }
 
+export function tarExtractionArgs(
+  archive,
+  destination,
+  workingDirectory = repositoryRoot,
+  platform = process.platform,
+) {
+  return [
+    '-xzf',
+    archivePathForTar(archive, workingDirectory, platform),
+    '-C',
+    archivePathForTar(destination, workingDirectory, platform),
+  ];
+}
+
 export function verifyMacDeveloperIdSignature(file) {
   run('codesign', ['--verify', '--strict', '--verbose=2', file]);
   const result = run('codesign', ['-dv', '--verbose=4', file]);
@@ -447,7 +461,7 @@ export async function preparePinnedZvecRuntime(descriptor, cacheRoot) {
   fs.mkdirSync(staging, { recursive: true });
   try {
     verifyArchiveMembers(archiveMembers(archive), descriptor);
-    run('tar', ['-xzf', archive, '-C', staging]);
+    run('tar', tarExtractionArgs(archive, staging));
     const verified = verifyExtractedDirectory(staging, descriptor);
     fs.mkdirSync(path.dirname(extractedDirectory), { recursive: true });
     fs.renameSync(staging, extractedDirectory);
