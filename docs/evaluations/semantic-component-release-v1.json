@@ -1,10 +1,31 @@
 {
   "schemaVersion": 1,
-  "decision": "no-go",
+  "decision": "go",
   "repository": "erikvullings/procyon",
-  "releaseTag": null,
-  "qualificationRunId": null,
-  "sourceRevision": null,
-  "releaseCandidateFingerprint": null,
-  "targets": {}
+  "releaseTag": "semantic-v1",
+  "qualificationRunId": 35399857139,
+  "sourceRevision": "059572e4503f8f1c2079f218b1da66d730d759d6",
+  "releaseCandidateFingerprint": "sha256:1d963240ffe79d46983f6b2332e11fa82d7587b28639a38dbd97388a04837f5a",
+  "targets": {
+    "linux-aarch64": {
+      "catalogRevision": "procyon-linux-aarch64-0.1.0-33-b8ffa1554487878a7d0e301442aea895",
+      "catalogSha256": "870e61956c14e4d2f74b2d77522a5d3c976bf13f3021a231ed1e9441d7a2158f",
+      "signatureSha256": "c163f6cc45d27f3b6294d79df7db7784c1402ced7bad06f2bdc65943da341eb4"
+    },
+    "linux-x86_64": {
+      "catalogRevision": "procyon-linux-x86_64-0.1.0-33-5825a1dab4718512e4d13cf86d397b17",
+      "catalogSha256": "f080bd04a997ba33bb16ef7150c799f4daf50bbc0641216ac6a34be6f054dc81",
+      "signatureSha256": "5f25bac2d2e4f1c97f7d4cd8cca887948055545993aa7a7fc17c6b1d46e52884"
+    },
+    "macos-aarch64": {
+      "catalogRevision": "procyon-macos-aarch64-0.1.0-33-5bd1ab503a1ab36bf788978da0f73dfc",
+      "catalogSha256": "4d1733f9ce64f78c8dff6fc8f00e1eeab0ad89e9722cd91a52389507591304e1",
+      "signatureSha256": "c089cd9d4b0bd4b56269503095c5d24592acbc8f938fe16ede404f0baf34d2ee"
+    },
+    "windows-x86_64": {
+      "catalogRevision": "procyon-windows-x86_64-0.1.0-33-f2c187a1cc1566f55bb870cda5210314",
+      "catalogSha256": "1dd5b2e95010bca6eef3b123ef7fce0220eb529fbd48ed778fb90f5f0e49fd6a",
+      "signatureSha256": "3a29cd54262022fd59351b7592c1095507f0c00d80fc2742aa804e9df968da80"
+    }
+  }
 }
