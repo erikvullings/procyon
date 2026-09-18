@@ -230,6 +230,17 @@ test('semantic components qualify and publish exact retained artifacts independe
     payloads.steps.find((step) => step.name === 'Build verified semantic release payloads')?.shell,
     'bash',
   );
+  const msvcSetupIndex = payloads.steps.findIndex(
+    (step) => step.name === 'Configure the MSVC tool environment',
+  );
+  const msvcLinkerIndex = payloads.steps.findIndex(
+    (step) => step.name === 'Select the MSVC linker',
+  );
+  assert.ok(msvcLinkerIndex > msvcSetupIndex);
+  const msvcLinker = payloads.steps[msvcLinkerIndex];
+  assert.equal(msvcLinker.shell, 'pwsh');
+  assert.match(msvcLinker.run, /VCToolsInstallDir/u);
+  assert.match(msvcLinker.run, /CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER/u);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
   assert.deepEqual(collect.needs, ['semantic-payloads', 'semantic-catalogs']);
   assert.match(collect.if, /inputs\.qualification_run_id == ''/);

@@ -55,6 +55,15 @@ jobs:
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Select the MSVC linker
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\link.exe'
+          if (-not (Test-Path -PathType Leaf $linker)) {
+            throw "MSVC linker was not found at $linker"
+          }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
       - name: Install the configured macOS linker
         if: matrix.target == 'macos-aarch64'
         run: brew install lld
