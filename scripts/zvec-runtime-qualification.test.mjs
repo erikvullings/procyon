@@ -160,43 +160,36 @@ test('rejects byte-length and digest drift in pinned files', () => {
 
 test('release qualification dispatch is statically proven non-publishing', () => {
   assert.deepEqual(checkSemanticQualificationWorkflow(), {
-    workflowDispatchCanPublish: false,
-    tagSemanticPublicationRequiresQualification: true,
+    qualificationCanPublish: false,
+    publicationReusesExactRun: true,
   });
 });
 
-test('private macOS operator kit is exact-production, secret-free, and non-publishing', () => {
+test('semantic qualification and desktop publication have separate workflows', () => {
   assert.doesNotThrow(() => checkSemanticQualificationWorkflow());
-  const source = fs.readFileSync(path.resolve('.github/workflows/release-desktop.yml'), 'utf8');
-  assert.match(source, /semantic-release-input\/artifacts\/\*/u);
-  assert.match(source, /semantic_qualification_kit install/u);
-  assert.match(source, /semantic_qualification_kit" cleanup/u);
-  const kitBlock = source.slice(source.indexOf('- name: Assemble private macOS operator kit'));
-  assert.doesNotMatch(
-    kitBlock.slice(0, kitBlock.indexOf('- uses: actions/upload-artifact@v4')),
-    /PROCYON_SEMANTIC_DEVELOPER_BUNDLE|CATALOG_SIGNING_KEY|gh release/u,
-  );
+  const desktop = fs.readFileSync(path.resolve('.github/workflows/release-desktop.yml'), 'utf8');
+  assert.doesNotMatch(desktop, /semantic:bundle:production|sign-semantic-catalog/u);
+  assert.match(desktop, /fetch-approved-semantic-catalog\.mjs/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {
   assert.deepEqual(
     assertQualificationDispatchEnvironment({
       eventName: 'workflow_dispatch',
-      semanticReleaseQualified: '',
-      knowledgeSearchReleaseQualified: 'false',
+      qualificationRunId: '',
+      semanticComponentsReleaseQualified: '',
     }),
     {
       workflowDispatchOnly: true,
-      semanticReleaseQualified: false,
-      knowledgeSearchReleaseQualified: false,
+      publishMode: false,
     },
   );
   assert.throws(
     () =>
       assertQualificationDispatchEnvironment({
         eventName: 'push',
-        semanticReleaseQualified: '',
-        knowledgeSearchReleaseQualified: '',
+        qualificationRunId: '',
+        semanticComponentsReleaseQualified: '',
       }),
     /restricted to workflow_dispatch/u,
   );
@@ -204,19 +197,10 @@ test('private qualification rejects release events and enabled release gates', (
     () =>
       assertQualificationDispatchEnvironment({
         eventName: 'workflow_dispatch',
-        semanticReleaseQualified: 'true',
-        knowledgeSearchReleaseQualified: '',
+        qualificationRunId: '123',
+        semanticComponentsReleaseQualified: 'false',
       }),
-    /SEMANTIC_RELEASE_QUALIFIED must be absent or false/u,
-  );
-  assert.throws(
-    () =>
-      assertQualificationDispatchEnvironment({
-        eventName: 'workflow_dispatch',
-        semanticReleaseQualified: '',
-        knowledgeSearchReleaseQualified: 'False',
-      }),
-    /KNOWLEDGE_SEARCH_RELEASE_QUALIFIED must be absent or false/u,
+    /SEMANTIC_COMPONENTS_RELEASE_QUALIFIED must be true/u,
   );
 });
 
@@ -225,18 +209,13 @@ test('release qualification proof rejects an unguarded release action', () => {
   const workflow = path.join(directory, 'release.yml');
   fs.writeFileSync(
     workflow,
-    [
-      'jobs:',
-      '  semantic-payloads:',
-      "    if: github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true'",
-      '    steps:',
-      '      - uses: softprops/action-gh-release@v2',
-      '',
-    ].join('\n'),
+    fs
+      .readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8')
+      .replace("inputs.qualification_run_id != '' && ", ''),
   );
   assert.throws(
     () => checkSemanticQualificationWorkflow(workflow),
-    /can publish on workflow_dispatch/u,
+    /publication must require an exact run/u,
   );
   fs.rmSync(directory, { recursive: true, force: true });
 });
@@ -246,19 +225,27 @@ test('release qualification proof rejects write permission on a dispatch-reachab
   const workflow = path.join(directory, 'release.yml');
   fs.writeFileSync(
     workflow,
-    [
-      'permissions:',
-      '  contents: write',
-      'jobs:',
-      '  qualification-safety:',
-      "    if: github.event_name == 'workflow_dispatch'",
-      '    steps: []',
-      '',
-    ].join('\n'),
+    fs
+      .readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8')
+      .replace('permissions:\n  contents: read', 'permissions:\n  contents: write'),
+  );
+  assert.throws(() => checkSemanticQualificationWorkflow(workflow), /read-only by default/u);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('release qualification proof rejects workflow inputs interpolated into shell commands', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'unsafe-release-input-'));
+  const workflow = path.join(directory, 'release.yml');
+  const unsafeInput = '"$' + '{{ inputs.release_tag }}"';
+  fs.writeFileSync(
+    workflow,
+    fs
+      .readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8')
+      .replace('"$RELEASE_TAG"', unsafeInput),
   );
   assert.throws(
     () => checkSemanticQualificationWorkflow(workflow),
-    /workflow_dispatch can receive contents: write/u,
+    /workflow inputs must reach shell commands through environment variables/u,
   );
   fs.rmSync(directory, { recursive: true, force: true });
 });

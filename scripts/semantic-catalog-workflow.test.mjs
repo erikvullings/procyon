@@ -41,7 +41,7 @@ test('semantic catalog release job signs then verifies the exact payload set', (
   );
   assert.ok(
     signJob.steps.some(
-      (step) => step.uses === 'actions/upload-artifact@v4' && step.with?.['retention-days'] === 7,
+      (step) => step.uses === 'actions/upload-artifact@v4' && step.with?.['retention-days'] === 14,
     ),
     'private catalog evidence must use bounded retention',
   );

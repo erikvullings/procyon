@@ -42,8 +42,10 @@ evidence.
 
 ## Implementation Notes
 
-- Reuse `release-desktop.yml`, the signed production catalog, `ComponentManager`, packaged worker
-  smoke, and desktop packaging smoke. Do not add another installer or semantic lifecycle.
+- Historical implementation reused `release-desktop.yml`; the independent semantic component
+  release design supersedes that coupling. Component lifecycle qualification now belongs to
+  `release-semantic-components.yml`, while desktop packaging consumes only an approved immutable
+  component lock. Do not add another installer or semantic lifecycle.
 - Qualification artifacts remain private GitHub Actions artifacts with short retention. Reports
   contain canary category names and SHA-256 fingerprints only.
 - A production-candidate upgrade/rollback row requires an exact preceding private candidate. Do

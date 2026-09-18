@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "decision": "no-go",
+  "repository": "erikvullings/procyon",
+  "releaseTag": null,
+  "qualificationRunId": null,
+  "sourceRevision": null,
+  "releaseCandidateFingerprint": null,
+  "targets": {}
+}

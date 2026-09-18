@@ -12,8 +12,13 @@ blockers, and records a `go` decision.
 This is not production/stable approval. Generated-answer grounding, reviewed case-fold comparison,
 generated-summary/unavailable-source/concept-label production setups, 200% installed-app layout
 validation, and native Windows/Linux accessibility and UX remain explicitly deferred to task 0225.
-Keep `SEMANTIC_RELEASE_QUALIFIED=false` and `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` absent or `false`
-until this focused evidence report is reviewed and merged.
+The evidence report was reviewed and merged, but public run `35285177542` failed closed because the
+desktop release rebuilt semantic artifacts from the later report-merge revision and then compared
+them byte-for-byte with this earlier private evidence. The run was cancelled before package
+publication and the prerelease has zero assets. Recovery uses the independent component-release
+boundary in [Independent Semantic Component Releases](architecture/semantic-component-releases.md);
+this report remains historical evidence for the failed coupled flow rather
+than approval for a rebuilt component set.
 
 This report is the operator record for task 0198. A code-complete subsystem and developer-bundle
 results are not substitutes for measurements from the exact signed production artifacts.
@@ -360,12 +365,14 @@ artifact.
 
 ## Automated installed lifecycle and privacy matrix
 
-Task 0219 adds a private `workflow_dispatch` continuation to the existing release workflow. The
-continuation cannot start until `scripts/check-semantic-qualification-workflow.mjs` proves that no
-dispatch-reachable step can publish and that both `SEMANTIC_RELEASE_QUALIFIED` and
-`KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` are absent or exactly `false`. Qualification jobs have
-read-only repository permission. They upload seven-day Actions artifacts only; they do not create
-or modify a GitHub Release, Homebrew tap, Chocolatey package, repository variable, or public asset.
+Task 0219 originally added a private `workflow_dispatch` continuation to the desktop release
+workflow. The
+[independent component release design](architecture/semantic-component-releases.md) supersedes that
+coupling: `release-semantic-components.yml` now owns manual component qualification and exact-run
+publication, while `release-desktop.yml` is tag-only.
+Qualification cannot publish and has read-only repository permission. It uploads fourteen-day
+Actions artifacts only; it does not create or modify a GitHub Release, Homebrew tap, Chocolatey
+package, repository variable, or public asset.
 
 The matrix preserves the production target contract:
 
@@ -560,8 +567,9 @@ measurement.
 
 ## Required qualification run
 
-1. From one immutable commit, dispatch the semantic payload matrix for all supported targets and
-   retain each unsigned input manifest, signed catalog, signature, payload, and installer digest.
+1. From one immutable commit, dispatch `release-semantic-components.yml` with the intended
+   `semantic-v*` tag and no qualification run ID. Retain each unsigned input manifest, signed
+   catalog, signature, payload, and generated component fingerprint lock.
 2. Verify every catalog signature and artifact checksum, then run the packaged worker handshake,
    offline model activation, and component lifecycle smoke tests against those retained bytes.
 3. Build a clean evaluation library from the task-0188 corpus with the candidate identity above.
@@ -575,13 +583,19 @@ measurement.
    excerpts, filenames, prompts, responses, credentials, tokens, and model payload content.
 7. Record operator, date, hardware, OS, installer/catalog/artifact digests, results, and defects in
    this report. All rows must be Pass; waivers require an explicit release-owner decision.
-8. Set `SEMANTIC_RELEASE_QUALIFIED` to `true` only after approval, dispatch the release workflow,
-   and verify each produced installer embeds the matching published catalog and public key.
+8. Commit the reviewed component lock, set `SEMANTIC_COMPONENTS_RELEASE_QUALIFIED=true`, and
+   dispatch the same component workflow with the exact qualification run ID. It must publish those
+   retained bytes without rebuilding.
+9. Set `SEMANTIC_RELEASE_QUALIFIED=true` only after the component release is verified. A later
+   desktop tag must fetch the locked catalog and signature and embed them with the public key
+   without running any semantic build, signing, or publication job.
 
 ## Rollback
 
-If any post-qualification regression occurs, set `SEMANTIC_RELEASE_QUALIFIED` to `false` before the
-next release. This stops semantic payload/catalog publication and produces ordinary desktop
-installers without managed semantic activation. Existing installations may use the component
-manager's signed rollback action; retain enrolment policy unless the user explicitly requests
-index deletion. Never repoint a signed catalog artifact URL or replace immutable payload bytes.
+If component qualification or publication fails, leave
+`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED=false` and do not create its `semantic-v*` release. If
+desktop integration fails, set `SEMANTIC_RELEASE_QUALIFIED=false` before the next desktop release;
+the already-published component release remains immutable and independently usable. Existing
+installations may use the component manager's signed rollback action; retain enrolment policy
+unless the user explicitly requests index deletion. Never repoint a signed catalog artifact URL or
+replace immutable payload bytes.

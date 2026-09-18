@@ -119,16 +119,19 @@ release-qualified repository variables absent or `false` until the final approva
   Windows/Linux rows, known limitations, and rollback instructions.
 - [x] Run the alpha-aware semantic precondition validator and obtain explicit dated release-owner
   approval for the named revision and artifacts.
-- [ ] Set only `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require
-  semantic publication plus all desktop installer jobs to pass.
+- [ ] Qualify one independent `semantic-v*` component candidate, commit its generated fingerprint
+  lock, then publish the exact retained run with `SEMANTIC_COMPONENTS_RELEASE_QUALIFIED=true`.
+- [ ] Set `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require desktop
+  installers to fetch the already-published locked catalogs without rebuilding components.
 - [ ] Verify the public macOS installer from the test account downloads only the published signed
   payloads and reproduces the qualified Search/Ask smoke. Verify the Windows/Linux installer
   digests and automated smoke reports.
 - [ ] State prominently in release notes that semantic functionality is experimental and opt-in,
   Windows/Linux manual accessibility testing is pending, Windows artifacts are unsigned, and
   macOS x86-64 semantic runtime is unsupported.
-- [ ] On any public verification failure, reset `SEMANTIC_RELEASE_QUALIFIED=false` and issue a
-  base-only corrective alpha.
+- [ ] On a component failure, do not publish its component tag. On desktop integration failure,
+  reset `SEMANTIC_RELEASE_QUALIFIED=false` and issue a base-only corrective alpha without changing
+  the immutable component release.
 
 ## Deferred production/stable checklist
 
@@ -652,3 +655,17 @@ qualification; a private qualification run must never publish assets.
   for fingerprint `sha256:1d963240ffe79d46983f6b2332e11fa82d7587b28639a38dbd97388a04837f5a`
   with zero blockers. Publication remains blocked until the focused report PR is reviewed and
   merged.
+- 2026-09-18 Copilot: Public run `35285177542` proved the combined release flow unsound. Payloads
+  and signed catalogs passed 4/4, but the public build used report-merge revision
+  `6178befeb771dbd6babfc9aa4a3ab2c3d49654ac` and final GitHub release URLs while the reviewed
+  private evidence bound revision `020ac3bf021bf129934f88020fc8dcd4e786e4a2` and qualification
+  URLs. macOS and Windows rebuilds also produced different catalog revisions. The exact comparison
+  correctly failed, semantic publication was skipped, and the workflow was cancelled before
+  desktop assets were published. The prerelease retains zero assets.
+- 2026-09-18 Copilot: Recovery adopts the independent semantic component release design. Semantic
+  components now qualify and publish through
+  a separate manual workflow. Qualification uses the final `semantic-v*` URL and emits a lock over
+  the exact run, source revision, evaluation fingerprint, catalogs, and signatures. Publication
+  reuses those exact retained bytes and verifies every payload against the reviewed lock. Desktop
+  releases only fetch a previously published locked catalog, allowing component and Procyon
+  releases to advance independently.
