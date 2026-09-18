@@ -202,10 +202,11 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
    indexing pause, worker quiescence, and authoritative index removal. Pass the resulting
    `ManagedSemanticComponentCapability` to `FileManagerService::with_semantic_component_capability`
    in the desktop host.
-6. Publish the platform payloads alongside, but never inside, the base desktop installers. The
-   release exposes each content-addressed worker, Zvec runtime, and deduplicated model pack as its
-   own asset, plus `semantic-catalog-<target>.json` and `.sig` for each target. Target-independent
-   model bytes are published once; conflicting bytes under one immutable ID fail the release.
+6. Publish the platform payloads in a dedicated immutable `semantic-v*` component release, never
+   inside or rebuilt by a base desktop release. The component release exposes each
+   content-addressed worker, Zvec runtime, and deduplicated model pack as its own asset, plus
+   `semantic-catalog-<target>.json` and `.sig` for each target. Target-independent model bytes are
+   published once; conflicting bytes under one immutable ID fail the release.
    Run protocol negotiation, real-model activation, component lifecycle, tamper, low-disk, and
    hardware smoke tests before publication.
 7. Preserve the platform's existing release policy. macOS worker and runtime payloads are signed
@@ -220,17 +221,19 @@ The production identity contract pins `intfloat/multilingual-e5-small` at revisi
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
-Manual release-workflow dispatches build production payloads, signed catalogs, and private
-catalog-enabled installers for qualification without publishing them. Before any payload work, the
-workflow proves that no dispatch-reachable step can publish and that both semantic release
-variables are absent or false. The four target jobs retain exact package/catalog digests,
-installed-boundary logs, lifecycle results, and redacted privacy reports for seven days. Tagged
-releases do that work only when the protected repository variable
-`SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
-passes, leave that variable absent or false: ordinary tagged desktop installers are still produced,
-but contain no production semantic catalog or verification key and therefore keep managed semantic
-installation unavailable. Once qualified, each installer embeds only its matching `catalog.json`,
-`catalog.sig`, and public verification key. The developer bundle
+Manual dispatches of `.github/workflows/release-semantic-components.yml` qualify components against
+their final `semantic-v*` public URLs without publishing them. The run emits a reviewable lock with
+the exact run ID, source revision, evaluation fingerprint, catalog revisions, and
+catalog/signature hashes. After that lock is reviewed and committed as
+`docs/evaluations/semantic-component-release-v1.json`, a publication dispatch downloads the exact
+artifacts from the named qualification run, verifies every payload against the signed catalogs and
+lock, and creates the component release without rebuilding.
+
+`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` gates that publication path.
+`SEMANTIC_RELEASE_QUALIFIED` separately controls whether a tagged desktop build fetches and embeds
+the already-published locked catalog. Desktop release jobs never build, sign, qualify, or publish
+semantic payloads, so component and application failures do not propagate across release
+boundaries. The developer bundle
 packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point

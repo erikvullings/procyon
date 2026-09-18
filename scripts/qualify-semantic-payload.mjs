@@ -19,8 +19,8 @@ if (process.env.CI !== 'true') {
 }
 assertQualificationDispatchEnvironment({
   eventName: process.env.GITHUB_EVENT_NAME,
-  semanticReleaseQualified: process.env.SEMANTIC_RELEASE_QUALIFIED_VALUE,
-  knowledgeSearchReleaseQualified: process.env.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE,
+  qualificationRunId: process.env.QUALIFICATION_RUN_ID,
+  semanticComponentsReleaseQualified: process.env.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED_VALUE,
 });
 
 const qualificationRoot = path.join(bundle, 'qualification-worker');

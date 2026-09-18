@@ -3,7 +3,6 @@ name: Release desktop
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -19,33 +18,10 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 
-  qualification-safety:
-    name: Prove private qualification safety
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Prove dispatch has no publication path
-        run: node scripts/check-semantic-qualification-workflow.mjs
-      - name: Prove both release gates are disabled
-        env:
-          SEMANTIC_RELEASE_QUALIFIED_VALUE: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
-          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
-        run: node scripts/check-semantic-qualification-workflow.mjs --dispatch-environment
-
   macos:
     name: Signed and notarized macOS bundles
-    needs: [release, semantic-catalogs]
-    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
+    needs: release
+    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
@@ -59,24 +35,27 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify exact-production semantic evaluation evidence
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: >
-          node scripts/check-semantic-release-preconditions.mjs
-          --policy experimental-alpha
-      - name: Embed the signed macOS arm64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        uses: actions/download-artifact@v5
-        with:
-          name: semantic-catalog-macos-aarch64
-          path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
-          "$GITHUB_ENV"
+          "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
+      - name: Fetch the approved macOS arm64 semantic catalog
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Verify the approved semantic catalog signature
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          cargo run --quiet --locked -p fm-semantic-components
+          --example semantic_production_catalog --
+          verify-signature
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.json
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
+          "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Install universal macOS Rust targets
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Install lld
@@ -207,8 +186,8 @@ jobs:
 
   linux:
     name: Linux packages
-    needs: [release, semantic-catalogs]
-    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
+    needs: release
+    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
@@ -229,24 +208,27 @@ jobs:
             patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify exact-production semantic evaluation evidence
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: >
-          node scripts/check-semantic-release-preconditions.mjs
-          --policy experimental-alpha
-      - name: Embed the signed Linux x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        uses: actions/download-artifact@v5
-        with:
-          name: semantic-catalog-linux-x86_64
-          path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
-          "$GITHUB_ENV"
+          "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
+      - name: Fetch the approved Linux x86-64 semantic catalog
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Verify the approved semantic catalog signature
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          cargo run --quiet --locked -p fm-semantic-components
+          --example semantic_production_catalog --
+          verify-signature
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.json
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
+          "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
@@ -270,8 +252,8 @@ jobs:
 
   windows:
     name: Unsigned Windows installers
-    needs: [release, semantic-catalogs]
-    if: ${{ always() && github.event_name == 'push' && (needs.semantic-catalogs.result == 'success' || needs.semantic-catalogs.result == 'skipped') && needs.release.result == 'success' }}
+    needs: release
+    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
     runs-on: windows-latest
     environment: desktop-release
     steps:
@@ -284,24 +266,27 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify exact-production semantic evaluation evidence
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: >
-          node scripts/check-semantic-release-preconditions.mjs
-          --policy experimental-alpha
-      - name: Embed the signed Windows x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        uses: actions/download-artifact@v5
-        with:
-          name: semantic-catalog-windows-x86_64
-          path: apps/fm-desktop/src-tauri/resources/semantic
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
-          "$env:GITHUB_ENV"
+          "$env:GITHUB_ENV" "$env:RUNNER_TEMP/semantic-catalog.pub"
+      - name: Fetch the approved Windows x86-64 semantic catalog
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Verify the approved semantic catalog signature
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        run: >
+          cargo run --quiet --locked -p fm-semantic-components
+          --example semantic_production_catalog --
+          verify-signature
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.json
+          apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
+          "$env:RUNNER_TEMP/semantic-catalog.pub"
       - name: Require tag to match the Cargo-owned desktop version
         if: github.event_name == 'push'
         run: node scripts/check-desktop-release.mjs "$env:GITHUB_REF_NAME"
@@ -322,497 +307,6 @@ jobs:
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
-
-  semantic-payloads:
-    name: Semantic payloads (${{ matrix.target }})
-    needs: [release, qualification-safety]
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && needs.qualification-safety.result == 'success') || (github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && needs.release.result == 'success')) }}
-    runs-on: ${{ matrix.runner }}
-    environment: desktop-release
-    permissions:
-      contents: read
-    timeout-minutes: 240
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: macos-aarch64
-            runner: macos-15
-          - target: windows-x86_64
-            runner: windows-latest
-          - target: linux-x86_64
-            runner: ubuntu-22.04
-          - target: linux-aarch64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v5
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-      - name: Install Linux desktop qualification dependencies
-        if: github.event_name == 'workflow_dispatch' && startsWith(matrix.target, 'linux-')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            xvfb
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Prove qualification dispatch cannot publish
-        run: node scripts/check-semantic-qualification-workflow.mjs
-      - name: Verify exact-production semantic evaluation evidence
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
-        run: >
-          node scripts/check-semantic-release-preconditions.mjs
-          --policy experimental-alpha
-      - name: Configure the MSVC tool environment
-        if: matrix.target == 'windows-x86_64'
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Install the configured macOS linker
-        if: matrix.target == 'macos-aarch64'
-        run: brew install lld
-      - name: Require tag to match the Cargo-owned desktop version
-        if: github.event_name == 'push'
-        run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
-      - name: Configure temporary macOS notarization path
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
-      - name: Import Developer ID Application certificate
-        if: matrix.target == 'macos-aarch64'
-        uses: apple-actions/import-codesign-certs@v7
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      - name: Install Developer ID G2 intermediate certificate
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: |
-          CERTIFICATE_PATH="$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          curl --fail --silent --show-error --location \
-            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer \
-            --output "$CERTIFICATE_PATH"
-          echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $CERTIFICATE_PATH" |
-            shasum -a 256 --check
-          sudo security add-trusted-cert \
-            -d -r trustRoot \
-            -k /Library/Keychains/System.keychain \
-            "$CERTIFICATE_PATH"
-      - name: Select Developer ID Application identity
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: |
-          IDENTITY="$(
-            security find-identity -v -p codesigning |
-              awk -F'"' '/Developer ID Application/ { print $2; exit }'
-          )"
-          test -n "$IDENTITY"
-          echo "PROCYON_APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-      - name: Prepare App Store Connect API key
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: |
-          test -n "$APPLE_API_KEY"
-          test -n "$APPLE_API_KEY_P8"
-          test -n "$APPLE_API_ISSUER"
-          printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
-          chmod 600 "$APPLE_API_KEY_PATH"
-      - name: Build verified semantic release payloads
-        env:
-          PROCYON_REQUIRE_CLEAN_SOURCE: "1"
-          PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
-        run: >
-          pnpm semantic:bundle:production --
-          --output "target/semantic-production-release/${{ matrix.target }}"
-          --release-base-url
-          "${{ github.event_name == 'push' && format('https://github.com/{0}/releases/download/{1}', github.repository, github.ref_name) || format('https://qualification.invalid/{0}', github.sha) }}"
-          --source-revision "${{ github.sha }}"
-      - name: Notarize and verify macOS semantic executables
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        env:
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-        run: |
-          ARTIFACTS="target/semantic-production-release/${{ matrix.target }}/artifacts"
-          WORKER="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.worker.*' -print -quit)"
-          RUNTIME="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.zvec-runtime.*' -print -quit)"
-          test -n "$WORKER"
-          test -n "$RUNTIME"
-          codesign --verify --strict --verbose=2 "$WORKER"
-          codesign --verify --strict --verbose=2 "$RUNTIME"
-          NOTARY_DIRECTORY="$RUNNER_TEMP/semantic-notary"
-          mkdir -p "$NOTARY_DIRECTORY"
-          cp "$WORKER" "$RUNTIME" "$NOTARY_DIRECTORY/"
-          ditto -c -k --keepParent "$NOTARY_DIRECTORY" "$RUNNER_TEMP/semantic-notary.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/semantic-notary.zip" \
-            --key "$APPLE_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait \
-            --timeout 45m \
-            --no-s3-acceleration \
-            --output-format json > "$RUNNER_TEMP/semantic-notary-result.json"
-          node scripts/zvec-runtime-qualification.mjs record-notarization \
-            "target/semantic-production-release/${{ matrix.target }}" \
-            "$RUNNER_TEMP/semantic-notary-result.json" \
-            "$RUNNER_TEMP/semantic-notary.zip"
-      - name: Smoke-test protocol, model activation, and component lifecycle
-        if: github.event_name == 'push'
-        env:
-          PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST: "1"
-        run: >
-          node scripts/smoke-semantic-production-bundle.mjs
-          "target/semantic-production-release/${{ matrix.target }}"
-          --evaluation-report
-          "target/semantic-production-release/${{ matrix.target }}/semantic-production-evaluation.json"
-      - name: Qualify packaged worker lifecycle and privacy
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST: "1"
-          SEMANTIC_RELEASE_QUALIFIED_VALUE: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
-          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
-        run: >
-          node scripts/qualify-semantic-payload.mjs
-          "target/semantic-production-release/${{ matrix.target }}"
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: semantic-payloads-${{ matrix.target }}
-          path: target/semantic-production-release/${{ matrix.target }}/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Upload redacted worker qualification failure reports
-        uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && failure()
-        with:
-          name: semantic-payload-qualification-failure-${{ matrix.target }}
-          path: |
-            target/semantic-production-release/${{ matrix.target }}/qualification-worker/privacy-report.json
-            target/semantic-production-release/${{ matrix.target }}/qualification-worker/qualification-report.json
-            target/semantic-production-release/${{ matrix.target }}/qualification-worker/safe-evidence/
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Remove temporary macOS signing credentials
-        if: always() && matrix.target == 'macos-aarch64'
-        shell: bash
-        run: rm -f "$APPLE_API_KEY_PATH"
-
-  semantic-catalogs:
-    name: Semantic catalog (${{ matrix.target }})
-    needs: [semantic-payloads]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || vars.SEMANTIC_RELEASE_QUALIFIED == 'true') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [macos-aarch64, windows-x86_64, linux-x86_64, linux-aarch64]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/sign-semantic-catalog.yml
-    with:
-      release-input-artifact: semantic-payloads-${{ matrix.target }}
-      signed-catalog-artifact: semantic-catalog-${{ matrix.target }}
-    secrets: inherit
-
-  semantic-installed-qualification:
-    name: Installed semantic qualification (${{ matrix.target }})
-    needs: [qualification-safety, semantic-payloads, semantic-catalogs]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.qualification-safety.result == 'success' }}
-    runs-on: ${{ matrix.runner }}
-    environment: desktop-release
-    permissions:
-      contents: read
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: macos-aarch64
-            runner: macos-15
-          - target: windows-x86_64
-            runner: windows-latest
-          - target: linux-x86_64
-            runner: ubuntu-22.04
-          - target: linux-aarch64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v5
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-      - name: Install Linux package and launch dependencies
-        if: startsWith(matrix.target, 'linux-')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            xdg-utils \
-            xvfb
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Prove qualification remains private and gated off
-        env:
-          SEMANTIC_RELEASE_QUALIFIED_VALUE: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
-          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
-        run: |
-          node scripts/check-semantic-qualification-workflow.mjs
-          node scripts/check-semantic-qualification-workflow.mjs --dispatch-environment
-      - uses: actions/download-artifact@v5
-        with:
-          name: semantic-payloads-${{ matrix.target }}
-          path: semantic-release-input
-      - uses: actions/download-artifact@v5
-        with:
-          name: semantic-catalog-${{ matrix.target }}
-          path: apps/fm-desktop/src-tauri/resources/semantic
-      - name: Compile catalog trust and retain the public verification key
-        shell: bash
-        env:
-          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
-        run: >
-          node scripts/export-semantic-verifying-key.mjs
-          "$GITHUB_ENV"
-          "$RUNNER_TEMP/semantic-catalog.pub"
-      - name: Record the disabled Structured Knowledge Search decision
-        shell: bash
-        env:
-          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: "false"
-        run: >
-          node scripts/export-knowledge-release-qualification.mjs
-          "$GITHUB_ENV"
-      - name: Configure temporary macOS notarization path
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
-      - name: Import Developer ID Application certificate
-        if: matrix.target == 'macos-aarch64'
-        uses: apple-actions/import-codesign-certs@v7
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      - name: Install Developer ID G2 intermediate certificate
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: |
-          CERTIFICATE_PATH="$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          curl --fail --silent --show-error --location \
-            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer \
-            --output "$CERTIFICATE_PATH"
-          echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $CERTIFICATE_PATH" |
-            shasum -a 256 --check
-          sudo security add-trusted-cert \
-            -d -r trustRoot \
-            -k /Library/Keychains/System.keychain \
-            "$CERTIFICATE_PATH"
-      - name: Select Developer ID Application identity
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: |
-          IDENTITY="$(
-            security find-identity -v -p codesigning |
-              awk -F'"' '/Developer ID Application/ { print $2; exit }'
-          )"
-          test -n "$IDENTITY"
-          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-      - name: Prepare App Store Connect API key
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: |
-          test -n "$APPLE_API_KEY"
-          test -n "$APPLE_API_KEY_P8"
-          test -n "$APPLE_API_ISSUER"
-          printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
-          chmod 600 "$APPLE_API_KEY_PATH"
-      - name: Build private catalog-enabled desktop package
-        run: pnpm run build:tauri
-      - name: Notarize and staple the private macOS qualification DMG
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        env:
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-        run: |
-          DMG_PATH="$(
-            find target/release/bundle/dmg \
-              -maxdepth 1 -type f -name '*.dmg' -print -quit
-          )"
-          test -n "$DMG_PATH"
-          xcrun notarytool submit "$DMG_PATH" \
-            --key "$APPLE_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait \
-            --timeout 45m \
-            --no-s3-acceleration
-          xcrun stapler staple "$DMG_PATH"
-          codesign --verify --strict --verbose=2 "$DMG_PATH"
-          xcrun stapler validate "$DMG_PATH"
-      - name: Run installed lifecycle, failure, and privacy qualification
-        env:
-          PROCYON_QUALIFICATION_TARGET: ${{ matrix.target }}
-          SEMANTIC_RELEASE_QUALIFIED_VALUE: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
-          KNOWLEDGE_SEARCH_RELEASE_QUALIFIED_VALUE: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
-        run: >
-          node scripts/qualify-semantic-installed.mjs
-          --bundle semantic-release-input
-          --catalog apps/fm-desktop/src-tauri/resources/semantic
-          --public-key "${{ runner.temp }}/semantic-catalog.pub"
-          --evidence "${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}"
-      - name: Build private macOS qualification helper
-        if: matrix.target == 'macos-aarch64'
-        run: cargo build --release -p fm-semantic-components --example semantic_qualification_kit
-      - name: Assemble private macOS operator kit
-        if: matrix.target == 'macos-aarch64'
-        shell: bash
-        run: |
-          KIT="$RUNNER_TEMP/semantic-installed-qualification/${{ matrix.target }}/operator-kit"
-          mkdir -p "$KIT/artifacts"
-          cp target/release/examples/semantic_qualification_kit "$KIT/"
-          cp apps/fm-desktop/src-tauri/resources/semantic/catalog.json "$KIT/"
-          cp apps/fm-desktop/src-tauri/resources/semantic/catalog.sig "$KIT/"
-          cp "$RUNNER_TEMP/semantic-catalog.pub" "$KIT/catalog.pub"
-          cp semantic-release-input/artifacts/* "$KIT/artifacts/"
-          DMG_PATH="$(find target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          test -n "$DMG_PATH"
-          cp "$DMG_PATH" "$KIT/"
-          cat > "$KIT/README.txt" <<'EOF'
-          PRIVATE MACOS ARM64 SEMANTIC QUALIFICATION KIT
-
-          Use only while signed in as the dedicated macOS qualification user. The profile path
-          must be a new directory strictly beneath that user's home and must not be the home or
-          the normal Library/Application Support/fm directory.
-
-            KIT="$(pwd)"
-            HOME_DIR="$HOME"
-            PROFILE="$HOME/qualification-profiles/procyon-semantic-alpha"
-            shasum -a 256 --check SHA256SUMS
-            DMG="$(find . -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-            test -n "$DMG"
-            codesign --verify --strict --verbose=2 "$DMG"
-            xcrun stapler validate "$DMG"
-            spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG"
-            hdiutil verify "$DMG"
-            ./semantic_qualification_kit install "$HOME_DIR" "$PROFILE" \
-              catalog.json catalog.sig artifacts catalog.pub
-            env HOME="$PROFILE" /Applications/Procyon.app/Contents/MacOS/Procyon
-
-          Close Procyon before cleanup, then run:
-
-            "$KIT/semantic_qualification_kit" cleanup "$HOME_DIR" "$PROFILE"
-
-          The helper accepts no signing credential and performs no network access. It verifies the
-          detached production catalog signature, exact private artifact set, macOS arm64 target,
-          production pipeline, checksums, and activation before writing ComponentManager state at
-          PROFILE/Library/Application Support/fm. Cleanup refuses an unmarked or symlinked tree.
-          EOF
-          (
-            cd "$KIT"
-            find . -type f ! -name SHA256SUMS -print0 |
-              LC_ALL=C sort -z |
-              xargs -0 shasum -a 256 > SHA256SUMS
-          )
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: semantic-installed-qualification-${{ matrix.target }}
-          path: |
-            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/
-            target/release/bundle/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Upload redacted qualification failure reports
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: semantic-installed-qualification-failure-${{ matrix.target }}
-          path: |
-            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/privacy-report.json
-            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/summary.json
-            ${{ runner.temp }}/semantic-installed-qualification/${{ matrix.target }}/safe-evidence/
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Remove temporary macOS signing credentials
-        if: always() && matrix.target == 'macos-aarch64'
-        shell: bash
-        run: rm -f "$APPLE_API_KEY_PATH"
-
-  semantic-collect:
-    name: Collect semantic release assets
-    needs: [semantic-payloads, semantic-catalogs]
-    if: ${{ always() && needs.semantic-payloads.result == 'success' && needs.semantic-catalogs.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
-        with:
-          pattern: semantic-payloads-*
-          path: semantic-payloads
-      - uses: actions/download-artifact@v5
-        with:
-          pattern: semantic-catalog-*
-          path: semantic-catalogs
-      - name: Collect unique payloads and target catalogs
-        run: >
-          node scripts/collect-semantic-release-assets.mjs
-          semantic-payloads semantic-catalogs semantic-release-assets
-      - name: Aggregate private supported-target semantic evaluation
-        run: >
-          node scripts/aggregate-semantic-production-evaluation.mjs
-          semantic-payloads
-          semantic-release-assets/semantic-production-evaluation.json
-          docs/evaluations/semantic-production-v1.json
-      - name: Match evaluated payloads to the reviewed release evidence
-        if: github.event_name == 'push'
-        run: >
-          node scripts/check-semantic-release-preconditions.mjs
-          --policy experimental-alpha
-          --report semantic-release-assets/semantic-production-evaluation.json
-          --approved-report docs/evaluations/semantic-production-v1.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: semantic-release-assets-${{ github.sha }}
-          path: semantic-release-assets/
-          if-no-files-found: error
-          retention-days: 7
-
-  semantic-publish:
-    name: Publish semantic release assets
-    needs: [release, semantic-collect]
-    if: ${{ github.event_name == 'push' && needs.release.result == 'success' && needs.semantic-collect.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          name: semantic-release-assets-${{ github.sha }}
-          path: semantic-release-assets
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: semantic-release-assets/*
 
   homebrew:
     name: Publish cross-platform Homebrew cask
