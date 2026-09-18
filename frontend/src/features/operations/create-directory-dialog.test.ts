@@ -63,6 +63,18 @@ describe('CreateDirectoryDialog', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('disables automatic capitalization and correction for folder names', () => {
+    m.mount(root, {
+      view: () => m(CreateDirectoryDialog, { open: true, onConfirm: vi.fn(), onCancel: vi.fn() }),
+    });
+    m.redraw.sync();
+
+    const input = root.querySelector<HTMLInputElement>('#create-directory-name');
+    expect(input?.getAttribute('autocapitalize')).toBe('none');
+    expect(input?.getAttribute('autocorrect')).toBe('off');
+    expect(input?.getAttribute('spellcheck')).toBe('false');
+  });
+
   it('normalizes and explicitly enables intermediate creation for a nested path', () => {
     const confirm = vi.fn();
     m.mount(root, {

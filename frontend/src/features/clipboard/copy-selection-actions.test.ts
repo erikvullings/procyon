@@ -45,6 +45,21 @@ describe('copy selection actions', () => {
     expect(selectionClipboardText(actionId, selectedEntries, activeDirectory)).toBe(expected);
   });
 
+  it('formats the synthetic parent row against the active directory', () => {
+    const parent: EntrySummary = {
+      id: 'fm:parent:/workspace/project' as EntryId,
+      location: location('/workspace/project'),
+      name: '..',
+      kind: 'directory',
+      hidden: false,
+      readOnly: true,
+      metadataRevision: 0,
+    };
+
+    expect(selectionClipboardText('core.copyPath', [parent], activeDirectory)).toBe('/workspace');
+    expect(selectionClipboardText('core.copyRelativePath', [parent], activeDirectory)).toBe('..');
+  });
+
   it('writes the formatted multi-selection text through the supplied clipboard writer', async () => {
     const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
 

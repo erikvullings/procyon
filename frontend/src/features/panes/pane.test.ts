@@ -391,6 +391,28 @@ describe('Pane inline rename', () => {
     expect(document.activeElement).toBe(pane);
   });
 
+  describe('Pane context menu', () => {
+    it('passes the synthetic parent row to its restricted context menu', () => {
+      const parent: EntrySummary = {
+        id: 'fm:parent:/home/erik' as EntryId,
+        location: { providerId: 'file', uri: '/home/erik' },
+        name: '..',
+        kind: 'directory',
+        hidden: false,
+        readOnly: true,
+        metadataRevision: 0,
+      };
+      const onContextMenu = vi.fn();
+      mount(attrs({ entries: [parent, ...entries], onContextMenu }));
+
+      root
+        .querySelector<HTMLElement>('.fm-directory-row')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }));
+
+      expect(onContextMenu).toHaveBeenCalledWith([parent], 12, 24);
+    });
+  });
+
   it('opens the multi-rename dialog instead of inline rename when F2 is pressed with more than one entry selected', () => {
     const onRename = vi.fn();
     const onMultiRename = vi.fn();

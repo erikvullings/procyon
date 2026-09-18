@@ -1720,11 +1720,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   return;
                 }
                 const target = attrs.entries[index];
-                if (
-                  target !== undefined &&
-                  !isParentEntry(target.id) &&
-                  !attrs.selectedEntryIds.has(target.id)
-                ) {
+                if (target !== undefined && isParentEntry(target.id)) {
+                  attrs.onContextMenu([target], x, y);
+                  return;
+                }
+                if (target !== undefined && !attrs.selectedEntryIds.has(target.id)) {
                   attrs.onSelectionAction({ type: 'selectOnly', entryId: target.id });
                   attrs.onContextMenu([target], x, y);
                   return;
