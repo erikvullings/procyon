@@ -1922,18 +1922,21 @@ input[type="text"].fm-shortcuts-help-capture-input {
   overflow: hidden;
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
-  padding: 0.25rem;
+  padding: 2px;
   background: var(--mm-card-background);
   box-shadow: var(--fm-shadow);
 }
 
 .fm-context-menu-item {
+  box-sizing: border-box;
+  min-height: var(--fm-header-height);
   border: 0;
   border-radius: 2px;
-  padding: 0.45rem 0.75rem;
+  padding: 2px 8px;
   background: transparent;
   color: var(--fm-text);
   font: inherit;
+  line-height: 1.15;
   text-align: left;
 }
 
