@@ -319,16 +319,54 @@ impl DirectoryService {
         &self,
         request: NavigateRequest,
     ) -> Result<DirectorySnapshot, ApplicationError> {
-        self.list(ListDirectoryRequest {
+        let list_request = ListDirectoryRequest {
             workspace_id: request.workspace_id,
             pane_id: request.pane_id,
             request_id: request.request_id,
-            location: request.location,
+            location: request.location.clone(),
             continuation_token: None,
             sort: request.sort,
             show_hidden: request.show_hidden,
             folders_first: request.folders_first,
             show_git_status: request.show_git_status,
+        };
+        let error = match self.list(list_request.clone()).await {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(error) => error,
+        };
+        if !matches!(error, ApplicationError::InvalidRequest(_)) {
+            return Err(error);
+        }
+
+        let location: fm_domain::Location = request.location.into();
+        let provider = match self.providers.resolve(&location) {
+            Ok(provider) => provider,
+            Err(_) => return Err(error),
+        };
+        let entry = match provider
+            .inspect(
+                &EntryRef {
+                    id: EntryId::new(),
+                    location: location.clone(),
+                },
+                CancellationToken::new(),
+            )
+            .await
+        {
+            Ok(entry) => entry,
+            Err(_) => return Err(error),
+        };
+        if entry.kind == EntryKind::Directory {
+            return Err(error);
+        }
+        let parent = match location.parent() {
+            Ok(Some(parent)) => parent,
+            _ => return Err(error),
+        };
+
+        self.list(ListDirectoryRequest {
+            location: parent.into(),
+            ..list_request
         })
         .await
     }
@@ -1946,6 +1984,44 @@ mod tests {
 
         assert_eq!(snapshot.entries.len(), 2, "hidden entry must be included");
         assert!(snapshot.entries.iter().any(|entry| entry.hidden));
+    }
+
+    #[tokio::test]
+    async fn navigate_to_a_file_opens_its_containing_directory() {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let file = root.path().join("report.svg");
+        std::fs::write(&file, b"<svg/>").expect("create file");
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(fm_vfs_local::LocalFileSystemProvider));
+        let service = DirectoryService::new(providers);
+        let pane_id = PaneId::new();
+        let file_location =
+            LocationDto::from(Location::from_native_path(&file).expect("local file location"));
+
+        let snapshot = service
+            .navigate(NavigateRequest {
+                workspace_id: Uuid::new_v4(),
+                pane_id: pane_id.into(),
+                request_id: Uuid::new_v4(),
+                location: file_location,
+                sort: Vec::new(),
+                show_hidden: true,
+                folders_first: false,
+                show_git_status: false,
+            })
+            .await
+            .expect("file navigation must open the containing directory");
+
+        assert_eq!(
+            snapshot.location,
+            Location::from_native_path(root.path()).expect("local directory location")
+        );
+        assert!(
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| entry.name == "report.svg")
+        );
     }
 
     fn sample_entry(kind: EntryKind, size: Option<u64>) -> fm_domain::EntrySummary {

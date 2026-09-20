@@ -464,6 +464,45 @@ describe('navigation controller', () => {
     );
   });
 
+  it('commits the containing directory returned for an explicit file path', async () => {
+    const context = setup();
+    const requestedLocation = {
+      providerId: 'local',
+      uri: 'file:///home/erik/Documents/report.svg',
+    } as const;
+    const containingLocation = {
+      providerId: 'local',
+      uri: 'file:///home/erik/Documents',
+    } as const;
+    vi.mocked(context.client.navigatePane).mockImplementation(async (request) =>
+      snapshot(request.requestId, containingLocation.uri, ['report.svg']),
+    );
+    vi.mocked(context.client.dispatchWorkspaceCommand).mockResolvedValue(
+      workspace(containingLocation.uri),
+    );
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+
+    await controller.navigate('left', requestedLocation);
+
+    expect(context.client.navigatePane).toHaveBeenCalledWith(
+      expect.objectContaining({ location: requestedLocation }),
+      expect.any(AbortSignal),
+    );
+    expect(context.client.dispatchWorkspaceCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'navigateTab',
+        location: containingLocation,
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(context.views.at(-1)?.location).toEqual(containingLocation);
+  });
+
   it('carries the current tab view (showHidden/sort/foldersFirst) over when navigating to a new location', async () => {
     const context = setup(
       workspace('file:///home/erik', 'local', {
