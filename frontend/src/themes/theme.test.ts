@@ -218,6 +218,14 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toContain('var(--fm-row-height)');
   });
 
+  it('keeps context-menu rows on the compact structural rhythm', () => {
+    const item = themeBlock(/\.fm-context-menu-item\s*\{([^}]*)\}/);
+    expect(item).toContain('box-sizing: border-box');
+    expect(item).toContain('min-height: var(--fm-header-height)');
+    expect(item).toContain('padding: 2px 8px');
+    expect(item).toContain('line-height: 1.15');
+  });
+
   it('tunes mithril-materialized form chrome to match the Procyon layout', () => {
     expect(materializedCss).toContain('.input-field > label');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');

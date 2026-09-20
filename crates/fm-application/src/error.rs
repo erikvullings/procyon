@@ -311,6 +311,7 @@ impl From<VfsError> for ApplicationError {
             }
             VfsError::CredentialRequired => Self::CredentialRequired,
             VfsError::InvalidCredential => Self::InvalidCredential,
+            VfsError::AuthenticationFailed { message } => Self::PlatformOperationFailed(message),
             VfsError::Io { .. }
             | VfsError::UnsafeArchiveEntry
             | VfsError::ArchiveResourceLimit { .. } => Self::Internal,
@@ -407,6 +408,22 @@ mod tests {
         assert_eq!(
             dto.message,
             "no default application is set for this file type"
+        );
+    }
+
+    #[test]
+    fn vfs_authentication_failure_keeps_safe_recovery_guidance() {
+        let request_id = Uuid::new_v4();
+        let dto = ApplicationError::from(VfsError::AuthenticationFailed {
+            message: "SSH agent authentication is unavailable. Run ssh-add and try again."
+                .to_owned(),
+        })
+        .into_dto(request_id);
+
+        assert_eq!(dto.code, ApplicationErrorCode::PlatformOperationFailed);
+        assert_eq!(
+            dto.message,
+            "SSH agent authentication is unavailable. Run ssh-add and try again."
         );
     }
 

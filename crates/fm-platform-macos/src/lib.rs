@@ -166,6 +166,8 @@ fn open_with_chooser_command(path: &Path) -> std::process::Command {
         .arg("-e")
         .arg("set targetPath to item 1 of argv")
         .arg("-e")
+        .arg("activate")
+        .arg("-e")
         .arg("try")
         .arg("-e")
         .arg("set chosenApp to (choose application)")
@@ -275,6 +277,8 @@ fn choose_from_list_command(names: &[String]) -> std::process::Command {
     command
         .arg("-e")
         .arg("on run argv")
+        .arg("-e")
+        .arg("activate")
         .arg("-e")
         .arg("try")
         .arg("-e")
@@ -2147,6 +2151,18 @@ mod tests {
                 .any(|arg| arg.to_string_lossy().contains("-128")),
             "cancelling `choose application` (AppleScript error -128) must be handled inside the script"
         );
+        let activate = args
+            .iter()
+            .position(|arg| arg == "activate")
+            .expect("the chooser host must be activated");
+        let choose = args
+            .iter()
+            .position(|arg| arg.to_string_lossy().contains("choose application"))
+            .expect("the chooser command must be present");
+        assert!(
+            activate < choose,
+            "activation must happen before the chooser opens"
+        );
     }
 
     #[test]
@@ -2217,6 +2233,18 @@ mod tests {
             args.iter()
                 .any(|arg| arg.to_string_lossy().contains("-128")),
             "cancelling `choose from list` (AppleScript error -128) must be handled inside the script"
+        );
+        let activate = args
+            .iter()
+            .position(|arg| arg == "activate")
+            .expect("the chooser host must be activated");
+        let choose = args
+            .iter()
+            .position(|arg| arg.to_string_lossy().contains("choose from list"))
+            .expect("the chooser command must be present");
+        assert!(
+            activate < choose,
+            "activation must happen before the chooser opens"
         );
     }
 
