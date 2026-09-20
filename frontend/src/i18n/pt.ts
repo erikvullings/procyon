@@ -336,7 +336,11 @@ export const pt = {
     source: 'Origem',
     destination: 'Destino',
     conflictRecommendation: 'Opção mais segura: mude o nome do item recebido para manter ambos.',
-    failureRecovery: 'Verifique o acesso e o espaço disponível e volte a executar a operação.',
+    failureRecovery: 'Reveja o erro acima e volte a executar a operação.',
+    failureRecoveryPermissionDenied:
+      'O Procyon não consegue escrever no destino. Escolha uma pasta gravável ou atualize as respetivas permissões.',
+    failureRecoveryInsufficientSpace:
+      'O destino não tem espaço disponível suficiente. Liberte espaço ou escolha outro destino.',
     createDirectory: 'Criar pasta',
     createDirectoryName: 'Nome da pasta',
     createFile: 'Criar ficheiro',

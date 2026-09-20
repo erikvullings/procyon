@@ -48,9 +48,27 @@ function currentEntryName(operation: Operation): string | undefined {
   return entryNameFromUri(uri);
 }
 
+function displayUri(uri: string): string {
+  try {
+    return decodeURIComponent(uri);
+  } catch {
+    return uri;
+  }
+}
+
+function failureRecovery(code: string): string {
+  if (code === 'permissionDenied') {
+    return t('operation', 'failureRecoveryPermissionDenied');
+  }
+  if (code === 'insufficientSpace') {
+    return t('operation', 'failureRecoveryInsufficientSpace');
+  }
+  return t('operation', 'failureRecovery');
+}
+
 function entryNameFromUri(uri: string): string {
   const segment = uri.split('/').at(-1);
-  return segment === undefined ? uri : decodeURIComponent(segment);
+  return displayUri(segment ?? uri);
 }
 
 function operationTimestamp(operation: Operation): string {
@@ -328,7 +346,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                           operation.sources.map((source) =>
                             m(
                               'li',
-                              { title: source.location.uri },
+                              { title: displayUri(source.location.uri) },
                               entryNameFromUri(source.location.uri),
                             ),
                           ),
@@ -382,17 +400,19 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                                 m('dt', t('operation', 'source')),
                                 m(
                                   'dd',
-                                  operation.sources.map((source) => source.location.uri).join(', '),
+                                  operation.sources
+                                    .map((source) => displayUri(source.location.uri))
+                                    .join(', '),
                                 ),
                               ],
                           operation.destination === undefined
                             ? undefined
                             : [
                                 m('dt', t('operation', 'destination')),
-                                m('dd', operation.destination.uri),
+                                m('dd', displayUri(operation.destination.uri)),
                               ],
                         ]),
-                        m('p.fm-operation-failure-recovery', t('operation', 'failureRecovery')),
+                        m('p.fm-operation-failure-recovery', failureRecovery(failure.code)),
                         m('details', [
                           m('summary', t('button', 'details')),
                           m(

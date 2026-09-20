@@ -334,7 +334,11 @@ export const pl = {
     destination: 'Cel',
     conflictRecommendation:
       'Najbezpieczniejszy wybór: zmień nazwę elementu przychodzącego, aby zachować oba.',
-    failureRecovery: 'Sprawdź dostęp i wolne miejsce, a następnie uruchom operację ponownie.',
+    failureRecovery: 'Sprawdź powyższy błąd, a następnie uruchom operację ponownie.',
+    failureRecoveryPermissionDenied:
+      'Procyon nie może zapisywać w miejscu docelowym. Wybierz folder z prawem zapisu lub zmień jego uprawnienia.',
+    failureRecoveryInsufficientSpace:
+      'W miejscu docelowym brakuje wolnego miejsca. Zwolnij miejsce lub wybierz inne miejsce docelowe.',
     createDirectory: 'Utwórz katalog',
     createDirectoryName: 'Nazwa katalogu',
     createFile: 'Utwórz plik',

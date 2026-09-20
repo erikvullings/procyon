@@ -141,6 +141,17 @@ async fn id_and_capabilities_are_reported_accurately() {
 }
 
 #[tokio::test]
+async fn capacity_query_is_optional_when_the_server_lacks_statvfs() {
+    let (provider, fixture) = provider_and_fixture().await;
+    let available = provider
+        .available_space(&root_location(&fixture), cancellation())
+        .await
+        .expect("capacity query should not fail when statvfs is unsupported");
+
+    assert!(available.is_none_or(|bytes| bytes > 0));
+}
+
+#[tokio::test]
 async fn registry_rejects_malformed_sftp_locations_through_the_owning_provider() {
     let (provider, _fixture) = provider_and_fixture().await;
     let mut registry = ProviderRegistry::new();

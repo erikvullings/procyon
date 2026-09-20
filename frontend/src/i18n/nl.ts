@@ -339,8 +339,11 @@ export const nl = {
     destination: 'Bestemming',
     conflictRecommendation:
       'Veiligste keuze: geef het binnenkomende item een andere naam om beide te behouden.',
-    failureRecovery:
-      'Controleer de toegang en beschikbare ruimte en voer de bewerking daarna opnieuw uit.',
+    failureRecovery: 'Bekijk de fout hierboven en voer de bewerking daarna opnieuw uit.',
+    failureRecoveryPermissionDenied:
+      'Procyon kan niet naar de bestemming schrijven. Kies een beschrijfbare map of pas de rechten aan.',
+    failureRecoveryInsufficientSpace:
+      'De bestemming heeft onvoldoende vrije ruimte. Maak ruimte vrij of kies een andere bestemming.',
     createDirectory: 'Map aanmaken',
     createDirectoryName: 'Mapnaam',
     createFile: 'Bestand aanmaken',

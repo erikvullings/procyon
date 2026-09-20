@@ -312,6 +312,9 @@ impl From<VfsError> for ApplicationError {
             VfsError::CredentialRequired => Self::CredentialRequired,
             VfsError::InvalidCredential => Self::InvalidCredential,
             VfsError::AuthenticationFailed { message } => Self::PlatformOperationFailed(message),
+            VfsError::InsufficientSpace { .. } => Self::PlatformOperationFailed(
+                "the destination does not have enough available space".to_owned(),
+            ),
             VfsError::Io { .. }
             | VfsError::UnsafeArchiveEntry
             | VfsError::ArchiveResourceLimit { .. } => Self::Internal,

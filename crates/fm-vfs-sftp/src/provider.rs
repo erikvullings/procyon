@@ -240,6 +240,31 @@ impl FileSystemProvider for SftpFileSystemProvider {
         }
     }
 
+    async fn available_space(
+        &self,
+        location: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<Option<u64>, VfsError> {
+        check_cancelled(&cancellation)?;
+        let parsed = ParsedSftpLocation::parse(location)?;
+        let remote_path = parsed.remote_path.clone();
+        let info = self
+            .with_sftp(&parsed.connection_id, move |sftp| {
+                let remote_path = remote_path.clone();
+                async move { sftp.fs_info(remote_path).await }
+            })
+            .await?;
+        check_cancelled(&cancellation)?;
+        info.map(|info| {
+            info.fragment_size
+                .checked_mul(info.blocks_avail)
+                .ok_or_else(|| VfsError::Io {
+                    message: "remote filesystem capacity exceeds supported size".to_owned(),
+                })
+        })
+        .transpose()
+    }
+
     async fn list(
         &self,
         location: &Location,

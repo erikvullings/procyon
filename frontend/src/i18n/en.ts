@@ -335,7 +335,11 @@ export const en = {
     source: 'Source',
     destination: 'Destination',
     conflictRecommendation: 'Safest choice: rename the incoming item to keep both.',
-    failureRecovery: 'Check access and available space, then run the operation again.',
+    failureRecovery: 'Review the error above, then run the operation again.',
+    failureRecoveryPermissionDenied:
+      'Procyon cannot write to the destination. Choose a writable folder or update its permissions.',
+    failureRecoveryInsufficientSpace:
+      'The destination does not have enough available space. Free space or choose another destination.',
     createDirectory: 'Create directory',
     createDirectoryName: 'Directory name',
     createFile: 'Create file',

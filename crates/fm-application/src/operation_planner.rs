@@ -1817,8 +1817,12 @@ impl OperationExecutor for MoveExecutor {
             .destination_directory
             .join(&name)
             .map_err(|error| ExecutionError::Failed(error.to_string()))?;
-        fm_operations::validate_paths(&source.location, &destination, cfg!(not(windows)))
-            .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        // Same-entry and descendant checks only apply within one provider namespace.
+        // Cross-provider moves are disjoint by construction and use the copy-then-delete path.
+        if source.location.provider_id == destination.provider_id {
+            fm_operations::validate_paths(&source.location, &destination, cfg!(not(windows)))
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        }
         // Task 0108: the planner already decided, from both sides'
         // `TransferCapabilities`, whether a server-native rename is even
         // conceivable — crucially this is *endpoint* identity, so two
@@ -2171,7 +2175,21 @@ impl OperationExecutor for CopyExecutor {
         }
         *self.planned.lock().unwrap_or_else(|e| e.into_inner()) = planned;
         *self.directories.lock().unwrap_or_else(|e| e.into_inner()) = directories;
-        Ok(OperationPlan::new(items))
+        let plan = OperationPlan::new(items);
+        if let (Some(required), Some(available)) = (
+            plan.total_bytes,
+            self.destination_provider
+                .available_space(&self.destination_directory, cancellation.clone())
+                .await?,
+        ) && required > available
+        {
+            return Err(fm_vfs::VfsError::InsufficientSpace {
+                available: Some(available),
+                required: Some(required),
+            }
+            .into());
+        }
+        Ok(plan)
     }
 
     async fn execute(
@@ -3302,6 +3320,7 @@ mod tests {
         partial_ready: Mutex<Option<tokio::sync::oneshot::Sender<PathBuf>>>,
         /// Records whether `discard_copy` ran.
         discard_called: AtomicBool,
+        available_bytes: Option<u64>,
     }
 
     #[async_trait]
@@ -3391,6 +3410,14 @@ mod tests {
             Err(fm_vfs::VfsError::Cancelled)
         }
 
+        async fn available_space(
+            &self,
+            _location: &Location,
+            _cancellation: CancellationToken,
+        ) -> Result<Option<u64>, fm_vfs::VfsError> {
+            Ok(self.available_bytes)
+        }
+
         async fn discard_copy(
             &self,
             temporary: &Location,
@@ -3427,6 +3454,7 @@ mod tests {
         let gated_provider = Arc::new(GatedDestinationProvider {
             partial_ready: Mutex::new(Some(ready_tx)),
             discard_called: AtomicBool::new(false),
+            available_bytes: None,
         });
         let destination_provider: Arc<dyn FileSystemProvider> = Arc::clone(&gated_provider) as _;
         let source_provider: Arc<dyn FileSystemProvider> =
@@ -3519,6 +3547,65 @@ mod tests {
             !destination_directory_path.join("source.bin").exists(),
             "the public destination must never be published"
         );
+    }
+
+    #[tokio::test]
+    async fn copy_plan_rejects_a_destination_without_enough_available_space() {
+        let root = tempfile::tempdir().expect("temp root");
+        let source_path = root.path().join("source.bin");
+        std::fs::write(&source_path, b"deterministic fixture bytes").expect("write source");
+        let destination_directory_path = root.path().join("destination");
+        std::fs::create_dir(&destination_directory_path).expect("create destination dir");
+
+        let source_location = Location::from_native_path(&source_path).expect("source location");
+        let destination_directory =
+            Location::from_native_path(&destination_directory_path).expect("destination location");
+        let destination_provider: Arc<dyn FileSystemProvider> =
+            Arc::new(GatedDestinationProvider {
+                partial_ready: Mutex::new(None),
+                discard_called: AtomicBool::new(false),
+                available_bytes: Some(1),
+            });
+        let executor = CopyExecutor {
+            source_provider: Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            destination_provider,
+            destination_directory: destination_directory.clone(),
+            temporary: Mutex::new(None),
+            planned: Mutex::new(HashMap::new()),
+            directories: Mutex::new(Vec::new()),
+            symlink_policy: SymlinkPolicyDto::CopyLink,
+            root_name: Mutex::new(None),
+            source_override: Some(source_location),
+            continue_on_error: false,
+            completed_root_destination: Mutex::new(None),
+            created_destinations: Mutex::new(Vec::new()),
+            replaced_existing: AtomicBool::new(false),
+            transfer: TransferPlan {
+                strategy: TransferStrategy::DirectStream,
+                move_strategy: MoveStrategy::CopyThenDelete,
+                same_endpoint: false,
+                destination_resumable_upload: false,
+            },
+        };
+        let operation = Operation::new(
+            fm_operations::OperationKind::Copy,
+            Vec::new(),
+            Some(destination_directory),
+            fm_operations::ConflictPolicy::Ask,
+        );
+
+        let error = executor
+            .plan(&operation, &CancellationToken::new())
+            .await
+            .expect_err("capacity preflight must reject the copy");
+
+        assert!(matches!(
+            error,
+            ExecutionError::Provider(fm_vfs::VfsError::InsufficientSpace {
+                available: Some(1),
+                required: Some(required),
+            }) if required > 1
+        ));
     }
 
     /// Fake destination provider recording the `expected_size` it was
