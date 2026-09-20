@@ -391,13 +391,21 @@ async fn cancelling_a_local_to_sftp_copy_mid_transfer_leaves_no_partial_file_any
         )
         .expect("operation must be accepted");
 
+    let mut cancellation_requested = false;
     for _ in 0..1_000 {
         if service.get_operation(operation.id.into()).unwrap().state == OperationStateDto::Running {
             service.cancel_operation(operation.id.into()).unwrap();
+            cancellation_requested = true;
             break;
         }
-        tokio::task::yield_now().await;
+        // A yield-only loop can exhaust all iterations before the scheduler
+        // starts this job on a loaded CI runner.
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert!(
+        cancellation_requested,
+        "operation did not start in time to exercise mid-transfer cancellation"
+    );
     for _ in 0..400 {
         let state = service.get_operation(operation.id.into()).unwrap().state;
         if state == OperationStateDto::Cancelled {

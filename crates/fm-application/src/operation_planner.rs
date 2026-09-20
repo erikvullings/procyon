@@ -2588,18 +2588,18 @@ impl CopyExecutor {
                 }
                 progress.report_bytes(read as u64);
             };
-            // Cancellation must reach *both* sides, not just this loop:
-            // dropping the reader releases the source provider's handle
-            // (closing the SFTP file / ending the FTP data connection), and
-            // shutting the writer down lets the destination provider finish
-            // and release its own transfer before `cleanup_partial` discards
-            // the temporary. Neither is best-effort noise: without them a
-            // cancelled remote transfer would keep streaming in the
-            // background and race the cleanup that follows.
+            // A successful transfer drains and closes the writer before
+            // publication. On cancellation or another transfer error, drop
+            // it instead: graceful shutdown waits for buffered remote writes
+            // and can keep a cancelled operation alive until the entire
+            // payload has reached the server.
             drop(reader);
+            if let Err(error) = transferred {
+                drop(writer);
+                return Err(error);
+            }
             let shutdown = writer.shutdown().await;
             drop(writer);
-            transferred?;
             shutdown.map_err(copy_stream_error)?;
         }
         pause.checkpoint().await;
