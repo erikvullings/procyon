@@ -77,6 +77,14 @@ pub enum VfsError {
     /// The cached or supplied archive credential was rejected.
     #[error("archive credential is invalid")]
     InvalidCredential,
+    /// A remote provider rejected authentication or could not access the configured
+    /// authentication mechanism. The provider supplies recovery guidance that is
+    /// safe to show to the user.
+    #[error("{message}")]
+    AuthenticationFailed {
+        /// Sanitized, actionable authentication failure message.
+        message: String,
+    },
     /// The caller cancelled the operation.
     #[error("operation cancelled")]
     Cancelled,
@@ -120,6 +128,7 @@ impl VfsError {
             Self::ArchiveResourceLimit { .. } => "archiveResourceLimit",
             Self::CredentialRequired => "credentialRequired",
             Self::InvalidCredential => "invalidCredential",
+            Self::AuthenticationFailed { .. } => "authenticationFailed",
             Self::Cancelled => "cancelled",
             Self::Io { .. } => "io",
             Self::InvalidLocation { .. } => "invalidLocation",

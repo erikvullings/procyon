@@ -94,11 +94,8 @@ impl SftpFileSystemProvider {
             .connections
             .session(connection_id, params)
             .await
-            .map_err(|error| map_ssh_error(error, connection_id))?;
-        session
-            .sftp()
-            .await
-            .map_err(|error| map_ssh_error(error, connection_id))
+            .map_err(map_ssh_error)?;
+        session.sftp().await.map_err(map_ssh_error)
     }
 
     /// Runs `operation` against a live SFTP session for `connection_id`,
@@ -705,10 +702,15 @@ fn map_sftp_error(error: russh_sftp::client::error::Error, connection_id: &str) 
     }
 }
 
-fn map_ssh_error(error: SshError, connection_id: &str) -> VfsError {
+fn map_ssh_error(error: SshError) -> VfsError {
     match error {
-        SshError::AuthenticationFailed => VfsError::PermissionDenied {
-            location: format!("sftp://{connection_id}"),
+        SshError::AuthenticationFailed => VfsError::AuthenticationFailed {
+            message: "SSH authentication failed. Check the saved username and credentials; if this connection uses the SSH agent, load the private key with ssh-add and try again."
+                .to_owned(),
+        },
+        SshError::Agent(_) => VfsError::AuthenticationFailed {
+            message: "SSH agent authentication is unavailable. Load your private key with ssh-add, then try again."
+                .to_owned(),
         },
         SshError::Cancelled => VfsError::Cancelled,
         other => VfsError::Io {
@@ -789,5 +791,28 @@ fn build_summary(location: Location, name: String, attrs: FileAttributes) -> Ent
         icon_key: None,
         metadata_revision: 0,
         git_status: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ssh_agent_failure_explains_how_to_restore_authentication() {
+        let error = map_ssh_error(SshError::Agent("the agent has no identities".to_owned()));
+
+        assert_eq!(
+            error.to_string(),
+            "SSH agent authentication is unavailable. Load your private key with ssh-add, then try again."
+        );
+    }
+
+    #[test]
+    fn rejected_ssh_credentials_are_reported_as_authentication_failures() {
+        let error = map_ssh_error(SshError::AuthenticationFailed);
+
+        assert!(matches!(error, VfsError::AuthenticationFailed { .. }));
+        assert!(error.to_string().contains("SSH authentication failed"));
     }
 }
