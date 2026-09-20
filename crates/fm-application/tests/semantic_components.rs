@@ -302,6 +302,23 @@ fn signed_catalog() -> TrustedCatalog {
     .unwrap()
 }
 
+fn empty_signed_catalog() -> TrustedCatalog {
+    let manifest = CatalogManifest::new(
+        ManifestRevision::new("empty-fixture-catalog").unwrap(),
+        Vec::new(),
+        Vec::new(),
+        BTreeMap::new(),
+    )
+    .unwrap();
+    let signing_key = SigningKey::from_bytes(&[18_u8; 32]);
+    let signature = signing_key.sign(&manifest.canonical_bytes().unwrap());
+    TrustedCatalog::verify(
+        SignedCatalogManifest::new(manifest, signature.to_bytes()),
+        &signing_key.verifying_key(),
+    )
+    .unwrap()
+}
+
 fn managed_capability(
     directory: &TempDir,
     distribution: DesktopSemanticDistribution,
@@ -318,6 +335,25 @@ fn managed_capability_with_inventory(
     distribution: DesktopSemanticDistribution,
     available_bytes: u64,
     with_inventory: bool,
+) -> (
+    Arc<ManagedSemanticComponentCapability>,
+    Arc<FixtureArtifactSource>,
+) {
+    managed_capability_with_catalog(
+        directory,
+        distribution,
+        available_bytes,
+        with_inventory,
+        signed_catalog(),
+    )
+}
+
+fn managed_capability_with_catalog(
+    directory: &TempDir,
+    distribution: DesktopSemanticDistribution,
+    available_bytes: u64,
+    with_inventory: bool,
+    catalog: TrustedCatalog,
 ) -> (
     Arc<ManagedSemanticComponentCapability>,
     Arc<FixtureArtifactSource>,
@@ -354,7 +390,7 @@ fn managed_capability_with_inventory(
             SemanticStateStore::new(directory.path().join("config")),
             directory.path().join("app-data"),
         ),
-        Arc::new(signed_catalog()),
+        Arc::new(catalog),
         ManagedSemanticComponentConfiguration {
             runtime_and_worker_artifacts: vec![
                 ArtifactId::new("fixture-worker").unwrap(),
@@ -381,6 +417,41 @@ fn managed_capability_with_inventory(
         },
     );
     (Arc::new(capability), source)
+}
+
+#[tokio::test]
+async fn stale_components_absent_from_the_trusted_catalog_remain_recoverable() {
+    let directory = project_temp_dir("stale-components-");
+    let (capability, _) =
+        managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+    let service = SemanticComponentService::new(capability);
+    let offer = service
+        .installation_offer(fm_semantic_components::SemanticProfile::CompactMultilingual)
+        .await
+        .unwrap();
+    service.install_or_enable(offer.consent()).await.unwrap();
+    drop(service);
+
+    let (stale_capability, _) = managed_capability_with_catalog(
+        &directory,
+        DesktopSemanticDistribution::Direct,
+        u64::MAX,
+        true,
+        empty_signed_catalog(),
+    );
+    let status = SemanticComponentService::new(stale_capability)
+        .status()
+        .await
+        .unwrap();
+
+    assert_eq!(status.lifecycle(), &SemanticComponentLifecycle::Absent);
+    assert!(status.active_model().is_none());
+    assert!(
+        status
+            .components()
+            .iter()
+            .all(|component| component.state() == InstalledSemanticComponentState::Rollback)
+    );
 }
 
 #[tokio::test]

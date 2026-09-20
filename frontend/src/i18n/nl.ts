@@ -407,6 +407,7 @@ export const nl = {
     stateFailed: 'Mislukt',
     stateInterrupted: 'Onderbroken',
     queuePosition: 'Wachtrijpositie {position}',
+    eta: 'Resterend {duration}',
     itemsProgress: { 1: '1 item', n: '{n} items' },
     filesFound: { 1: '1 bestand gevonden.', n: '{n} bestanden gevonden.' },
     entriesCompared: { 1: '1 item vergeleken.', n: '{n} items vergeleken.' },
@@ -1235,7 +1236,7 @@ export const nl = {
     noProfiles: 'Deze host biedt geen modelprofielen aan.',
     reviewInstallation:
       'Controleer het volledige ondertekende aanbod voordat iets wordt gedownload.',
-    installEnableAction: 'Installeren / inschakelen',
+    installEnableAction: 'Installatie bekijken',
     existingOffer:
       'Er staat een eerder aanbod open. Maak een nieuw aanbod om de volledige actuele informatie te controleren.',
     offerHeading: 'Installatie-informatie',

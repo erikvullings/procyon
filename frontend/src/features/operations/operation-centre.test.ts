@@ -234,6 +234,44 @@ describe('OperationCentre states', () => {
     ).not.toBeNull();
   });
 
+  it('shows a running transfer ETA beside its controls', () => {
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([operation('running')]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const controls = root.querySelector('[data-operation-id="running"] .fm-operation-controls');
+    expect(controls?.querySelector('.fm-operation-eta')?.textContent).toBe('ETA 0:02');
+    expect(controls?.lastElementChild?.classList).toContain('fm-operation-eta');
+  });
+
+  const runningWithoutRate = operation('running');
+  delete runningWithoutRate.progress.bytesPerSecond;
+
+  it.each([
+    ['paused transfer', operation('paused')],
+    ['transfer without a measured rate', runningWithoutRate],
+  ])('does not estimate completion for a %s', (_description, transfer) => {
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([transfer]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(root.querySelector('.fm-operation-eta')).toBeNull();
+  });
+
   it('announces failures with retained transfer context and a recovery path', () => {
     const failed: Operation = {
       ...operation('failed'),

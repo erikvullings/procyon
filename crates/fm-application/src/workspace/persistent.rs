@@ -55,14 +55,14 @@ pub struct JsonFileWorkspaceRepository {
 impl JsonFileWorkspaceRepository {
     /// The default storage location: `workspaces/` under the platform config
     /// directory (via the `dirs` crate, spec §5.3.8's "platform config
-    /// directory"), falling back to `.fm-config/workspaces` in the current
+    /// directory"), falling back to `.procyon-config/procyon/workspaces` in the current
     /// directory if the platform cannot report one (for example a container
     /// with no `$HOME`/`$XDG_CONFIG_HOME`).
     #[must_use]
     pub fn default_directory() -> PathBuf {
         dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(".fm-config"))
-            .join("fm")
+            .unwrap_or_else(|| PathBuf::from(".procyon-config"))
+            .join("procyon")
             .join("workspaces")
     }
 
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn default_directory_lives_under_the_platform_config_directory() {
-        let expected_suffix = Path::new("fm").join("workspaces");
+        let expected_suffix = Path::new("procyon").join("workspaces");
         assert!(JsonFileWorkspaceRepository::default_directory().ends_with(&expected_suffix));
     }
 

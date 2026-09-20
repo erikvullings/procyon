@@ -403,6 +403,7 @@ export const pt = {
     stateFailed: 'Falhou',
     stateInterrupted: 'Interrompido',
     queuePosition: 'Posição na fila {position}',
+    eta: 'Tempo restante {duration}',
     itemsProgress: { 1: '1 item', n: '{n} itens' },
     filesFound: { 1: '1 ficheiro encontrado.', n: '{n} ficheiros encontrados.' },
     entriesCompared: { 1: '1 item comparado.', n: '{n} itens comparados.' },

@@ -406,6 +406,7 @@ export const de = {
     stateFailed: 'Fehlgeschlagen',
     stateInterrupted: 'Unterbrochen',
     queuePosition: 'Position in Warteschlange {position}',
+    eta: 'Restzeit {duration}',
     itemsProgress: { 1: '1 Element', n: '{n} Elemente' },
     filesFound: { 1: '1 Datei gefunden.', n: '{n} Dateien gefunden.' },
     entriesCompared: { 1: '1 Eintrag verglichen.', n: '{n} Einträge verglichen.' },

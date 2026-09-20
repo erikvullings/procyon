@@ -102,8 +102,8 @@ impl Default for ServerConfig {
             workspace_directory:
                 fm_application::workspace::JsonFileWorkspaceRepository::default_directory(),
             settings_directory: dirs::config_dir()
-                .unwrap_or_else(|| PathBuf::from(".fm-config"))
-                .join("fm"),
+                .unwrap_or_else(|| PathBuf::from(".procyon-config"))
+                .join("procyon"),
             session_secret: SessionSecret::random(),
             dev_mode_auth_disabled: false,
             semantic_library_tenant_id: "private".to_owned(),

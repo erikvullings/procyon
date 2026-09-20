@@ -1,6 +1,6 @@
 //! Host-neutral lifecycle boundary for optional semantic components.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -2662,25 +2662,23 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
         let _mutation = self.mutation.lock().await;
         let manager = self.manager.clone();
         let catalog = Arc::clone(&self.catalog);
-        let (state, report) = run_component_blocking(move || {
+        let (state, report, trusted_artifact_ids) = run_component_blocking(move || {
             let (state, report) = manager.state_and_status().map_err(map_status_error)?;
+            let mut trusted_artifact_ids = BTreeSet::new();
             for component in state.installed_components() {
-                let artifact = catalog.artifact(component.artifact_id()).ok_or_else(|| {
-                    SemanticComponentError::Catalog {
-                        message: format!(
-                            "installed artifact `{}` is absent from the trusted catalog",
-                            component.artifact_id().as_str()
-                        ),
-                    }
-                })?;
+                let Some(artifact) = catalog.artifact(component.artifact_id()) else {
+                    // Retain stale entries for explicit removal, but never verify or activate them.
+                    continue;
+                };
                 manager
                     .verified_installed_payload(artifact)
                     .map_err(map_install_error)?
                     .ok_or_else(|| SemanticComponentError::ArtifactVerificationFailed {
                         artifact_id: artifact.id().as_str().to_owned(),
                     })?;
+                trusted_artifact_ids.insert(artifact.id().as_str().to_owned());
             }
-            Ok((state, report))
+            Ok((state, report, trusted_artifact_ids))
         })
         .await?;
         let observed = self
@@ -2688,7 +2686,12 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        Ok(map_managed_status(&state, &report, observed))
+        Ok(map_managed_status(
+            &state,
+            &report,
+            &trusted_artifact_ids,
+            observed,
+        ))
     }
 
     async fn catalog_profiles(&self) -> Result<Vec<SemanticModelProfile>, SemanticComponentError> {
@@ -3590,9 +3593,16 @@ fn map_artifact_kind(
 fn map_managed_status(
     state: &core::SemanticState,
     report: &core::SemanticStatusReport,
+    trusted_artifact_ids: &BTreeSet<String>,
     observed: SemanticComponentLifecycle,
 ) -> SemanticComponentStatus {
-    let migration = state.pending_model_migration().map(map_pending_migration);
+    let has_trusted_components = report
+        .components()
+        .iter()
+        .any(|component| trusted_artifact_ids.contains(component.artifact_id().as_str()));
+    let migration = has_trusted_components
+        .then(|| state.pending_model_migration().map(map_pending_migration))
+        .flatten();
     let lifecycle = if let Some(progress) = migration.clone() {
         SemanticComponentLifecycle::Migrating { progress }
     } else if matches!(
@@ -3605,7 +3615,7 @@ fn map_managed_status(
             | SemanticComponentLifecycle::Uninstalled { .. }
     ) {
         observed
-    } else if report.components().is_empty() {
+    } else if !has_trusted_components {
         SemanticComponentLifecycle::Absent
     } else {
         SemanticComponentLifecycle::InstalledEnabled
@@ -3618,10 +3628,16 @@ fn map_managed_status(
             component_id: component.component_id().as_str().to_owned(),
             kind: map_artifact_kind(component.kind()).0,
             version: component.version().to_string(),
-            state: match component.status() {
-                core::ComponentLifecycleStatus::Active => InstalledSemanticComponentState::Active,
-                core::ComponentLifecycleStatus::Rollback => {
-                    InstalledSemanticComponentState::Rollback
+            state: if !trusted_artifact_ids.contains(component.artifact_id().as_str()) {
+                InstalledSemanticComponentState::Rollback
+            } else {
+                match component.status() {
+                    core::ComponentLifecycleStatus::Active => {
+                        InstalledSemanticComponentState::Active
+                    }
+                    core::ComponentLifecycleStatus::Rollback => {
+                        InstalledSemanticComponentState::Rollback
+                    }
                 }
             },
             installed_bytes: component.installed_bytes(),
@@ -3638,11 +3654,24 @@ fn map_managed_status(
     SemanticComponentStatus {
         lifecycle,
         data_root: Some(state.data_root().path().to_owned()),
-        active_model: state.active_model().map(|selection| {
-            SemanticModelSelection::new(
-                selection.profile(),
-                map_model_identity(selection.identity()),
-            )
+        active_model: state.active_model().and_then(|selection| {
+            report
+                .components()
+                .iter()
+                .any(|component| {
+                    trusted_artifact_ids.contains(component.artifact_id().as_str())
+                        && matches!(
+                            component.kind(),
+                            core::ArtifactKind::Model(identity)
+                                if identity == selection.identity()
+                        )
+                })
+                .then(|| {
+                    SemanticModelSelection::new(
+                        selection.profile(),
+                        map_model_identity(selection.identity()),
+                    )
+                })
         }),
         migration,
         components,

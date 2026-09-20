@@ -137,7 +137,11 @@ describe('SemanticComponentManagement', () => {
 
       expect(root.querySelector('.fm-semantic-install') !== null).toBe(actionable);
       expect(root.querySelectorAll('.fm-semantic-action')).toHaveLength(actionable ? 1 : 0);
-      if (!actionable) {
+      if (actionable) {
+        expect(root.querySelector('.fm-semantic-install .fm-semantic-action')?.classList).toContain(
+          'btn',
+        );
+      } else {
         expect(root.textContent).toContain('cannot download executable semantic components');
       }
     },
@@ -165,7 +169,7 @@ describe('SemanticComponentManagement', () => {
     mountComponent(emptyClient);
     await waitForLoaded();
     expect(root.textContent).toContain('No model profiles are available');
-    expect(button('Install / enable').disabled).toBe(true);
+    expect(button('Review installation').disabled).toBe(true);
   });
 
   it('requires a reviewed complete disclosure before explicit installation consent', async () => {
@@ -190,7 +194,7 @@ describe('SemanticComponentManagement', () => {
     expect(createOffer).not.toHaveBeenCalled();
     expect(acceptOffer).not.toHaveBeenCalled();
 
-    button('Install / enable').click();
+    button('Review installation').click();
     await vi.waitFor(() =>
       expect(root.querySelectorAll('.fm-semantic-offer-component')).toHaveLength(3),
     );
@@ -346,9 +350,11 @@ describe('SemanticComponentManagement', () => {
 
     mountComponent(client);
     await waitForLoaded();
-    button('Install / enable').click();
+    button('Review installation').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
-    button('Accept and install').click();
+    const acceptButton = button('Accept and install');
+    expect(acceptButton.classList).toContain('btn');
+    acceptButton.click();
 
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-action-error')?.textContent).toContain(

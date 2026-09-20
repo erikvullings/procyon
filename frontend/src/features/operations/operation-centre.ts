@@ -197,6 +197,29 @@ function itemProgressSummary(operation: Operation): string {
   return t('operation', 'itemsProgress', count).replace(String(count), displayedCount);
 }
 
+function estimatedTimeRemaining(operation: Operation): string | undefined {
+  const { completedBytes, totalBytes, bytesPerSecond } = operation.progress;
+  if (
+    operation.state !== 'running' ||
+    !hasValue(totalBytes) ||
+    !hasValue(bytesPerSecond) ||
+    bytesPerSecond <= 0 ||
+    completedBytes >= totalBytes
+  ) {
+    return undefined;
+  }
+  const totalSeconds = Math.ceil((totalBytes - completedBytes) / bytesPerSecond);
+  if (!Number.isFinite(totalSeconds)) return undefined;
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  const duration =
+    hours > 0
+      ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      : `${minutes}:${String(seconds).padStart(2, '0')}`;
+  return t('operation', 'eta', { duration });
+}
+
 /** Compact event-driven queue shown below the workspace panes. */
 export const OperationCentre: Component<OperationCentreAttrs> = {
   view: ({ attrs }) => {
@@ -228,6 +251,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                 operation.state === 'interrupted';
               const completedSuccessfully =
                 operation.state === 'completed' || operation.state === 'completedWithWarnings';
+              const eta = estimatedTimeRemaining(operation);
               return m(
                 'article.fm-operation',
                 { 'data-operation-id': operation.id, 'data-state': operation.state },
@@ -404,6 +428,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                     operation.state === 'paused'
                       ? button(t('button', 'resume'), 'resume', () => attrs.onResume(operation.id))
                       : undefined,
+                    eta === undefined ? undefined : m('span.fm-operation-eta', eta),
                   ]),
                 ],
               );

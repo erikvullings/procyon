@@ -18,7 +18,7 @@ use crate::{
 
 const MARKER_FILE: &str = ".procyon-semantic-qualification-profile";
 const MARKER_CONTENTS: &[u8] = b"procyon-semantic-qualification-profile-v1\n";
-const APP_DATA_SUFFIX: &str = "Library/Application Support/fm";
+const APP_DATA_SUFFIX: &str = "Library/Application Support/procyon";
 const ARTIFACT_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 const RESERVE_BYTES: u64 = 64 * 1024 * 1024;
 const SMALL_MEMBER_VERIFICATION_BYTES: u64 = 32 * 1024 * 1024;

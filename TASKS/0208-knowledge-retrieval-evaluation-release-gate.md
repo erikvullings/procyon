@@ -53,3 +53,7 @@ search across representative domains without optimizing only for TRIZ.
   tests, rustfmt, warning-free Clippy, Biome (pre-existing specificity warnings only), and final
   release-integrity review. The full script suite has one unrelated pre-existing failure because
   `scripts/architecture-docs.test.mjs` expects 11 ADRs while the repository currently contains 12.
+- 2026-09-20 Release owner: Requested that `v0.1.1` expose Structured Knowledge Search
+  experimentally despite the checked-in NO-GO. The workflow preserves that report unchanged,
+  labels the decision as an explicit release-owner override, and still runs every supported-platform
+  native Zvec migration and recovery precondition before packaging.

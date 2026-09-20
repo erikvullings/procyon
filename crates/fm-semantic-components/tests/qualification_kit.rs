@@ -60,13 +60,13 @@ fn cleanup_removes_only_a_marker_owned_profile_beneath_the_dedicated_home() {
 fn cleanup_rejects_home_normal_app_data_symlinks_and_unowned_profiles() {
     let root = project_temp_dir("qualification-rejections-");
     let home = root.path().join("dedicated-user");
-    fs::create_dir_all(home.join("Library/Application Support/fm")).unwrap();
+    fs::create_dir_all(home.join("Library/Application Support/procyon")).unwrap();
 
     for unsafe_path in [
         home.clone(),
         home.join("Library"),
-        home.join("Library/Application Support/fm"),
-        home.join("Library/Application Support/fm/nested-profile"),
+        home.join("Library/Application Support/procyon"),
+        home.join("Library/Application Support/procyon/nested-profile"),
         home.join("single-broad-directory"),
         root.path().join("outside"),
     ] {
@@ -119,7 +119,7 @@ fn install_uses_signed_exact_macos_payloads_and_release_layout() {
     assert_eq!(receipt.installed_artifact_count(), 3);
     assert_eq!(
         receipt.application_data(),
-        profile.join("Library/Application Support/fm")
+        profile.join("Library/Application Support/procyon")
     );
     assert!(
         receipt

@@ -225,7 +225,7 @@ async fn long_runtime_directory_starts_and_accepts_authenticated_connections() {
     let directory = test_directory("long-runtime-directory");
     let runtime = directory
         .join("qualification-profiles/procyon-semantic-alpha")
-        .join("Library/Application Support/fm/semantic/worker-runtime");
+        .join("Library/Application Support/procyon/semantic/worker-runtime");
     let endpoint = Endpoint::for_runtime_directory(&runtime);
     let secret = LaunchSecret::generate();
     let task =

@@ -401,6 +401,7 @@ export const en = {
     stateFailed: 'Failed',
     stateInterrupted: 'Interrupted',
     queuePosition: 'Queue position {position}',
+    eta: 'ETA {duration}',
     itemsProgress: { 1: '1 item', n: '{n} items' },
     filesFound: { 1: 'Found 1 file.', n: 'Found {n} files.' },
     entriesCompared: { 1: 'Compared 1 entry.', n: 'Compared {n} entries.' },
@@ -1215,7 +1216,7 @@ export const en = {
     recommended: 'Recommended',
     noProfiles: 'No model profiles are available from this host.',
     reviewInstallation: 'Review the complete signed offer before anything is downloaded.',
-    installEnableAction: 'Install / enable',
+    installEnableAction: 'Review installation',
     existingOffer:
       'A previous offer is pending. Create a fresh offer to review its complete current disclosure.',
     offerHeading: 'Installation disclosure',

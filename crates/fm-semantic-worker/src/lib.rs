@@ -989,8 +989,9 @@ mod developer_connector_tests {
     #[cfg(unix)]
     #[test]
     fn long_runtime_directories_use_a_short_per_user_socket_path() {
-        let runtime = Path::new("/Users/qualification-user/qualification-profiles")
-            .join("procyon-semantic-alpha/Library/Application Support/fm/semantic/worker-runtime");
+        let runtime = Path::new("/Users/qualification-user/qualification-profiles").join(
+            "procyon-semantic-alpha/Library/Application Support/procyon/semantic/worker-runtime",
+        );
 
         let Endpoint::Unix(path) = Endpoint::for_runtime_directory(&runtime);
 
