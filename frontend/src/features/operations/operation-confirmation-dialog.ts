@@ -2,13 +2,15 @@ import m, { type FactoryComponent } from 'mithril';
 import { AlertDialog, type ModalCloseReason } from 'mithril-materialized';
 import { arrowRightIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
-import type { Location } from '../../models';
+import type { Connection, Location } from '../../models';
+import { connectionForLocation } from '../connections/connections-model';
 import { parentLocation } from '../navigation/navigation';
 import { createDialogFocusCycle } from './dialog-focus';
 import type { OperationConfirmationRequest } from './operations-controller';
 
 export interface OperationConfirmationDialogAttrs {
   readonly request?: OperationConfirmationRequest;
+  readonly connections: readonly Connection[];
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }
@@ -30,22 +32,37 @@ function displayUri(uri: string): string {
   }
 }
 
+function displayLocation(location: Location, connections: readonly Connection[]): string {
+  const connection = connectionForLocation(location, connections);
+  if (connection === undefined) return displayUri(location.uri);
+  try {
+    return `${connection.name} · ${decodeURIComponent(new URL(location.uri).pathname)}`;
+  } catch {
+    return connection.name;
+  }
+}
+
 function itemCount(count: number): string {
   return t('operation', 'itemsProgress', count);
 }
 
-function transferDescription(request: OperationConfirmationRequest): m.Children {
+function transferDescription(
+  request: OperationConfirmationRequest,
+  connections: readonly Connection[],
+): m.Children {
   const destination = request.destination;
   if (destination === undefined) return undefined;
+  const destinationLabel = displayLocation(destination, connections);
   return m('.fm-operation-confirmation-description', [
     m('.fm-operation-confirmation-route', [
       m('.fm-operation-confirmation-endpoint.fm-operation-confirmation-source', [
         m('span.fm-operation-confirmation-label', t('operation', 'source')),
         m(
           '.fm-operation-confirmation-locations',
-          sourceDirectories(request.sources).map((location) =>
-            m('code', { title: displayUri(location.uri) }, displayUri(location.uri)),
-          ),
+          sourceDirectories(request.sources).map((location) => {
+            const label = displayLocation(location, connections);
+            return m('code', { title: label }, label);
+          }),
         ),
       ]),
       m(
@@ -55,7 +72,7 @@ function transferDescription(request: OperationConfirmationRequest): m.Children 
       ),
       m('.fm-operation-confirmation-endpoint', [
         m('span.fm-operation-confirmation-label', t('operation', 'destination')),
-        m('code', { title: displayUri(destination.uri) }, displayUri(destination.uri)),
+        m('code', { title: destinationLabel }, destinationLabel),
       ]),
     ]),
   ]);
@@ -86,7 +103,9 @@ export const OperationConfirmationDialog: FactoryComponent<
               },
             );
       const description =
-        request === undefined || kind === 'trash' ? undefined : transferDescription(request);
+        request === undefined || kind === 'trash'
+          ? undefined
+          : transferDescription(request, attrs.connections);
       return m(AlertDialog, {
         className: 'fm-operation-confirmation-modal',
         title,

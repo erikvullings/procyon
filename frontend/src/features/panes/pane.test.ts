@@ -367,6 +367,8 @@ describe('Pane inline rename', () => {
     expect(input?.value).toBe('one.txt');
     expect(input?.selectionStart).toBe(0);
     expect(input?.selectionEnd).toBe(3);
+    expect(input?.closest('.fm-directory-row')?.classList).not.toContain('fm-cursor-row');
+    expect(input?.closest('.fm-directory-name')?.querySelector('.fm-entry-icon')).not.toBeNull();
 
     if (input === null) throw new Error('rename input missing');
     input.value = '../bad';
@@ -389,6 +391,61 @@ describe('Pane inline rename', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onRename).toHaveBeenCalledWith(entries[0], 'renamed.txt');
     expect(document.activeElement).toBe(pane);
+  });
+
+  it('blocks folder navigation until inline rename is committed or cancelled', () => {
+    const onNavigate = vi.fn();
+    const onOpenEntry = vi.fn();
+    const onSelectTab = vi.fn();
+    mount(
+      attrs({
+        cursorIndex: 0,
+        selectedEntryIds: new Set(['one' as EntryId]),
+        tabs: [...defaultTabs, { id: 'tab-2' as TabId, title: 'other', path: '/home/other' }],
+        onNavigate,
+        onOpenEntry,
+        onSelectTab,
+      }),
+    );
+    const pane = root.querySelector<HTMLElement>('.fm-pane');
+    pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    m.redraw.sync();
+
+    root.querySelector<HTMLButtonElement>('.fm-breadcrumb-segment')?.click();
+    root
+      .querySelector<HTMLElement>('.fm-directory-row[data-entry-index="1"]')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    root.querySelector<HTMLElement>('[data-tab-id="tab-2"]')?.click();
+
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(onOpenEntry).not.toHaveBeenCalled();
+    expect(onSelectTab).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-inline-rename-input')).not.toBeNull();
+
+    root
+      .querySelector<HTMLInputElement>('.fm-inline-rename-input')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-breadcrumb-segment')?.click();
+    expect(onNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('discards stale inline rename state after an external navigation', () => {
+    const initial = attrs({
+      cursorIndex: 0,
+      selectedEntryIds: new Set(['one' as EntryId]),
+    });
+    const rerender = mountUpdating(initial);
+    root
+      .querySelector<HTMLElement>('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-inline-rename-input')).not.toBeNull();
+
+    rerender({ ...initial, path: '/home/other', tabTitle: 'other' });
+    rerender(initial);
+
+    expect(root.querySelector('.fm-inline-rename-input')).toBeNull();
   });
 
   describe('Pane context menu', () => {

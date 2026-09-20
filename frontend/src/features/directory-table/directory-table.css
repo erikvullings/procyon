@@ -308,8 +308,9 @@ img.fm-native-entry-icon {
 
 .fm-directory-cell > input[type="text"]:not(.browser-default).fm-inline-rename-input {
   box-sizing: border-box;
-  width: 100%;
+  width: auto;
   min-width: 0;
+  flex: 1 1 auto;
   padding: 0;
   color: var(--fm-text);
   font-family: var(--fm-font-family);

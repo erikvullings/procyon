@@ -1,6 +1,6 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Location } from '../../models';
+import type { Connection, Location } from '../../models';
 import { OperationConfirmationDialog } from './operation-confirmation-dialog';
 
 const source: Location = {
@@ -8,6 +8,28 @@ const source: Location = {
   uri: 'file:///source%20folder%23one/source%20file.txt',
 };
 const destination: Location = { providerId: 'local', uri: 'file:///target%20folder' };
+const remoteDestination: Location = {
+  providerId: 'sftp',
+  uri: 'sftp://connection-id/target%20folder',
+};
+const connection: Connection = {
+  id: 'connection-id',
+  name: 'Home Assistant',
+  kind: 'ssh',
+  configuration: {
+    kind: 'ssh',
+    host: 'homeassistant.local',
+    port: 22,
+    username: 'root',
+    authentication: 'agent',
+    hostKeyPolicy: 'promptOnFirstUse',
+    startPath: '/mnt/kingston',
+  },
+  status: 'connected',
+  hasCredential: false,
+  createdAt: '2026-09-20T10:00:00Z',
+  updatedAt: '2026-09-20T10:00:00Z',
+};
 let root: HTMLElement;
 
 beforeEach(() => {
@@ -27,6 +49,7 @@ describe('OperationConfirmationDialog', () => {
       view: () =>
         m(OperationConfirmationDialog, {
           request: { kind: 'copy', sources: [source], destination },
+          connections: [],
           onConfirm,
           onCancel: vi.fn(),
         }),
@@ -68,8 +91,9 @@ describe('OperationConfirmationDialog', () => {
               { providerId: 'sftp', uri: 'sftp://connection-id/incoming/remote.txt' },
               { providerId: 'local', uri: 'file:///source%20folder%23one/other.txt' },
             ],
-            destination,
+            destination: remoteDestination,
           },
+          connections: [connection],
           onConfirm: vi.fn(),
           onCancel: vi.fn(),
         }),
@@ -82,7 +106,13 @@ describe('OperationConfirmationDialog', () => {
     const sourceLocations = [
       ...document.querySelectorAll('.fm-operation-confirmation-source code'),
     ].map((element) => element.textContent);
-    expect(sourceLocations).toEqual(['file:///source folder#one', 'sftp://connection-id/incoming']);
+    expect(sourceLocations).toEqual(['file:///source folder#one', 'Home Assistant · /incoming']);
+    expect(
+      dialog?.querySelector(
+        '.fm-operation-confirmation-endpoint:not(.fm-operation-confirmation-source) code',
+      )?.textContent,
+    ).toBe('Home Assistant · /target folder');
+    expect(dialog?.textContent).not.toContain('connection-id');
   });
 
   it('marks Trash as destructive and can be cancelled', () => {
@@ -91,6 +121,7 @@ describe('OperationConfirmationDialog', () => {
       view: () =>
         m(OperationConfirmationDialog, {
           request: { kind: 'trash', sources: [source] },
+          connections: [],
           onConfirm: vi.fn(),
           onCancel,
         }),

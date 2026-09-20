@@ -43,6 +43,38 @@ const MIN_COLUMN_WIDTH = 60;
  * small, since a tiny real image is still a legible preview of itself. */
 const LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS = new Set(['pdf', 'mp4', 'm4v', 'mov', 'cbz', 'cbr']);
 
+function listEntryIcon(
+  entry: EntrySummary,
+  nativeIconLoader?: NativeIconLoader,
+  thumbnailLoader?: ThumbnailLoader,
+): m.Children {
+  const skipThumbnail = LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS.has(
+    (entry.extension ?? '').toLocaleLowerCase(),
+  );
+  const thumbnailDataUri = skipThumbnail
+    ? undefined
+    : thumbnailLoader?.thumbnailDataUri(entry, 'small');
+  if (thumbnailDataUri !== undefined) {
+    return m('img.fm-entry-icon.fm-thumbnail-entry-icon', {
+      src: thumbnailDataUri,
+      width: 16,
+      height: 16,
+      alt: '',
+      'aria-hidden': 'true',
+    });
+  }
+  const nativeIconDataUri = nativeIconLoader?.iconDataUri(entry);
+  return nativeIconDataUri === undefined
+    ? entryIcon(entry, { className: 'fm-entry-icon' })
+    : m('img.fm-entry-icon.fm-native-entry-icon', {
+        src: nativeIconDataUri,
+        width: 16,
+        height: 16,
+        alt: '',
+        'aria-hidden': 'true',
+      });
+}
+
 /** A single column's persisted width, keyed by column id. */
 export interface ColumnWidthEntry {
   readonly columnId: string;
@@ -319,30 +351,8 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
         nameMatchPrefix === undefined
           ? -1
           : name.toLocaleLowerCase().indexOf(nameMatchPrefix.toLocaleLowerCase());
-      const skipThumbnail = LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS.has(
-        (entry.extension ?? '').toLocaleLowerCase(),
-      );
-      const thumbnailDataUri = skipThumbnail
-        ? undefined
-        : thumbnailLoader?.thumbnailDataUri(entry, 'small');
       return [
-        thumbnailDataUri !== undefined
-          ? m('img.fm-entry-icon.fm-thumbnail-entry-icon', {
-              src: thumbnailDataUri,
-              width: 16,
-              height: 16,
-              alt: '',
-              'aria-hidden': 'true',
-            })
-          : nativeIconLoader?.iconDataUri(entry) === undefined
-            ? entryIcon(entry, { className: 'fm-entry-icon' })
-            : m('img.fm-entry-icon.fm-native-entry-icon', {
-                src: nativeIconLoader.iconDataUri(entry),
-                width: 16,
-                height: 16,
-                alt: '',
-                'aria-hidden': 'true',
-              }),
+        listEntryIcon(entry, nativeIconLoader, thumbnailLoader),
         m(searchResult ? 'span.fm-entry-name.fm-search-result' : 'span.fm-entry-name', [
           searchResult && resultParentPath !== undefined && displayedParentPath !== undefined
             ? m(
@@ -955,7 +965,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 ondblclick: () => attrs.onActivate?.(index),
                 class: [
                   entry.hidden ? 'fm-hidden-entry' : '',
-                  cursor ? 'fm-cursor-row' : '',
+                  cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
                   attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
                   dragTargetIndex === index ? 'fm-drop-target' : '',
@@ -973,6 +983,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   { key: column.id, role: 'gridcell' },
                   column.id === 'core.name' && attrs.renamingEntryId === entry.id
                     ? [
+                        listEntryIcon(entry, attrs.nativeIconLoader, attrs.thumbnailLoader),
                         m('input[type=text].fm-inline-rename-input', {
                           value: attrs.renameValue ?? entry.name,
                           'aria-label': t('table', 'rename', { name: entry.name }),

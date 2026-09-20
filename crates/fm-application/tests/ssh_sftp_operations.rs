@@ -234,6 +234,30 @@ async fn local_to_sftp_move_copies_then_deletes_the_source() {
 }
 
 #[tokio::test]
+async fn sftp_rename_runs_through_the_real_operation_engine() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let service = service(&root);
+    let fixture = SshFixture::start().await;
+    let connection_id = register_and_trust_connection(&service, &fixture).await;
+    fs::write(fixture.path("old-name.txt"), b"rename through operation").unwrap();
+
+    let operation = run_transfer(
+        &service,
+        OperationKindDto::Rename,
+        sftp_location(connection_id, "old-name.txt"),
+        sftp_location(connection_id, "new-name.txt"),
+    )
+    .await;
+
+    assert_eq!(operation.state, OperationStateDto::Completed);
+    assert!(!fixture.path("old-name.txt").exists());
+    assert_eq!(
+        fs::read(fixture.path("new-name.txt")).unwrap(),
+        b"rename through operation"
+    );
+}
+
+#[tokio::test]
 async fn sftp_to_local_copy_streams_through_the_real_operation_engine() {
     let root = tempfile::tempdir().expect("temporary root");
     let service = service(&root);

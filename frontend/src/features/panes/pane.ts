@@ -541,6 +541,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
 
   const typeaheadCtrl = createTypeaheadController(() => m.redraw());
   const renameCtrl = createRenameEditingController();
+  let renameContext: { readonly path: string; readonly tabId: TabId } | undefined;
   /** Selection just before the current keystroke, for the Numpad `/` "restore" shortcut. */
   let previousSelectionSnapshot: readonly EntryId[] = [];
 
@@ -577,7 +578,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   }
 
   async function navigateFavourite(location: Location, attrs: PaneAttrs): Promise<void> {
-    if (attrs.favourites.onNavigateLocation === undefined) return;
+    if (renameCtrl.entry !== undefined || attrs.favourites.onNavigateLocation === undefined) return;
     const previousFocus = favouritesPreviousFocus;
     closeFavourites();
     m.redraw();
@@ -633,10 +634,17 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
     const entry = attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
     if (entry === undefined || isParentEntry(entry.id)) return;
     renameCtrl.open(entry);
+    renameContext = { path: attrs.path, tabId: attrs.activeTabId };
     m.redraw();
   }
 
+  function cancelRename(): void {
+    renameCtrl.cancel();
+    renameContext = undefined;
+  }
+
   function beginEditing(path: string): void {
+    if (renameCtrl.entry !== undefined) return;
     editing = true;
     draftPath = path;
     m.redraw();
@@ -648,6 +656,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   }
 
   async function navigate(path: string, attrs: PaneAttrs, fromEditor: boolean): Promise<void> {
+    if (renameCtrl.entry !== undefined) return;
     if (!isAcceptedPath(path)) {
       if (fromEditor) editing = false;
       toast({ html: t('pane', 'unableToOpenPath') });
@@ -669,6 +678,12 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       typeaheadCtrl.clearTimer();
     },
     view: ({ attrs }) => {
+      if (
+        renameCtrl.entry !== undefined &&
+        (renameContext?.path !== attrs.path || renameContext.tabId !== attrs.activeTabId)
+      ) {
+        cancelRename();
+      }
       if (attrs.viewerContent !== undefined) {
         return m(
           'section.fm-pane.fm-pane-viewer',
@@ -770,6 +785,10 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
           },
           onkeydown: (event: KeyboardEvent) => {
             if (isEditableTarget(event.target)) return;
+            if (renameCtrl.entry !== undefined) {
+              event.preventDefault();
+              return;
+            }
             previousSelectionSnapshot = [...attrs.selectedEntryIds];
             if (
               hasPrimaryModifier(event, attrs.platform) &&
@@ -1006,6 +1025,10 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             }
           },
           onmouseup: (event: MouseEvent) => {
+            if (renameCtrl.entry !== undefined) {
+              event.preventDefault();
+              return;
+            }
             if (event.button === 3) {
               event.preventDefault();
               void attrs.navigation.onBack();
@@ -1020,14 +1043,21 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             paneId: attrs.paneId,
             tabs: attrs.tabs,
             activeTabId: attrs.activeTabId,
-            onSelectTab: attrs.onSelectTab,
-            onCloseTab: attrs.onCloseTab,
-            onNewTab: attrs.onNewTab,
+            onSelectTab: (tabId) => {
+              if (renameCtrl.entry === undefined) attrs.onSelectTab(tabId);
+            },
+            onCloseTab: (tabId) => {
+              if (renameCtrl.entry === undefined) attrs.onCloseTab(tabId);
+            },
+            onNewTab: () => {
+              if (renameCtrl.entry === undefined) attrs.onNewTab();
+            },
             onMoveTab: attrs.onMoveTab,
             onTabDragOver: attrs.onTabDragOver,
             onTabDrop: attrs.onTabDrop,
             favouritesOpen,
             onToggleFavourites: () => {
+              if (renameCtrl.entry !== undefined) return;
               if (favouritesOpen) closeFavourites();
               else openFavourites(attrs);
               m.redraw();
@@ -1439,8 +1469,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                               'button.fm-breadcrumb-scheme',
                               {
                                 type: 'button',
-                                onclick: () =>
-                                  void attrs.favourites.onNavigateLocation?.(breadcrumbRoot),
+                                onclick: () => void navigateFavourite(breadcrumbRoot, attrs),
                               },
                               `${remoteScheme}://`,
                             ),
@@ -1499,7 +1528,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 {
                   className: 'fm-pane-tab-new',
                   'aria-label': t('pane', 'newTab'),
-                  onclick: () => attrs.onNewTab(),
+                  onclick: () => {
+                    if (renameCtrl.entry === undefined) attrs.onNewTab();
+                  },
                 },
                 plusIcon({ size: 16 }),
               ),
@@ -1685,6 +1716,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               onRetry: () => void attrs.onRetry(),
               onEndReached: () => void attrs.onLoadNextPage(),
               onCursorChange: (index: number, modifiers?: CursorClickModifiers) => {
+                if (renameCtrl.entry !== undefined) return;
                 const entry = attrs.entries[index];
                 if (entry === undefined) return;
                 // A mouse click only ever changed selection *state* - nothing moved real DOM focus
@@ -1709,6 +1741,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 }
               },
               onActivate: (index: number) => {
+                if (renameCtrl.entry !== undefined) return;
                 const entry = attrs.entries[index];
                 if (entry !== undefined) {
                   void attrs.onOpenEntry(entry);
@@ -1825,12 +1858,13 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     renameCtrl.updateValue(value);
                   },
                   onRenameCancel: () => {
-                    renameCtrl.cancel();
+                    cancelRename();
                     m.redraw();
                   },
                   onRenameCommit: () => {
                     const committed = renameCtrl.commit();
                     if (committed !== undefined) {
+                      renameContext = undefined;
                       void attrs.onRename(committed.entry, committed.name);
                       m.redraw.sync();
                       sectionElement?.focus();

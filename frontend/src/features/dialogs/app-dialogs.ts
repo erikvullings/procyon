@@ -181,6 +181,7 @@ export function renderAppDialogs(
   return [
     m(OperationConfirmationDialog, {
       ...(operationConfirmation === undefined ? {} : { request: operationConfirmation }),
+      connections: ctx.getConnections(),
       onConfirm: () => ctx.resolveOperationConfirmation(true),
       onCancel: () => ctx.resolveOperationConfirmation(false),
     }),
