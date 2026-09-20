@@ -3446,6 +3446,7 @@ dependencies = [
  "criterion",
  "fm-domain",
  "fm-vfs",
+ "fs2",
  "futures",
  "notify",
  "tempfile",

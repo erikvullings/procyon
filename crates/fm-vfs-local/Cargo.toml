@@ -11,6 +11,7 @@ async-trait.workspace = true
 chrono.workspace = true
 fm-domain.workspace = true
 fm-vfs = { path = "../fm-vfs" }
+fs2.workspace = true
 futures.workspace = true
 notify.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "sync", "time"] }

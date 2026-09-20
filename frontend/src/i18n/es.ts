@@ -334,8 +334,11 @@ export const es = {
     destination: 'Destino',
     conflictRecommendation:
       'Opción más segura: cambia el nombre del elemento entrante para conservar ambos.',
-    failureRecovery:
-      'Comprueba el acceso y el espacio disponible y, después, vuelve a ejecutar la operación.',
+    failureRecovery: 'Revisa el error anterior y vuelve a ejecutar la operación.',
+    failureRecoveryPermissionDenied:
+      'Procyon no puede escribir en el destino. Elige una carpeta con permisos de escritura o actualiza sus permisos.',
+    failureRecoveryInsufficientSpace:
+      'El destino no tiene suficiente espacio disponible. Libera espacio o elige otro destino.',
     createDirectory: 'Crear directorio',
     createDirectoryName: 'Nombre del directorio',
     createFile: 'Crear archivo',

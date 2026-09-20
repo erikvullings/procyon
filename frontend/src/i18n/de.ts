@@ -338,8 +338,11 @@ export const de = {
     destination: 'Ziel',
     conflictRecommendation:
       'Sicherste Wahl: Das eingehende Element umbenennen, um beide zu behalten.',
-    failureRecovery:
-      'Zugriff und verfügbaren Speicherplatz prüfen, dann den Vorgang erneut ausführen.',
+    failureRecovery: 'Prüfen Sie den Fehler oben und führen Sie den Vorgang erneut aus.',
+    failureRecoveryPermissionDenied:
+      'Procyon kann nicht in das Ziel schreiben. Wählen Sie einen beschreibbaren Ordner oder ändern Sie die Berechtigungen.',
+    failureRecoveryInsufficientSpace:
+      'Am Ziel ist nicht genügend Speicherplatz verfügbar. Geben Sie Speicherplatz frei oder wählen Sie ein anderes Ziel.',
     createDirectory: 'Verzeichnis erstellen',
     createDirectoryName: 'Verzeichnisname',
     createFile: 'Datei erstellen',

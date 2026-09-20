@@ -593,15 +593,6 @@ export function createNavigationController(
     const previousView = paneViews.get(tabKey(paneId, tab.id));
     const request = begin(paneId, tab.id, 'navigate');
     publish(paneId, tab.id, loadingView(paneId, tab.id, request, location ?? tab.location));
-    const command: WorkspaceCommand = {
-      type: 'navigateTab',
-      workspaceId: workspace.id,
-      paneId,
-      tabId: tab.id,
-      navigationMode,
-      expectedRevision: workspace.revision,
-      ...(location === undefined ? {} : { location }),
-    };
     const navigatePane = async (
       currentWorkspaceId: string,
       currentPaneId: PaneId,
@@ -648,6 +639,16 @@ export function createNavigationController(
       if (!isCurrent(paneId, tab.id, request)) {
         return;
       }
+      const resolvedLocation = pendingSnapshot?.location ?? location;
+      const command: WorkspaceCommand = {
+        type: 'navigateTab',
+        workspaceId: workspace.id,
+        paneId,
+        tabId: tab.id,
+        navigationMode,
+        expectedRevision: workspace.revision,
+        ...(resolvedLocation === undefined ? {} : { location: resolvedLocation }),
+      };
       // Goes through the resilient wrapper (not the raw client call) so a revision conflict
       // still resyncs the local workspace projection via `options.replaceWorkspace` even though
       // push/back/forward navigation isn't safe to silently retry — otherwise the local revision

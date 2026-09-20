@@ -278,9 +278,16 @@ describe('OperationCentre states', () => {
       sources: [
         {
           id: 'report',
-          location: { providerId: 'local', uri: 'file:///Documents/report.pdf' },
+          location: {
+            providerId: 'local',
+            uri: 'file:///Documents/The%20Report%20%282026%29.pdf',
+          },
         },
       ],
+      destination: {
+        providerId: 'sftp',
+        uri: 'sftp://server/home/demo/The%20Report%20%282026%29.pdf',
+      },
     };
     m.mount(root, {
       view: () =>
@@ -305,11 +312,46 @@ describe('OperationCentre states', () => {
     const failure = root.querySelector('[data-operation-id="failed"] .fm-operation-failure');
     expect(failure?.getAttribute('role')).toBe('alert');
     expect(failure?.textContent).toContain('Could not copy report.pdf.');
-    expect(failure?.textContent).toContain('file:///Documents/report.pdf');
-    expect(failure?.textContent).toContain('file:///Archive');
+    expect(failure?.textContent).toContain('file:///Documents/The Report (2026).pdf');
+    expect(failure?.textContent).toContain('sftp://server/home/demo/The Report (2026).pdf');
+    expect(failure?.textContent).not.toContain('%20');
+    expect(failure?.textContent).not.toContain('%28');
     expect(failure?.textContent).toContain(
-      'Check access and available space, then run the operation again.',
+      'Procyon cannot write to the destination. Choose a writable folder or update its permissions.',
     );
+  });
+
+  it.each([
+    [
+      'insufficientSpace',
+      'The destination does not have enough available space. Free space or choose another destination.',
+    ],
+    ['operationFailed', 'Review the error above, then run the operation again.'],
+  ])('shows recovery guidance for %s failures', (code, recovery) => {
+    const failed = operation('failed');
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: {
+            ...createOperationsState([failed]),
+            failuresById: {
+              failed: {
+                code,
+                message: 'Could not copy report.pdf.',
+              },
+            },
+          },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(
+      root.querySelector('[data-operation-id="failed"] .fm-operation-failure-recovery')
+        ?.textContent,
+    ).toBe(recovery);
   });
 
   it('makes partial results explicit for a cancelled operation', () => {

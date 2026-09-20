@@ -250,6 +250,52 @@ impl From<ExecutionError> for SchedulerError {
     }
 }
 
+impl ExecutionError {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::Provider(error) => error.code(),
+            _ => "operationFailed",
+        }
+    }
+}
+
+impl SchedulerError {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::Execution(error) => error.code(),
+            _ => "operationFailed",
+        }
+    }
+}
+
+#[cfg(test)]
+mod error_code_tests {
+    use super::{ExecutionError, SchedulerError};
+
+    #[test]
+    fn provider_failure_codes_survive_scheduler_wrapping() {
+        let error = SchedulerError::from(ExecutionError::Provider(
+            fm_vfs::VfsError::PermissionDenied {
+                location: "file:///read-only".to_owned(),
+            },
+        ));
+
+        assert_eq!(error.code(), "permissionDenied");
+    }
+
+    #[test]
+    fn insufficient_space_has_a_stable_operation_failure_code() {
+        let error = SchedulerError::from(ExecutionError::Provider(
+            fm_vfs::VfsError::InsufficientSpace {
+                available: Some(100),
+                required: Some(200),
+            },
+        ));
+
+        assert_eq!(error.code(), "insufficientSpace");
+    }
+}
+
 #[derive(Debug, Clone)]
 struct PendingConflict {
     conflict: OperationConflict,
@@ -399,12 +445,12 @@ impl Scheduler {
                     if let Err(cleanup_error) =
                         scheduler.finish_cancelled(&job, executor.as_ref()).await
                     {
-                        scheduler.fail_job(&job, &cleanup_error.to_string());
+                        scheduler.fail_job(&job, cleanup_error.code(), &cleanup_error.to_string());
                     }
                 } else {
                     let snapshot = job.snapshot();
                     let _ = executor.cleanup_partial(&snapshot).await;
-                    scheduler.fail_job(&job, &error.to_string());
+                    scheduler.fail_job(&job, error.code(), &error.to_string());
                 }
             }
             job.completed.notify_waiters();
@@ -841,7 +887,7 @@ impl Scheduler {
         );
     }
 
-    fn fail_job(&self, job: &Job, message: &str) {
+    fn fail_job(&self, job: &Job, code: &str, message: &str) {
         let mut state = job.lock();
         if !state.operation.state.is_terminal() {
             if state.operation.state == OperationState::Cancelling {
@@ -854,7 +900,7 @@ impl Scheduler {
             EventAudience::Global,
             BackendEventPayload::OperationFailed {
                 operation_id: state.operation.id,
-                code: "operationFailed".into(),
+                code: code.into(),
                 message: message.into(),
             },
         );
