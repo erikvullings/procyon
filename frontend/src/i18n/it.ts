@@ -402,6 +402,7 @@ export const it = {
     stateFailed: 'Non riuscito',
     stateInterrupted: 'Interrotto',
     queuePosition: 'Posizione in coda {position}',
+    eta: 'Tempo restante {duration}',
     itemsProgress: { 1: '1 elemento', n: '{n} elementi' },
     filesFound: { 1: '1 file trovato.', n: '{n} file trovati.' },
     entriesCompared: { 1: '1 elemento confrontato.', n: '{n} elementi confrontati.' },

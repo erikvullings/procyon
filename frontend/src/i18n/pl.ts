@@ -400,6 +400,7 @@ export const pl = {
     stateFailed: 'Niepowodzenie',
     stateInterrupted: 'Przerwano',
     queuePosition: 'Pozycja w kolejce {position}',
+    eta: 'Pozostało {duration}',
     itemsProgress: { 1: '1 element', n: '{n} elementów' },
     filesFound: { 1: 'Znaleziono 1 plik.', n: 'Znaleziono {n} plików.' },
     entriesCompared: { 1: 'Porównano 1 element.', n: 'Porównano {n} elementów.' },

@@ -404,6 +404,7 @@ export const fr = {
     stateFailed: 'Échoué',
     stateInterrupted: 'Interrompu',
     queuePosition: 'Position dans la file : {position}',
+    eta: 'Temps restant {duration}',
     itemsProgress: { 1: '1 élément', n: '{n} éléments' },
     filesFound: { 1: '1 fichier trouvé.', n: '{n} fichiers trouvés.' },
     entriesCompared: { 1: '1 élément comparé.', n: '{n} éléments comparés.' },

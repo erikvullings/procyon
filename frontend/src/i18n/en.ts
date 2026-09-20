@@ -401,6 +401,7 @@ export const en = {
     stateFailed: 'Failed',
     stateInterrupted: 'Interrupted',
     queuePosition: 'Queue position {position}',
+    eta: 'ETA {duration}',
     itemsProgress: { 1: '1 item', n: '{n} items' },
     filesFound: { 1: 'Found 1 file.', n: 'Found {n} files.' },
     entriesCompared: { 1: 'Compared 1 entry.', n: 'Compared {n} entries.' },

@@ -2033,6 +2033,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
   min-width: 0;
   flex-wrap: wrap;
   row-gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .fm-operation-summary strong {
@@ -2087,6 +2088,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-operation-controls {
   margin-top: auto;
+}
+
+.fm-operation-eta {
+  margin-left: auto;
+  color: var(--fm-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .fm-operation-result {

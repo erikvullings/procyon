@@ -407,6 +407,7 @@ export const nl = {
     stateFailed: 'Mislukt',
     stateInterrupted: 'Onderbroken',
     queuePosition: 'Wachtrijpositie {position}',
+    eta: 'Resterend {duration}',
     itemsProgress: { 1: '1 item', n: '{n} items' },
     filesFound: { 1: '1 bestand gevonden.', n: '{n} bestanden gevonden.' },
     entriesCompared: { 1: '1 item vergeleken.', n: '{n} items vergeleken.' },
