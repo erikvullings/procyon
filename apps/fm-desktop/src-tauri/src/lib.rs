@@ -89,7 +89,7 @@ pub fn run() {
                 fm_application::workspace::JsonFileWorkspaceRepository::default_directory();
             let app_data_directory = workspace_directory
                 .parent()
-                .unwrap_or_else(|| std::path::Path::new(".fm-config/fm"))
+                .unwrap_or_else(|| std::path::Path::new(".procyon-config/procyon"))
                 .to_path_buf();
             let resource_directory = app.path().resource_dir().ok();
             #[cfg(not(debug_assertions))]
@@ -510,10 +510,10 @@ fn init_tracing() {
 
     let format = std::env::var("FM_LOG_FORMAT").unwrap_or_default();
     let log_file = std::env::var("FM_LOG_FILE").ok().or_else(|| {
-        // Default desktop log location: OS data dir / fm / fm-desktop.log
+        // Default desktop log location: OS data dir / procyon / procyon-desktop.log
         dirs::data_dir().map(|d| {
-            d.join("fm")
-                .join("fm-desktop.log")
+            d.join("procyon")
+                .join("procyon-desktop.log")
                 .to_string_lossy()
                 .into_owned()
         })

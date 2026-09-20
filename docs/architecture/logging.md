@@ -238,9 +238,9 @@ async fn test_with_logging() {
 Desktop mode writes a rolling daily log by default under the operating system's application-data
 directory:
 
-- macOS: `~/Library/Application Support/fm/fm-desktop.log.YYYY-MM-DD`
-- Windows: `%APPDATA%\fm\fm-desktop.log.YYYY-MM-DD`
-- Linux: `~/.local/share/fm/fm-desktop.log.YYYY-MM-DD`
+- macOS: `~/Library/Application Support/procyon/procyon-desktop.log.YYYY-MM-DD`
+- Windows: `%APPDATA%\procyon\procyon-desktop.log.YYYY-MM-DD`
+- Linux: `~/.local/share/procyon/procyon-desktop.log.YYYY-MM-DD`
 
 ### Environment Setup
 
@@ -248,7 +248,7 @@ Add to `.env` or launch script:
 
 ```bash
 export RUST_LOG=info,fm_server=debug
-export FM_LOG_FILE=$HOME/.local/share/fm/fm-desktop.log
+export FM_LOG_FILE=$HOME/.local/share/procyon/procyon-desktop.log
 ```
 
 ## Browser Mode (Server)

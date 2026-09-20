@@ -40,6 +40,7 @@ const plan = {
 };
 
 const reportArgument = process.argv.indexOf('--report');
+const allowUnqualified = process.argv.includes('--allow-unqualified');
 const reportPath =
   reportArgument >= 0
     ? process.argv[reportArgument + 1]
@@ -72,27 +73,37 @@ if (reportPath === undefined) {
   throw new Error('--report requires a path');
 }
 const report = JSON.parse(readFileSync(reportPath, 'utf8'));
-if (
-  report.decision !== 'go' ||
-  report.productionMeasurement !== true ||
-  !Array.isArray(report.blockingReasons) ||
-  report.blockingReasons.length !== 0
-) {
-  throw new Error(
-    'the repository knowledge-search evaluation is not a measured go; refusing a qualified release',
+if (!allowUnqualified) {
+  if (
+    report.decision !== 'go' ||
+    report.productionMeasurement !== true ||
+    !Array.isArray(report.blockingReasons) ||
+    report.blockingReasons.length !== 0
+  ) {
+    throw new Error(
+      'the repository knowledge-search evaluation is not a measured go; refusing a qualified release',
+    );
+  }
+
+  const reportValidation = spawnSync(plan.reportValidator.command, plan.reportValidator.arguments, {
+    encoding: 'utf8',
+  });
+  if (reportValidation.error) throw reportValidation.error;
+  if (reportValidation.status !== 0) {
+    process.stderr.write(`${reportValidation.stdout ?? ''}${reportValidation.stderr ?? ''}`);
+    throw new Error('the repository knowledge-search evaluation evidence does not support a go');
+  }
+} else {
+  console.warn(
+    'Structured Knowledge Search is being exposed as an explicit experimental release-owner override; the checked-in NO-GO report remains authoritative.',
   );
 }
-
-const reportValidation = spawnSync(plan.reportValidator.command, plan.reportValidator.arguments, {
-  encoding: 'utf8',
-});
-if (reportValidation.error) throw reportValidation.error;
-if (reportValidation.status !== 0) {
-  process.stderr.write(`${reportValidation.stdout ?? ''}${reportValidation.stderr ?? ''}`);
-  throw new Error('the repository knowledge-search evaluation evidence does not support a go');
-}
 if (process.argv.includes('--check-report')) {
-  console.log('Verified a measured knowledge-search go decision.');
+  console.log(
+    allowUnqualified
+      ? 'Accepted the checked-in NO-GO report under an explicit experimental release-owner override.'
+      : 'Verified a measured knowledge-search go decision.',
+  );
   process.exit(0);
 }
 

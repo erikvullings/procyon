@@ -25,7 +25,7 @@ if (decision !== '' && decision !== 'true' && decision !== 'false') {
 if (decision === 'true') {
   appendFileSync(environmentFile, 'PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true\n');
   console.log(
-    'Structured Knowledge Search is production visible: a measured go decision was recorded.',
+    'Structured Knowledge Search is visible in this build by explicit release configuration.',
   );
 } else {
   console.log(

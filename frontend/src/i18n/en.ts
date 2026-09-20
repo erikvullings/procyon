@@ -1215,7 +1215,7 @@ export const en = {
     recommended: 'Recommended',
     noProfiles: 'No model profiles are available from this host.',
     reviewInstallation: 'Review the complete signed offer before anything is downloaded.',
-    installEnableAction: 'Install / enable',
+    installEnableAction: 'Review installation',
     existingOffer:
       'A previous offer is pending. Create a fresh offer to review its complete current disclosure.',
     offerHeading: 'Installation disclosure',

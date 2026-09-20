@@ -759,6 +759,25 @@ impl ProductionEvaluationReport {
         corpus: &ProductionEvaluationCorpus,
         evidence_policy: ProductionEvidencePolicy,
     ) -> Result<(), ProductionEvaluationError> {
+        self.validate_for_policy_and_candidate(
+            corpus,
+            evidence_policy,
+            &release_candidate_fingerprint(),
+        )
+    }
+
+    /// Recomputes a report against an immutable, independently released candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the report, requested policy, candidate fingerprint, or evidence
+    /// is invalid.
+    pub fn validate_for_policy_and_candidate(
+        &self,
+        corpus: &ProductionEvaluationCorpus,
+        evidence_policy: ProductionEvidencePolicy,
+        release_candidate_fingerprint: &str,
+    ) -> Result<(), ProductionEvaluationError> {
         if self.evidence_policy != evidence_policy {
             return Err(ProductionEvaluationError::InvalidReport(
                 "the report evidence policy does not match the requested release policy".into(),
@@ -772,11 +791,10 @@ impl ProductionEvaluationReport {
         }
         if self.corpus_id != corpus.corpus_id
             || self.corpus_fingerprint != corpus.fingerprint()
-            || self.release_candidate_fingerprint != release_candidate_fingerprint()
+            || self.release_candidate_fingerprint != release_candidate_fingerprint
         {
             return Err(ProductionEvaluationError::InvalidReport(
-                "the report is stale or does not match the current corpus and implementation"
-                    .into(),
+                "the report does not match the requested corpus and release candidate".into(),
             ));
         }
         if self.measurement_basis.trim().is_empty() {
@@ -2495,13 +2513,21 @@ mod tests {
             "../../../docs/evaluations/semantic-production-v1.json"
         ))
         .expect("checked-in semantic report");
-        assert_eq!(
-            report.release_candidate_fingerprint,
-            release_candidate_fingerprint()
-        );
+        let component_lock: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/evaluations/semantic-component-release-v1.json"
+        ))
+        .expect("checked-in semantic component lock");
+        let approved_candidate = component_lock["releaseCandidateFingerprint"]
+            .as_str()
+            .expect("component lock candidate fingerprint");
+        assert_eq!(report.release_candidate_fingerprint, approved_candidate);
         report
-            .validate(&corpus)
-            .expect("current fail-closed report");
+            .validate_for_policy_and_candidate(
+                &corpus,
+                ProductionEvidencePolicy::ExperimentalAlpha,
+                approved_candidate,
+            )
+            .expect("approved independent semantic release report");
         assert_eq!(
             report.production_measurement,
             report.decision == ProductionEvaluationDecision::Go

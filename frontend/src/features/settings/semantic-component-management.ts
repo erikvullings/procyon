@@ -472,7 +472,7 @@ function offerView(
     ]),
     m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
     m(
-      'button.fm-semantic-action.fm-semantic-accept',
+      'button.btn.fm-semantic-action.fm-semantic-accept',
       {
         type: 'button',
         disabled: busy !== undefined,
@@ -1084,7 +1084,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               offer = undefined;
             }),
             m(
-              'button.fm-semantic-action',
+              'button.btn.fm-semantic-action',
               {
                 type: 'button',
                 disabled: busy !== undefined || profiles.length === 0,

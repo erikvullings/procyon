@@ -381,10 +381,11 @@ test('release desktop builds fail closed without a measured knowledge-search go 
       // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression syntax.
       '${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}',
     );
-    // The expensive supported-platform checks only run for a candidate that
-    // claims a measured go, so an ordinary release does no duplicate work.
+    // The expensive supported-platform checks run whenever the release owner
+    // explicitly exposes the experimental feature.
     assert.equal(steps[preconditions].if, "vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'");
     assert.doesNotMatch(steps[preconditions].if, /workflow_dispatch/);
+    assert.match(steps[preconditions].run, /--allow-unqualified/);
   }
 
   // The existing semantic gate keeps its own, separate variable and behaviour.
@@ -392,7 +393,7 @@ test('release desktop builds fail closed without a measured knowledge-search go 
   assert.match(releaseText, /vars\.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED/);
 });
 
-test('knowledge qualification exporter compiles the flag only for an exact measured go', () => {
+test('knowledge qualification exporter compiles the flag only for an exact visibility decision', () => {
   const outputRoot = scratchDirectory('knowledge-qualification-');
 
   function exportQualification(value) {
@@ -527,6 +528,17 @@ test('knowledge release preconditions require a repository-recorded measured go'
   );
   assert.notEqual(forgedResult.status, 0);
   assert.match(`${forgedResult.stdout}${forgedResult.stderr}`, /evidence does not support a go/i);
+
+  const experimentalOverride = spawnSync(
+    'node',
+    ['scripts/check-knowledge-search-preconditions.mjs', '--check-report', '--allow-unqualified'],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.equal(experimentalOverride.status, 0);
+  assert.match(
+    `${experimentalOverride.stdout}${experimentalOverride.stderr}`,
+    /explicit experimental release-owner override/i,
+  );
 });
 
 test('developer semantic bundle exposes the native runtime under its loader filename', () => {

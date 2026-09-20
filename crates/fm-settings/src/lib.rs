@@ -340,7 +340,7 @@ impl SettingsStore {
     pub fn platform_default() -> Result<Self, SettingsError> {
         let directory = dirs::config_dir()
             .ok_or(SettingsError::ConfigDirectoryUnavailable)?
-            .join("fm");
+            .join("procyon");
         Ok(Self::new(directory))
     }
 

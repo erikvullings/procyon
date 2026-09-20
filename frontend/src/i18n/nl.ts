@@ -1235,7 +1235,7 @@ export const nl = {
     noProfiles: 'Deze host biedt geen modelprofielen aan.',
     reviewInstallation:
       'Controleer het volledige ondertekende aanbod voordat iets wordt gedownload.',
-    installEnableAction: 'Installeren / inschakelen',
+    installEnableAction: 'Installatie bekijken',
     existingOffer:
       'Er staat een eerder aanbod open. Maak een nieuw aanbod om de volledige actuele informatie te controleren.',
     offerHeading: 'Installatie-informatie',
