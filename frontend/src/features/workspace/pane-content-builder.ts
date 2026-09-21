@@ -197,6 +197,7 @@ export interface PaneContentContext {
     openMetadata?: boolean,
   ): void;
   closeViewer(paneId: PaneId): void;
+  isDocumentSummaryAvailable?(): boolean;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
@@ -545,7 +546,12 @@ export function createPaneContentBuilder(
           { paneId, selectedEntryIds: [entry.id], cursorEntryId: entry.id },
         );
       },
-      onDocumentSummary: (entry) => context.openDocumentSummary?.(paneId, entry),
+      ...(context.isDocumentSummaryAvailable?.() === true
+        ? {
+            onDocumentSummary: (entry: EntrySummary) =>
+              context.openDocumentSummary?.(paneId, entry),
+          }
+        : {}),
       ...(context.openKnowledgeSearch === undefined
         ? {}
         : { onSearchKnowledge: () => context.openKnowledgeSearch?.() }),
@@ -974,8 +980,12 @@ export function createPaneContentBuilder(
                           cursorEntryId: viewer.state.entry.id,
                         },
                       ),
-                    onDocumentSummary: () =>
-                      context.openDocumentSummary?.(paneId, viewer.state.entry),
+                    ...(context.isDocumentSummaryAvailable?.() === true
+                      ? {
+                          onDocumentSummary: () =>
+                            context.openDocumentSummary?.(paneId, viewer.state.entry),
+                        }
+                      : {}),
                     onClose: () => context.closeViewer(paneId),
                   });
                 })(),

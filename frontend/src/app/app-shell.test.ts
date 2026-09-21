@@ -1970,11 +1970,43 @@ describe('AppShell', () => {
     expect(inactivePane?.classList.contains('fm-pane-viewer')).toBe(true);
     expect(inactivePane?.querySelectorAll('.fm-pane-tab')).toHaveLength(2);
     expect(inactivePane?.querySelector('.fm-file-viewer')?.textContent).toContain('.env');
+    expect(inactivePane?.querySelector('.fm-file-viewer-summary')).toBeNull();
     expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'addTransientTab', paneId: 'right' }),
       undefined,
     );
     expect(invokeAction).not.toHaveBeenCalled();
+  });
+
+  it('offers F3 summaries only when semantic components and a generation profile are ready', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'qwen3:8b',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    directoryRowNamed(activePane, '.env')?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer-summary')).not.toBeNull());
   });
 
   it('opens an external-only F3 video in the OS default player', async () => {
@@ -3291,9 +3323,7 @@ describe('AppShell', () => {
     trigger.click();
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-search')?.textContent).toContain(
-        'What do you need?',
-      ),
+      expect(root.querySelector('.fm-knowledge-search')?.textContent).toContain('Search for:'),
     );
     expect(root.querySelector('.fm-knowledge-search-modal')).toBeNull();
     expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(

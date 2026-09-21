@@ -3118,6 +3118,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openDocumentSummary: (_paneId, entry) => {
+      if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();
@@ -3224,7 +3225,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
     closeViewer,
+    isDocumentSummaryAvailable: () => semanticAssistantAvailable,
     openDocumentSummary: (_paneId, entry) => {
+      if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();

@@ -31,6 +31,20 @@ function target(attrs: DocumentSummaryDialogAttrs): DocumentSummaryTarget | unde
   };
 }
 
+function summaryErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.length > 0) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message.length > 0
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs> = () => {
   let wasOpen = false;
   let busy = false;
@@ -56,8 +70,8 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         }),
         attrs.client.getDocumentSummary({ target: requestTarget }),
       ]);
-    } catch {
-      error = t('documentSummary', 'loadFailed');
+    } catch (cause) {
+      error = summaryErrorMessage(cause, t('documentSummary', 'loadFailed'));
     } finally {
       busy = false;
       m.redraw();
@@ -79,8 +93,8 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         inputTokenBudget: INPUT_TOKEN_BUDGET,
         profileId: selectedProfileId ?? null,
       });
-    } catch {
-      error = t('documentSummary', 'loadFailed');
+    } catch (cause) {
+      error = summaryErrorMessage(cause, t('documentSummary', 'loadFailed'));
     } finally {
       busy = false;
       m.redraw();
@@ -100,8 +114,8 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         expectedSelectionFingerprint: preview.selectionFingerprint,
         profileId: selectedProfileId,
       });
-    } catch {
-      error = t('documentSummary', 'generationFailed');
+    } catch (cause) {
+      error = summaryErrorMessage(cause, t('documentSummary', 'generationFailed'));
     } finally {
       busy = false;
       m.redraw();

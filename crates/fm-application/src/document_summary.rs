@@ -1,14 +1,19 @@
 //! Authorized orchestration for representative document summaries.
 
 use async_trait::async_trait;
+use fm_semantic_conversion::{Chunker, ConvertedDocument};
 use fm_semantic_worker::document_summary::{
     DocumentSummaryError as WorkerSummaryError, GeneratedSummary, PrepareDocumentSummary,
     PreparedDocumentSummary,
 };
-use fm_semantic_worker::representative_selection::RepresentativeChunk;
+use fm_semantic_worker::representative_selection::{
+    RepresentativeChunk, RepresentativeSelection, RepresentativeSelectionConfig,
+    SummarySectionRole, SummarySourceChunk, select_representative_chunks,
+};
 use fm_semantic_worker::semantic_storage::StorageError;
 use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -144,6 +149,12 @@ pub struct GenerateDocumentSummary {
     pub profile_id: Uuid,
 }
 
+/// One bounded in-memory selection for a document outside the durable semantic library.
+pub struct EphemeralDocumentSummary {
+    /// Deterministic structural passages selected from the current source bytes.
+    pub selection: RepresentativeSelection,
+}
+
 /// Host-side summary failure with no source text, path, or response-body detail.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DocumentSummaryError {
@@ -191,6 +202,100 @@ impl DocumentSummaryCoordinator {
         Self { capability }
     }
 
+    /// Selects representative passages from a converted document without persisting source data.
+    pub fn prepare_ephemeral(
+        &self,
+        document: &ConvertedDocument,
+        input_token_budget: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<EphemeralDocumentSummary, DocumentSummaryError> {
+        let chunks = Chunker::default().chunk(document);
+        let mut hasher = Sha256::new();
+        for chunk in &chunks {
+            hasher.update(chunk.fingerprint.as_bytes());
+        }
+        let content_hash = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let chunk_count = chunks.len().max(1) as f32;
+        let sources = chunks
+            .into_iter()
+            .map(|chunk| {
+                let source_position = chunk.source_order;
+                let normalized_position = source_position as f32 / chunk_count;
+                Ok(SummarySourceChunk {
+                    chunk_id: format!("ephemeral-{}", chunk.fingerprint),
+                    text: chunk.embedding_input,
+                    embedding: vec![normalized_position, 1.0 - normalized_position],
+                    token_count: chunk.estimated_tokens as usize,
+                    source_position,
+                    section_path: chunk.section_path,
+                    provenance: serde_json::to_string(&chunk.provenance)
+                        .map_err(|_| DocumentSummaryError::InvalidRequest)?,
+                    role: match source_position {
+                        0 => SummarySectionRole::Introduction,
+                        position if position + 1 == chunk_count as u32 => {
+                            SummarySectionRole::Conclusion
+                        }
+                        _ => SummarySectionRole::Body,
+                    },
+                    generated: false,
+                })
+            })
+            .collect::<Result<Vec<_>, DocumentSummaryError>>()?;
+        let selection = select_representative_chunks(
+            0,
+            &content_hash,
+            "ephemeral-structural-position/1",
+            &sources,
+            RepresentativeSelectionConfig::for_budget(input_token_budget),
+            cancellation,
+        )
+        .map_err(|_| DocumentSummaryError::InvalidRequest)?;
+        Ok(EphemeralDocumentSummary { selection })
+    }
+
+    /// Describes one in-memory selection without storing it.
+    pub fn preview_ephemeral(
+        &self,
+        prepared: &EphemeralDocumentSummary,
+        profile_id: Option<Uuid>,
+        profiles: &LlmProfileService,
+    ) -> Result<DocumentSummaryPreview, DocumentSummaryError> {
+        let profile = Self::profile_disclosure(profile_id, profiles)?;
+        Ok(DocumentSummaryPreview {
+            selection_fingerprint: prepared.selection.fingerprint.clone(),
+            representative_tokens: u32::try_from(prepared.selection.selected_tokens)
+                .map_err(|_| DocumentSummaryError::InvalidRequest)?,
+            representatives: prepared.selection.representatives.clone(),
+            profile,
+            reused_selection: false,
+        })
+    }
+
+    /// Generates a summary from in-memory passages without publishing derived data.
+    pub async fn generate_ephemeral(
+        &self,
+        prepared: &EphemeralDocumentSummary,
+        expected_selection_fingerprint: &str,
+        profile_id: Uuid,
+        profiles: &LlmProfileService,
+        cancellation: &CancellationToken,
+    ) -> Result<GeneratedSummary, DocumentSummaryError> {
+        if prepared.selection.fingerprint != expected_selection_fingerprint {
+            return Err(DocumentSummaryError::StaleConfirmation);
+        }
+        Self::generate_text(
+            &prepared.selection.representatives,
+            profile_id,
+            profiles,
+            cancellation,
+        )
+        .await
+    }
+
     /// Selects key passages and describes, but does not contact, an optional profile.
     pub async fn preview(
         &self,
@@ -200,21 +305,7 @@ impl DocumentSummaryCoordinator {
         cancellation: &CancellationToken,
     ) -> Result<DocumentSummaryPreview, DocumentSummaryError> {
         let prepared = self.capability.prepare(request, cancellation).await?;
-        let profile = profile_id
-            .map(|id| {
-                profiles
-                    .generation_profile(id)
-                    .and_then(|profile| {
-                        Ok(SummaryProfileDisclosure {
-                            profile_id: profile.id,
-                            profile_name: profile.name,
-                            model_id: profile.model,
-                            locality: normalize_endpoint_locality(&profile.base_url)?,
-                        })
-                    })
-                    .map_err(map_profile_error)
-            })
-            .transpose()?;
+        let profile = Self::profile_disclosure(profile_id, profiles)?;
         let representative_tokens = u32::try_from(prepared.selection.selected_tokens)
             .map_err(|_| DocumentSummaryError::InvalidRequest)?;
         Ok(DocumentSummaryPreview {
@@ -240,13 +331,52 @@ impl DocumentSummaryCoordinator {
         if prepared.selection.fingerprint != request.expected_selection_fingerprint {
             return Err(DocumentSummaryError::StaleConfirmation);
         }
+        let generated = Self::generate_text(
+            &prepared.selection.representatives,
+            request.profile_id,
+            profiles,
+            cancellation,
+        )
+        .await?;
+        self.capability
+            .publish(&prepared, generated, cancellation)
+            .await
+    }
+
+    fn profile_disclosure(
+        profile_id: Option<Uuid>,
+        profiles: &LlmProfileService,
+    ) -> Result<Option<SummaryProfileDisclosure>, DocumentSummaryError> {
+        profile_id
+            .map(|id| {
+                profiles
+                    .generation_profile(id)
+                    .and_then(|profile| {
+                        Ok(SummaryProfileDisclosure {
+                            profile_id: profile.id,
+                            profile_name: profile.name,
+                            model_id: profile.model,
+                            locality: normalize_endpoint_locality(&profile.base_url)?,
+                        })
+                    })
+                    .map_err(map_profile_error)
+            })
+            .transpose()
+    }
+
+    async fn generate_text(
+        representatives: &[RepresentativeChunk],
+        profile_id: Uuid,
+        profiles: &LlmProfileService,
+        cancellation: &CancellationToken,
+    ) -> Result<GeneratedSummary, DocumentSummaryError> {
         let profile = profiles
-            .generation_profile(request.profile_id)
+            .generation_profile(profile_id)
             .map_err(map_profile_error)?;
-        let prompt = build_prompt(&prepared.selection.representatives)?;
+        let prompt = build_prompt(representatives)?;
         let response = profiles
             .generate(
-                request.profile_id,
+                profile_id,
                 LlmChatGeneration {
                     system_prompt: system_prompt().into(),
                     user_prompt: prompt,
@@ -258,19 +388,13 @@ impl DocumentSummaryCoordinator {
             .await
             .map_err(map_profile_error)?;
         let parsed = parse_generation(&response)?;
-        self.capability
-            .publish(
-                &prepared,
-                GeneratedSummary {
-                    profile_id: profile.id.to_string(),
-                    model_id: profile.model,
-                    brief_text: parsed.brief,
-                    full_text: parsed.full,
-                    created_at_ms: unix_time_ms(),
-                },
-                cancellation,
-            )
-            .await
+        Ok(GeneratedSummary {
+            profile_id: profile.id.to_string(),
+            model_id: profile.model,
+            brief_text: parsed.brief,
+            full_text: parsed.full,
+            created_at_ms: unix_time_ms(),
+        })
     }
 
     /// Reads an existing generated summary without invoking an endpoint.
@@ -381,6 +505,10 @@ fn map_profile_error(error: LlmProfileError) -> DocumentSummaryError {
 
 #[cfg(test)]
 mod tests {
+    use fm_semantic_conversion::{
+        ComponentVersion, FormatKind, Provenance, SourceMap, StructuralUnit, TopLevelBoundary,
+        UnitKind,
+    };
     use fm_semantic_worker::representative_selection::{SummarySectionRole, SummarySourceChunk};
 
     use super::*;
@@ -403,6 +531,126 @@ mod tests {
             centroid_distance: 0.0,
             structural_anchor: true,
         }
+    }
+
+    fn converted_document(paragraphs: &[String]) -> ConvertedDocument {
+        ConvertedDocument::new(
+            ComponentVersion::new("test", 1),
+            FormatKind::PlainText,
+            paragraphs
+                .iter()
+                .enumerate()
+                .map(|(index, text)| StructuralUnit {
+                    order: index as u32,
+                    kind: UnitKind::Paragraph,
+                    format: FormatKind::PlainText,
+                    section_path: vec![format!("Section {}", index + 1)],
+                    text: text.clone(),
+                    provenance: Provenance::TextLines {
+                        start_line: index as u32 + 1,
+                        end_line: index as u32 + 1,
+                    },
+                    boundary: TopLevelBoundary::Document,
+                    source_map: SourceMap::default(),
+                    truncated: false,
+                })
+                .collect(),
+            Vec::new(),
+            Vec::new(),
+        )
+    }
+
+    fn ephemeral_coordinator() -> DocumentSummaryCoordinator {
+        DocumentSummaryCoordinator::new(std::sync::Arc::new(UnavailableDocumentSummaryCapability))
+    }
+
+    #[test]
+    fn ephemeral_selection_is_deterministic_and_covers_document_edges() {
+        let paragraphs = (0..20)
+            .map(|index| format!("Section {index}: {}", "evidence ".repeat(40)))
+            .collect::<Vec<_>>();
+        let document = converted_document(&paragraphs);
+        let coordinator = ephemeral_coordinator();
+        let cancellation = CancellationToken::new();
+
+        let first = coordinator
+            .prepare_ephemeral(&document, 600, &cancellation)
+            .unwrap();
+        let second = coordinator
+            .prepare_ephemeral(&document, 600, &cancellation)
+            .unwrap();
+
+        assert_eq!(first.selection.fingerprint, second.selection.fingerprint);
+        assert!(first.selection.selected_tokens <= 600);
+        assert!(
+            first
+                .selection
+                .representatives
+                .iter()
+                .any(|item| item.source.role == SummarySectionRole::Introduction)
+        );
+        assert!(
+            first
+                .selection
+                .representatives
+                .iter()
+                .any(|item| item.source.role == SummarySectionRole::Conclusion)
+        );
+    }
+
+    #[test]
+    fn ephemeral_selection_fingerprint_changes_with_converted_content() {
+        let coordinator = ephemeral_coordinator();
+        let cancellation = CancellationToken::new();
+        let first = coordinator
+            .prepare_ephemeral(
+                &converted_document(&["original evidence".to_owned()]),
+                600,
+                &cancellation,
+            )
+            .unwrap();
+        let second = coordinator
+            .prepare_ephemeral(
+                &converted_document(&["changed evidence".to_owned()]),
+                600,
+                &cancellation,
+            )
+            .unwrap();
+
+        assert_ne!(first.selection.fingerprint, second.selection.fingerprint);
+    }
+
+    #[tokio::test]
+    async fn ephemeral_generation_rejects_a_stale_preview_before_contacting_a_profile() {
+        let coordinator = ephemeral_coordinator();
+        let cancellation = CancellationToken::new();
+        let prepared = coordinator
+            .prepare_ephemeral(
+                &converted_document(&["current evidence".to_owned()]),
+                600,
+                &cancellation,
+            )
+            .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let profiles = LlmProfileService::new(
+            fm_settings::SettingsStore::new(directory.path().join("settings")),
+            std::sync::Arc::new(fm_credentials::InMemoryCredentialStore::new()),
+            std::sync::Arc::new(crate::llm_profiles::ReqwestLlmProbeTransport::new()),
+            crate::llm_profiles::LlmHostPolicy::desktop(),
+        )
+        .unwrap();
+
+        let result = coordinator
+            .generate_ephemeral(
+                &prepared,
+                "stale-fingerprint",
+                Uuid::new_v4(),
+                &profiles,
+                &cancellation,
+            )
+            .await;
+
+        assert_eq!(result, Err(DocumentSummaryError::StaleConfirmation));
     }
 
     #[test]

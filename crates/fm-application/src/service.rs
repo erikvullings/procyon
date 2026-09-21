@@ -1626,45 +1626,92 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::PreviewDocumentSummaryRequestDto,
     ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
-        let worker_request = self
-            .resolve_document_summary_request(access, request.target, request.input_token_budget)
-            .await?;
         let cancellation = tokio_util::sync::CancellationToken::new();
-        self.document_summaries
-            .preview(
-                worker_request,
-                request.profile_id,
-                &self.llm_profiles,
-                &cancellation,
-            )
+        let target = request.target;
+        match self
+            .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
-            .map(preview_to_dto)
-            .map_err(summary_error_to_application)
+        {
+            Ok(worker_request) => match self
+                .document_summaries
+                .preview(
+                    worker_request,
+                    request.profile_id,
+                    &self.llm_profiles,
+                    &cancellation,
+                )
+                .await
+            {
+                Ok(preview) => Ok(preview_to_dto(preview)),
+                Err(crate::document_summary::DocumentSummaryError::Unavailable) => {
+                    self.preview_ephemeral_document_summary(
+                        target,
+                        request.input_token_budget,
+                        request.profile_id,
+                        &cancellation,
+                    )
+                    .await
+                }
+                Err(error) => Err(summary_error_to_application(error)),
+            },
+            Err(ApplicationError::NotFound) => {
+                self.preview_ephemeral_document_summary(
+                    target,
+                    request.input_token_budget,
+                    request.profile_id,
+                    &cancellation,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
     }
 
-    /// Generates and publishes a summary after revalidating the preview fingerprint.
+    /// Generates a summary after revalidating the preview fingerprint.
     pub async fn generate_document_summary(
         &self,
         access: &SemanticAccessContext,
         request: fm_transport_dto::GenerateDocumentSummaryRequestDto,
     ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
-        let worker_request = self
-            .resolve_document_summary_request(access, request.target, request.input_token_budget)
-            .await?;
         let cancellation = tokio_util::sync::CancellationToken::new();
-        self.document_summaries
-            .generate(
-                GenerateDocumentSummary {
-                    request: worker_request,
-                    expected_selection_fingerprint: request.expected_selection_fingerprint,
-                    profile_id: request.profile_id,
-                },
-                &self.llm_profiles,
-                &cancellation,
-            )
+        let target = request.target;
+        match self
+            .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
-            .map(|summary| summary_to_dto(summary, false))
-            .map_err(summary_error_to_application)
+        {
+            Ok(worker_request) => {
+                match self
+                    .document_summaries
+                    .generate(
+                        GenerateDocumentSummary {
+                            request: worker_request,
+                            expected_selection_fingerprint: request
+                                .expected_selection_fingerprint
+                                .clone(),
+                            profile_id: request.profile_id,
+                        },
+                        &self.llm_profiles,
+                        &cancellation,
+                    )
+                    .await
+                {
+                    Ok(summary) => return Ok(summary_to_dto(summary, false)),
+                    Err(crate::document_summary::DocumentSummaryError::Unavailable) => {}
+                    Err(error) => return Err(summary_error_to_application(error)),
+                }
+            }
+            Err(ApplicationError::NotFound) => {}
+            Err(error) => return Err(error),
+        }
+
+        self.generate_ephemeral_document_summary(
+            target,
+            request.input_token_budget,
+            &request.expected_selection_fingerprint,
+            request.profile_id,
+            &cancellation,
+        )
+        .await
     }
 
     /// Returns the current generated summary, including stale-source state.
@@ -1673,13 +1720,129 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::GetDocumentSummaryRequestDto,
     ) -> Result<Option<fm_transport_dto::DocumentSummaryDto>, ApplicationError> {
-        let worker_request = self
+        let worker_request = match self
             .resolve_document_summary_request(access, request.target, 1)
+            .await
+        {
+            Ok(request) => request,
+            Err(ApplicationError::NotFound) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        match self.document_summaries.current(&worker_request).await {
+            Ok(summary) => Ok(summary.map(|(stored, stale)| summary_to_dto(stored, stale))),
+            Err(crate::document_summary::DocumentSummaryError::Unavailable) => Ok(None),
+            Err(error) => Err(summary_error_to_application(error)),
+        }
+    }
+
+    async fn preview_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        profile_id: Option<Uuid>,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
+        let prepared = self
+            .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .current(&worker_request)
+            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles)
+            .map(preview_to_dto)
+            .map_err(summary_error_to_application)
+    }
+
+    async fn generate_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        expected_selection_fingerprint: &str,
+        profile_id: Uuid,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
+        let prepared = self
+            .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
+            .await?;
+        let generated = self
+            .document_summaries
+            .generate_ephemeral(
+                &prepared,
+                expected_selection_fingerprint,
+                profile_id,
+                &self.llm_profiles,
+                cancellation,
+            )
             .await
-            .map(|summary| summary.map(|(stored, stale)| summary_to_dto(stored, stale)))
+            .map_err(summary_error_to_application)?;
+        Ok(fm_transport_dto::DocumentSummaryDto {
+            record_id: format!("ephemeral-{}", prepared.selection.fingerprint),
+            source_generation: 0,
+            profile_id: generated.profile_id,
+            model_id: generated.model_id,
+            supporting_chunk_ids: prepared
+                .selection
+                .representatives
+                .iter()
+                .map(|representative| representative.source.chunk_id.clone())
+                .collect(),
+            supporting_weights: prepared
+                .selection
+                .representatives
+                .iter()
+                .map(|representative| representative.cluster_weight)
+                .collect(),
+            created_at_ms: generated.created_at_ms,
+            brief: generated.brief_text,
+            full: generated.full_text,
+            stale: false,
+        })
+    }
+
+    async fn prepare_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<crate::document_summary::EphemeralDocumentSummary, ApplicationError> {
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
+            return Err(ApplicationError::InvalidRequest(
+                "summary input token budget is outside the supported range".into(),
+            ));
+        }
+        let health = self
+            .semantic
+            .health()
+            .await
+            .map_err(|_| ApplicationError::ProviderUnavailable)?;
+        if health != SemanticHealth::Serving {
+            return Err(ApplicationError::ProviderUnavailable);
+        }
+        let outcome = self
+            .document_conversion
+            .convert(target.location.into(), cancellation.child_token())
+            .await?;
+        let document = match outcome {
+            fm_semantic_conversion::ConversionOutcome::Converted(document) => document,
+            fm_semantic_conversion::ConversionOutcome::Unsupported { detail, .. }
+            | fm_semantic_conversion::ConversionOutcome::Malformed { detail }
+            | fm_semantic_conversion::ConversionOutcome::Encrypted { detail }
+            | fm_semantic_conversion::ConversionOutcome::NoTextLayer { detail } => {
+                return Err(ApplicationError::InvalidRequest(detail));
+            }
+            fm_semantic_conversion::ConversionOutcome::Skipped { reason } => {
+                return Err(ApplicationError::InvalidRequest(reason.as_str().to_owned()));
+            }
+            fm_semantic_conversion::ConversionOutcome::OverBudget { budget, limit } => {
+                return Err(ApplicationError::InvalidRequest(format!(
+                    "document conversion exceeds the {budget:?} limit ({limit})"
+                )));
+            }
+            fm_semantic_conversion::ConversionOutcome::Cancelled => {
+                return Err(ApplicationError::OperationCancelled);
+            }
+        };
+        self.document_summaries
+            .prepare_ephemeral(&document, input_token_budget as usize, cancellation)
             .map_err(summary_error_to_application)
     }
 
