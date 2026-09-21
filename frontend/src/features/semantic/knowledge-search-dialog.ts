@@ -932,7 +932,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   async function previewPlan(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     // `busy` is shared, and the plan disclosure's summary cannot be disabled:
     // clearing it here would hide Cancel and re-enable Search mid-search.
-    if (busy !== undefined || !canSearch()) return;
+    if (busy !== undefined || !canSearch(attrs)) return;
     const planGeneration = generation;
     const planRevision = revision;
     busy = 'planning';
@@ -964,9 +964,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return (draft.about ?? []).some((subject) => subject.trim().length > 0);
   }
 
-  /** Whether a search can run: a subject, and no unusable scope selector. */
-  function canSearch(): boolean {
-    return hasSubject() && scopeIssues.length === 0;
+  /** Whether this workspace or the active semantic result set has indexed evidence to search. */
+  function hasIndexedDocuments(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.indexedGeneration > 0);
+  }
+
+  /** Whether a search can run: indexed evidence, a subject, and no unusable scope selector. */
+  function canSearch(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return hasIndexedDocuments(attrs) && hasSubject() && scopeIssues.length === 0;
   }
 
   /**
@@ -980,7 +985,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     // A query typed only into the DSL box has not reached the canonical draft
     // until its parse lands, so an in-flight parse is a reason to wait, not a
     // reason to refuse.
-    if (pendingParse === undefined && !canSearch()) return;
+    if (pendingParse === undefined && !canSearch(attrs)) return;
     const startGeneration = generation;
     const controller = new AbortController();
     busy = 'searching';
@@ -994,7 +999,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     m.redraw();
     if (pendingParse !== undefined) await pendingParse;
     if (startGeneration !== generation) return;
-    if (controller.signal.aborted || !canSearch()) {
+    if (controller.signal.aborted || !canSearch(attrs)) {
       if (controller.signal.aborted) notice = t('knowledgeSearch', 'cancelled');
       busy = undefined;
       abortController = undefined;
@@ -1333,6 +1338,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
+      if (capabilities !== undefined && !hasIndexedDocuments(attrs)) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchNoSources'),
+        );
+      }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
     }
     if (result.evidence.length === 0) {
@@ -1661,7 +1673,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     onremove: () => abortController?.abort(),
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
-      const searchable = canSearch();
+      const searchable = canSearch(attrs);
       const route = result?.route;
       if (!attrs.open) return undefined;
       return m(
@@ -1719,7 +1731,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     type: 'button',
                     className: 'fm-knowledge-search-submit',
                     'aria-label': t('knowledgeSearch', 'search'),
-                    disabled: busy !== undefined || !canSearch(),
+                    disabled: busy !== undefined || !canSearch(attrs),
                     onclick: () => void search(attrs),
                   },
                   cornerDownLeftIcon({ size: 16 }),

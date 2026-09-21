@@ -198,6 +198,22 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-results')).toBeNull();
   });
 
+  it('shows and enforces the empty-index state before a query is submitted', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([]);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).toContain(
+      'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
+    );
+    expect(button('Search').disabled).toBe(true);
+    submitSearch();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {
     mount({ initialSubject: 'retrieval' });
 
