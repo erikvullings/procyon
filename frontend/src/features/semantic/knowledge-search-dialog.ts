@@ -3,10 +3,11 @@ import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
+  closeIcon,
   cornerDownLeftIcon,
+  dotsIcon,
   externalLinkIcon,
   filterIcon,
-  settingsIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -35,6 +36,7 @@ import type {
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
@@ -633,6 +635,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
   let settingsOpen = false;
+  let enrolmentOpen = false;
 
   /** Bounded options sent with both the plan preview and the search itself. */
   function searchOptions(): KnowledgeSearchOptions {
@@ -867,6 +870,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     selectedAnswerProfileId = '';
     allowModelKnowledge = false;
     settingsOpen = false;
+    enrolmentOpen = false;
     try {
       const [reportedCapabilities, availableRoots] = await Promise.all([
         attrs.client.getKnowledgeCapabilities(),
@@ -932,7 +936,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   async function previewPlan(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     // `busy` is shared, and the plan disclosure's summary cannot be disabled:
     // clearing it here would hide Cancel and re-enable Search mid-search.
-    if (busy !== undefined || !canSearch()) return;
+    if (busy !== undefined || !canSearch(attrs)) return;
     const planGeneration = generation;
     const planRevision = revision;
     busy = 'planning';
@@ -964,9 +968,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return (draft.about ?? []).some((subject) => subject.trim().length > 0);
   }
 
-  /** Whether a search can run: a subject, and no unusable scope selector. */
-  function canSearch(): boolean {
-    return hasSubject() && scopeIssues.length === 0;
+  /** Whether this workspace or the active semantic result set has indexed evidence to search. */
+  function hasIndexedDocuments(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.indexedGeneration > 0);
+  }
+
+  /** Whether a search can run: indexed evidence, a subject, and no unusable scope selector. */
+  function canSearch(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return hasIndexedDocuments(attrs) && hasSubject() && scopeIssues.length === 0;
   }
 
   /**
@@ -980,7 +989,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     // A query typed only into the DSL box has not reached the canonical draft
     // until its parse lands, so an in-flight parse is a reason to wait, not a
     // reason to refuse.
-    if (pendingParse === undefined && !canSearch()) return;
+    if (pendingParse === undefined && !canSearch(attrs)) return;
     const startGeneration = generation;
     const controller = new AbortController();
     busy = 'searching';
@@ -994,7 +1003,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     m.redraw();
     if (pendingParse !== undefined) await pendingParse;
     if (startGeneration !== generation) return;
-    if (controller.signal.aborted || !canSearch()) {
+    if (controller.signal.aborted || !canSearch(attrs)) {
       if (controller.signal.aborted) notice = t('knowledgeSearch', 'cancelled');
       busy = undefined;
       abortController = undefined;
@@ -1174,6 +1183,21 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     attrs.onClose();
   }
 
+  function updateNeed(
+    attrs: KnowledgeSearchDialogAttrs,
+    need: KnowledgeNeed,
+    checked: boolean,
+  ): void {
+    const selected = new Set(draft.needs ?? []);
+    if (checked) selected.add(need);
+    else selected.delete(need);
+    const needs = NEEDS.filter((value) => selected.has(value));
+    draft = { ...draft, needs };
+    persistPreferredNeeds(needs);
+    edited();
+    void reinterpret(attrs);
+  }
+
   /** Keeps editor keystrokes local and lets Escape dismiss only the settings modal. */
   function stopSettingsTypingKeys(event: KeyboardEvent): void {
     event.stopPropagation();
@@ -1333,6 +1357,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
+      if (capabilities !== undefined && !hasIndexedDocuments(attrs)) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchNoSources'),
+        );
+      }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
     }
     if (result.evidence.length === 0) {
@@ -1661,7 +1692,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     onremove: () => abortController?.abort(),
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
-      const searchable = canSearch();
+      const searchable = canSearch(attrs);
       const route = result?.route;
       if (!attrs.open) return undefined;
       return m(
@@ -1719,12 +1750,57 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     type: 'button',
                     className: 'fm-knowledge-search-submit',
                     'aria-label': t('knowledgeSearch', 'search'),
-                    disabled: busy !== undefined || !canSearch(),
+                    disabled: busy !== undefined || !canSearch(attrs),
                     onclick: () => void search(attrs),
                   },
                   cornerDownLeftIcon({ size: 16 }),
                 ),
               ),
+              tooltip(
+                t('knowledgeSearch', 'close'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-search-close',
+                    'aria-label': t('knowledgeSearch', 'close'),
+                    onclick: () => close(attrs),
+                  },
+                  closeIcon({ size: 13 }),
+                ),
+              ),
+            ]),
+            m('.fm-knowledge-search-options', [
+              !currentFolderIndexed && attrs.currentFolder !== undefined
+                ? m('label.fm-knowledge-include-folder', [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: false,
+                      disabled: busy === 'loading',
+                      onchange: (event: Event) => {
+                        (event.currentTarget as HTMLInputElement).checked = false;
+                        enrolmentOpen = true;
+                      },
+                    }),
+                    m('span', t('knowledgeSearch', 'includeFolder')),
+                  ])
+                : undefined,
+              m('span.fm-knowledge-search-for', t('knowledgeSearch', 'searchFor')),
+              m('fieldset.fm-knowledge-inline-needs.fm-knowledge-needs', [
+                m('legend.fm-visually-hidden', t('knowledgeSearch', 'searchFor')),
+                NEEDS.map((need) =>
+                  m('label', { key: need }, [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: (draft.needs ?? []).includes(need),
+                      disabled: busy === 'searching',
+                      onchange: (event: Event) =>
+                        updateNeed(attrs, need, (event.currentTarget as HTMLInputElement).checked),
+                    }),
+                    m('span', needLabel(need)),
+                  ]),
+                ),
+              ]),
               tooltip(
                 t('knowledgeSearch', 'settings'),
                 m(
@@ -1737,10 +1813,42 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       settingsOpen = true;
                     },
                   },
-                  settingsIcon({ size: 16 }),
+                  dotsIcon({ size: 16 }),
                 ),
               ),
             ]),
+            attrs.currentFolder === undefined
+              ? undefined
+              : m(ModalPanel, {
+                  className: 'fm-dense-modal fm-semantic-enrolment-modal',
+                  title: t('ragAsk', 'includeFolderTitle'),
+                  isOpen: enrolmentOpen,
+                  closeOnEsc: true,
+                  onToggle: (open: boolean) => {
+                    enrolmentOpen = open;
+                  },
+                  description: enrolmentOpen
+                    ? m(SemanticFolderEnrolmentPrompt, {
+                        client: attrs.client,
+                        workspaceId: attrs.workspaceId,
+                        location: attrs.currentFolder,
+                        onEnrolled: () => {
+                          currentFolderIndexed = true;
+                          scopeKind = 'currentFolder';
+                          enrolmentOpen = false;
+                          m.redraw();
+                        },
+                      })
+                    : undefined,
+                  buttons: [
+                    {
+                      label: t('button', 'close'),
+                      onclick: () => {
+                        enrolmentOpen = false;
+                      },
+                    },
+                  ],
+                }),
             m(ModalPanel, {
               className: 'fm-dense-modal fm-knowledge-settings-modal',
               title: t('knowledgeSearch', 'settings'),
@@ -1750,29 +1858,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 settingsOpen = open;
               },
               description: m('.fm-knowledge-settings', [
-                m('fieldset.fm-knowledge-needs', [
-                  m('legend', t('knowledgeSearch', 'needs')),
-                  NEEDS.map((need) =>
-                    m('label', { key: need }, [
-                      m('input', {
-                        type: 'checkbox',
-                        checked: (draft.needs ?? []).includes(need),
-                        disabled: busy === 'searching',
-                        onchange: (event: Event) => {
-                          const selected = new Set(draft.needs ?? []);
-                          if ((event.currentTarget as HTMLInputElement).checked) selected.add(need);
-                          else selected.delete(need);
-                          const needs = NEEDS.filter((value) => selected.has(value));
-                          draft = { ...draft, needs };
-                          persistPreferredNeeds(needs);
-                          edited();
-                          void reinterpret(attrs);
-                        },
-                      }),
-                      m('span', needLabel(need)),
-                    ]),
-                  ),
-                ]),
                 m('details.fm-knowledge-advanced', [
                   m('summary', t('knowledgeSearch', 'showAdvanced')),
                   m('.fm-knowledge-advanced-body', [

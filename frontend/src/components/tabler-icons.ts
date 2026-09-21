@@ -233,6 +233,12 @@ export const gridDotsIcon = trustedStrokeIcon(
   'fm-icon-grid-dots',
 );
 
+/** "dots" — compact overflow actions. */
+export const dotsIcon = trustedStrokeIcon(
+  '<path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />',
+  'fm-icon-dots',
+);
+
 /** "x" — close a dialog/disclosure panel. */
 export const closeIcon = trustedStrokeIcon(
   '<path d="M18 6l-12 12" /><path d="M6 6l12 12" />',

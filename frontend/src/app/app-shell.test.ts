@@ -1970,11 +1970,43 @@ describe('AppShell', () => {
     expect(inactivePane?.classList.contains('fm-pane-viewer')).toBe(true);
     expect(inactivePane?.querySelectorAll('.fm-pane-tab')).toHaveLength(2);
     expect(inactivePane?.querySelector('.fm-file-viewer')?.textContent).toContain('.env');
+    expect(inactivePane?.querySelector('.fm-file-viewer-summary')).toBeNull();
     expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'addTransientTab', paneId: 'right' }),
       undefined,
     );
     expect(invokeAction).not.toHaveBeenCalled();
+  });
+
+  it('offers F3 summaries only when semantic components and a generation profile are ready', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'qwen3:8b',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    directoryRowNamed(activePane, '.env')?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer-summary')).not.toBeNull());
   });
 
   it('opens an external-only F3 video in the OS default player', async () => {
@@ -3202,6 +3234,60 @@ describe('AppShell', () => {
     expect(acceptOffer).not.toHaveBeenCalled();
   });
 
+  it('refreshes Semantic Search availability immediately after installing components', async () => {
+    const client = new MockFileManagerClient();
+    let installed = false;
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockImplementation(async () =>
+      installed
+        ? {
+            fullText: true,
+            semantic: true,
+            answerGeneration: false,
+          }
+        : {
+            fullText: false,
+            semantic: false,
+            answerGeneration: false,
+          },
+    );
+    const acceptInstallation = client.acceptSemanticComponentInstallationOffer.bind(client);
+    vi.spyOn(client, 'acceptSemanticComponentInstallationOffer').mockImplementation(
+      async (request, signal) => {
+        const status = await acceptInstallation(request, signal);
+        installed = true;
+        return status;
+      },
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
+
+    await openAppearanceSettings();
+    openSettingsSection('Semantic');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
+    );
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
+
+    const semanticButton = (label: string): HTMLButtonElement => {
+      const match = [
+        ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-management button'),
+      ].find((candidate) => candidate.textContent?.trim() === label);
+      if (!match) throw new Error(`no semantic button labelled "${label}"`);
+      return match;
+    };
+
+    semanticButton('Review installation').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
+    semanticButton('Accept and install').click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('button[aria-label="Semantic Search…"]')).not.toBeNull(),
+    );
+    expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
+  });
+
   it('hides semantic chat while semantic components are inactive', async () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
@@ -3237,9 +3323,7 @@ describe('AppShell', () => {
     trigger.click();
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-search')?.textContent).toContain(
-        'What do you need?',
-      ),
+      expect(root.querySelector('.fm-knowledge-search')?.textContent).toContain('Search for:'),
     );
     expect(root.querySelector('.fm-knowledge-search-modal')).toBeNull();
     expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(

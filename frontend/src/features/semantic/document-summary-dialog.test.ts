@@ -90,4 +90,76 @@ describe('DocumentSummaryDialog', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('A concise representative summary.'));
     expect(root.textContent).toContain('Full summary');
   });
+
+  it('loads representative passages when no persisted summary exists', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getDocumentSummary').mockResolvedValue(null);
+
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry,
+          onClose: vi.fn(),
+        }),
+    });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
+    expect(root.textContent).not.toContain('The summary could not be loaded.');
+  });
+
+  it('surfaces generation endpoint errors instead of hiding them', async () => {
+    const client = new MockFileManagerClient();
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'summary-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    vi.spyOn(client, 'generateDocumentSummary').mockRejectedValue({
+      code: 'providerUnavailable',
+      message: 'Ollama is not reachable at http://127.0.0.1:11434',
+    });
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry,
+          onClose: vi.fn(),
+        }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+          candidate.textContent?.includes('Generate summary'),
+        ),
+      ).toBeDefined(),
+    );
+    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+      candidate.textContent?.includes('Generate summary'),
+    );
+    generate?.click();
+
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Ollama is not reachable at http://127.0.0.1:11434'),
+    );
+  });
 });

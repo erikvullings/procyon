@@ -23,6 +23,9 @@ not replace the original chunks as the basis for grounded claims.
 - A Summarize action is available for supported indexed documents from file actions, preview/lister
   surfaces, and semantic results. It requires an active LLM profile and shows scope, profile,
   local/cloud status, estimated representative input, and cloud disclosure before generation.
+- F3 preview may summarize a readable document outside an enrolled semantic root by converting and
+  selecting bounded structural passages on demand. This path is session-only: it does not enrol the
+  folder, persist source chunks, or publish the generated summary to Zvec.
 - Short documents whose complete content fits the configured summary input budget skip clustering
   and use all content chunks. Large documents derive a bounded cluster count from that token budget
   with documented minimum/maximum limits.
@@ -81,3 +84,7 @@ not replace the original chunks as the basis for grounded claims.
   replacement, and enrolment deletion; strict untrusted-evidence prompting through consented LLM
   profiles; authorized HTTP/Tauri/mock APIs; and file-action, Lister, and semantic-result entry
   points. Production worker/model activation remains deliberately measurement-gated by task 0188.
+- 2026-09-21: Added the production F3 fallback for non-indexed documents. Procyon performs bounded
+  VFS conversion and deterministic positional selection in memory, revalidates the selection
+  fingerprint before generation, and returns the result only to the open dialog. The F3 action is
+  hidden until managed semantic components and an LLM generation profile are ready.

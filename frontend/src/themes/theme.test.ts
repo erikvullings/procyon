@@ -467,7 +467,13 @@ describe('theme stylesheet', () => {
       /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects\s*\{[^}]*outline:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
+      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options\s*\{[^}]*height:\s*var\(--fm-row-height\)[^}]*white-space:\s*nowrap/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
     );
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,

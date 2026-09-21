@@ -204,6 +204,7 @@ import type {
   ScanDiskUsageResult,
   SearchExecutionMode,
   SearchQuery,
+  SemanticComponentStatus,
   Settings,
   SortDescriptor,
   SystemLocation,
@@ -2043,10 +2044,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     m.redraw();
   }
 
-  async function refreshSemanticAssistantAvailability(): Promise<void> {
+  async function refreshSemanticAssistantAvailability(
+    currentComponents?: SemanticComponentStatus,
+  ): Promise<void> {
     try {
       const [components, library, profiles] = await Promise.all([
-        attrsClient.getSemanticComponentStatus(),
+        currentComponents ?? attrsClient.getSemanticComponentStatus(),
         attrsClient.getSemanticLibraryStatus(),
         attrsClient.listLlmProfiles(),
       ]);
@@ -3115,6 +3118,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openDocumentSummary: (_paneId, entry) => {
+      if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();
@@ -3221,7 +3225,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
     closeViewer,
+    isDocumentSummaryAvailable: () => semanticAssistantAvailable,
     openDocumentSummary: (_paneId, entry) => {
+      if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
       dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
       m.redraw();
@@ -4254,6 +4260,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 pluginId: PluginId,
                               ): Promise<readonly PluginLogEntry[]> =>
                                 attrs.client.getPluginLogs(pluginId),
+                              onSemanticStatusChange: (status) => {
+                                void refreshSemanticAssistantAvailability(status);
+                                void refreshKnowledgeSearchAvailability();
+                              },
                             })
                           : undefined,
                     ]),
