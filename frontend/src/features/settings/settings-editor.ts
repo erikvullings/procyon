@@ -89,6 +89,7 @@ export interface SettingsEditorAttrs {
   readonly onCancel: () => void;
   readonly onTogglePlugin: (pluginId: PluginId, enabled: boolean) => Promise<void>;
   readonly onRequestPluginLogs: (pluginId: PluginId) => Promise<readonly PluginLogEntry[]>;
+  readonly onSemanticStatusChange?: (status: SemanticComponentStatus) => void;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -597,6 +598,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         client: current.client,
                         onStatusChange: (status) => {
                           semanticStatus = status;
+                          current.onSemanticStatusChange?.(status);
                           m.redraw();
                         },
                       }),

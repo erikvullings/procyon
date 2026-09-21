@@ -3202,6 +3202,60 @@ describe('AppShell', () => {
     expect(acceptOffer).not.toHaveBeenCalled();
   });
 
+  it('refreshes Semantic Search availability immediately after installing components', async () => {
+    const client = new MockFileManagerClient();
+    let installed = false;
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockImplementation(async () =>
+      installed
+        ? {
+            fullText: true,
+            semantic: true,
+            answerGeneration: false,
+          }
+        : {
+            fullText: false,
+            semantic: false,
+            answerGeneration: false,
+          },
+    );
+    const acceptInstallation = client.acceptSemanticComponentInstallationOffer.bind(client);
+    vi.spyOn(client, 'acceptSemanticComponentInstallationOffer').mockImplementation(
+      async (request, signal) => {
+        const status = await acceptInstallation(request, signal);
+        installed = true;
+        return status;
+      },
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
+
+    await openAppearanceSettings();
+    openSettingsSection('Semantic');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
+    );
+    expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
+
+    const semanticButton = (label: string): HTMLButtonElement => {
+      const match = [
+        ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-management button'),
+      ].find((candidate) => candidate.textContent?.trim() === label);
+      if (!match) throw new Error(`no semantic button labelled "${label}"`);
+      return match;
+    };
+
+    semanticButton('Review installation').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
+    semanticButton('Accept and install').click();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('button[aria-label="Semantic Search…"]')).not.toBeNull(),
+    );
+    expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
+  });
+
   it('hides semantic chat while semantic components are inactive', async () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),

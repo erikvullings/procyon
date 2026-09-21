@@ -204,6 +204,7 @@ import type {
   ScanDiskUsageResult,
   SearchExecutionMode,
   SearchQuery,
+  SemanticComponentStatus,
   Settings,
   SortDescriptor,
   SystemLocation,
@@ -2043,10 +2044,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     m.redraw();
   }
 
-  async function refreshSemanticAssistantAvailability(): Promise<void> {
+  async function refreshSemanticAssistantAvailability(
+    currentComponents?: SemanticComponentStatus,
+  ): Promise<void> {
     try {
       const [components, library, profiles] = await Promise.all([
-        attrsClient.getSemanticComponentStatus(),
+        currentComponents ?? attrsClient.getSemanticComponentStatus(),
         attrsClient.getSemanticLibraryStatus(),
         attrsClient.listLlmProfiles(),
       ]);
@@ -4254,6 +4257,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 pluginId: PluginId,
                               ): Promise<readonly PluginLogEntry[]> =>
                                 attrs.client.getPluginLogs(pluginId),
+                              onSemanticStatusChange: (status) => {
+                                void refreshSemanticAssistantAvailability(status);
+                                void refreshKnowledgeSearchAvailability();
+                              },
                             })
                           : undefined,
                     ]),
