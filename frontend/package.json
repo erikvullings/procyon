@@ -1,6 +1,6 @@
 {
   "name": "@fm/frontend",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Mithril frontend for the dual-pane file manager, shared by the Axum and Tauri hosts.",
