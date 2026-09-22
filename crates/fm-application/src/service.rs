@@ -178,6 +178,17 @@ fn prepare_summary_image(data: &[u8], media_type: &str) -> Option<Vec<u8>> {
     (output.get_ref().len() <= MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize).then(|| output.into_inner())
 }
 
+fn supports_summary_visual_evidence(uri: &str) -> bool {
+    let path = uri
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    [".pdf", ".docx", ".pptx", ".epub", ".xlsx"]
+        .iter()
+        .any(|extension| path.ends_with(extension))
+}
+
 /// Central application service that every host (Axum, Tauri, CLI) calls into.
 ///
 /// Only the capabilities needed by the current milestone are implemented; the
@@ -1868,15 +1879,7 @@ impl FileManagerService {
         include_images: bool,
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<DocumentSummaryImages, ApplicationError> {
-        if !target
-            .location
-            .uri
-            .split(['?', '#'])
-            .next()
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .ends_with(".docx")
-        {
+        if !supports_summary_visual_evidence(&target.location.uri) {
             return Ok(DocumentSummaryImages::default());
         }
         let Some(profile_id) = profile_id else {
@@ -1888,74 +1891,50 @@ impl FileManagerService {
             .await
             .map(|capabilities| capabilities.vision)
             .unwrap_or(false);
-        if !include_images {
-            return Ok(DocumentSummaryImages {
-                available: supports_vision,
-                ..DocumentSummaryImages::default()
+        if !supports_vision {
+            return Ok(DocumentSummaryImages::default());
+        }
+        let outcome = self
+            .document_conversion
+            .convert_with_visual_evidence(
+                target.location.clone().into(),
+                cancellation.child_token(),
+            )
+            .await?;
+        let fm_semantic_conversion::ConversionOutcome::Converted(document) = outcome else {
+            return Ok(DocumentSummaryImages::default());
+        };
+        let mut evidence = DocumentSummaryImages {
+            available: !document.visuals().is_empty(),
+            ..DocumentSummaryImages::default()
+        };
+        if !include_images || !evidence.available {
+            return Ok(evidence);
+        }
+        evidence.omitted = u32::try_from(document.visual_omissions().len()).unwrap_or(u32::MAX);
+        let mut total_bytes = 0_usize;
+        for visual in document.visuals() {
+            if evidence.images.len() >= MAX_SUMMARY_IMAGES
+                || visual.data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize
+            {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            }
+            let Some(data) = prepare_summary_image(&visual.data, visual.media_type.as_str()) else {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            };
+            if total_bytes.saturating_add(data.len()) > MAX_SUMMARY_TOTAL_IMAGE_BYTES {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            }
+            total_bytes = total_bytes.saturating_add(data.len());
+            evidence.images.push(LlmImageAttachment {
+                media_type: visual.media_type.as_str().to_owned(),
+                data,
             });
         }
-        let opened = self
-            .docx_preview
-            .open(fm_transport_dto::OpenDocxPreviewRequestDto {
-                location: target.location.clone(),
-            })
-            .await?;
-        let collected = async {
-            let mut evidence = DocumentSummaryImages {
-                available: supports_vision,
-                ..DocumentSummaryImages::default()
-            };
-            if supports_vision {
-                let mut total_bytes = 0_usize;
-                for resource in &opened.resources {
-                    if evidence.images.len() >= MAX_SUMMARY_IMAGES
-                        || resource.byte_length > MAX_SUMMARY_SOURCE_IMAGE_BYTES
-                    {
-                        evidence.omitted = evidence.omitted.saturating_add(1);
-                        continue;
-                    }
-                    let resource_data = self
-                        .docx_preview
-                        .read_resource(fm_transport_dto::ReadDocxPreviewResourceRequestDto {
-                            session_id: opened.session_id,
-                            resource_id: resource.resource_id,
-                        })
-                        .await?;
-                    let Some(data) =
-                        prepare_summary_image(&resource_data.data, &resource.media_type)
-                    else {
-                        evidence.omitted = evidence.omitted.saturating_add(1);
-                        continue;
-                    };
-                    if total_bytes.saturating_add(data.len()) > MAX_SUMMARY_TOTAL_IMAGE_BYTES {
-                        evidence.omitted = evidence.omitted.saturating_add(1);
-                        continue;
-                    }
-                    total_bytes = total_bytes.saturating_add(data.len());
-                    evidence.images.push(LlmImageAttachment {
-                        media_type: resource.media_type.clone(),
-                        data,
-                    });
-                }
-            } else {
-                evidence.omitted = u32::try_from(opened.resources.len()).unwrap_or(u32::MAX);
-            }
-            Ok(evidence)
-        }
-        .await;
-        let closed = self
-            .docx_preview
-            .close(fm_transport_dto::DocxPreviewSessionRequestDto {
-                session_id: opened.session_id,
-            })
-            .await;
-        match collected {
-            Err(error) => Err(error),
-            Ok(evidence) => {
-                closed?;
-                Ok(evidence)
-            }
-        }
+        Ok(evidence)
     }
 
     async fn prepare_ephemeral_document_summary(
@@ -3865,6 +3844,21 @@ mod tests {
         assert_eq!(resized.width(), MAX_SUMMARY_IMAGE_DIMENSION);
         assert_eq!(resized.height(), 256);
         assert!(prepare_summary_image(encoded.get_ref(), "image/svg+xml").is_none());
+    }
+
+    #[test]
+    fn summary_visual_discovery_is_limited_to_supported_formats() {
+        for uri in [
+            "sftp://host/report.PDF",
+            "file:///notes.docx",
+            "file:///deck.pptx?revision=2",
+            "file:///book.epub#chapter",
+            "file:///figures.xlsx",
+        ] {
+            assert!(supports_summary_visual_evidence(uri), "{uri}");
+        }
+        assert!(!supports_summary_visual_evidence("file:///notes.txt"));
+        assert!(!supports_summary_visual_evidence("file:///legacy.xls"));
     }
 
     #[test]

@@ -1,17 +1,19 @@
 //! EPUB package conversion through its declared OPF manifest and spine.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
-use crate::builder::DocumentBuilder;
+use crate::builder::{DocumentBuilder, VisualDraft};
 use crate::formats::html::{self, HtmlContext};
-use crate::formats::package::{self, Package, PackageError};
+use crate::formats::package::{self, BoundedPart, Package, PackageError};
+use crate::model::VisualProvenance;
 use crate::text::decode;
 
 const MAX_METADATA_PART_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CHAPTER_PART_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_IMAGE_PART_BYTES: u64 = 4 * 1024 * 1024;
 const CONTAINER_PART: &str = "META-INF/container.xml";
 const ENCRYPTION_PART: &str = "META-INF/encryption.xml";
 
@@ -58,6 +60,7 @@ pub(crate) fn convert(
         ));
     }
 
+    let mut encrypted_targets = HashSet::new();
     if part_names.iter().any(|name| name == ENCRYPTION_PART) {
         let encryption = required_part(archive, ENCRYPTION_PART, MAX_METADATA_PART_BYTES)?;
         let targets = parse_encryption(builder, &encryption)?;
@@ -77,6 +80,7 @@ pub(crate) fn convert(
                 resource.path
             )));
         }
+        encrypted_targets.extend(targets);
     }
 
     for resource in spine_resources {
@@ -100,8 +104,131 @@ pub(crate) fn convert(
             },
         )
         .map_err(PackageError::from)?;
+        if builder.visuals_enabled() {
+            extract_spine_images(
+                builder,
+                archive,
+                &package_document,
+                opf_directory,
+                &resource,
+                &chapter,
+                &encrypted_targets,
+            )?;
+        }
     }
     Ok(())
+}
+
+fn extract_spine_images(
+    builder: &mut DocumentBuilder<'_, '_>,
+    archive: &mut Package<'_>,
+    package_document: &PackageDocument,
+    opf_directory: &str,
+    resource: &SpineResource,
+    chapter: &[u8],
+    encrypted_targets: &HashSet<String>,
+) -> Result<(), PackageError> {
+    let mut manifest_images = HashMap::new();
+    for item in package_document.manifest.values() {
+        let media_type = match item.media_type.as_str() {
+            "image/png" => "image/png",
+            "image/jpeg" => "image/jpeg",
+            "image/webp" => "image/webp",
+            _ => continue,
+        };
+        if item.navigation {
+            continue;
+        }
+        if let Ok(path) = resolve_part_path(opf_directory, &item.href) {
+            manifest_images.insert(path, media_type);
+        }
+    }
+    let sources = match image_sources(chapter) {
+        Ok(sources) => sources,
+        Err(detail) => {
+            builder.omit_visual(None, detail);
+            return Ok(());
+        }
+    };
+    for (image_index, source) in sources.into_iter().enumerate() {
+        builder.checkpoint().map_err(PackageError::from)?;
+        let provenance = VisualProvenance::EpubImage {
+            spine_index: resource.spine_index,
+            image_index: image_index as u32,
+        };
+        let part = match package::resolve_part_target(&resource.path, &source) {
+            Ok(part) => part,
+            Err(_) => {
+                builder.omit_visual(
+                    Some(provenance),
+                    "external or unsafe EPUB images are not fetched",
+                );
+                continue;
+            }
+        };
+        let Some(media_type) = manifest_images.get(&part).copied() else {
+            builder.omit_visual(
+                Some(provenance),
+                "EPUB image is not a supported manifest-declared resource",
+            );
+            continue;
+        };
+        if encrypted_targets.contains(&part) {
+            builder.omit_visual(Some(provenance), "encrypted EPUB image was not read");
+            continue;
+        }
+        let data = match package::read_bounded_visual_part(archive, &part, MAX_IMAGE_PART_BYTES)? {
+            BoundedPart::Data(data) => data,
+            BoundedPart::Missing => {
+                builder.omit_visual(Some(provenance), "EPUB image part is missing");
+                continue;
+            }
+            BoundedPart::TooLarge => {
+                builder.omit_visual(
+                    Some(provenance),
+                    format!("EPUB image exceeds {MAX_IMAGE_PART_BYTES} bytes"),
+                );
+                continue;
+            }
+        };
+        builder
+            .push_visual(VisualDraft {
+                media_type,
+                data,
+                provenance,
+                caption: None,
+            })
+            .map_err(PackageError::from)?;
+    }
+    Ok(())
+}
+
+fn image_sources(bytes: &[u8]) -> Result<Vec<String>, String> {
+    let mut reader = package::xml_reader(bytes);
+    let mut buffer = Vec::new();
+    let mut sources = Vec::new();
+    loop {
+        let event = reader
+            .read_event_into(&mut buffer)
+            .map_err(|_| "EPUB image references could not be parsed safely".to_owned())?;
+        match &event {
+            Event::Start(start) | Event::Empty(start)
+                if package::local_name(start.name().as_ref()).eq_ignore_ascii_case("img") =>
+            {
+                if let Some(source) = start.attributes().flatten().find_map(|attribute| {
+                    package::local_name(attribute.key.as_ref())
+                        .eq_ignore_ascii_case("src")
+                        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                }) {
+                    sources.push(source);
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+    Ok(sources)
 }
 
 fn readable_spine_resources(
@@ -532,5 +659,58 @@ fn hex_value(byte: u8) -> Option<u8> {
         b'a'..=b'f' => Some(byte - b'a' + 10),
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
+    use crate::cancellation::Cancellation;
+    use crate::formats::package::tests::{package, png};
+    use crate::model::{ComponentVersion, FormatKind, VisualProvenance};
+
+    #[test]
+    fn only_manifest_declared_spine_images_are_retained() {
+        let container = br#"<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>"#;
+        let opf = br#"<package><manifest>
+          <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+          <item id="picture" href="images/picture.png" media-type="image/png"/>
+        </manifest><spine><itemref idref="chapter"/></spine></package>"#;
+        let chapter = br#"<html><body><p>Visible text</p>
+          <img src="images/picture.png"/><img src="https://example.com/external.png"/>
+        </body></html>"#;
+        let image = png();
+        let bytes = package(&[
+            ("META-INF/container.xml", container),
+            ("OPS/book.opf", opf),
+            ("OPS/chapter.xhtml", chapter),
+            ("OPS/images/picture.png", &image),
+        ]);
+        let budgets = ConversionBudgets::default();
+        let cancellation = Cancellation::none();
+        let clock = ManualClock::new();
+        let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
+        let mut archive = package::preflight(&bytes, &mut tracker).expect("preflight");
+        let mut builder = DocumentBuilder::new(
+            ComponentVersion::new("baseline", 1),
+            FormatKind::Epub,
+            &mut tracker,
+        );
+        builder.set_visuals_enabled(true);
+
+        convert(&mut builder, &mut archive).expect("conversion");
+        let converted = builder.finish();
+
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::EpubImage {
+                spine_index: 0,
+                image_index: 0
+            }
+        );
+        assert_eq!(converted.visual_omissions().len(), 1);
+        assert!(converted.visual_omissions()[0].detail.contains("external"));
     }
 }

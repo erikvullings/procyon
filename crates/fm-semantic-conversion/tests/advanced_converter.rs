@@ -8,13 +8,78 @@ use fm_semantic_conversion::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
     BaselineConverter, CancellationFlag, ComponentVersion, ConversionBudgets, ConversionContext,
     ConversionError, ConversionOutcome, ConvertedDocument, DocumentConverter, DocumentMetadata,
-    FormatKind, ManualClock, OptionalConverter, Provenance, ProvenancePrecision, SourceContent,
-    SourceMap, StructuralUnit, TopLevelBoundary, UnitKind,
+    FormatKind, ManualClock, MediaType, OptionalConverter, Provenance, ProvenancePrecision,
+    SourceContent, SourceMap, StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment,
+    VisualProvenance,
 };
 
 struct OcrBackend {
     malformed: bool,
     clock: Option<Arc<ManualClock>>,
+}
+
+struct NoTextBackend;
+
+impl AdvancedConverterBackend for NoTextBackend {
+    fn version(&self) -> ComponentVersion {
+        ComponentVersion::new("fixture-no-text", 1)
+    }
+
+    fn capabilities(&self) -> &[AdvancedCapability] {
+        &[AdvancedCapability::Ocr]
+    }
+
+    fn convert_bytes(
+        &self,
+        _bytes: &[u8],
+        _metadata: &DocumentMetadata,
+        _context: &ConversionContext,
+    ) -> Result<AdvancedConversion, ConversionError> {
+        Ok(AdvancedConversion {
+            outcome: ConversionOutcome::NoTextLayer {
+                detail: "no text".into(),
+            },
+            provenance_precision: ProvenancePrecision::FileOnly,
+        })
+    }
+}
+
+struct VisualBaseline;
+
+impl DocumentConverter for VisualBaseline {
+    fn version(&self) -> ComponentVersion {
+        ComponentVersion::new("fixture-visual", 1)
+    }
+
+    fn convert(
+        &self,
+        _content: SourceContent<'_>,
+        _metadata: &DocumentMetadata,
+        _context: &ConversionContext,
+    ) -> Result<ConversionOutcome, ConversionError> {
+        Ok(ConversionOutcome::Converted(
+            ConvertedDocument::new_with_visuals(
+                self.version(),
+                FormatKind::Pdf,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                vec![VisualAttachment {
+                    id: "image".into(),
+                    media_type: MediaType::parse("image/jpeg"),
+                    data: vec![0xff, 0xd8, 0xff, 0xd9],
+                    width: 1,
+                    height: 1,
+                    provenance: VisualProvenance::PdfImage {
+                        page_number: 1,
+                        image_index: 0,
+                    },
+                    caption: None,
+                }],
+                Vec::new(),
+            ),
+        ))
+    }
 }
 
 impl AdvancedConverterBackend for OcrBackend {
@@ -157,6 +222,26 @@ fn preferred_advanced_converter_replaces_baseline_and_falls_back_on_failure() {
         fallback.document().expect("baseline document").converter(),
         fm_semantic_conversion::BASELINE_CONVERTER_VERSION
     );
+}
+
+#[test]
+fn preferred_no_text_result_keeps_baseline_visual_evidence_when_requested() {
+    let converter = OptionalConverter::prefer_advanced(
+        Arc::new(VisualBaseline),
+        Some(Arc::new(AdvancedConverterAdapter::new(Arc::new(
+            NoTextBackend,
+        )))),
+    );
+
+    let outcome = converter
+        .convert(
+            SourceContent::Bytes(b"%PDF-visual"),
+            &DocumentMetadata::unknown().with_media_type("application/pdf"),
+            &ConversionContext::new().with_visual_evidence(true),
+        )
+        .expect("visual conversion");
+
+    assert_eq!(outcome.document().expect("document").visuals().len(), 1);
 }
 
 #[test]

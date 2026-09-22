@@ -730,12 +730,14 @@ impl OcrMyPdfConverter {
                     language: "ocrmypdf-auto".into(),
                     mean_confidence_basis_points: None,
                 });
-                ConversionOutcome::Converted(ConvertedDocument::new(
+                ConversionOutcome::Converted(ConvertedDocument::new_with_visuals(
                     OCRMYPDF_CONVERTER_VERSION,
                     document.format(),
                     document.units().to_vec(),
                     warnings,
                     document.omissions().to_vec(),
+                    document.visuals().to_vec(),
+                    document.visual_omissions().to_vec(),
                 ))
             }
             ConversionOutcome::NoTextLayer { .. } => Self::no_text(

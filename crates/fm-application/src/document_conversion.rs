@@ -66,6 +66,24 @@ impl DocumentConversionService {
         location: Location,
         cancellation: CancellationToken,
     ) -> Result<ConversionOutcome, ApplicationError> {
+        self.convert_inner(location, cancellation, false).await
+    }
+
+    /// Converts one file and retains bounded optional visual evidence.
+    pub(crate) async fn convert_with_visual_evidence(
+        &self,
+        location: Location,
+        cancellation: CancellationToken,
+    ) -> Result<ConversionOutcome, ApplicationError> {
+        self.convert_inner(location, cancellation, true).await
+    }
+
+    async fn convert_inner(
+        &self,
+        location: Location,
+        cancellation: CancellationToken,
+        visual_evidence: bool,
+    ) -> Result<ConversionOutcome, ApplicationError> {
         let provider = self
             .providers
             .resolve(&location)
@@ -116,6 +134,7 @@ impl DocumentConversionService {
         let metadata = trusted_metadata(&summary, bytes.len() as u64);
         let context = ConversionContext::new()
             .with_budgets(self.budgets.clone())
+            .with_visual_evidence(visual_evidence)
             .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
                 cancellation.clone(),
             ))));
@@ -339,6 +358,10 @@ mod tests {
     }
 
     fn epub_with_image() -> Vec<u8> {
+        let mut image = Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(2, 1)
+            .write_to(&mut image, image::ImageFormat::Png)
+            .expect("encode EPUB image");
         let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
         archive
             .start_file(
@@ -353,35 +376,35 @@ mod tests {
         for (name, content) in [
             (
                 "META-INF/container.xml",
-                r#"<?xml version="1.0"?>
+                br#"<?xml version="1.0"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
     <rootfile full-path="EPUB/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
-</container>"#,
+</container>"#.as_slice(),
             ),
             (
                 "EPUB/content.opf",
-                r#"<?xml version="1.0"?>
+                br#"<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
   <manifest>
     <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
     <item id="cover" href="cover.png" media-type="image/png"/>
   </manifest>
   <spine><itemref idref="chapter"/></spine>
-</package>"#,
+</package>"#.as_slice(),
             ),
             (
                 "EPUB/chapter.xhtml",
-                "<html><body><h1>EPUB chapter</h1><p>Provider-neutral book text.</p></body></html>",
+                br#"<html><body><h1>EPUB chapter</h1><p>Provider-neutral book text.</p><img src="cover.png"/></body></html>"#.as_slice(),
             ),
-            ("EPUB/cover.png", "IMAGE_BYTES_MUST_NOT_BE_INDEXED"),
+            ("EPUB/cover.png", image.get_ref().as_slice()),
         ] {
             archive
                 .start_file(name, zip::write::SimpleFileOptions::default())
                 .expect("start EPUB part");
             archive
-                .write_all(content.as_bytes())
+                .write_all(content)
                 .expect("write EPUB part");
         }
         archive.finish().expect("finish EPUB").into_inner()
@@ -431,7 +454,26 @@ mod tests {
             .join("\n");
         assert!(text.contains("EPUB chapter"));
         assert!(text.contains("Provider-neutral book text."));
-        assert!(!text.contains("IMAGE_BYTES_MUST_NOT_BE_INDEXED"));
+        assert!(document.visuals().is_empty());
+    }
+
+    #[tokio::test]
+    async fn visual_conversion_retains_manifest_declared_epub_images() {
+        let service = memory_service(&epub_with_image(), "book.epub");
+        let outcome = service
+            .convert_with_visual_evidence(
+                Location::new(
+                    ProviderId::new("memory-conversion-test-double"),
+                    "memory://book.epub",
+                ),
+                CancellationToken::new(),
+            )
+            .await
+            .expect("conversion");
+        let document = outcome.document().expect("converted");
+
+        assert_eq!(document.visuals().len(), 1);
+        assert_eq!(document.visuals()[0].media_type.as_str(), "image/png");
     }
 
     #[tokio::test]

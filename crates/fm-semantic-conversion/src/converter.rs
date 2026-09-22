@@ -54,6 +54,7 @@ pub struct ConversionContext {
     budgets: ConversionBudgets,
     cancellation: Cancellation,
     clock: Arc<dyn Clock>,
+    visual_evidence: bool,
 }
 
 impl Default for ConversionContext {
@@ -62,6 +63,7 @@ impl Default for ConversionContext {
             budgets: ConversionBudgets::default(),
             cancellation: Cancellation::none(),
             clock: Arc::new(SystemClock::new()),
+            visual_evidence: false,
         }
     }
 }
@@ -105,6 +107,13 @@ impl ConversionContext {
         self
     }
 
+    /// Requests bounded visual attachments in addition to structural text.
+    #[must_use]
+    pub fn with_visual_evidence(mut self, enabled: bool) -> Self {
+        self.visual_evidence = enabled;
+        self
+    }
+
     /// The budgets in force.
     #[must_use]
     pub fn budgets(&self) -> &ConversionBudgets {
@@ -121,6 +130,12 @@ impl ConversionContext {
     #[must_use]
     pub fn elapsed(&self) -> std::time::Duration {
         self.clock.elapsed()
+    }
+
+    /// Whether converters should retain optional visual attachments.
+    #[must_use]
+    pub fn visual_evidence(&self) -> bool {
+        self.visual_evidence
     }
 }
 
@@ -300,6 +315,7 @@ impl DocumentConverter for BaselineConverter {
             | FormatKind::Csv => {
                 let decoded = decode(bytes, metadata.charset());
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
+                builder.set_visuals_enabled(context.visual_evidence());
                 if decoded.lossy {
                     builder.warn(ConversionWarning::LossyDecoding {
                         encoding: decoded.encoding.to_owned(),
@@ -329,6 +345,7 @@ impl DocumentConverter for BaselineConverter {
                     Err(error) => return Ok(package_outcome(error)),
                 };
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
+                builder.set_visuals_enabled(context.visual_evidence());
                 let outcome = match format {
                     FormatKind::Docx => docx::convert(&mut builder, &mut archive),
                     FormatKind::Pptx => pptx::convert(&mut builder, &mut archive),
@@ -341,17 +358,25 @@ impl DocumentConverter for BaselineConverter {
                 builder.finish()
             }
             FormatKind::Spreadsheet => {
-                if let Err(error) = package::preflight(bytes, &mut tracker) {
-                    return Ok(package_outcome(error));
-                }
+                let mut archive = match package::preflight(bytes, &mut tracker) {
+                    Ok(archive) => archive,
+                    Err(error) => return Ok(package_outcome(error)),
+                };
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
+                builder.set_visuals_enabled(context.visual_evidence());
                 if let Err(error) = spreadsheet::convert(&mut builder, bytes) {
                     return Ok(workbook_outcome(error));
+                }
+                if builder.visuals_enabled()
+                    && let Err(error) = spreadsheet::extract_visuals(&mut builder, &mut archive)
+                {
+                    return Ok(package_outcome(error));
                 }
                 builder.finish()
             }
             FormatKind::Pdf => {
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
+                builder.set_visuals_enabled(context.visual_evidence());
                 if let Err(error) = pdf::convert(&mut builder, bytes) {
                     return Ok(pdf_outcome(error));
                 }
@@ -366,7 +391,7 @@ impl DocumentConverter for BaselineConverter {
 /// Reports a document with no units as a visible skip rather than an empty
 /// success.
 fn finish(document: ConvertedDocument) -> ConversionOutcome {
-    if document.units().is_empty() {
+    if document.units().is_empty() && document.visuals().is_empty() {
         return ConversionOutcome::Skipped {
             reason: SkipReason::NoTextContent,
         };

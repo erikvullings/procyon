@@ -7,12 +7,14 @@
 
 use quick_xml::events::Event;
 
-use crate::builder::{DocumentBuilder, UnitDraft};
-use crate::formats::package::{self, Package, PackageError};
-use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
+use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
+use crate::formats::package::{self, BoundedPart, Package, PackageError, RelationshipTarget};
+use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 
 /// Maximum bytes read from `word/document.xml`.
 const MAX_DOCUMENT_PART_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_RELATIONSHIP_PART_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_IMAGE_PART_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Heading level implied by a paragraph style name, if any.
 fn style_heading_level(style: &str) -> Option<u32> {
@@ -52,6 +54,8 @@ pub(crate) fn convert(
     let mut in_paragraph_properties = false;
     let mut table: Option<TableState> = None;
     let mut block_index = 0_u32;
+    let mut image_index = 0_u32;
+    let mut image_references = Vec::new();
     let mut headings: Vec<(u32, String)> = Vec::new();
 
     loop {
@@ -81,7 +85,14 @@ pub(crate) fn convert(
                 "p" => {
                     paragraph.clear();
                     style = None;
+                    image_index = 0;
                 }
+                "blip" => collect_image_reference(
+                    start,
+                    block_index,
+                    &mut image_index,
+                    &mut image_references,
+                ),
                 _ => {}
             },
             Event::Empty(empty) => match package::local_name(empty.name().as_ref()).as_str() {
@@ -102,6 +113,12 @@ pub(crate) fn convert(
                 }
                 "tab" => push_text(&mut paragraph, &mut table, "\t"),
                 "br" | "cr" => push_text(&mut paragraph, &mut table, "\n"),
+                "blip" => collect_image_reference(
+                    empty,
+                    block_index,
+                    &mut image_index,
+                    &mut image_references,
+                ),
                 _ => {}
             },
             Event::Text(text) => {
@@ -161,6 +178,89 @@ pub(crate) fn convert(
         });
     } else {
         package::ensure_balanced(depth, "word/document.xml")?;
+    }
+    if builder.visuals_enabled() {
+        extract_images(builder, archive, &image_references)?;
+    }
+    Ok(())
+}
+
+fn collect_image_reference(
+    element: &quick_xml::events::BytesStart<'_>,
+    block_index: u32,
+    image_index: &mut u32,
+    references: &mut Vec<(String, VisualProvenance)>,
+) {
+    if let Some(id) = element.attributes().flatten().find_map(|attribute| {
+        matches!(
+            package::local_name(attribute.key.as_ref()).as_str(),
+            "embed" | "link"
+        )
+        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+    }) {
+        references.push((
+            id,
+            VisualProvenance::DocxImage {
+                block_index,
+                image_index: *image_index,
+            },
+        ));
+        *image_index = image_index.saturating_add(1);
+    }
+}
+
+fn extract_images(
+    builder: &mut DocumentBuilder<'_, '_>,
+    archive: &mut Package<'_>,
+    references: &[(String, VisualProvenance)],
+) -> Result<(), PackageError> {
+    let relationships =
+        package::read_relationships(archive, "word/document.xml", MAX_RELATIONSHIP_PART_BYTES)?;
+    for (id, provenance) in references {
+        builder.checkpoint().map_err(PackageError::from)?;
+        let Some(target) = relationships.get(id) else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                format!("DOCX image relationship '{id}' is missing"),
+            );
+            continue;
+        };
+        let RelationshipTarget::Internal(part) = target else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                "external DOCX images are not fetched",
+            );
+            continue;
+        };
+        let Some(media_type) = package::image_media_type(part) else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                "DOCX image uses an unsupported media type",
+            );
+            continue;
+        };
+        let data = match package::read_bounded_visual_part(archive, part, MAX_IMAGE_PART_BYTES)? {
+            BoundedPart::Data(data) => data,
+            BoundedPart::Missing => {
+                builder.omit_visual(Some(provenance.clone()), "DOCX image part is missing");
+                continue;
+            }
+            BoundedPart::TooLarge => {
+                builder.omit_visual(
+                    Some(provenance.clone()),
+                    format!("DOCX image exceeds {MAX_IMAGE_PART_BYTES} bytes"),
+                );
+                continue;
+            }
+        };
+        builder
+            .push_visual(VisualDraft {
+                media_type,
+                data,
+                provenance: provenance.clone(),
+                caption: None,
+            })
+            .map_err(PackageError::from)?;
     }
     Ok(())
 }
@@ -259,8 +359,8 @@ mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock, Stop};
     use crate::cancellation::{Cancellation, CancellationFlag};
-    use crate::formats::package::tests::package;
-    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
+    use crate::formats::package::tests::{package, png};
+    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, VisualProvenance};
 
     const DOCUMENT: &[u8] = br#"<?xml version="1.0"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -303,6 +403,22 @@ mod tests {
             FormatKind::Docx,
             &mut tracker,
         );
+        convert(&mut builder, &mut archive)?;
+        Ok(builder.finish())
+    }
+
+    fn convert_package_with_visuals(bytes: &[u8]) -> Result<ConvertedDocument, PackageError> {
+        let budgets = ConversionBudgets::default();
+        let cancellation = Cancellation::none();
+        let clock = ManualClock::new();
+        let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
+        let mut archive = package::preflight(bytes, &mut tracker)?;
+        let mut builder = DocumentBuilder::new(
+            ComponentVersion::new("baseline", 1),
+            FormatKind::Docx,
+            &mut tracker,
+        );
+        builder.set_visuals_enabled(true);
         convert(&mut builder, &mut archive)?;
         Ok(builder.finish())
     }
@@ -384,5 +500,56 @@ mod tests {
         assert_eq!(style_heading_level("Title"), Some(1));
         assert_eq!(style_heading_level("BodyText"), None);
         assert_eq!(style_heading_level("HeadingChar"), None);
+    }
+
+    #[test]
+    fn referenced_local_images_are_exposed_with_block_provenance() {
+        let document = br#"<w:document xmlns:w="w" xmlns:r="r" xmlns:a="a">
+          <w:body><w:p><w:r><w:t>Visible text</w:t></w:r>
+          <w:r><w:drawing><a:blip r:embed="rImage"/></w:drawing></w:r></w:p></w:body>
+        </w:document>"#;
+        let relationships = br#"<Relationships>
+          <Relationship Id="rImage" Target="media/picture.png"/>
+        </Relationships>"#;
+        let image = png();
+        let bytes = package(&[
+            ("word/document.xml", document),
+            ("word/_rels/document.xml.rels", relationships),
+            ("word/media/picture.png", &image),
+        ]);
+
+        let converted = convert_package_with_visuals(&bytes).expect("conversion");
+
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(converted.visuals()[0].width, 2);
+        assert_eq!(converted.visuals()[0].height, 1);
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::DocxImage {
+                block_index: 0,
+                image_index: 0
+            }
+        );
+    }
+
+    #[test]
+    fn external_images_are_disclosed_without_being_fetched() {
+        let document = br#"<w:document xmlns:w="w" xmlns:r="r" xmlns:a="a">
+          <w:body><w:p><w:r><w:t>Visible text</w:t></w:r>
+          <w:r><w:drawing><a:blip r:link="rExternal"/></w:drawing></w:r></w:p></w:body>
+        </w:document>"#;
+        let relationships = br#"<Relationships>
+          <Relationship Id="rExternal" Target="https://example.com/picture.png" TargetMode="External"/>
+        </Relationships>"#;
+        let bytes = package(&[
+            ("word/document.xml", document),
+            ("word/_rels/document.xml.rels", relationships),
+        ]);
+
+        let converted = convert_package_with_visuals(&bytes).expect("conversion");
+
+        assert!(converted.visuals().is_empty());
+        assert_eq!(converted.visual_omissions().len(), 1);
+        assert!(converted.visual_omissions()[0].detail.contains("external"));
     }
 }

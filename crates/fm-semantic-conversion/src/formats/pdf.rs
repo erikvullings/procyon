@@ -15,8 +15,8 @@
 use lopdf::Document;
 
 use crate::budget::Stop;
-use crate::builder::{DocumentBuilder, UnitDraft};
-use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
+use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
+use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 
 /// Maximum decompressed content bytes per page.
 const MAX_PAGE_CONTENT_BYTES: usize = 16 * 1024 * 1024;
@@ -74,7 +74,8 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
             "the PDF is encrypted and cannot be read without a password".to_owned(),
         ));
     }
-    let mut page_numbers: Vec<u32> = document.get_pages().keys().copied().collect();
+    let pages = document.get_pages();
+    let mut page_numbers: Vec<u32> = pages.keys().copied().collect();
     page_numbers.sort_unstable();
     if page_numbers.is_empty() {
         return Err(PdfError::Malformed("the PDF contains no pages".to_owned()));
@@ -119,11 +120,58 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
                 .map_err(PdfError::from)?;
             extracted_any |= pushed;
         }
+        let Some(page_id) = pages.get(&page_number).copied() else {
+            continue;
+        };
+        if builder.visuals_enabled() {
+            extract_page_images(builder, &document, page_id, page_number)?;
+        }
     }
-    if !extracted_any {
+    if !extracted_any && !builder.has_visuals() {
         return Err(PdfError::NoTextLayer(
             "the PDF pages contain no extractable text layer; an OCR pack is required".to_owned(),
         ));
+    }
+    Ok(())
+}
+
+fn extract_page_images(
+    builder: &mut DocumentBuilder<'_, '_>,
+    document: &Document,
+    page_id: lopdf::ObjectId,
+    page_number: u32,
+) -> Result<(), PdfError> {
+    match document.get_page_images(page_id) {
+        Ok(images) => {
+            for (image_index, image) in images.into_iter().enumerate() {
+                let provenance = VisualProvenance::PdfImage {
+                    page_number,
+                    image_index: image_index as u32,
+                };
+                if image.filters.as_deref() != Some(&["DCTDecode".to_owned()]) {
+                    builder.omit_visual(
+                        Some(provenance),
+                        "PDF image encoding is not a reusable JPEG raster",
+                    );
+                    continue;
+                }
+                builder
+                    .push_visual(VisualDraft {
+                        media_type: "image/jpeg",
+                        data: image.content.to_vec(),
+                        provenance,
+                        caption: None,
+                    })
+                    .map_err(PdfError::from)?;
+            }
+        }
+        Err(error) => builder.omit_visual(
+            Some(VisualProvenance::PdfImage {
+                page_number,
+                image_index: 0,
+            }),
+            format!("PDF page images could not be inspected: {error}"),
+        ),
     }
     Ok(())
 }
@@ -135,7 +183,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
     use crate::cancellation::Cancellation;
-    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
+    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, VisualProvenance};
 
     /// Generates a small single-font PDF whose pages carry the given text
     /// lines, so no binary fixture is checked in.
@@ -193,6 +241,13 @@ pub(crate) mod tests {
     }
 
     fn convert_pdf(bytes: &[u8]) -> Result<ConvertedDocument, PdfError> {
+        convert_pdf_with_visuals(bytes, false)
+    }
+
+    fn convert_pdf_with_visuals(
+        bytes: &[u8],
+        visuals: bool,
+    ) -> Result<ConvertedDocument, PdfError> {
         let budgets = ConversionBudgets::default();
         let cancellation = Cancellation::none();
         let clock = ManualClock::new();
@@ -202,6 +257,7 @@ pub(crate) mod tests {
             FormatKind::Pdf,
             &mut tracker,
         );
+        builder.set_visuals_enabled(visuals);
         convert(&mut builder, bytes)?;
         Ok(builder.finish())
     }
@@ -239,5 +295,44 @@ pub(crate) mod tests {
     fn page_text_is_split_into_blocks_on_blank_lines() {
         let blocks = page_blocks("first line\nsecond line\n\n\nthird block\n");
         assert_eq!(blocks, ["first line\nsecond line", "third block"]);
+    }
+
+    #[test]
+    fn reusable_pdf_jpeg_images_are_retained_with_page_provenance() {
+        let bytes = text_pdf(&[&["Visible text"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&1];
+        let jpeg = vec![
+            0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
+            0xff, 0xd9,
+        ];
+        let image_id = document.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => 2,
+                "Height" => 1,
+                "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8,
+                "Filter" => "DCTDecode",
+            },
+            jpeg,
+        ));
+        document
+            .add_xobject(page_id, b"Im1", image_id)
+            .expect("attach image");
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
+
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::PdfImage {
+                page_number: 1,
+                image_index: 0
+            }
+        );
     }
 }

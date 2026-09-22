@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use crate::{
     BudgetKind, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
-    ConvertedDocument, DocumentConverter, DocumentMetadata, SourceContent,
+    ConvertedDocument, DocumentConverter, DocumentMetadata, MAX_TOTAL_VISUAL_BYTES,
+    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, SourceContent,
 };
 
 /// Independently disclosed capability supplied by an advanced converter pack.
@@ -209,10 +210,32 @@ impl DocumentConverter for OptionalConverter {
             let advanced_outcome = advanced
                 .convert_with_report(SourceContent::Bytes(&bytes), metadata, context)?
                 .outcome;
+            if let ConversionOutcome::Converted(mut document) = advanced_outcome {
+                if context.visual_evidence()
+                    && document.visuals().is_empty()
+                    && let ConversionOutcome::Converted(baseline) =
+                        self.baseline
+                            .convert(SourceContent::Bytes(&bytes), metadata, context)?
+                {
+                    document.replace_visual_evidence(
+                        baseline.visuals().to_vec(),
+                        baseline.visual_omissions().to_vec(),
+                    );
+                }
+                return Ok(ConversionOutcome::Converted(document));
+            }
+            if context.visual_evidence()
+                && matches!(advanced_outcome, ConversionOutcome::NoTextLayer { .. })
+                && let ConversionOutcome::Converted(document) =
+                    self.baseline
+                        .convert(SourceContent::Bytes(&bytes), metadata, context)?
+                && !document.visuals().is_empty()
+            {
+                return Ok(ConversionOutcome::Converted(document));
+            }
             if matches!(
                 advanced_outcome,
-                ConversionOutcome::Converted(_)
-                    | ConversionOutcome::Cancelled
+                ConversionOutcome::Cancelled
                     | ConversionOutcome::NoTextLayer { .. }
                     | ConversionOutcome::OverBudget { .. }
                     | ConversionOutcome::Encrypted { .. }
@@ -308,7 +331,29 @@ fn valid_document(document: &ConvertedDocument, context: &ConversionContext) -> 
         };
         output_chars = total;
     }
-    output_chars <= budgets.max_output_chars
+    if output_chars > budgets.max_output_chars {
+        return false;
+    }
+    if !context.visual_evidence() {
+        return document.visuals().is_empty();
+    }
+    if document.visuals().len() > MAX_VISUAL_ATTACHMENTS {
+        return false;
+    }
+    let mut visual_bytes = 0_usize;
+    for visual in document.visuals() {
+        if visual.data.len() > MAX_VISUAL_BYTES
+            || !matches!(
+                visual.media_type.as_str(),
+                "image/png" | "image/jpeg" | "image/webp"
+            )
+            || u64::from(visual.width).saturating_mul(u64::from(visual.height)) > MAX_VISUAL_PIXELS
+        {
+            return false;
+        }
+        visual_bytes = visual_bytes.saturating_add(visual.data.len());
+    }
+    visual_bytes <= MAX_TOTAL_VISUAL_BYTES
 }
 
 fn cancelled() -> AdvancedConversion {
