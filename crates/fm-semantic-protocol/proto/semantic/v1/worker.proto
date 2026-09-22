@@ -34,7 +34,7 @@ message OpenSessionResponse {
   string session_id = 1;
   // Opaque token authenticating subsequent requests.
   bytes session_token = 2;
-  // Session expiry as Unix epoch milliseconds.
+  // Session expiry as Unix epoch milliseconds, or zero for the connection lifetime.
   uint64 expires_at_unix_ms = 3;
 }
 
