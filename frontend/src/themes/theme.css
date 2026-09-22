@@ -2563,6 +2563,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-search-options .fm-knowledge-inline-needs {
   display: flex;
+  align-items: center;
   flex: 1 1 auto;
   gap: 0.5rem;
   min-width: 0;
@@ -2572,6 +2573,11 @@ input[type="text"].fm-shortcuts-help-capture-input {
   overflow: hidden;
   border: 0;
   flex-wrap: nowrap;
+}
+
+.fm-knowledge-search-options input[type="checkbox"] + span:not(.lever) {
+  display: inline-flex;
+  align-items: center;
 }
 
 .fm-knowledge-search-options > .fm-tooltip {

@@ -168,6 +168,13 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(chocolateyText, /secrets\.CHOCOLATEY_API_KEY/);
   assert.match(chocolateyText, /choco pack/);
   assert.match(chocolateyText, /choco push/);
+  const chocolateyPush = chocolatey.jobs.chocolatey.steps.find(
+    (step) => step.name === 'Push to the Chocolatey Community Repository',
+  );
+  assert.equal(chocolateyPush?.['continue-on-error'], undefined);
+  assert.match(chocolateyPush?.run ?? '', /403 \\\(Forbidden\\\)/);
+  assert.match(chocolateyPush?.run ?? '', /GITHUB_STEP_SUMMARY/);
+  assert.doesNotMatch(chocolateyPush?.run ?? '', /exit 1/);
 });
 
 test('desktop releases consume one approved semantic component release without rebuilding it', () => {

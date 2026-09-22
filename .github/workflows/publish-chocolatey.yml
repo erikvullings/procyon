@@ -25,7 +25,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Download the unsigned NSIS installer
         shell: pwsh
         env:
@@ -56,7 +56,6 @@ jobs:
           gh release upload "$env:RELEASE_TAG" $package.FullName --clobber
       - name: Push to the Chocolatey Community Repository
         shell: pwsh
-        continue-on-error: true
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
         run: |
@@ -64,16 +63,20 @@ jobs:
           if (-not $package) { throw "Chocolatey package was not created" }
           $maxAttempts = 4
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            try {
-              choco push $package.FullName --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY --execution-timeout=500
-              if ($LASTEXITCODE -eq 0) { exit 0 }
-              throw "choco push exited with code $LASTEXITCODE"
-            } catch {
-              Write-Warning "Attempt $attempt of $maxAttempts failed: $_"
-              if ($attempt -eq $maxAttempts) {
-                Write-Warning "Giving up after $maxAttempts attempts - the .nupkg is still attached to the GitHub release for a manual push."
-                exit 1
-              }
-              Start-Sleep -Seconds (30 * $attempt)
+            $output = choco push $package.FullName --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY --execution-timeout=500 2>&1
+            $exitCode = $LASTEXITCODE
+            $output | ForEach-Object { Write-Host $_ }
+            if ($exitCode -eq 0) { exit 0 }
+            $details = $output -join [Environment]::NewLine
+            if ($details -match '403 \(Forbidden\)') {
+              Write-Warning "Chocolatey rejected the configured API key. Verify the desktop-release CHOCOLATEY_API_KEY secret. The .nupkg remains attached to the GitHub release for manual publication."
+              "### Chocolatey publication" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+              "Chocolatey returned 403 Forbidden. Verify the desktop-release API key; the package is attached to the GitHub release." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+              exit 0
             }
+            Write-Warning "Attempt $attempt of $maxAttempts failed with exit code $exitCode."
+            if ($attempt -lt $maxAttempts) { Start-Sleep -Seconds (30 * $attempt) }
           }
+          Write-Warning "Chocolatey remained unavailable after $maxAttempts attempts. The .nupkg remains attached to the GitHub release for manual publication."
+          "### Chocolatey publication" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Automatic publication failed after $maxAttempts attempts; the package is attached to the GitHub release." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append

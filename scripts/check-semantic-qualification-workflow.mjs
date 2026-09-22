@@ -90,7 +90,7 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   if (
     !publishSteps.some(
       (step) =>
-        step.uses === 'actions/download-artifact@v5' &&
+        step.uses === 'actions/download-artifact@v8' &&
         String(step.with?.['run-id'] ?? '').includes('inputs.qualification_run_id'),
     ) ||
     !publishCommands.includes('check-semantic-release-preconditions.mjs') ||

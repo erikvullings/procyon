@@ -137,7 +137,7 @@
   bottom: 0.1rem;
   width: 0.45rem;
   height: 1.5px;
-  border-radius: 1px;
+  border-radius: 2px;
   background: currentColor;
   content: "";
   transform: rotate(45deg);
@@ -291,6 +291,14 @@
 
 .fm-app-shell[data-mm-preset="compact-minimal"] input[type="checkbox"] + span:not(.lever) {
   line-height: 16px;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .fm-semantic-library-confirmation
+  input[type="checkbox"]
+  + span:not(.lever) {
+  height: auto;
+  min-height: 20px;
 }
 
 .fm-app-shell[data-mm-preset="compact-minimal"] input[type="checkbox"]:focus + span:not(.lever) {

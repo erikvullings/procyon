@@ -21,9 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: desktop-release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.release-input-artifact }}
           path: semantic-release-input
@@ -54,7 +54,7 @@ jobs:
             semantic-signed-catalog/catalog.sig \
             semantic-release-input/artifacts \
             "$RUNNER_TEMP/semantic-catalog.pub"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.signed-catalog-artifact }}
           path: semantic-signed-catalog/
