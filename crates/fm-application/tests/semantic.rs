@@ -428,7 +428,7 @@ async fn semantic_ipc_restart_accepts_an_already_stopped_cached_worker() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn semantic_ipc_capability_reconnects_after_a_typed_session_expiry_rejection() {
+async fn semantic_ipc_capability_renews_an_expired_session_before_the_next_operation() {
     let directory = TestDirectory::new("ipc-session-expiry");
     let endpoint = SemanticWorkerEndpoint::for_runtime_directory(&directory);
     let secret = SemanticWorkerSecret::from_bytes([12; 32]);
@@ -456,10 +456,6 @@ async fn semantic_ipc_capability_reconnects_after_a_typed_session_expiry_rejecti
     assert_eq!(service.semantic_health().await, Ok(SemanticHealth::Serving));
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    assert_eq!(
-        service.semantic_health().await,
-        Err(SemanticError::AuthenticationRejected)
-    );
     assert_eq!(service.semantic_health().await, Ok(SemanticHealth::Serving));
 
     service

@@ -1304,6 +1304,7 @@ impl ClientInner {
 pub struct WorkerClient {
     inner: Arc<ClientInner>,
     session: v1::SessionContext,
+    session_expires_at: Option<tokio::time::Instant>,
     protocol_version: u32,
     capabilities: BTreeSet<v1::Capability>,
 }
@@ -1526,6 +1527,7 @@ impl Clone for WorkerClient {
         Self {
             inner: Arc::clone(&self.inner),
             session: self.session.clone(),
+            session_expires_at: self.session_expires_at,
             protocol_version: self.protocol_version,
             capabilities: self.capabilities.clone(),
         }
@@ -1629,6 +1631,7 @@ impl WorkerClient {
         let mut client = Self {
             inner,
             session: v1::SessionContext::default(),
+            session_expires_at: None,
             protocol_version: 0,
             capabilities: BTreeSet::new(),
         };
@@ -1678,7 +1681,17 @@ impl WorkerClient {
             session_id: response.session_id,
             session_token: response.session_token,
         };
+        client.session_expires_at = tokio::time::Instant::now().checked_add(Duration::from_millis(
+            response.expires_at_unix_ms.saturating_sub(now_millis()),
+        ));
         Ok(client)
+    }
+
+    /// Whether the authenticated session has reached the worker-issued deadline.
+    #[must_use]
+    pub fn session_is_expired(&self) -> bool {
+        self.session_expires_at
+            .is_some_and(|expires_at| tokio::time::Instant::now() >= expires_at)
     }
 
     /// Returns the negotiated protocol version.

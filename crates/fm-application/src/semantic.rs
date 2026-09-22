@@ -650,9 +650,12 @@ impl IpcSemanticCapability {
 
     async fn worker_client(&self) -> Result<WorkerClient, SemanticError> {
         let mut client = self.client.lock().await;
-        if let Some(client) = client.as_ref() {
+        if let Some(client) = client.as_ref()
+            && !client.session_is_expired()
+        {
             return Ok(client.clone());
         }
+        client.take();
         let connected = self
             .connector
             .connect()

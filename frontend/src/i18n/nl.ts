@@ -872,6 +872,8 @@ export const nl = {
     cancelled: 'De zoekopdracht is geannuleerd.',
     searchNoSources:
       'Er zijn geen geïndexeerde documenten beschikbaar in dit bereik. Kies een ander bereik of indexeer een map en probeer het opnieuw.',
+    searchIndexPending:
+      'Deze map is toegevoegd, maar de eerste indexering is nog niet voltooid. Start Procyon opnieuw als de indexering niet verdergaat.',
     searchUnavailable:
       'Semantisch zoeken is niet beschikbaar. Controleer de instellingen voor semantisch zoeken en probeer het opnieuw.',
     searchDenied:

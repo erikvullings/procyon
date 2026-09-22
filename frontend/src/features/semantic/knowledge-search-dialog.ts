@@ -1361,7 +1361,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         return m(
           'p.fm-knowledge-warning',
           { role: 'status' },
-          t('knowledgeSearch', 'searchNoSources'),
+          t('knowledgeSearch', roots.length > 0 ? 'searchIndexPending' : 'searchNoSources'),
         );
       }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
