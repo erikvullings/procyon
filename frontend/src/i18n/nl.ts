@@ -873,7 +873,7 @@ export const nl = {
     searchNoSources:
       'Er zijn geen geïndexeerde documenten beschikbaar in dit bereik. Kies een ander bereik of indexeer een map en probeer het opnieuw.',
     searchIndexPending:
-      'Deze map is toegevoegd, maar de eerste indexering is nog niet voltooid. Start Procyon opnieuw als de indexering niet verdergaat.',
+      'Deze map is toegevoegd en wordt nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
     searchUnavailable:
       'Semantisch zoeken is niet beschikbaar. Controleer de instellingen voor semantisch zoeken en probeer het opnieuw.',
     searchDenied:

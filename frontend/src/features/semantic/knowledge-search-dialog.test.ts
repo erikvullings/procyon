@@ -290,10 +290,10 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'This folder is included, but its initial indexing has not completed.',
+      'This folder is included and still being indexed. You can search documents that are already available.',
     );
     expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
-    expect(button('Search').disabled).toBe(true);
+    expect(button('Search').disabled).toBe(false);
   });
 
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {

@@ -968,14 +968,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return (draft.about ?? []).some((subject) => subject.trim().length > 0);
   }
 
-  /** Whether this workspace or the active semantic result set has indexed evidence to search. */
-  function hasIndexedDocuments(attrs: KnowledgeSearchDialogAttrs): boolean {
-    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.indexedGeneration > 0);
+  /** Whether an authorized source can be queried while full reconciliation continues. */
+  function hasSearchableSources(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.available);
   }
 
-  /** Whether a search can run: indexed evidence, a subject, and no unusable scope selector. */
+  /** Whether a search can run: searchable sources, a subject, and no unusable scope selector. */
   function canSearch(attrs: KnowledgeSearchDialogAttrs): boolean {
-    return hasIndexedDocuments(attrs) && hasSubject() && scopeIssues.length === 0;
+    return hasSearchableSources(attrs) && hasSubject() && scopeIssues.length === 0;
   }
 
   /**
@@ -1357,11 +1357,22 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
-      if (capabilities !== undefined && !hasIndexedDocuments(attrs)) {
+      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
         return m(
           'p.fm-knowledge-warning',
           { role: 'status' },
-          t('knowledgeSearch', roots.length > 0 ? 'searchIndexPending' : 'searchNoSources'),
+          t('knowledgeSearch', 'searchNoSources'),
+        );
+      }
+      if (
+        capabilities !== undefined &&
+        attrs.semanticSourceIds.length === 0 &&
+        roots.some((root) => root.available && root.indexedGeneration === 0)
+      ) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchIndexPending'),
         );
       }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));

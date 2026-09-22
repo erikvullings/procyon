@@ -910,7 +910,7 @@ export const en = {
     searchNoSources:
       'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
     searchIndexPending:
-      'This folder is included, but its initial indexing has not completed. Restart Procyon to retry if indexing does not progress.',
+      'This folder is included and still being indexed. You can search documents that are already available.',
     searchUnavailable:
       'Semantic search is unavailable. Check Semantic Search settings and try again.',
     searchDenied: 'This search scope is no longer authorized. Choose another scope and try again.',
