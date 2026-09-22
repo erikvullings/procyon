@@ -846,6 +846,7 @@ impl RagCoordinator {
                 LlmChatGeneration {
                     system_prompt,
                     user_prompt,
+                    images: Vec::new(),
                     maximum_tokens: MAX_PLANNER_TOKENS,
                     temperature: 0.0,
                 },
@@ -924,6 +925,7 @@ impl RagCoordinator {
                 LlmChatGeneration {
                     system_prompt,
                     user_prompt,
+                    images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
                     temperature: 0.2,
                 },

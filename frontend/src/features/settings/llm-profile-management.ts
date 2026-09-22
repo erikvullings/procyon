@@ -271,6 +271,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       if (loading) return m('p', t('llmProfiles', 'loading'));
       if (editor === undefined) return m('p', t('llmProfiles', 'unavailable'));
       const active = profiles.find((profile) => profile.id === selectedId);
+      const activeIsDefault = active !== undefined && profiles[0]?.id === active.id;
       const request = editor.request;
       const customHeaders = request.advanced.customHeaders;
       const modelOptions =
@@ -548,18 +549,21 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   type: 'button',
                   disabled:
                     busy ||
+                    (activeIsDefault &&
+                      (active.locality === 'loopback' || active.consentedHost != null)) ||
                     (active.locality === 'cloud' && active.consentedHost == null && !consent),
                   onclick: () =>
                     void run(async () => {
                       const activated = await attrs.client.activateLlmProfile(active.id, consent);
-                      profiles = profiles.map((profile) =>
-                        profile.id === activated.id ? activated : profile,
-                      );
+                      profiles = [
+                        activated,
+                        ...profiles.filter((profile) => profile.id !== activated.id),
+                      ];
                       selectProfile(activated);
                       message = t('llmProfiles', 'activated');
                     }),
                 },
-                t('llmProfiles', 'activate'),
+                t('llmProfiles', activeIsDefault ? 'defaultProfile' : 'activate'),
               ),
           active === undefined
             ? undefined

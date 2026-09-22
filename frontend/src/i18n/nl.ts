@@ -718,19 +718,35 @@ export const nl = {
   },
   documentSummary: {
     title: 'Samenvatting · {name}',
-    working: 'Representatieve passages voorbereiden…',
+    working: 'Documentinhoud voorbereiden…',
     loadFailed: 'De samenvatting kon niet worden geladen.',
     generationFailed: 'De samenvatting kon niet worden gegenereerd.',
     keyPassagesOnly: 'Er is geen generatieprofiel ingesteld. Alleen kernpassages worden getoond.',
     profile: 'Generatieprofiel',
-    cloudDisclosure:
-      '{tokens} geschatte tokens met representatieve documenttekst worden naar deze cloudendpoint verzonden.',
-    localDisclosure:
-      '{tokens} geschatte tokens met representatieve documenttekst worden naar deze lokale endpoint verzonden.',
+    representativeOnly: 'Representatieve passages gebruiken in plaats van het hele document',
+    includeImages: 'Afbeeldingen opnemen (alleen vision-modellen, max. 1024 px)',
+    imagesIncluded: '{count} ingesloten afbeelding(en) worden ook verzonden.',
+    imagesIncludedWithOmissions:
+      '{count} ingesloten afbeelding(en) worden verzonden; {omitted} afbeelding(en) zijn weggelaten vanwege de veiligheidslimieten.',
+    imagesOmitted:
+      'Er zijn geen geschikte ingesloten afbeeldingen gevonden binnen de afbeeldingslimieten.',
+    cloudFullDisclosure:
+      'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze cloudendpoint verzonden.',
+    localFullDisclosure:
+      'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze lokale endpoint verzonden.',
+    cloudRepresentativeDisclosure:
+      '{tokens} geschatte tokens met representatieve documentpassages worden naar deze cloudendpoint verzonden.',
+    localRepresentativeDisclosure:
+      '{tokens} geschatte tokens met representatieve documentpassages worden naar deze lokale endpoint verzonden.',
+    cloudFallbackDisclosure:
+      'Het hele document is groter dan de ingestelde contextlimiet. Procyon heeft automatisch {tokens} geschatte tokens met representatieve passages geselecteerd voor deze cloudendpoint.',
+    localFallbackDisclosure:
+      'Het hele document is groter dan de ingestelde contextlimiet. Procyon heeft automatisch {tokens} geschatte tokens met representatieve passages geselecteerd voor deze lokale endpoint.',
     stale: 'De bron is gewijzigd sinds deze samenvatting is gegenereerd.',
     brief: 'Kort',
     full: 'Volledige samenvatting',
     keyPassages: 'Kernpassages',
+    documentText: 'Documenttekst',
     generate: 'Samenvatting genereren',
     regenerate: 'Samenvatting opnieuw genereren',
   },
@@ -1554,14 +1570,15 @@ export const nl = {
       'Activering staat toe dat vragen, gespreksgeschiedenis en opgehaalde fragmenten dit apparaat verlaten naar {host}.',
     confirmConsent: 'Ik begrijp dit en geef toestemming om deze gegevens naar deze host te sturen.',
     test: 'Testen',
-    activate: 'Activeren',
+    activate: 'Als standaard gebruiken',
+    defaultProfile: 'Standaardprofiel',
     clone: 'Klonen',
     export: 'Exporteren',
     credentialOnDelete: 'Opgeslagen referentie bij verwijderen',
     deleteCredential: 'Referentie verwijderen',
     retainCredential: 'Referentie behouden',
     saved: 'Generatieprofiel opgeslagen.',
-    activated: 'Generatieprofiel geactiveerd.',
+    activated: 'Standaard generatieprofiel bijgewerkt.',
     testSucceeded: 'Verbindingstest geslaagd.',
     testFailed: 'Verbindingstest mislukt: {category}.',
   },

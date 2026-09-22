@@ -1,6 +1,7 @@
 //! The `FileManagerService` facade (specification §7).
 
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -60,8 +61,8 @@ use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
 use crate::document_conversion::DocumentConversionService;
 use crate::document_summary::{
-    DocumentSummaryCapability, DocumentSummaryCoordinator, GenerateDocumentSummary,
-    UnavailableDocumentSummaryCapability,
+    DocumentSummaryCapability, DocumentSummaryCoordinator, DocumentSummaryImages,
+    GenerateDocumentSummary, UnavailableDocumentSummaryCapability,
 };
 use crate::document_summary_mapping::{
     preview_to_dto, summary_error_to_application, summary_to_dto,
@@ -78,7 +79,9 @@ use crate::llm_profile_mapping::{
     disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
     profile_to_export_dto, test_result_to_dto,
 };
-use crate::llm_profiles::{LlmHostPolicy, LlmProfileService, ReqwestLlmProbeTransport};
+use crate::llm_profiles::{
+    LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
+};
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
 use crate::operation_requests::map_scheduler_error;
@@ -137,6 +140,43 @@ use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
+
+const MAX_SUMMARY_IMAGES: usize = 8;
+const MAX_SUMMARY_SOURCE_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_SUMMARY_TOTAL_IMAGE_BYTES: usize = 12 * 1024 * 1024;
+const MAX_SUMMARY_DECODED_PIXELS: u64 = 40_000_000;
+const MAX_SUMMARY_IMAGE_DIMENSION: u32 = 1_024;
+
+fn prepare_summary_image(data: &[u8], media_type: &str) -> Option<Vec<u8>> {
+    if data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize {
+        return None;
+    }
+    let format = match media_type {
+        "image/png" => image::ImageFormat::Png,
+        "image/jpeg" => image::ImageFormat::Jpeg,
+        "image/webp" => image::ImageFormat::WebP,
+        _ => return None,
+    };
+    let reader = image::ImageReader::new(Cursor::new(data))
+        .with_guessed_format()
+        .ok()?;
+    let (width, height) = reader.into_dimensions().ok()?;
+    if u64::from(width).saturating_mul(u64::from(height)) > MAX_SUMMARY_DECODED_PIXELS {
+        return None;
+    }
+    if width <= MAX_SUMMARY_IMAGE_DIMENSION && height <= MAX_SUMMARY_IMAGE_DIMENSION {
+        return Some(data.to_vec());
+    }
+    let resized = image::ImageReader::new(Cursor::new(data))
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .thumbnail(MAX_SUMMARY_IMAGE_DIMENSION, MAX_SUMMARY_IMAGE_DIMENSION);
+    let mut output = Cursor::new(Vec::new());
+    resized.write_to(&mut output, format).ok()?;
+    (output.get_ref().len() <= MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize).then(|| output.into_inner())
+}
 
 /// Central application service that every host (Axum, Tauri, CLI) calls into.
 ///
@@ -1628,6 +1668,14 @@ impl FileManagerService {
     ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
         let cancellation = tokio_util::sync::CancellationToken::new();
         let target = request.target;
+        let image_evidence = self
+            .prepare_document_summary_images(
+                &target,
+                request.profile_id,
+                request.include_images,
+                &cancellation,
+            )
+            .await?;
         match self
             .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
@@ -1638,6 +1686,7 @@ impl FileManagerService {
                     worker_request,
                     request.profile_id,
                     &self.llm_profiles,
+                    &image_evidence,
                     &cancellation,
                 )
                 .await
@@ -1648,6 +1697,7 @@ impl FileManagerService {
                         target,
                         request.input_token_budget,
                         request.profile_id,
+                        &image_evidence,
                         &cancellation,
                     )
                     .await
@@ -1659,6 +1709,7 @@ impl FileManagerService {
                     target,
                     request.input_token_budget,
                     request.profile_id,
+                    &image_evidence,
                     &cancellation,
                 )
                 .await
@@ -1675,6 +1726,14 @@ impl FileManagerService {
     ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
         let cancellation = tokio_util::sync::CancellationToken::new();
         let target = request.target;
+        let image_evidence = self
+            .prepare_document_summary_images(
+                &target,
+                Some(request.profile_id),
+                request.include_images,
+                &cancellation,
+            )
+            .await?;
         match self
             .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
@@ -1689,6 +1748,7 @@ impl FileManagerService {
                                 .expected_selection_fingerprint
                                 .clone(),
                             profile_id: request.profile_id,
+                            images: image_evidence.images.clone(),
                         },
                         &self.llm_profiles,
                         &cancellation,
@@ -1709,6 +1769,7 @@ impl FileManagerService {
             request.input_token_budget,
             &request.expected_selection_fingerprint,
             request.profile_id,
+            &image_evidence.images,
             &cancellation,
         )
         .await
@@ -1740,13 +1801,14 @@ impl FileManagerService {
         target: fm_transport_dto::DocumentSummaryTargetDto,
         input_token_budget: u32,
         profile_id: Option<Uuid>,
+        image_evidence: &DocumentSummaryImages,
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
         let prepared = self
             .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles)
+            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles, image_evidence)
             .map(preview_to_dto)
             .map_err(summary_error_to_application)
     }
@@ -1757,6 +1819,7 @@ impl FileManagerService {
         input_token_budget: u32,
         expected_selection_fingerprint: &str,
         profile_id: Uuid,
+        images: &[LlmImageAttachment],
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
         let prepared = self
@@ -1769,6 +1832,7 @@ impl FileManagerService {
                 expected_selection_fingerprint,
                 profile_id,
                 &self.llm_profiles,
+                images,
                 cancellation,
             )
             .await
@@ -1797,13 +1861,110 @@ impl FileManagerService {
         })
     }
 
+    async fn prepare_document_summary_images(
+        &self,
+        target: &fm_transport_dto::DocumentSummaryTargetDto,
+        profile_id: Option<Uuid>,
+        include_images: bool,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<DocumentSummaryImages, ApplicationError> {
+        if !target
+            .location
+            .uri
+            .split(['?', '#'])
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .ends_with(".docx")
+        {
+            return Ok(DocumentSummaryImages::default());
+        }
+        let Some(profile_id) = profile_id else {
+            return Ok(DocumentSummaryImages::default());
+        };
+        let supports_vision = self
+            .llm_profiles
+            .model_capabilities(profile_id, cancellation)
+            .await
+            .map(|capabilities| capabilities.vision)
+            .unwrap_or(false);
+        if !include_images {
+            return Ok(DocumentSummaryImages {
+                available: supports_vision,
+                ..DocumentSummaryImages::default()
+            });
+        }
+        let opened = self
+            .docx_preview
+            .open(fm_transport_dto::OpenDocxPreviewRequestDto {
+                location: target.location.clone(),
+            })
+            .await?;
+        let collected = async {
+            let mut evidence = DocumentSummaryImages {
+                available: supports_vision,
+                ..DocumentSummaryImages::default()
+            };
+            if supports_vision {
+                let mut total_bytes = 0_usize;
+                for resource in &opened.resources {
+                    if evidence.images.len() >= MAX_SUMMARY_IMAGES
+                        || resource.byte_length > MAX_SUMMARY_SOURCE_IMAGE_BYTES
+                    {
+                        evidence.omitted = evidence.omitted.saturating_add(1);
+                        continue;
+                    }
+                    let resource_data = self
+                        .docx_preview
+                        .read_resource(fm_transport_dto::ReadDocxPreviewResourceRequestDto {
+                            session_id: opened.session_id,
+                            resource_id: resource.resource_id,
+                        })
+                        .await?;
+                    let Some(data) =
+                        prepare_summary_image(&resource_data.data, &resource.media_type)
+                    else {
+                        evidence.omitted = evidence.omitted.saturating_add(1);
+                        continue;
+                    };
+                    if total_bytes.saturating_add(data.len()) > MAX_SUMMARY_TOTAL_IMAGE_BYTES {
+                        evidence.omitted = evidence.omitted.saturating_add(1);
+                        continue;
+                    }
+                    total_bytes = total_bytes.saturating_add(data.len());
+                    evidence.images.push(LlmImageAttachment {
+                        media_type: resource.media_type.clone(),
+                        data,
+                    });
+                }
+            } else {
+                evidence.omitted = u32::try_from(opened.resources.len()).unwrap_or(u32::MAX);
+            }
+            Ok(evidence)
+        }
+        .await;
+        let closed = self
+            .docx_preview
+            .close(fm_transport_dto::DocxPreviewSessionRequestDto {
+                session_id: opened.session_id,
+            })
+            .await;
+        match collected {
+            Err(error) => Err(error),
+            Ok(evidence) => {
+                closed?;
+                Ok(evidence)
+            }
+        }
+    }
+
     async fn prepare_ephemeral_document_summary(
         &self,
         target: fm_transport_dto::DocumentSummaryTargetDto,
         input_token_budget: u32,
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<crate::document_summary::EphemeralDocumentSummary, ApplicationError> {
-        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
         if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
@@ -1853,7 +2014,7 @@ impl FileManagerService {
         input_token_budget: u32,
     ) -> Result<fm_semantic_worker::document_summary::PrepareDocumentSummary, ApplicationError>
     {
-        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
         if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
@@ -3687,6 +3848,23 @@ mod tests {
             dir.path().join("settings"),
         );
         (dir, service)
+    }
+
+    #[test]
+    fn summary_images_are_downscaled_to_the_safe_dimension() {
+        let source = image::DynamicImage::new_rgba8(2_048, 512);
+        let mut encoded = Cursor::new(Vec::new());
+        source
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source image");
+
+        let prepared =
+            prepare_summary_image(encoded.get_ref(), "image/png").expect("prepare image");
+        let resized = image::load_from_memory(&prepared).expect("decode prepared image");
+
+        assert_eq!(resized.width(), MAX_SUMMARY_IMAGE_DIMENSION);
+        assert_eq!(resized.height(), 256);
+        assert!(prepare_summary_image(encoded.get_ref(), "image/svg+xml").is_none());
     }
 
     #[test]

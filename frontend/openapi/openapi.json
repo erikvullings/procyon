@@ -9365,7 +9365,7 @@
           },
           "full": {
             "type": "string",
-            "description": "Full representative summary."
+            "description": "Full summary grounded in the selected document evidence."
           },
           "modelId": {
             "type": "string",
@@ -9412,16 +9412,36 @@
         "required": [
           "selectionFingerprint",
           "representativeTokens",
+          "selectionMode",
+          "imageInputAvailable",
+          "includedImageCount",
+          "omittedImageCount",
           "keyPassages",
           "reusedSelection"
         ],
         "properties": {
+          "imageInputAvailable": {
+            "type": "boolean",
+            "description": "Whether the selected model and document support bounded image input."
+          },
+          "includedImageCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Embedded document images that will be sent to a verified vision model.",
+            "minimum": 0
+          },
           "keyPassages": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SummaryKeyPassageDto"
             },
             "description": "Selected complete source passages."
+          },
+          "omittedImageCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Embedded images omitted because of model capability or safety budgets.",
+            "minimum": 0
           },
           "profile": {
             "oneOf": [
@@ -9447,8 +9467,20 @@
           "selectionFingerprint": {
             "type": "string",
             "description": "Stable confirmation fingerprint."
+          },
+          "selectionMode": {
+            "$ref": "#/components/schemas/DocumentSummarySelectionModeDto",
+            "description": "Whether the preview contains the complete extracted text or selected passages."
           }
         }
+      },
+      "DocumentSummarySelectionModeDto": {
+        "type": "string",
+        "description": "How the document text was selected for summary generation.",
+        "enum": [
+          "fullDocument",
+          "representativePassages"
+        ]
       },
       "DocumentSummaryTargetDto": {
         "type": "object",
@@ -10123,6 +10155,10 @@
           "expectedSelectionFingerprint": {
             "type": "string",
             "description": "Fingerprint returned by the confirmed preview."
+          },
+          "includeImages": {
+            "type": "boolean",
+            "description": "Whether bounded embedded images may be sent to a verified vision model."
           },
           "inputTokenBudget": {
             "type": "integer",
@@ -14318,6 +14354,10 @@
           "inputTokenBudget"
         ],
         "properties": {
+          "includeImages": {
+            "type": "boolean",
+            "description": "Whether bounded embedded images may be sent to a verified vision model."
+          },
           "inputTokenBudget": {
             "type": "integer",
             "format": "int32",

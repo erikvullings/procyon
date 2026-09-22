@@ -10,6 +10,8 @@ import type { DocumentSummaryTargetDto } from './documentSummaryTargetDto.ts';
 export interface GenerateDocumentSummaryRequestDto {
   /** Fingerprint returned by the confirmed preview. */
   expectedSelectionFingerprint: string;
+  /** Whether bounded embedded images may be sent to a verified vision model. */
+  includeImages?: boolean;
   /**
      * Maximum representative source tokens.
      * @minimum 0

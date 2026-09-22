@@ -80,8 +80,8 @@ pub use disk_usage::{
     DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto, ScanDiskUsageResponseDto,
 };
 pub use document_summary::{
-    DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummaryTargetDto,
-    GenerateDocumentSummaryRequestDto, GetDocumentSummaryRequestDto,
+    DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummarySelectionModeDto,
+    DocumentSummaryTargetDto, GenerateDocumentSummaryRequestDto, GetDocumentSummaryRequestDto,
     PreviewDocumentSummaryRequestDto, SummaryKeyPassageDto, SummaryProfileDisclosureDto,
 };
 pub use entry::{

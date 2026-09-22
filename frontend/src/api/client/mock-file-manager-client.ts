@@ -4286,6 +4286,16 @@ export class MockFileManagerClient implements FileManagerClient {
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
+        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        imageInputAvailable:
+          profile?.preset === 'ollama' && request.target.location.uri.endsWith('.docx'),
+        includedImageCount:
+          request.includeImages &&
+          profile?.preset === 'ollama' &&
+          request.target.location.uri.endsWith('.docx')
+            ? 1
+            : 0,
+        omittedImageCount: 0,
         keyPassages: [
           {
             label: 'S1',
@@ -4330,8 +4340,8 @@ export class MockFileManagerClient implements FileManagerClient {
         supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
         supportingWeights: [1],
         createdAtMs: Date.now(),
-        brief: 'A concise representative summary.',
-        full: 'A fuller representative summary grounded in the selected key passage.',
+        brief: 'A concise document summary.',
+        full: 'A fuller summary grounded in the selected document evidence.',
         stale: false,
       };
       this.documentSummaries.set(request.target.entryId, summary);

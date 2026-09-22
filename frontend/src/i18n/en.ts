@@ -710,19 +710,34 @@ export const en = {
   },
   documentSummary: {
     title: 'Summary · {name}',
-    working: 'Preparing representative passages…',
+    working: 'Preparing document content…',
     loadFailed: 'The summary could not be loaded.',
     generationFailed: 'The summary could not be generated.',
     keyPassagesOnly: 'No generation profile is configured. Showing key passages only.',
     profile: 'Generation profile',
-    cloudDisclosure:
-      '{tokens} estimated tokens of representative document text will be sent to this cloud endpoint.',
-    localDisclosure:
-      '{tokens} estimated tokens of representative document text will be sent to this local endpoint.',
+    representativeOnly: 'Use representative passages instead of the whole document',
+    includeImages: 'Include images (vision models only, resized to max. 1024 px)',
+    imagesIncluded: '{count} embedded image(s) will also be sent.',
+    imagesIncludedWithOmissions:
+      '{count} embedded image(s) will be sent; {omitted} image(s) were omitted by safety limits.',
+    imagesOmitted: 'No eligible embedded images were found within the image safety limits.',
+    cloudFullDisclosure:
+      'The whole extracted document ({tokens} estimated tokens) will be sent to this cloud endpoint.',
+    localFullDisclosure:
+      'The whole extracted document ({tokens} estimated tokens) will be sent to this local endpoint.',
+    cloudRepresentativeDisclosure:
+      '{tokens} estimated tokens of representative document passages will be sent to this cloud endpoint.',
+    localRepresentativeDisclosure:
+      '{tokens} estimated tokens of representative document passages will be sent to this local endpoint.',
+    cloudFallbackDisclosure:
+      'The whole document exceeds the configured context limit. Procyon automatically selected {tokens} estimated tokens of representative passages for this cloud endpoint.',
+    localFallbackDisclosure:
+      'The whole document exceeds the configured context limit. Procyon automatically selected {tokens} estimated tokens of representative passages for this local endpoint.',
     stale: 'The source has changed since this summary was generated.',
     brief: 'Brief',
     full: 'Full summary',
     keyPassages: 'Key passages',
+    documentText: 'Document text',
     generate: 'Generate summary',
     regenerate: 'Regenerate summary',
   },
@@ -1534,14 +1549,15 @@ export const en = {
       'Activating this profile allows questions, conversation history, and retrieved excerpts to leave this device for {host}.',
     confirmConsent: 'I understand and consent to sending this data to this host.',
     test: 'Test',
-    activate: 'Activate',
+    activate: 'Use as default',
+    defaultProfile: 'Default profile',
     clone: 'Clone',
     export: 'Export',
     credentialOnDelete: 'Stored credential on delete',
     deleteCredential: 'Delete credential',
     retainCredential: 'Retain credential',
     saved: 'Generation profile saved.',
-    activated: 'Generation profile activated.',
+    activated: 'Default generation profile updated.',
     testSucceeded: 'Connection test succeeded.',
     testFailed: 'Connection test failed: {category}.',
   },

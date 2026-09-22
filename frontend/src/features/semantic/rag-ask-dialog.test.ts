@@ -118,8 +118,8 @@ describe('RagAskDialog', () => {
     expect(root.textContent).not.toContain('Enter to ask');
     expect(root.textContent).not.toContain('Generate answer');
     const selects = root.querySelectorAll<HTMLSelectElement>('select');
-    expect(selects).toHaveLength(2);
-    const scopeSelect = selects.item(1);
+    expect(selects).toHaveLength(1);
+    const scopeSelect = selects.item(0);
     expect([...scopeSelect.options].map((option) => option.text)).toEqual([
       'Entire indexed library',
       'Selected files',

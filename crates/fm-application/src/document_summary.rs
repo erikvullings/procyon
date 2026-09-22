@@ -8,7 +8,8 @@ use fm_semantic_worker::document_summary::{
 };
 use fm_semantic_worker::representative_selection::{
     RepresentativeChunk, RepresentativeSelection, RepresentativeSelectionConfig,
-    SummarySectionRole, SummarySourceChunk, select_representative_chunks,
+    RepresentativeSelectionMode, SummarySectionRole, SummarySourceChunk,
+    select_representative_chunks,
 };
 use fm_semantic_worker::semantic_storage::StorageError;
 use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
@@ -18,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::llm_profiles::{
-    EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
+    EndpointLocality, LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService,
     normalize_endpoint_locality,
 };
 
@@ -117,6 +118,14 @@ pub struct DocumentSummaryPreview {
     pub selection_fingerprint: String,
     /// Complete representative input token estimate.
     pub representative_tokens: u32,
+    /// Whether all extracted chunks fit or representative passages were selected.
+    pub selection_mode: RepresentativeSelectionMode,
+    /// Whether the selected model and document support bounded image input.
+    pub image_input_available: bool,
+    /// Embedded images included in the confirmed generation request.
+    pub included_image_count: u32,
+    /// Embedded images omitted because of capability or safety limits.
+    pub omitted_image_count: u32,
     /// Selected source evidence. This is shown locally as key passages.
     pub representatives: Vec<RepresentativeChunk>,
     /// Selected generation profile, when generation is available.
@@ -147,12 +156,25 @@ pub struct GenerateDocumentSummary {
     pub expected_selection_fingerprint: String,
     /// Saved generation profile.
     pub profile_id: Uuid,
+    /// Bounded image evidence confirmed by the preview.
+    pub images: Vec<LlmImageAttachment>,
 }
 
 /// One bounded in-memory selection for a document outside the durable semantic library.
 pub struct EphemeralDocumentSummary {
     /// Deterministic structural passages selected from the current source bytes.
     pub selection: RepresentativeSelection,
+}
+
+#[derive(Clone, Default)]
+/// Bounded image evidence and disclosure prepared for one summary request.
+pub struct DocumentSummaryImages {
+    /// Verified and resized images that may be sent to generation.
+    pub images: Vec<LlmImageAttachment>,
+    /// Embedded images excluded by format or resource budgets.
+    pub omitted: u32,
+    /// Whether the document and selected model permit image input.
+    pub available: bool,
 }
 
 /// Host-side summary failure with no source text, path, or response-body detail.
@@ -263,12 +285,20 @@ impl DocumentSummaryCoordinator {
         prepared: &EphemeralDocumentSummary,
         profile_id: Option<Uuid>,
         profiles: &LlmProfileService,
+        image_evidence: &DocumentSummaryImages,
     ) -> Result<DocumentSummaryPreview, DocumentSummaryError> {
         let profile = Self::profile_disclosure(profile_id, profiles)?;
         Ok(DocumentSummaryPreview {
-            selection_fingerprint: prepared.selection.fingerprint.clone(),
+            selection_fingerprint: Self::selection_fingerprint(
+                &prepared.selection.fingerprint,
+                &image_evidence.images,
+            ),
             representative_tokens: u32::try_from(prepared.selection.selected_tokens)
                 .map_err(|_| DocumentSummaryError::InvalidRequest)?,
+            selection_mode: prepared.selection.mode,
+            image_input_available: image_evidence.available,
+            included_image_count: u32::try_from(image_evidence.images.len()).unwrap_or(u32::MAX),
+            omitted_image_count: image_evidence.omitted,
             representatives: prepared.selection.representatives.clone(),
             profile,
             reused_selection: false,
@@ -282,15 +312,19 @@ impl DocumentSummaryCoordinator {
         expected_selection_fingerprint: &str,
         profile_id: Uuid,
         profiles: &LlmProfileService,
+        images: &[LlmImageAttachment],
         cancellation: &CancellationToken,
     ) -> Result<GeneratedSummary, DocumentSummaryError> {
-        if prepared.selection.fingerprint != expected_selection_fingerprint {
+        if Self::selection_fingerprint(&prepared.selection.fingerprint, images)
+            != expected_selection_fingerprint
+        {
             return Err(DocumentSummaryError::StaleConfirmation);
         }
         Self::generate_text(
             &prepared.selection.representatives,
             profile_id,
             profiles,
+            images,
             cancellation,
         )
         .await
@@ -302,6 +336,7 @@ impl DocumentSummaryCoordinator {
         request: PrepareDocumentSummary,
         profile_id: Option<Uuid>,
         profiles: &LlmProfileService,
+        image_evidence: &DocumentSummaryImages,
         cancellation: &CancellationToken,
     ) -> Result<DocumentSummaryPreview, DocumentSummaryError> {
         let prepared = self.capability.prepare(request, cancellation).await?;
@@ -309,8 +344,15 @@ impl DocumentSummaryCoordinator {
         let representative_tokens = u32::try_from(prepared.selection.selected_tokens)
             .map_err(|_| DocumentSummaryError::InvalidRequest)?;
         Ok(DocumentSummaryPreview {
-            selection_fingerprint: prepared.selection.fingerprint.clone(),
+            selection_fingerprint: Self::selection_fingerprint(
+                &prepared.selection.fingerprint,
+                &image_evidence.images,
+            ),
             representative_tokens,
+            selection_mode: prepared.selection.mode,
+            image_input_available: image_evidence.available,
+            included_image_count: u32::try_from(image_evidence.images.len()).unwrap_or(u32::MAX),
+            omitted_image_count: image_evidence.omitted,
             representatives: prepared.selection.representatives,
             profile,
             reused_selection: prepared.reused_selection,
@@ -328,13 +370,16 @@ impl DocumentSummaryCoordinator {
             .capability
             .prepare(request.request, cancellation)
             .await?;
-        if prepared.selection.fingerprint != request.expected_selection_fingerprint {
+        if Self::selection_fingerprint(&prepared.selection.fingerprint, &request.images)
+            != request.expected_selection_fingerprint
+        {
             return Err(DocumentSummaryError::StaleConfirmation);
         }
         let generated = Self::generate_text(
             &prepared.selection.representatives,
             request.profile_id,
             profiles,
+            &request.images,
             cancellation,
         )
         .await?;
@@ -368,6 +413,7 @@ impl DocumentSummaryCoordinator {
         representatives: &[RepresentativeChunk],
         profile_id: Uuid,
         profiles: &LlmProfileService,
+        images: &[LlmImageAttachment],
         cancellation: &CancellationToken,
     ) -> Result<GeneratedSummary, DocumentSummaryError> {
         let profile = profiles
@@ -380,6 +426,7 @@ impl DocumentSummaryCoordinator {
                 LlmChatGeneration {
                     system_prompt: system_prompt().into(),
                     user_prompt: prompt,
+                    images: images.to_vec(),
                     maximum_tokens: profile.advanced.maximum_answer_tokens,
                     temperature: profile.advanced.temperature,
                 },
@@ -395,6 +442,24 @@ impl DocumentSummaryCoordinator {
             full_text: parsed.full,
             created_at_ms: unix_time_ms(),
         })
+    }
+
+    fn selection_fingerprint(base: &str, images: &[LlmImageAttachment]) -> String {
+        if images.is_empty() {
+            return base.to_owned();
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(base.as_bytes());
+        for image in images {
+            hasher.update(image.media_type.as_bytes());
+            hasher.update(image.data.len().to_le_bytes());
+            hasher.update(&image.data);
+        }
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     /// Reads an existing generated summary without invoking an endpoint.
@@ -438,7 +503,7 @@ fn build_prompt(representatives: &[RepresentativeChunk]) -> Result<String, Docum
         .collect::<Vec<_>>();
     serde_json::to_string(&serde_json::json!({
         "promptVersion": SUMMARY_PROMPT_VERSION,
-        "task": "Produce a concise brief and a fuller representative summary.",
+        "task": "Produce a concise brief and a fuller summary from the provided document evidence.",
         "evidence": evidence,
     }))
     .map_err(|_| DocumentSummaryError::InvalidRequest)
@@ -581,6 +646,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(first.selection.fingerprint, second.selection.fingerprint);
+        assert_eq!(
+            first.selection.mode,
+            RepresentativeSelectionMode::ClusterMedoids
+        );
         assert!(first.selection.selected_tokens <= 600);
         assert!(
             first
@@ -596,6 +665,27 @@ mod tests {
                 .iter()
                 .any(|item| item.source.role == SummarySectionRole::Conclusion)
         );
+    }
+
+    #[test]
+    fn ephemeral_selection_retains_the_full_document_when_it_fits() {
+        let coordinator = ephemeral_coordinator();
+        let prepared = coordinator
+            .prepare_ephemeral(
+                &converted_document(&[
+                    "Opening evidence".to_owned(),
+                    "Closing evidence".to_owned(),
+                ]),
+                600,
+                &CancellationToken::new(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            prepared.selection.mode,
+            RepresentativeSelectionMode::AllChunks
+        );
+        assert_eq!(prepared.selection.representatives.len(), 2);
     }
 
     #[test]
@@ -618,6 +708,30 @@ mod tests {
             .unwrap();
 
         assert_ne!(first.selection.fingerprint, second.selection.fingerprint);
+    }
+
+    #[test]
+    fn image_content_is_bound_to_the_summary_confirmation() {
+        let first = DocumentSummaryCoordinator::selection_fingerprint(
+            "text-selection",
+            &[LlmImageAttachment {
+                media_type: "image/png".into(),
+                data: vec![1, 2, 3],
+            }],
+        );
+        let second = DocumentSummaryCoordinator::selection_fingerprint(
+            "text-selection",
+            &[LlmImageAttachment {
+                media_type: "image/png".into(),
+                data: vec![1, 2, 4],
+            }],
+        );
+
+        assert_ne!(first, second);
+        assert_eq!(
+            DocumentSummaryCoordinator::selection_fingerprint("text-selection", &[]),
+            "text-selection"
+        );
     }
 
     #[tokio::test]
@@ -646,6 +760,7 @@ mod tests {
                 "stale-fingerprint",
                 Uuid::new_v4(),
                 &profiles,
+                &[],
                 &cancellation,
             )
             .await;
