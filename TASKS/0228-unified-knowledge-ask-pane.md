@@ -52,3 +52,4 @@ answer, citation, and source-opening concepts.
   tests, TypeScript, repository Rust lint, and desktop/narrow browser inspection. Biome reported
   only the repository's existing CSS specificity warnings and schema-version notice after changed
   files were formatted.
+- 2026-09-23 Copilot: Delivered in patch release 0.1.5.
