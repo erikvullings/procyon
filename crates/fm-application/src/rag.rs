@@ -1217,10 +1217,42 @@ fn normalize_citation_references<'label>(
 ) -> String {
     let mut labels = labels.into_iter().collect::<Vec<_>>();
     labels.sort_unstable_by_key(|label| std::cmp::Reverse(label.len()));
+    text = normalize_bracketed_citation_lists(&text, &labels);
     for label in labels {
         text = normalize_citation_reference(&text, label);
     }
     text
+}
+
+fn normalize_bracketed_citation_lists(text: &str, labels: &[&str]) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut cursor = 0;
+    while let Some(relative_start) = text[cursor..].find('[') {
+        let start = cursor + relative_start;
+        let Some(relative_end) = text[start + 1..].find(']') else {
+            break;
+        };
+        let end = start + 1 + relative_end;
+        let citations = text[start + 1..end]
+            .split(',')
+            .map(str::trim)
+            .collect::<Vec<_>>();
+        if citations.len() > 1 && citations.iter().all(|citation| labels.contains(citation)) {
+            normalized.push_str(&text[cursor..start]);
+            for (index, citation) in citations.iter().enumerate() {
+                if index > 0 {
+                    normalized.push_str(", ");
+                }
+                write!(normalized, "[{citation}]").expect("writing to a String cannot fail");
+            }
+            cursor = end + 1;
+        } else {
+            normalized.push_str(&text[cursor..=end]);
+            cursor = end + 1;
+        }
+    }
+    normalized.push_str(&text[cursor..]);
+    normalized
 }
 
 fn normalize_citation_reference(text: &str, label: &str) -> String {
@@ -1651,6 +1683,20 @@ mod tests {
                 .map(|citation| citation.label.as_str())
                 .collect::<Vec<_>>(),
             ["C8", "C12"]
+        );
+    }
+
+    #[test]
+    fn citation_variants_are_normalized_without_nested_brackets() {
+        let labels = ["C3", "C5", "C9"];
+
+        assert_eq!(
+            normalize_citation_references("Use the positional method [C3, C5, C9].".into(), labels),
+            "Use the positional method [C3], [C5], [C9]."
+        );
+        assert_eq!(
+            normalize_citation_references("Use both (C3, C5).".into(), labels),
+            "Use both ([C3], [C5])."
         );
     }
 
