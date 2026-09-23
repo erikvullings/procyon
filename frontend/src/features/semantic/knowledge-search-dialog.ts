@@ -1749,7 +1749,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       }
                     },
                   },
-                  t('ragAsk', 'openAssistant'),
+                  t('knowledgeSearch', 'ask'),
                 ),
               ]),
               filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),

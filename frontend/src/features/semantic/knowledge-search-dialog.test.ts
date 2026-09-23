@@ -120,7 +120,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await ready();
 
-    expect(button('Ask your files').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Ask').getAttribute('aria-pressed')).toBe('true');
     expect(button('Search').getAttribute('aria-pressed')).toBe('false');
     expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull();
     expect(root.querySelector('.fm-knowledge-answer-panel')).not.toBeNull();

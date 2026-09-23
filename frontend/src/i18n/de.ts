@@ -895,6 +895,7 @@ export const de = {
     ...en.knowledgeSearch,
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
+    ask: 'Fragen',
     resultRelevanceHigh: 'Hohe Relevanz',
     resultRelevanceMedium: 'Mittlere Relevanz',
     resultRelevanceLow: 'Geringe Relevanz',

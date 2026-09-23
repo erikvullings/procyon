@@ -883,6 +883,7 @@ export const nl = {
     reasonActionDefault: 'Standaardbehoefte voor {action}: {need}',
     reasonRelatedTerm: 'Verwante term',
     search: 'Zoeken',
+    ask: 'Vragen',
     searching: 'Bezig met zoeken…',
     cancel: 'Zoeken annuleren',
     cancelled: 'De zoekopdracht is geannuleerd.',

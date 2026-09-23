@@ -882,6 +882,7 @@ export const it = {
     ...en.knowledgeSearch,
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
+    ask: 'Chiedi',
     resultRelevanceHigh: 'Pertinenza alta',
     resultRelevanceMedium: 'Pertinenza media',
     resultRelevanceLow: 'Pertinenza bassa',
