@@ -11,7 +11,7 @@ export interface DocumentSummaryDto {
   brief: string;
   /** Creation time in Unix milliseconds. */
   createdAtMs: number;
-  /** Full representative summary. */
+  /** Full summary grounded in the selected document evidence. */
   full: string;
   /** Exact generation model identity. */
   modelId: string;
