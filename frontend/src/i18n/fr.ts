@@ -888,6 +888,7 @@ export const fr = {
     ...en.knowledgeSearch,
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
+    ask: 'Demander',
     resultRelevanceHigh: 'Pertinence élevée',
     resultRelevanceMedium: 'Pertinence moyenne',
     resultRelevanceLow: 'Pertinence faible',

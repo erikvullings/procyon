@@ -261,6 +261,7 @@ interface KnowledgeSearchTabEntry {
   readonly currentFolder: Location | undefined;
   readonly semanticSourceIds: readonly string[];
   readonly initialSubject: string | undefined;
+  readonly initialMode: 'search' | 'ask';
 }
 
 /** Returns the one-based preview page encoded by structural knowledge provenance. */
@@ -1903,32 +1904,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function openRagAsk(): void {
-    const active = activeDirectory();
-    if (workspace === undefined || active === undefined) return;
-    const key = activeTabKey(active.paneId);
-    const directory = directories.get(key);
-    const selectedIds = new Set(selections.get(key)?.selectedEntryIds ?? []);
-    const presentation = findFilesPresentationsByLocationUri.get(active.location.uri);
-    const semanticSourceIds = [
-      ...new Set(
-        (presentation?.semanticResults ?? []).flatMap((result) => [
-          result.bestEvidence.sourceId,
-          ...result.additionalSourceIds,
-        ]),
-      ),
-    ];
-    dialogs.openRagAskDialog({
-      workspaceId: workspace.id,
-      currentFolder: active.location,
-      selectedEntries:
-        directory?.entries.filter((entry) => selectedIds.has(entry.id) && entry.kind === 'file') ??
-        [],
-      semanticSourceIds,
-    });
+    openKnowledgeSearch('ask');
   }
 
-  /** Opens search-only Structured Knowledge Search as a session-only tab (task 0209). */
-  function openKnowledgeSearch(): void {
+  /** Opens Structured Knowledge as a session-only Search or Ask tab (tasks 0209/0228). */
+  function openKnowledgeSearch(initialMode: 'search' | 'ask' = 'search'): void {
     const active = activeDirectory();
     const currentWorkspace = workspace;
     if (currentWorkspace === undefined) return;
@@ -1973,6 +1953,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             presentation?.kind === 'semantic' || presentation?.kind === 'content'
               ? presentation.term
               : undefined,
+          initialMode,
         });
         m.redraw();
       },

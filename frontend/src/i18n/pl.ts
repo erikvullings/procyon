@@ -884,6 +884,7 @@ export const pl = {
     ...en.knowledgeSearch,
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
+    ask: 'Zapytaj',
     resultRelevanceHigh: 'Wysoka trafność',
     resultRelevanceMedium: 'Średnia trafność',
     resultRelevanceLow: 'Niska trafność',

@@ -886,6 +886,7 @@ export const es = {
     ...en.knowledgeSearch,
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
+    ask: 'Preguntar',
     resultRelevanceHigh: 'Relevancia alta',
     resultRelevanceMedium: 'Relevancia media',
     resultRelevanceLow: 'Relevancia baja',

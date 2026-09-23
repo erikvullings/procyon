@@ -873,6 +873,7 @@ export const en = {
     reasonActionDefault: 'Default need for {action}: {need}',
     reasonRelatedTerm: 'Related term',
     search: 'Search',
+    ask: 'Ask',
     searching: 'Searching…',
     cancel: 'Cancel search',
     cancelled: 'The search was cancelled.',

@@ -3480,39 +3480,30 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
-        'Index current folder',
-      ),
+      expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull(),
     );
-    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
-      .find((label) => label.textContent?.trim() === 'Index current folder')
-      ?.querySelector<HTMLInputElement>('input')
-      ?.click();
+    expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
+    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
       .find((button) => button.textContent?.trim() === 'Close')
       ?.click();
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain(
-        'Index current folder',
-      ),
-    );
-    [...root.querySelectorAll<HTMLLabelElement>('.fm-rag-preferences label')]
-      .find((label) => label.textContent?.trim() === 'Index current folder')
-      ?.querySelector<HTMLInputElement>('input')
-      ?.click();
+    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).not.toBeNull(),
     );
     root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')?.click();
-    [...root.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Include and index folder')
-      ?.click();
+    const includeButton = await vi.waitFor(() => {
+      const candidate = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Include and index folder',
+      );
+      expect(candidate?.disabled).toBe(false);
+      return candidate;
+    });
+    includeButton?.click();
 
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-rag-ask-modal')?.textContent).toContain('Ask is read-only'),
-    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
   });
 
   it('renders settings content when the native disclosure state opens', async () => {

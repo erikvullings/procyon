@@ -384,7 +384,10 @@ describe('RagAskDialog', () => {
     );
     expect(root.querySelector('.fm-rag-answer-markdown script')).toBeNull();
     expect(root.querySelector<HTMLAnchorElement>('.fm-rag-answer-markdown a')?.textContent).toBe(
-      'C1',
+      'TRIZ Engineering of Creativity.pdf',
+    );
+    expect(root.querySelector('.fm-rag-citations button')?.textContent).toBe(
+      'TRIZ Engineering of Creativity.pdf',
     );
     expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Page 195');
     expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Chapter 3, lines 7–11');

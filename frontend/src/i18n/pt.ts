@@ -888,6 +888,7 @@ export const pt = {
     ...en.knowledgeSearch,
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
+    ask: 'Perguntar',
     resultRelevanceHigh: 'Relevância alta',
     resultRelevanceMedium: 'Relevância média',
     resultRelevanceLow: 'Relevância baixa',
