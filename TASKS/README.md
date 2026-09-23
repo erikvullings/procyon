@@ -143,6 +143,7 @@ semantic components are not installed.
   measurements complete with an honest NO-GO; release publication remains disabled)*
 - [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
   for document/query embeddings with a mandatory clean index rebuild)*
+- [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
 - [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
   accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
 

@@ -660,6 +660,19 @@ function lastSegment(uri: string): string {
   return decodeURIComponent(index === -1 ? trimmed : trimmed.slice(index + 1));
 }
 
+function mockSummaryVisualCount(uri: string): number {
+  const name = lastSegment(uri.split(/[?#]/, 1)[0] ?? '').toLowerCase();
+  return new Set([
+    'report.docx',
+    'illustrated.pdf',
+    'presentation.pptx',
+    'book.epub',
+    'figures.xlsx',
+  ]).has(name)
+    ? 1
+    : 0;
+}
+
 /**
  * A deterministic, plausible-looking digest for the mock runtime.
  *
@@ -4283,9 +4296,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('previewDocumentSummary', signal, () => {
       const profile =
         request.profileId == null ? undefined : this.requireLlmProfile(request.profileId);
+      const visualCount = mockSummaryVisualCount(request.target.location.uri);
+      const imageInputAvailable = profile?.preset === 'ollama' && visualCount > 0;
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
+        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        imageInputAvailable,
+        includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
+        omittedImageCount: 0,
         keyPassages: [
           {
             label: 'S1',
@@ -4330,8 +4349,8 @@ export class MockFileManagerClient implements FileManagerClient {
         supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
         supportingWeights: [1],
         createdAtMs: Date.now(),
-        brief: 'A concise representative summary.',
-        full: 'A fuller representative summary grounded in the selected key passage.',
+        brief: 'A concise document summary.',
+        full: 'A fuller summary grounded in the selected document evidence.',
         stale: false,
       };
       this.documentSummaries.set(request.target.entryId, summary);

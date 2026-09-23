@@ -1,7 +1,8 @@
+use fm_semantic_worker::representative_selection::RepresentativeSelectionMode;
 use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
 use fm_transport_dto::{
-    DocumentSummaryDto, DocumentSummaryPreviewDto, SummaryKeyPassageDto,
-    SummaryProfileDisclosureDto,
+    DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummarySelectionModeDto,
+    SummaryKeyPassageDto, SummaryProfileDisclosureDto,
 };
 
 use crate::document_summary::{DocumentSummaryError, DocumentSummaryPreview};
@@ -12,6 +13,15 @@ pub(crate) fn preview_to_dto(value: DocumentSummaryPreview) -> DocumentSummaryPr
     DocumentSummaryPreviewDto {
         selection_fingerprint: value.selection_fingerprint,
         representative_tokens: value.representative_tokens,
+        selection_mode: match value.selection_mode {
+            RepresentativeSelectionMode::AllChunks => DocumentSummarySelectionModeDto::FullDocument,
+            RepresentativeSelectionMode::ClusterMedoids => {
+                DocumentSummarySelectionModeDto::RepresentativePassages
+            }
+        },
+        image_input_available: value.image_input_available,
+        included_image_count: value.included_image_count,
+        omitted_image_count: value.omitted_image_count,
         key_passages: value
             .representatives
             .into_iter()
@@ -66,9 +76,9 @@ pub(crate) fn summary_error_to_application(error: DocumentSummaryError) -> Appli
         DocumentSummaryError::InvalidRequest | DocumentSummaryError::InvalidGeneration => {
             ApplicationError::InvalidRequest(error.to_string())
         }
-        DocumentSummaryError::Unavailable => ApplicationError::ProviderUnavailable,
-        DocumentSummaryError::GenerationFailed | DocumentSummaryError::Storage => {
-            ApplicationError::Internal
+        DocumentSummaryError::Unavailable | DocumentSummaryError::GenerationFailed => {
+            ApplicationError::ProviderUnavailable
         }
+        DocumentSummaryError::Storage => ApplicationError::Internal,
     }
 }

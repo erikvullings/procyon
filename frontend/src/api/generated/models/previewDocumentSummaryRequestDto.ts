@@ -8,6 +8,8 @@ import type { DocumentSummaryTargetDto } from './documentSummaryTargetDto.ts';
  * Requests bounded representative key passages and generation disclosure.
  */
 export interface PreviewDocumentSummaryRequestDto {
+  /** Whether bounded embedded images may be sent to a verified vision model. */
+  includeImages?: boolean;
   /**
      * Maximum representative source tokens.
      * @minimum 0

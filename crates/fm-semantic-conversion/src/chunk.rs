@@ -915,6 +915,35 @@ mod tests {
     }
 
     #[test]
+    fn visual_attachments_do_not_change_embedding_input_or_chunk_fingerprints() {
+        let chunker = Chunker::default();
+        let unit = unit(0, "content", TopLevelBoundary::Document, &[]);
+        let text_only = document(vec![unit.clone()]);
+        let with_visual = ConvertedDocument::new_with_visuals(
+            ComponentVersion::new("baseline", 1),
+            FormatKind::PlainText,
+            vec![unit],
+            Vec::new(),
+            Vec::new(),
+            vec![crate::model::VisualAttachment {
+                id: "visual".into(),
+                media_type: crate::model::MediaType::parse("image/png"),
+                data: vec![1, 2, 3],
+                width: 1,
+                height: 1,
+                provenance: crate::model::VisualProvenance::DocxImage {
+                    block_index: 0,
+                    image_index: 0,
+                },
+                caption: None,
+            }],
+            Vec::new(),
+        );
+
+        assert_eq!(chunker.chunk(&text_only), chunker.chunk(&with_visual));
+    }
+
+    #[test]
     fn the_display_excerpt_is_bounded_but_the_embedding_input_is_not_truncated() {
         let chunker = Chunker::new(ChunkerOptions {
             max_excerpt_chars: 10,

@@ -273,6 +273,29 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('distinguishes an enrolled root whose initial indexing has not completed', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'pending-root',
+        label: 'Basisschool',
+        location: { providerId: 'local', uri: 'file:///OneDrive/Basisschool' },
+        recursive: true,
+        indexedGeneration: 0,
+        available: true,
+      },
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).toContain(
+      'This folder is included and still being indexed. You can search documents that are already available.',
+    );
+    expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
+    expect(button('Search').disabled).toBe(false);
+  });
+
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {
     mount({ initialSubject: 'retrieval' });
 

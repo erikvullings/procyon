@@ -36,10 +36,10 @@ jobs:
           - target: linux-aarch64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -171,7 +171,7 @@ jobs:
         run: >
           node scripts/qualify-semantic-payload.mjs
           "target/semantic-production-release/${{ matrix.target }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: semantic-payloads-${{ matrix.target }}
           path: target/semantic-production-release/${{ matrix.target }}/
@@ -206,13 +206,13 @@ jobs:
     if: ${{ always() && inputs.qualification_run_id == '' && needs.semantic-payloads.result == 'success' && needs.semantic-catalogs.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: semantic-payloads-*
           path: semantic-payloads
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: semantic-catalog-*
           path: semantic-catalogs
@@ -238,7 +238,7 @@ jobs:
           "${{ github.run_id }}"
           "${{ github.sha }}"
           semantic-release-assets/semantic-component-release.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: semantic-component-candidate-${{ github.sha }}
           path: semantic-release-assets/
@@ -254,15 +254,15 @@ jobs:
       actions: read
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: semantic-payloads-*
           path: semantic-payloads
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: semantic-catalog-*
           path: semantic-catalogs

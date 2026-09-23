@@ -305,6 +305,7 @@ impl KnowledgeAnswerCoordinator {
                 LlmChatGeneration {
                     system_prompt,
                     user_prompt,
+                    images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
                     temperature: ANSWER_TEMPERATURE,
                 },

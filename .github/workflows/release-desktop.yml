@@ -13,7 +13,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
     environment: desktop-release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -175,7 +175,7 @@ jobs:
           ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/Procyon")"
           grep -qw arm64 <<< "$ARCHITECTURES"
           grep -qw x86_64 <<< "$ARCHITECTURES"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
           files: |
@@ -191,10 +191,10 @@ jobs:
     runs-on: ubuntu-22.04
     environment: desktop-release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -243,7 +243,7 @@ jobs:
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build Linux packages
         run: pnpm run build:tauri
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
           files: |
@@ -257,10 +257,10 @@ jobs:
     runs-on: windows-latest
     environment: desktop-release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -301,7 +301,7 @@ jobs:
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build unsigned Windows installers
         run: pnpm run build:tauri
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
           files: |
@@ -315,7 +315,7 @@ jobs:
     runs-on: macos-latest
     environment: desktop-release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Download the macOS and Linux release packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -341,7 +341,7 @@ jobs:
             --linux-sha256 "$APPIMAGE_SHA256" \
             --linux-asset "$(basename "$APPIMAGE_PATH")" \
             --output generated-cask/procyon.rb
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           repository: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}

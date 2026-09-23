@@ -732,27 +732,16 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   m('small', scopeLabel(selectedScope)),
                 ]),
                 m('.fm-rag-controls', [
-                  m('label', [
-                    m('span', t('ragAsk', 'profile')),
-                    m(
-                      'select.browser-default',
-                      {
-                        value: selectedProfileId,
-                        disabled: busy !== undefined,
-                        onchange: (event: Event) => {
-                          selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
-                          resetRetrieval(true);
-                        },
-                      },
-                      profiles.map((profile) =>
-                        m(
-                          'option',
-                          { key: profile.id, value: profile.id },
-                          `${profile.name} · ${profile.locality}`,
-                        ),
-                      ),
-                    ),
-                  ]),
+                  profiles[0] === undefined
+                    ? undefined
+                    : m('p.fm-rag-profile', [
+                        m('strong', `${t('ragAsk', 'profile')}: `),
+                        `${profiles[0].name} · ${profiles[0].model} · ${
+                          profiles[0].locality === 'loopback'
+                            ? t('llmProfiles', 'local')
+                            : t('llmProfiles', 'cloud')
+                        }`,
+                      ]),
                   m('label', [
                     m('span', t('ragAsk', 'scope')),
                     m(

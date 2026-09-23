@@ -9,12 +9,14 @@
 
 use quick_xml::events::Event;
 
-use crate::builder::{DocumentBuilder, UnitDraft};
-use crate::formats::package::{self, Package, PackageError};
-use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
+use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
+use crate::formats::package::{self, BoundedPart, Package, PackageError, RelationshipTarget};
+use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 
 /// Maximum bytes read from one slide part.
 const MAX_SLIDE_PART_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_RELATIONSHIP_PART_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_IMAGE_PART_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Elements that delimit one shape's text.
 const SHAPE_ELEMENTS: &[&str] = &["sp", "graphicFrame", "pic", "cxnSp"];
@@ -72,7 +74,10 @@ pub(crate) fn convert(
             });
             continue;
         };
-        convert_slide(builder, &part, number, &name)?;
+        let image_references = convert_slide(builder, &part, number, &name)?;
+        if builder.visuals_enabled() {
+            extract_slide_images(builder, archive, &name, &image_references)?;
+        }
     }
     Ok(())
 }
@@ -82,13 +87,15 @@ fn convert_slide(
     part: &[u8],
     slide_number: u32,
     name: &str,
-) -> Result<(), PackageError> {
+) -> Result<Vec<(String, VisualProvenance)>, PackageError> {
     let mut reader = package::xml_reader(part);
     let mut buffer = Vec::new();
     let mut depth = 0_u32;
     let mut shape_index = 0_u32;
     let mut shape_stack: Vec<u32> = Vec::new();
     let mut text = String::new();
+    let mut image_index = 0_u32;
+    let mut image_references = Vec::new();
 
     loop {
         builder.checkpoint().map_err(PackageError::from)?;
@@ -106,6 +113,22 @@ fn convert_slide(
                 if SHAPE_ELEMENTS.contains(&local.as_str()) {
                     shape_stack.push(depth);
                 }
+                if local == "blip" {
+                    collect_image_reference(
+                        start,
+                        slide_number,
+                        &mut image_index,
+                        &mut image_references,
+                    );
+                }
+            }
+            Event::Empty(empty) if package::local_name(empty.name().as_ref()) == "blip" => {
+                collect_image_reference(
+                    empty,
+                    slide_number,
+                    &mut image_index,
+                    &mut image_references,
+                );
             }
             Event::End(end) => {
                 let local = package::local_name(end.name().as_ref());
@@ -138,6 +161,87 @@ fn convert_slide(
         package::ensure_balanced(depth, name)?;
     }
     emit_shape(builder, &mut text, slide_number, shape_index)?;
+    Ok(image_references)
+}
+
+fn collect_image_reference(
+    element: &quick_xml::events::BytesStart<'_>,
+    slide_number: u32,
+    image_index: &mut u32,
+    references: &mut Vec<(String, VisualProvenance)>,
+) {
+    if let Some(id) = element.attributes().flatten().find_map(|attribute| {
+        matches!(
+            package::local_name(attribute.key.as_ref()).as_str(),
+            "embed" | "link"
+        )
+        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+    }) {
+        references.push((
+            id,
+            VisualProvenance::SlideImage {
+                slide_number,
+                image_index: *image_index,
+            },
+        ));
+        *image_index = image_index.saturating_add(1);
+    }
+}
+
+fn extract_slide_images(
+    builder: &mut DocumentBuilder<'_, '_>,
+    archive: &mut Package<'_>,
+    slide_part: &str,
+    references: &[(String, VisualProvenance)],
+) -> Result<(), PackageError> {
+    let relationships =
+        package::read_relationships(archive, slide_part, MAX_RELATIONSHIP_PART_BYTES)?;
+    for (id, provenance) in references {
+        builder.checkpoint().map_err(PackageError::from)?;
+        let Some(target) = relationships.get(id) else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                format!("PPTX image relationship '{id}' is missing"),
+            );
+            continue;
+        };
+        let RelationshipTarget::Internal(part) = target else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                "external PPTX images are not fetched",
+            );
+            continue;
+        };
+        let Some(media_type) = package::image_media_type(part) else {
+            builder.omit_visual(
+                Some(provenance.clone()),
+                "PPTX image uses an unsupported media type",
+            );
+            continue;
+        };
+        let data = match package::read_bounded_visual_part(archive, part, MAX_IMAGE_PART_BYTES)? {
+            BoundedPart::Data(data) => data,
+            BoundedPart::Missing => {
+                builder.omit_visual(Some(provenance.clone()), "PPTX image part is missing");
+                continue;
+            }
+            BoundedPart::TooLarge => {
+                builder.omit_visual(
+                    Some(provenance.clone()),
+                    format!("PPTX image exceeds {MAX_IMAGE_PART_BYTES} bytes"),
+                );
+                continue;
+            }
+        };
+        builder
+            .push_visual(VisualDraft {
+                media_type,
+                data,
+                provenance: provenance.clone(),
+                caption: None,
+            })
+            .map_err(PackageError::from)?;
+    }
     Ok(())
 }
 
@@ -179,8 +283,8 @@ mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
     use crate::cancellation::Cancellation;
-    use crate::formats::package::tests::package;
-    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
+    use crate::formats::package::tests::{package, png};
+    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, VisualProvenance};
 
     fn slide(title: &str, body: &str) -> Vec<u8> {
         format!(
@@ -208,6 +312,13 @@ mod tests {
     }
 
     fn convert_package(bytes: &[u8]) -> Result<ConvertedDocument, PackageError> {
+        convert_package_with_visuals(bytes, false)
+    }
+
+    fn convert_package_with_visuals(
+        bytes: &[u8],
+        visuals: bool,
+    ) -> Result<ConvertedDocument, PackageError> {
         let budgets = ConversionBudgets::default();
         let cancellation = Cancellation::none();
         let clock = ManualClock::new();
@@ -218,6 +329,7 @@ mod tests {
             FormatKind::Pptx,
             &mut tracker,
         );
+        builder.set_visuals_enabled(visuals);
         convert(&mut builder, &mut archive)?;
         Ok(builder.finish())
     }
@@ -316,5 +428,36 @@ mod tests {
             document.omissions().first(),
             Some(Omission::UnreadablePart { .. })
         ));
+    }
+
+    #[test]
+    fn slide_images_follow_only_declared_local_relationships() {
+        let slide = br#"<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:cSld><p:spTree>
+          <p:sp><p:txBody><a:p><a:r><a:t>Visible text</a:t></a:r></a:p></p:txBody></p:sp>
+          <p:pic><p:blipFill><a:blip r:embed="rImage"/></p:blipFill></p:pic>
+        </p:spTree></p:cSld></p:sld>"#;
+        let relationships = br#"<Relationships>
+          <Relationship Id="rImage" Target="../media/picture.png"/>
+        </Relationships>"#;
+        let image = png();
+        let bytes = presentation(vec![
+            ("ppt/slides/slide1.xml".to_owned(), slide.to_vec()),
+            (
+                "ppt/slides/_rels/slide1.xml.rels".to_owned(),
+                relationships.to_vec(),
+            ),
+            ("ppt/media/picture.png".to_owned(), image),
+        ]);
+
+        let converted = convert_package_with_visuals(&bytes, true).expect("conversion");
+
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::SlideImage {
+                slide_number: 1,
+                image_index: 0
+            }
+        );
     }
 }

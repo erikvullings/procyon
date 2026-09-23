@@ -36,12 +36,12 @@ test('semantic catalog release job signs then verifies the exact payload set', (
   assert.ok(commands.some((command) => command.includes(' sign ')));
   assert.ok(commands.some((command) => command.includes(' verify ')));
   assert.ok(
-    signJob.steps.some((step) => step.uses === 'actions/upload-artifact@v4'),
+    signJob.steps.some((step) => step.uses === 'actions/upload-artifact@v7'),
     'signed catalog must be retained as a workflow artifact',
   );
   assert.ok(
     signJob.steps.some(
-      (step) => step.uses === 'actions/upload-artifact@v4' && step.with?.['retention-days'] === 14,
+      (step) => step.uses === 'actions/upload-artifact@v7' && step.with?.['retention-days'] === 14,
     ),
     'private catalog evidence must use bounded retention',
   );

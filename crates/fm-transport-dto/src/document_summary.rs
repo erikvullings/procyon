@@ -6,6 +6,16 @@ use uuid::Uuid;
 
 use crate::{LlmEndpointLocalityDto, LocationDto};
 
+/// How the document text was selected for summary generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DocumentSummarySelectionModeDto {
+    /// Every extracted text chunk fit within the configured model context.
+    FullDocument,
+    /// Representative passages were selected to stay within the input budget.
+    RepresentativePassages,
+}
+
 /// Exact file occurrence selected for summary operations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +38,9 @@ pub struct PreviewDocumentSummaryRequestDto {
     pub input_token_budget: u32,
     /// Optional generation profile; omit to inspect key passages only.
     pub profile_id: Option<Uuid>,
+    /// Whether bounded embedded images may be sent to a verified vision model.
+    #[serde(default)]
+    pub include_images: bool,
 }
 
 /// One complete, unmodified source passage selected by the semantic worker.
@@ -75,6 +88,14 @@ pub struct DocumentSummaryPreviewDto {
     pub selection_fingerprint: String,
     /// Conservative selected-input token estimate.
     pub representative_tokens: u32,
+    /// Whether the preview contains the complete extracted text or selected passages.
+    pub selection_mode: DocumentSummarySelectionModeDto,
+    /// Whether the selected model and document support bounded image input.
+    pub image_input_available: bool,
+    /// Embedded document images that will be sent to a verified vision model.
+    pub included_image_count: u32,
+    /// Embedded images omitted because of model capability or safety budgets.
+    pub omitted_image_count: u32,
     /// Selected complete source passages.
     pub key_passages: Vec<SummaryKeyPassageDto>,
     /// Generation disclosure, absent in key-passages-only mode.
@@ -95,6 +116,9 @@ pub struct GenerateDocumentSummaryRequestDto {
     pub expected_selection_fingerprint: String,
     /// Saved profile used for generation.
     pub profile_id: Uuid,
+    /// Whether bounded embedded images may be sent to a verified vision model.
+    #[serde(default)]
+    pub include_images: bool,
 }
 
 /// Reads the current summary for an authorized file occurrence.
@@ -125,7 +149,7 @@ pub struct DocumentSummaryDto {
     pub created_at_ms: i64,
     /// Concise overview.
     pub brief: String,
-    /// Full representative summary.
+    /// Full summary grounded in the selected document evidence.
     pub full: String,
     /// Whether the indexed source changed after generation.
     pub stale: bool,

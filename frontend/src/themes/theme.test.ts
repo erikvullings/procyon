@@ -473,7 +473,10 @@ describe('theme stylesheet', () => {
       /\.fm-knowledge-search-options\s*\{[^}]*height:\s*var\(--fm-row-height\)[^}]*white-space:\s*nowrap/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
+      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*align-items:\s*center[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options input\[type="checkbox"\] \+ span:not\(\.lever\)\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center/s,
     );
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
@@ -486,6 +489,12 @@ describe('theme stylesheet', () => {
     );
     expect(themeCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
+    );
+  });
+
+  it('lets semantic enrolment consent wrap without covering its action', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-semantic-library-confirmation\s+input\[type="checkbox"\]\s+\+ span:not\(\.lever\)\s*\{[^}]*height:\s*auto[^}]*min-height:\s*20px/s,
     );
   });
 

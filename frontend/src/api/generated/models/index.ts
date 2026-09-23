@@ -78,6 +78,7 @@ export * from './discoverApplicationUninstallCandidatesRequestDto.ts';
 export * from './discoverApplicationUninstallCandidatesResponseDto.ts';
 export * from './documentSummaryDto.ts';
 export * from './documentSummaryPreviewDto.ts';
+export * from './documentSummarySelectionModeDto.ts';
 export * from './documentSummaryTargetDto.ts';
 export * from './docxPreviewResourceDto.ts';
 export * from './docxPreviewSessionRequestDto.ts';

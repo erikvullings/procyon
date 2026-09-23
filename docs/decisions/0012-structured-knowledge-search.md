@@ -75,6 +75,15 @@ the old collection is eligible for reclamation. An interruption leaves version 1
 staged rebuild restartable. Runtime `add_column` and `create_index` exist, but are not used for this
 migration because every row requires backfill and an in-place build has a partial-index state.
 
+## Alternatives
+
+- Keep LLM query rewriting as the primary search path. Rejected because search must work offline,
+  without a generation profile, and without sending the user's question to a remote provider.
+- Keep vector-only retrieval. Rejected because exact identifiers, specialist terms, and headings
+  need native full-text matching.
+- Maintain a separate full-text store beside Zvec. Rejected because it would duplicate indexed
+  content and introduce another publication lifecycle without improving the trust boundary.
+
 ## Consequences
 
 - Knowledge Search works offline with FTS alone and does not require a generation profile.
@@ -85,6 +94,13 @@ migration because every row requires backfill and an in-place build has a partia
   control.
 - Production visibility remains gated on multilingual retrieval, migration, lifecycle, privacy,
   accessibility, and supported-platform evaluation in task 0208.
+
+## Revisit conditions
+
+Revisit this decision if measured retrieval quality shows that deterministic planning and reciprocal
+rank fusion cannot meet the accepted evaluation thresholds, if Zvec can no longer provide the
+required full-text and vector guarantees, or if a new retrieval design preserves offline operation,
+explicit generation consent, and SQLite authorization without adding a second authority.
 
 ## Sequential implementation
 
