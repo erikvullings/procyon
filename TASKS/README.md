@@ -171,6 +171,7 @@ layers and never prerequisites for retrieval.
 - [x] 0215 Knowledge results scroll and position fixes *(needs 0214)*
 - [x] 0216 Knowledge retrieval relevance *(needs 0215)*
 - [x] 0217 Base alpha release 0.1.0-24 *(excludes semantic and Ask modes)*
+- [x] 0228 Unified Knowledge Ask pane *(needs 0186, 0207, 0209)*
 
 ## File operations
 

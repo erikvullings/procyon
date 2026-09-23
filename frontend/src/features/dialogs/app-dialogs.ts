@@ -69,7 +69,6 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
-import { RagAskDialog } from '../semantic/rag-ask-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
@@ -525,32 +524,6 @@ export function renderAppDialogs(
       entry: ds.documentSummaryDialog?.entry,
       client,
       onClose: () => dialogs.cancelDocumentSummaryDialog(),
-    }),
-    m(RagAskDialog, {
-      open: ds.ragAskDialog !== undefined,
-      workspaceId: ds.ragAskDialog?.workspaceId ?? '',
-      currentFolder: ds.ragAskDialog?.currentFolder,
-      selectedEntries: ds.ragAskDialog?.selectedEntries ?? [],
-      semanticSourceIds: ds.ragAskDialog?.semanticSourceIds ?? [],
-      client,
-      onClose: () => dialogs.cancelRagAskDialog(),
-      onIncludeCurrentFolder: () => {
-        const request = ds.ragAskDialog;
-        if (request?.currentFolder === undefined) return;
-        dialogs.cancelRagAskDialog();
-        ctx.includeCurrentSemanticFolder(request.workspaceId, request.currentFolder);
-      },
-      onOpenCitation: async (sourceId) => {
-        const request = ds.ragAskDialog;
-        if (request === undefined) return;
-        const navigated = await navigateToRagCitation(
-          request.workspaceId,
-          sourceId,
-          (citationRequest) => client.resolveRagCitation(citationRequest),
-          (location, name) => ctx.navigateActiveLocation(location, name),
-        );
-        if (navigated) dialogs.cancelRagAskDialog();
-      },
     }),
     m(FinderTagsDialog, {
       open: ds.finderTagsDialog !== undefined,

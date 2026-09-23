@@ -317,6 +317,9 @@ describe('theme stylesheet', () => {
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
     );
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\s+:is\([^)]*\.fm-entry-icon[^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\.fm-search-result-parent[^)]*\)\s*\{[^}]*color:\s*inherit/s,
+    );
     // The cursor row keeps a distinctive outline even when it's also marked, so the mark's amber
     // text color (above) isn't washed out by the cursor's own background/text override - and,
     // unlike the fill rules above, this one is deliberately not gated on `:focus-within`, so the
@@ -489,6 +492,9 @@ describe('theme stylesheet', () => {
     );
     expect(themeCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
+    );
+    expect(themeCss).toMatch(
+      /@container \(max-width: 36rem\)\s*\{[^}]*\.fm-knowledge-workspace\.is-ask\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(12rem,\s*1fr\)\s+minmax\(12rem,\s*1fr\)/s,
     );
   });
 

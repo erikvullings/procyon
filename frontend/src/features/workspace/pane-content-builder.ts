@@ -60,7 +60,10 @@ import {
   type SelectionAction,
   type SelectionState,
 } from '../selection/selection';
-import { KnowledgeSearchPane } from '../semantic/knowledge-search-dialog';
+import {
+  KnowledgeSearchPane,
+  type KnowledgeSurfaceMode,
+} from '../semantic/knowledge-search-dialog';
 import { type SortModel, sortEntriesResponsive } from '../sorting/sorting';
 import { dispatchWorkspaceCommand } from './dispatch-workspace-command';
 import type { WorkspaceController } from './workspace-controller';
@@ -79,6 +82,7 @@ export interface KnowledgeSearchTabState {
   readonly currentFolder: Location | undefined;
   readonly semanticSourceIds: readonly string[];
   readonly initialSubject: string | undefined;
+  readonly initialMode: KnowledgeSurfaceMode;
 }
 
 /** Shown before settings finish loading, mirroring the backend's own default (`core.gitStatus`
@@ -894,6 +898,7 @@ export function createPaneContentBuilder(
                       currentFolder: knowledgeSearch.currentFolder,
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
+                      initialMode: knowledgeSearch.initialMode,
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
                     });

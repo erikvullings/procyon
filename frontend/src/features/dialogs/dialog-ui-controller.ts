@@ -32,13 +32,6 @@ export interface DocumentSummaryDialogRequest {
   readonly entry: EntrySummary;
 }
 
-export interface RagAskDialogRequest {
-  readonly workspaceId: string;
-  readonly currentFolder: Location | undefined;
-  readonly selectedEntries: readonly EntrySummary[];
-  readonly semanticSourceIds: readonly string[];
-}
-
 /** Backs the uninstall review checklist (task 0148): the `.app` bundle being uninstalled plus
  * what discovery found for it, held until the user confirms or cancels. */
 export interface ApplicationUninstallDialogRequest {
@@ -65,7 +58,6 @@ export interface DialogUIState {
   finderTagsDialog: FinderTagsDialogRequest | undefined;
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
   documentSummaryDialog: DocumentSummaryDialogRequest | undefined;
-  ragAskDialog: RagAskDialogRequest | undefined;
   applicationUninstallDialog: ApplicationUninstallDialogRequest | undefined;
 }
 
@@ -110,8 +102,6 @@ export interface DialogUIController {
   cancelSpotlightCommentDialog(): void;
   openDocumentSummaryDialog(request: DocumentSummaryDialogRequest): void;
   cancelDocumentSummaryDialog(): void;
-  openRagAskDialog(request: RagAskDialogRequest): void;
-  cancelRagAskDialog(): void;
   openApplicationUninstallDialog(request: ApplicationUninstallDialogRequest): void;
   cancelApplicationUninstallDialog(): void;
 }
@@ -135,7 +125,6 @@ export function createDialogUIController(): DialogUIController {
     finderTagsDialog: undefined,
     spotlightCommentDialog: undefined,
     documentSummaryDialog: undefined,
-    ragAskDialog: undefined,
     applicationUninstallDialog: undefined,
   };
 
@@ -263,14 +252,6 @@ export function createDialogUIController(): DialogUIController {
 
     cancelDocumentSummaryDialog(): void {
       state.documentSummaryDialog = undefined;
-    },
-
-    openRagAskDialog(request): void {
-      state.ragAskDialog = request;
-    },
-
-    cancelRagAskDialog(): void {
-      state.ragAskDialog = undefined;
     },
 
     openApplicationUninstallDialog(request): void {

@@ -20,6 +20,7 @@ interface MountOptions {
   readonly currentFolder?: { providerId: string; uri: string };
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
+  readonly initialMode?: 'search' | 'ask';
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
@@ -35,6 +36,7 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         currentFolder: options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
+        initialMode: options.initialMode,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
       }),
@@ -67,6 +69,12 @@ function button(label: string): HTMLButtonElement {
       candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label,
   );
   if (found === undefined) throw new Error(`button not rendered: ${label}`);
+  return found;
+}
+
+function searchButton(): HTMLButtonElement {
+  const found = root.querySelector<HTMLButtonElement>('.fm-knowledge-search-submit');
+  if (found === null) throw new Error('search button not rendered');
   return found;
 }
 
@@ -107,6 +115,18 @@ afterEach(() => {
 });
 
 describe('KnowledgeSearchDialog (task 0206)', () => {
+  it('opens Ask as an aligned answer and evidence workspace', async () => {
+    mount({ initialMode: 'ask' });
+
+    await ready();
+
+    expect(button('Ask your files').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Search').getAttribute('aria-pressed')).toBe('false');
+    expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-answer-panel')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-evidence-panel')).not.toBeNull();
+  });
+
   it('uses a fixed filter-style toolbar and moves search settings into a modal', async () => {
     mount();
 
@@ -268,7 +288,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.textContent).toContain(
       'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
     );
-    expect(button('Search').disabled).toBe(true);
+    expect(searchButton().disabled).toBe(true);
     submitSearch();
     expect(execute).not.toHaveBeenCalled();
   });
@@ -293,7 +313,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'This folder is included and still being indexed. You can search documents that are already available.',
     );
     expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
-    expect(button('Search').disabled).toBe(false);
+    expect(searchButton().disabled).toBe(false);
   });
 
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {
@@ -663,7 +683,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'true',
     );
     expect(root.querySelector('.fm-knowledge-search-spinner')).not.toBeNull();
-    expect(button('Search').disabled).toBe(true);
+    expect(searchButton().disabled).toBe(true);
     expect(() => button('Cancel search')).toThrow();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search-spinner')).toBeNull());
@@ -699,13 +719,13 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     subjects().dispatchEvent(newline);
     expect(newline.defaultPrevented).toBe(false);
     expect(execute).not.toHaveBeenCalled();
-    expect(button('Search').disabled).toBe(false);
+    expect(searchButton().disabled).toBe(false);
 
     submitSearch();
 
     await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(button('Search').disabled).toBe(false));
-    button('Search').click();
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+    searchButton().click();
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
   });
 
@@ -1021,7 +1041,7 @@ describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
     type(dsl(), '');
 
     await vi.waitFor(() => expect(subjects().value).toBe(''));
-    expect(button('Search').disabled).toBe(true);
+    expect(searchButton().disabled).toBe(true);
   });
 
   it('discards a parse that lands after a further edit', async () => {
@@ -1640,6 +1660,24 @@ async function answersReady(): Promise<void> {
 }
 
 describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
+  it('retrieves once and answers automatically in Ask mode', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    mount({ client, initialSubject: 'retrieval', initialMode: 'ask' });
+    await answersReady();
+
+    submitSearch();
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    expect(execute).toHaveBeenCalledOnce();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')?.textContent).toContain(
+      'Answered from',
+    );
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
   it('never offers answer controls when the host reports no answer capability', async () => {
     mount({ initialSubject: 'retrieval' });
     await ready();
