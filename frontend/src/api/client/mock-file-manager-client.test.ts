@@ -11,6 +11,26 @@ const ROOT_REQUEST = {
 } as const;
 
 describe('MockFileManagerClient directories', () => {
+  it('retains reported frontend diagnostics newest first', async () => {
+    const client = new MockFileManagerClient();
+    await client.recordFrontendDiagnostic({
+      timestamp: '2026-09-13T19:00:00Z',
+      code: 'FRONTEND_CONSOLE_ERROR',
+      message: 'first at /Users/alice/project/main.ts token: secret-value',
+    });
+    await client.recordFrontendDiagnostic({
+      timestamp: '2026-09-13T19:01:00Z',
+      code: 'FRONTEND_UNCAUGHT_ERROR',
+      message: 'second',
+    });
+
+    const diagnostics = await client.getDiagnostics();
+
+    expect(diagnostics.recentErrors[0]?.message).toBe('second');
+    expect(diagnostics.recentErrors[1]?.message).not.toContain('/Users/alice');
+    expect(diagnostics.recentErrors[1]?.message).not.toContain('secret-value');
+  });
+
   it('mirrors bounded workbook sheets and in-session sheet selection', async () => {
     const client = new MockFileManagerClient();
     const opened = await client.openStructuredView({

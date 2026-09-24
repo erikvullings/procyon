@@ -1,6 +1,7 @@
 import { t } from '../../i18n';
 import type { ActionDescriptor, EntrySummary } from '../../models';
 import { archiveRootForEntry } from '../navigation/archive-location';
+import { isParentEntry } from '../panes/parent-entry';
 
 /** Context the frontend uses to advise which registered commands can run. */
 export interface CommandAvailabilityContext {
@@ -60,6 +61,8 @@ const CONTEXT_MENU_SELECTION_ORDER = new Map([
   ['core.copyPath', 1],
   ['core.copyRelativePath', 2],
 ]);
+
+const PARENT_ENTRY_ACTION_IDS = new Set(['core.copyPath', 'core.copyRelativePath']);
 
 // `core.trash` is deliberately excluded: unlike rename/move/permanent-delete,
 // trashing is reversible and requires no `overrideReadOnly` escape hatch, so
@@ -164,6 +167,12 @@ export function menuActionsForContext(
   actions: readonly ActionDescriptor[],
   context: CommandAvailabilityContext,
 ): readonly AvailableAction[] {
+  if (context.selectedEntries.length === 1 && isParentEntry(context.selectedEntries[0]?.id)) {
+    return availableActions(
+      actions.filter((action) => PARENT_ENTRY_ACTION_IDS.has(action.id)),
+      context,
+    );
+  }
   const selected = context.selectedEntries.length > 0;
   const matchingActions = actions.filter((action) =>
     selected ? SELECTION_ACTION_IDS.has(action.id) : LOCATION_ACTION_IDS.has(action.id),

@@ -234,6 +234,126 @@ describe('OperationCentre states', () => {
     ).not.toBeNull();
   });
 
+  it('shows a running transfer ETA beside its controls', () => {
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([operation('running')]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const controls = root.querySelector('[data-operation-id="running"] .fm-operation-controls');
+    expect(controls?.querySelector('.fm-operation-eta')?.textContent).toBe('ETA 0:02');
+    expect(controls?.lastElementChild?.classList).toContain('fm-operation-eta');
+  });
+
+  const runningWithoutRate = operation('running');
+  delete runningWithoutRate.progress.bytesPerSecond;
+
+  it.each([
+    ['paused transfer', operation('paused')],
+    ['transfer without a measured rate', runningWithoutRate],
+  ])('does not estimate completion for a %s', (_description, transfer) => {
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([transfer]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(root.querySelector('.fm-operation-eta')).toBeNull();
+  });
+
+  it('announces failures with retained transfer context and a recovery path', () => {
+    const failed: Operation = {
+      ...operation('failed'),
+      sources: [
+        {
+          id: 'report',
+          location: {
+            providerId: 'local',
+            uri: 'file:///Documents/The%20Report%20%282026%29.pdf',
+          },
+        },
+      ],
+      destination: {
+        providerId: 'sftp',
+        uri: 'sftp://server/home/demo/The%20Report%20%282026%29.pdf',
+      },
+    };
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: {
+            ...createOperationsState([failed]),
+            failuresById: {
+              failed: {
+                code: 'permissionDenied',
+                message: 'Could not copy report.pdf.',
+                details: { reason: 'Permission denied' },
+              },
+            },
+          },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const failure = root.querySelector('[data-operation-id="failed"] .fm-operation-failure');
+    expect(failure?.getAttribute('role')).toBe('alert');
+    expect(failure?.textContent).toContain('Could not copy report.pdf.');
+    expect(failure?.textContent).toContain('file:///Documents/The Report (2026).pdf');
+    expect(failure?.textContent).toContain('sftp://server/home/demo/The Report (2026).pdf');
+    expect(failure?.textContent).not.toContain('%20');
+    expect(failure?.textContent).not.toContain('%28');
+    expect(failure?.textContent).toContain(
+      'Procyon cannot write to the destination. Choose a writable folder or update its permissions.',
+    );
+  });
+
+  it.each([
+    [
+      'insufficientSpace',
+      'The destination does not have enough available space. Free space or choose another destination.',
+    ],
+    ['operationFailed', 'Review the error above, then run the operation again.'],
+  ])('shows recovery guidance for %s failures', (code, recovery) => {
+    const failed = operation('failed');
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: {
+            ...createOperationsState([failed]),
+            failuresById: {
+              failed: {
+                code,
+                message: 'Could not copy report.pdf.',
+              },
+            },
+          },
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(
+      root.querySelector('[data-operation-id="failed"] .fm-operation-failure-recovery')
+        ?.textContent,
+    ).toBe(recovery);
+  });
+
   it('makes partial results explicit for a cancelled operation', () => {
     m.mount(root, {
       view: () =>

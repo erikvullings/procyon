@@ -77,6 +77,22 @@ pub enum VfsError {
     /// The cached or supplied archive credential was rejected.
     #[error("archive credential is invalid")]
     InvalidCredential,
+    /// A remote provider rejected authentication or could not access the configured
+    /// authentication mechanism. The provider supplies recovery guidance that is
+    /// safe to show to the user.
+    #[error("{message}")]
+    AuthenticationFailed {
+        /// Sanitized, actionable authentication failure message.
+        message: String,
+    },
+    /// The destination cannot accommodate the requested write.
+    #[error("the destination does not have enough available space")]
+    InsufficientSpace {
+        /// Bytes available when the provider could determine the value.
+        available: Option<u64>,
+        /// Bytes required when the operation could determine the value.
+        required: Option<u64>,
+    },
     /// The caller cancelled the operation.
     #[error("operation cancelled")]
     Cancelled,
@@ -120,6 +136,8 @@ impl VfsError {
             Self::ArchiveResourceLimit { .. } => "archiveResourceLimit",
             Self::CredentialRequired => "credentialRequired",
             Self::InvalidCredential => "invalidCredential",
+            Self::AuthenticationFailed { .. } => "authenticationFailed",
+            Self::InsufficientSpace { .. } => "insufficientSpace",
             Self::Cancelled => "cancelled",
             Self::Io { .. } => "io",
             Self::InvalidLocation { .. } => "invalidLocation",

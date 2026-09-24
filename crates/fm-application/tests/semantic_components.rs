@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use ed25519_dalek::{Signer, SigningKey};
 use fm_application::FileManagerService;
+use fm_application::semantic::{FakeSemanticCapability, SemanticHealth};
 use fm_application::semantic_components::{
     AdministratorProvisionedSemanticComponentCapability, DesktopSemanticDistribution,
     FakeSemanticComponentCapability, FakeSemanticComponentScenario,
@@ -301,6 +302,23 @@ fn signed_catalog() -> TrustedCatalog {
     .unwrap()
 }
 
+fn empty_signed_catalog() -> TrustedCatalog {
+    let manifest = CatalogManifest::new(
+        ManifestRevision::new("empty-fixture-catalog").unwrap(),
+        Vec::new(),
+        Vec::new(),
+        BTreeMap::new(),
+    )
+    .unwrap();
+    let signing_key = SigningKey::from_bytes(&[18_u8; 32]);
+    let signature = signing_key.sign(&manifest.canonical_bytes().unwrap());
+    TrustedCatalog::verify(
+        SignedCatalogManifest::new(manifest, signature.to_bytes()),
+        &signing_key.verifying_key(),
+    )
+    .unwrap()
+}
+
 fn managed_capability(
     directory: &TempDir,
     distribution: DesktopSemanticDistribution,
@@ -317,6 +335,25 @@ fn managed_capability_with_inventory(
     distribution: DesktopSemanticDistribution,
     available_bytes: u64,
     with_inventory: bool,
+) -> (
+    Arc<ManagedSemanticComponentCapability>,
+    Arc<FixtureArtifactSource>,
+) {
+    managed_capability_with_catalog(
+        directory,
+        distribution,
+        available_bytes,
+        with_inventory,
+        signed_catalog(),
+    )
+}
+
+fn managed_capability_with_catalog(
+    directory: &TempDir,
+    distribution: DesktopSemanticDistribution,
+    available_bytes: u64,
+    with_inventory: bool,
+    catalog: TrustedCatalog,
 ) -> (
     Arc<ManagedSemanticComponentCapability>,
     Arc<FixtureArtifactSource>,
@@ -353,7 +390,7 @@ fn managed_capability_with_inventory(
             SemanticStateStore::new(directory.path().join("config")),
             directory.path().join("app-data"),
         ),
-        Arc::new(signed_catalog()),
+        Arc::new(catalog),
         ManagedSemanticComponentConfiguration {
             runtime_and_worker_artifacts: vec![
                 ArtifactId::new("fixture-worker").unwrap(),
@@ -380,6 +417,41 @@ fn managed_capability_with_inventory(
         },
     );
     (Arc::new(capability), source)
+}
+
+#[tokio::test]
+async fn stale_components_absent_from_the_trusted_catalog_remain_recoverable() {
+    let directory = project_temp_dir("stale-components-");
+    let (capability, _) =
+        managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+    let service = SemanticComponentService::new(capability);
+    let offer = service
+        .installation_offer(fm_semantic_components::SemanticProfile::CompactMultilingual)
+        .await
+        .unwrap();
+    service.install_or_enable(offer.consent()).await.unwrap();
+    drop(service);
+
+    let (stale_capability, _) = managed_capability_with_catalog(
+        &directory,
+        DesktopSemanticDistribution::Direct,
+        u64::MAX,
+        true,
+        empty_signed_catalog(),
+    );
+    let status = SemanticComponentService::new(stale_capability)
+        .status()
+        .await
+        .unwrap();
+
+    assert_eq!(status.lifecycle(), &SemanticComponentLifecycle::Absent);
+    assert!(status.active_model().is_none());
+    assert!(
+        status
+            .components()
+            .iter()
+            .all(|component| component.state() == InstalledSemanticComponentState::Rollback)
+    );
 }
 
 #[tokio::test]
@@ -755,6 +827,36 @@ async fn managed_status_keeps_disk_categories_stable_after_interleaved_writes() 
 }
 
 #[tokio::test]
+async fn managed_status_rejects_a_corrupted_installed_component() {
+    let directory = project_temp_dir("managed-corrupt-status-");
+    let (capability, _) =
+        managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+    let service = SemanticComponentService::new(capability);
+    let offer = service
+        .installation_offer(fm_semantic_components::SemanticProfile::CompactMultilingual)
+        .await
+        .unwrap();
+    service.install_or_enable(offer.consent()).await.unwrap();
+    let manager = ComponentManager::new(
+        SemanticStateStore::new(directory.path().join("config")),
+        directory.path().join("app-data"),
+    );
+    let state = manager.state().unwrap();
+    let worker = state
+        .installed_components()
+        .iter()
+        .find(|component| matches!(component.kind(), ArtifactKind::Worker))
+        .unwrap();
+    std::fs::write(worker.installed_path(), b"tampered worker").unwrap();
+
+    assert!(matches!(
+        service.status().await,
+        Err(SemanticComponentError::ArtifactVerificationFailed { artifact_id })
+            if artifact_id == "fixture-worker"
+    ));
+}
+
+#[tokio::test]
 async fn managed_lifecycle_uses_distinct_pause_remove_move_and_uninstall_operations() {
     let directory = project_temp_dir("managed-lifecycle-");
     let (capability, _) =
@@ -908,6 +1010,54 @@ async fn managed_uninstall_quiesces_and_clears_an_existing_pause_guard() {
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn service_stops_the_semantic_worker_before_either_uninstall_flow() {
+    for index_decision in [
+        SemanticIndexRetentionDecision::Retain,
+        SemanticIndexRetentionDecision::Delete,
+    ] {
+        let directory = project_temp_dir("managed-uninstall-worker-");
+        let (components, _) =
+            managed_capability(&directory, DesktopSemanticDistribution::Direct, u64::MAX);
+        let semantic = Arc::new(FakeSemanticCapability::new());
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            directory.path().join("workspaces"),
+            directory.path().join("settings"),
+        )
+        .with_semantic_component_capability(components)
+        .with_semantic_capability(semantic);
+        let offer = service
+            .semantic_component_installation_offer(
+                fm_semantic_components::SemanticProfile::CompactMultilingual,
+            )
+            .await
+            .unwrap();
+        service
+            .semantic_component_install_or_enable(offer.consent())
+            .await
+            .unwrap();
+
+        service
+            .semantic_component_uninstall(index_decision)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            service.semantic_health().await.unwrap(),
+            SemanticHealth::Draining
+        );
+        assert!(
+            service
+                .semantic_component_status()
+                .await
+                .unwrap()
+                .components()
+                .is_empty()
+        );
+    }
 }
 
 #[tokio::test]

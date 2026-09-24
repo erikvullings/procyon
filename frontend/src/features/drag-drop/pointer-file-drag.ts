@@ -13,8 +13,25 @@ export interface PointerFileDragSource {
 }
 
 const targets = new WeakMap<HTMLElement, PointerFileDropTarget>();
+const EFFECT_INDICATOR_OFFSET_X = 14;
+const EFFECT_INDICATOR_OFFSET_Y = 16;
 let activeCleanup: (() => void) | undefined;
 let suppressClick = false;
+let clickSuppressionGeneration = 0;
+
+function clearClickSuppression(): void {
+  clickSuppressionGeneration += 1;
+  suppressClick = false;
+}
+
+function suppressNextClick(releaseAfterEventLoop: boolean): void {
+  const generation = ++clickSuppressionGeneration;
+  suppressClick = true;
+  if (!releaseAfterEventLoop) return;
+  setTimeout(() => {
+    if (clickSuppressionGeneration === generation) suppressClick = false;
+  }, 0);
+}
 
 function modifiers(event: PointerEvent): DropModifiers {
   return { altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey };
@@ -56,6 +73,9 @@ export function registerPointerFileDropTarget(
 
 export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDragSource): void {
   if (event.button !== 0) return;
+  // A fresh in-app press is always intentional. Clear native handoff suppression here so only a
+  // click synthesized without a new pointerdown can be discarded when the WebView regains focus.
+  clearClickSuppression();
   activeCleanup?.();
   const startX = event.clientX;
   const startY = event.clientY;
@@ -82,9 +102,9 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     }
     effectIndicator ??= document.body.appendChild(document.createElement('span'));
     effectIndicator.className = `fm-file-drag-effect fm-file-drag-effect-${effect}`;
-    effectIndicator.textContent = effect === 'copy' ? '+' : '-';
-    effectIndicator.style.left = `${lastX + 4}px`;
-    effectIndicator.style.top = `${lastY + 4}px`;
+    effectIndicator.textContent = '';
+    effectIndicator.style.left = `${lastX + EFFECT_INDICATOR_OFFSET_X}px`;
+    effectIndicator.style.top = `${lastY + EFFECT_INDICATOR_OFFSET_Y}px`;
   };
 
   const highlight = (element?: HTMLElement): void => {
@@ -144,10 +164,7 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
       if (resolved?.target.onDragOver(resolved.index, modifiers(current)) === true) {
         resolved.target.onDrop(resolved.index, modifiers(current));
       }
-      suppressClick = true;
-      setTimeout(() => {
-        suppressClick = false;
-      }, 0);
+      suppressNextClick(true);
     }
     cleanup();
   };
@@ -156,6 +173,9 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   };
   const handOffToNative = (): void => {
     if (!started) return;
+    // Native drag sessions may synthesize their click only after another application returns
+    // control to this WebView, well beyond the current event loop turn.
+    suppressNextClick(false);
     cleanup();
     source.onNativeDragOut(source.index);
   };
@@ -177,5 +197,7 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
 }
 
 export function consumePointerFileDragClick(): boolean {
-  return suppressClick;
+  const suppressed = suppressClick;
+  if (suppressed) clearClickSuppression();
+  return suppressed;
 }

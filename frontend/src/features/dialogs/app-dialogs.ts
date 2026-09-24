@@ -46,12 +46,16 @@ import { CreateDirectoryDialog } from '../operations/create-directory-dialog';
 import { CreateFileDialog } from '../operations/create-file-dialog';
 import { MultiRenameDialog } from '../operations/multi-rename-dialog';
 import { OperationCentre } from '../operations/operation-centre';
+import { OperationConfirmationDialog } from '../operations/operation-confirmation-dialog';
 import {
   dismissOperation,
   type OperationCentreState,
   transitionOperationState,
 } from '../operations/operation-state';
-import type { OperationsController } from '../operations/operations-controller';
+import type {
+  OperationConfirmationRequest,
+  OperationsController,
+} from '../operations/operations-controller';
 import { PermanentDeleteDialog } from '../operations/permanent-delete-dialog';
 import { CloseLastTabDialog } from '../panes/close-last-tab-dialog';
 import type { TabController } from '../panes/tab-controller';
@@ -65,7 +69,6 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
-import { RagAskDialog } from '../semantic/rag-ask-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
@@ -84,6 +87,8 @@ export interface AppDialogsContext {
   getFindFilesError(): string | undefined;
   getCloseTabConfirmation(): { readonly paneId: PaneId; readonly tabId: TabId } | undefined;
   setCloseTabConfirmation(conf?: { readonly paneId: PaneId; readonly tabId: TabId }): void;
+  getOperationConfirmation(): OperationConfirmationRequest | undefined;
+  resolveOperationConfirmation(confirmed: boolean): void;
   getDialogs(): DialogUIController;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
   getFormatSettings(): EntryFormatSettings;
@@ -170,8 +175,15 @@ export function renderAppDialogs(
 ): m.Children[] {
   const dialogs = ctx.getDialogs();
   const ds = dialogs.getState();
+  const operationConfirmation = ctx.getOperationConfirmation();
 
   return [
+    m(OperationConfirmationDialog, {
+      ...(operationConfirmation === undefined ? {} : { request: operationConfirmation }),
+      connections: ctx.getConnections(),
+      onConfirm: () => ctx.resolveOperationConfirmation(true),
+      onCancel: () => ctx.resolveOperationConfirmation(false),
+    }),
     ctx.getOperationCentreVisible()
       ? m(OperationCentre, {
           state: ctx.getOperations(),
@@ -512,32 +524,6 @@ export function renderAppDialogs(
       entry: ds.documentSummaryDialog?.entry,
       client,
       onClose: () => dialogs.cancelDocumentSummaryDialog(),
-    }),
-    m(RagAskDialog, {
-      open: ds.ragAskDialog !== undefined,
-      workspaceId: ds.ragAskDialog?.workspaceId ?? '',
-      currentFolder: ds.ragAskDialog?.currentFolder,
-      selectedEntries: ds.ragAskDialog?.selectedEntries ?? [],
-      semanticSourceIds: ds.ragAskDialog?.semanticSourceIds ?? [],
-      client,
-      onClose: () => dialogs.cancelRagAskDialog(),
-      onIncludeCurrentFolder: () => {
-        const request = ds.ragAskDialog;
-        if (request?.currentFolder === undefined) return;
-        dialogs.cancelRagAskDialog();
-        ctx.includeCurrentSemanticFolder(request.workspaceId, request.currentFolder);
-      },
-      onOpenCitation: async (sourceId) => {
-        const request = ds.ragAskDialog;
-        if (request === undefined) return;
-        const navigated = await navigateToRagCitation(
-          request.workspaceId,
-          sourceId,
-          (citationRequest) => client.resolveRagCitation(citationRequest),
-          (location, name) => ctx.navigateActiveLocation(location, name),
-        );
-        if (navigated) dialogs.cancelRagAskDialog();
-      },
     }),
     m(FinderTagsDialog, {
       open: ds.finderTagsDialog !== undefined,

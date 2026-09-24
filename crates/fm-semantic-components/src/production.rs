@@ -21,10 +21,14 @@ pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VER
 pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036000+baseline/2";
 /// Structural chunker compiled into the production semantic worker.
 pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
+/// Unicode normalization applied symmetrically before production embeddings.
+pub const PRODUCTION_EMBEDDING_PREPROCESSING_IDENTITY: &str = "unicode-default-case-fold/1";
 /// Logical component identity of the production semantic worker.
 pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 /// Logical component identity of the production Zvec native runtime.
 pub const PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.zvec-runtime";
+/// Logical component identity of the production ONNX Runtime loader.
+pub const PRODUCTION_ONNX_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.onnx-runtime";
 /// Logical component identity of the production multilingual model package.
 pub const PRODUCTION_MODEL_COMPONENT_ID: &str = "procyon.semantic.model.multilingual-e5-small";
 /// Exact upstream model identity selected for the first production profile.
@@ -57,6 +61,7 @@ pub fn production_pipeline_identity() -> crate::ProductionPipelineIdentity {
         2,
         PRODUCTION_CONVERTER_IDENTITY,
         PRODUCTION_CHUNKER_IDENTITY,
+        PRODUCTION_EMBEDDING_PREPROCESSING_IDENTITY,
         crate::TokenizerId::new(PRODUCTION_TOKENIZER_ID)
             .expect("production tokenizer constant is valid"),
         crate::ModelIdentity::new(

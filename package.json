@@ -1,7 +1,7 @@
 {
   "name": "fm",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.5",
   "type": "module",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
@@ -16,9 +16,11 @@
     "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
     "semantic:bundle:production": "node scripts/build-semantic-production-bundle.mjs",
     "semantic:catalog": "node scripts/semantic-production-catalog.mjs",
+    "semantic:evaluation:check": "node scripts/check-semantic-release-preconditions.mjs",
     "semantic:qualification:check": "node scripts/check-semantic-qualification-workflow.mjs",
     "semantic:model:fetch": "node scripts/fetch-semantic-model.mjs",
     "semantic:model:verify": "node scripts/verify-semantic-model.mjs",
+    "semantic:onnx:prepare": "node scripts/onnx-runtime-qualification.mjs prepare",
     "semantic:zvec:prepare": "node scripts/zvec-runtime-qualification.mjs prepare",
     "test": "pnpm run test:rust && pnpm run test:frontend && pnpm run test:scripts",
     "test:rust": "cargo nextest run --workspace && cargo test --doc --workspace",

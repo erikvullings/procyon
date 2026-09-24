@@ -118,8 +118,8 @@ describe('RagAskDialog', () => {
     expect(root.textContent).not.toContain('Enter to ask');
     expect(root.textContent).not.toContain('Generate answer');
     const selects = root.querySelectorAll<HTMLSelectElement>('select');
-    expect(selects).toHaveLength(2);
-    const scopeSelect = selects.item(1);
+    expect(selects).toHaveLength(1);
+    const scopeSelect = selects.item(0);
     expect([...scopeSelect.options].map((option) => option.text)).toEqual([
       'Entire indexed library',
       'Selected files',
@@ -384,7 +384,10 @@ describe('RagAskDialog', () => {
     );
     expect(root.querySelector('.fm-rag-answer-markdown script')).toBeNull();
     expect(root.querySelector<HTMLAnchorElement>('.fm-rag-answer-markdown a')?.textContent).toBe(
-      'C1',
+      'TRIZ Engineering of Creativity.pdf',
+    );
+    expect(root.querySelector('.fm-rag-citations button')?.textContent).toBe(
+      'TRIZ Engineering of Creativity.pdf',
     );
     expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Page 195');
     expect(root.querySelector('.fm-rag-citations')?.textContent).toContain('Chapter 3, lines 7–11');

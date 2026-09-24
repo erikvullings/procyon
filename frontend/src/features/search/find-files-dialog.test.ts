@@ -44,8 +44,9 @@ describe('FindFilesDialog', () => {
     expect(onSearch).toHaveBeenCalledWith({
       mode: 'name',
       filenameQuery: 'report',
-      contentQuery: undefined,
       contentRegex: false,
+      contentCaseSensitive: false,
+      contentWholeWord: false,
       recurse: true,
     });
 
@@ -55,42 +56,22 @@ describe('FindFilesDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it('keeps semantic mode and its visible library scope explicit', () => {
-    const onSearch = vi.fn();
+  it('shows filename and content search together without mode tabs', () => {
     m.mount(root, {
       view: () =>
         m(FindFilesDialog, {
           open: true,
           scopeLabel: 'file:///Documents',
-          onSearch,
+          onSearch: vi.fn(),
           onCancel: vi.fn(),
         }),
     });
     m.redraw.sync();
-    const semanticButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Semantic',
-    );
-    semanticButton?.click();
-    m.redraw.sync();
-    const query = document.querySelector<HTMLInputElement>('#find-files-query');
-    if (!query) throw new Error('semantic query input missing');
-    query.value = 'renewable energy planning';
-    query.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const scopeButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Current folder recursively',
-    );
-    scopeButton?.click();
-    m.redraw.sync();
-    query.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
-    expect(onSearch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mode: 'semantic',
-        semanticQuery: 'renewable energy planning',
-        semanticScope: 'entireLibrary',
-        filenameQuery: '',
-      }),
-    );
+    expect(document.querySelector('#find-files-query')).not.toBeNull();
+    expect(document.querySelector('#find-files-content-query')).not.toBeNull();
+    expect(document.querySelector('.fm-find-files-modes')).toBeNull();
+    expect(root.textContent).not.toContain('Semantic');
   });
 
   it('does not search on an empty/whitespace-only query', () => {
@@ -201,6 +182,72 @@ describe('FindFilesDialog', () => {
     );
   });
 
+  it('converts the selected size units to bytes', () => {
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: 'file:///Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const minimum = document.querySelector<HTMLInputElement>('#find-files-min-size');
+    const unit = minimum
+      ?.closest('.fm-find-files-size-control')
+      ?.querySelector<HTMLSelectElement>('select');
+    if (!minimum || !unit) throw new Error('minimum size controls missing');
+    minimum.value = '1.5';
+    minimum.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    unit.value = 'MB';
+    unit.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
+
+    const searchButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Search',
+    );
+    searchButton?.click();
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ filenameQuery: '', minSizeBytes: 1_500_000 }),
+    );
+  });
+
+  it('uses compact native date inputs with explicit clear buttons', () => {
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: 'file:///Documents',
+          onSearch: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const modifiedAfter = document.querySelector<HTMLInputElement>('#find-files-modified-after');
+    expect(modifiedAfter?.type).toBe('date');
+    expect(modifiedAfter?.classList).toContain('browser-default');
+    if (!modifiedAfter) throw new Error('modified-after input missing');
+
+    modifiedAfter.value = '2026-09-10';
+    modifiedAfter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    const clearButton = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear modified-after date"]',
+    );
+    expect(clearButton).not.toBeNull();
+    expect(clearButton?.querySelector('svg')).not.toBeNull();
+    expect(clearButton?.textContent).toBe('');
+    clearButton?.click();
+    m.redraw.sync();
+
+    expect(document.querySelector<HTMLInputElement>('#find-files-modified-after')?.value).toBe('');
+  });
+
   it('keeps results out of the modal because they render in the active pane', () => {
     m.mount(root, {
       view: () =>
@@ -266,6 +313,8 @@ describe('FindFilesDialog', () => {
       mode: 'name',
       filenameQuery: '*.svg',
       contentRegex: false,
+      contentCaseSensitive: false,
+      contentWholeWord: false,
       recurse: true,
     };
     expect(onSearch).toHaveBeenCalledWith(expected);
@@ -301,17 +350,11 @@ describe('FindFilesDialog', () => {
     });
     m.redraw.sync();
 
-    const contentButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Content',
-    );
-    contentButton?.click();
-    m.redraw.sync();
-    const contentInput = document.querySelector<HTMLInputElement>('#find-files-query');
+    const contentInput = document.querySelector<HTMLInputElement>('#find-files-content-query');
     if (!contentInput) throw new Error('content input missing');
     contentInput.value = 'TODO';
     contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
-    // Trigger search from the filename input
     const files = document.querySelector<HTMLInputElement>('#find-files-query');
     if (!files) throw new Error('filename input missing');
     files.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -320,13 +363,64 @@ describe('FindFilesDialog', () => {
       expect.objectContaining({
         filenameQuery: '',
         contentQuery: 'TODO',
+        mode: 'content',
         contentRegex: false,
         recurse: true,
       }),
     );
   });
 
-  it('shows recurse and regex toggles', () => {
+  it('shows VS Code-style content options and toggles their pressed states', () => {
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: 'file:///Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const matchCase = document.querySelector<HTMLButtonElement>('button[title="Match case"]');
+    const matchWholeWord = document.querySelector<HTMLButtonElement>(
+      'button[title="Match whole word"]',
+    );
+    const useRegex = document.querySelector<HTMLButtonElement>(
+      'button[title="Use regular expression"]',
+    );
+    expect(matchCase?.textContent).toBe('Aa');
+    expect(matchWholeWord?.textContent).toBe('Ab');
+    expect(useRegex?.textContent).toBe('.*');
+    expect(matchCase?.getAttribute('aria-pressed')).toBe('false');
+    expect(matchWholeWord?.getAttribute('aria-pressed')).toBe('false');
+    expect(useRegex?.getAttribute('aria-pressed')).toBe('false');
+
+    matchCase?.click();
+    matchWholeWord?.click();
+    useRegex?.click();
+    m.redraw.sync();
+
+    expect(matchCase?.getAttribute('aria-pressed')).toBe('true');
+    expect(matchWholeWord?.getAttribute('aria-pressed')).toBe('true');
+    expect(useRegex?.getAttribute('aria-pressed')).toBe('true');
+
+    const contentInput = document.querySelector<HTMLInputElement>('#find-files-content-query');
+    if (!contentInput) throw new Error('content input missing');
+    contentInput.value = 'TODO';
+    contentInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentCaseSensitive: true,
+        contentWholeWord: true,
+        contentRegex: true,
+      }),
+    );
+  });
+
+  it('places an accessible subdirectory toggle beside advanced filters', () => {
     m.mount(root, {
       view: () =>
         m(FindFilesDialog, {
@@ -338,15 +432,29 @@ describe('FindFilesDialog', () => {
     });
     m.redraw.sync();
 
-    const options = document.querySelector('.fm-find-files-options');
-    const contentButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Content',
+    const advancedSection = document.querySelector('.fm-find-files-advanced-section');
+    const toggle = advancedSection?.querySelector<HTMLButtonElement>(
+      '.fm-find-files-recurse-toggle',
     );
-    contentButton?.click();
+    expect(toggle?.title).toBe('Recurse subdirectories');
+    expect(toggle?.getAttribute('aria-label')).toBe('Include subdirectories: On');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle?.querySelector('.fm-icon-directory-tree')).not.toBeNull();
+
+    const details = document.querySelector<HTMLDetailsElement>('.fm-find-files-advanced');
+    expect(details?.querySelector('.fm-find-files-advanced-caret')).not.toBeNull();
+    expect(details?.open).toBe(false);
+    details?.querySelector<HTMLElement>('summary')?.click();
+    expect(details?.open).toBe(true);
+
+    toggle?.click();
     m.redraw.sync();
-    expect(options).not.toBeNull();
-    expect(options?.textContent).toContain('Recurse subdirectories');
-    expect(options?.textContent).toContain('Use regex');
+
+    const updatedToggle = document.querySelector<HTMLButtonElement>(
+      '.fm-find-files-recurse-toggle',
+    );
+    expect(updatedToggle?.getAttribute('aria-label')).toBe('Include subdirectories: Off');
+    expect(updatedToggle?.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('opens a saved search in either pane or a new tab and exposes pin/delete controls', () => {

@@ -34,7 +34,8 @@ use std::time::Instant;
 
 use fm_semantic_conversion::{ChunkProvenance, Provenance};
 use fm_semantic_worker::embedding::{
-    EmbeddingCacheKey, EmbeddingError, EmbeddingModelIdentity, VectorNormalization,
+    EMBEDDING_PREPROCESSING_VERSION, EmbeddingCacheKey, EmbeddingError, EmbeddingModelIdentity,
+    VectorNormalization,
 };
 use fm_semantic_worker::ingestion::EmbeddingProvider;
 use fm_semantic_worker::knowledge_retrieval::{
@@ -1752,6 +1753,7 @@ impl CorpusHarness {
             identity.model_revision.as_str(),
             identity.tokenizer.as_str(),
             self.indexes.backend_identity.as_str(),
+            EMBEDDING_PREPROCESSING_VERSION,
             CHUNKER_VERSION,
             CONVERTER_VERSION,
         ] {
@@ -1962,6 +1964,7 @@ fn manifest() -> LibraryIndexManifest {
         distance_metric: DistanceMetric::Cosine,
         model_revision: SURROGATE_REVISION.into(),
         tokenizer: SURROGATE_TOKENIZER.into(),
+        embedding_preprocessing: EMBEDDING_PREPROCESSING_VERSION.into(),
         converter_version: CONVERTER_VERSION.into(),
         chunker_version: CHUNKER_VERSION.into(),
         normalization: VectorNormalization::L2,

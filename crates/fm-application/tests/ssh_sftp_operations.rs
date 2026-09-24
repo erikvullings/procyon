@@ -123,10 +123,25 @@ async fn run_copy(
     source: Location,
     destination_directory: Location,
 ) -> fm_transport_dto::OperationDto {
+    run_transfer(
+        service,
+        OperationKindDto::Copy,
+        source,
+        destination_directory,
+    )
+    .await
+}
+
+async fn run_transfer(
+    service: &FileManagerService,
+    operation_type: OperationKindDto,
+    source: Location,
+    destination_directory: Location,
+) -> fm_transport_dto::OperationDto {
     let operation = service
         .start_operation(
             StartOperationRequestDto {
-                operation_type: OperationKindDto::Copy,
+                operation_type,
                 sources: vec![source.into()],
                 destination: Some(destination_directory.into()),
                 destinations: vec![],
@@ -190,6 +205,56 @@ async fn local_to_sftp_copy_streams_through_the_real_operation_engine() {
         .filter_map(Result::ok)
         .any(|entry| entry.file_name().to_string_lossy().starts_with(".fm-copy-"));
     assert!(!leftover_temp_files);
+}
+
+#[tokio::test]
+async fn local_to_sftp_move_copies_then_deletes_the_source() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let service = service(&root);
+    let fixture = SshFixture::start().await;
+    let connection_id = register_and_trust_connection(&service, &fixture).await;
+
+    let local_source = root.path().join("move-me.txt");
+    fs::write(&local_source, b"move across providers").unwrap();
+
+    let operation = run_transfer(
+        &service,
+        OperationKindDto::Move,
+        Location::from_native_path(&local_source).unwrap(),
+        sftp_location(connection_id, ""),
+    )
+    .await;
+
+    assert_eq!(operation.state, OperationStateDto::Completed);
+    assert!(!local_source.exists());
+    assert_eq!(
+        fs::read(fixture.path("move-me.txt")).unwrap(),
+        b"move across providers"
+    );
+}
+
+#[tokio::test]
+async fn sftp_rename_runs_through_the_real_operation_engine() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let service = service(&root);
+    let fixture = SshFixture::start().await;
+    let connection_id = register_and_trust_connection(&service, &fixture).await;
+    fs::write(fixture.path("old-name.txt"), b"rename through operation").unwrap();
+
+    let operation = run_transfer(
+        &service,
+        OperationKindDto::Rename,
+        sftp_location(connection_id, "old-name.txt"),
+        sftp_location(connection_id, "new-name.txt"),
+    )
+    .await;
+
+    assert_eq!(operation.state, OperationStateDto::Completed);
+    assert!(!fixture.path("old-name.txt").exists());
+    assert_eq!(
+        fs::read(fixture.path("new-name.txt")).unwrap(),
+        b"rename through operation"
+    );
 }
 
 #[tokio::test]
@@ -326,13 +391,21 @@ async fn cancelling_a_local_to_sftp_copy_mid_transfer_leaves_no_partial_file_any
         )
         .expect("operation must be accepted");
 
+    let mut cancellation_requested = false;
     for _ in 0..1_000 {
         if service.get_operation(operation.id.into()).unwrap().state == OperationStateDto::Running {
             service.cancel_operation(operation.id.into()).unwrap();
+            cancellation_requested = true;
             break;
         }
-        tokio::task::yield_now().await;
+        // A yield-only loop can exhaust all iterations before the scheduler
+        // starts this job on a loaded CI runner.
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert!(
+        cancellation_requested,
+        "operation did not start in time to exercise mid-transfer cancellation"
+    );
     for _ in 0..400 {
         let state = service.get_operation(operation.id.into()).unwrap().state;
         if state == OperationStateDto::Cancelled {

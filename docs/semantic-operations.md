@@ -173,7 +173,7 @@ artifacts/
 records each payload's credential-free HTTPS distribution location, SPDX license and notice, exact
 download/installed/RAM bytes, SHA-256, target, protocol, runtime requirements, and index schema.
 The production wrapper adds an immutable public source URL and source revision for every artifact,
-plus one exact worker-protocol/index-schema/converter/chunker/tokenizer/model identity. Production
+plus one exact worker-protocol/index-schema/converter/chunker/embedding-preprocessing/tokenizer/model identity. Production
 IDs use the `procyon.semantic.*` component namespaces and include target, package version, and a
 SHA-256 prefix; development IDs and the public developer key are never accepted as release trust.
 
@@ -202,10 +202,11 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
    indexing pause, worker quiescence, and authoritative index removal. Pass the resulting
    `ManagedSemanticComponentCapability` to `FileManagerService::with_semantic_component_capability`
    in the desktop host.
-6. Publish the platform payloads alongside, but never inside, the base desktop installers. The
-   release exposes each content-addressed worker, Zvec runtime, and deduplicated model pack as its
-   own asset, plus `semantic-catalog-<target>.json` and `.sig` for each target. Target-independent
-   model bytes are published once; conflicting bytes under one immutable ID fail the release.
+6. Publish the platform payloads in a dedicated immutable `semantic-v*` component release, never
+   inside or rebuilt by a base desktop release. The component release exposes each
+   content-addressed worker, Zvec runtime, and deduplicated model pack as its own asset, plus
+   `semantic-catalog-<target>.json` and `.sig` for each target. Target-independent model bytes are
+   published once; conflicting bytes under one immutable ID fail the release.
    Run protocol negotiation, real-model activation, component lifecycle, tamper, low-disk, and
    hardware smoke tests before publication.
 7. Preserve the platform's existing release policy. macOS worker and runtime payloads are signed
@@ -220,13 +221,19 @@ The production identity contract pins `intfloat/multilingual-e5-small` at revisi
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
 `docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
-Manual release-workflow dispatches build production payloads, signed catalogs, and catalog-enabled
-installers for qualification without publishing them. Tagged releases do that work only when the
-protected repository variable `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`. Until task 0198
-passes, leave that variable absent or false: ordinary tagged desktop installers are still produced,
-but contain no production semantic catalog or verification key and therefore keep managed semantic
-installation unavailable. Once qualified, each installer embeds only its matching `catalog.json`,
-`catalog.sig`, and public verification key. The developer bundle
+Manual dispatches of `.github/workflows/release-semantic-components.yml` qualify components against
+their final `semantic-v*` public URLs without publishing them. The run emits a reviewable lock with
+the exact run ID, source revision, evaluation fingerprint, catalog revisions, and
+catalog/signature hashes. After that lock is reviewed and committed as
+`docs/evaluations/semantic-component-release-v1.json`, a publication dispatch downloads the exact
+artifacts from the named qualification run, verifies every payload against the signed catalogs and
+lock, and creates the component release without rebuilding.
+
+`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` gates that publication path.
+`SEMANTIC_RELEASE_QUALIFIED` separately controls whether a tagged desktop build fetches and embeds
+the already-published locked catalog. Desktop release jobs never build, sign, qualify, or publish
+semantic payloads, so component and application failures do not propagate across release
+boundaries. The developer bundle
 packs the same real multilingual model for local testing, but remains development-only. It
 is platform-specific and may be copied as a complete directory to another developer using the same
 OS and architecture. The recipient must use a debug build and point
@@ -241,14 +248,14 @@ Structured Knowledge Search is gated separately from the semantic component pack
 release question is retrieval quality rather than artifact distribution. Tagged and dispatched
 desktop builds compile the feature's production visibility from the protected repository variable
 `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED`, which must be exactly `true` or `false`. Only an exact `true`
-confirms a measured go decision and compiles
+compiles
 `PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true` into the build; an absent, empty, or `false`
 variable fails closed, and any other value fails the release rather than qualifying it silently.
-The variable cannot override the checked-in `docs/evaluations/knowledge-retrieval-v1.json`: the
-release precondition rejects the build unless that report records `decision: "go"`, a production
-measurement, and no blocking reasons. The report is also bound to the checked-in corpus and a
-fingerprint of the release-critical planner, retrieval, and index sources; changing any of them
-invalidates the report and requires a new measurement. There is no workflow-dispatch bypass.
+The checked-in `docs/evaluations/knowledge-retrieval-v1.json` remains the authoritative quality
+assessment and may still record `decision: "noGo"`. In that case an exact `true` is an explicit
+release-owner decision to expose the feature as experimental; it does not reclassify or overwrite
+the evidence. The report remains bound to the checked-in corpus and a fingerprint of the
+release-critical planner, retrieval, and index sources.
 
 An unqualified release build reports `fullText`, `semantic`, and `answerGeneration` as unavailable,
 so the surface is hidden, and the backend refuses knowledge planning, search, and answers with
@@ -260,14 +267,15 @@ release build can be qualified deliberately by compiling it with
 `PROCYON_KNOWLEDGE_SEARCH_RELEASE_QUALIFIED=true`; the decision is compile-time only, so no runtime
 setting on an installed application can turn the feature on.
 
-A candidate that claims a measured go additionally runs the supported-platform full-text index
-preconditions on each release runner before it builds
+A candidate that exposes the feature runs the supported-platform full-text index preconditions on
+each release runner before it builds
 (`node scripts/check-knowledge-search-preconditions.mjs`). The script first verifies the repository
-report, then verifies the Zvec full-text schema, its one-way migration from a vector-only collection,
-interrupted-migration rollback and publication after a restart, derived-collection rebuild, and
-committed-write recovery. Those tests are behind the `zvec` feature and are therefore not covered by
-the ordinary workspace test run. To roll back, set `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` to `false`
-before the next release; installed builds are unaffected because the decision is compiled per build.
+report unless the workflow records the explicit experimental override, then verifies the Zvec
+full-text schema, its one-way migration from a vector-only collection, interrupted-migration
+rollback and publication after a restart, derived-collection rebuild, and committed-write recovery.
+Those tests are behind the `zvec` feature and are therefore not covered by the ordinary workspace
+test run. To roll back, set `KNOWLEDGE_SEARCH_RELEASE_QUALIFIED` to `false` before the next release;
+installed builds are unaffected because the decision is compiled per build.
 
 #### Rotation, retention, rollback, and revocation
 
@@ -302,6 +310,12 @@ Default logs include only opaque IDs or hashes, stage, timing, counts, component
 identities, and redacted error categories. They exclude queries, excerpts, filenames, prompts,
 responses, credentials, headers, and HTTP bodies. A sensitive capture is local, previewed,
 category-scoped, and expires after at most 15 minutes.
+
+Private release qualification scans application, worker, installer, diagnostic, crash-equivalent,
+and command evidence for unique sensitive canaries. The scanner is binary-safe, recognizes common
+text encodings and path/transport transformations, retains only categories and hashes, verifies
+the post-scan evidence manifest, and deletes an authorized capture before upload. Any leak,
+unreadable path, symbolic link, stale capture, or evidence change fails the target job.
 
 Remote LLM requests always show their profile, locality, scope, minimized metadata, and exact
 content preview before transmission. The semantic worker itself has no network authority.
@@ -348,6 +362,46 @@ Changes to model, chunker, converter, index, grouping, summary selection, or lab
 require a before/after `EvaluationChangeReport` with distinct fingerprints, the same cases/cutoff,
 an explicit migration description, and signed storage impact. Generated-answer fluency is not an
 evaluation metric.
+
+The exact-production task-0188 runner is part of the production bundle smoke:
+
+```bash
+node scripts/smoke-semantic-production-bundle.mjs \
+  target/semantic-production-release/<target> \
+  --evaluation-report <private-output>/semantic-production-evaluation.json
+```
+
+The evaluation option is stricter than an ordinary package smoke. It requires the retained Zvec
+and, where applicable, ONNX Runtime qualification records to verify with production trust, then
+launches the content-addressed worker against only the packaged native loaders and model. It builds
+an isolated library from the checked-in generated corpus, ingests through the production converter,
+structural chunker, multilingual embedder, SQLite catalog, and native Zvec index, and queries every
+case with the `0.84` absolute floor, `0.02` relative window, and production document/chunk caps.
+Runtime execution sets offline model flags and unusable loopback proxy endpoints; the worker has no
+telemetry or download path.
+
+Per-target reports contain only opaque case, file, chunk, source, artifact, and provenance
+identities plus scores and aggregate metrics. Queries, excerpts, and source text remain in the
+repository-owned corpus and are not copied into private evidence. The release workflow aggregates
+all four supported-target reports into its private Actions artifact. The checked-in
+`docs/evaluations/semantic-production-v1.json` remains a structurally valid NO-GO template until
+those private artifacts and every unrelated task-0198 criterion are reviewed. A release that sets
+`SEMANTIC_RELEASE_QUALIFIED=true` must pass
+`node scripts/check-semantic-release-preconditions.mjs`; changing the variable cannot override a
+stale, tampered, partial, non-production, or blocked report.
+
+Passage and query embeddings use Unicode default case folding before their model-owned `passage:`
+or `query:` prefix is added. The preprocessing identity
+`unicode-default-case-fold/1` is part of the signed production pipeline, embedding cache keys,
+library manifests, and the active-index marker. Upgrading from the legacy `preserve-case/1`
+identity discards and rebuilds the derived embedding index from preserved source content; display
+text and lexical/full-text content are not rewritten. Exact or quoted terms remain an explicit
+full-text/hybrid-search concern rather than a hidden casing signal in semantic ranking.
+
+Without a configured answer provider the runner records deterministic offline citation precision
+and recall over authorized, structurally attributable evidence. Generated-answer citation
+correctness remains `null` and release-blocking rather than being inferred from retrieval or
+fabricated as a pass.
 
 ## Storage and unsupported formats
 

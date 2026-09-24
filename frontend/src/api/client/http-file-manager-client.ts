@@ -52,6 +52,7 @@ import type {
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
+  FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -235,6 +236,7 @@ import {
   getFinderTags as requestFinderTags,
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
+  recordFrontendDiagnostic as requestFrontendDiagnostic,
   getFileGitHistory as requestGitFileHistory,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
@@ -929,6 +931,16 @@ export class HttpFileManagerClient implements FileManagerClient {
   async getDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResult> {
     const response = await requestDiagnostics(signal === undefined ? undefined : { signal });
     return response.data;
+  }
+
+  async recordFrontendDiagnostic(error: FrontendDiagnostic, signal?: AbortSignal): Promise<void> {
+    const response = await requestFrontendDiagnostic(
+      error,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(`Unexpected recordFrontendDiagnostic response status: ${response.status}`);
+    }
   }
 
   async getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {

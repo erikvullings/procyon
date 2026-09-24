@@ -49,6 +49,7 @@ const ADR_TITLES = [
   'settings persistence',
   'native platform adapters',
   'archive library selection',
+  'structured knowledge search',
 ];
 
 function decisionFiles() {
@@ -57,7 +58,7 @@ function decisionFiles() {
     .sort();
 }
 
-test('docs/decisions contains exactly one numbered ADR per §34 item', () => {
+test('docs/decisions contains exactly one numbered ADR per registered decision', () => {
   const files = decisionFiles();
   assert.equal(files.length, ADR_TITLES.length);
   files.forEach((file, index) => {

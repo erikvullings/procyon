@@ -50,6 +50,18 @@ fn local_directory_exposes_a_repeatable_stable_filesystem_identity() {
 }
 
 #[tokio::test]
+async fn reports_available_space_for_a_local_directory() {
+    let root = tempdir().expect("temporary directory");
+    let location = Location::from_native_path(root.path()).expect("local location");
+    let available = LocalFileSystemProvider::new()
+        .available_space(&location, CancellationToken::new())
+        .await
+        .expect("query available space");
+
+    assert!(available.is_some_and(|bytes| bytes > 0));
+}
+
+#[tokio::test]
 async fn creates_one_unicode_child_directory_without_creating_parents() {
     let root = tempdir().expect("temporary directory");
     let location = Location::from_native_path(root.path()).expect("local location");

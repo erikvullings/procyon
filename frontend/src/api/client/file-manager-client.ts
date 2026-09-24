@@ -51,6 +51,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -654,6 +655,9 @@ export interface FileManagerClient {
 
   /** Diagnostics view for troubleshooting and bug reports (spec §30). */
   getDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResult>;
+
+  /** Retains a redacted frontend error in the host diagnostics buffer (task 0224). */
+  recordFrontendDiagnostic(error: FrontendDiagnostic, signal?: AbortSignal): Promise<void>;
 
   listPlugins(signal?: AbortSignal): Promise<PluginDescriptor[]>;
 

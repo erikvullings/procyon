@@ -193,6 +193,13 @@ function isWithinModal(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.closest('[role="dialog"]') !== null;
 }
 
+function hasOpenModal(): boolean {
+  return (
+    document.querySelector('.modal.active[role="dialog"], .modal.active[role="alertdialog"]') !==
+    null
+  );
+}
+
 /** Resolves *only* the cursor entry, ignoring any marked selection - F3/F4/Ctrl+Enter (view, edit,
  * open-with) are single-file commands that always act on whatever the cursor is on, Total
  * Commander style, unlike F5/F6 (copy/move) which prefer the marked set and fall back to the
@@ -351,7 +358,7 @@ const EARLY_KEYDOWN_ROUTES = [
   {
     id: 'modal-blocker',
     tryHandle: (_context, event) => {
-      if (isWithinModal(event.target)) return;
+      if (hasOpenModal() || isWithinModal(event.target)) return;
       return false;
     },
   },
@@ -772,7 +779,8 @@ const ACTION_KEYDOWN_ROUTES = [
                 ? context.getOpsController().duplicate(currentClipboard.locations)
                 : context.getOpsController().copy(currentClipboard.locations, active.location)
           )
-            .then(() => {
+            .then((operation) => {
+              if (operation === undefined) return;
               if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
               context.redraw();
             })

@@ -96,7 +96,27 @@ impl Endpoint {
     pub fn for_runtime_directory(directory: &Path) -> Self {
         #[cfg(unix)]
         {
-            Self::Unix(directory.join("semantic-worker.sock"))
+            use std::os::unix::ffi::OsStrExt as _;
+
+            const SAFE_SOCKET_PATH_BYTES: usize = 96;
+            let local = directory.join("semantic-worker.sock");
+            if local.as_os_str().as_bytes().len() <= SAFE_SOCKET_PATH_BYTES {
+                return Self::Unix(local);
+            }
+
+            let key = directory
+                .as_os_str()
+                .as_bytes()
+                .iter()
+                .fold(14695981039346656037_u64, |hash, byte| {
+                    (hash ^ u64::from(*byte)).wrapping_mul(1099511628211)
+                });
+            let uid = rustix::process::geteuid().as_raw();
+            Self::Unix(
+                Path::new("/tmp")
+                    .join(format!("procyon-semantic-{uid}-{key:016x}"))
+                    .join("worker.sock"),
+            )
         }
         #[cfg(windows)]
         {
@@ -160,7 +180,7 @@ pub struct WorkerConfig {
     versions: VersionRange,
     limits: ProtocolLimits,
     idle_timeout: Duration,
-    session_lifetime: Duration,
+    session_lifetime: Option<Duration>,
     ingestion_timeout: Option<Duration>,
     atomic_ingestion_delay: Duration,
     test_query_scan_delay: Duration,
@@ -180,7 +200,7 @@ impl WorkerConfig {
             versions: VersionRange::exact(ProtocolVersion::new(1)),
             limits: ProtocolLimits::default(),
             idle_timeout: Duration::from_secs(30),
-            session_lifetime: Duration::from_secs(60 * 60),
+            session_lifetime: None,
             ingestion_timeout: None,
             atomic_ingestion_delay: Duration::ZERO,
             test_query_scan_delay: Duration::ZERO,
@@ -208,7 +228,7 @@ impl WorkerConfig {
     /// Overrides the lifetime of newly authenticated sessions.
     #[must_use]
     pub fn with_session_lifetime(mut self, lifetime: Duration) -> Self {
-        self.session_lifetime = lifetime;
+        self.session_lifetime = Some(lifetime);
         self
     }
 
@@ -963,6 +983,26 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt as _;
+
+    #[cfg(unix)]
+    #[test]
+    fn long_runtime_directories_use_a_short_per_user_socket_path() {
+        let runtime = Path::new("/Users/qualification-user/qualification-profiles").join(
+            "procyon-semantic-alpha/Library/Application Support/procyon/semantic/worker-runtime",
+        );
+
+        let Endpoint::Unix(path) = Endpoint::for_runtime_directory(&runtime);
+
+        assert!(path.as_os_str().as_bytes().len() <= 96);
+        assert!(path.starts_with("/tmp"));
+        assert_eq!(path.file_name().unwrap(), "worker.sock");
+        assert_eq!(
+            Endpoint::for_runtime_directory(&runtime),
+            Endpoint::for_runtime_directory(&runtime)
+        );
+    }
 
     #[test]
     fn managed_launch_passes_a_discovered_ocrmypdf_executable_as_a_fixed_argument() {
@@ -1264,6 +1304,7 @@ impl ClientInner {
 pub struct WorkerClient {
     inner: Arc<ClientInner>,
     session: v1::SessionContext,
+    session_expires_at: Option<tokio::time::Instant>,
     protocol_version: u32,
     capabilities: BTreeSet<v1::Capability>,
 }
@@ -1486,6 +1527,7 @@ impl Clone for WorkerClient {
         Self {
             inner: Arc::clone(&self.inner),
             session: self.session.clone(),
+            session_expires_at: self.session_expires_at,
             protocol_version: self.protocol_version,
             capabilities: self.capabilities.clone(),
         }
@@ -1589,6 +1631,7 @@ impl WorkerClient {
         let mut client = Self {
             inner,
             session: v1::SessionContext::default(),
+            session_expires_at: None,
             protocol_version: 0,
             capabilities: BTreeSet::new(),
         };
@@ -1638,7 +1681,21 @@ impl WorkerClient {
             session_id: response.session_id,
             session_token: response.session_token,
         };
+        client.session_expires_at = (response.expires_at_unix_ms != 0)
+            .then(|| {
+                tokio::time::Instant::now().checked_add(Duration::from_millis(
+                    response.expires_at_unix_ms.saturating_sub(now_millis()),
+                ))
+            })
+            .flatten();
         Ok(client)
+    }
+
+    /// Whether the authenticated session has reached the worker-issued deadline.
+    #[must_use]
+    pub fn session_is_expired(&self) -> bool {
+        self.session_expires_at
+            .is_some_and(|expires_at| tokio::time::Instant::now() >= expires_at)
     }
 
     /// Returns the negotiated protocol version.
@@ -2886,7 +2943,10 @@ async fn handle_frame(
             let id = state.next_session.fetch_add(1, Ordering::Relaxed);
             let session_id = format!("session-{id}");
             let token = LaunchSecret::generate().as_bytes().to_vec();
-            let expires_at = tokio::time::Instant::now().checked_add(state.config.session_lifetime);
+            let expires_at = state
+                .config
+                .session_lifetime
+                .and_then(|lifetime| tokio::time::Instant::now().checked_add(lifetime));
             let mut session = connection
                 .session
                 .lock()
@@ -2907,9 +2967,10 @@ async fn handle_frame(
             v1::server_frame::Payload::SessionOpened(v1::OpenSessionResponse {
                 session_id,
                 session_token: token,
-                expires_at_unix_ms: now_millis().saturating_add(
-                    u64::try_from(state.config.session_lifetime.as_millis()).unwrap_or(u64::MAX),
-                ),
+                expires_at_unix_ms: state.config.session_lifetime.map_or(0, |lifetime| {
+                    now_millis()
+                        .saturating_add(u64::try_from(lifetime.as_millis()).unwrap_or(u64::MAX))
+                }),
             })
         }
         Some(v1::client_frame::Payload::Health(request)) => {
@@ -5023,24 +5084,48 @@ fn verify_current_user_only_pipe(
 
     let LocalSocketStream::NamedPipe(pipe) = stream;
     let current_user = windows_permissions::utilities::current_process_sid()
-        .map_err(|_| ClientError::InsecureEndpoint)?;
+        .map_err(|_| insecure_pipe("current-user"))?;
     let descriptor = windows_permissions::wrappers::GetSecurityInfo(
         pipe.inner(),
         SeObjectType::SE_KERNEL_OBJECT,
         SecurityInformation::Owner | SecurityInformation::Dacl,
     )
-    .map_err(|_| ClientError::InsecureEndpoint)?;
-    let dacl = descriptor.dacl().ok_or(ClientError::InsecureEndpoint)?;
-    let ace = dacl.get_ace(0).ok_or(ClientError::InsecureEndpoint)?;
-    if descriptor.owner() != Some(current_user.as_ref())
-        || dacl.len() != 1
-        || ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
-        || ace.sid() != Some(current_user.as_ref())
-        || !ace.mask().contains(AccessRights::GenericAll)
-    {
-        return Err(ClientError::InsecureEndpoint);
+    .map_err(|_| insecure_pipe("security-descriptor"))?;
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| insecure_pipe("missing-dacl"))?;
+    let mut current_user_has_full_access = false;
+    if descriptor.owner() != Some(current_user.as_ref()) {
+        return Err(insecure_pipe("owner"));
+    }
+    if dacl.len() == 0 {
+        return Err(insecure_pipe("empty-dacl"));
+    }
+    for index in 0..dacl.len() {
+        let ace = dacl
+            .get_ace(index)
+            .ok_or_else(|| insecure_pipe("missing-ace"))?;
+        if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE {
+            return Err(insecure_pipe("ace-type"));
+        }
+        if ace.sid() != Some(current_user.as_ref()) {
+            return Err(insecure_pipe("ace-owner"));
+        }
+        current_user_has_full_access |= ace.mask().contains(AccessRights::GenericAll)
+            || ace.mask().contains(AccessRights::FileAllAccess);
+    }
+    if !current_user_has_full_access {
+        return Err(insecure_pipe("full-access"));
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn insecure_pipe(reason: &'static str) -> ClientError {
+    if cfg!(debug_assertions) {
+        eprintln!("semantic worker pipe security rejection: {reason}");
+    }
+    ClientError::InsecureEndpoint
 }
 
 #[cfg(unix)]
@@ -5111,6 +5196,25 @@ async fn run_local(state: Arc<RuntimeState>) -> Result<(), ServerError> {
         std::fs::remove_file(path)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Endpoint, LaunchSecret, WorkerConfig};
+    use std::path::Path;
+    use std::time::Duration;
+
+    #[test]
+    fn authenticated_sessions_default_to_the_ipc_connection_lifetime() {
+        let config = WorkerConfig::new(
+            Endpoint::for_runtime_directory(Path::new("runtime")),
+            LaunchSecret::from_bytes([1; 32]),
+        );
+        assert_eq!(config.session_lifetime, None);
+
+        let expiring = config.with_session_lifetime(Duration::from_secs(60));
+        assert_eq!(expiring.session_lifetime, Some(Duration::from_secs(60)));
+    }
 }
 
 #[cfg(windows)]

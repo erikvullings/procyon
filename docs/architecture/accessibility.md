@@ -331,8 +331,8 @@ File: `frontend/src/styles/` (theme variables)
    - Helper function provided for verification
    - Needs manual verification in real dialogs
    
-6. **Zoom support** inherited from mithril-materialized ✓
-   - Framework and CSS in place
+6. **Zoom support** inherited from mithril-materialized and enabled in the Tauri host ✓
+   - Framework, CSS, and Ctrl/Cmd +/- page-zoom hotkeys are in place
    - Needs manual 200% zoom testing
    
 7. **Reduced-motion** CSS framework ready ✓

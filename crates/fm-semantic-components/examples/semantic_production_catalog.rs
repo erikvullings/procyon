@@ -27,11 +27,15 @@ fn run() -> Result<(), Box<dyn Error>> {
     let paths: Vec<PathBuf> = arguments.map(PathBuf::from).collect();
     match (command.as_str(), paths.as_slice()) {
         ("sign", [manifest, artifacts, output]) => sign(manifest, artifacts, output),
+        ("verify-signature", [manifest, signature, public_key]) => {
+            verify_signature(manifest, signature, public_key)
+        }
         ("verify", [manifest, signature, artifacts, public_key]) => {
             verify(manifest, signature, artifacts, public_key)
         }
         _ => Err(
             "usage: semantic_production_catalog sign <manifest> <artifacts> <output> \
+             | verify-signature <catalog> <signature> <public-key> \
              | verify <catalog> <signature> <artifacts> <public-key>"
                 .into(),
         ),
@@ -45,6 +49,22 @@ fn sign(manifest: &Path, artifacts: &Path, output: &Path) -> Result<(), Box<dyn 
     let signed = sign_production_catalog(manifest, &signing_key)?;
     write_signed_production_catalog(&signed, output)?;
     println!("{}", output.display());
+    Ok(())
+}
+
+fn verify_signature(
+    manifest_path: &Path,
+    signature_path: &Path,
+    public_key_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let manifest_bytes = fs::read(manifest_path)?;
+    let signature = fs::read(signature_path)?;
+    let public_key: [u8; 32] = fs::read(public_key_path)?
+        .try_into()
+        .map_err(|_| "production catalog public key must contain exactly 32 bytes")?;
+    let public_key = VerifyingKey::from_bytes(&public_key)?;
+    let trusted = verify_serialized_production_catalog(&manifest_bytes, &signature, &public_key)?;
+    println!("{}", trusted.revision().as_str());
     Ok(())
 }
 

@@ -6,7 +6,9 @@ use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use crate::embedding::{EmbeddingCacheKey, EmbeddingError};
+use crate::embedding::{
+    EMBEDDING_PREPROCESSING_VERSION, EmbeddingCacheKey, EmbeddingError, case_fold_embedding_input,
+};
 use crate::ingestion::{DerivedIndex, DerivedRecord, EmbeddingProvider};
 use crate::representative_selection::{
     RepresentativeChunk, RepresentativeSelection, RepresentativeSelectionConfig,
@@ -169,10 +171,11 @@ impl DocumentSummaryService {
             .next()
             .ok_or(DocumentSummaryError::MissingEmbedding)?;
         let identity = self.embedder.identity();
+        let normalized = case_fold_embedding_input(&generated.full_text);
         let cache_key = EmbeddingCacheKey::calculate(
-            &generated.full_text,
+            &normalized,
             identity,
-            &identity.tokenizer,
+            EMBEDDING_PREPROCESSING_VERSION,
             SUMMARY_PROMPT_VERSION,
         );
         let record_id = summary_record_id(
@@ -468,6 +471,7 @@ mod tests {
                     distance_metric: DistanceMetric::Cosine,
                     model_revision: identity.model_revision.clone(),
                     tokenizer: identity.tokenizer.clone(),
+                    embedding_preprocessing: "unicode-default-case-fold/1".into(),
                     normalization: VectorNormalization::L2,
                     chunker_version: "structural/2".into(),
                     converter_version: "text/1".into(),

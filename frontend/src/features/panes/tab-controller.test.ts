@@ -102,6 +102,39 @@ describe('createTabController', () => {
     expect(load).toHaveBeenCalledWith('pane-1', { background: true });
   });
 
+  it('keeps a clicked tab active after recovering from a Tauri revision conflict', async () => {
+    const initial = projection({ activeTabIdByPane: { 'pane-1': 'tab-1' } });
+    const latest = {
+      ...projection({ activeTabIdByPane: { 'pane-1': 'tab-1' } }),
+      revision: 2,
+    };
+    const activated = {
+      ...projection({ activeTabIdByPane: { 'pane-1': 'tab-2' } }),
+      revision: 3,
+    };
+    const context = makeContext(initial);
+    const dispatchWorkspaceCommand = vi
+      .fn<FileManagerClient['dispatchWorkspaceCommand']>()
+      .mockRejectedValueOnce({
+        code: 'workspaceRevisionConflict',
+        message: 'The workspace changed after this view was loaded.',
+        requestId: 'request-1',
+        details: { expectedRevision: 1, actualRevision: 2 },
+      })
+      .mockResolvedValueOnce(activated);
+    const client = {
+      dispatchWorkspaceCommand,
+      getWorkspace: vi.fn().mockResolvedValue(latest),
+    } as unknown as FileManagerClient;
+
+    createTabController(client, context).activateTab('pane-1' as PaneId, 'tab-2' as TabId);
+
+    await vi.waitFor(() => expect(dispatchWorkspaceCommand).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(context.getWorkspace()?.panesById['pane-1']?.activeTabId).toBe('tab-2'),
+    );
+  });
+
   it('openTabAt adds a tab at an arbitrary location rather than duplicating the active tab', async () => {
     const workspace = projection();
     const context = makeContext(workspace);

@@ -43,6 +43,38 @@ const MIN_COLUMN_WIDTH = 60;
  * small, since a tiny real image is still a legible preview of itself. */
 const LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS = new Set(['pdf', 'mp4', 'm4v', 'mov', 'cbz', 'cbr']);
 
+function listEntryIcon(
+  entry: EntrySummary,
+  nativeIconLoader?: NativeIconLoader,
+  thumbnailLoader?: ThumbnailLoader,
+): m.Children {
+  const skipThumbnail = LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS.has(
+    (entry.extension ?? '').toLocaleLowerCase(),
+  );
+  const thumbnailDataUri = skipThumbnail
+    ? undefined
+    : thumbnailLoader?.thumbnailDataUri(entry, 'small');
+  if (thumbnailDataUri !== undefined) {
+    return m('img.fm-entry-icon.fm-thumbnail-entry-icon', {
+      src: thumbnailDataUri,
+      width: 16,
+      height: 16,
+      alt: '',
+      'aria-hidden': 'true',
+    });
+  }
+  const nativeIconDataUri = nativeIconLoader?.iconDataUri(entry);
+  return nativeIconDataUri === undefined
+    ? entryIcon(entry, { className: 'fm-entry-icon' })
+    : m('img.fm-entry-icon.fm-native-entry-icon', {
+        src: nativeIconDataUri,
+        width: 16,
+        height: 16,
+        alt: '',
+        'aria-hidden': 'true',
+      });
+}
+
 /** A single column's persisted width, keyed by column id. */
 export interface ColumnWidthEntry {
   readonly columnId: string;
@@ -319,30 +351,8 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
         nameMatchPrefix === undefined
           ? -1
           : name.toLocaleLowerCase().indexOf(nameMatchPrefix.toLocaleLowerCase());
-      const skipThumbnail = LIST_VIEW_THUMBNAIL_SKIP_EXTENSIONS.has(
-        (entry.extension ?? '').toLocaleLowerCase(),
-      );
-      const thumbnailDataUri = skipThumbnail
-        ? undefined
-        : thumbnailLoader?.thumbnailDataUri(entry, 'small');
       return [
-        thumbnailDataUri !== undefined
-          ? m('img.fm-entry-icon.fm-thumbnail-entry-icon', {
-              src: thumbnailDataUri,
-              width: 16,
-              height: 16,
-              alt: '',
-              'aria-hidden': 'true',
-            })
-          : nativeIconLoader?.iconDataUri(entry) === undefined
-            ? entryIcon(entry, { className: 'fm-entry-icon' })
-            : m('img.fm-entry-icon.fm-native-entry-icon', {
-                src: nativeIconLoader.iconDataUri(entry),
-                width: 16,
-                height: 16,
-                alt: '',
-                'aria-hidden': 'true',
-              }),
+        listEntryIcon(entry, nativeIconLoader, thumbnailLoader),
         m(searchResult ? 'span.fm-entry-name.fm-search-result' : 'span.fm-entry-name', [
           searchResult && resultParentPath !== undefined && displayedParentPath !== undefined
             ? m(
@@ -418,14 +428,20 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
     label: t('table', 'ext'),
     cellClass: 'fm-directory-type',
     minWidth: 48,
-    render: typeLabel,
+    render: (entry) => {
+      const value = typeLabel(entry);
+      return value === '' ? '' : m('span', { title: value }, value);
+    },
   },
   {
     id: 'core.size',
     label: t('table', 'size'),
     cellClass: 'fm-directory-size',
-    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) =>
-      isParentEntry(entry.id) || entry.kind === 'symlink' ? '' : formatEntrySize(entry, settings),
+    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) => {
+      if (isParentEntry(entry.id) || entry.kind === 'symlink') return '';
+      const value = formatEntrySize(entry, settings);
+      return m('span', { title: value }, value);
+    },
   },
   {
     id: 'core.gitStatus',
@@ -450,8 +466,18 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
     id: 'core.modified',
     label: t('table', 'modified'),
     cellClass: 'fm-directory-modified',
-    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) =>
-      isParentEntry(entry.id) ? '' : formatEntryModifiedAt(entry.modifiedAt, settings),
+    render: (entry, _nameMatchPrefix, settings = DEFAULT_ENTRY_FORMAT_SETTINGS) => {
+      if (isParentEntry(entry.id)) return '';
+      const value = formatEntryModifiedAt(entry.modifiedAt, settings);
+      const compactValue = formatEntryModifiedAt(entry.modifiedAt, {
+        ...settings,
+        dateFormat: 'short',
+      });
+      return m('span', { title: value }, [
+        m('span.fm-directory-modified-full', value),
+        m('span.fm-directory-modified-compact', { 'aria-hidden': 'true' }, compactValue),
+      ]);
+    },
   },
 ];
 
@@ -460,8 +486,11 @@ export const SAMPLE_FILE_AGE_COLUMN: DirectoryColumnDescriptor = {
   id: fileAgeColumn.id,
   label: t('table', 'age'),
   cellClass: 'fm-directory-file-age',
-  render: (entry, _nameMatchPrefix, _formatSettings, now = Date.now()) =>
-    isParentEntry(entry.id) ? '' : fileAgeColumn.display(entry.modifiedAt, now),
+  render: (entry, _nameMatchPrefix, _formatSettings, now = Date.now()) => {
+    if (isParentEntry(entry.id)) return '';
+    const value = fileAgeColumn.display(entry.modifiedAt, now);
+    return m('span', { title: value }, value);
+  },
 };
 
 function stateView(attrs: DirectoryTableAttrs, rowHeight: number): m.Children | undefined {
@@ -549,7 +578,13 @@ function headerView(
 ): m.Children {
   return m(
     '.fm-directory-header',
-    { role: 'row', style: { gridTemplateColumns: gridTemplate(columns, widths) } },
+    {
+      role: 'row',
+      style: {
+        gridTemplateColumns: gridTemplate(columns, widths),
+        ...directoryGridStyle(columns),
+      },
+    },
     columns.map((column) =>
       m(
         `button.fm-directory-cell.${column.cellClass}`,
@@ -640,6 +675,23 @@ function gridTemplate(
       return `${Math.max(column.minWidth ?? MIN_COLUMN_WIDTH, width)}px`;
     })
     .join(' ');
+}
+
+function compactGridTemplate(columns: readonly DirectoryColumnDescriptor[]): string {
+  const fallbacks: Record<string, string> = {
+    'core.name': 'minmax(7rem, 1fr)',
+    'core.extension': 'minmax(2.5rem, 0.18fr)',
+    'core.size': 'minmax(3.75rem, 0.22fr)',
+    'core.gitStatus': 'minmax(1.75rem, 0.1fr)',
+    'core.modified': 'minmax(6.5rem, 0.42fr)',
+  };
+  return columns.map((column) => fallbacks[column.id] ?? 'minmax(4rem, 0.2fr)').join(' ');
+}
+
+function directoryGridStyle(columns: readonly DirectoryColumnDescriptor[]): {
+  '--fm-compact-directory-grid-template': string;
+} {
+  return { '--fm-compact-directory-grid-template': compactGridTemplate(columns) };
 }
 
 /**
@@ -913,7 +965,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 ondblclick: () => attrs.onActivate?.(index),
                 class: [
                   entry.hidden ? 'fm-hidden-entry' : '',
-                  cursor ? 'fm-cursor-row' : '',
+                  cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
                   attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
                   dragTargetIndex === index ? 'fm-drop-target' : '',
@@ -922,6 +974,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   height: `${rowHeight}px`,
                   transform: `translateY(${window.offsetTop + (index - window.start) * rowHeight}px)`,
                   gridTemplateColumns: gridTemplate(columns, columnWidths),
+                  ...directoryGridStyle(columns),
                 },
               },
               columns.map((column) =>
@@ -930,6 +983,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   { key: column.id, role: 'gridcell' },
                   column.id === 'core.name' && attrs.renamingEntryId === entry.id
                     ? [
+                        listEntryIcon(entry, attrs.nativeIconLoader, attrs.thumbnailLoader),
                         m('input[type=text].fm-inline-rename-input', {
                           value: attrs.renameValue ?? entry.name,
                           'aria-label': t('table', 'rename', { name: entry.name }),
@@ -995,6 +1049,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 height: `${fillerHeight}px`,
                 transform: `translateY(${fillerTop}px)`,
                 gridTemplateColumns: gridTemplate(columns, columnWidths),
+                ...directoryGridStyle(columns),
               },
             }),
           );

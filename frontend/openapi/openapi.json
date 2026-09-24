@@ -1325,6 +1325,27 @@
         }
       }
     },
+    "/api/v1/diagnostics/frontend-errors": {
+      "post": {
+        "summary": "Retains one redacted frontend error for the diagnostics view and structured host log.",
+        "operationId": "recordFrontendDiagnostic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticErrorDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Frontend diagnostic recorded"
+          }
+        }
+      }
+    },
     "/api/v1/directories/activity": {
       "post": {
         "summary": "Marks whether a pane is currently in the foreground, so a poll-tracked\ndirectory watch (SFTP, FTP, ...) can poll less often while backgrounded\n(task 0109).",
@@ -9344,7 +9365,7 @@
           },
           "full": {
             "type": "string",
-            "description": "Full representative summary."
+            "description": "Full summary grounded in the selected document evidence."
           },
           "modelId": {
             "type": "string",
@@ -9391,16 +9412,36 @@
         "required": [
           "selectionFingerprint",
           "representativeTokens",
+          "selectionMode",
+          "imageInputAvailable",
+          "includedImageCount",
+          "omittedImageCount",
           "keyPassages",
           "reusedSelection"
         ],
         "properties": {
+          "imageInputAvailable": {
+            "type": "boolean",
+            "description": "Whether the selected model and document support bounded image input."
+          },
+          "includedImageCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Embedded document images that will be sent to a verified vision model.",
+            "minimum": 0
+          },
           "keyPassages": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SummaryKeyPassageDto"
             },
             "description": "Selected complete source passages."
+          },
+          "omittedImageCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Embedded images omitted because of model capability or safety budgets.",
+            "minimum": 0
           },
           "profile": {
             "oneOf": [
@@ -9426,8 +9467,20 @@
           "selectionFingerprint": {
             "type": "string",
             "description": "Stable confirmation fingerprint."
+          },
+          "selectionMode": {
+            "$ref": "#/components/schemas/DocumentSummarySelectionModeDto",
+            "description": "Whether the preview contains the complete extracted text or selected passages."
           }
         }
+      },
+      "DocumentSummarySelectionModeDto": {
+        "type": "string",
+        "description": "How the document text was selected for summary generation.",
+        "enum": [
+          "fullDocument",
+          "representativePassages"
+        ]
       },
       "DocumentSummaryTargetDto": {
         "type": "object",
@@ -10102,6 +10155,10 @@
           "expectedSelectionFingerprint": {
             "type": "string",
             "description": "Fingerprint returned by the confirmed preview."
+          },
+          "includeImages": {
+            "type": "boolean",
+            "description": "Whether bounded embedded images may be sent to a verified vision model."
           },
           "inputTokenBudget": {
             "type": "integer",
@@ -14297,6 +14354,10 @@
           "inputTokenBudget"
         ],
         "properties": {
+          "includeImages": {
+            "type": "boolean",
+            "description": "Whether bounded embedded images may be sent to a verified vision model."
+          },
           "inputTokenBudget": {
             "type": "integer",
             "format": "int32",
@@ -18764,6 +18825,7 @@
           "sizeFormat",
           "showHiddenFiles",
           "confirmPermanentDelete",
+          "confirmFileOperations",
           "defaultConflictPolicy",
           "operationConcurrency",
           "defaultPaneLayout",
@@ -18791,6 +18853,10 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "confirmFileOperations": {
+            "type": "boolean",
+            "description": "Confirm routine copy, move, and Trash operations before they start."
           },
           "confirmPermanentDelete": {
             "type": "boolean",

@@ -60,6 +60,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -203,7 +204,7 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
-import { defaultKnowledgeSearchOptions } from '../../models';
+import { defaultKnowledgeSearchOptions, sanitizeFrontendDiagnostic } from '../../models';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import {
@@ -294,6 +295,7 @@ export type MockClientMethod =
   | 'resumeSemanticLibrary'
   | 'updateSemanticEligibilityOverrides'
   | 'getDiagnostics'
+  | 'recordFrontendDiagnostic'
   | 'getSystemLocations'
   | 'getVolumes'
   | 'getHomeDirectory'
@@ -656,6 +658,19 @@ function lastSegment(uri: string): string {
   const trimmed = uri.endsWith('/') ? uri.slice(0, -1) : uri;
   const index = trimmed.lastIndexOf('/');
   return decodeURIComponent(index === -1 ? trimmed : trimmed.slice(index + 1));
+}
+
+function mockSummaryVisualCount(uri: string): number {
+  const name = lastSegment(uri.split(/[?#]/, 1)[0] ?? '').toLowerCase();
+  return new Set([
+    'report.docx',
+    'illustrated.pdf',
+    'presentation.pptx',
+    'book.epub',
+    'figures.xlsx',
+  ]).has(name)
+    ? 1
+    : 0;
 }
 
 /**
@@ -1262,6 +1277,7 @@ function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatu
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
+  private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
 
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
@@ -1338,6 +1354,7 @@ export class MockFileManagerClient implements FileManagerClient {
     sizeFormat: 'binary',
     showHiddenFiles: false,
     confirmPermanentDelete: true,
+    confirmFileOperations: true,
     defaultConflictPolicy: 'ask',
     operationConcurrency: 2,
     defaultPaneLayout: 'dual',
@@ -2377,7 +2394,7 @@ export class MockFileManagerClient implements FileManagerClient {
         statusMessage: 'Mock',
       },
       loadedPlugins: [],
-      recentErrors: [],
+      recentErrors: structuredClone(this.frontendDiagnostics),
       operationQueueStatus: {
         queuedCount: 0,
         runningCount: 0,
@@ -2386,6 +2403,13 @@ export class MockFileManagerClient implements FileManagerClient {
         totalPendingSize: 0,
       },
     }));
+  }
+
+  recordFrontendDiagnostic(error: FrontendDiagnostic, signal?: AbortSignal): Promise<void> {
+    return this.perform('recordFrontendDiagnostic', signal, () => {
+      this.frontendDiagnostics.unshift(sanitizeFrontendDiagnostic(error));
+      this.frontendDiagnostics.splice(50);
+    });
   }
 
   getVolumes(signal?: AbortSignal): Promise<Volume[]> {
@@ -4272,9 +4296,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('previewDocumentSummary', signal, () => {
       const profile =
         request.profileId == null ? undefined : this.requireLlmProfile(request.profileId);
+      const visualCount = mockSummaryVisualCount(request.target.location.uri);
+      const imageInputAvailable = profile?.preset === 'ollama' && visualCount > 0;
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
+        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        imageInputAvailable,
+        includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
+        omittedImageCount: 0,
         keyPassages: [
           {
             label: 'S1',
@@ -4319,8 +4349,8 @@ export class MockFileManagerClient implements FileManagerClient {
         supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
         supportingWeights: [1],
         createdAtMs: Date.now(),
-        brief: 'A concise representative summary.',
-        full: 'A fuller representative summary grounded in the selected key passage.',
+        brief: 'A concise document summary.',
+        full: 'A fuller summary grounded in the selected document evidence.',
         stale: false,
       };
       this.documentSummaries.set(request.target.entryId, summary);

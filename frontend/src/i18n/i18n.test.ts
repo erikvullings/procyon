@@ -16,6 +16,19 @@ describe('i18n', () => {
     expect(assertTypeSafety).toBeTypeOf('function');
   });
 
+  it('rejects a locale catalogue with a missing key at compile time', () => {
+    const { language: _language, ...settingsWithoutLanguage } = nl.settings;
+    const assertCatalogueCompleteness = () => {
+      const incomplete: LocalisedCatalogue<EnglishCatalogue> = {
+        ...nl,
+        // @ts-expect-error every English key is required in every locale catalogue
+        settings: settingsWithoutLanguage,
+      };
+      return incomplete;
+    };
+    expect(assertCatalogueCompleteness).toBeTypeOf('function');
+  });
+
   beforeEach(() => {
     setLocale(DEFAULT_LOCALE);
   });
@@ -59,6 +72,32 @@ describe('i18n', () => {
       expect(getLocale()).toBe(locale);
       expect(t('settings', 'language')).toBe(languageLabel);
     });
+
+    it.each([
+      ['en', 'Semantic Search', 'High relevance', 'Medium relevance', 'Low relevance'],
+      ['nl', 'Semantisch zoeken', 'Hoge relevantie', 'Gemiddelde relevantie', 'Lage relevantie'],
+      ['de', 'Semantische Suche', 'Hohe Relevanz', 'Mittlere Relevanz', 'Geringe Relevanz'],
+      [
+        'fr',
+        'Recherche sémantique',
+        'Pertinence élevée',
+        'Pertinence moyenne',
+        'Pertinence faible',
+      ],
+      ['es', 'Búsqueda semántica', 'Relevancia alta', 'Relevancia media', 'Relevancia baja'],
+      ['it', 'Ricerca semantica', 'Pertinenza alta', 'Pertinenza media', 'Pertinenza bassa'],
+      ['pt', 'Pesquisa semântica', 'Relevância alta', 'Relevância média', 'Relevância baixa'],
+      ['pl', 'Wyszukiwanie semantyczne', 'Wysoka trafność', 'Średnia trafność', 'Niska trafność'],
+    ] as const)(
+      'localises Semantic Search and its relevance labels in %s',
+      (locale, title, high, medium, low) => {
+        setLocale(locale);
+        expect(t('knowledgeSearch', 'title')).toBe(title);
+        expect(t('knowledgeSearch', 'resultRelevanceHigh')).toBe(high);
+        expect(t('knowledgeSearch', 'resultRelevanceMedium')).toBe(medium);
+        expect(t('knowledgeSearch', 'resultRelevanceLow')).toBe(low);
+      },
+    );
 
     it('updates the same translator object on every call', () => {
       const before = t('settings', 'language');

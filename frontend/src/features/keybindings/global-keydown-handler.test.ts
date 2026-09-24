@@ -286,6 +286,26 @@ function viewerKeydown(
 }
 
 describe('dispatchGlobalKeydown precedence', () => {
+  it('leaves key handling to an open modal even when focus is outside it', () => {
+    const setShortcutsHelpOpen = vi.fn();
+    const context = makeContext({ setShortcutsHelpOpen });
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.setAttribute('role', 'dialog');
+    document.body.appendChild(modal);
+
+    try {
+      const event = keydown('F1');
+      const route = dispatchGlobalKeydown(context, event);
+
+      expect(route).toBe('modal-blocker');
+      expect(event.defaultPrevented).toBe(false);
+      expect(setShortcutsHelpOpen).not.toHaveBeenCalled();
+    } finally {
+      modal.remove();
+    }
+  });
+
   it('routes Alt+Z to the operation centre toggle', () => {
     const toggleOperationCentre = vi.fn();
     const context = makeContext({ toggleOperationCentre });

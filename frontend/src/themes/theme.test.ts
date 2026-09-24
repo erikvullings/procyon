@@ -16,6 +16,18 @@ const fileViewerCss = readFileSync(
   join(process.cwd(), 'src/features/preview/file-viewer.css'),
   'utf8',
 );
+const connectionEditorCss = readFileSync(
+  join(process.cwd(), 'src/features/connections/connection-editor.css'),
+  'utf8',
+);
+const diagnosticsCss = readFileSync(
+  join(process.cwd(), 'src/features/diagnostics/diagnostics-view.css'),
+  'utf8',
+);
+const sessionTokenGateCss = readFileSync(
+  join(process.cwd(), 'src/app/session-token-gate.css'),
+  'utf8',
+);
 
 const REQUIRED_TOKENS = [
   '--fm-background',
@@ -31,9 +43,16 @@ const REQUIRED_TOKENS = [
   '--fm-error',
   '--fm-warning',
   '--fm-success',
+  '--fm-cursor-row-background',
+  '--fm-tab-inactive-background',
   '--fm-row-height',
+  '--fm-header-height',
   '--fm-font-family',
   '--fm-font-size',
+  '--fm-type-body',
+  '--fm-type-heading',
+  '--fm-type-label',
+  '--fm-type-title',
   '--fm-radius',
   '--fm-shadow',
 ] as const;
@@ -74,6 +93,27 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('theme stylesheet', () => {
+  it('shows one solid focus treatment for dialog actions', () => {
+    const focus = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\][^{]*button\.btn-flat:focus\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(focus).toContain('background: var(--fm-accent)');
+    expect(focus).toContain('color: var(--fm-surface)');
+    expect(focus).toContain('font-weight: 600');
+    expect(focus).toContain('outline: none');
+  });
+
+  it('optically aligns compact checkbox labels with their controls', () => {
+    const checkbox = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\]\s+input\[type=["']checkbox["']\]\s*\+\s*span:not\(\.lever\)\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(checkbox).toContain('line-height: 16px');
+    const focusedCheckbox = materializedCss.match(
+      /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\]\s+input\[type=["']checkbox["']\]:focus\s*\+\s*span:not\(\.lever\)\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(focusedCheckbox).toContain('font-weight: 600');
+  });
+
   it('contains long operation source previews within their card', () => {
     expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('flex-direction: column');
     expect(themeBlock(/\.fm-operation\s*\{([^}]*)\}/)).toContain('overflow: hidden');
@@ -107,6 +147,20 @@ describe('theme stylesheet', () => {
   it('defines every file-manager design token', () => {
     for (const token of REQUIRED_TOKENS) {
       expect(themeCss).toContain(`${token}:`);
+    }
+  });
+
+  it('uses the shared compact type floor for functional labels', () => {
+    expect(themeCss).toContain('--fm-type-label: max(0.92rem, 12px)');
+    for (const stylesheet of [
+      themeCss,
+      materializedCss,
+      directoryTableCss,
+      connectionEditorCss,
+      diagnosticsCss,
+      sessionTokenGateCss,
+    ]) {
+      expect(stylesheet).not.toMatch(/font-size:\s*0\.75(?:r?em)/);
     }
   });
 
@@ -144,12 +198,9 @@ describe('theme stylesheet', () => {
     );
   });
 
-  it('shows the keyboard-focused permanent-delete action in the error colour', () => {
-    expect(themeCss).toMatch(
-      /\.fm-permanent-delete-modal\s+\.fm-permanent-delete-confirm:focus\s*\{[^}]*color:\s*var\(--fm-error\)/s,
-    );
-    expect(themeCss).not.toMatch(
-      /\.fm-permanent-delete-modal\s+\.fm-permanent-delete-confirm:focus\s*\{[^}]*outline:\s*2px/s,
+  it('shows destructive focused dialog actions with the shared solid error treatment', () => {
+    expect(materializedCss).toMatch(
+      /button\.btn-flat\[data-destructive=["']true["']\]:focus,[^{]*button\.fm-permanent-delete-confirm:focus\s*\{[^}]*background:\s*var\(--fm-error\)[^}]*color:\s*var\(--fm-surface\)/s,
     );
   });
 
@@ -167,6 +218,14 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toContain('var(--fm-row-height)');
   });
 
+  it('keeps context-menu rows on the compact structural rhythm', () => {
+    const item = themeBlock(/\.fm-context-menu-item\s*\{([^}]*)\}/);
+    expect(item).toContain('box-sizing: border-box');
+    expect(item).toContain('min-height: var(--fm-header-height)');
+    expect(item).toContain('padding: 2px 8px');
+    expect(item).toContain('line-height: 1.15');
+  });
+
   it('tunes mithril-materialized form chrome to match the Procyon layout', () => {
     expect(materializedCss).toContain('.input-field > label');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');
@@ -175,6 +234,18 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toContain('.dropdown-content li.selected');
     expect(materializedCss).toContain(
       '[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.active',
+    );
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell\s+input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-list\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-shortcuts-help-table\s+td\s*\{[^}]*padding:\s*0\.2rem\s+0\.4rem/s,
     );
     expect(materializedCss).toContain('position: static');
     expect(materializedCss).toContain('input[type="number"]::-webkit-inner-spin-button');
@@ -212,6 +283,22 @@ describe('theme stylesheet', () => {
     }
   });
 
+  it('keeps the cursor row label readable on its dark-blue highlight', () => {
+    const themes = [
+      themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/),
+      themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/),
+    ];
+
+    for (const theme of themes) {
+      expect(
+        contrastRatio(
+          tokenValue(theme, '--fm-cursor-row-text'),
+          tokenValue(theme, '--fm-cursor-row-background'),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('uses subtle selection backgrounds and a distinct brighter cursor highlight', () => {
     expect(themeCss).not.toMatch(/(?:^|\n)\.fm-selected-row\s*\{/);
     expect(themeCss).not.toMatch(/(?:^|\n)\.fm-cursor-row\s*\{/);
@@ -222,20 +309,84 @@ describe('theme stylesheet', () => {
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*18%/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s+:is\([^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\)\s*\{[^}]*color:\s*inherit/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:[^}]*48%[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*42%/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\s+:is\([^)]*\.fm-entry-icon[^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\.fm-search-result-parent[^)]*\)\s*\{[^}]*color:\s*inherit/s,
     );
     // The cursor row keeps a distinctive outline even when it's also marked, so the mark's amber
     // text color (above) isn't washed out by the cursor's own background/text override - and,
     // unlike the fill rules above, this one is deliberately not gated on `:focus-within`, so the
     // cursor position stays visible in a pane that lost focus to the tree sidebar.
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-accent\)/s,
+      /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-cursor-row-background\)/s,
     );
     expect(themeCss).toMatch(
-      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:/s,
+      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\.fm-selected-row\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\[data-theme="dark"\][^}]*\.fm-pane\[data-active="true"\]:focus-within[^}]*\.fm-selected-row:not\(\.fm-cursor-row\)\s*\{[^}]*background:/s,
+    );
+  });
+
+  it('uses the same four-pixel-taller height for headers and the function-key footer', () => {
+    const lightTheme = themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/);
+    const functionBar = themeBlock(/\.fm-function-key-bar\s*\{([^}]*justify-content[^}]*)\}/);
+    const tabs = paneCss.match(/\.fm-pane-tabs\s*\{([^}]*display:\s*flex[^}]*)\}/s)?.[1];
+    const tab = paneCss.match(/\.fm-pane-tab\s*\{([^}]*)\}/s)?.[1];
+
+    expect(lightTheme).toContain('--fm-header-height: calc(var(--fm-row-height) + 4px)');
+    expect(functionBar).toContain('min-height: var(--fm-header-height)');
+    expect(functionBar).toContain('padding-block: 2px');
+    expect(tabs).toContain('box-sizing: border-box');
+    expect(tabs).toContain('height: var(--fm-header-height)');
+    expect(tab).toContain('height: var(--fm-header-height)');
+  });
+
+  it('aligns breadcrumb text and pane actions to one compact row geometry', () => {
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb,\s*\.fm-path-editor\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-tab-new[^)]*\.fm-pane-view-mode[^)]*\.fm-pane-tab-favourites[^)]*\)\s*\{[^}]*width:\s*var\(--fm-row-height\) !important[^}]*height:\s*var\(--fm-row-height\) !important/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-view-mode[^)]*\)\s+\.fm-icon\s*\{[^}]*width:\s*16px[^}]*height:\s*16px[^}]*transform:\s*none/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-breadcrumb-segment,\s*\.fm-breadcrumb-scheme,\s*\.fm-path-input\s*\{[^}]*transform:\s*translateY\(-2px\)/s,
+    );
+    expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);
+  });
+
+  it('keeps the command toolbar at header height with muted icons', () => {
+    const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
+    const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
+
+    expect(toolbar).toContain('height: var(--fm-header-height)');
+    expect(toolbar).toContain('min-height: var(--fm-header-height)');
+    expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
+    expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
+  });
+
+  it('uses full touch targets for the command toolbar on coarse pointers', () => {
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar\s*\{[^}]*height:\s*44px[^}]*overflow-x:\s*auto[^}]*--mm-control-height:\s*44px/s,
+    );
+    expect(themeCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar button\s*\{[^}]*width:\s*44px !important[^}]*height:\s*44px !important[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s,
+    );
+  });
+
+  it('gives conflict resolution more width without overflowing narrow viewports', () => {
+    expect(themeCss).toMatch(
+      /\.modal\.fm-conflict-dialog\s*\{[^}]*width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-width:\s*min\(44rem, calc\(100vw - 2rem\)\) !important[^}]*max-height:\s*calc\(100vh - 2rem\) !important/s,
     );
   });
 
@@ -245,6 +396,46 @@ describe('theme stylesheet', () => {
 
   it('keeps the arrow cursor over directory rows', () => {
     expect(directoryTableCss).toMatch(/\.fm-directory-row\s*[,{][^}]*cursor:\s*default/s);
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="move"\][^}]*cursor:\s*default\s*!important/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="copy"\][^}]*cursor:\s*default\s*!important/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-pointer-file-dragging\[data-file-drag-effect="none"\][^}]*cursor:\s*not-allowed\s*!important/s,
+    );
+    expect(directoryTableCss).not.toMatch(/cursor:\s*(?:move|copy)\s*!important/);
+  });
+
+  it('centres pointer-drag operation signs with CSS geometry', () => {
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect::before,\s*\.fm-file-drag-effect-copy::after\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*left:\s*50%[^}]*transform:\s*translate\(-50%, -50%\)/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect::before\s*\{[^}]*width:\s*0\.55rem[^}]*height:\s*2px/s,
+    );
+    expect(directoryTableCss).toMatch(
+      /\.fm-file-drag-effect-copy::after\s*\{[^}]*width:\s*2px[^}]*height:\s*0\.55rem/s,
+    );
+  });
+
+  it('keeps populated Materialized labels close to their settings controls', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell \.input-field > label:not\(\.label-icon\)\.active\s*\{[^}]*transform:\s*none/s,
+    );
+  });
+
+  it('uses a font-independent command-palette loupe and legible shortcut chips', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-search-icon\s*\{[^}]*font-size:\s*0/s,
+    );
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-search-icon::before/s,
+    );
+    expect(materializedCss).toMatch(
+      /\.fm-command-palette \.mm-command-palette-command kbd\s*\{[^}]*background:\s*var\(--fm-selection-inactive\)[^}]*color:\s*var\(--fm-text\)/s,
+    );
   });
 
   it('keeps directory and viewer content inside its pane grid track', () => {
@@ -279,7 +470,16 @@ describe('theme stylesheet', () => {
       /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects\s*\{[^}]*outline:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
+      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options\s*\{[^}]*height:\s*var\(--fm-row-height\)[^}]*white-space:\s*nowrap/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*align-items:\s*center[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-search-options input\[type="checkbox"\] \+ span:not\(\.lever\)\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center/s,
     );
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
@@ -293,15 +493,26 @@ describe('theme stylesheet', () => {
     expect(themeCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
     );
+    expect(themeCss).toMatch(
+      /@container \(max-width: 36rem\)\s*\{[^}]*\.fm-knowledge-workspace\.is-ask\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(12rem,\s*1fr\)\s+minmax\(12rem,\s*1fr\)/s,
+    );
   });
 
-  it('distinguishes unselected tabs from the selected light-theme tab', () => {
+  it('lets semantic enrolment consent wrap without covering its action', () => {
+    expect(materializedCss).toMatch(
+      /\.fm-semantic-library-confirmation\s+input\[type="checkbox"\]\s+\+ span:not\(\.lever\)\s*\{[^}]*height:\s*auto[^}]*min-height:\s*20px/s,
+    );
+  });
+
+  it('uses Marta-like inactive tabs while preserving the selected-tab surface', () => {
+    const darkTheme = themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/);
     const tabRule = paneCss.match(/\.fm-pane-tab\s*\{([^}]*)\}/s)?.[1];
     const selectedTabRule = paneCss.match(
       /\.fm-pane-tab\[aria-selected="true"\]\s*\{([^}]*)\}/s,
     )?.[1];
 
-    expect(tabRule).toContain('background: var(--fm-background)');
+    expect(darkTheme).toContain('--fm-tab-inactive-background: #1d2026');
+    expect(tabRule).toContain('background: var(--fm-tab-inactive-background)');
     expect(selectedTabRule).toContain('background: var(--fm-surface-elevated)');
   });
 
@@ -311,6 +522,15 @@ describe('theme stylesheet', () => {
     expect(menuRule).toContain('width: min(18rem, calc(100vw - 0.5rem))');
     expect(menuRule).not.toMatch(/\bmin-width:/);
     expect(menuRule).not.toMatch(/\bmax-width:/);
+  });
+
+  it('keeps the add-favourite controls compact', () => {
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add\s*>\s*input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
+    expect(paneCss).toMatch(
+      /\.fm-app-shell\s+\.fm-favourites-add-button\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)/s,
+    );
   });
 
   it('allows a longer favourites list before scrolling', () => {

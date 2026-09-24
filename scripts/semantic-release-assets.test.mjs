@@ -31,6 +31,16 @@ test('semantic release collection deduplicates identical model payloads and name
       path.join(payloads, `semantic-payloads-${target}`, 'zvec-runtime-qualification.json'),
       JSON.stringify({ target }),
     );
+    fs.writeFileSync(
+      path.join(payloads, `semantic-payloads-${target}`, 'semantic-production-evaluation.json'),
+      JSON.stringify({ target, decision: 'noGo' }),
+    );
+    if (target === 'linux-x86_64') {
+      fs.writeFileSync(
+        path.join(payloads, `semantic-payloads-${target}`, 'onnx-runtime-qualification.json'),
+        JSON.stringify({ target, runtime: 'onnx' }),
+      );
+    }
     fs.mkdirSync(path.join(catalogs, `semantic-catalog-${target}`), { recursive: true });
     fs.writeFileSync(path.join(catalogs, `semantic-catalog-${target}`, 'catalog.json'), target);
     fs.writeFileSync(path.join(catalogs, `semantic-catalog-${target}`, 'catalog.sig'), target);
@@ -39,10 +49,13 @@ test('semantic release collection deduplicates identical model payloads and name
   collectSemanticReleaseAssets(payloads, catalogs, output);
 
   assert.deepEqual(fs.readdirSync(output).sort(), [
+    'onnx-runtime-qualification-linux-x86_64.json',
     'semantic-catalog-linux-x86_64.json',
     'semantic-catalog-linux-x86_64.sig',
     'semantic-catalog-windows-x86_64.json',
     'semantic-catalog-windows-x86_64.sig',
+    'semantic-production-evaluation-linux-x86_64.json',
+    'semantic-production-evaluation-windows-x86_64.json',
     'shared-model',
     'worker-linux-x86_64',
     'worker-windows-x86_64',
@@ -68,6 +81,10 @@ test('semantic release collection rejects conflicting bytes under one immutable 
     );
     fs.writeFileSync(
       path.join(payloads, `semantic-payloads-${target}`, 'zvec-runtime-qualification.json'),
+      JSON.stringify({ target }),
+    );
+    fs.writeFileSync(
+      path.join(payloads, `semantic-payloads-${target}`, 'semantic-production-evaluation.json'),
       JSON.stringify({ target }),
     );
   }

@@ -6,13 +6,13 @@ export interface OperationsController {
     sources: readonly Location[],
     destination: Location,
     signal?: AbortSignal,
-  ): Promise<Operation>;
+  ): Promise<Operation | undefined>;
   move(
     sources: readonly Location[],
     destination: Location,
     signal?: AbortSignal,
-  ): Promise<Operation>;
-  trash(sources: readonly Location[], signal?: AbortSignal): Promise<Operation>;
+  ): Promise<Operation | undefined>;
+  trash(sources: readonly Location[], signal?: AbortSignal): Promise<Operation | undefined>;
   delete(
     sources: readonly Location[],
     permanentDeleteConfirmed: boolean,
@@ -45,6 +45,45 @@ export interface OperationsController {
   ): Promise<Operation>;
   /** Copy-with-rename in the same directory ("Duplicate", Shift+F5, TASKS/0042). */
   duplicate(sources: readonly Location[], signal?: AbortSignal): Promise<Operation>;
+}
+
+export type ConfirmableOperationKind = 'copy' | 'move' | 'trash';
+
+export interface OperationConfirmationRequest {
+  readonly kind: ConfirmableOperationKind;
+  readonly sources: readonly Location[];
+  readonly destination?: Location;
+}
+
+export function withOperationConfirmation(
+  delegate: OperationsController,
+  enabled: () => boolean,
+  confirm: (request: OperationConfirmationRequest) => Promise<boolean>,
+): OperationsController {
+  async function confirmed(
+    request: OperationConfirmationRequest,
+    signal: AbortSignal | undefined,
+    start: () => Promise<Operation | undefined>,
+  ): Promise<Operation | undefined> {
+    if (signal?.aborted) return undefined;
+    if (enabled() && !(await confirm(request))) return undefined;
+    if (signal?.aborted) return undefined;
+    return start();
+  }
+
+  return {
+    ...delegate,
+    copy: (sources, destination, signal) =>
+      confirmed({ kind: 'copy', sources, destination }, signal, () =>
+        delegate.copy(sources, destination, signal),
+      ),
+    move: (sources, destination, signal) =>
+      confirmed({ kind: 'move', sources, destination }, signal, () =>
+        delegate.move(sources, destination, signal),
+      ),
+    trash: (sources, signal) =>
+      confirmed({ kind: 'trash', sources }, signal, () => delegate.trash(sources, signal)),
+  };
 }
 
 export function createOperationsController(client: FileManagerClient): OperationsController {

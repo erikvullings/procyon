@@ -31,7 +31,8 @@ Procyon's pinned Rust 1.97 toolchain is compatible.
 
 ## Native and model supply chain
 
-The ML path adds PDFium, ONNX Runtime `2.0.0-rc.13`, image processing, tokenizers, layout
+The ML path adds PDFium, the `ort` crate `2.0.0-rc.13` with native ONNX Runtime 1.28.0, image
+processing, tokenizers, layout
 inference, PaddleOCR recognition, and TableFormer. Upstream enables ONNX Runtime's
 `download-binaries` feature and its install scripts download PDFium and models without a
 Docling-owned signed manifest. Procyon does not use either download path for release packs.

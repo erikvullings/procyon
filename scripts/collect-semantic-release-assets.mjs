@@ -35,6 +35,17 @@ export function collectSemanticReleaseAssets(payloadRoot, catalogRoot, output) {
       path.join(payload, 'zvec-runtime-qualification.json'),
       path.join(output, `zvec-runtime-qualification-${target}.json`),
     );
+    const onnxQualification = path.join(payload, 'onnx-runtime-qualification.json');
+    if (fs.existsSync(onnxQualification)) {
+      fs.copyFileSync(
+        onnxQualification,
+        path.join(output, `onnx-runtime-qualification-${target}.json`),
+      );
+    }
+    fs.copyFileSync(
+      path.join(payload, 'semantic-production-evaluation.json'),
+      path.join(output, `semantic-production-evaluation-${target}.json`),
+    );
   }
 
   const catalogDirectories = fs

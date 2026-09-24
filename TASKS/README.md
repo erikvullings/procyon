@@ -72,6 +72,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0068 Recursive filesystem search
 - [x] 0162 Smart folders and saved searches *(needs 0030, 0068, 0089)*
 - [x] 0166 Native indexed search *(needs 0058, 0068, 0089)*
+- [x] 0223 Workspace chrome and splitter polish *(needs 0025, 0026, 0045, 0094, 0222)*
 - [ ] 0169 Saved advanced filter presets *(needs 0030, 0067)*
 - [x] 0069 Tabs per pane
 - [x] 0070 Favourites, bookmarks and recent locations
@@ -125,9 +126,9 @@ semantic components are not installed.
 - [x] 0196 Release desktop semantic activation
 - [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
-- [ ] 0198 Semantic release qualification *(blocked: production artifact evaluation and
-  macOS/Windows/Linux installed and manual evidence remain outstanding; the release workflow now
-  fails closed unless `SEMANTIC_RELEASE_QUALIFIED` is exactly `true`)*
+- [ ] 0198 Semantic release qualification *(in progress: experimental OSS alpha tooling and checklist require
+  four-platform automation, an isolated-user macOS installer/VoiceOver pass, private provisioning,
+  honest tier-aware evidence, and release-owner approval; publication stays fail-closed)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
 - [x] 0200 Opt-in multi-query grounded Ask *(needs 0199 and its go decision; single-query remains
@@ -135,6 +136,16 @@ semantic components are not installed.
   was not the requested alternative)*
 - [x] 0218 Zvec native-runtime qualification preparation *(needs 0195; immutable upstream
   runtime inputs and non-published qualification evidence for blocked task 0198)*
+- [x] 0219 Semantic installed lifecycle and privacy qualification *(private four-target installed
+  lifecycle, package launch, failure-mode, and privacy matrix passed; manual accessibility remains
+  part of blocked task 0198)*
+- [x] 0220 Exact-production semantic evaluation *(needs 0188, 0195, 0196, 0218; four-target private
+  measurements complete with an honest NO-GO; release publication remains disabled)*
+- [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
+  for document/query embeddings with a mandatory clean index rebuild)*
+- [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
+- [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
+  accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
 
 ## Structured knowledge search
 
@@ -160,6 +171,7 @@ layers and never prerequisites for retrieval.
 - [x] 0215 Knowledge results scroll and position fixes *(needs 0214)*
 - [x] 0216 Knowledge retrieval relevance *(needs 0215)*
 - [x] 0217 Base alpha release 0.1.0-24 *(excludes semantic and Ask modes)*
+- [x] 0228 Unified Knowledge Ask pane *(needs 0186, 0207, 0209)*
 
 ## File operations
 
@@ -180,16 +192,17 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0046 Operation cancellation, pause and resume
 - [x] 0047 Operation queue and history
 - [x] 0048 In-application clipboard copy / cut / paste
+- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
+  drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
 - [x] 0075 Directory comparison and synchronization
 - [x] 0077 Checksums and duplicate-file detection
+- [x] 0093 Copy filename and path actions
 - [x] 0160 Safe operation undo
 - [ ] 0161 Saved synchronization profiles *(needs 0030, 0075)*
 - [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
 - [ ] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [ ] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
-- [x] 0093 Copy filename and path actions
-- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
-  drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
+- [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
 
 ## Actions, shortcuts & command palette
 
@@ -264,6 +277,7 @@ The Lua plugin runtime, sample plugins, and icon-theme plugins.
 - [x] 0057 Plugin management UI
 - [x] 0092 Catppuccin icon theme *(after 0085)*
 - [x] 0095 Distributable icon theme plugins *(after 0053, 0085, 0092)*
+- [ ] 0226 Sandboxed JavaScript and SPA plugins *(needs 0053, 0054, 0057)*
 
 ## Remote & cloud connections
 
@@ -348,6 +362,7 @@ dev-only inspector.
 - [x] 0064 Browser/server mode security hardening (§22)
 - [x] 0065 Performance fixtures and benchmarks (§28)
 - [x] 0073 Diagnostics view and structured logging (§30)
+- [x] 0224 Frontend diagnostics and native reload *(needs 0015, 0073, 0133)*
 - [x] 0098 Frontend i18n with translate.js
 - [ ] 0066 Accessibility review (§29) *(in_progress — automated axe-core phase complete; manual
   keyboard/screen-reader passes still outstanding)*

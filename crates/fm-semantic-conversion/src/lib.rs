@@ -3,7 +3,8 @@
 //!
 //! This crate is deliberately pure: it accepts already-read bytes (or a
 //! bounded [`std::io::Read`]) plus *trusted* [`DocumentMetadata`] and returns
-//! normalized structural units, warnings, omissions and provenance. It never
+//! normalized structural units and opt-in bounded visual attachments with
+//! warnings, omissions and provenance. It never
 //! opens a path, resolves a VFS provider, performs network I/O or depends on a
 //! host runtime, which is what allows the same conversion to run behind the
 //! HTTP host, the Tauri host and the semantic worker unchanged.
@@ -25,8 +26,9 @@
 //! marked [`Completeness::Partial`] and carries [`Omission`]s; there is no
 //! silent partial success.
 //! EPUB conversion is signature-verified and follows only readable HTML
-//! resources declared by the package spine; bundled media and non-spine
-//! resources are never crawled.
+//! resources declared by the package spine. Optional visuals are limited to
+//! local image resources that those spine documents reference and the OPF
+//! manifest declares; other bundled media is never crawled.
 
 mod advanced;
 mod budget;
@@ -56,8 +58,9 @@ pub use converter::{
 };
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
-    DocumentMetadata, FormatKind, MediaType, Omission, Provenance, SkipReason, StructuralUnit,
-    TopLevelBoundary, UnitKind,
+    DocumentMetadata, FormatKind, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
+    MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, StructuralUnit,
+    TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
 };
 pub use sniff::{ResolvedFormat, resolve_format};
 pub use text::{

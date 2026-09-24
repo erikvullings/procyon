@@ -416,7 +416,8 @@ export function createActionCommandController(
         mode === 'move'
           ? context.getOpsController().move(currentClipboard.locations, directory.location)
           : context.getOpsController().copy(currentClipboard.locations, directory.location)
-      ).then(() => {
+      ).then((operation) => {
+        if (operation === undefined) return;
         if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
         context.redraw();
       });

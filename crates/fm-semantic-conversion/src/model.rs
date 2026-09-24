@@ -9,6 +9,15 @@ use crate::budget::BudgetKind;
 use crate::text::SourceMap;
 use serde::{Deserialize, Serialize};
 
+/// Maximum visual attachments retained by one conversion.
+pub const MAX_VISUAL_ATTACHMENTS: usize = 32;
+/// Maximum encoded bytes retained for one visual attachment.
+pub const MAX_VISUAL_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum encoded bytes retained across all visual attachments.
+pub const MAX_TOTAL_VISUAL_BYTES: usize = 32 * 1024 * 1024;
+/// Maximum decoded pixels accepted for one visual attachment.
+pub const MAX_VISUAL_PIXELS: u64 = 40_000_000;
+
 /// Name and revision of a versioned component (a converter or the chunker).
 ///
 /// The revision is part of every chunk fingerprint: changing extraction or
@@ -302,6 +311,79 @@ pub enum Provenance {
     },
 }
 
+/// Best-available origin of one visual attachment.
+///
+/// Package-relative resource names and filesystem paths are deliberately not
+/// retained. The provenance identifies only the structural location needed to
+/// explain the evidence to a user.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum VisualProvenance {
+    /// An image XObject on a 1-based PDF page.
+    PdfImage {
+        /// 1-based page number.
+        page_number: u32,
+        /// 0-based image index on that page.
+        image_index: u32,
+    },
+    /// An image referenced from a DOCX body block.
+    DocxImage {
+        /// 0-based body block index.
+        block_index: u32,
+        /// 0-based image index within the block.
+        image_index: u32,
+    },
+    /// An image referenced from a presentation slide.
+    SlideImage {
+        /// 1-based slide number.
+        slide_number: u32,
+        /// 0-based image index on the slide.
+        image_index: u32,
+    },
+    /// An image referenced from a declared EPUB spine resource.
+    EpubImage {
+        /// 0-based position in the declared spine.
+        spine_index: u32,
+        /// 0-based image index in that resource.
+        image_index: u32,
+    },
+    /// An image referenced from a spreadsheet worksheet drawing.
+    SpreadsheetImage {
+        /// 0-based worksheet position in workbook order.
+        sheet_index: u32,
+        /// 0-based image index for that worksheet.
+        image_index: u32,
+    },
+}
+
+/// One decoded, bounded raster attachment available as optional visual evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VisualAttachment {
+    /// Stable content fingerprint. It intentionally excludes paths and names.
+    pub id: String,
+    /// Normalized raster media type.
+    pub media_type: MediaType,
+    /// Encoded PNG, JPEG, or WebP bytes.
+    pub data: Vec<u8>,
+    /// Decoded pixel width.
+    pub width: u32,
+    /// Decoded pixel height.
+    pub height: u32,
+    /// Structural origin within the document.
+    pub provenance: VisualProvenance,
+    /// Optional source-provided caption or alternative text.
+    pub caption: Option<String>,
+}
+
+/// Why a candidate visual was not retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VisualOmission {
+    /// Structural origin, when it could be established safely.
+    pub provenance: Option<VisualProvenance>,
+    /// Human-readable bounded reason.
+    pub detail: String,
+}
+
 /// The top-level boundary a unit belongs to.
 ///
 /// The chunker never packs units from two different boundaries into one chunk:
@@ -445,6 +527,8 @@ pub struct ConvertedDocument {
     units: Vec<StructuralUnit>,
     warnings: Vec<ConversionWarning>,
     omissions: Vec<Omission>,
+    visuals: Vec<VisualAttachment>,
+    visual_omissions: Vec<VisualOmission>,
 }
 
 impl ConvertedDocument {
@@ -469,7 +553,26 @@ impl ConvertedDocument {
             units,
             warnings,
             omissions,
+            visuals: Vec::new(),
+            visual_omissions: Vec::new(),
         }
+    }
+
+    /// Builds a document with optional visual evidence.
+    #[must_use]
+    pub fn new_with_visuals(
+        converter: ComponentVersion,
+        format: FormatKind,
+        units: Vec<StructuralUnit>,
+        warnings: Vec<ConversionWarning>,
+        omissions: Vec<Omission>,
+        visuals: Vec<VisualAttachment>,
+        visual_omissions: Vec<VisualOmission>,
+    ) -> Self {
+        let mut document = Self::new(converter, format, units, warnings, omissions);
+        document.visuals = visuals;
+        document.visual_omissions = visual_omissions;
+        document
     }
 
     /// The converter that produced this document.
@@ -512,6 +615,27 @@ impl ConvertedDocument {
     #[must_use]
     pub fn omissions(&self) -> &[Omission] {
         &self.omissions
+    }
+
+    /// Optional path-free visual evidence, in deterministic source order.
+    #[must_use]
+    pub fn visuals(&self) -> &[VisualAttachment] {
+        &self.visuals
+    }
+
+    /// Candidate visuals that were explicitly excluded.
+    #[must_use]
+    pub fn visual_omissions(&self) -> &[VisualOmission] {
+        &self.visual_omissions
+    }
+
+    pub(crate) fn replace_visual_evidence(
+        &mut self,
+        visuals: Vec<VisualAttachment>,
+        omissions: Vec<VisualOmission>,
+    ) {
+        self.visuals = visuals;
+        self.visual_omissions = omissions;
     }
 }
 

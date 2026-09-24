@@ -41,6 +41,7 @@ export interface Settings {
   readonly sizeFormat: 'binary' | 'decimal' | 'bytes';
   readonly showHiddenFiles: boolean;
   readonly confirmPermanentDelete: boolean;
+  readonly confirmFileOperations: boolean;
   readonly defaultConflictPolicy: 'ask' | 'overwrite' | 'keepBoth' | 'skip';
   readonly operationConcurrency: number;
   readonly defaultPaneLayout: 'dual' | 'single';

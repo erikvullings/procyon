@@ -11,6 +11,14 @@ import {
 
 const actions: readonly ActionDescriptor[] = [
   {
+    id: 'core.showShortcutsHelp',
+    title: 'Keyboard Shortcuts',
+    category: 'navigation',
+    defaultShortcuts: [{ key: 'F1' }],
+    contextRequirements: {},
+    source: { kind: 'core' },
+  },
+  {
     id: 'core.copy',
     title: 'Copy',
     category: 'fileOperations',
@@ -231,6 +239,13 @@ describe('keybinding dispatcher', () => {
     );
 
     expect(bindings).toEqual([
+      {
+        actionId: 'core.showShortcutsHelp',
+        shortcut: 'F1',
+        key: 'F1',
+        title: 'Keyboard Shortcuts',
+        actionAvailable: false,
+      },
       {
         actionId: 'core.rename',
         shortcut: 'F2',

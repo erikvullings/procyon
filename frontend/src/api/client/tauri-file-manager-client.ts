@@ -55,6 +55,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -514,6 +515,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async getDiagnostics(_signal?: AbortSignal): Promise<DiagnosticsResult> {
     return invoke<DiagnosticsResult>('get_diagnostics');
+  }
+
+  async recordFrontendDiagnostic(error: FrontendDiagnostic, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('record_frontend_diagnostic', { error });
   }
 
   async getSystemLocations(_signal?: AbortSignal): Promise<SystemLocation[]> {

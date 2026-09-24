@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -6,9 +9,25 @@ import {
   PRODUCTION_CHUNKER_IDENTITY,
   PRODUCTION_CONVERTER_IDENTITY,
   parseProductionBundleArguments,
+  requireRelocatableWorkerLoaderPath,
   sourceBuildIdentity,
   supportedSemanticTarget,
 } from './build-semantic-production-bundle.mjs';
+import { modelDownloadRetryDelay } from './fetch-semantic-model.mjs';
+import { resolveModelPack } from './verify-semantic-model.mjs';
+
+test('model downloads honor bounded Retry-After delays', () => {
+  const response = (retryAfter) => ({
+    headers: new Headers(retryAfter ? { 'retry-after': retryAfter } : {}),
+  });
+  assert.equal(modelDownloadRetryDelay(response('7'), 0), 7_000);
+  assert.equal(modelDownloadRetryDelay(response('120'), 0), 60_000);
+  assert.equal(
+    modelDownloadRetryDelay(response('Sat, 12 Sep 2026 16:00:09 GMT'), 0, 1_789_228_800_000),
+    9_000,
+  );
+  assert.equal(modelDownloadRetryDelay(response(), 2), 8_000);
+});
 
 test('semantic production targets map only supported native platform pairs', () => {
   assert.deepEqual(supportedSemanticTarget('darwin', 'arm64'), {
@@ -61,10 +80,54 @@ test('Zvec native library names are platform-specific', () => {
   assert.deepEqual(nativeLibraryNames('linux'), ['libzvec_c_api.so']);
 });
 
+test('macOS production workers require a loader-relative native-library path', () => {
+  assert.doesNotThrow(() =>
+    requireRelocatableWorkerLoaderPath(
+      'macos',
+      [
+        'Load command 22',
+        '          cmd LC_RPATH',
+        '      cmdsize 32',
+        '         path @loader_path (offset 12)',
+      ].join('\n'),
+    ),
+  );
+  assert.throws(
+    () =>
+      requireRelocatableWorkerLoaderPath(
+        'macos',
+        'Load command 22\n          cmd LC_CODE_SIGNATURE',
+      ),
+    /missing LC_RPATH @loader_path/u,
+  );
+  assert.doesNotThrow(() => requireRelocatableWorkerLoaderPath('linux', ''));
+});
+
 test('production bundle records the compiled structural chunker identity', () => {
   assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/3');
 });
 
 test('production bundle records the EPUB-capable baseline converter identity', () => {
   assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/1036000+baseline/2');
+});
+
+test('model verification resolves the content-addressed developer artifact', () => {
+  const bundle = fs.mkdtempSync(path.join(tmpdir(), 'semantic-model-verification-'));
+  const artifact = 'procyon.dev.model.multilingual-e5-small.v1.sha256.abc123';
+  fs.mkdirSync(path.join(bundle, 'artifacts'));
+  fs.writeFileSync(path.join(bundle, 'artifacts', artifact), 'model');
+  fs.writeFileSync(
+    path.join(bundle, 'catalog.json'),
+    JSON.stringify({
+      artifacts: [
+        {
+          id: artifact,
+          component_id: 'procyon.dev.model.multilingual-e5-small',
+        },
+      ],
+    }),
+  );
+
+  assert.equal(resolveModelPack(bundle), path.join(bundle, 'artifacts', artifact));
+  fs.rmSync(bundle, { recursive: true, force: true });
 });

@@ -572,6 +572,10 @@ impl SemanticCapability for FakeSemanticCapability {
         self.draining.store(true, Ordering::Relaxed);
         Ok(())
     }
+
+    async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.shutdown(grace).await
+    }
 }
 
 /// Lazy IPC-backed semantic capability.
@@ -646,9 +650,12 @@ impl IpcSemanticCapability {
 
     async fn worker_client(&self) -> Result<WorkerClient, SemanticError> {
         let mut client = self.client.lock().await;
-        if let Some(client) = client.as_ref() {
+        if let Some(client) = client.as_ref()
+            && !client.session_is_expired()
+        {
             return Ok(client.clone());
         }
+        client.take();
         let connected = self
             .connector
             .connect()

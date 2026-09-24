@@ -88,6 +88,19 @@ pub fn redact(input: &str) -> String {
 /// assert_eq!(redact_absolute_paths("./relative/path.txt"), "./relative/path.txt");
 /// ```
 pub fn redact_absolute_paths(input: &str) -> String {
+    let file_urls = Regex::new(r"file:///[^\s)\]}]+")
+        .ok()
+        .map(|regex| {
+            regex
+                .replace_all(input, |captures: &regex::Captures| {
+                    let path = captures[0].strip_prefix("file://").unwrap_or(&captures[0]);
+                    format!("file://{}", truncate_path(path))
+                })
+                .into_owned()
+        })
+        .unwrap_or_else(|| input.to_owned());
+    let input = file_urls.as_str();
+
     // Simple non-regex approach: find /something/something patterns and truncate them
     let mut result = String::new();
     let mut i = 0;
@@ -95,7 +108,10 @@ pub fn redact_absolute_paths(input: &str) -> String {
 
     while i < bytes.len() {
         // Look for absolute path starting with /
-        if (i == 0 || bytes[i - 1] == b' ' || bytes[i - 1] == b'\n' || bytes[i - 1] == b'\t')
+        if (i == 0
+            || bytes[i - 1].is_ascii_whitespace()
+            || bytes[i - 1] == b'('
+            || bytes[i - 1] == b'[')
             && bytes[i] == b'/'
         {
             // Found potential start of absolute path
@@ -287,6 +303,16 @@ mod tests {
                 expected, input
             );
         }
+    }
+
+    #[test]
+    fn test_redact_absolute_paths_in_frontend_stack_traces() {
+        let stack = "Error: boom\n    at render (file:///Users/alice/project/src/main.ts:42:7)\n    at /Users/alice/project/src/app.ts:9:2";
+        let redacted = redact_absolute_paths(stack);
+
+        assert!(!redacted.contains("/Users/alice"));
+        assert!(redacted.contains("...project/src/main.ts"));
+        assert!(redacted.contains("...project/src/app.ts"));
     }
 
     #[test]

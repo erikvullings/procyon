@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { beginPointerFileDrag, registerPointerFileDropTarget } from './pointer-file-drag';
+import {
+  beginPointerFileDrag,
+  consumePointerFileDragClick,
+  registerPointerFileDropTarget,
+} from './pointer-file-drag';
 
 describe('pointer file drag', () => {
   afterEach(() => {
@@ -104,17 +108,50 @@ describe('pointer file drag', () => {
     );
 
     expect(document.documentElement.dataset.fileDragEffect).toBe('move');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+    const indicator = document.querySelector<HTMLElement>('.fm-file-drag-effect');
+    expect(indicator?.classList.contains('fm-file-drag-effect-move')).toBe(true);
+    expect(indicator?.textContent).toBe('');
+    expect(indicator?.style.left).toBe('44px');
+    expect(indicator?.style.top).toBe('26px');
 
     window.dispatchEvent(new KeyboardEvent('keydown', { altKey: true, key: 'Alt' }));
     expect(document.documentElement.dataset.fileDragEffect).toBe('copy');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('+');
+    expect(indicator?.classList.contains('fm-file-drag-effect-copy')).toBe(true);
+    expect(indicator?.textContent).toBe('');
 
     window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt' }));
     expect(document.documentElement.dataset.fileDragEffect).toBe('move');
-    expect(document.querySelector('.fm-file-drag-effect')?.textContent).toBe('-');
+    expect(indicator?.classList.contains('fm-file-drag-effect-move')).toBe(true);
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
     expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
+  });
+
+  it('suppresses a delayed click after native handoff but preserves the next intentional click', () => {
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 4 }),
+      {
+        index: 0,
+        onStart: vi.fn(),
+        onNativeDragOut: vi.fn(),
+      },
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: -1, clientY: 10, pointerId: 4 }),
+    );
+
+    expect(consumePointerFileDragClick()).toBe(true);
+    expect(consumePointerFileDragClick()).toBe(false);
+
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 5 }),
+      {
+        index: 0,
+        onStart: vi.fn(),
+        onNativeDragOut: vi.fn(),
+      },
+    );
+    expect(consumePointerFileDragClick()).toBe(false);
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 5 }));
   });
 });

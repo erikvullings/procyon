@@ -13,7 +13,7 @@
 //! * entry names that escape the package (`..`, absolute paths, backslashes),
 //! * entries whose compression ratio marks them as a decompression bomb.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 
 use quick_xml::events::Event;
@@ -48,6 +48,18 @@ impl From<Stop> for PackageError {
 }
 
 pub(crate) type Package<'a> = zip::ZipArchive<Cursor<&'a [u8]>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RelationshipTarget {
+    Internal(String),
+    External,
+}
+
+pub(crate) enum BoundedPart {
+    Missing,
+    TooLarge,
+    Data(Vec<u8>),
+}
 
 /// Validates the package and returns an archive positioned for part reads.
 pub(crate) fn preflight<'a>(
@@ -132,6 +144,181 @@ pub(crate) fn read_part(
         }));
     }
     Ok(Some(buffer))
+}
+
+/// Reads an optional visual part without turning its local byte limit into a
+/// document-wide conversion failure.
+pub(crate) fn read_bounded_visual_part(
+    archive: &mut Package<'_>,
+    name: &str,
+    limit: u64,
+) -> Result<BoundedPart, PackageError> {
+    let mut entry = match archive.by_name(name) {
+        Ok(entry) => entry,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(BoundedPart::Missing),
+        Err(error) => {
+            return Err(PackageError::Malformed(format!(
+                "part '{name}' is unreadable: {error}"
+            )));
+        }
+    };
+    if entry.size() > limit {
+        return Ok(BoundedPart::TooLarge);
+    }
+    let mut buffer = Vec::new();
+    entry
+        .by_ref()
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut buffer)
+        .map_err(|error| {
+            PackageError::Malformed(format!("part '{name}' is unreadable: {error}"))
+        })?;
+    if buffer.len() as u64 > limit {
+        return Ok(BoundedPart::TooLarge);
+    }
+    Ok(BoundedPart::Data(buffer))
+}
+
+pub(crate) fn image_media_type(name: &str) -> Option<&'static str> {
+    match name.rsplit('.').next()?.to_ascii_lowercase().as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+/// Reads relationships declared for one package part.
+pub(crate) fn read_relationships(
+    archive: &mut Package<'_>,
+    source_part: &str,
+    limit: u64,
+) -> Result<HashMap<String, RelationshipTarget>, PackageError> {
+    let (directory, file) = source_part
+        .rsplit_once('/')
+        .map_or(("", source_part), |(directory, file)| (directory, file));
+    let relationship_part = if directory.is_empty() {
+        format!("_rels/{file}.rels")
+    } else {
+        format!("{directory}/_rels/{file}.rels")
+    };
+    let Some(bytes) = read_part(archive, &relationship_part, limit)? else {
+        return Ok(HashMap::new());
+    };
+    let mut reader = xml_reader(&bytes);
+    let mut buffer = Vec::new();
+    let mut depth = 0_u32;
+    let mut relationships = HashMap::new();
+    loop {
+        let event = reader.read_event_into(&mut buffer).map_err(|error| {
+            PackageError::Malformed(format!(
+                "relationship part '{relationship_part}' is not well formed: {error}"
+            ))
+        })?;
+        inspect_event_without_budget(&event, &mut depth)?;
+        match &event {
+            Event::Start(start) | Event::Empty(start)
+                if local_name(start.name().as_ref()) == "Relationship" =>
+            {
+                let mut id = None;
+                let mut target = None;
+                let mut external = false;
+                for attribute in start.attributes().flatten() {
+                    match local_name(attribute.key.as_ref()).as_str() {
+                        "Id" => id = Some(String::from_utf8_lossy(&attribute.value).into_owned()),
+                        "Target" => {
+                            target = Some(String::from_utf8_lossy(&attribute.value).into_owned());
+                        }
+                        "TargetMode" => {
+                            external = String::from_utf8_lossy(&attribute.value)
+                                .eq_ignore_ascii_case("external");
+                        }
+                        _ => {}
+                    }
+                }
+                if let (Some(id), Some(target)) = (id, target) {
+                    let resolved = if external || target.contains("://") || target.starts_with("//")
+                    {
+                        RelationshipTarget::External
+                    } else {
+                        RelationshipTarget::Internal(resolve_part_target(source_part, &target)?)
+                    };
+                    if relationships.insert(id.clone(), resolved).is_some() {
+                        return Err(PackageError::Malformed(format!(
+                            "relationship part '{relationship_part}' repeats id '{id}'"
+                        )));
+                    }
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+    ensure_balanced(depth, &relationship_part)?;
+    Ok(relationships)
+}
+
+fn inspect_event_without_budget(event: &Event<'_>, depth: &mut u32) -> Result<(), PackageError> {
+    match event {
+        Event::DocType(_) => Err(PackageError::Malformed(
+            "DOCTYPE declarations are not allowed in package XML parts".to_owned(),
+        )),
+        Event::Start(_) => {
+            *depth = depth.saturating_add(1);
+            if *depth > 128 {
+                return Err(PackageError::Malformed(
+                    "relationship XML exceeds the nesting-depth limit".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+        Event::End(_) => {
+            *depth = depth.saturating_sub(1);
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+pub(crate) fn resolve_part_target(source_part: &str, target: &str) -> Result<String, PackageError> {
+    if target.contains('\\')
+        || target.starts_with('/')
+        || target.contains("://")
+        || target.starts_with("//")
+    {
+        return Err(PackageError::Malformed(format!(
+            "package relationship target '{target}' escapes the package"
+        )));
+    }
+    let base = source_part
+        .rsplit_once('/')
+        .map_or("", |(directory, _)| directory);
+    let joined = if base.is_empty() {
+        target.to_owned()
+    } else {
+        format!("{base}/{target}")
+    };
+    let mut components = Vec::new();
+    for component in joined.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.pop().is_none() {
+                    return Err(PackageError::Malformed(format!(
+                        "package relationship target '{target}' escapes the package"
+                    )));
+                }
+            }
+            component => components.push(component),
+        }
+    }
+    if components.is_empty() {
+        return Err(PackageError::Malformed(
+            "package relationship target resolves to no part".to_owned(),
+        ));
+    }
+    Ok(components.join("/"))
 }
 
 pub(crate) fn unsafe_entry_detail(
@@ -230,6 +417,15 @@ pub(crate) mod tests {
         buffer.into_inner()
     }
 
+    pub(crate) fn png() -> Vec<u8> {
+        vec![
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 2, 0, 0, 0, 1,
+            8, 6, 0, 0, 0, 244, 34, 127, 138, 0, 0, 0, 17, 73, 68, 65, 84, 120, 156, 99, 252, 207,
+            192, 240, 159, 129, 129, 129, 1, 0, 13, 5, 2, 0, 224, 7, 107, 2, 0, 0, 0, 0, 73, 69,
+            78, 68, 174, 66, 96, 130,
+        ]
+    }
+
     #[test]
     fn a_broken_container_is_malformed() {
         let budgets = ConversionBudgets::default();
@@ -238,6 +434,25 @@ pub(crate) mod tests {
         let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
         let outcome = preflight(b"PK\x03\x04not a zip", &mut tracker);
         assert!(matches!(outcome, Err(PackageError::Malformed(_))));
+    }
+
+    #[test]
+    fn oversized_visual_parts_are_skipped_without_aborting_the_package() {
+        let bytes = package(&[("word/media/picture.png", b"12345")]);
+        let budgets = ConversionBudgets::default();
+        let cancellation = Cancellation::none();
+        let clock = ManualClock::new();
+        let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
+        let mut archive = preflight(&bytes, &mut tracker).expect("preflight");
+
+        assert!(matches!(
+            read_bounded_visual_part(&mut archive, "word/media/picture.png", 4),
+            Ok(BoundedPart::TooLarge)
+        ));
+        assert!(matches!(
+            read_bounded_visual_part(&mut archive, "word/media/missing.png", 4),
+            Ok(BoundedPart::Missing)
+        ));
     }
 
     #[test]

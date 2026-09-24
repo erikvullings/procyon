@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { Location } from '../../models';
-import { createOperationsController, type OperationsController } from './operations-controller';
+import {
+  createOperationsController,
+  type OperationsController,
+  withOperationConfirmation,
+} from './operations-controller';
 
 const src: Location = { providerId: 'local', uri: 'file:///src/a.txt' };
 const src2: Location = { providerId: 'local', uri: 'file:///src/b.txt' };
@@ -174,5 +178,40 @@ describe('OperationsController', () => {
     const signal = new AbortController().signal;
     await controller.copy([src], dest, signal);
     expect(client.startOperation).toHaveBeenCalledWith(expect.any(Object), signal);
+  });
+
+  it('waits for confirmation before copy, move, and trash', async () => {
+    const confirm = vi.fn().mockResolvedValue(true);
+    const guarded = withOperationConfirmation(controller, () => true, confirm);
+
+    await guarded.copy([src], dest);
+    await guarded.move([src2], dest);
+    await guarded.trash([src]);
+
+    expect(confirm).toHaveBeenNthCalledWith(1, {
+      kind: 'copy',
+      sources: [src],
+      destination: dest,
+    });
+    expect(confirm).toHaveBeenNthCalledWith(2, {
+      kind: 'move',
+      sources: [src2],
+      destination: dest,
+    });
+    expect(confirm).toHaveBeenNthCalledWith(3, { kind: 'trash', sources: [src] });
+    expect(client.startOperation).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not start a declined or disabled confirmation', async () => {
+    const confirm = vi.fn().mockResolvedValue(false);
+    const guarded = withOperationConfirmation(controller, () => true, confirm);
+
+    await expect(guarded.copy([src], dest)).resolves.toBeUndefined();
+    expect(client.startOperation).not.toHaveBeenCalled();
+
+    const unguarded = withOperationConfirmation(controller, () => false, confirm);
+    await unguarded.copy([src], dest);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(client.startOperation).toHaveBeenCalledOnce();
   });
 });

@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { ApiError } from '../../api/fetch-mutator';
 import type { WorkspaceCommand, WorkspaceProjection } from '../../models';
-import { dispatchWorkspaceCommand } from './dispatch-workspace-command';
+import {
+  dispatchWorkspaceCommand,
+  isWorkspaceRevisionConflict,
+} from './dispatch-workspace-command';
 
 function projection(revision: number, name = 'Workspace'): WorkspaceProjection {
   return {
@@ -52,6 +55,28 @@ function clientWith(
 }
 
 describe('dispatchWorkspaceCommand', () => {
+  it('recognizes revision conflicts from both HTTP and Tauri transports', () => {
+    const dto = {
+      code: 'workspaceRevisionConflict',
+      message: 'stale',
+      requestId: 'request-1',
+      details: { expectedRevision: 4, actualRevision: 5 },
+    };
+
+    expect(
+      isWorkspaceRevisionConflict(
+        new ApiError(409, {
+          code: 'workspaceRevisionConflict',
+          message: 'stale',
+          details: {},
+        }),
+      ),
+    ).toBe(true);
+    expect(isWorkspaceRevisionConflict(dto)).toBe(true);
+    expect(isWorkspaceRevisionConflict({ ...dto, code: 'fileRevisionConflict' })).toBe(false);
+    expect(isWorkspaceRevisionConflict('workspaceRevisionConflict')).toBe(false);
+  });
+
   it('reloads and retries a safely idempotent command at the latest revision', async () => {
     const conflict = new ApiError(409, {
       code: 'workspaceRevisionConflict',

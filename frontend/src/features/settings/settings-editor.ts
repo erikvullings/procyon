@@ -20,6 +20,7 @@ import type {
   Settings,
   WorkspaceId,
 } from '../../models';
+import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { LlmProfileManagement } from './llm-profile-management';
@@ -44,7 +45,13 @@ const AVAILABLE_DEFAULT_COLUMNS = [
   { id: 'core.modified', labelKey: 'modified' },
 ] as const satisfies readonly { readonly id: string; readonly labelKey: keyof typeof en.table }[];
 
-type SettingsSection = 'appearance' | 'files' | 'keybindings' | 'plugins' | 'semantic';
+export type SettingsSection =
+  | 'appearance'
+  | 'files'
+  | 'keybindings'
+  | 'plugins'
+  | 'semantic'
+  | 'diagnostics';
 
 function semanticComponentsInstalled(status: SemanticComponentStatus | undefined): boolean {
   return (
@@ -69,6 +76,7 @@ const LANGUAGE_LABEL_KEYS = {
 export interface SettingsEditorAttrs {
   readonly client: FileManagerClient;
   readonly settings: Settings;
+  readonly initialSection?: SettingsSection;
   readonly actions: readonly ActionDescriptor[];
   readonly platform: SelectionPlatform;
   readonly runtime: KeybindingRuntime;
@@ -81,6 +89,7 @@ export interface SettingsEditorAttrs {
   readonly onCancel: () => void;
   readonly onTogglePlugin: (pluginId: PluginId, enabled: boolean) => Promise<void>;
   readonly onRequestPluginLogs: (pluginId: PluginId) => Promise<readonly PluginLogEntry[]>;
+  readonly onSemanticStatusChange?: (status: SemanticComponentStatus) => void;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -101,6 +110,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
+  let lastInitialSection: SettingsSection | undefined;
   let semanticVisited = false;
   let semanticStatus: SemanticComponentStatus | undefined;
   let saveLlmProfile: (() => Promise<boolean>) | undefined;
@@ -184,6 +194,11 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
       if (draft === undefined) {
         resetDraft(current);
       }
+      if (current.initialSection !== undefined && current.initialSection !== lastInitialSection) {
+        activeSection = current.initialSection;
+        if (activeSection === 'semantic') semanticVisited = true;
+        lastInitialSection = current.initialSection;
+      }
       const activeDraft = draft as Settings;
       const errors = validateSettingsDraft(activeDraft);
       const errorsByField = new Map<string, string>(
@@ -209,6 +224,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
         { id: 'keybindings', label: t('settings', 'keybindings') },
         { id: 'plugins', label: t('settings', 'plugins') },
         { id: 'semantic', label: t('settings', 'semantic') },
+        { id: 'diagnostics', label: t('shell', 'diagnostics') },
       ];
 
       return [
@@ -358,10 +374,19 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         className: 'col s12 m6',
                         label: t('settings', 'confirmPermanentDelete'),
                         checked: activeDraft.confirmPermanentDelete,
-                        left: 'Off',
-                        right: 'On',
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
                         onchange: (checked: boolean) =>
                           update(current, { confirmPermanentDelete: checked }),
+                      }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'confirmFileOperations'),
+                        checked: activeDraft.confirmFileOperations,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { confirmFileOperations: checked }),
                       }),
                     ]),
 
@@ -573,6 +598,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         client: current.client,
                         onStatusChange: (status) => {
                           semanticStatus = status;
+                          current.onSemanticStatusChange?.(status);
                           m.redraw();
                         },
                       }),
@@ -692,6 +718,16 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         handleTogglePlugin(current, pluginId, enabled),
                       onRequestLogs: current.onRequestPluginLogs,
                     }),
+                  ]
+                : undefined,
+
+              activeSection === 'diagnostics'
+                ? [
+                    m(
+                      '.row',
+                      m('h4.fm-settings-section-heading.col.s12', t('shell', 'systemDiagnostics')),
+                    ),
+                    m(DiagnosticsViewComponent, { client: current.client }),
                   ]
                 : undefined,
 

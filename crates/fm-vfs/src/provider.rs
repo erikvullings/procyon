@@ -306,6 +306,17 @@ pub trait FileSystemProvider: Send + Sync {
         Ok(false)
     }
 
+    /// Returns bytes available to an unprivileged writer, or `None` when the
+    /// provider or remote server cannot report filesystem capacity.
+    async fn available_space(
+        &self,
+        location: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<Option<u64>, VfsError> {
+        let _ = (location, cancellation);
+        Ok(None)
+    }
+
     /// Watches a location for incremental directory changes.
     async fn watch(
         &self,

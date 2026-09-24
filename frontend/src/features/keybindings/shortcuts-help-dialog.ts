@@ -71,77 +71,85 @@ export const ShortcutsHelpDialog: FactoryComponent<ShortcutsHelpDialogAttrs> = (
       return m(ModalPanel, {
         title: t('keybindingsHelp', 'title'),
         className: 'fm-shortcuts-help-modal',
-        description: m('div', [
-          m('input.fm-shortcuts-help-search', {
-            type: 'text',
-            placeholder: t('keybindingsHelp', 'filterPlaceholder'),
-            'aria-label': t('keybindingsHelp', 'filterAriaLabel'),
-            value: query,
-            oninput: (event: InputEvent) => {
-              query = (event.currentTarget as HTMLInputElement).value;
-            },
-          }),
-          m('.fm-shortcuts-help-capture', [
-            m(
-              'label',
-              { for: 'fm-shortcuts-help-capture-input' },
-              t('keybindingsHelp', 'captureLabel'),
-            ),
-            m('input#fm-shortcuts-help-capture-input.fm-shortcuts-help-capture-input', {
-              type: 'text',
-              readonly: true,
-              placeholder: t('keybindingsHelp', 'capturePlaceholder'),
-              value: capturedShortcut ?? '',
-              onkeydown: (event: KeyboardEvent) => {
-                if (event.key === 'Escape') {
-                  // Clear the capture instead of letting ModalPanel's closeOnEsc close the dialog.
+        description: m('.fm-shortcuts-help-body', [
+          m('.fm-shortcuts-help-controls', [
+            m('.fm-shortcuts-help-filter', [
+              m(
+                'label',
+                { for: 'fm-shortcuts-help-filter-input' },
+                t('keybindingsHelp', 'filterAriaLabel'),
+              ),
+              m('input#fm-shortcuts-help-filter-input.fm-shortcuts-help-search', {
+                type: 'text',
+                placeholder: t('keybindingsHelp', 'filterPlaceholder'),
+                'aria-label': t('keybindingsHelp', 'filterAriaLabel'),
+                value: query,
+                oninput: (event: InputEvent) => {
+                  query = (event.currentTarget as HTMLInputElement).value;
+                },
+              }),
+            ]),
+            m('.fm-shortcuts-help-capture', [
+              m(
+                'label',
+                { for: 'fm-shortcuts-help-capture-input' },
+                t('keybindingsHelp', 'captureLabel'),
+              ),
+              m('input#fm-shortcuts-help-capture-input.fm-shortcuts-help-capture-input', {
+                type: 'text',
+                readonly: true,
+                placeholder: t('keybindingsHelp', 'capturePlaceholder'),
+                value: capturedShortcut ?? '',
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key === 'Escape') return;
+                  if (BARE_MODIFIER_KEYS.has(event.key)) return;
+                  // Bare Tab (no modifier) must keep moving focus normally, not get trapped here.
+                  if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey) return;
                   event.preventDefault();
                   event.stopPropagation();
-                  capturedShortcut = undefined;
-                  return;
-                }
-                if (BARE_MODIFIER_KEYS.has(event.key)) return;
-                // Bare Tab (no modifier) must keep moving focus normally, not get trapped here.
-                if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey) return;
-                event.preventDefault();
-                event.stopPropagation();
-                capturedShortcut = normalizedShortcut({
-                  key: event.key,
-                  ctrl: event.ctrlKey || event.metaKey,
-                  shift: event.shiftKey,
-                  alt: event.altKey,
-                });
-              },
-            }),
-            capturedShortcut === undefined
-              ? undefined
-              : m(
-                  '.fm-shortcuts-help-capture-result',
-                  captureMatches.length === 0
-                    ? t('keybindingsHelp', 'noActionBound', { shortcut: capturedShortcut ?? '' })
-                    : captureMatches
-                        .map(({ action }) => `${capturedShortcut} → ${action.title}`)
-                        .join(', '),
-                ),
+                  capturedShortcut = normalizedShortcut({
+                    key: event.key,
+                    ctrl: event.ctrlKey || event.metaKey,
+                    shift: event.shiftKey,
+                    alt: event.altKey,
+                  });
+                },
+              }),
+              capturedShortcut === undefined
+                ? undefined
+                : m(
+                    '.fm-shortcuts-help-capture-result',
+                    captureMatches.length === 0
+                      ? t('keybindingsHelp', 'noActionBound', { shortcut: capturedShortcut ?? '' })
+                      : captureMatches
+                          .map(({ action }) => `${capturedShortcut} → ${action.title}`)
+                          .join(', '),
+                  ),
+            ]),
           ]),
           m(
-            'table.fm-shortcuts-help-table',
+            '.fm-shortcuts-help-list',
             m(
-              'tbody',
-              filtered.map(({ binding, action }) =>
-                m('tr', { key: `${action.id}:${binding.shortcut}` }, [
-                  m('td', [
-                    m('div', action.title),
-                    action.description === undefined ? undefined : m('small', action.description),
+              'table.fm-shortcuts-help-table',
+              m(
+                'tbody',
+                filtered.map(({ binding, action }) =>
+                  m('tr', { key: `${action.id}:${binding.shortcut}` }, [
+                    m('td', [
+                      m('div', action.title),
+                      action.description === undefined ? undefined : m('small', action.description),
+                    ]),
+                    m('td', m('kbd', binding.shortcut)),
                   ]),
-                  m('td', m('kbd', binding.shortcut)),
-                ]),
+                ),
               ),
             ),
           ),
         ]),
         isOpen: attrs.open,
+        fixedFooter: true,
         closeOnEsc: true,
+        initialFocus: '.fm-shortcuts-help-search',
         onToggle: (open: boolean) => {
           if (!open) attrs.onClose();
         },

@@ -137,7 +137,11 @@ describe('SemanticComponentManagement', () => {
 
       expect(root.querySelector('.fm-semantic-install') !== null).toBe(actionable);
       expect(root.querySelectorAll('.fm-semantic-action')).toHaveLength(actionable ? 1 : 0);
-      if (!actionable) {
+      if (actionable) {
+        expect(root.querySelector('.fm-semantic-install .fm-semantic-action')?.classList).toContain(
+          'btn',
+        );
+      } else {
         expect(root.textContent).toContain('cannot download executable semantic components');
       }
     },
@@ -153,6 +157,9 @@ describe('SemanticComponentManagement', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toContain('offline'),
     );
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Restore or reinstall the semantic components',
+    );
     button('Retry').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Not installed'));
 
@@ -162,7 +169,7 @@ describe('SemanticComponentManagement', () => {
     mountComponent(emptyClient);
     await waitForLoaded();
     expect(root.textContent).toContain('No model profiles are available');
-    expect(button('Install / enable').disabled).toBe(true);
+    expect(button('Review installation').disabled).toBe(true);
   });
 
   it('requires a reviewed complete disclosure before explicit installation consent', async () => {
@@ -177,12 +184,17 @@ describe('SemanticComponentManagement', () => {
       '.fm-semantic-install .fm-semantic-profile-option input[type="radio"]',
     );
     expect(profileOptions).toHaveLength(3);
+    expect(
+      root.querySelectorAll(
+        '.fm-semantic-install .fm-semantic-radio-option > input[type="radio"] + .fm-semantic-radio-copy',
+      ),
+    ).toHaveLength(3);
     expect(profileOptions[0]?.checked).toBe(true);
     expect(root.textContent).toContain('Recommended');
     expect(createOffer).not.toHaveBeenCalled();
     expect(acceptOffer).not.toHaveBeenCalled();
 
-    button('Install / enable').click();
+    button('Review installation').click();
     await vi.waitFor(() =>
       expect(root.querySelectorAll('.fm-semantic-offer-component')).toHaveLength(3),
     );
@@ -338,9 +350,11 @@ describe('SemanticComponentManagement', () => {
 
     mountComponent(client);
     await waitForLoaded();
-    button('Install / enable').click();
+    button('Review installation').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
-    button('Accept and install').click();
+    const acceptButton = button('Accept and install');
+    expect(acceptButton.classList).toContain('btn');
+    acceptButton.click();
 
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-action-error')?.textContent).toContain(
@@ -388,6 +402,13 @@ describe('SemanticComponentManagement', () => {
     expect(button('Confirm uninstall').disabled).toBe(true);
     expect(root.textContent).toContain('Retain index');
     expect(root.textContent).toContain('Delete index');
+    expect(root.querySelectorAll('.fm-semantic-uninstall-option')).toHaveLength(2);
+    expect(root.querySelectorAll('.fm-semantic-uninstall-copy')).toHaveLength(2);
+    expect(
+      root.querySelectorAll(
+        '.fm-semantic-uninstall-options .fm-semantic-radio-option > input[type="radio"] + .fm-semantic-radio-copy',
+      ),
+    ).toHaveLength(2);
     root.querySelector<HTMLInputElement>('#fm-semantic-uninstall-delete')?.click();
     m.redraw.sync();
     button('Confirm uninstall').click();

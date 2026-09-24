@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 use uuid::Uuid;
 
-const PROFILE_SCHEMA_VERSION: u32 = 2;
+const PROFILE_SCHEMA_VERSION: u32 = 3;
 const TEST_PROMPT: &str = "Reply with OK.";
 const MAX_STREAM_BYTES: usize = 256 * 1024;
 const ALLOWED_CUSTOM_HEADERS: &[&str] =
@@ -227,6 +227,17 @@ pub struct LlmProbeResponse {
     pub body: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LlmModelCapabilities {
+    pub vision: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmImageAttachment {
+    pub media_type: String,
+    pub data: Vec<u8>,
+}
+
 /// Bounded host-owned generation request using a saved profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
@@ -234,6 +245,8 @@ pub struct LlmChatGeneration {
     pub system_prompt: String,
     /// User-role evidence payload.
     pub user_prompt: String,
+    /// Bounded image evidence. Only transports with verified vision support may accept it.
+    pub images: Vec<LlmImageAttachment>,
     /// Maximum generated tokens, further bounded by the saved profile.
     pub maximum_tokens: u32,
     /// Sampling temperature, further bounded by the saved profile.
@@ -242,6 +255,14 @@ pub struct LlmChatGeneration {
 
 #[async_trait]
 pub trait LlmProbeTransport: Send + Sync {
+    async fn model_capabilities(
+        &self,
+        _request: &LlmProbeRequest,
+        _cancellation: &CancellationToken,
+    ) -> Result<LlmModelCapabilities, LlmProfileError> {
+        Ok(LlmModelCapabilities::default())
+    }
+
     async fn discover_models(
         &self,
         request: &LlmProbeRequest,
@@ -301,6 +322,31 @@ impl Default for ReqwestLlmProbeTransport {
 
 #[async_trait]
 impl LlmProbeTransport for ReqwestLlmProbeTransport {
+    async fn model_capabilities(
+        &self,
+        request: &LlmProbeRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<LlmModelCapabilities, LlmProfileError> {
+        let Some(chat_url) = &request.ollama_generation_url else {
+            return Ok(LlmModelCapabilities::default());
+        };
+        let Some(base_url) = chat_url.strip_suffix("/api/chat") else {
+            return Err(LlmProfileError::InvalidConfiguration);
+        };
+        let response = tokio::select! {
+            () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
+            response = self
+                .request(reqwest::Method::POST, request, &format!("{base_url}/api/show"))
+                .json(&json!({ "model": request.model }))
+                .send() => {
+                response.map_err(map_reqwest)?
+            }
+        };
+        classify_http_status(response.status().as_u16())?;
+        let body = read_bounded_body(response, cancellation).await?;
+        parse_ollama_model_capabilities(&body)
+    }
+
     async fn discover_models(
         &self,
         request: &LlmProbeRequest,
@@ -377,6 +423,9 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
             let bytes = read_bounded_body(response, cancellation).await?;
             return parse_ollama_chat(&bytes);
         }
+        if !generation.images.is_empty() {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
         let body = json!({
             "model": request.model,
             "messages": [
@@ -426,6 +475,8 @@ async fn read_bounded_body(
 #[serde(rename_all = "camelCase")]
 struct LlmProfilesDocument {
     schema_version: u32,
+    #[serde(default)]
+    active_profile_id: Option<Uuid>,
     profiles: Vec<LlmProfile>,
 }
 
@@ -433,6 +484,7 @@ impl Default for LlmProfilesDocument {
     fn default() -> Self {
         Self {
             schema_version: PROFILE_SCHEMA_VERSION,
+            active_profile_id: None,
             profiles: Vec::new(),
         }
     }
@@ -448,6 +500,7 @@ impl VersionedDocument for LlmProfilesDocument {
         match version {
             1 => {
                 value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
+                value["activeProfileId"] = Value::Null;
                 if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
                     for profile in profiles {
                         profile["capabilities"] = json!(["chatCompletions", "modelDiscovery"]);
@@ -455,6 +508,11 @@ impl VersionedDocument for LlmProfilesDocument {
                         profile["consentedHost"] = Value::Null;
                     }
                 }
+                Ok(value)
+            }
+            2 => {
+                value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
+                value["activeProfileId"] = Value::Null;
                 Ok(value)
             }
             PROFILE_SCHEMA_VERSION => Ok(value),
@@ -472,6 +530,12 @@ impl VersionedDocument for LlmProfilesDocument {
             if !ids.insert(profile.id) {
                 return Err(LlmProfileError::InvalidConfiguration);
             }
+        }
+        if self
+            .active_profile_id
+            .is_some_and(|active| !ids.contains(&active))
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
         }
         Ok(())
     }
@@ -551,7 +615,14 @@ impl LlmProfileService {
     }
 
     pub fn list(&self) -> Result<Vec<LlmProfile>, LlmProfileError> {
-        Ok(self.lock()?.profiles.clone())
+        let document = self.lock()?;
+        let mut profiles = document.profiles.clone();
+        if let Some(active) = document.active_profile_id
+            && let Some(index) = profiles.iter().position(|profile| profile.id == active)
+        {
+            profiles.rotate_left(index);
+        }
+        Ok(profiles)
     }
 
     pub async fn create(&self, mut draft: LlmProfileDraft) -> Result<LlmProfile, LlmProfileError> {
@@ -563,11 +634,16 @@ impl LlmProfileService {
         profile.consented_host = None;
         let persist_error = {
             let mut document = self.lock()?;
+            let previous_active = document.active_profile_id;
             document.profiles.push(profile.clone());
+            if document.active_profile_id.is_none() {
+                document.active_profile_id = Some(profile.id);
+            }
             match self.persist(&document) {
                 Ok(()) => None,
                 Err(error) => {
                     document.profiles.pop();
+                    document.active_profile_id = previous_active;
                     Some(error)
                 }
             }
@@ -660,8 +736,13 @@ impl LlmProfileService {
                 .position(|profile| profile.id == id)
                 .ok_or(LlmProfileError::NotFound)?;
             let profile = document.profiles.remove(index);
+            let previous_active = document.active_profile_id;
+            if document.active_profile_id == Some(id) {
+                document.active_profile_id = document.profiles.first().map(|profile| profile.id);
+            }
             if let Err(error) = self.persist(&document) {
                 document.profiles.insert(index, profile);
+                document.active_profile_id = previous_active;
                 return Err(error);
             }
             profile
@@ -701,7 +782,7 @@ impl LlmProfileService {
 
     pub fn activate(&self, id: Uuid, consent: bool) -> Result<LlmProfile, LlmProfileError> {
         let mut document = self.lock()?;
-        let (profile, changed) = {
+        let profile = {
             let profile = document
                 .profiles
                 .iter_mut()
@@ -709,7 +790,6 @@ impl LlmProfileService {
                 .ok_or(LlmProfileError::NotFound)?;
             let endpoint = normalize_endpoint(&profile.base_url)?;
             self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
-            let mut changed = false;
             if endpoint.locality == EndpointLocality::Cloud
                 && profile.consented_host.as_deref() != Some(endpoint.host.as_str())
             {
@@ -717,13 +797,11 @@ impl LlmProfileService {
                     return Err(LlmProfileError::ConsentRequired(endpoint.host));
                 }
                 profile.consented_host = Some(endpoint.host);
-                changed = true;
             }
-            (profile.clone(), changed)
+            profile.clone()
         };
-        if changed {
-            self.persist(&document)?;
-        }
+        document.active_profile_id = Some(id);
+        self.persist(&document)?;
         Ok(profile)
     }
 
@@ -884,6 +962,20 @@ impl LlmProfileService {
         };
         self.transport
             .generate_chat(&request, &bounded, cancellation)
+            .await
+    }
+
+    pub(crate) async fn model_capabilities(
+        &self,
+        id: Uuid,
+        cancellation: &CancellationToken,
+    ) -> Result<LlmModelCapabilities, LlmProfileError> {
+        let profile = self.profile(id)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        let request = self.probe_request(&profile).await?;
+        self.transport
+            .model_capabilities(&request, cancellation)
             .await
     }
 
@@ -1144,18 +1236,40 @@ fn ollama_chat_url(endpoint: &NormalizedEndpoint) -> String {
 }
 
 fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGeneration) -> Value {
+    use base64::Engine as _;
+
+    let images = generation
+        .images
+        .iter()
+        .map(|image| base64::engine::general_purpose::STANDARD.encode(&image.data))
+        .collect::<Vec<_>>();
     json!({
         "model": request.model,
         "messages": [
             {"role": "system", "content": generation.system_prompt},
-            {"role": "user", "content": generation.user_prompt}
+            {"role": "user", "content": generation.user_prompt, "images": images}
         ],
         "stream": false,
         "think": false,
+        "format": "json",
         "options": {
             "num_predict": generation.maximum_tokens,
             "temperature": generation.temperature
         }
+    })
+}
+
+fn parse_ollama_model_capabilities(body: &[u8]) -> Result<LlmModelCapabilities, LlmProfileError> {
+    let value: Value =
+        serde_json::from_slice(body).map_err(|_| LlmProfileError::MalformedResponse)?;
+    let capabilities = value
+        .get("capabilities")
+        .and_then(Value::as_array)
+        .ok_or(LlmProfileError::MalformedResponse)?;
+    Ok(LlmModelCapabilities {
+        vision: capabilities
+            .iter()
+            .any(|value| value.as_str() == Some("vision")),
     })
 }
 
@@ -1514,6 +1628,7 @@ mod tests {
         );
         let mut value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 1,
+            active_profile_id: None,
             profiles: vec![profile],
         })
         .unwrap();
@@ -1527,12 +1642,94 @@ mod tests {
 
         document.validate().unwrap();
         assert_eq!(document.schema_version, PROFILE_SCHEMA_VERSION);
+        assert_eq!(document.active_profile_id, None);
         assert_eq!(document.profiles[0].consented_host, None);
         assert!(
             document.profiles[0]
                 .capabilities
                 .contains(&LlmApiCapability::ChatCompletions)
         );
+    }
+
+    #[test]
+    fn version_two_profiles_migrate_without_changing_profile_order() {
+        let first = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::Ollama, "http://localhost:11434"),
+            None,
+        );
+        let mut second = first.clone();
+        second.id = Uuid::new_v4();
+        second.name = "Second".to_owned();
+        let mut value = serde_json::to_value(LlmProfilesDocument {
+            schema_version: 2,
+            active_profile_id: None,
+            profiles: vec![first.clone(), second.clone()],
+        })
+        .unwrap();
+        value.as_object_mut().unwrap().remove("activeProfileId");
+
+        let migrated = LlmProfilesDocument::migrate(value, 2).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
+
+        document.validate().unwrap();
+        assert_eq!(document.active_profile_id, None);
+        assert_eq!(document.profiles, vec![first, second]);
+    }
+
+    #[tokio::test]
+    async fn activating_a_profile_makes_it_the_shared_default() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let first = service
+            .create(draft(LlmPreset::Ollama, "http://localhost:11434"))
+            .await
+            .unwrap();
+        let mut second_draft = draft(LlmPreset::Ollama, "http://localhost:11434");
+        second_draft.name = "Second".to_owned();
+        let second = service.create(second_draft).await.unwrap();
+
+        assert_eq!(service.list().unwrap()[0].id, first.id);
+        service.activate(second.id, false).unwrap();
+        assert_eq!(service.list().unwrap()[0].id, second.id);
+    }
+
+    #[test]
+    fn ollama_capabilities_and_generation_preserve_bounded_images() {
+        assert!(
+            parse_ollama_model_capabilities(br#"{"capabilities":["completion","tools","vision"]}"#)
+                .unwrap()
+                .vision
+        );
+        assert!(
+            !parse_ollama_model_capabilities(br#"{"capabilities":["completion"]}"#)
+                .unwrap()
+                .vision
+        );
+        let request = LlmProbeRequest {
+            url: "http://localhost:11434/v1/chat/completions".into(),
+            ollama_generation_url: Some("http://localhost:11434/api/chat".into()),
+            model: "vision-model".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+        };
+        let body = ollama_generation_body(
+            &request,
+            &LlmChatGeneration {
+                system_prompt: "Summarize.".into(),
+                user_prompt: "Evidence".into(),
+                images: vec![LlmImageAttachment {
+                    media_type: "image/png".into(),
+                    data: vec![1, 2, 3],
+                }],
+                maximum_tokens: 512,
+                temperature: 0.1,
+            },
+        );
+
+        assert_eq!(body["messages"][1]["images"][0], "AQID");
+        assert_eq!(body["format"], "json");
     }
 
     #[tokio::test]
@@ -1745,12 +1942,14 @@ mod tests {
             &LlmChatGeneration {
                 system_prompt: "Answer from evidence.".into(),
                 user_prompt: "Question".into(),
+                images: Vec::new(),
                 maximum_tokens: 1_024,
                 temperature: 0.2,
             },
         );
         assert_eq!(body["think"], false);
         assert_eq!(body["stream"], false);
+        assert_eq!(body["format"], "json");
         assert_eq!(body["options"]["num_predict"], 1_024);
         assert_eq!(
             classify_http_status(401).unwrap_err().category(),
@@ -1803,6 +2002,7 @@ mod tests {
         let generation = LlmChatGeneration {
             system_prompt: "Summarize grounded evidence.".into(),
             user_prompt: "Evidence".into(),
+            images: Vec::new(),
             maximum_tokens: 512,
             temperature: 0.1,
         };

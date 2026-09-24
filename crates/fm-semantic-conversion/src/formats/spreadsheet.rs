@@ -3,20 +3,25 @@
 //! Calamine parses the workbook; this module only bounds it and turns cells
 //! into citable bands. Sheets are visited in workbook order, rows in ascending
 //! order, and every unit records the exact 0-based cell range it came from.
-//! Formulas, charts, pivot caches and images are not read - a spreadsheet's
-//! semantic content is its cell values.
+//! Formulas, charts and pivot caches are not interpreted. When visual evidence
+//! is explicitly requested, embedded raster images referenced through the
+//! workbook's worksheet/drawing relationship chain are retained separately
+//! from semantic text.
 
 use std::io::Cursor;
 
 use calamine::{Data, Reader};
 
 use crate::budget::Stop;
-use crate::builder::{DocumentBuilder, UnitDraft};
+use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::formats::csv::ROWS_PER_BAND;
-use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind};
+use crate::formats::package::{self, BoundedPart, Package, PackageError, RelationshipTarget};
+use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 
 /// Maximum columns read from one sheet.
 const MAX_COLUMNS: u32 = 2_048;
+const MAX_XML_PART_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_IMAGE_PART_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Why a workbook could not be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,13 +152,169 @@ pub(crate) fn convert(
     Ok(())
 }
 
+pub(crate) fn extract_visuals(
+    builder: &mut DocumentBuilder<'_, '_>,
+    archive: &mut Package<'_>,
+) -> Result<(), PackageError> {
+    let Some(workbook) = package::read_part(archive, "xl/workbook.xml", MAX_XML_PART_BYTES)? else {
+        return Ok(());
+    };
+    let workbook_relationships =
+        package::read_relationships(archive, "xl/workbook.xml", MAX_XML_PART_BYTES)?;
+    for (sheet_index, sheet_relationship) in relationship_ids(&workbook, "sheet", "id")
+        .into_iter()
+        .enumerate()
+    {
+        builder.checkpoint().map_err(PackageError::from)?;
+        let Some(RelationshipTarget::Internal(sheet_part)) =
+            workbook_relationships.get(&sheet_relationship)
+        else {
+            builder.omit_visual(
+                Some(VisualProvenance::SpreadsheetImage {
+                    sheet_index: sheet_index as u32,
+                    image_index: 0,
+                }),
+                "spreadsheet worksheet relationship is external or missing",
+            );
+            continue;
+        };
+        let Some(sheet) = package::read_part(archive, sheet_part, MAX_XML_PART_BYTES)? else {
+            continue;
+        };
+        let sheet_relationships =
+            package::read_relationships(archive, sheet_part, MAX_XML_PART_BYTES)?;
+        let mut image_index = 0_u32;
+        for drawing_relationship in relationship_ids(&sheet, "drawing", "id") {
+            let Some(RelationshipTarget::Internal(drawing_part)) =
+                sheet_relationships.get(&drawing_relationship)
+            else {
+                builder.omit_visual(
+                    Some(VisualProvenance::SpreadsheetImage {
+                        sheet_index: sheet_index as u32,
+                        image_index,
+                    }),
+                    "spreadsheet drawing relationship is external or missing",
+                );
+                continue;
+            };
+            let Some(drawing) = package::read_part(archive, drawing_part, MAX_XML_PART_BYTES)?
+            else {
+                continue;
+            };
+            let drawing_relationships =
+                package::read_relationships(archive, drawing_part, MAX_XML_PART_BYTES)?;
+            for image_relationship in image_relationship_ids(&drawing) {
+                let provenance = VisualProvenance::SpreadsheetImage {
+                    sheet_index: sheet_index as u32,
+                    image_index,
+                };
+                image_index = image_index.saturating_add(1);
+                let Some(RelationshipTarget::Internal(image_part)) =
+                    drawing_relationships.get(&image_relationship)
+                else {
+                    builder.omit_visual(
+                        Some(provenance),
+                        "external spreadsheet images are not fetched",
+                    );
+                    continue;
+                };
+                let Some(media_type) = package::image_media_type(image_part) else {
+                    builder.omit_visual(
+                        Some(provenance),
+                        "spreadsheet image uses an unsupported media type",
+                    );
+                    continue;
+                };
+                let data = match package::read_bounded_visual_part(
+                    archive,
+                    image_part,
+                    MAX_IMAGE_PART_BYTES,
+                )? {
+                    BoundedPart::Data(data) => data,
+                    BoundedPart::Missing => {
+                        builder.omit_visual(Some(provenance), "spreadsheet image part is missing");
+                        continue;
+                    }
+                    BoundedPart::TooLarge => {
+                        builder.omit_visual(
+                            Some(provenance),
+                            format!("spreadsheet image exceeds {MAX_IMAGE_PART_BYTES} bytes"),
+                        );
+                        continue;
+                    }
+                };
+                builder
+                    .push_visual(VisualDraft {
+                        media_type,
+                        data,
+                        provenance,
+                        caption: None,
+                    })
+                    .map_err(PackageError::from)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn image_relationship_ids(bytes: &[u8]) -> Vec<String> {
+    let mut reader = package::xml_reader(bytes);
+    let mut buffer = Vec::new();
+    let mut ids = Vec::new();
+    while let Ok(event) = reader.read_event_into(&mut buffer) {
+        match &event {
+            quick_xml::events::Event::Start(start) | quick_xml::events::Event::Empty(start)
+                if package::local_name(start.name().as_ref()) == "blip" =>
+            {
+                if let Some(id) = start.attributes().flatten().find_map(|attribute| {
+                    matches!(
+                        package::local_name(attribute.key.as_ref()).as_str(),
+                        "embed" | "link"
+                    )
+                    .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                }) {
+                    ids.push(id);
+                }
+            }
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+    ids
+}
+
+fn relationship_ids(bytes: &[u8], element: &str, attribute_name: &str) -> Vec<String> {
+    let mut reader = package::xml_reader(bytes);
+    let mut buffer = Vec::new();
+    let mut ids = Vec::new();
+    while let Ok(event) = reader.read_event_into(&mut buffer) {
+        match &event {
+            quick_xml::events::Event::Start(start) | quick_xml::events::Event::Empty(start)
+                if package::local_name(start.name().as_ref()) == element =>
+            {
+                if let Some(id) = start.attributes().flatten().find_map(|attribute| {
+                    (package::local_name(attribute.key.as_ref()) == attribute_name)
+                        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                }) {
+                    ids.push(id);
+                }
+            }
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+    ids
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use crate::budget::{BudgetTracker, ConversionBudgets, ManualClock};
     use crate::cancellation::Cancellation;
-    use crate::formats::package::tests::package;
-    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind};
+    use crate::formats::package::tests::{package, png};
+    use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, VisualProvenance};
 
     /// Builds a minimal but valid XLSX package with inline strings, so the
     /// fixture stays generated text rather than a checked-in binary.
@@ -321,5 +482,60 @@ pub(crate) mod tests {
             convert_workbook(&bytes),
             Err(WorkbookError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn worksheet_drawing_images_follow_the_declared_relationship_chain() {
+        let image = png();
+        let bytes = package(&[
+            (
+                "xl/workbook.xml",
+                br#"<workbook xmlns:r="r"><sheets><sheet r:id="rSheet"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships><Relationship Id="rSheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet xmlns:r="r"><drawing r:id="rDrawing"/></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                br#"<Relationships><Relationship Id="rDrawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<drawing xmlns:r="r"><blip r:embed="rImage"/></drawing>"#,
+            ),
+            (
+                "xl/drawings/_rels/drawing1.xml.rels",
+                br#"<Relationships><Relationship Id="rImage" Target="../media/picture.png"/></Relationships>"#,
+            ),
+            ("xl/media/picture.png", &image),
+        ]);
+        let budgets = ConversionBudgets::default();
+        let cancellation = Cancellation::none();
+        let clock = ManualClock::new();
+        let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
+        let mut archive = package::preflight(&bytes, &mut tracker).expect("preflight");
+        let mut builder = DocumentBuilder::new(
+            ComponentVersion::new("baseline", 1),
+            FormatKind::Spreadsheet,
+            &mut tracker,
+        );
+        builder.set_visuals_enabled(true);
+
+        extract_visuals(&mut builder, &mut archive).expect("visual extraction");
+        let converted = builder.finish();
+
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::SpreadsheetImage {
+                sheet_index: 0,
+                image_index: 0
+            }
+        );
     }
 }

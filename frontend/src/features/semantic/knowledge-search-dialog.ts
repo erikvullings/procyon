@@ -3,10 +3,11 @@ import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
+  closeIcon,
   cornerDownLeftIcon,
+  dotsIcon,
   externalLinkIcon,
   filterIcon,
-  settingsIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -35,7 +36,10 @@ import type {
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
+
+export type KnowledgeSurfaceMode = 'search' | 'ask';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -48,6 +52,8 @@ export interface KnowledgeSearchDialogAttrs {
   readonly semanticSourceIds: readonly string[];
   /** Initial subject text, e.g. the active quick filter or semantic query. */
   readonly initialSubject?: string | undefined;
+  /** Primary workflow selected when the transient pane opens. */
+  readonly initialMode?: KnowledgeSurfaceMode | undefined;
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
@@ -633,6 +639,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
   let settingsOpen = false;
+  let enrolmentOpen = false;
+  let surfaceMode: KnowledgeSurfaceMode = 'search';
 
   /** Bounded options sent with both the plan preview and the search itself. */
   function searchOptions(): KnowledgeSearchOptions {
@@ -867,6 +875,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     selectedAnswerProfileId = '';
     allowModelKnowledge = false;
     settingsOpen = false;
+    enrolmentOpen = false;
+    surfaceMode = attrs.initialMode ?? 'search';
     try {
       const [reportedCapabilities, availableRoots] = await Promise.all([
         attrs.client.getKnowledgeCapabilities(),
@@ -891,6 +901,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           const profiles = await attrs.client.listLlmProfiles();
           if (loadGeneration !== generation) return;
           answerProfiles = profiles;
+          if (surfaceMode === 'ask') selectedAnswerProfileId = profiles[0]?.id ?? '';
         } catch {
           if (loadGeneration !== generation) return;
           answerProfilesFailed = true;
@@ -932,7 +943,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   async function previewPlan(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     // `busy` is shared, and the plan disclosure's summary cannot be disabled:
     // clearing it here would hide Cancel and re-enable Search mid-search.
-    if (busy !== undefined || !canSearch()) return;
+    if (busy !== undefined || !canSearch(attrs)) return;
     const planGeneration = generation;
     const planRevision = revision;
     busy = 'planning';
@@ -964,9 +975,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return (draft.about ?? []).some((subject) => subject.trim().length > 0);
   }
 
-  /** Whether a search can run: a subject, and no unusable scope selector. */
-  function canSearch(): boolean {
-    return hasSubject() && scopeIssues.length === 0;
+  /** Whether an authorized source can be queried while full reconciliation continues. */
+  function hasSearchableSources(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.available);
+  }
+
+  /** Whether a search can run: searchable sources, a subject, and no unusable scope selector. */
+  function canSearch(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return hasSearchableSources(attrs) && hasSubject() && scopeIssues.length === 0;
   }
 
   /**
@@ -980,7 +996,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     // A query typed only into the DSL box has not reached the canonical draft
     // until its parse lands, so an in-flight parse is a reason to wait, not a
     // reason to refuse.
-    if (pendingParse === undefined && !canSearch()) return;
+    if (pendingParse === undefined && !canSearch(attrs)) return;
     const startGeneration = generation;
     const controller = new AbortController();
     busy = 'searching';
@@ -994,7 +1010,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     m.redraw();
     if (pendingParse !== undefined) await pendingParse;
     if (startGeneration !== generation) return;
-    if (controller.signal.aborted || !canSearch()) {
+    if (controller.signal.aborted || !canSearch(attrs)) {
       if (controller.signal.aborted) notice = t('knowledgeSearch', 'cancelled');
       busy = undefined;
       abortController = undefined;
@@ -1004,6 +1020,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     const searchRevision = revision;
     traceRequested = includeTrace;
     const requestId = crypto.randomUUID();
+    let generateAfterSearch = false;
     try {
       const executed = await attrs.client.executeKnowledgeSearch(
         {
@@ -1019,6 +1036,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       result = executed;
       plan = executed.plan;
       capabilities = executed.capabilities;
+      generateAfterSearch = surfaceMode === 'ask';
     } catch (cause) {
       if (startGeneration !== generation || searchRevision !== revision) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1033,6 +1051,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m.redraw();
       }
     }
+    if (generateAfterSearch) await generateAnswer(attrs);
   }
 
   function cancel(): void {
@@ -1174,6 +1193,21 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     attrs.onClose();
   }
 
+  function updateNeed(
+    attrs: KnowledgeSearchDialogAttrs,
+    need: KnowledgeNeed,
+    checked: boolean,
+  ): void {
+    const selected = new Set(draft.needs ?? []);
+    if (checked) selected.add(need);
+    else selected.delete(need);
+    const needs = NEEDS.filter((value) => selected.has(value));
+    draft = { ...draft, needs };
+    persistPreferredNeeds(needs);
+    edited();
+    void reinterpret(attrs);
+  }
+
   /** Keeps editor keystrokes local and lets Escape dismiss only the settings modal. */
   function stopSettingsTypingKeys(event: KeyboardEvent): void {
     event.stopPropagation();
@@ -1190,6 +1224,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
     const indexedTitle = row.sectionPath.join(' / ');
+    const relevanceStrength = row.finalRank <= 3 ? 'high' : row.finalRank <= 10 ? 'medium' : 'low';
+    const relevanceKey =
+      relevanceStrength === 'high'
+        ? 'resultRelevanceHigh'
+        : relevanceStrength === 'medium'
+          ? 'resultRelevanceMedium'
+          : 'resultRelevanceLow';
+    const relevance = t('knowledgeSearch', relevanceKey);
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
@@ -1202,23 +1244,33 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      indexedTitle === '' && position === ''
-        ? undefined
-        : m('.fm-knowledge-section-heading', [
-            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
-            position === ''
-              ? undefined
-              : m(
-                  'button.fm-knowledge-page-link',
-                  {
-                    type: 'button',
-                    disabled: !openable,
-                    'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
-                    onclick: () => void openSource(attrs, row),
-                  },
-                  position,
-                ),
-          ]),
+      m('.fm-knowledge-section-heading', [
+        indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
+        m('.fm-knowledge-section-metadata', [
+          position === ''
+            ? undefined
+            : m(
+                'button.fm-knowledge-page-link',
+                {
+                  type: 'button',
+                  disabled: !openable,
+                  'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
+                  onclick: () => void openSource(attrs, row),
+                },
+                position,
+              ),
+          tooltip(
+            relevance,
+            m('span.fm-knowledge-relevance-indicator', {
+              role: 'img',
+              tabindex: 0,
+              'aria-label': relevance,
+              'data-strength': relevanceStrength,
+            }),
+            { 'data-tooltip-placement': 'above' },
+          ),
+        ]),
+      ]),
       m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
       states.length === 0
         ? undefined
@@ -1315,6 +1367,24 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
+      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchNoSources'),
+        );
+      }
+      if (
+        capabilities !== undefined &&
+        attrs.semanticSourceIds.length === 0 &&
+        roots.some((root) => root.available && root.indexedGeneration === 0)
+      ) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchIndexPending'),
+        );
+      }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
     }
     if (result.evidence.length === 0) {
@@ -1643,7 +1713,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     onremove: () => abortController?.abort(),
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
-      const searchable = canSearch();
+      const searchable = canSearch(attrs);
       const route = result?.route;
       if (!attrs.open) return undefined;
       return m(
@@ -1652,6 +1722,36 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         [
           m('.fm-knowledge-composer', [
             m('.fm-knowledge-search-toolbar', [
+              m('.fm-knowledge-surface-modes', { 'aria-label': t('knowledgeSearch', 'title') }, [
+                m(
+                  'button.fm-knowledge-surface-mode',
+                  {
+                    type: 'button',
+                    class: surfaceMode === 'search' ? 'is-active' : undefined,
+                    'aria-pressed': surfaceMode === 'search' ? 'true' : 'false',
+                    onclick: () => {
+                      surfaceMode = 'search';
+                    },
+                  },
+                  t('knowledgeSearch', 'search'),
+                ),
+                m(
+                  'button.fm-knowledge-surface-mode',
+                  {
+                    type: 'button',
+                    class: surfaceMode === 'ask' ? 'is-active' : undefined,
+                    'aria-pressed': surfaceMode === 'ask' ? 'true' : 'false',
+                    disabled: capabilities?.answerGeneration !== true,
+                    onclick: () => {
+                      surfaceMode = 'ask';
+                      if (selectedAnswerProfileId === '') {
+                        selectedAnswerProfileId = answerProfiles[0]?.id ?? '';
+                      }
+                    },
+                  },
+                  t('knowledgeSearch', 'ask'),
+                ),
+              ]),
               filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),
               m('textarea#fm-knowledge-subjects', {
                 name: 'knowledge-subjects',
@@ -1701,12 +1801,57 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     type: 'button',
                     className: 'fm-knowledge-search-submit',
                     'aria-label': t('knowledgeSearch', 'search'),
-                    disabled: busy !== undefined || !canSearch(),
+                    disabled: busy !== undefined || !canSearch(attrs),
                     onclick: () => void search(attrs),
                   },
                   cornerDownLeftIcon({ size: 16 }),
                 ),
               ),
+              tooltip(
+                t('knowledgeSearch', 'close'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-search-close',
+                    'aria-label': t('knowledgeSearch', 'close'),
+                    onclick: () => close(attrs),
+                  },
+                  closeIcon({ size: 13 }),
+                ),
+              ),
+            ]),
+            m('.fm-knowledge-search-options', [
+              !currentFolderIndexed && attrs.currentFolder !== undefined
+                ? m('label.fm-knowledge-include-folder', [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: false,
+                      disabled: busy === 'loading',
+                      onchange: (event: Event) => {
+                        (event.currentTarget as HTMLInputElement).checked = false;
+                        enrolmentOpen = true;
+                      },
+                    }),
+                    m('span', t('knowledgeSearch', 'includeFolder')),
+                  ])
+                : undefined,
+              m('span.fm-knowledge-search-for', t('knowledgeSearch', 'searchFor')),
+              m('fieldset.fm-knowledge-inline-needs.fm-knowledge-needs', [
+                m('legend.fm-visually-hidden', t('knowledgeSearch', 'searchFor')),
+                NEEDS.map((need) =>
+                  m('label', { key: need }, [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: (draft.needs ?? []).includes(need),
+                      disabled: busy === 'searching',
+                      onchange: (event: Event) =>
+                        updateNeed(attrs, need, (event.currentTarget as HTMLInputElement).checked),
+                    }),
+                    m('span', needLabel(need)),
+                  ]),
+                ),
+              ]),
               tooltip(
                 t('knowledgeSearch', 'settings'),
                 m(
@@ -1719,10 +1864,42 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       settingsOpen = true;
                     },
                   },
-                  settingsIcon({ size: 16 }),
+                  dotsIcon({ size: 16 }),
                 ),
               ),
             ]),
+            attrs.currentFolder === undefined
+              ? undefined
+              : m(ModalPanel, {
+                  className: 'fm-dense-modal fm-semantic-enrolment-modal',
+                  title: t('ragAsk', 'includeFolderTitle'),
+                  isOpen: enrolmentOpen,
+                  closeOnEsc: true,
+                  onToggle: (open: boolean) => {
+                    enrolmentOpen = open;
+                  },
+                  description: enrolmentOpen
+                    ? m(SemanticFolderEnrolmentPrompt, {
+                        client: attrs.client,
+                        workspaceId: attrs.workspaceId,
+                        location: attrs.currentFolder,
+                        onEnrolled: () => {
+                          currentFolderIndexed = true;
+                          scopeKind = 'currentFolder';
+                          enrolmentOpen = false;
+                          m.redraw();
+                        },
+                      })
+                    : undefined,
+                  buttons: [
+                    {
+                      label: t('button', 'close'),
+                      onclick: () => {
+                        enrolmentOpen = false;
+                      },
+                    },
+                  ],
+                }),
             m(ModalPanel, {
               className: 'fm-dense-modal fm-knowledge-settings-modal',
               title: t('knowledgeSearch', 'settings'),
@@ -1732,29 +1909,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 settingsOpen = open;
               },
               description: m('.fm-knowledge-settings', [
-                m('fieldset.fm-knowledge-needs', [
-                  m('legend', t('knowledgeSearch', 'needs')),
-                  NEEDS.map((need) =>
-                    m('label', { key: need }, [
-                      m('input', {
-                        type: 'checkbox',
-                        checked: (draft.needs ?? []).includes(need),
-                        disabled: busy === 'searching',
-                        onchange: (event: Event) => {
-                          const selected = new Set(draft.needs ?? []);
-                          if ((event.currentTarget as HTMLInputElement).checked) selected.add(need);
-                          else selected.delete(need);
-                          const needs = NEEDS.filter((value) => selected.has(value));
-                          draft = { ...draft, needs };
-                          persistPreferredNeeds(needs);
-                          edited();
-                          void reinterpret(attrs);
-                        },
-                      }),
-                      m('span', needLabel(need)),
-                    ]),
-                  ),
-                ]),
                 m('details.fm-knowledge-advanced', [
                   m('summary', t('knowledgeSearch', 'showAdvanced')),
                   m('.fm-knowledge-advanced-body', [
@@ -2089,32 +2243,45 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           busy === 'loading'
             ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
             : undefined,
-          m(
-            'section.fm-knowledge-results-section',
-            {
-              'aria-label': t('knowledgeSearch', 'resultsRegion'),
-              'aria-busy': busy === 'searching' ? 'true' : 'false',
-            },
-            [
-              m(
-                '.fm-knowledge-results-heading',
-                { role: result === undefined ? undefined : 'status' },
-                m('h3', [
-                  t('knowledgeSearch', 'results'),
-                  result === undefined
-                    ? undefined
-                    : `: ${t('knowledgeSearch', 'resultsSummary', {
-                        documents: groupEvidenceByDocument(result.evidence).length,
-                        sections: result.evidence.length,
-                      })}`,
+          m('.fm-knowledge-workspace', { class: surfaceMode === 'ask' ? 'is-ask' : 'is-search' }, [
+            surfaceMode === 'ask'
+              ? m(
+                  'section.fm-knowledge-answer-panel',
+                  { 'aria-label': t('knowledgeSearch', 'answerRegion') },
+                  answerView(attrs) ??
+                    m('.fm-knowledge-answer-empty', [
+                      m('h3', t('knowledgeSearch', 'answerHeading')),
+                      m('p.fm-knowledge-hint', t('ragAsk', 'answerPlaceholder')),
+                    ]),
+                )
+              : undefined,
+            m(
+              'section.fm-knowledge-results-section.fm-knowledge-evidence-panel',
+              {
+                'aria-label': t('knowledgeSearch', 'resultsRegion'),
+                'aria-busy': busy === 'searching' ? 'true' : 'false',
+              },
+              [
+                m(
+                  '.fm-knowledge-results-heading',
+                  { role: result === undefined ? undefined : 'status' },
+                  m('h3', [
+                    t('knowledgeSearch', 'results'),
+                    result === undefined
+                      ? undefined
+                      : `: ${t('knowledgeSearch', 'resultsSummary', {
+                          documents: groupEvidenceByDocument(result.evidence).length,
+                          sections: result.evidence.length,
+                        })}`,
+                  ]),
+                ),
+                m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [
+                  resultsView(attrs),
+                  surfaceMode === 'search' ? answerView(attrs) : undefined,
                 ]),
-              ),
-              m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [
-                resultsView(attrs),
-                answerView(attrs),
-              ]),
-            ],
-          ),
+              ],
+            ),
+          ]),
         ],
       );
     },

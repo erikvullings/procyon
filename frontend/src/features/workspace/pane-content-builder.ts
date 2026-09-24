@@ -60,7 +60,10 @@ import {
   type SelectionAction,
   type SelectionState,
 } from '../selection/selection';
-import { KnowledgeSearchPane } from '../semantic/knowledge-search-dialog';
+import {
+  KnowledgeSearchPane,
+  type KnowledgeSurfaceMode,
+} from '../semantic/knowledge-search-dialog';
 import { type SortModel, sortEntriesResponsive } from '../sorting/sorting';
 import { dispatchWorkspaceCommand } from './dispatch-workspace-command';
 import type { WorkspaceController } from './workspace-controller';
@@ -79,6 +82,7 @@ export interface KnowledgeSearchTabState {
   readonly currentFolder: Location | undefined;
   readonly semanticSourceIds: readonly string[];
   readonly initialSubject: string | undefined;
+  readonly initialMode: KnowledgeSurfaceMode;
 }
 
 /** Shown before settings finish loading, mirroring the backend's own default (`core.gitStatus`
@@ -197,6 +201,7 @@ export interface PaneContentContext {
     openMetadata?: boolean,
   ): void;
   closeViewer(paneId: PaneId): void;
+  isDocumentSummaryAvailable?(): boolean;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
@@ -433,7 +438,9 @@ export function createPaneContentBuilder(
         if (tab !== undefined) {
           await context
             .getNavigation()
-            .navigate(paneId, context.locationForPath(tab.location, path));
+            .navigate(paneId, context.locationForPath(tab.location, path), undefined, {
+              preserveCurrentOnError: true,
+            });
         }
       },
       onNavigateLocation: async (location) => {
@@ -543,7 +550,12 @@ export function createPaneContentBuilder(
           { paneId, selectedEntryIds: [entry.id], cursorEntryId: entry.id },
         );
       },
-      onDocumentSummary: (entry) => context.openDocumentSummary?.(paneId, entry),
+      ...(context.isDocumentSummaryAvailable?.() === true
+        ? {
+            onDocumentSummary: (entry: EntrySummary) =>
+              context.openDocumentSummary?.(paneId, entry),
+          }
+        : {}),
       ...(context.openKnowledgeSearch === undefined
         ? {}
         : { onSearchKnowledge: () => context.openKnowledgeSearch?.() }),
@@ -886,6 +898,7 @@ export function createPaneContentBuilder(
                       currentFolder: knowledgeSearch.currentFolder,
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
+                      initialMode: knowledgeSearch.initialMode,
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
                     });
@@ -972,8 +985,12 @@ export function createPaneContentBuilder(
                           cursorEntryId: viewer.state.entry.id,
                         },
                       ),
-                    onDocumentSummary: () =>
-                      context.openDocumentSummary?.(paneId, viewer.state.entry),
+                    ...(context.isDocumentSummaryAvailable?.() === true
+                      ? {
+                          onDocumentSummary: () =>
+                            context.openDocumentSummary?.(paneId, viewer.state.entry),
+                        }
+                      : {}),
                     onClose: () => context.closeViewer(paneId),
                   });
                 })(),

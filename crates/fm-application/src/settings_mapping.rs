@@ -48,6 +48,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         },
         show_hidden_files: settings.show_hidden_files,
         confirm_permanent_delete: settings.confirm_permanent_delete,
+        confirm_file_operations: settings.confirm_file_operations,
         default_conflict_policy: match settings.default_conflict_policy {
             ConflictPolicy::Ask => ConflictPolicyDto::Ask,
             ConflictPolicy::Overwrite => ConflictPolicyDto::Overwrite,
@@ -159,6 +160,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         },
         show_hidden_files: settings.show_hidden_files,
         confirm_permanent_delete: settings.confirm_permanent_delete,
+        confirm_file_operations: settings.confirm_file_operations,
         default_conflict_policy: match settings.default_conflict_policy {
             ConflictPolicyDto::Ask => ConflictPolicy::Ask,
             ConflictPolicyDto::Overwrite => ConflictPolicy::Overwrite,

@@ -251,6 +251,33 @@ function run(command, args, options = {}) {
   return result;
 }
 
+export function archivePathForTar(
+  archive,
+  workingDirectory = repositoryRoot,
+  platform = process.platform,
+) {
+  if (platform !== 'win32') return archive;
+  const relative = path.win32.relative(workingDirectory, archive);
+  if (relative === '' || path.win32.isAbsolute(relative)) {
+    return archive;
+  }
+  return relative.replaceAll('\\', '/');
+}
+
+export function tarExtractionArgs(
+  archive,
+  destination,
+  workingDirectory = repositoryRoot,
+  platform = process.platform,
+) {
+  return [
+    '-xzf',
+    archivePathForTar(archive, workingDirectory, platform),
+    '-C',
+    archivePathForTar(destination, workingDirectory, platform),
+  ];
+}
+
 export function verifyMacDeveloperIdSignature(file) {
   run('codesign', ['--verify', '--strict', '--verbose=2', file]);
   const result = run('codesign', ['-dv', '--verbose=4', file]);
@@ -261,7 +288,7 @@ export function verifyMacDeveloperIdSignature(file) {
 }
 
 function archiveMembers(archive) {
-  return run('tar', ['-tzf', archive]).stdout.split(/\r?\n/u);
+  return run('tar', ['-tzf', archivePathForTar(archive)]).stdout.split(/\r?\n/u);
 }
 
 export function verifyNativeArchitecture(bytes, descriptor) {
@@ -434,7 +461,7 @@ export async function preparePinnedZvecRuntime(descriptor, cacheRoot) {
   fs.mkdirSync(staging, { recursive: true });
   try {
     verifyArchiveMembers(archiveMembers(archive), descriptor);
-    run('tar', ['-xzf', archive, '-C', staging]);
+    run('tar', tarExtractionArgs(archive, staging));
     const verified = verifyExtractedDirectory(staging, descriptor);
     fs.mkdirSync(path.dirname(extractedDirectory), { recursive: true });
     fs.renameSync(staging, extractedDirectory);

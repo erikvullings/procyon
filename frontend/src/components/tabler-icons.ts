@@ -85,6 +85,28 @@ export const folderOpenIcon = trustedStrokeIcon(
   'fm-icon-folder-open',
 );
 
+/** Directory hierarchy — include nested directories in a search. */
+export const directoryTreeIcon = (attrs?: IconAttrs): m.Children => {
+  const size = attrs?.size ?? 18;
+  return m(
+    `svg.fm-icon.fm-icon-tabler.fm-icon-directory-tree${
+      attrs?.className === undefined ? '' : `.${attrs.className}`
+    }`,
+    {
+      'aria-hidden': 'true',
+      viewBox: '1.5 0.5 12 15',
+      width: size,
+      height: size,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-linecap': 'square',
+    },
+    m('path', {
+      d: 'M2 1v11h4m-4 -7h4m0 -2h2l2 2h3v3h-7Zm0 7h2l2 2h3v3h-7Z',
+    }),
+  );
+};
+
 /** "columns" — open a saved search in the opposite pane. */
 export const columnsIcon = trustedStrokeIcon(
   '<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><path d="M12 4l0 16" />',
@@ -119,6 +141,14 @@ export const compareIcon = trustedStrokeIcon(
 export const listIcon = trustedStrokeIcon(
   '<path d="M9 6l11 0" /><path d="M9 12l11 0" /><path d="M9 18l11 0" /><path d="M5 6l0 .01" /><path d="M5 12l0 .01" /><path d="M5 18l0 .01" />',
   'fm-icon-list',
+);
+
+/** "adjustments-horizontal" — grouped tools and utilities. */
+export const adjustmentsHorizontalIcon = trustedStrokeIcon(
+  '<path d="M4 6l5 0" /><path d="M15 6l5 0" /><path d="M9 4l0 4" />' +
+    '<path d="M4 12l9 0" /><path d="M17 12l3 0" /><path d="M13 10l0 4" />' +
+    '<path d="M4 18l3 0" /><path d="M11 18l9 0" /><path d="M7 16l0 4" />',
+  'fm-icon-adjustments-horizontal',
 );
 
 /** "menu-2" — compact document-navigation menu. */
@@ -201,6 +231,12 @@ export const gridDotsIcon = trustedStrokeIcon(
     '<path d="M12 16m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />' +
     '<path d="M19 16m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />',
   'fm-icon-grid-dots',
+);
+
+/** "dots" — compact overflow actions. */
+export const dotsIcon = trustedStrokeIcon(
+  '<path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />',
+  'fm-icon-dots',
 );
 
 /** "x" — close a dialog/disclosure panel. */

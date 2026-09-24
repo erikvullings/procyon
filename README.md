@@ -212,12 +212,8 @@ Download packaged builds from [GitHub Releases](https://github.com/erikvullings/
 macOS and x86_64 Linux users can also install through Homebrew:
 
 ```bash
-brew tap erikvullings/tap
-brew install --cask procyon
+brew install --cask erikvullings/tap/procyon
 ```
-
-Homebrew 6.0 and later may require `brew trust erikvullings/tap` before installing from a
-third-party tap.
 
 Windows packages are published to Chocolatey after community moderation:
 
@@ -226,7 +222,29 @@ choco install procyon
 ```
 
 macOS releases are signed and notarized. Windows releases are currently unsigned and can trigger a
-Microsoft Defender SmartScreen warning. Auto-update is not yet included.
+Microsoft Defender SmartScreen warning. Auto-update is not included.
+
+## Desktop releases
+
+The workspace version in `Cargo.toml` is the source for desktop tags named `v<version>`.
+`.github/workflows/release-desktop.yml` builds the Developer ID Application-signed and notarized
+macOS DMG, unsigned Windows MSI/NSIS installers, Linux `.deb` and AppImage packages, then updates
+Homebrew and Chocolatey.
+Release notes and a manual smoke pass are required before promotion. Protected release
+configuration includes `APPLE_CERTIFICATE`, `APPLE_API_KEY_P8`, `HOMEBREW_TAP_TOKEN`, and
+`CHOCOLATEY_API_KEY`.
+
+Optional semantic workers, native runtimes, models, and signed catalogs use the independent
+`.github/workflows/release-semantic-components.yml` flow and immutable `semantic-v*` releases.
+Qualification emits a reviewed fingerprint lock; publication reuses the exact retained artifacts.
+Desktop releases only fetch catalogs named by that lock, so semantic component failures do not
+block base application packaging and application failures do not rebuild component assets.
+
+## CI
+
+Pull requests run formatting, lint, tests, architecture checks, and unsigned desktop package
+smoke tests through `.github/workflows/ci.yml`. Release workflows run only from their documented
+tag or manual qualification boundaries.
 
 ## Project status
 

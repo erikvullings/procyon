@@ -14,6 +14,8 @@ export interface SessionTokenGateAttrs {
   /** Deferred so the gated subtree (and its `oninit`/network calls) is never
    * created until the token requirement is resolved. */
   readonly children: () => m.Children;
+  /** Flushes work deferred until the HTTP session is authenticated or confirmed auth-free. */
+  readonly onReady?: () => void;
 }
 
 /** A cheap, side-effect-free endpoint that requires a session token whenever
@@ -39,12 +41,13 @@ type GateStatus = 'checking' | 'prompting' | 'ready';
  * returns here, since it means the token was never valid or the server
  * restarted with a new one (tokens don't survive a restart, spec §22).
  */
-export const SessionTokenGate: FactoryComponent<SessionTokenGateAttrs> = () => {
+export const SessionTokenGate: FactoryComponent<SessionTokenGateAttrs> = ({ attrs }) => {
   const state = {
     status: (getSessionToken() !== undefined ? 'ready' : 'checking') as GateStatus,
     draft: '',
     error: undefined as string | undefined,
   };
+  if (state.status === 'ready') attrs.onReady?.();
 
   setSessionHeaderProvider(() => {
     const token = getSessionToken();
@@ -62,6 +65,7 @@ export const SessionTokenGate: FactoryComponent<SessionTokenGateAttrs> = () => {
     fetchMutator(PROBE_PATH)
       .then(() => {
         state.status = 'ready';
+        attrs.onReady?.();
       })
       .catch(() => {
         state.status = 'prompting';
@@ -77,6 +81,7 @@ export const SessionTokenGate: FactoryComponent<SessionTokenGateAttrs> = () => {
     state.draft = '';
     state.error = undefined;
     state.status = 'ready';
+    attrs.onReady?.();
   }
 
   return {

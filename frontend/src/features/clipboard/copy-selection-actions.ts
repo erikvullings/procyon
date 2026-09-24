@@ -1,5 +1,7 @@
 import { t } from '../../i18n';
 import type { EntrySummary, Location } from '../../models';
+import { parentLocation } from '../navigation/navigation';
+import { isParentEntry } from '../panes/parent-entry';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 /** Core actions that copy a textual representation of the selected entries. */
@@ -40,7 +42,9 @@ export function selectionClipboardText(
   return selectedEntries
     .map((entry) => {
       if (actionId === 'core.copyName') return entry.name;
-      const path = pathFromUri(entry.location.uri);
+      const path = pathFromUri(
+        isParentEntry(entry.id) ? parentLocation(activeDirectory).uri : entry.location.uri,
+      );
       return actionId === 'core.copyPath'
         ? path
         : relativePath(pathFromUri(activeDirectory.uri), path);

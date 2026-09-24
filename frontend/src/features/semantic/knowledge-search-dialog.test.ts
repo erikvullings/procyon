@@ -20,6 +20,7 @@ interface MountOptions {
   readonly currentFolder?: { providerId: string; uri: string };
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
+  readonly initialMode?: 'search' | 'ask';
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
@@ -35,6 +36,7 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         currentFolder: options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
+        initialMode: options.initialMode,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
       }),
@@ -70,10 +72,16 @@ function button(label: string): HTMLButtonElement {
   return found;
 }
 
+function searchButton(): HTMLButtonElement {
+  const found = root.querySelector<HTMLButtonElement>('.fm-knowledge-search-submit');
+  if (found === null) throw new Error('search button not rendered');
+  return found;
+}
+
 /** Waits until the dialog finished loading its reported capabilities and roots. */
 async function ready(): Promise<void> {
   await vi.waitFor(() => {
-    expect(root.textContent).not.toContain('Loading knowledge search…');
+    expect(root.textContent).not.toContain('Loading semantic search…');
     expect(root.querySelector('.fm-knowledge-advanced')).not.toBeNull();
   });
   m.redraw.sync();
@@ -107,6 +115,18 @@ afterEach(() => {
 });
 
 describe('KnowledgeSearchDialog (task 0206)', () => {
+  it('opens Ask as an aligned answer and evidence workspace', async () => {
+    mount({ initialMode: 'ask' });
+
+    await ready();
+
+    expect(button('Ask').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Search').getAttribute('aria-pressed')).toBe('false');
+    expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-answer-panel')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-evidence-panel')).not.toBeNull();
+  });
+
   it('uses a fixed filter-style toolbar and moves search settings into a modal', async () => {
     mount();
 
@@ -123,18 +143,77 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const settings = toolbar?.querySelector<HTMLButtonElement>(
       'button[aria-label="Search settings"]',
     );
-    expect(settings).not.toBeNull();
-    expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-needs')).toBeNull();
+    expect(settings).toBeNull();
+    const options = root.querySelector('.fm-knowledge-search-options');
+    expect(options).not.toBeNull();
+    expect(options?.textContent).toContain('Search for:');
+    const more = options?.querySelector<HTMLButtonElement>('button[aria-label="Search settings"]');
+    expect(more).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-search-options > .fm-knowledge-needs')).not.toBeNull();
     expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced')).toBeNull();
 
-    settings?.click();
+    more?.click();
     m.redraw.sync();
 
     expect(root.querySelector('.fm-knowledge-settings-modal')).not.toBeNull();
-    expect(root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-needs')).not.toBeNull();
     expect(
       root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-advanced'),
     ).not.toBeNull();
+  });
+
+  it('offers one-way inclusion for an unindexed current folder', async () => {
+    const currentFolder = { providerId: 'local', uri: 'file:///documents' };
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+      consent: 'notIncluded',
+      rootId: null,
+      exclusionId: null,
+      workspaceReferenced: false,
+      sourceAvailable: true,
+      unavailableReason: null,
+    });
+    mount({ client, currentFolder });
+
+    await ready();
+
+    const include = root.querySelector<HTMLInputElement>(
+      '.fm-knowledge-include-folder input[type="checkbox"]',
+    );
+    expect(include?.checked).toBe(false);
+    expect(include?.parentElement?.textContent).toContain('Include folder');
+    include?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-folder-prompt')).not.toBeNull());
+  });
+
+  it('does not offer folder removal when the current folder is already included', async () => {
+    const currentFolder = { providerId: 'local', uri: 'file:///documents' };
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+      consent: 'includedHere',
+      rootId: 'root-1',
+      exclusionId: null,
+      workspaceReferenced: true,
+      sourceAvailable: true,
+      unavailableReason: null,
+    });
+    mount({ client, currentFolder });
+
+    await ready();
+
+    expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-search-options')?.textContent).toContain(
+      'Search for:',
+    );
+  });
+
+  it('closes the transient search pane from the toolbar close button', async () => {
+    const onClose = vi.fn();
+    mount({ onClose });
+
+    await ready();
+    button('Close Semantic Search').click();
+
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('restores and persists selected knowledge needs across pane instances', async () => {
@@ -196,6 +275,45 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(document.activeElement).toBe(subjects());
     expect(root.textContent).toContain('Compose a subject, then search your indexed documents.');
     expect(root.querySelector('.fm-knowledge-results')).toBeNull();
+  });
+
+  it('shows and enforces the empty-index state before a query is submitted', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([]);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).toContain(
+      'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
+    );
+    expect(searchButton().disabled).toBe(true);
+    submitSearch();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes an enrolled root whose initial indexing has not completed', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'pending-root',
+        label: 'Basisschool',
+        location: { providerId: 'local', uri: 'file:///OneDrive/Basisschool' },
+        recursive: true,
+        indexedGeneration: 0,
+        available: true,
+      },
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).toContain(
+      'This folder is included and still being indexed. You can search documents that are already available.',
+    );
+    expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
+    expect(searchButton().disabled).toBe(false);
   });
 
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {
@@ -322,7 +440,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await search();
 
     expect(root.querySelector('.fm-knowledge-results-section')?.getAttribute('aria-label')).toBe(
-      'Knowledge search results',
+      'Semantic search results',
     );
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
     expect(root.querySelector('.fm-knowledge-document-list')).not.toBeNull();
@@ -351,6 +469,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             ...first,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: '## Su-Field model\n\nA **substance-field** section.',
+            fusedScore: 0.023456,
             sectionPath: ['Standards', 'Su-Field synthesis'],
             provenance:
               '{"kind":"exact","value":{"kind":"pdfBlock","page_number":167,"block_index":3}}',
@@ -361,6 +480,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             recordId: `${first.recordId}-page-168`,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: 'A continuation without an indexed heading.',
+            fusedScore: 0.012345,
+            finalRank: 8,
             sectionPath: [],
             provenance:
               '{"kind":"span","value":{"first":{"kind":"pdfBlock","page_number":168,"block_index":0},"last":{"kind":"pdfBlock","page_number":168,"block_index":2}}}',
@@ -387,6 +508,19 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const pages = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-page-link');
     expect(pages[0]?.textContent).toBe('Page 167');
     expect(pages[1]?.textContent).toBe('Page 168');
+    const relevance = [...root.querySelectorAll<HTMLElement>('.fm-knowledge-relevance-indicator')];
+    expect(relevance.map((indicator) => indicator.getAttribute('aria-label'))).toEqual([
+      'High relevance',
+      'Medium relevance',
+    ]);
+    expect(relevance.map((indicator) => indicator.tabIndex)).toEqual([0, 0]);
+    expect(relevance.map((indicator) => indicator.parentElement?.dataset.tooltip)).toEqual([
+      'High relevance',
+      'Medium relevance',
+    ]);
+    expect(relevance.map((indicator) => indicator.dataset.strength)).toEqual(['high', 'medium']);
+    expect(root.textContent).not.toContain('0.023');
+    expect(root.textContent).not.toContain('0.012');
     expect(root.textContent).not.toContain('Matching section');
     expect(root.querySelector('.fm-knowledge-result-markdown h2')?.textContent).toBe(
       'Su-Field model',
@@ -497,7 +631,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
-        'Knowledge search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
+        'Semantic search encountered an internal error. Try again; if it continues, rebuild the semantic index.',
       ),
     );
   });
@@ -527,7 +661,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
-        'Knowledge search is not available right now.',
+        'Semantic search is not available right now.',
       ),
     );
   });
@@ -549,7 +683,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       'true',
     );
     expect(root.querySelector('.fm-knowledge-search-spinner')).not.toBeNull();
-    expect(button('Search').disabled).toBe(true);
+    expect(searchButton().disabled).toBe(true);
     expect(() => button('Cancel search')).toThrow();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search-spinner')).toBeNull());
@@ -585,13 +719,13 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     subjects().dispatchEvent(newline);
     expect(newline.defaultPrevented).toBe(false);
     expect(execute).not.toHaveBeenCalled();
-    expect(button('Search').disabled).toBe(false);
+    expect(searchButton().disabled).toBe(false);
 
     submitSearch();
 
     await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(button('Search').disabled).toBe(false));
-    button('Search').click();
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+    searchButton().click();
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
   });
 
@@ -601,7 +735,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     expect(subjects().getAttribute('aria-describedby')).toBeNull();
     expect(root.querySelector('#fm-knowledge-subjects-hint')).toBeNull();
-    expect(root.querySelector('.fm-knowledge-needs legend')?.textContent).toBe('What do you need?');
+    expect(root.querySelector('.fm-knowledge-needs legend')?.textContent).toBe('Search for:');
     expect(root.querySelector('.fm-knowledge-modes legend')?.textContent).toBe('Retrieval');
     expect(root.querySelector('.fm-knowledge-results-body')?.getAttribute('aria-live')).toBe(
       'polite',
@@ -907,7 +1041,7 @@ describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
     type(dsl(), '');
 
     await vi.waitFor(() => expect(subjects().value).toBe(''));
-    expect(button('Search').disabled).toBe(true);
+    expect(searchButton().disabled).toBe(true);
   });
 
   it('discards a parse that lands after a further edit', async () => {
@@ -1375,7 +1509,7 @@ describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
       answerGeneration: true,
     });
     mount({ client, initialSubject: 'retrieval' });
-    await vi.waitFor(() => expect(root.textContent).toContain('What do you need?'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Search for:'));
 
     expect(root.textContent).not.toContain('Generate answer');
     expect(root.querySelector('.fm-knowledge-answer')).toBeNull();
@@ -1526,6 +1660,24 @@ async function answersReady(): Promise<void> {
 }
 
 describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
+  it('retrieves once and answers automatically in Ask mode', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    mount({ client, initialSubject: 'retrieval', initialMode: 'ask' });
+    await answersReady();
+
+    submitSearch();
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    expect(execute).toHaveBeenCalledOnce();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')?.textContent).toContain(
+      'Answered from',
+    );
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
   it('never offers answer controls when the host reports no answer capability', async () => {
     mount({ initialSubject: 'retrieval' });
     await ready();

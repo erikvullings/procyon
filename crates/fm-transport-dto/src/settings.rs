@@ -189,6 +189,8 @@ pub struct SettingsDto {
     pub show_hidden_files: bool,
     /// Confirm permanent deletion.
     pub confirm_permanent_delete: bool,
+    /// Confirm routine copy, move, and Trash operations before they start.
+    pub confirm_file_operations: bool,
     /// Default operation conflict policy.
     pub default_conflict_policy: ConflictPolicyDto,
     /// Maximum concurrent operations.

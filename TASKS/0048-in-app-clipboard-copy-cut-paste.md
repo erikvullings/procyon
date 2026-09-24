@@ -39,3 +39,5 @@ application.
   remains intentionally deferred to the platform adapter in task 0058; the in-app clipboard works
   in every current host. Verified with affected Vitest suites, `pnpm --dir frontend typecheck`,
   `cargo test -p fm-application --test copy_file_operation`, and affected Rust crate tests.
+- 2026-11-14 — Routed clipboard copy/move through the configurable routine-operation confirmation.
+  Declining a cut-paste keeps the cut clipboard intact; it is cleared only after the move starts.

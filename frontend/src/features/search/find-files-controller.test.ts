@@ -33,6 +33,8 @@ describe('searchQueryFromParams', () => {
         filenameQuery: '*.md',
         contentQuery: 'TODO',
         contentRegex: true,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
         recurse: false,
         mimeTypes: ['text/*'],
         tags: ['work'],
@@ -43,7 +45,12 @@ describe('searchQueryFromParams', () => {
 
     expect(updated.scope).toEqual({ ...existing.scope, recurse: false });
     expect(updated.name).toEqual(existing.name);
-    expect(updated.content).toEqual({ ...existing.content, regex: true });
+    expect(updated.content).toEqual({
+      ...existing.content,
+      regex: true,
+      caseSensitive: false,
+      wholeWord: false,
+    });
     expect(updated.entryKinds).toEqual(existing.entryKinds);
     expect(updated.gitStatuses).toEqual(existing.gitStatuses);
     expect(updated.metadata).toEqual(existing.metadata);
@@ -73,6 +80,8 @@ describe('FindFilesController refresh', () => {
     const params: FindFilesSearchParams = {
       filenameQuery: 'report',
       contentRegex: false,
+      contentCaseSensitive: false,
+      contentWholeWord: false,
       recurse: true,
     };
     const startSearch = vi.fn().mockResolvedValue({

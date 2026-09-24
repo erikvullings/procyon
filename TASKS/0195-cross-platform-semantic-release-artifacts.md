@@ -48,12 +48,13 @@ arm64 locally but is not a redistributable or production-trusted package.
   paths. Added a deterministic packer in
   `crates/fm-semantic-components/src/release_bundle.rs` that verifies the pinned multilingual-E5
   cache, emits content-addressed worker/Zvec/model payloads, and records exact pipeline provenance.
-  `.github/workflows/release-desktop.yml` now builds macOS arm64, Windows x86-64, Linux x86-64, and
-  Linux arm64 payloads separately from desktop installers, signs and notarizes macOS executable
-  payloads under the existing release policy, invokes protected catalog signing, deduplicates the
-  target-independent model, and publishes only after protocol, real-model activation, and component
-  lifecycle tests. The packaged-binary smoke test launches the content-addressed worker through the
-  managed connector, and Unix installation restores an owner-only executable bit after artifact
-  transport. Intel macOS is explicitly unsupported because Zvec 0.7.0 has no matching runtime. A
-  real 523 MiB macOS arm64 bundle built from the pinned 465 MiB model cache and passed protocol,
-  offline production-model activation, and lifecycle smoke tests.
+  `.github/workflows/release-desktop.yml` originally built macOS arm64, Windows x86-64, Linux
+  x86-64, and Linux arm64 payloads separately from desktop installers. The independent semantic
+  component release design moved those builds, protected catalog signing, qualification, and
+  exact-byte publication to
+  `.github/workflows/release-semantic-components.yml`; desktop releases now consume the approved
+  immutable component lock. The packaged-binary smoke test launches the content-addressed worker
+  through the managed connector, and Unix installation restores an owner-only executable bit after
+  artifact transport. Intel macOS is explicitly unsupported because Zvec 0.7.0 has no matching
+  runtime. A real 523 MiB macOS arm64 bundle built from the pinned 465 MiB model cache and passed
+  protocol, offline production-model activation, and lifecycle smoke tests.

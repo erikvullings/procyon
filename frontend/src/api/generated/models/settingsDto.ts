@@ -22,6 +22,8 @@ import type { ThemeDto } from './themeDto.ts';
 export interface SettingsDto {
   /** Column widths in CSS pixels, keyed by column id, shared by every tab and pane. */
   columnWidths: SettingsDtoColumnWidths;
+  /** Confirm routine copy, move, and Trash operations before they start. */
+  confirmFileOperations: boolean;
   /** Confirm permanent deletion. */
   confirmPermanentDelete: boolean;
   /** Timestamp presentation. */

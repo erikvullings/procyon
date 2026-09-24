@@ -81,7 +81,12 @@ export interface NavigationController {
    * snapshot fetch (see fm-search results not appearing after navigating to `search://`).
    */
   load(paneId: PaneId, options?: { readonly background?: boolean }): Promise<void>;
-  navigate(paneId: PaneId, location: Location, preferredCursorName?: string): Promise<void>;
+  navigate(
+    paneId: PaneId,
+    location: Location,
+    preferredCursorName?: string,
+    options?: { readonly preserveCurrentOnError?: boolean },
+  ): Promise<void>;
   parent(paneId: PaneId): Promise<void>;
   back(paneId: PaneId): Promise<void>;
   forward(paneId: PaneId): Promise<void>;
@@ -571,6 +576,7 @@ export function createNavigationController(
     navigationMode: 'push' | 'back' | 'forward',
     location?: Location,
     preferredCursorName?: string,
+    navigationOptions?: { readonly preserveCurrentOnError?: boolean },
   ): Promise<void> {
     const workspace = options.getWorkspace();
     const pane = workspace?.panesById[paneId];
@@ -584,17 +590,9 @@ export function createNavigationController(
     ) {
       return;
     }
+    const previousView = paneViews.get(tabKey(paneId, tab.id));
     const request = begin(paneId, tab.id, 'navigate');
     publish(paneId, tab.id, loadingView(paneId, tab.id, request, location ?? tab.location));
-    const command: WorkspaceCommand = {
-      type: 'navigateTab',
-      workspaceId: workspace.id,
-      paneId,
-      tabId: tab.id,
-      navigationMode,
-      expectedRevision: workspace.revision,
-      ...(location === undefined ? {} : { location }),
-    };
     const navigatePane = async (
       currentWorkspaceId: string,
       currentPaneId: PaneId,
@@ -641,6 +639,16 @@ export function createNavigationController(
       if (!isCurrent(paneId, tab.id, request)) {
         return;
       }
+      const resolvedLocation = pendingSnapshot?.location ?? location;
+      const command: WorkspaceCommand = {
+        type: 'navigateTab',
+        workspaceId: workspace.id,
+        paneId,
+        tabId: tab.id,
+        navigationMode,
+        expectedRevision: workspace.revision,
+        ...(resolvedLocation === undefined ? {} : { location: resolvedLocation }),
+      };
       // Goes through the resilient wrapper (not the raw client call) so a revision conflict
       // still resyncs the local workspace projection via `options.replaceWorkspace` even though
       // push/back/forward navigation isn't safe to silently retry — otherwise the local revision
@@ -680,6 +688,10 @@ export function createNavigationController(
         options.onLocationUnavailable?.(workspace.id, location);
       }
       if (isCurrent(paneId, tab.id, request)) {
+        if (navigationOptions?.preserveCurrentOnError === true) {
+          if (previousView !== undefined) publish(paneId, tab.id, previousView);
+          throw error;
+        }
         const currentTab = options.getWorkspace();
         publish(paneId, tab.id, {
           state: { type: 'error', message: errorMessage(error) },
@@ -783,8 +795,8 @@ export function createNavigationController(
 
   return {
     load,
-    navigate: (paneId, location, preferredCursorName) =>
-      navigateHistory(paneId, 'push', location, preferredCursorName),
+    navigate: (paneId, location, preferredCursorName, navigationOptions) =>
+      navigateHistory(paneId, 'push', location, preferredCursorName, navigationOptions),
     parent: async (paneId) => {
       const workspace = options.getWorkspace();
       const tab = workspace === undefined ? undefined : activeTab(workspace, paneId);

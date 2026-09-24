@@ -1390,6 +1390,7 @@ mod tests {
             distance_metric: DistanceMetric::Cosine,
             model_revision: "embed-revision".into(),
             tokenizer: "tokenizer-revision".into(),
+            embedding_preprocessing: "unicode-default-case-fold/1".into(),
             normalization: VectorNormalization::L2,
             chunker_version: "structural/2".into(),
             converter_version: "text/1".into(),

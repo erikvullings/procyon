@@ -183,13 +183,24 @@ function editMenu(actions: readonly ActionDescriptor[], useNativeEditRoles: bool
 function viewMenu(actions: readonly ActionDescriptor[]): NativeMenu {
   return {
     title: t('menu', 'view'),
-    items: actionItems(actions, [
-      'core.sortByName',
-      'core.sortByExtension',
-      'core.sortByDate',
-      'core.sortBySize',
-      'core.sortUnsorted',
-    ]),
+    items: [
+      {
+        kind: 'action',
+        id: 'ui.reloadWebview',
+        title: t('editor', 'reload'),
+        shortcut: { key: 'r', meta: true },
+        enabled: true,
+        checked: false,
+      },
+      { kind: 'separator' },
+      ...actionItems(actions, [
+        'core.sortByName',
+        'core.sortByExtension',
+        'core.sortByDate',
+        'core.sortBySize',
+        'core.sortUnsorted',
+      ]),
+    ],
   };
 }
 

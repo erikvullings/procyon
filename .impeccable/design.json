@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T13:15:47Z",
+  "title": "Design System: Procyon",
+  "extensions": {
+    "colorMeta": {
+      "day-accent": {
+        "role": "primary",
+        "displayName": "Instrument Blue",
+        "canonical": "#075ea8",
+        "tonalRamp": ["#06213a", "#06365d", "#064a82", "#075ea8", "#2b79bd", "#5c99d1", "#94bce3", "#d0e5f5"]
+      },
+      "night-accent": {
+        "role": "primary",
+        "displayName": "Night Instrument Blue",
+        "canonical": "#79b8ff",
+        "tonalRamp": ["#10243d", "#173c63", "#24598b", "#3679b5", "#5799dc", "#79b8ff", "#acd3ff", "#e1f0ff"]
+      },
+      "cursor-blue": {
+        "role": "primary",
+        "displayName": "Cursor Blue",
+        "canonical": "#285fa8",
+        "tonalRamp": ["#0d2038", "#14345a", "#1c477d", "#285fa8", "#4c7abd", "#7699d0", "#a8bbe2", "#d9e3f4"]
+      },
+      "day-canvas": {
+        "role": "neutral",
+        "displayName": "Day Canvas",
+        "canonical": "#f4f6f8",
+        "tonalRamp": ["#202326", "#3d4247", "#5d636a", "#80868d", "#a4aab0", "#c7ccd1", "#e2e6ea", "#f4f6f8"]
+      },
+      "day-text": {
+        "role": "neutral",
+        "displayName": "Day Ink",
+        "canonical": "#344054",
+        "tonalRamp": ["#171b23", "#26303f", "#344054", "#536177", "#768398", "#9ca7b6", "#c4cbd4", "#edf0f3"]
+      },
+      "day-border": {
+        "role": "neutral",
+        "displayName": "Day Divider",
+        "canonical": "#c8ced8",
+        "tonalRamp": ["#202329", "#3d424b", "#5c626d", "#7d8490", "#9fa6b1", "#c8ced8", "#e0e4e9", "#f5f6f8"]
+      },
+      "night-canvas": {
+        "role": "neutral",
+        "displayName": "Night Canvas",
+        "canonical": "#11151a",
+        "tonalRamp": ["#11151a", "#202832", "#35414e", "#53606e", "#75818e", "#9aa4ad", "#c2c8ce", "#eef0f2"]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "#1b2129",
+        "tonalRamp": ["#11151a", "#1b2129", "#303945", "#4b5663", "#6c7783", "#929ba5", "#bbc1c7", "#eaedef"]
+      },
+      "night-elevated": {
+        "role": "neutral",
+        "displayName": "Night Raised Surface",
+        "canonical": "#252d38",
+        "tonalRamp": ["#14191f", "#252d38", "#3b4653", "#586471", "#77828d", "#9ba4ad", "#c0c6cb", "#eceeef"]
+      },
+      "night-text": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#d3dae3",
+        "tonalRamp": ["#202328", "#3d4249", "#5c626a", "#7d848c", "#9fa6ae", "#bcc3cb", "#d3dae3", "#f1f3f5"]
+      },
+      "night-border": {
+        "role": "neutral",
+        "displayName": "Night Divider",
+        "canonical": "#485463",
+        "tonalRamp": ["#171c22", "#2a333d", "#485463", "#65717e", "#828d98", "#a2abb4", "#c5cbd1", "#eef0f2"]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Operational Danger",
+        "canonical": "#b42318",
+        "tonalRamp": ["#380e0a", "#64140e", "#8b1a12", "#b42318", "#cf493e", "#e8776e", "#f3aaa4", "#fbe0dd"]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Operational Warning",
+        "canonical": "#8a4b08",
+        "tonalRamp": ["#2d1803", "#4b2804", "#693906", "#8a4b08", "#ac6821", "#cc8c4b", "#e5b984", "#f7e7cd"]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Operational Success",
+        "canonical": "#18723c",
+        "tonalRamp": ["#082714", "#0d4222", "#125d31", "#18723c", "#3b8f5b", "#68ae7e", "#9bcbaa", "#d5eadb"]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Operational Title",
+        "purpose": "Compact dialog, pane, tab, and section titles."
+      },
+      "body": {
+        "displayName": "Interface Body",
+        "purpose": "Default file metadata, controls, settings, and status copy."
+      },
+      "label": {
+        "displayName": "Field Label",
+        "purpose": "Quiet static labels above compact controls."
+      },
+      "mono": {
+        "displayName": "Technical Mono",
+        "purpose": "Terminal content, code, hashes, and aligned technical values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay-light",
+        "value": "0 8px 24px rgb(23 32 51 / 16%)",
+        "purpose": "Temporary overlays on the light workspace."
+      },
+      {
+        "name": "overlay-dark",
+        "value": "0 8px 24px rgb(0 0 0 / 45%)",
+        "purpose": "Temporary overlays on the dark workspace."
+      }
+    ],
+    "motion": [
+      {
+        "name": "direct-state",
+        "value": "none",
+        "purpose": "Default for dense controls and labels; state changes should feel immediate."
+      },
+      {
+        "name": "short-spatial",
+        "value": "120ms ease-out",
+        "purpose": "Reserved for small spatial cues such as a caret rotation."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-form",
+        "value": "640px"
+      },
+      {
+        "name": "narrow-layout",
+        "value": "44rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The decisive action in a compact dialog or action group.",
+      "html": "<button class=\"ds-btn-primary\">Copy</button>",
+      "css": ".ds-btn-primary { min-height: var(--fm-row-height, 20px); padding: 2px 4px; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-accent, #075ea8); color: var(--fm-surface, #fff); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-primary:active { filter: brightness(0.94); }"
+    },
+    {
+      "name": "Flat Action",
+      "kind": "button",
+      "refersTo": "button-flat",
+      "description": "A secondary command that stays visually inside the working plane.",
+      "html": "<button class=\"ds-btn-flat\">Cancel</button>",
+      "css": ".ds-btn-flat { min-height: var(--fm-row-height, 20px); padding: 2px 4px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--fm-text, #344054); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-flat:hover, .ds-btn-flat:focus-visible { background: var(--fm-hover, #e9eef4); } .ds-btn-flat:focus-visible { outline: 1px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-flat:active { background: var(--fm-selection-inactive, #e2e8f0); }"
+    },
+    {
+      "name": "Compact Text Field",
+      "kind": "input",
+      "refersTo": "input-compact",
+      "description": "A dense, statically labeled text-entry control.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Name</span><input class=\"ds-input\" value=\"report\" /></label>",
+      "css": ".ds-field { display: grid; gap: 3px; color: var(--fm-text-muted, #667085); font: 400 0.82rem/1.15 Inter, ui-sans-serif, sans-serif; } .ds-input { box-sizing: border-box; width: 100%; height: var(--fm-row-height, 20px); padding: 0 0.55rem; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-surface, #fff); color: var(--fm-text, #344054); font: 400 13px/1 Inter, ui-sans-serif, sans-serif; } .ds-input:hover { border-color: var(--fm-text-muted, #667085); } .ds-input:focus-visible { border-color: var(--fm-border, #c8ced8); outline: none; box-shadow: none; }"
+    },
+    {
+      "name": "Pane Tabs",
+      "kind": "nav",
+      "refersTo": "pane-tabs",
+      "description": "Compact location tabs that form a continuous pane header.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Locations\"><button class=\"ds-tab\">Home</button><button class=\"ds-tab ds-tab-active\" aria-current=\"page\">Tasks</button><button class=\"ds-tab\">Archive</button></nav>",
+      "css": ".ds-tabs { display: flex; height: 24px; border-bottom: 1px solid var(--fm-border, #485463); background: var(--fm-background, #11151a); } .ds-tab { min-width: 6rem; padding: 0 8px; border: 0; border-right: 1px solid var(--fm-border, #485463); border-radius: 0; background: var(--fm-tab-inactive-background, #1d2026); color: var(--fm-text-muted, #98a3b0); font: 600 13px/24px Inter, ui-sans-serif, sans-serif; } .ds-tab:hover, .ds-tab:focus-visible { background: var(--fm-hover, #29333f); color: var(--fm-text, #d3dae3); outline: none; } .ds-tab-active { background: var(--fm-surface, #1b2129); color: var(--fm-text, #d3dae3); }"
+    },
+    {
+      "name": "Directory Row",
+      "kind": "custom",
+      "refersTo": "directory-row",
+      "description": "The signature 20px file-list row with stable metadata columns.",
+      "html": "<div class=\"ds-file-row\"><span class=\"ds-file-name\"><svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M1.5 3.5h5l1.5 2h6.5v7h-13z\" /></svg>project</span><span>Folder</span><span>--</span><span>Today 13:15</span></div>",
+      "css": ".ds-file-row { display: grid; grid-template-columns: minmax(10rem, 1fr) 5rem 5rem 9rem; align-items: center; height: var(--fm-row-height, 20px); padding: 0 4px; background: var(--fm-surface, #1b2129); color: var(--fm-text, #d3dae3); font: 400 13px/20px Inter, ui-sans-serif, sans-serif; } .ds-file-row:hover { background: var(--fm-hover, #29333f); } .ds-file-row:focus-visible { outline: 1px solid var(--fm-accent, #79b8ff); outline-offset: -1px; } .ds-file-name { display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .ds-file-name svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1; }"
+    },
+    {
+      "name": "Cursor Directory Row",
+      "kind": "custom",
+      "refersTo": "directory-row-cursor",
+      "description": "The authoritative keyboard cursor state in a directory listing.",
+      "html": "<div class=\"ds-file-row-cursor\"><span>README.md</span><span>md</span><span>26.3 KiB</span><span>Today 13:15</span></div>",
+      "css": ".ds-file-row-cursor { display: grid; grid-template-columns: minmax(10rem, 1fr) 5rem 5rem 9rem; align-items: center; height: var(--fm-row-height, 20px); padding: 0 4px; background: var(--fm-cursor-row-background, #285fa8); color: var(--fm-cursor-row-text, #fff); font: 400 13px/20px Inter, ui-sans-serif, sans-serif; box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background, #285fa8); } .ds-file-row-cursor:hover { filter: brightness(1.05); } .ds-file-row-cursor:focus-visible { outline: 1px solid #fff; outline-offset: -2px; }"
+    },
+    {
+      "name": "Operational Dialog",
+      "kind": "card",
+      "refersTo": "dialog",
+      "description": "A raised decision layer with a stable title and action footer.",
+      "html": "<section class=\"ds-dialog\" role=\"dialog\" aria-labelledby=\"ds-dialog-title\"><header id=\"ds-dialog-title\">Confirm copy</header><div class=\"ds-dialog-body\">Copy 14 items to Projects?</div><footer><button>Cancel</button><button class=\"ds-dialog-primary\">Copy</button></footer></section>",
+      "css": ".ds-dialog { width: min(28rem, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--fm-border, #485463); border-radius: var(--fm-radius, 4px); background: var(--fm-surface-elevated, #252d38); color: var(--fm-text, #d3dae3); font: 400 13px/1.35 Inter, ui-sans-serif, sans-serif; box-shadow: var(--fm-shadow, 0 8px 24px rgb(0 0 0 / 45%)); } .ds-dialog header, .ds-dialog footer { padding: 8px 12px; border-color: var(--fm-border, #485463); font-weight: 600; } .ds-dialog header { border-bottom: 1px solid var(--fm-border, #485463); } .ds-dialog-body { min-height: 4rem; padding: 12px; } .ds-dialog footer { display: flex; justify-content: flex-end; gap: 4px; border-top: 1px solid var(--fm-border, #485463); } .ds-dialog button { min-height: 20px; padding: 2px 6px; border: 1px solid var(--fm-border, #485463); border-radius: 2px; background: transparent; color: inherit; } .ds-dialog button:hover, .ds-dialog button:focus-visible { background: var(--fm-hover, #29333f); outline: none; } .ds-dialog .ds-dialog-primary { background: var(--fm-accent, #79b8ff); color: var(--fm-background, #11151a); }"
+    },
+    {
+      "name": "Function Key Bar",
+      "kind": "nav",
+      "refersTo": "function-bar",
+      "description": "The persistent keyboard command strip at the bottom of the workspace.",
+      "html": "<nav class=\"ds-function-bar\" aria-label=\"File commands\"><button><kbd>F2</kbd> Rename</button><button><kbd>F5</kbd> Copy</button><button><kbd>F6</kbd> Move</button><button><kbd>F8</kbd> Trash</button></nav>",
+      "css": ".ds-function-bar { display: grid; grid-template-columns: repeat(4, 1fr); height: 24px; border-top: 1px solid var(--fm-border, #485463); background: var(--fm-surface-elevated, #252d38); } .ds-function-bar button { border: 0; border-right: 1px solid var(--fm-border, #485463); border-radius: 0; background: transparent; color: var(--fm-text, #d3dae3); font: 400 13px/24px Inter, ui-sans-serif, sans-serif; } .ds-function-bar button:hover, .ds-function-bar button:focus-visible { background: var(--fm-hover, #29333f); outline: none; } .ds-function-bar button:active { background: var(--fm-selection, #244f78); } .ds-function-bar kbd { color: var(--fm-text-muted, #98a3b0); font: inherit; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Operations Deck",
+    "overview": "Procyon is an operations surface, not a presentation surface. It should feel like a calm command deck built for sustained, high-volume file work: dense enough to keep two directory contexts visible, exact enough to support keyboard habits, and quiet enough that selection, conflict, and progress states remain immediately legible. The visual system favors information capacity and stable geometry over decorative whitespace.\n\nThe interface uses flat tonal layers, fine separators, compact controls, and a restrained blue signal color. Brand character comes from disciplined alignment, decisive cursor states, dual-pane symmetry, and the function-key rhythm rather than ornament. It should not drift into a spacious consumer dashboard, a glowing sci-fi terminal, or a generic rounded-card application.",
+    "keyCharacteristics": [
+      "Dense 20px operational rows and 24px structural headers.",
+      "Calm blue-gray neutrals in light and dark themes.",
+      "One strong cursor blue for immediate location and action context.",
+      "Borders and tonal shifts define structure; shadows belong to overlays.",
+      "Keyboard-first behavior with visible, compact command affordances."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rarity Rule",
+        "body": "Blue communicates location, focus, selection, or action. Do not use it as decorative fill across large passive regions.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cursor Supremacy Rule",
+        "body": "The cursor row must be the strongest state in a file list; multi-selection, hover, zebra striping, and search highlighting must not compete with it.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Hero Type Rule",
+        "body": "Application typography should never consume working area for visual drama. Hierarchy comes from weight, alignment, and tonal contrast before size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-at-Rest Rule",
+        "body": "Permanent workspace structure uses tone and borders. A shadow means that a temporary layer is above the working plane.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the 20px row and 24px header rhythm for core file-management surfaces.",
+      "Do use borders and tonal layers to make pane ownership and hierarchy immediately scannable.",
+      "Do keep the cursor row visually stronger than selection, hover, striping, and search marks.",
+      "Do keep primary actions scarce and explicit; secondary actions should remain flat.",
+      "Do maintain equivalent visual behavior across browser and Tauri hosts.",
+      "Do keep focus, selection, disabled, error, and progress states accessible without depending on color alone."
+    ],
+    "donts": [
+      "Don't turn Procyon into a spacious card dashboard or add whitespace that reduces simultaneous file context.",
+      "Don't use gradients, glass effects, glow, or ambient shadows on permanent workspace regions.",
+      "Don't round every container; rows, panes, tabs, and structural bars should remain rectilinear.",
+      "Don't introduce oversized headings, decorative typography, or icon-only actions without accessible names.",
+      "Don't let modals, drawers, or toolbars make their primary action scroll off-screen.",
+      "Don't create host-specific visual behavior that breaks browser/Tauri parity."
+    ]
+  }
+}

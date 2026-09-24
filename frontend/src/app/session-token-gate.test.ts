@@ -20,9 +20,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mountGate(childText = 'gated content') {
+function mountGate(childText = 'gated content', onReady?: () => void) {
   m.mount(root, {
-    view: () => m(SessionTokenGate, { children: () => m('div', childText) }),
+    view: () =>
+      m(SessionTokenGate, {
+        children: () => m('div', childText),
+        ...(onReady === undefined ? {} : { onReady }),
+      }),
   });
   m.redraw.sync();
 }
@@ -43,13 +47,15 @@ describe('SessionTokenGate', () => {
   });
 
   it('steps aside and renders the gated content when the probe succeeds unauthenticated (dev mode)', async () => {
+    const onReady = vi.fn();
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(jsonResponse(200, { runtimeKind: 'browserServer' })),
     );
-    mountGate();
+    mountGate('gated content', onReady);
 
     await vi.waitFor(() => expect(root.textContent).toContain('gated content'));
+    expect(onReady).toHaveBeenCalledOnce();
   });
 
   it('prompts for a token when the probe is rejected as unauthorized', async () => {

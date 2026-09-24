@@ -367,6 +367,8 @@ describe('Pane inline rename', () => {
     expect(input?.value).toBe('one.txt');
     expect(input?.selectionStart).toBe(0);
     expect(input?.selectionEnd).toBe(3);
+    expect(input?.closest('.fm-directory-row')?.classList).not.toContain('fm-cursor-row');
+    expect(input?.closest('.fm-directory-name')?.querySelector('.fm-entry-icon')).not.toBeNull();
 
     if (input === null) throw new Error('rename input missing');
     input.value = '../bad';
@@ -389,6 +391,83 @@ describe('Pane inline rename', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onRename).toHaveBeenCalledWith(entries[0], 'renamed.txt');
     expect(document.activeElement).toBe(pane);
+  });
+
+  it('blocks folder navigation until inline rename is committed or cancelled', () => {
+    const onNavigate = vi.fn();
+    const onOpenEntry = vi.fn();
+    const onSelectTab = vi.fn();
+    mount(
+      attrs({
+        cursorIndex: 0,
+        selectedEntryIds: new Set(['one' as EntryId]),
+        tabs: [...defaultTabs, { id: 'tab-2' as TabId, title: 'other', path: '/home/other' }],
+        onNavigate,
+        onOpenEntry,
+        onSelectTab,
+      }),
+    );
+    const pane = root.querySelector<HTMLElement>('.fm-pane');
+    pane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    m.redraw.sync();
+
+    root.querySelector<HTMLButtonElement>('.fm-breadcrumb-segment')?.click();
+    root
+      .querySelector<HTMLElement>('.fm-directory-row[data-entry-index="1"]')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    root.querySelector<HTMLElement>('[data-tab-id="tab-2"]')?.click();
+
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(onOpenEntry).not.toHaveBeenCalled();
+    expect(onSelectTab).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-inline-rename-input')).not.toBeNull();
+
+    root
+      .querySelector<HTMLInputElement>('.fm-inline-rename-input')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-breadcrumb-segment')?.click();
+    expect(onNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('discards stale inline rename state after an external navigation', () => {
+    const initial = attrs({
+      cursorIndex: 0,
+      selectedEntryIds: new Set(['one' as EntryId]),
+    });
+    const rerender = mountUpdating(initial);
+    root
+      .querySelector<HTMLElement>('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-inline-rename-input')).not.toBeNull();
+
+    rerender({ ...initial, path: '/home/other', tabTitle: 'other' });
+    rerender(initial);
+
+    expect(root.querySelector('.fm-inline-rename-input')).toBeNull();
+  });
+
+  describe('Pane context menu', () => {
+    it('passes the synthetic parent row to its restricted context menu', () => {
+      const parent: EntrySummary = {
+        id: 'fm:parent:/home/erik' as EntryId,
+        location: { providerId: 'file', uri: '/home/erik' },
+        name: '..',
+        kind: 'directory',
+        hidden: false,
+        readOnly: true,
+        metadataRevision: 0,
+      };
+      const onContextMenu = vi.fn();
+      mount(attrs({ entries: [parent, ...entries], onContextMenu }));
+
+      root
+        .querySelector<HTMLElement>('.fm-directory-row')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }));
+
+      expect(onContextMenu).toHaveBeenCalledWith([parent], 12, 24);
+    });
   });
 
   it('opens the multi-rename dialog instead of inline rename when F2 is pressed with more than one entry selected', () => {
@@ -617,6 +696,7 @@ beforeEach(() => {
 afterEach(() => {
   m.mount(root, null);
   root.remove();
+  document.getElementById('toast-container')?.remove();
 });
 
 describe('breadcrumbSegments', () => {
@@ -1064,6 +1144,26 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-path-input')).toBeNull());
   });
 
+  it('cancels an edited path when focus leaves the input without navigating', () => {
+    const onNavigate = vi.fn();
+    mount(attrs({ onNavigate }));
+
+    root
+      .querySelector<HTMLElement>('.fm-breadcrumb')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.fm-path-input');
+    if (input === null) return;
+    input.value = '/draft/path';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.blur();
+    m.redraw.sync();
+
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+    expect(root.querySelector('.fm-breadcrumb')?.textContent).toContain('home');
+  });
+
   it('navigates to a clicked breadcrumb target', async () => {
     const onNavigate = vi.fn();
     mount(attrs({ onNavigate }));
@@ -1073,7 +1173,7 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/home'));
   });
 
-  it('shows rejected paths inline without replacing the current directory', async () => {
+  it('shows rejected paths in a localized toast without replacing the current directory', async () => {
     mount(attrs({ onNavigate: () => Promise.reject(new Error('Path does not exist')) }));
 
     root
@@ -1087,8 +1187,10 @@ describe('Pane breadcrumb editing', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-path-error')?.textContent).toBe('Path does not exist'),
+      expect(document.querySelector('.toast')?.textContent).toBe('Unable to open path'),
     );
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+    expect(root.querySelector('.fm-path-error')).toBeNull();
     expect(root.querySelector('.fm-entry-name [title="one.txt"]')).not.toBeNull();
   });
 

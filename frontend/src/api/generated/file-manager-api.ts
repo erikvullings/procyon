@@ -39,6 +39,7 @@ import type {
   DeleteSemanticVocabularyImpactDto,
   DeleteSemanticVocabularyRequestDto,
   DeleteWorkspaceParams,
+  DiagnosticErrorDto,
   DiagnosticsDto,
   DirectorySnapshotDto,
   DiscoverApplicationUninstallCandidatesRequestDto,
@@ -1601,6 +1602,48 @@ export const getDiagnostics = async ( options?: Parameters<typeof fetchMutator>[
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type recordFrontendDiagnosticResponse204 = {
+  data: void
+  status: 204
+}
+
+export type recordFrontendDiagnosticResponseSuccess = (recordFrontendDiagnosticResponse204) & {
+  headers: Headers;
+};
+;
+
+export type recordFrontendDiagnosticResponse = (recordFrontendDiagnosticResponseSuccess)
+
+export const getRecordFrontendDiagnosticUrl = () => {
+
+
+
+
+  return `/api/v1/diagnostics/frontend-errors`
+}
+
+/**
+ * @summary Retains one redacted frontend error for the diagnostics view and structured host log.
+ */
+export const recordFrontendDiagnostic = async (diagnosticErrorDto: DiagnosticErrorDto, options?: Parameters<typeof fetchMutator>[1]): Promise<recordFrontendDiagnosticResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return fetchMutator<recordFrontendDiagnosticResponse>(getRecordFrontendDiagnosticUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(diagnosticErrorDto)
   }
 );}
 

@@ -230,6 +230,52 @@ describe('DirectoryTable rows', () => {
     expect(onDrop).toHaveBeenCalledWith(0, expect.any(Event));
   });
 
+  it('does not move the cursor when native drag-out returns a delayed click', () => {
+    const onCursorChange = vi.fn();
+    const onPointerDragOut = vi.fn();
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([entry()]),
+      onCursorChange,
+      onPointerDragStart: vi.fn(),
+      onPointerDragOut,
+    });
+
+    const row = root.querySelector<HTMLElement>('.fm-directory-row');
+    row?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: -1, clientY: 10, pointerId: 1 }),
+    );
+    row?.click();
+
+    expect(onPointerDragOut).toHaveBeenCalledExactlyOnceWith(0);
+    expect(onCursorChange).not.toHaveBeenCalled();
+
+    row?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 2,
+      }),
+    );
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }));
+    row?.click();
+    expect(onCursorChange).toHaveBeenCalledExactlyOnceWith(0, {
+      ctrlKey: false,
+      shiftKey: false,
+    });
+  });
+
   it('clips the final filler stripe to the unused viewport height', () => {
     mount({
       state: { type: 'loaded' },
@@ -272,6 +318,37 @@ describe('DirectoryTable rows', () => {
     expect(root.querySelector('[role="grid"]')?.getAttribute('aria-colcount')).toBe('5');
     expect(root.querySelector('[data-column-id="sample.fileAge"]')?.textContent).toContain('Age');
     expect(root.querySelectorAll('.fm-directory-file-age').item(1)?.textContent).toBe('1h');
+    expect(
+      root
+        .querySelector<HTMLElement>('.fm-directory-header')
+        ?.style.getPropertyValue('--fm-compact-directory-grid-template'),
+    ).toContain('minmax(4rem, 0.2fr)');
+  });
+
+  it('renders compact dates and full-value metadata titles without hiding columns', () => {
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([entry({ extension: 'webmanifest', size: 1_024 })]),
+      formatSettings: {
+        sizeFormat: 'binary',
+        dateFormat: 'medium',
+        locale: 'en-US',
+        timeZone: 'UTC',
+      },
+    });
+
+    expect(root.querySelector('.fm-directory-type span')?.getAttribute('title')).toBe(
+      'webmanifest',
+    );
+    expect(root.querySelector('.fm-directory-size span')?.getAttribute('title')).toBe('1 K');
+    const modified = root.querySelector('.fm-directory-modified > span');
+    expect(modified?.getAttribute('title')).toBe('Jul 30, 2026, 12:00 PM');
+    expect(modified?.querySelector('.fm-directory-modified-full')?.textContent).toBe(
+      'Jul 30, 2026, 12:00 PM',
+    );
+    expect(modified?.querySelector('.fm-directory-modified-compact')?.textContent).toBe(
+      '7/30/26, 12:00 PM',
+    );
   });
 
   it('renders a single-letter git status badge before the Modified column, blank outside a working tree', () => {
@@ -297,6 +374,11 @@ describe('DirectoryTable rows', () => {
     );
     expect(gitHeaderIndex).toBeGreaterThanOrEqual(0);
     expect(gitHeaderIndex).toBeLessThan(modifiedHeaderIndex);
+    expect(
+      root
+        .querySelector<HTMLElement>('.fm-directory-header')
+        ?.style.getPropertyValue('--fm-compact-directory-grid-template'),
+    ).toContain('minmax(1.75rem, 0.1fr)');
 
     const badges = root.querySelectorAll('.fm-directory-git-status-badge');
     expect(Array.from(badges).map((badge) => badge.textContent)).toEqual(['M', 'S', 'U', 'I']);

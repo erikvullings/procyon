@@ -28,6 +28,11 @@ pane while opening the exact source preview in the other pane.
   structured-query behavior.
 - Add focused frontend regressions for temporary-tab lifecycle, simplified disclosure, and
   opposite-pane exact-source preview.
+- Keep folder inclusion in the search pane one-way: offer the existing preview-and-consent flow
+  when the active folder is outside the library, and hide the control after inclusion so the pane
+  cannot accidentally revoke consent.
+- Keep common search-purpose filters on a single pane-header-height row, with a fixed overflow
+  control for advanced settings and an explicit close button matching the F3 viewer.
 
 ## Implementation Notes
 
@@ -53,3 +58,6 @@ pane while opening the exact source preview in the other pane.
 - 2026-09-09 Copilot: Frontend type checking and all 313 affected tests pass. Automated screen
   capture was unavailable on the host, so final visual inspection remains manual; the
   semantic-enabled Tauri process is running against the existing indexed database for that check.
+- 2026-09-21 Copilot: Added the compact one-way folder inclusion and search-purpose row, fixed
+  overflow clipping at narrow pane widths, moved advanced controls behind the fixed ellipsis, and
+  added an F3-style close action.

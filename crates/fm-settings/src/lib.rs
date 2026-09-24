@@ -2,7 +2,9 @@
 //!
 //! Settings are versioned and migrated rather than discarded when the schema
 //! changes (specification §26), and are written atomically so a crash cannot
-//! leave a half-written configuration behind.
+//! leave a half-written configuration behind. Reads and writes are serialized
+//! across app processes, and older versions cannot quarantine or overwrite a
+//! settings document created by a newer version.
 //!
 //! The same machinery is reusable by other crates through
 //! [`VersionedDocument`]: an independently versioned sidecar document stored
@@ -23,9 +25,10 @@ use serde_json::Value;
 use thiserror::Error;
 
 /// Current on-disk settings schema.
-pub const CURRENT_SCHEMA_VERSION: u32 = 6;
+pub const CURRENT_SCHEMA_VERSION: u32 = 7;
 /// Stable settings filename within the platform configuration directory.
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
+const SETTINGS_LOCK_FILE_NAME: &str = ".settings.lock";
 
 /// UI language (task 0098).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -209,6 +212,8 @@ pub struct Settings {
     pub show_hidden_files: bool,
     /// Whether permanent deletion requires confirmation.
     pub confirm_permanent_delete: bool,
+    /// Whether routine copy, move, and Trash operations require confirmation.
+    pub confirm_file_operations: bool,
     /// Default operation conflict policy.
     pub default_conflict_policy: ConflictPolicy,
     /// Maximum concurrent operations.
@@ -259,6 +264,7 @@ impl Default for Settings {
             size_format: SizeFormat::Binary,
             show_hidden_files: false,
             confirm_permanent_delete: true,
+            confirm_file_operations: true,
             default_conflict_policy: ConflictPolicy::Ask,
             operation_concurrency: 2,
             default_pane_layout: DefaultPaneLayout::Dual,
@@ -305,6 +311,14 @@ pub enum SettingsError {
     /// Settings serialization failed.
     #[error("settings serialization failed: {0}")]
     Serialize(#[from] serde_json::Error),
+    /// A newer Procyon version owns this settings document.
+    #[error("settings schema version {found} is newer than the supported version {supported}")]
+    NewerSchema {
+        /// Version found in the settings document.
+        found: u64,
+        /// Newest version understood by this build.
+        supported: u32,
+    },
 }
 
 /// JSON settings repository rooted in one configuration directory.
@@ -326,12 +340,13 @@ impl SettingsStore {
     pub fn platform_default() -> Result<Self, SettingsError> {
         let directory = dirs::config_dir()
             .ok_or(SettingsError::ConfigDirectoryUnavailable)?
-            .join("fm");
+            .join("procyon");
         Ok(Self::new(directory))
     }
 
-    /// Loads and migrates settings. Invalid/unreadable files are backed up.
+    /// Loads and migrates settings. Malformed files are backed up.
     pub fn load(&self) -> Result<LoadOutcome, SettingsError> {
+        let _lock = self.lock_settings()?;
         let path = self.path();
         if !path.exists() {
             return Ok(LoadOutcome {
@@ -339,12 +354,14 @@ impl SettingsStore {
                 warning: None,
             });
         }
-        match fs::read(&path).ok().and_then(|bytes| migrate(&bytes).ok()) {
-            Some(settings) => Ok(LoadOutcome {
+        let bytes = fs::read(&path)?;
+        reject_newer_settings_schema(&bytes)?;
+        match migrate(&bytes) {
+            Ok(settings) => Ok(LoadOutcome {
                 settings,
                 warning: None,
             }),
-            None => {
+            Err(_) => {
                 fs::create_dir_all(&self.directory)?;
                 let backup = self
                     .directory
@@ -368,6 +385,12 @@ impl SettingsStore {
     /// consent — are never touched, so a stale client cannot revoke or
     /// resurrect consent by replaying an old settings payload.
     pub fn save(&self, settings: &Settings) -> Result<(), SettingsError> {
+        let _lock = self.lock_settings()?;
+        match fs::read(self.path()) {
+            Ok(bytes) => reject_newer_settings_schema(&bytes)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         let mut current = settings.clone();
         current.schema_version = CURRENT_SCHEMA_VERSION;
         for saved in &mut current.saved_searches {
@@ -439,6 +462,34 @@ impl SettingsStore {
     fn path(&self) -> PathBuf {
         self.directory.join(SETTINGS_FILE_NAME)
     }
+
+    fn lock_settings(&self) -> Result<fs::File, SettingsError> {
+        fs::create_dir_all(&self.directory)?;
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.directory.join(SETTINGS_LOCK_FILE_NAME))?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        Ok(lock)
+    }
+}
+
+fn reject_newer_settings_schema(bytes: &[u8]) -> Result<(), SettingsError> {
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return Ok(());
+    };
+    let Some(found) = value.get("schemaVersion").and_then(Value::as_u64) else {
+        return Ok(());
+    };
+    if found > u64::from(CURRENT_SCHEMA_VERSION) {
+        return Err(SettingsError::NewerSchema {
+            found,
+            supported: CURRENT_SCHEMA_VERSION,
+        });
+    }
+    Ok(())
 }
 
 fn sanitize_persisted_location(uri: &str) -> String {
@@ -870,6 +921,15 @@ mod tests {
     }
 
     #[test]
+    fn v6_fixture_enables_routine_operation_confirmation() {
+        let settings =
+            migrate(br#"{"schemaVersion":6,"theme":"dark"}"#).expect("migrate v6 settings");
+
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
+        assert!(settings.confirm_file_operations);
+    }
+
+    #[test]
     fn saved_search_scope_drops_credentials_and_transient_tokens() {
         let directory = tempdir().expect("temp directory");
         let store = SettingsStore::new(directory.path());
@@ -957,6 +1017,56 @@ mod tests {
             .count();
         assert_eq!(backups, 1);
         assert!(!directory.path().join(SETTINGS_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn settings_from_a_newer_version_are_not_quarantined() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join(SETTINGS_FILE_NAME);
+        let newer = format!(
+            r#"{{"schemaVersion":{},"dateFormat":"iso","iconTheme":"catppuccin.icons"}}"#,
+            CURRENT_SCHEMA_VERSION + 1
+        );
+        fs::write(&path, &newer).expect("write newer settings");
+
+        let error = SettingsStore::new(directory.path())
+            .load()
+            .expect_err("older build must reject newer settings");
+
+        assert!(matches!(
+            error,
+            SettingsError::NewerSchema {
+                found,
+                supported: CURRENT_SCHEMA_VERSION
+            } if found == u64::from(CURRENT_SCHEMA_VERSION + 1)
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), newer);
+        assert_eq!(
+            fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".corrupt-"))
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn older_version_cannot_overwrite_settings_from_a_newer_version() {
+        let directory = tempdir().expect("temp directory");
+        let path = directory.path().join(SETTINGS_FILE_NAME);
+        let newer = format!(
+            r#"{{"schemaVersion":{},"dateFormat":"iso","iconTheme":"catppuccin.icons"}}"#,
+            CURRENT_SCHEMA_VERSION + 1
+        );
+        fs::write(&path, &newer).expect("write newer settings");
+
+        let error = SettingsStore::new(directory.path())
+            .save(&Settings::default())
+            .expect_err("older build must not overwrite newer settings");
+
+        assert!(matches!(error, SettingsError::NewerSchema { .. }));
+        assert_eq!(fs::read_to_string(path).unwrap(), newer);
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

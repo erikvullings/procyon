@@ -576,6 +576,24 @@ impl FileSystemProvider for LocalFileSystemProvider {
         ))
     }
 
+    async fn available_space(
+        &self,
+        location: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<Option<u64>, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let path = location
+            .to_native_path()
+            .map_err(|_| invalid_location(location))?;
+        let uri = location.uri.clone();
+        tokio::task::spawn_blocking(move || fs2::available_space(path).map(Some))
+            .await
+            .map_err(|_| VfsError::Cancelled)?
+            .map_err(|error| map_io_error(error, &uri))
+    }
+
     async fn watch(
         &self,
         location: &Location,
@@ -1211,6 +1229,10 @@ fn map_io_error(error: io::Error, location: &str) -> VfsError {
         },
         io::ErrorKind::PermissionDenied => VfsError::PermissionDenied {
             location: location.to_owned(),
+        },
+        io::ErrorKind::StorageFull => VfsError::InsufficientSpace {
+            available: None,
+            required: None,
         },
         io::ErrorKind::AlreadyExists => VfsError::AlreadyExists {
             location: location.to_owned(),

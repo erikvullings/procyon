@@ -110,13 +110,27 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function linkAnswerCitations(markdown: string, citations: readonly RagCitation[]): string {
+function citationTitle(citation: RagCitation, preview: RagPreview | undefined): string {
+  const title = preview?.evidence.find((item) => item.sourceId === citation.sourceId)?.title;
+  return title === undefined ? citation.label : (decodeEvidenceTitle(title) ?? citation.label);
+}
+
+function markdownLinkLabel(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('[', '\\[').replaceAll(']', '\\]');
+}
+
+function linkAnswerCitations(
+  markdown: string,
+  citations: readonly RagCitation[],
+  preview: RagPreview | undefined,
+): string {
   return citations.reduce((linked, citation) => {
     const label = escapeRegExp(citation.label);
     const target = `#rag-citation-${encodeURIComponent(citation.label)}`;
+    const title = markdownLinkLabel(citationTitle(citation, preview));
     return linked
-      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'g'), `[${citation.label}](${target})`)
-      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'g'), `([${citation.label}](${target})`);
+      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'g'), `[${title}](${target})`)
+      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'g'), `([${title}](${target})`);
   }, markdown);
 }
 
@@ -600,6 +614,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                           linkAnswerCitations(
                             answer?.text ?? streamedText,
                             answer?.citations ?? [],
+                            preview,
                           ),
                         ),
                       ),
@@ -622,7 +637,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                             label: citation.label,
                           }),
                         },
-                        citation.label,
+                        citationTitle(citation, preview),
                       ),
                       provenance === '' ? '' : ` · ${provenance}`,
                       citation.generated ? ` · ${t('ragAsk', 'generatedEvidence')}` : '',
@@ -732,27 +747,16 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   m('small', scopeLabel(selectedScope)),
                 ]),
                 m('.fm-rag-controls', [
-                  m('label', [
-                    m('span', t('ragAsk', 'profile')),
-                    m(
-                      'select.browser-default',
-                      {
-                        value: selectedProfileId,
-                        disabled: busy !== undefined,
-                        onchange: (event: Event) => {
-                          selectedProfileId = (event.currentTarget as HTMLSelectElement).value;
-                          resetRetrieval(true);
-                        },
-                      },
-                      profiles.map((profile) =>
-                        m(
-                          'option',
-                          { key: profile.id, value: profile.id },
-                          `${profile.name} · ${profile.locality}`,
-                        ),
-                      ),
-                    ),
-                  ]),
+                  profiles[0] === undefined
+                    ? undefined
+                    : m('p.fm-rag-profile', [
+                        m('strong', `${t('ragAsk', 'profile')}: `),
+                        `${profiles[0].name} · ${profiles[0].model} · ${
+                          profiles[0].locality === 'loopback'
+                            ? t('llmProfiles', 'local')
+                            : t('llmProfiles', 'cloud')
+                        }`,
+                      ]),
                   m('label', [
                     m('span', t('ragAsk', 'scope')),
                     m(

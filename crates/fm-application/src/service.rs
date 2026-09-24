@@ -1,6 +1,7 @@
 //! The `FileManagerService` facade (specification §7).
 
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -21,7 +22,7 @@ use fm_platform::{FallbackPlatformAdapter, PlatformAdapter};
 use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
 use fm_search::{SearchEngine, SearchFileSystemProvider, SearchResultsStore};
 use fm_search_acceleration::{SearchAcceleration, UnsupportedSearchAccelerator};
-use fm_settings::{Settings, SettingsStore};
+use fm_settings::{Settings, SettingsError, SettingsStore};
 use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ArchiveSummaryRequestDto,
@@ -60,8 +61,8 @@ use crate::content_streaming;
 use crate::disk_usage_coordinator::DiskUsageCoordinator;
 use crate::document_conversion::DocumentConversionService;
 use crate::document_summary::{
-    DocumentSummaryCapability, DocumentSummaryCoordinator, GenerateDocumentSummary,
-    UnavailableDocumentSummaryCapability,
+    DocumentSummaryCapability, DocumentSummaryCoordinator, DocumentSummaryImages,
+    GenerateDocumentSummary, UnavailableDocumentSummaryCapability,
 };
 use crate::document_summary_mapping::{
     preview_to_dto, summary_error_to_application, summary_to_dto,
@@ -78,7 +79,9 @@ use crate::llm_profile_mapping::{
     disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
     profile_to_export_dto, test_result_to_dto,
 };
-use crate::llm_profiles::{LlmHostPolicy, LlmProfileService, ReqwestLlmProbeTransport};
+use crate::llm_profiles::{
+    LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
+};
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
 use crate::operation_requests::map_scheduler_error;
@@ -137,6 +140,54 @@ use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
+
+const MAX_SUMMARY_IMAGES: usize = 8;
+const MAX_SUMMARY_SOURCE_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_SUMMARY_TOTAL_IMAGE_BYTES: usize = 12 * 1024 * 1024;
+const MAX_SUMMARY_DECODED_PIXELS: u64 = 40_000_000;
+const MAX_SUMMARY_IMAGE_DIMENSION: u32 = 1_024;
+
+fn prepare_summary_image(data: &[u8], media_type: &str) -> Option<Vec<u8>> {
+    if data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize {
+        return None;
+    }
+    let format = match media_type {
+        "image/png" => image::ImageFormat::Png,
+        "image/jpeg" => image::ImageFormat::Jpeg,
+        "image/webp" => image::ImageFormat::WebP,
+        _ => return None,
+    };
+    let reader = image::ImageReader::new(Cursor::new(data))
+        .with_guessed_format()
+        .ok()?;
+    let (width, height) = reader.into_dimensions().ok()?;
+    if u64::from(width).saturating_mul(u64::from(height)) > MAX_SUMMARY_DECODED_PIXELS {
+        return None;
+    }
+    if width <= MAX_SUMMARY_IMAGE_DIMENSION && height <= MAX_SUMMARY_IMAGE_DIMENSION {
+        return Some(data.to_vec());
+    }
+    let resized = image::ImageReader::new(Cursor::new(data))
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .thumbnail(MAX_SUMMARY_IMAGE_DIMENSION, MAX_SUMMARY_IMAGE_DIMENSION);
+    let mut output = Cursor::new(Vec::new());
+    resized.write_to(&mut output, format).ok()?;
+    (output.get_ref().len() <= MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize).then(|| output.into_inner())
+}
+
+fn supports_summary_visual_evidence(uri: &str) -> bool {
+    let path = uri
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    [".pdf", ".docx", ".pptx", ".epub", ".xlsx"]
+        .iter()
+        .any(|extension| path.ends_with(extension))
+}
 
 /// Central application service that every host (Axum, Tauri, CLI) calls into.
 ///
@@ -442,14 +493,21 @@ impl FileManagerService {
                 llm_policy,
             )
         });
-        let loaded = settings_store
-            .load()
-            .unwrap_or_else(|_| fm_settings::LoadOutcome {
+        let loaded = match settings_store.load() {
+            Ok(loaded) => loaded,
+            Err(error @ SettingsError::NewerSchema { .. }) => fm_settings::LoadOutcome {
+                settings: Settings::default(),
+                warning: Some(format!(
+                    "{error}. The settings file was left unchanged; close this older Procyon version before changing settings."
+                )),
+            },
+            Err(_) => fm_settings::LoadOutcome {
                 settings: Settings::default(),
                 warning: Some(
                     "Settings could not be read. Application defaults were loaded.".into(),
                 ),
-            });
+            },
+        };
         if let Some(message) = loaded.warning {
             events.publish(
                 EventAudience::Global,
@@ -1308,6 +1366,12 @@ impl FileManagerService {
         index_decision: SemanticIndexRetentionDecision,
     ) -> Result<SemanticUninstallReceipt, SemanticComponentError> {
         self.ensure_semantic_component_mutation(SemanticComponentOperation::UninstallComponents)?;
+        self.semantic
+            .restart(Duration::from_secs(10))
+            .await
+            .map_err(|error| SemanticComponentError::Indexing {
+                message: format!("semantic worker could not be stopped before uninstall: {error}"),
+            })?;
         self.semantic_components
             .uninstall_components(index_decision)
             .await
@@ -1613,45 +1677,113 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::PreviewDocumentSummaryRequestDto,
     ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
-        let worker_request = self
-            .resolve_document_summary_request(access, request.target, request.input_token_budget)
-            .await?;
         let cancellation = tokio_util::sync::CancellationToken::new();
-        self.document_summaries
-            .preview(
-                worker_request,
+        let target = request.target;
+        let image_evidence = self
+            .prepare_document_summary_images(
+                &target,
                 request.profile_id,
-                &self.llm_profiles,
+                request.include_images,
                 &cancellation,
             )
+            .await?;
+        match self
+            .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
-            .map(preview_to_dto)
-            .map_err(summary_error_to_application)
+        {
+            Ok(worker_request) => match self
+                .document_summaries
+                .preview(
+                    worker_request,
+                    request.profile_id,
+                    &self.llm_profiles,
+                    &image_evidence,
+                    &cancellation,
+                )
+                .await
+            {
+                Ok(preview) => Ok(preview_to_dto(preview)),
+                Err(crate::document_summary::DocumentSummaryError::Unavailable) => {
+                    self.preview_ephemeral_document_summary(
+                        target,
+                        request.input_token_budget,
+                        request.profile_id,
+                        &image_evidence,
+                        &cancellation,
+                    )
+                    .await
+                }
+                Err(error) => Err(summary_error_to_application(error)),
+            },
+            Err(ApplicationError::NotFound) => {
+                self.preview_ephemeral_document_summary(
+                    target,
+                    request.input_token_budget,
+                    request.profile_id,
+                    &image_evidence,
+                    &cancellation,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
     }
 
-    /// Generates and publishes a summary after revalidating the preview fingerprint.
+    /// Generates a summary after revalidating the preview fingerprint.
     pub async fn generate_document_summary(
         &self,
         access: &SemanticAccessContext,
         request: fm_transport_dto::GenerateDocumentSummaryRequestDto,
     ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
-        let worker_request = self
-            .resolve_document_summary_request(access, request.target, request.input_token_budget)
-            .await?;
         let cancellation = tokio_util::sync::CancellationToken::new();
-        self.document_summaries
-            .generate(
-                GenerateDocumentSummary {
-                    request: worker_request,
-                    expected_selection_fingerprint: request.expected_selection_fingerprint,
-                    profile_id: request.profile_id,
-                },
-                &self.llm_profiles,
+        let target = request.target;
+        let image_evidence = self
+            .prepare_document_summary_images(
+                &target,
+                Some(request.profile_id),
+                request.include_images,
                 &cancellation,
             )
+            .await?;
+        match self
+            .resolve_document_summary_request(access, target.clone(), request.input_token_budget)
             .await
-            .map(|summary| summary_to_dto(summary, false))
-            .map_err(summary_error_to_application)
+        {
+            Ok(worker_request) => {
+                match self
+                    .document_summaries
+                    .generate(
+                        GenerateDocumentSummary {
+                            request: worker_request,
+                            expected_selection_fingerprint: request
+                                .expected_selection_fingerprint
+                                .clone(),
+                            profile_id: request.profile_id,
+                            images: image_evidence.images.clone(),
+                        },
+                        &self.llm_profiles,
+                        &cancellation,
+                    )
+                    .await
+                {
+                    Ok(summary) => return Ok(summary_to_dto(summary, false)),
+                    Err(crate::document_summary::DocumentSummaryError::Unavailable) => {}
+                    Err(error) => return Err(summary_error_to_application(error)),
+                }
+            }
+            Err(ApplicationError::NotFound) => {}
+            Err(error) => return Err(error),
+        }
+
+        self.generate_ephemeral_document_summary(
+            target,
+            request.input_token_budget,
+            &request.expected_selection_fingerprint,
+            request.profile_id,
+            &image_evidence.images,
+            &cancellation,
+        )
+        .await
     }
 
     /// Returns the current generated summary, including stale-source state.
@@ -1660,13 +1792,197 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::GetDocumentSummaryRequestDto,
     ) -> Result<Option<fm_transport_dto::DocumentSummaryDto>, ApplicationError> {
-        let worker_request = self
+        let worker_request = match self
             .resolve_document_summary_request(access, request.target, 1)
+            .await
+        {
+            Ok(request) => request,
+            Err(ApplicationError::NotFound) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        match self.document_summaries.current(&worker_request).await {
+            Ok(summary) => Ok(summary.map(|(stored, stale)| summary_to_dto(stored, stale))),
+            Err(crate::document_summary::DocumentSummaryError::Unavailable) => Ok(None),
+            Err(error) => Err(summary_error_to_application(error)),
+        }
+    }
+
+    async fn preview_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        profile_id: Option<Uuid>,
+        image_evidence: &DocumentSummaryImages,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::DocumentSummaryPreviewDto, ApplicationError> {
+        let prepared = self
+            .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .current(&worker_request)
+            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles, image_evidence)
+            .map(preview_to_dto)
+            .map_err(summary_error_to_application)
+    }
+
+    async fn generate_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        expected_selection_fingerprint: &str,
+        profile_id: Uuid,
+        images: &[LlmImageAttachment],
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
+        let prepared = self
+            .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
+            .await?;
+        let generated = self
+            .document_summaries
+            .generate_ephemeral(
+                &prepared,
+                expected_selection_fingerprint,
+                profile_id,
+                &self.llm_profiles,
+                images,
+                cancellation,
+            )
             .await
-            .map(|summary| summary.map(|(stored, stale)| summary_to_dto(stored, stale)))
+            .map_err(summary_error_to_application)?;
+        Ok(fm_transport_dto::DocumentSummaryDto {
+            record_id: format!("ephemeral-{}", prepared.selection.fingerprint),
+            source_generation: 0,
+            profile_id: generated.profile_id,
+            model_id: generated.model_id,
+            supporting_chunk_ids: prepared
+                .selection
+                .representatives
+                .iter()
+                .map(|representative| representative.source.chunk_id.clone())
+                .collect(),
+            supporting_weights: prepared
+                .selection
+                .representatives
+                .iter()
+                .map(|representative| representative.cluster_weight)
+                .collect(),
+            created_at_ms: generated.created_at_ms,
+            brief: generated.brief_text,
+            full: generated.full_text,
+            stale: false,
+        })
+    }
+
+    async fn prepare_document_summary_images(
+        &self,
+        target: &fm_transport_dto::DocumentSummaryTargetDto,
+        profile_id: Option<Uuid>,
+        include_images: bool,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<DocumentSummaryImages, ApplicationError> {
+        if !supports_summary_visual_evidence(&target.location.uri) {
+            return Ok(DocumentSummaryImages::default());
+        }
+        let Some(profile_id) = profile_id else {
+            return Ok(DocumentSummaryImages::default());
+        };
+        let supports_vision = self
+            .llm_profiles
+            .model_capabilities(profile_id, cancellation)
+            .await
+            .map(|capabilities| capabilities.vision)
+            .unwrap_or(false);
+        if !supports_vision {
+            return Ok(DocumentSummaryImages::default());
+        }
+        let outcome = self
+            .document_conversion
+            .convert_with_visual_evidence(
+                target.location.clone().into(),
+                cancellation.child_token(),
+            )
+            .await?;
+        let fm_semantic_conversion::ConversionOutcome::Converted(document) = outcome else {
+            return Ok(DocumentSummaryImages::default());
+        };
+        let mut evidence = DocumentSummaryImages {
+            available: !document.visuals().is_empty(),
+            ..DocumentSummaryImages::default()
+        };
+        if !include_images || !evidence.available {
+            return Ok(evidence);
+        }
+        evidence.omitted = u32::try_from(document.visual_omissions().len()).unwrap_or(u32::MAX);
+        let mut total_bytes = 0_usize;
+        for visual in document.visuals() {
+            if evidence.images.len() >= MAX_SUMMARY_IMAGES
+                || visual.data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize
+            {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            }
+            let Some(data) = prepare_summary_image(&visual.data, visual.media_type.as_str()) else {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            };
+            if total_bytes.saturating_add(data.len()) > MAX_SUMMARY_TOTAL_IMAGE_BYTES {
+                evidence.omitted = evidence.omitted.saturating_add(1);
+                continue;
+            }
+            total_bytes = total_bytes.saturating_add(data.len());
+            evidence.images.push(LlmImageAttachment {
+                media_type: visual.media_type.as_str().to_owned(),
+                data,
+            });
+        }
+        Ok(evidence)
+    }
+
+    async fn prepare_ephemeral_document_summary(
+        &self,
+        target: fm_transport_dto::DocumentSummaryTargetDto,
+        input_token_budget: u32,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<crate::document_summary::EphemeralDocumentSummary, ApplicationError> {
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
+        if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
+            return Err(ApplicationError::InvalidRequest(
+                "summary input token budget is outside the supported range".into(),
+            ));
+        }
+        let health = self
+            .semantic
+            .health()
+            .await
+            .map_err(|_| ApplicationError::ProviderUnavailable)?;
+        if health != SemanticHealth::Serving {
+            return Err(ApplicationError::ProviderUnavailable);
+        }
+        let outcome = self
+            .document_conversion
+            .convert(target.location.into(), cancellation.child_token())
+            .await?;
+        let document = match outcome {
+            fm_semantic_conversion::ConversionOutcome::Converted(document) => document,
+            fm_semantic_conversion::ConversionOutcome::Unsupported { detail, .. }
+            | fm_semantic_conversion::ConversionOutcome::Malformed { detail }
+            | fm_semantic_conversion::ConversionOutcome::Encrypted { detail }
+            | fm_semantic_conversion::ConversionOutcome::NoTextLayer { detail } => {
+                return Err(ApplicationError::InvalidRequest(detail));
+            }
+            fm_semantic_conversion::ConversionOutcome::Skipped { reason } => {
+                return Err(ApplicationError::InvalidRequest(reason.as_str().to_owned()));
+            }
+            fm_semantic_conversion::ConversionOutcome::OverBudget { budget, limit } => {
+                return Err(ApplicationError::InvalidRequest(format!(
+                    "document conversion exceeds the {budget:?} limit ({limit})"
+                )));
+            }
+            fm_semantic_conversion::ConversionOutcome::Cancelled => {
+                return Err(ApplicationError::OperationCancelled);
+            }
+        };
+        self.document_summaries
+            .prepare_ephemeral(&document, input_token_budget as usize, cancellation)
             .map_err(summary_error_to_application)
     }
 
@@ -1677,7 +1993,7 @@ impl FileManagerService {
         input_token_budget: u32,
     ) -> Result<fm_semantic_worker::document_summary::PrepareDocumentSummary, ApplicationError>
     {
-        const MAX_SUMMARY_INPUT_TOKENS: u32 = 32_768;
+        const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
         if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
@@ -3511,6 +3827,38 @@ mod tests {
             dir.path().join("settings"),
         );
         (dir, service)
+    }
+
+    #[test]
+    fn summary_images_are_downscaled_to_the_safe_dimension() {
+        let source = image::DynamicImage::new_rgba8(2_048, 512);
+        let mut encoded = Cursor::new(Vec::new());
+        source
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source image");
+
+        let prepared =
+            prepare_summary_image(encoded.get_ref(), "image/png").expect("prepare image");
+        let resized = image::load_from_memory(&prepared).expect("decode prepared image");
+
+        assert_eq!(resized.width(), MAX_SUMMARY_IMAGE_DIMENSION);
+        assert_eq!(resized.height(), 256);
+        assert!(prepare_summary_image(encoded.get_ref(), "image/svg+xml").is_none());
+    }
+
+    #[test]
+    fn summary_visual_discovery_is_limited_to_supported_formats() {
+        for uri in [
+            "sftp://host/report.PDF",
+            "file:///notes.docx",
+            "file:///deck.pptx?revision=2",
+            "file:///book.epub#chapter",
+            "file:///figures.xlsx",
+        ] {
+            assert!(supports_summary_visual_evidence(uri), "{uri}");
+        }
+        assert!(!supports_summary_visual_evidence("file:///notes.txt"));
+        assert!(!supports_summary_visual_evidence("file:///legacy.xls"));
     }
 
     #[test]
