@@ -144,6 +144,7 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
+import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
   createSettingsController,
@@ -187,6 +188,7 @@ import {
 } from '../keybindings/dispatcher';
 import type {
   ActionDescriptor,
+  AppUpdateInfo,
   BackendEvent,
   Connection,
   DirectoryDelta,
@@ -413,6 +415,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
   let settingsInitialSection: SettingsSection = 'appearance';
+  let availableAppUpdate: AppUpdateInfo | undefined;
   let aboutDialogOpen = false;
   let workspaceDisclosureElement: HTMLDetailsElement | undefined;
   let registeredActions: readonly ActionDescriptor[] = [];
@@ -1038,6 +1041,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   async function loadSettings(client: FileManagerClient): Promise<void> {
     await settingsController.loadSettings(client);
+    if (currentSettings?.checkForUpdatesAutomatically !== true || !client.supportsAppUpdates) {
+      return;
+    }
+    try {
+      availableAppUpdate = await client.checkForAppUpdate();
+      m.redraw();
+    } catch (error) {
+      console.warn('Automatic application update check failed.', error);
+    }
   }
 
   function effectiveSort(sort: readonly SortDescriptor[]): readonly SortDescriptor[] {
@@ -4541,6 +4553,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             closeOnEsc: true,
             onToggle: (open: boolean) => {
               if (!open) aboutDialogOpen = false;
+            },
+          }),
+          m(AppUpdateDialog, {
+            client: attrs.client,
+            ...(availableAppUpdate === undefined ? {} : { update: availableAppUpdate }),
+            onLater: () => {
+              availableAppUpdate = undefined;
             },
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),

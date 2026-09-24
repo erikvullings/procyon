@@ -38,6 +38,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     multiRenamePresets: [],
     savedSearches: [],
     iconTheme: 'generic',
+    checkForUpdatesAutomatically: true,
     ...overrides,
   };
 }

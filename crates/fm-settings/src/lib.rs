@@ -25,7 +25,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 /// Current on-disk settings schema.
-pub const CURRENT_SCHEMA_VERSION: u32 = 7;
+pub const CURRENT_SCHEMA_VERSION: u32 = 8;
 /// Stable settings filename within the platform configuration directory.
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
 const SETTINGS_LOCK_FILE_NAME: &str = ".settings.lock";
@@ -250,6 +250,8 @@ pub struct Settings {
     /// Directory-entry icon set: `"generic"` for the built-in glyphs, or a discovered plugin's id
     /// (task 0095).
     pub icon_theme: String,
+    /// Whether the desktop host checks for signed application updates after startup.
+    pub check_for_updates_automatically: bool,
 }
 
 impl Default for Settings {
@@ -286,6 +288,7 @@ impl Default for Settings {
             multi_rename_presets: Vec::new(),
             saved_searches: Vec::new(),
             icon_theme: GENERIC_ICON_THEME.to_owned(),
+            check_for_updates_automatically: true,
         }
     }
 }
@@ -918,6 +921,15 @@ mod tests {
 
         assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(settings.saved_searches.is_empty());
+    }
+
+    #[test]
+    fn v7_fixture_enables_automatic_update_checks_by_default() {
+        let settings =
+            migrate(br#"{"schemaVersion":7,"theme":"dark"}"#).expect("migrate v7 settings");
+
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
+        assert!(settings.check_for_updates_automatically);
     }
 
     #[test]

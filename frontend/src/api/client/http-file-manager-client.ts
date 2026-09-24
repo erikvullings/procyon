@@ -370,6 +370,7 @@ import { settingsFromDto, settingsToDto } from './settings-mapping';
  * shared module so the Tauri/mock adapters can reuse it.
  */
 export class HttpFileManagerClient implements FileManagerClient {
+  readonly supportsAppUpdates = false;
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
     if (opened === null) throw new Error('The browser blocked the external link.');
@@ -1084,6 +1085,14 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected updateSettings response status: ${response.status}`);
     }
     return settingsFromDto(response.data);
+  }
+
+  checkForAppUpdate(_signal?: AbortSignal): Promise<undefined> {
+    return Promise.reject(new Error('Application updates are available only in the desktop app.'));
+  }
+
+  installAppUpdate(): Promise<void> {
+    return Promise.reject(new Error('Application updates are available only in the desktop app.'));
   }
 
   async listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {

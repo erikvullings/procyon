@@ -3794,6 +3794,7 @@ describe('AppShell', () => {
       multiRenamePresets: [],
       savedSearches: [],
       iconTheme: 'mock.archive',
+      checkForUpdatesAutomatically: true,
     });
     const iconTheme = {
       iconDefinitions: { file: { iconPath: 'icons/file.svg' } },

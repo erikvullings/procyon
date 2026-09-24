@@ -242,6 +242,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Persists and restores each window's frame (position, size, maximized state) keyed by
         // its label, using only public Tauri/monitor APIs (task 0143 sub-task (c)). `map_label`
         // reduces a per-workspace window's label (`open_workspace_window`, sub-task (b), gives

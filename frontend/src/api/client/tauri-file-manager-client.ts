@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { check } from '@tauri-apps/plugin-updater';
 
 import type {
   AcceptSemanticInstallationOfferRequest,
@@ -8,6 +10,8 @@ import type {
   ActionResult,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
+  AppUpdateInfo,
+  AppUpdateProgress,
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
@@ -232,6 +236,9 @@ async function invokeCancellableRag<T>(
  * that will add their command, mirroring `HttpFileManagerClient`.
  */
 export class TauriFileManagerClient implements FileManagerClient {
+  readonly supportsAppUpdates = true;
+  private pendingAppUpdate: Awaited<ReturnType<typeof check>> | undefined;
+
   openExternalUrl(url: string): Promise<void> {
     return openUrl(url);
   }
@@ -636,6 +643,52 @@ export class TauriFileManagerClient implements FileManagerClient {
     return settingsFromDto(
       await invoke<SettingsDto>('update_settings', { settings: settingsToDto(settings) }),
     );
+  }
+
+  async checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateInfo | undefined> {
+    signal?.throwIfAborted();
+    await this.pendingAppUpdate?.close();
+    this.pendingAppUpdate = undefined;
+    const update = await check({ timeout: 30_000 });
+    try {
+      signal?.throwIfAborted();
+    } catch (error) {
+      await update?.close();
+      throw error;
+    }
+    this.pendingAppUpdate = update;
+    if (update === null) return undefined;
+    return {
+      currentVersion: update.currentVersion,
+      version: update.version,
+      ...(update.date === undefined ? {} : { date: update.date }),
+      ...(update.body === undefined ? {} : { body: update.body }),
+    };
+  }
+
+  async installAppUpdate(
+    onProgress?: (progress: AppUpdateProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    signal?.throwIfAborted();
+    const update = this.pendingAppUpdate ?? (await check({ timeout: 30_000 }));
+    if (update === null) throw new Error('The selected application update is no longer available.');
+    this.pendingAppUpdate = update;
+    await update.downloadAndInstall((event) => {
+      if (event.event === 'Started') {
+        onProgress?.({
+          event: 'started',
+          ...(event.data.contentLength === undefined
+            ? {}
+            : { contentLength: event.data.contentLength }),
+        });
+      } else if (event.event === 'Progress') {
+        onProgress?.({ event: 'progress', chunkLength: event.data.chunkLength });
+      } else {
+        onProgress?.({ event: 'finished' });
+      }
+    });
+    await relaunch();
   }
 
   listWorkspaces(_signal?: AbortSignal): Promise<WorkspaceSummary[]> {

@@ -1277,6 +1277,7 @@ function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatu
 /** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
+  readonly supportsAppUpdates = false;
   private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
 
   async openExternalUrl(url: string): Promise<void> {
@@ -1345,7 +1346,7 @@ export class MockFileManagerClient implements FileManagerClient {
   >();
   private pluginState: PluginDescriptor[] = structuredClone(plugins);
   private settings: Settings = {
-    schemaVersion: 5,
+    schemaVersion: 8,
     theme: 'auto',
     language: 'en',
     fontSize: 13,
@@ -1371,6 +1372,7 @@ export class MockFileManagerClient implements FileManagerClient {
     multiRenamePresets: [],
     savedSearches: [],
     iconTheme: 'generic',
+    checkForUpdatesAutomatically: true,
   };
   private operationSequence = 0;
   private tabSequence = 0;
@@ -2512,6 +2514,14 @@ export class MockFileManagerClient implements FileManagerClient {
       this.settings = structuredClone(settings);
       return structuredClone(this.settings);
     });
+  }
+
+  checkForAppUpdate(_signal?: AbortSignal): Promise<undefined> {
+    return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
+  }
+
+  installAppUpdate(): Promise<void> {
+    return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
   }
 
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {

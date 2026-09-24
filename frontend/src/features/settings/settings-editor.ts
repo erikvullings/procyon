@@ -23,6 +23,7 @@ import type {
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
+import { AppUpdateSettings } from './app-update-settings';
 import { LlmProfileManagement } from './llm-profile-management';
 import { SemanticComponentManagement } from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
@@ -51,6 +52,7 @@ export type SettingsSection =
   | 'keybindings'
   | 'plugins'
   | 'semantic'
+  | 'updates'
   | 'diagnostics';
 
 function semanticComponentsInstalled(status: SemanticComponentStatus | undefined): boolean {
@@ -224,6 +226,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
         { id: 'keybindings', label: t('settings', 'keybindings') },
         { id: 'plugins', label: t('settings', 'plugins') },
         { id: 'semantic', label: t('settings', 'semantic') },
+        { id: 'updates', label: t('settings', 'updates') },
         { id: 'diagnostics', label: t('shell', 'diagnostics') },
       ];
 
@@ -717,6 +720,21 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       onToggle: (pluginId, enabled) =>
                         handleTogglePlugin(current, pluginId, enabled),
                       onRequestLogs: current.onRequestPluginLogs,
+                    }),
+                  ]
+                : undefined,
+
+              activeSection === 'updates'
+                ? [
+                    m(
+                      '.row',
+                      m('h4.fm-settings-section-heading.col.s12', t('settings', 'updates')),
+                    ),
+                    m(AppUpdateSettings, {
+                      client: current.client,
+                      automaticChecks: activeDraft.checkForUpdatesAutomatically,
+                      onAutomaticChecksChange: (enabled) =>
+                        update(current, { checkForUpdatesAutomatically: enabled }),
                     }),
                   ]
                 : undefined,

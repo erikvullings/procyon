@@ -323,6 +323,7 @@ behavior.
 - [x] 0061 Open with default application, reveal in file manager, open terminal
 - [ ] 0063 Desktop packaging, signing and notarization *(in_progress — signed/notarized macOS DMG
   is published and Homebrew-launch verified; Windows signing remains unconfigured)*
+- [x] 0229 Desktop self-update and Windows icon *(needs 0015, 0030, 0063)*
 - [ ] 0175 Mac App Store distribution *(needs 0063; separate sandboxed variant)*
 - [x] 0126 Embedded terminal drawer
 - [x] 0132 Windows defect: operation routes return 500 / deadlock *(pre-existing, found while

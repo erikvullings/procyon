@@ -222,7 +222,9 @@ choco install procyon
 ```
 
 macOS releases are signed and notarized. Windows releases are currently unsigned and can trigger a
-Microsoft Defender SmartScreen warning. Auto-update is not included.
+Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
+installation. Automatic checks can be disabled in Settings; checks never download, install, or
+restart without user confirmation, and a manual **Check now** action remains available.
 
 ## Desktop releases
 
@@ -232,7 +234,10 @@ macOS DMG, unsigned Windows MSI/NSIS installers, Linux `.deb` and AppImage packa
 Homebrew and Chocolatey.
 Release notes and a manual smoke pass are required before promotion. Protected release
 configuration includes `APPLE_CERTIFICATE`, `APPLE_API_KEY_P8`, `HOMEBREW_TAP_TOKEN`, and
-`CHOCOLATEY_API_KEY`.
+`CHOCOLATEY_API_KEY`. Updater bundles are independently signed on every platform with
+`TAURI_SIGNING_PRIVATE_KEY` and its optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the public key
+is compiled into the desktop app. The release workflow publishes versioned signed artifacts and
+atomically replaces the `latest.json` asset on the managed `updater-latest` prerelease.
 
 Optional semantic workers, native runtimes, models, and signed catalogs use the independent
 `.github/workflows/release-semantic-components.yml` flow and immutable `semantic-v*` releases.

@@ -20,6 +20,8 @@ import type { ThemeDto } from './themeDto.ts';
  * Versioned global settings. Live workspace content is deliberately absent.
  */
 export interface SettingsDto {
+  /** Whether the desktop host checks for signed application updates after startup. */
+  checkForUpdatesAutomatically: boolean;
   /** Column widths in CSS pixels, keyed by column id, shared by every tab and pane. */
   columnWidths: SettingsDtoColumnWidths;
   /** Confirm routine copy, move, and Trash operations before they start. */

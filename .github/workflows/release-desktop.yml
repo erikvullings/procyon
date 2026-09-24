@@ -117,6 +117,9 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
           chmod 600 "$APPLE_API_KEY_PATH"
       - name: Build signed macOS bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm run build:tauri --target universal-apple-darwin
       - name: Notarize and staple the DMG
         env:
@@ -180,6 +183,8 @@ jobs:
         with:
           files: |
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
       - name: Remove temporary signing credentials
         if: always()
         run: rm -f "$APPLE_API_KEY_PATH"
@@ -242,6 +247,9 @@ jobs:
         if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build Linux packages
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
@@ -249,6 +257,7 @@ jobs:
           files: |
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
+            target/release/bundle/appimage/*.AppImage.sig
 
   windows:
     name: Unsigned Windows installers
@@ -300,6 +309,9 @@ jobs:
         if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build unsigned Windows installers
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm run build:tauri
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
@@ -307,6 +319,48 @@ jobs:
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/*-setup.exe.sig
+
+  updater-manifest:
+    name: Publish signed updater manifest
+    needs: [macos, linux, windows]
+    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: desktop-release
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download signed updater artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir updater-assets
+          gh release download "$GITHUB_REF_NAME" \
+            --pattern "*.app.tar.gz" \
+            --pattern "*.app.tar.gz.sig" \
+            --pattern "*.AppImage" \
+            --pattern "*.AppImage.sig" \
+            --pattern "*-setup.exe" \
+            --pattern "*-setup.exe.sig" \
+            --dir updater-assets
+      - name: Generate signed update metadata
+        run: >
+          node scripts/generate-updater-manifest.mjs
+          --assets updater-assets
+          --repository "$GITHUB_REPOSITORY"
+          --tag "$GITHUB_REF_NAME"
+          --version "${GITHUB_REF_NAME#v}"
+          --output latest.json
+      - name: Publish stable update endpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view updater-latest >/dev/null 2>&1; then
+            gh release create updater-latest \
+              --prerelease \
+              --title "Procyon updater metadata" \
+              --notes "Managed endpoint for signed desktop update metadata."
+          fi
+          gh release upload updater-latest latest.json --clobber
 
   homebrew:
     name: Publish cross-platform Homebrew cask

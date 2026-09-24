@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { ActionDescriptor, PluginDescriptor, Settings } from '../../models';
 import { SettingsEditor } from './settings-editor';
@@ -45,6 +46,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     multiRenamePresets: [],
     savedSearches: [],
     iconTheme: 'generic',
+    checkForUpdatesAutomatically: true,
     ...overrides,
   };
 }
@@ -146,6 +148,43 @@ describe('SettingsEditor', () => {
       'diagnostics',
     );
     await vi.waitFor(() => expect(root.querySelector('.diagnostics-view')).not.toBeNull());
+  });
+
+  it('persists automatic update checks and explains desktop-only installation', () => {
+    const { onPreview } = mountEditor();
+
+    openSection('Updates');
+
+    expect(root.textContent).toContain(
+      'Application updates are available only in the desktop app.',
+    );
+    const toggle = root.querySelector<HTMLInputElement>('.fm-app-update-settings input');
+    expect(toggle?.checked).toBe(true);
+    toggle?.click();
+    expect(onPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ checkForUpdatesAutomatically: false }),
+    );
+  });
+
+  it('checks for and installs an available signed desktop update on demand', async () => {
+    const client = new MockFileManagerClient();
+    Object.defineProperty(client, 'supportsAppUpdates', { value: true });
+    const check = vi.spyOn(client as FileManagerClient, 'checkForAppUpdate').mockResolvedValue({
+      currentVersion: '0.1.5',
+      version: '0.1.6',
+      body: 'Update notes',
+    });
+    const install = vi.spyOn(client, 'installAppUpdate').mockResolvedValue(undefined);
+    mountEditor({ client });
+    openSection('Updates');
+
+    root.querySelector<HTMLButtonElement>('.fm-update-check')?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Procyon 0.1.6 is available.'));
+    expect(check).toHaveBeenCalledOnce();
+    expect(root.textContent).toContain('Update notes');
+
+    root.querySelector<HTMLButtonElement>('.fm-update-install')?.click();
+    await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
   });
 
   it('shows only semantic activation until components are installed', async () => {

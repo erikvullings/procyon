@@ -38,12 +38,14 @@ function desktopConfig() {
   if (!Array.isArray(metadata.icons) || metadata.icons.length === 0) fail('icons is empty');
 
   const windowsThumbprint = process.env.FM_WINDOWS_CERTIFICATE_THUMBPRINT?.trim();
+  const createUpdaterArtifacts = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY?.trim());
   return {
     productName: metadata['product-name'],
     version: desktopPackage.version,
     identifier: metadata.identifier,
     bundle: {
       icon: metadata.icons,
+      createUpdaterArtifacts,
       ...(windowsThumbprint
         ? {
             windows: {

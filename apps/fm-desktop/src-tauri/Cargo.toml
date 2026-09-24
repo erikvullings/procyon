@@ -52,6 +52,8 @@ reqwest = { workspace = true, features = ["blocking"] }
 tauri.workspace = true
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-opener.workspace = true
+tauri-plugin-process.workspace = true
+tauri-plugin-updater.workspace = true
 tauri-plugin-window-state.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

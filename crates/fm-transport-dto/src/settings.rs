@@ -224,4 +224,6 @@ pub struct SettingsDto {
     pub saved_searches: Vec<SavedSearchDto>,
     /// Directory-entry icon set: `"generic"` for the built-in glyphs, or a discovered plugin's id.
     pub icon_theme: String,
+    /// Whether the desktop host checks for signed application updates after startup.
+    pub check_for_updates_automatically: bool,
 }

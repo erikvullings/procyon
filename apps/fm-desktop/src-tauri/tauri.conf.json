@@ -31,6 +31,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "app",
       "dmg",
@@ -50,6 +51,17 @@
       "../../../plugins": "plugins",
       "resources/procyon": "procyon",
       "resources/semantic": "semantic"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/erikvullings/procyon/releases/download/updater-latest/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE3RDU4RDk2OTM0RTA2QTkKUldTcEJrNlRsbzNWRnpwSjRjSGxWYkNmb0tDRk1hc1B2c05LNzhrNDJHOVUrbFdNcE81NW5RQXYK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

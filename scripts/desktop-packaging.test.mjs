@@ -5,9 +5,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import { load } from 'js-yaml';
 
 import { installNativeRuntimeAlias } from './build-semantic-developer-bundle.mjs';
+import { generateUpdaterManifest } from './generate-updater-manifest.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -21,6 +23,76 @@ function workflow(name) {
 
 function workflowText(name) {
   return read('.github', 'workflows', name);
+}
+
+function pngAlphaBounds(path) {
+  const png = readFileSync(path);
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  let offset = 8;
+  let width;
+  let height;
+  const compressed = [];
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.subarray(offset + 4, offset + 8).toString('ascii');
+    const data = png.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      assert.equal(data[8], 8, 'icon source must use 8-bit channels');
+      assert.equal(data[9], 6, 'icon source must be RGBA');
+    } else if (type === 'IDAT') {
+      compressed.push(data);
+    }
+    offset += length + 12;
+  }
+  assert.ok(width && height);
+  const bytesPerPixel = 4;
+  const rowBytes = width * bytesPerPixel;
+  const filtered = inflateSync(Buffer.concat(compressed));
+  const pixels = Buffer.alloc(rowBytes * height);
+  const paeth = (left, above, upperLeft) => {
+    const estimate = left + above - upperLeft;
+    const leftDistance = Math.abs(estimate - left);
+    const aboveDistance = Math.abs(estimate - above);
+    const upperLeftDistance = Math.abs(estimate - upperLeft);
+    if (leftDistance <= aboveDistance && leftDistance <= upperLeftDistance) return left;
+    return aboveDistance <= upperLeftDistance ? above : upperLeft;
+  };
+  for (let y = 0; y < height; y += 1) {
+    const filter = filtered[y * (rowBytes + 1)];
+    for (let x = 0; x < rowBytes; x += 1) {
+      const raw = filtered[y * (rowBytes + 1) + x + 1];
+      const index = y * rowBytes + x;
+      const left = x < bytesPerPixel ? 0 : pixels[index - bytesPerPixel];
+      const above = y === 0 ? 0 : pixels[index - rowBytes];
+      const upperLeft = y === 0 || x < bytesPerPixel ? 0 : pixels[index - rowBytes - bytesPerPixel];
+      pixels[index] =
+        filter === 0
+          ? raw
+          : filter === 1
+            ? (raw + left) & 0xff
+            : filter === 2
+              ? (raw + above) & 0xff
+              : filter === 3
+                ? (raw + Math.floor((left + above) / 2)) & 0xff
+                : (raw + paeth(left, above, upperLeft)) & 0xff;
+    }
+  }
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixels[y * rowBytes + x * bytesPerPixel + 3] === 0) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return { width, height, minX, minY, maxX: maxX + 1, maxY: maxY + 1 };
 }
 
 /// Scratch space inside the repository, never a shared temporary directory.
@@ -58,6 +130,7 @@ test('desktop Cargo metadata and Tauri bootstrap config agree on product identit
   assert.equal(derived.version, workspaceVersion);
   assert.equal(derived.identifier, config.identifier);
   assert.deepEqual(derived.bundle.icon, config.bundle.icon);
+  assert.equal(derived.bundle.createUpdaterArtifacts, false);
 });
 
 test('the root Tauri build command uses the metadata-derived build wrapper', () => {
@@ -68,6 +141,19 @@ test('the root Tauri build command uses the metadata-derived build wrapper', () 
 test('Tauri targets installable macOS, Windows, and Linux bundle formats', () => {
   const config = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.deepEqual(config.bundle.targets, ['app', 'dmg', 'msi', 'nsis', 'deb', 'appimage']);
+});
+
+test('Windows icon fills its canvas and retains taskbar-size frames', () => {
+  const source = join(repoRoot, 'apps', 'fm-desktop', 'src-tauri', 'app-icon-source-windows.png');
+  const bounds = pngAlphaBounds(source);
+  assert.ok((bounds.maxX - bounds.minX) / bounds.width >= 0.94);
+  assert.ok((bounds.maxY - bounds.minY) / bounds.height >= 0.94);
+
+  const ico = readFileSync(join(repoRoot, 'apps', 'fm-desktop', 'src-tauri', 'icons', 'icon.ico'));
+  assert.equal(ico.readUInt16LE(2), 1);
+  const frameCount = ico.readUInt16LE(4);
+  const widths = Array.from({ length: frameCount }, (_, index) => ico[6 + index * 16] || 256);
+  for (const required of [16, 24, 32, 48, 64, 256]) assert.ok(widths.includes(required));
 });
 
 test('Tauri windows enable native page zoom hotkeys', () => {
@@ -96,7 +182,7 @@ test('pull-request CI builds desktop bundles without any signing credentials', (
   assert.doesNotMatch(ciText, /APPLE_|WINDOWS_|CERTIFICATE|SIGNING|notariz/i);
 });
 
-test('protected release workflow signs and notarizes macOS packages only', () => {
+test('protected release workflow signs updater artifacts and notarizes macOS packages', () => {
   const releaseText = workflowText('release-desktop.yml');
   const release = workflow('release-desktop.yml');
   assert.deepEqual(release.on.push.tags, ['v*']);
@@ -112,6 +198,8 @@ test('protected release workflow signs and notarizes macOS packages only', () =>
   assert.match(releaseText, /secrets\.APPLE_API_ISSUER/);
   assert.match(releaseText, /secrets\.APPLE_API_KEY/);
   assert.match(releaseText, /secrets\.APPLE_API_KEY_P8/);
+  assert.match(releaseText, /secrets\.TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(releaseText, /secrets\.TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
   assert.match(releaseText, /apple-actions\/import-codesign-certs@v7/);
   assert.match(releaseText, /DeveloperIDG2CA\.cer/);
   assert.match(releaseText, /f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a/);
@@ -147,6 +235,12 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(releaseText, /libwebkit2gtk-4\.1-dev/);
   assert.match(releaseText, /bundle\/deb\/\*\.deb/);
   assert.match(releaseText, /bundle\/appimage\/\*\.AppImage/);
+  assert.match(releaseText, /bundle\/appimage\/\*\.AppImage\.sig/);
+  assert.match(releaseText, /bundle\/macos\/\*\.app\.tar\.gz\.sig/);
+  assert.match(releaseText, /bundle\/nsis\/\*-setup\.exe\.sig/);
+  assert.deepEqual(release.jobs['updater-manifest'].needs, ['macos', 'linux', 'windows']);
+  assert.match(releaseText, /generate-updater-manifest\.mjs/);
+  assert.match(releaseText, /gh release upload updater-latest latest\.json --clobber/);
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
@@ -175,6 +269,35 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(chocolateyPush?.run ?? '', /403 \\\(Forbidden\\\)/);
   assert.match(chocolateyPush?.run ?? '', /GITHUB_STEP_SUMMARY/);
   assert.doesNotMatch(chocolateyPush?.run ?? '', /exit 1/);
+});
+
+test('updater manifest embeds signed versioned artifacts for every supported target', () => {
+  const assets = scratchDirectory('updater-assets-');
+  const artifacts = [
+    ['Procyon.app.tar.gz', 'mac-signature'],
+    ['Procyon_0.2.0_amd64.AppImage', 'linux-signature'],
+    ['Procyon_0.2.0_x64-setup.exe', 'windows-signature'],
+  ];
+  for (const [name, signature] of artifacts) {
+    writeFileSync(join(assets, name), name);
+    writeFileSync(join(assets, `${name}.sig`), signature);
+  }
+
+  const manifest = generateUpdaterManifest({
+    assetsDirectory: assets,
+    repository: 'erikvullings/procyon',
+    tag: 'v0.2.0',
+    version: '0.2.0',
+  });
+
+  assert.equal(manifest.version, '0.2.0');
+  assert.equal(manifest.platforms['darwin-aarch64'].signature, 'mac-signature');
+  assert.deepEqual(manifest.platforms['darwin-aarch64'], manifest.platforms['darwin-x86_64']);
+  assert.match(
+    manifest.platforms['linux-x86_64'].url,
+    /v0\.2\.0\/Procyon_0\.2\.0_amd64\.AppImage$/,
+  );
+  assert.equal(manifest.platforms['windows-x86_64'].signature, 'windows-signature');
 });
 
 test('desktop releases consume one approved semantic component release without rebuilding it', () => {
@@ -754,7 +877,7 @@ test('semantic component qualification retains portable lifecycle and privacy ev
   assert.doesNotMatch(JSON.stringify(payloads), /qualify-semantic-installed\.mjs/);
 });
 
-test('README documents release versioning, package managers, smoke checks, and no auto-update', () => {
+test('README documents release versioning, package managers, smoke checks, and signed updates', () => {
   const readme = read('README.md');
   assert.match(readme, /## Desktop releases/);
   assert.match(readme, /Cargo\.toml/);
@@ -771,7 +894,8 @@ test('README documents release versioning, package managers, smoke checks, and n
   assert.match(readme, /choco install procyon/);
   assert.match(readme, /HOMEBREW_TAP_TOKEN/);
   assert.match(readme, /CHOCOLATEY_API_KEY/);
-  assert.match(readme, /auto-update is not included/i);
+  assert.match(readme, /verify signed update artifacts/i);
+  assert.match(readme, /TAURI_SIGNING_PRIVATE_KEY/);
   assert.match(readme, /\.deb/);
   assert.match(readme, /AppImage/);
 });

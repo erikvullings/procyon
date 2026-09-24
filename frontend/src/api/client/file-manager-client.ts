@@ -4,6 +4,8 @@ import type {
   ActionResult,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
+  AppUpdateInfo,
+  AppUpdateProgress,
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
@@ -208,6 +210,7 @@ export interface NativeFileDrop {
  */
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
+  readonly supportsAppUpdates: boolean;
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities>;
   getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities>;
   getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus>;
@@ -348,6 +351,15 @@ export interface FileManagerClient {
   getSettings(signal?: AbortSignal): Promise<Settings>;
 
   updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings>;
+
+  /** Checks the host's configured signed update endpoint. */
+  checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateInfo | undefined>;
+
+  /** Downloads, verifies, installs, and restarts into the most recently checked update. */
+  installAppUpdate(
+    onProgress?: (progress: AppUpdateProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<void>;
 
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]>;
 

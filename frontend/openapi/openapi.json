@@ -18839,9 +18839,14 @@
           "recentLocationsByWorkspace",
           "multiRenamePresets",
           "savedSearches",
-          "iconTheme"
+          "iconTheme",
+          "checkForUpdatesAutomatically"
         ],
         "properties": {
+          "checkForUpdatesAutomatically": {
+            "type": "boolean",
+            "description": "Whether the desktop host checks for signed application updates after startup."
+          },
           "columnWidths": {
             "type": "object",
             "description": "Column widths in CSS pixels, keyed by column id, shared by every tab and pane.",

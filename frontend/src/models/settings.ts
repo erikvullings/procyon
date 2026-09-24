@@ -60,4 +60,5 @@ export interface Settings {
   readonly multiRenamePresets: readonly MultiRenamePreset[];
   readonly savedSearches: readonly SavedSearch[];
   readonly iconTheme: string;
+  readonly checkForUpdatesAutomatically: boolean;
 }

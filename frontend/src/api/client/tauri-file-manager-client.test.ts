@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const invoke = vi.fn();
 const onDragDropEvent = vi.fn();
 const openUrl = vi.fn();
+const check = vi.fn();
+const relaunch = vi.fn();
 
 class MockChannel<T> {
   constructor(public onmessage: (message: T) => void) {}
@@ -17,6 +19,12 @@ vi.mock('@tauri-apps/api/window', () => ({
 }));
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: (...args: unknown[]) => openUrl(...args),
+}));
+vi.mock('@tauri-apps/plugin-process', () => ({
+  relaunch: (...args: unknown[]) => relaunch(...args),
+}));
+vi.mock('@tauri-apps/plugin-updater', () => ({
+  check: (...args: unknown[]) => check(...args),
 }));
 
 const { TauriFileManagerClient } = await import('./tauri-file-manager-client');
@@ -65,6 +73,8 @@ afterEach(() => {
   invoke.mockReset();
   onDragDropEvent.mockReset();
   openUrl.mockReset();
+  check.mockReset();
+  relaunch.mockReset();
 });
 
 describe('TauriFileManagerClient', () => {
@@ -75,6 +85,44 @@ describe('TauriFileManagerClient', () => {
     await client.openExternalUrl('https://example.com/read');
 
     expect(openUrl).toHaveBeenCalledWith('https://example.com/read');
+  });
+
+  it('checks, downloads, verifies, installs, and restarts through the Tauri updater', async () => {
+    const close = vi.fn();
+    const downloadAndInstall = vi.fn(async (onProgress) => {
+      onProgress({ event: 'Started', data: { contentLength: 100 } });
+      onProgress({ event: 'Progress', data: { chunkLength: 40 } });
+      onProgress({ event: 'Finished' });
+    });
+    check.mockResolvedValue({
+      currentVersion: '0.1.5',
+      version: '0.1.6',
+      date: '2026-08-01T12:00:00Z',
+      body: 'Update notes',
+      close,
+      downloadAndInstall,
+    });
+    relaunch.mockResolvedValue(undefined);
+    const progress = vi.fn();
+    const client = new TauriFileManagerClient();
+
+    await expect(client.checkForAppUpdate()).resolves.toEqual({
+      currentVersion: '0.1.5',
+      version: '0.1.6',
+      date: '2026-08-01T12:00:00Z',
+      body: 'Update notes',
+    });
+    await client.installAppUpdate(progress);
+
+    expect(client.supportsAppUpdates).toBe(true);
+    expect(check).toHaveBeenCalledOnce();
+    expect(downloadAndInstall).toHaveBeenCalledOnce();
+    expect(progress.mock.calls.map(([event]) => event)).toEqual([
+      { event: 'started', contentLength: 100 },
+      { event: 'progress', chunkLength: 40 },
+      { event: 'finished' },
+    ]);
+    expect(relaunch).toHaveBeenCalledOnce();
   });
 
   it('propagates Ask cancellation to the desktop host', async () => {
