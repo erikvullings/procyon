@@ -42,7 +42,7 @@ pnpm --dir frontend exec vitest run -t "lands the cursor on the first entry"
 `cargo nextest run --workspace` is the full Rust suite (`cargo test --doc --workspace` separately
 covers doctests, which nextest doesn't run).
 
-**Rust toolchain:** pinned to `1.97.1` via `rust-toolchain.toml`, matching CI exactly — don't chase
+**Rust toolchain:** pinned to `1.98.1` via `rust-toolchain.toml`, matching CI exactly — don't chase
 build/lint differences without first confirming `rustc --version` matches. A Homebrew-installed
 `rustc`/`cargo` ahead of `~/.cargo/bin` (rustup's shims) on `PATH` silently shadows this pin; a
 newer local toolchain can then fail clippy lints (e.g. `result_large_err`) that don't exist in the

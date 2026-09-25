@@ -66,7 +66,7 @@ requires a session token and should be placed behind TLS. See
 
 | Tool | Version | Purpose |
 | --- | --- | --- |
-| Rust | **1.97.1** | Pinned by `rust-toolchain.toml` |
+| Rust | **1.98.1** | Pinned by `rust-toolchain.toml`; includes the macOS 27 Mach-O `LINKEDIT` alignment fix |
 | Node.js | **22 LTS** | Frontend and repository scripts |
 | pnpm | **12** | Pinned by `packageManager` in `package.json` |
 | cargo-watch | Latest | Automatic Axum rebuilds during HTTP development |
