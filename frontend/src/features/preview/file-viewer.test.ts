@@ -1293,7 +1293,7 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-structured-header-row')).not.toBeNull();
     expect(root.querySelectorAll('.fm-structured-row').length).toBeLessThan(50);
     expect(root.querySelectorAll('.fm-structured-header-cell').length).toBeLessThan(20);
-    expect(root.querySelector<HTMLButtonElement>('button[title*="sorting"]')?.disabled).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('.fm-structured-sort')?.disabled).toBe(true);
   });
 
   it('renders populated Materialized delimiter and header controls', () => {
