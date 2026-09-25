@@ -741,7 +741,7 @@ fn parse_sha256(value: &str) -> Option<[u8; 32]> {
         return None;
     }
     let mut bytes = [0_u8; 32];
-    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let pair = std::str::from_utf8(pair).ok()?;
         bytes[index] = u8::from_str_radix(pair, 16).ok()?;
     }
