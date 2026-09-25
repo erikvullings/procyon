@@ -689,7 +689,7 @@ fn encode_png(width: i32, height: i32, bgra: &[u8]) -> Result<Vec<u8>, PlatformE
     let mut scanlines = Vec::with_capacity((row_bytes + 1) * height);
     for row in bgra.chunks_exact(row_bytes) {
         scanlines.push(0);
-        for pixel in row.chunks_exact(4) {
+        for pixel in row.as_chunks::<4>().0 {
             scanlines.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
         }
     }

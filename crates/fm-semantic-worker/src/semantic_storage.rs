@@ -2613,12 +2613,10 @@ fn decode_vector(bytes: &[u8]) -> Result<Vec<f32>, StorageError> {
         return Err(StorageError::CorruptCatalog);
     }
     Ok(bytes
-        .chunks_exact(std::mem::size_of::<f32>())
-        .map(|chunk| {
-            let mut encoded = [0_u8; std::mem::size_of::<f32>()];
-            encoded.copy_from_slice(chunk);
-            f32::from_le_bytes(encoded)
-        })
+        .as_chunks::<{ std::mem::size_of::<f32>() }>()
+        .0
+        .iter()
+        .map(|encoded| f32::from_le_bytes(*encoded))
         .collect())
 }
 
