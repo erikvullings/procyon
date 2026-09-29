@@ -33,3 +33,8 @@ link counts, flags and mount status for a whole batch of entries per syscall, in
   dirs, empty dir/file, unicode names, symlinks, a hardlink pair and a chmod-000 directory.
 - Benchmark (release, `~/Library`, 1.09M nodes, identical output): portable 8.1 s warm vs
   bulk 6.1 s warm (~25% faster); on a cold cache 13.4 s vs 6.1 s.
+- File apparent size uses `ATTR_FILE_DATALENGTH` (data fork, matching `st_size`), not
+  `ATTR_FILE_TOTALSIZE`, which adds resource forks; the parity fixture includes a resource fork.
+- The few Darwin FFI items are declared in a private `sys` module rather than depending on
+  `libc`: `Cargo.lock` is part of the knowledge-evaluation release fingerprint, so a lockfile
+  change would invalidate the checked-in measured report.

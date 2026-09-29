@@ -135,7 +135,7 @@ function paintScene(canvas: HTMLCanvasElement, scene: TreemapScene, palette: Tre
   );
   const style = getComputedStyle(canvas);
   const fontFamily = style.getPropertyValue('--fm-font-family').trim() || 'sans-serif';
-  const labelColour = style.getPropertyValue('--fm-disk-usage-label').trim() || '#ffffff';
+  const labelColour = style.getPropertyValue('--fm-disk-usage-label').trim() || 'white';
   context.font = `600 ${LABEL_CSS_FONT_SIZE * scene.scale}px ${fontFamily}`;
   context.textBaseline = 'middle';
   context.fillStyle = labelColour;

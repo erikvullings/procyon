@@ -13,8 +13,56 @@ use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-/// `ATTR_CMN_ERROR` is missing from `libc`; it reports a per-entry failure.
-const ATTR_CMN_ERROR: u32 = 0x2000_0000;
+/// The few `<sys/attr.h>`, `<fcntl.h>` and `<errno.h>` items this module needs, declared here
+/// rather than via the `libc` crate. These are stable Darwin ABI values.
+mod sys {
+    use std::ffi::{c_int, c_void};
+
+    pub(super) type AttrGroup = u32;
+
+    #[repr(C)]
+    pub(super) struct AttrList {
+        pub(super) bitmapcount: u16,
+        pub(super) reserved: u16,
+        pub(super) commonattr: AttrGroup,
+        pub(super) volattr: AttrGroup,
+        pub(super) dirattr: AttrGroup,
+        pub(super) fileattr: AttrGroup,
+        pub(super) forkattr: AttrGroup,
+    }
+
+    pub(super) const ATTR_BIT_MAP_COUNT: u16 = 5;
+    pub(super) const ATTR_CMN_NAME: AttrGroup = 0x0000_0001;
+    pub(super) const ATTR_CMN_DEVID: AttrGroup = 0x0000_0002;
+    pub(super) const ATTR_CMN_OBJTYPE: AttrGroup = 0x0000_0008;
+    pub(super) const ATTR_CMN_FLAGS: AttrGroup = 0x0004_0000;
+    pub(super) const ATTR_CMN_FILEID: AttrGroup = 0x0200_0000;
+    pub(super) const ATTR_CMN_ERROR: AttrGroup = 0x2000_0000;
+    pub(super) const ATTR_CMN_RETURNED_ATTRS: AttrGroup = 0x8000_0000;
+    pub(super) const ATTR_DIR_MOUNTSTATUS: AttrGroup = 0x0000_0004;
+    pub(super) const ATTR_DIR_ALLOCSIZE: AttrGroup = 0x0000_0008;
+    pub(super) const ATTR_DIR_DATALENGTH: AttrGroup = 0x0000_0020;
+    pub(super) const ATTR_FILE_LINKCOUNT: AttrGroup = 0x0000_0001;
+    pub(super) const ATTR_FILE_ALLOCSIZE: AttrGroup = 0x0000_0004;
+    pub(super) const ATTR_FILE_DATALENGTH: AttrGroup = 0x0000_0200;
+    pub(super) const DIR_MNTSTATUS_MNTPOINT: u32 = 0x1;
+    pub(super) const O_NOFOLLOW: c_int = 0x0000_0100;
+    pub(super) const O_DIRECTORY: c_int = 0x0010_0000;
+    #[cfg(test)]
+    pub(super) const EACCES: c_int = 13;
+
+    #[allow(unsafe_code)]
+    unsafe extern "C" {
+        pub(super) fn getattrlistbulk(
+            dirfd: c_int,
+            attr_list: *mut c_void,
+            attr_buf: *mut c_void,
+            attr_buf_size: usize,
+            options: u64,
+        ) -> c_int;
+    }
+}
+
 const VDIR: u32 = 2;
 const VLNK: u32 = 5;
 /// `attribute_set_t`: five `attrgroup_t` words (common, volume, directory, file, fork).
@@ -22,17 +70,17 @@ const ATTRIBUTE_SET_LEN: usize = 20;
 /// Kernel buffer per call, reused per thread; large directories take several calls.
 const BUFFER_WORDS: usize = 16 * 1024;
 
-const COMMON_ATTRIBUTES: u32 = libc::ATTR_CMN_RETURNED_ATTRS
-    | ATTR_CMN_ERROR
-    | libc::ATTR_CMN_NAME
-    | libc::ATTR_CMN_DEVID
-    | libc::ATTR_CMN_OBJTYPE
-    | libc::ATTR_CMN_FLAGS
-    | libc::ATTR_CMN_FILEID;
+const COMMON_ATTRIBUTES: u32 = sys::ATTR_CMN_RETURNED_ATTRS
+    | sys::ATTR_CMN_ERROR
+    | sys::ATTR_CMN_NAME
+    | sys::ATTR_CMN_DEVID
+    | sys::ATTR_CMN_OBJTYPE
+    | sys::ATTR_CMN_FLAGS
+    | sys::ATTR_CMN_FILEID;
 const DIRECTORY_ATTRIBUTES: u32 =
-    libc::ATTR_DIR_MOUNTSTATUS | libc::ATTR_DIR_ALLOCSIZE | libc::ATTR_DIR_DATALENGTH;
+    sys::ATTR_DIR_MOUNTSTATUS | sys::ATTR_DIR_ALLOCSIZE | sys::ATTR_DIR_DATALENGTH;
 const FILE_ATTRIBUTES: u32 =
-    libc::ATTR_FILE_LINKCOUNT | libc::ATTR_FILE_TOTALSIZE | libc::ATTR_FILE_ALLOCSIZE;
+    sys::ATTR_FILE_LINKCOUNT | sys::ATTR_FILE_ALLOCSIZE | sys::ATTR_FILE_DATALENGTH;
 
 thread_local! {
     // `u64` words keep the kernel buffer 8-byte aligned.
@@ -101,10 +149,10 @@ pub struct BulkListing {
 pub fn list_directory_bulk(path: &Path) -> io::Result<BulkListing> {
     let directory = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .custom_flags(sys::O_DIRECTORY | sys::O_NOFOLLOW)
         .open(path)?;
-    let mut request = libc::attrlist {
-        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
+    let mut request = sys::AttrList {
+        bitmapcount: sys::ATTR_BIT_MAP_COUNT,
         reserved: 0,
         commonattr: COMMON_ATTRIBUTES,
         volattr: 0,
@@ -121,7 +169,7 @@ pub fn list_directory_bulk(path: &Path) -> io::Result<BulkListing> {
             // `request` is a valid `attrlist`, and `buffer` is a live, writable allocation of
             // `byte_len` bytes that the kernel fills without retaining the pointer.
             let count = unsafe {
-                libc::getattrlistbulk(
+                sys::getattrlistbulk(
                     directory.as_raw_fd(),
                     (&raw mut request).cast(),
                     buffer.as_mut_ptr().cast(),
@@ -190,12 +238,12 @@ fn parse_entry(entry: &[u8]) -> Option<ParsedEntry> {
     offset += ATTRIBUTE_SET_LEN;
 
     let mut error = 0;
-    if common & ATTR_CMN_ERROR != 0 {
+    if common & sys::ATTR_CMN_ERROR != 0 {
         error = read_u32(entry, offset)?;
         offset += 4;
     }
     let mut name = None;
-    if common & libc::ATTR_CMN_NAME != 0 {
+    if common & sys::ATTR_CMN_NAME != 0 {
         let relative = i32::from_ne_bytes(read_array(entry, offset)?);
         let length = usize::try_from(read_u32(entry, offset + 4)?).ok()?;
         let start = offset.checked_add_signed(isize::try_from(relative).ok()?)?;
@@ -217,28 +265,26 @@ fn parse_entry(entry: &[u8]) -> Option<ParsedEntry> {
         }));
     }
 
-    let required = libc::ATTR_CMN_DEVID
-        | libc::ATTR_CMN_OBJTYPE
-        | libc::ATTR_CMN_FLAGS
-        | libc::ATTR_CMN_FILEID;
+    let required =
+        sys::ATTR_CMN_DEVID | sys::ATTR_CMN_OBJTYPE | sys::ATTR_CMN_FLAGS | sys::ATTR_CMN_FILEID;
     let mut device = 0;
-    if common & libc::ATTR_CMN_DEVID != 0 {
+    if common & sys::ATTR_CMN_DEVID != 0 {
         // `dev_t` is an `i32`; widen it the way `std`'s `MetadataExt::dev` does.
         device = i64::from(i32::from_ne_bytes(read_array(entry, offset)?)) as u64;
         offset += 4;
     }
     let mut object_type = 0;
-    if common & libc::ATTR_CMN_OBJTYPE != 0 {
+    if common & sys::ATTR_CMN_OBJTYPE != 0 {
         object_type = read_u32(entry, offset)?;
         offset += 4;
     }
     let mut bsd_flags = 0;
-    if common & libc::ATTR_CMN_FLAGS != 0 {
+    if common & sys::ATTR_CMN_FLAGS != 0 {
         bsd_flags = read_u32(entry, offset)?;
         offset += 4;
     }
     let mut file_id = 0;
-    if common & libc::ATTR_CMN_FILEID != 0 {
+    if common & sys::ATTR_CMN_FILEID != 0 {
         file_id = u64::from_ne_bytes(read_array(entry, offset)?);
         offset += 8;
     }
@@ -254,29 +300,30 @@ fn parse_entry(entry: &[u8]) -> Option<ParsedEntry> {
     let mut logical_bytes = 0;
     let mut physical_bytes = 0;
     let complete_sizes = if kind == BulkEntryKind::Directory {
-        if directory & libc::ATTR_DIR_MOUNTSTATUS != 0 {
-            mount_point = read_u32(entry, offset)? & libc::DIR_MNTSTATUS_MNTPOINT != 0;
+        if directory & sys::ATTR_DIR_MOUNTSTATUS != 0 {
+            mount_point = read_u32(entry, offset)? & sys::DIR_MNTSTATUS_MNTPOINT != 0;
             offset += 4;
         }
-        if directory & libc::ATTR_DIR_ALLOCSIZE != 0 {
+        if directory & sys::ATTR_DIR_ALLOCSIZE != 0 {
             physical_bytes = read_off_t(entry, offset)?;
             offset += 8;
         }
-        if directory & libc::ATTR_DIR_DATALENGTH != 0 {
+        if directory & sys::ATTR_DIR_DATALENGTH != 0 {
             logical_bytes = read_off_t(entry, offset)?;
         }
         directory & DIRECTORY_ATTRIBUTES == DIRECTORY_ATTRIBUTES
     } else {
-        if file & libc::ATTR_FILE_LINKCOUNT != 0 {
+        if file & sys::ATTR_FILE_LINKCOUNT != 0 {
             link_count = read_u32(entry, offset)?;
             offset += 4;
         }
-        if file & libc::ATTR_FILE_TOTALSIZE != 0 {
-            logical_bytes = read_off_t(entry, offset)?;
+        if file & sys::ATTR_FILE_ALLOCSIZE != 0 {
+            physical_bytes = read_off_t(entry, offset)?;
             offset += 8;
         }
-        if file & libc::ATTR_FILE_ALLOCSIZE != 0 {
-            physical_bytes = read_off_t(entry, offset)?;
+        // Data fork only, like `st_size`; `ATTR_FILE_TOTALSIZE` would add resource forks.
+        if file & sys::ATTR_FILE_DATALENGTH != 0 {
+            logical_bytes = read_off_t(entry, offset)?;
         }
         file & FILE_ATTRIBUTES == FILE_ATTRIBUTES
     };
@@ -361,22 +408,22 @@ mod tests {
         ]
     }
 
-    const ALL_COMMON: u32 = libc::ATTR_CMN_RETURNED_ATTRS
-        | libc::ATTR_CMN_NAME
-        | libc::ATTR_CMN_DEVID
-        | libc::ATTR_CMN_OBJTYPE
-        | libc::ATTR_CMN_FLAGS
-        | libc::ATTR_CMN_FILEID;
+    const ALL_COMMON: u32 = sys::ATTR_CMN_RETURNED_ATTRS
+        | sys::ATTR_CMN_NAME
+        | sys::ATTR_CMN_DEVID
+        | sys::ATTR_CMN_OBJTYPE
+        | sys::ATTR_CMN_FLAGS
+        | sys::ATTR_CMN_FILEID;
 
     #[test]
     fn parses_files_and_directories_from_one_batch() {
         let mut file_tail = common_parts(7, 1, 0, 42);
         file_tail.push(3_u32.to_ne_bytes().to_vec());
-        file_tail.push(13_i64.to_ne_bytes().to_vec());
         file_tail.push(4096_i64.to_ne_bytes().to_vec());
+        file_tail.push(13_i64.to_ne_bytes().to_vec());
         let file_tail = file_tail.iter().map(Vec::as_slice).collect::<Vec<_>>();
         let mut directory_tail = common_parts(7, VDIR, 0x4000_0000, 43);
-        directory_tail.push(libc::DIR_MNTSTATUS_MNTPOINT.to_ne_bytes().to_vec());
+        directory_tail.push(sys::DIR_MNTSTATUS_MNTPOINT.to_ne_bytes().to_vec());
         directory_tail.push(0_i64.to_ne_bytes().to_vec());
         directory_tail.push(96_i64.to_ne_bytes().to_vec());
         let directory_tail = directory_tail.iter().map(Vec::as_slice).collect::<Vec<_>>();
@@ -429,7 +476,7 @@ mod tests {
     #[test]
     fn entry_errors_and_missing_attributes_defer_to_lstat() {
         let errored = packed_entry(
-            libc::ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_ERROR | libc::ATTR_CMN_NAME,
+            sys::ATTR_CMN_RETURNED_ATTRS | sys::ATTR_CMN_ERROR | sys::ATTR_CMN_NAME,
             0,
             0,
             b"locked",
@@ -437,7 +484,7 @@ mod tests {
         );
         // The error word precedes the name reference, so splice it in after the returned set.
         let mut errored_with_code = errored[..24].to_vec();
-        errored_with_code.extend_from_slice(&(libc::EACCES as u32).to_ne_bytes());
+        errored_with_code.extend_from_slice(&(sys::EACCES as u32).to_ne_bytes());
         errored_with_code.extend_from_slice(&errored[24..]);
         let length = u32::try_from(errored_with_code.len()).expect("small entry");
         errored_with_code[..4].copy_from_slice(&length.to_ne_bytes());

@@ -1644,6 +1644,28 @@ mod tests {
         (flat, unreadable.count())
     }
 
+    /// Gives the hardlink pair their sizes in a fixed order, since which one wins is racy.
+    #[cfg(target_os = "macos")]
+    fn normalise_hardlinks(
+        (mut flat, unreadable): (Vec<(String, DiskUsageSize)>, u64),
+    ) -> (Vec<(String, DiskUsageSize)>, u64) {
+        let is_link =
+            |path: &str| path.ends_with("/linked.bin") || path.ends_with("/linked-copy.bin");
+        let mut sizes = flat
+            .iter()
+            .filter(|(path, _)| is_link(path))
+            .map(|(_, size)| *size)
+            .collect::<Vec<_>>();
+        sizes.sort();
+        let mut sizes = sizes.into_iter();
+        for (path, size) in &mut flat {
+            if is_link(path) {
+                *size = sizes.next().expect("same count");
+            }
+        }
+        (flat, unreadable)
+    }
+
     /// The `getattrlistbulk` lister must produce exactly the tree the portable
     /// `read_dir` + `lstat` lister does: same entries, kinds, logical and physical bytes,
     /// hardlinks counted once, and the same unreadable count.
@@ -1660,8 +1682,17 @@ mod tests {
         fs::write(base.join("a/b/medium.bin"), vec![1_u8; 70_000]).expect("medium file");
         fs::write(base.join("a/b/c/zero"), b"").expect("empty file");
         fs::write(base.join("a/b/c/ünïcødé ☃.txt"), vec![2_u8; 5_000]).expect("unicode file");
-        fs::write(base.join("linked.bin"), vec![3_u8; 9_000]).expect("hardlink source");
-        fs::hard_link(base.join("linked.bin"), base.join("a/linked-copy.bin")).expect("hardlink");
+        // Same parent, so parallel traversal order only decides which of the two leaves counts.
+        fs::write(base.join("a/linked.bin"), vec![3_u8; 9_000]).expect("hardlink source");
+        fs::hard_link(base.join("a/linked.bin"), base.join("a/linked-copy.bin")).expect("hardlink");
+        let forked = base.join("a/forked.txt");
+        fs::write(&forked, b"hello").expect("forked file");
+        let status = std::process::Command::new("xattr")
+            .args(["-wx", "com.apple.ResourceFork", &"00".repeat(3_000)])
+            .arg(&forked)
+            .status()
+            .expect("run xattr");
+        assert!(status.success(), "write resource fork");
         symlink("a/small.txt", base.join("to-small")).expect("symlink");
         symlink("a", base.join("to-dir")).expect("dir symlink");
         let locked = base.join("locked");
@@ -1669,8 +1700,8 @@ mod tests {
         fs::write(locked.join("hidden"), b"secret").expect("locked file");
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod 000");
 
-        let portable = scan_with(base, DirectoryLister::Portable);
-        let bulk = scan_with(base, DirectoryLister::Bulk);
+        let portable = normalise_hardlinks(scan_with(base, DirectoryLister::Portable));
+        let bulk = normalise_hardlinks(scan_with(base, DirectoryLister::Bulk));
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("restore mode");
 
         assert_eq!(bulk, portable);

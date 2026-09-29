@@ -29,4 +29,13 @@ describe('mergeCleanupCandidates', () => {
       'file:///home/a/node_modules',
     ]);
   });
+
+  it('keeps the expanded folder itself, which its own rescan never reports', () => {
+    const merged = mergeCleanupCandidates([candidate('file:///home/app/node_modules', 40)], [], {
+      providerId: 'local',
+      uri: 'file:///home/app/node_modules',
+    });
+
+    expect(merged.map((item) => item.location.uri)).toEqual(['file:///home/app/node_modules']);
+  });
 });
