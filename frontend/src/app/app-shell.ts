@@ -3913,7 +3913,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ),
               tooltip(
-                t('shell', 'parentDirectory'),
+                labelWithShortcut(t('shell', 'parentDirectory'), shortcutFor('core.parent')),
                 m(
                   IconButton,
                   {
@@ -4441,6 +4441,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             recency: commandPaletteRecency,
             context: actionCommandController.actionContext(),
             availabilityContext: actionCommandController.commandAvailabilityContext(),
+            platform,
             onClose: () => {
               commandPaletteOpen = false;
             },
@@ -4495,6 +4496,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               contextMenu = undefined;
             },
             onInvoke: actionCommandController.invokeContextMenuAction,
+            platform,
             ...(platformContextMenuSupported &&
             contextMenu !== undefined &&
             contextMenu.entries.length > 0 &&

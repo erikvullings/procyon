@@ -426,6 +426,41 @@ main.fm-workspace {
   }
 }
 
+.fm-affected-items {
+  margin-block-end: 0.6rem;
+}
+
+.fm-affected-items-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-height: 4.5rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fm-affected-items-list > li {
+  max-width: 100%;
+  padding: 0 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font-weight: 600;
+  line-height: calc(var(--fm-row-height) - 2px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-affected-items-list > li.fm-affected-items-more {
+  border-style: dashed;
+  color: var(--fm-text-muted);
+  font-weight: 400;
+}
+
 /* Directory-tree sidebar (task 0139): a fixed-width column beside the pane split, sized so
  * `.fm-workspace-layout` (flex: 1 1 auto) fills the remaining width the same way it filled the
  * whole row before the sidebar existed. */
@@ -762,7 +797,7 @@ main.fm-workspace {
 .fm-workspace-toolbar {
   position: relative;
   box-sizing: border-box;
-  gap: 0rem;
+  gap: 2px;
   height: var(--fm-header-height);
   min-height: var(--fm-header-height);
   font-size: 0.92em;
@@ -771,9 +806,10 @@ main.fm-workspace {
 }
 
 .fm-toolbar-separator {
+  flex: 0 0 auto;
   width: 1px;
-  height: 1rem;
-  margin-inline: 0.25rem;
+  height: 14px;
+  margin-inline: 0.5rem;
   background: var(--fm-border);
 }
 
@@ -785,10 +821,13 @@ main.fm-workspace {
 .fm-search-controls {
   display: flex;
   align-items: center;
+  gap: 2px;
 }
 
+/* Enabled toolbar glyphs use the body text colour so the 18px strokes read clearly against the
+   raised toolbar; disabled buttons still recede through their own opacity. */
 .fm-workspace-toolbar .fm-icon {
-  color: var(--fm-text-muted);
+  color: var(--fm-text);
 }
 
 /*
@@ -986,7 +1025,7 @@ main.fm-workspace {
 
 .fm-navigation-controls {
   display: flex;
-  gap: 0.125rem;
+  gap: 2px;
 }
 
 .fm-navigation-controls button,
@@ -1009,7 +1048,7 @@ main.fm-workspace {
 
 .fm-navigation-controls button:disabled,
 .fm-workspace-toolbar button:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
 }
 
 .fm-navigation-controls button:hover:not(:disabled),
@@ -1019,6 +1058,17 @@ main.fm-workspace {
 .fm-diagnostics-button:hover,
 .fm-diagnostics-editor button:hover:not(:disabled) {
   background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+/* Keyboard focus on toolbar controls: the same tonal wash as hover plus a hairline accent inset,
+   so Tab traversal is visible without a thick ring or glow (DESIGN.md buttons). */
+.fm-navigation-controls button:focus-visible,
+.fm-workspace-toolbar button:focus-visible,
+.fm-pane-tabs button:focus-visible {
+  outline: 0;
+  background: var(--fm-hover);
+  box-shadow: inset 0 0 0 1px var(--fm-accent);
   color: var(--fm-text);
 }
 
@@ -1929,6 +1979,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-context-menu-item {
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
   min-height: var(--fm-header-height);
   border: 0;
   border-radius: 2px;
@@ -1940,19 +1993,53 @@ input[type="text"].fm-shortcuts-help-capture-input {
   text-align: left;
 }
 
+.fm-context-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-context-menu-shortcut {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--fm-text-muted);
+  font: inherit;
+  font-size: var(--fm-type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-context-menu-separator {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--fm-border);
+}
+
 .fm-context-menu-submenu::after {
-  float: right;
-  content: ">";
+  margin-inline-start: auto;
+  content: "›";
 }
 
 .fm-context-menu-item:hover:not(:disabled),
-.fm-context-menu-item:focus-visible {
+.fm-context-menu-item:focus-visible,
+.fm-context-menu:focus .fm-context-menu-item-active:not(:disabled) {
   outline: 0;
   background: var(--mm-dropdown-hover);
 }
 
+.fm-context-menu-item-destructive:not(:disabled) {
+  color: var(--fm-error);
+}
+
 .fm-context-menu-item:disabled {
   color: var(--fm-text-muted);
+  opacity: 0.75;
+}
+
+.fm-context-menu-item:disabled .fm-context-menu-shortcut {
+  opacity: 0.6;
 }
 
 .fm-operation-centre {
@@ -3310,6 +3397,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
    `:focus-within`, so the cursor position stays visible when focus moves to the directory tree. */
 .fm-pane[data-active="true"] .fm-cursor-row {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
+}
+
+/* The inactive pane keeps a faint, neutral cursor outline so both cursor positions stay legible
+   when switching panes with Tab, without competing with the active pane's accent cursor. */
+.fm-pane[data-active="false"] .fm-cursor-row {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fm-text-muted) 55%, transparent);
 }
 
 [data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {

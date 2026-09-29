@@ -429,6 +429,8 @@ export const nl = {
     queuePosition: 'Wachtrijpositie {position}',
     eta: 'Resterend {duration}',
     itemsProgress: { 1: '1 item', n: '{n} items' },
+    affectedItems: 'Items',
+    affectedMore: '+{n} meer',
     filesFound: { 1: '1 bestand gevonden.', n: '{n} bestanden gevonden.' },
     entriesCompared: { 1: '1 item vergeleken.', n: '{n} items vergeleken.' },
     itemsCompleted: '{count} items voltooid ({bytes}).',
@@ -1752,6 +1754,15 @@ export const nl = {
   },
   quickFilter: {
     placeholder: 'Filter…',
+  },
+  commandCategory: {
+    recent: 'Recent gebruikt',
+    fileOperations: 'Bestandsbewerkingen',
+    navigation: 'Navigatie',
+    selection: 'Selectie',
+    clipboard: 'Klembord',
+    tools: 'Hulpmiddelen',
+    application: 'Applicatie',
   },
   commandPalette: {
     placeholder: 'Typ een opdracht…',

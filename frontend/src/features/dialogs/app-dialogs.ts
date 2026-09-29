@@ -450,6 +450,7 @@ export function renderAppDialogs(
       ...(pendingDelete === undefined ? {} : { operationId: pendingDelete.id }),
       itemCount: pendingDelete?.progress.totalItems ?? 0,
       totalBytes: pendingDelete?.progress.totalBytes ?? 0,
+      sources: pendingDelete?.sources.map((source) => source.location) ?? [],
       formatSettings: ctx.getFormatSettings(),
       onCancel: () => {
         if (pendingDelete !== undefined) {

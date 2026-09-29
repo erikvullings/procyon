@@ -425,6 +425,8 @@ export const es = {
     queuePosition: 'Posición en la cola {position}',
     eta: 'Tiempo restante {duration}',
     itemsProgress: { 1: '1 elemento', n: '{n} elementos' },
+    affectedItems: 'Elementos',
+    affectedMore: '+{n} más',
     filesFound: { 1: 'Se encontró 1 archivo.', n: 'Se encontraron {n} archivos.' },
     entriesCompared: { 1: 'Se comparó 1 elemento.', n: 'Se compararon {n} elementos.' },
     itemsCompleted: 'Completados {count} elementos ({bytes}).',
@@ -1060,6 +1062,15 @@ export const es = {
   },
   quickFilter: {
     placeholder: 'Filtro…',
+  },
+  commandCategory: {
+    recent: 'Usados recientemente',
+    fileOperations: 'Operaciones de archivo',
+    navigation: 'Navegación',
+    selection: 'Selección',
+    clipboard: 'Portapapeles',
+    tools: 'Herramientas',
+    application: 'Aplicación',
   },
   commandPalette: {
     placeholder: 'Escriba un comando…',

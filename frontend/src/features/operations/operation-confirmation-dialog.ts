@@ -5,6 +5,7 @@ import { t } from '../../i18n';
 import type { Connection, Location } from '../../models';
 import { connectionForLocation } from '../connections/connections-model';
 import { parentLocation } from '../navigation/navigation';
+import { affectedItems } from './affected-items';
 import { createDialogFocusCycle } from './dialog-focus';
 import type { OperationConfirmationRequest } from './operations-controller';
 
@@ -118,7 +119,7 @@ export const OperationConfirmationDialog: FactoryComponent<
                   oncreate: ({ dom }) => focusCycle.mount(dom),
                   onremove: focusCycle.unmount,
                 },
-                description,
+                [affectedItems(request.sources), description],
               ),
         isOpen: request !== undefined,
         closeOnEsc: true,

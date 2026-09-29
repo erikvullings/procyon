@@ -56,10 +56,46 @@ const SELECTION_ACTION_IDS = new Set([
   'core.documentSummary',
 ]);
 
-const CONTEXT_MENU_SELECTION_ORDER = new Map([
-  ['core.copyName', 0],
-  ['core.copyPath', 1],
-  ['core.copyRelativePath', 2],
+/**
+ * Context-menu sections for a selection: open/inspect, clipboard, organise, archive, then the
+ * removal actions last so destructive items are never sandwiched between routine ones.
+ */
+const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
+  [
+    'core.open',
+    'core.view',
+    'core.edit',
+    'core.openWith',
+    'core.quickLook',
+    'core.revealInSystemFileManager',
+  ],
+  ['core.copyName', 'core.copyPath', 'core.copyRelativePath'],
+  [
+    'core.rename',
+    'core.copy',
+    'core.move',
+    'core.editFinderTags',
+    'core.editSpotlightComment',
+    'core.documentSummary',
+  ],
+  ['core.pack', 'core.moveToArchive', 'core.extract'],
+  ['core.trash', 'core.delete', 'core.uninstallApplication'],
+];
+
+const CONTEXT_MENU_SELECTION_ORDER = new Map(
+  CONTEXT_MENU_SELECTION_GROUPS.flat().map((actionId, index) => [actionId, index] as const),
+);
+
+/** Section index used to separate context-menu groups; unknown actions share a final section. */
+export function contextMenuGroup(actionId: string): number {
+  const group = CONTEXT_MENU_SELECTION_GROUPS.findIndex((ids) => ids.includes(actionId));
+  return group < 0 ? CONTEXT_MENU_SELECTION_GROUPS.length : group;
+}
+
+/** Actions whose effect cannot be undone from Trash; rendered with danger emphasis. */
+export const DESTRUCTIVE_CONTEXT_ACTION_IDS: ReadonlySet<string> = new Set([
+  'core.delete',
+  'core.uninstallApplication',
 ]);
 
 const PARENT_ENTRY_ACTION_IDS = new Set(['core.copyPath', 'core.copyRelativePath']);

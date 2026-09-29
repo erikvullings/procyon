@@ -130,7 +130,13 @@ describe('OperationConfirmationDialog', () => {
 
     const dialog = document.querySelector('[role="alertdialog"]');
     expect(dialog?.querySelector('h4')?.textContent).toBe('Move 1 item to Trash?');
-    expect(dialog?.querySelector('.fm-operation-confirmation-focus-scope')?.textContent).toBe('');
+    const scope = dialog?.querySelector('.fm-operation-confirmation-focus-scope');
+    expect(scope?.querySelector('.fm-operation-confirmation-route')).toBeNull();
+    expect(
+      [...(scope?.querySelectorAll('.fm-affected-items-list li') ?? [])].map(
+        (li) => li.textContent,
+      ),
+    ).toEqual(['source file.txt']);
     expect(document.activeElement?.textContent?.trim()).toBe('Move to Trash');
     const trash = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.trim() === 'Move to Trash',

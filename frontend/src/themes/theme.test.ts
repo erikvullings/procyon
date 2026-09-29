@@ -365,14 +365,14 @@ describe('theme stylesheet', () => {
     expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);
   });
 
-  it('keeps the command toolbar at header height with muted icons', () => {
+  it('keeps the command toolbar at header height with full-contrast icons', () => {
     const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
     const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
 
     expect(toolbar).toContain('height: var(--fm-header-height)');
     expect(toolbar).toContain('min-height: var(--fm-header-height)');
     expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
-    expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
+    expect(toolbarIcons).toContain('color: var(--fm-text);');
   });
 
   it('uses full touch targets for the command toolbar on coarse pointers', () => {
