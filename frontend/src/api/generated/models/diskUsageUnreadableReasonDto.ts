@@ -13,4 +13,6 @@ export const DiskUsageUnreadableReasonDto = {
   permissionDenied: 'permissionDenied',
   disappeared: 'disappeared',
   ioError: 'ioError',
+  otherVolume: 'otherVolume',
+  cloudOnly: 'cloudOnly',
 } as const;

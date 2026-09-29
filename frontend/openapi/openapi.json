@@ -9338,6 +9338,93 @@
           }
         }
       },
+      "DiskUsageNodeDto": {
+        "type": "object",
+        "description": "One node in the hierarchical disk-usage result.",
+        "required": [
+          "name",
+          "location",
+          "kind",
+          "logicalBytes",
+          "physicalBytes",
+          "children"
+        ],
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiskUsageNodeDto"
+            },
+            "description": "Descendants retained by the backend depth cap."
+          },
+          "collapsed": {
+            "type": "boolean",
+            "description": "Whether descendants were intentionally omitted from the response."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DiskUsageNodeKindDto",
+            "description": "Filesystem kind."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral location used for navigation."
+          },
+          "logicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Apparent byte length, with hard-linked data counted once per scanned tree.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the entry."
+          },
+          "physicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Allocated bytes on Unix; equal to logical bytes on platforms without allocated-size data.",
+            "minimum": 0
+          }
+        }
+      },
+      "DiskUsageNodeKindDto": {
+        "type": "string",
+        "description": "Filesystem entry kind represented in a disk-usage tree.",
+        "enum": [
+          "directory",
+          "file",
+          "symlink"
+        ]
+      },
+      "DiskUsageUnreadableEntryDto": {
+        "type": "object",
+        "description": "One filesystem entry skipped during a disk-usage scan, with enough context to show the\ncaller which path was unreadable and why, without leaking raw OS error strings.",
+        "required": [
+          "location",
+          "reason"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The location that could not be read."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/DiskUsageUnreadableReasonDto",
+            "description": "Sanitized reason the entry was skipped."
+          }
+        }
+      },
+      "DiskUsageUnreadableReasonDto": {
+        "type": "string",
+        "description": "Why one filesystem entry could not be included in a disk-usage scan.",
+        "enum": [
+          "permissionDenied",
+          "disappeared",
+          "ioError",
+          "otherVolume",
+          "cloudOnly"
+        ]
+      },
       "DocumentSummaryDto": {
         "type": "object",
         "description": "Persisted generated summary with source-evidence identities.",
@@ -15876,6 +15963,39 @@
             "type": "string",
             "format": "uuid",
             "description": "Workspace that owns the scan and receives its progress events."
+          }
+        }
+      },
+      "ScanDiskUsageResponseDto": {
+        "type": "object",
+        "description": "Completed hierarchical disk-usage scan.",
+        "required": [
+          "root",
+          "unreadableEntries"
+        ],
+        "properties": {
+          "root": {
+            "$ref": "#/components/schemas/DiskUsageNodeDto",
+            "description": "Root of the scanned hierarchy."
+          },
+          "scannedEntries": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Filesystem entries visited so far, so progress can advance visibly even while no\ntop-level subtree has finished.",
+            "minimum": 0
+          },
+          "unreadable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiskUsageUnreadableEntryDto"
+            },
+            "description": "Bounded detail list (capped) for entries counted in `unreadable_entries`, stable-sorted\nby location."
+          },
+          "unreadableEntries": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries skipped because metadata or directory contents could not be read.",
+            "minimum": 0
           }
         }
       },

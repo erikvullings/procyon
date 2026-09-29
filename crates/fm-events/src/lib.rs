@@ -105,6 +105,10 @@ pub enum DiskUsageUnreadableReasonPayload {
     Disappeared,
     /// Any other I/O failure while reading metadata or directory contents.
     IoError,
+    /// A directory on another volume (mount point); counted but not descended.
+    OtherVolume,
+    /// A directory whose contents are stored only in the cloud; not descended to avoid a download.
+    CloudOnly,
 }
 
 /// One filesystem entry skipped during a disk-usage scan.

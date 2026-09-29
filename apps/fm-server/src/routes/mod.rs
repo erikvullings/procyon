@@ -35,9 +35,13 @@ use utoipa::OpenApi;
 
 /// OpenAPI document metadata. Operation schemas are collected automatically
 /// from the `#[utoipa::path]` annotations on the handlers above as they are
-/// registered with `utoipa_axum::routes!`.
+/// registered with `utoipa_axum::routes!`. Schemas that only reach clients through events (such
+/// as disk-usage results) are listed explicitly so generated client models stay in sync.
 #[derive(OpenApi)]
-#[openapi(info(title = "File Manager API", version = "1.0.0"))]
+#[openapi(
+    info(title = "File Manager API", version = "1.0.0"),
+    components(schemas(fm_transport_dto::ScanDiskUsageResponseDto))
+)]
 struct ApiDoc;
 
 /// Builds the base OpenAPI document that routes are registered into.

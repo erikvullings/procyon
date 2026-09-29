@@ -245,6 +245,12 @@ enum UnreadableReason {
     PermissionDenied,
     Disappeared,
     IoError,
+    /// A directory on a different device than the scan root (a mount point). A scan measures one
+    /// volume, so it is counted as an entry but never descended.
+    OtherVolume,
+    /// A directory whose contents live only in the cloud (macOS `SF_DATALESS`). Listing it would
+    /// ask the file provider to download it, so it is never descended.
+    CloudOnly,
 }
 
 impl UnreadableReason {
@@ -263,6 +269,8 @@ impl From<UnreadableReason> for DiskUsageUnreadableReasonDto {
             UnreadableReason::PermissionDenied => Self::PermissionDenied,
             UnreadableReason::Disappeared => Self::Disappeared,
             UnreadableReason::IoError => Self::IoError,
+            UnreadableReason::OtherVolume => Self::OtherVolume,
+            UnreadableReason::CloudOnly => Self::CloudOnly,
         }
     }
 }
@@ -273,6 +281,8 @@ impl From<UnreadableReason> for DiskUsageUnreadableReasonPayload {
             UnreadableReason::PermissionDenied => Self::PermissionDenied,
             UnreadableReason::Disappeared => Self::Disappeared,
             UnreadableReason::IoError => Self::IoError,
+            UnreadableReason::OtherVolume => Self::OtherVolume,
+            UnreadableReason::CloudOnly => Self::CloudOnly,
         }
     }
 }
@@ -297,6 +307,10 @@ impl UnreadableRegistry {
     /// an individual `read_dir` entry failed mid-iteration (its own path is not recoverable in
     /// that case).
     fn record(&self, path: &Path, kind: std::io::ErrorKind) {
+        self.record_reason(path, UnreadableReason::from_error_kind(kind));
+    }
+
+    fn record_reason(&self, path: &Path, reason: UnreadableReason) {
         self.count.fetch_add(1, Ordering::Relaxed);
         let mut details = self
             .details
@@ -305,7 +319,7 @@ impl UnreadableRegistry {
         if details.len() < MAX_UNREADABLE_DETAILS {
             details.push(UnreadableEntry {
                 path: path.to_owned(),
-                reason: UnreadableReason::from_error_kind(kind),
+                reason,
             });
         }
     }
@@ -345,6 +359,75 @@ impl UnreadableRegistry {
     }
 }
 
+/// macOS `SF_DATALESS`: the directory's contents live in the cloud (iCloud Drive, File Provider).
+/// Other platforms report no BSD flags, so the check never matches there.
+const SF_DATALESS: u32 = 0x4000_0000;
+
+/// Where a scan stops descending, fixed once from the scan root.
+#[derive(Debug, Clone, Copy, Default)]
+struct ScanBoundary {
+    /// Device of the scan root; directories on any other device are not descended.
+    root_device: Option<u64>,
+}
+
+impl ScanBoundary {
+    fn for_root(metadata: &fs::Metadata) -> Self {
+        Self {
+            root_device: device_of(metadata),
+        }
+    }
+
+    /// Why a directory must not be descended, if it crosses the scan's boundary.
+    fn skip_reason(self, metadata: &fs::Metadata) -> Option<UnreadableReason> {
+        boundary_skip_reason(
+            self.root_device,
+            device_of(metadata),
+            bsd_flags_of(metadata),
+        )
+    }
+}
+
+/// Pure boundary decision: cloud-only contents first (never trigger a download), then mounts.
+fn boundary_skip_reason(
+    root_device: Option<u64>,
+    device: Option<u64>,
+    bsd_flags: u32,
+) -> Option<UnreadableReason> {
+    if bsd_flags & SF_DATALESS != 0 {
+        return Some(UnreadableReason::CloudOnly);
+    }
+    match (root_device, device) {
+        (Some(root), Some(device)) if root != device => Some(UnreadableReason::OtherVolume),
+        _ => None,
+    }
+}
+
+#[cfg(unix)]
+fn device_of(metadata: &fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    Some(metadata.dev())
+}
+
+/// Windows mount points are junctions, which `symlink_metadata` already reports as symlinks and
+/// the scan never follows.
+#[cfg(not(unix))]
+fn device_of(_metadata: &fs::Metadata) -> Option<u64> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn bsd_flags_of(metadata: &fs::Metadata) -> u32 {
+    use std::os::macos::fs::MetadataExt;
+
+    metadata.st_flags()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn bsd_flags_of(_metadata: &fs::Metadata) -> u32 {
+    0
+}
+
 /// Bounded parallel recursive traversal, replacing
 /// `parallel_disk_usage::fs_tree_builder::FsTreeBuilder`. `FsTreeBuilder`'s own `TreeBuilder`
 /// forks into Rayon's *global* thread pool, which previously combined with outer std-thread fan-out
@@ -368,6 +451,7 @@ fn build_tree_parallel(
     unreadable: &UnreadableRegistry,
     scanned_entries: &AtomicU64,
     seen_hardlinks: &Mutex<HashSet<FileIdentity>>,
+    boundary: ScanBoundary,
 ) -> Result<ScanTree, ApplicationError> {
     if cancellation.is_cancelled() {
         return Err(ApplicationError::OperationCancelled);
@@ -421,6 +505,10 @@ fn build_tree_parallel(
     if size.kind != ScannedEntryKind::Directory {
         return Ok(DataTree::dir(name, size, Vec::new()));
     }
+    if let Some(reason) = boundary.skip_reason(&metadata) {
+        unreadable.record_reason(path, reason);
+        return Ok(DataTree::dir(name, size, Vec::new()));
+    }
 
     let mut entry_names = Vec::new();
     match fs::read_dir(path) {
@@ -458,6 +546,7 @@ fn build_tree_parallel(
                 unreadable,
                 scanned_entries,
                 seen_hardlinks,
+                boundary,
             )
         })
         .collect::<Result<Vec<_>, ApplicationError>>()?;
@@ -504,9 +593,18 @@ fn scan_local_tree(
 ) -> Result<ScanDiskUsageResponseDto, ApplicationError> {
     let unreadable = UnreadableRegistry::default();
     let scanned_entries = AtomicU64::new(0);
-    let root_size = GetDiskUsageSize.get_size(&fs::symlink_metadata(&root).map_err(map_io_error)?);
+    let root_metadata = fs::symlink_metadata(&root).map_err(map_io_error)?;
+    let root_size = GetDiskUsageSize.get_size(&root_metadata);
+    let boundary = ScanBoundary::for_root(&root_metadata);
     let mut child_paths = Vec::new();
-    for entry in fs::read_dir(&root).map_err(map_io_error)? {
+    // The root is on its own device by definition; only its cloud-only state can stop the scan.
+    let root_entries = if boundary.skip_reason(&root_metadata).is_some() {
+        unreadable.record_reason(&root, UnreadableReason::CloudOnly);
+        Vec::new()
+    } else {
+        fs::read_dir(&root).map_err(map_io_error)?.collect()
+    };
+    for entry in root_entries {
         match entry {
             Ok(entry) => child_paths.push(entry.path()),
             // The failing entry's own name is unrecoverable from `io::Error` here, so the
@@ -560,6 +658,7 @@ fn scan_local_tree(
                             unreadable_ref,
                             scanned_entries_ref,
                             seen_hardlinks_ref,
+                            boundary,
                         );
                         let _ = sender.send((index, result));
                     });
@@ -827,6 +926,10 @@ fn event_unreadable(entry: &DiskUsageUnreadableEntryDto) -> DiskUsageUnreadableE
                 DiskUsageUnreadableReasonPayload::Disappeared
             }
             DiskUsageUnreadableReasonDto::IoError => DiskUsageUnreadableReasonPayload::IoError,
+            DiskUsageUnreadableReasonDto::OtherVolume => {
+                DiskUsageUnreadableReasonPayload::OtherVolume
+            }
+            DiskUsageUnreadableReasonDto::CloudOnly => DiskUsageUnreadableReasonPayload::CloudOnly,
         },
     }
 }
@@ -1150,6 +1253,58 @@ mod tests {
         assert_eq!(pool.current_num_threads(), DISK_USAGE_WORKER_COUNT);
     }
 
+    #[test]
+    fn boundary_skips_cloud_only_directories_before_checking_devices() {
+        assert_eq!(
+            boundary_skip_reason(Some(1), Some(1), SF_DATALESS),
+            Some(UnreadableReason::CloudOnly)
+        );
+        assert_eq!(
+            boundary_skip_reason(Some(1), Some(2), SF_DATALESS),
+            Some(UnreadableReason::CloudOnly)
+        );
+    }
+
+    #[test]
+    fn boundary_skips_directories_on_another_device() {
+        assert_eq!(
+            boundary_skip_reason(Some(1), Some(2), 0),
+            Some(UnreadableReason::OtherVolume)
+        );
+        assert_eq!(boundary_skip_reason(Some(1), Some(1), 0), None);
+        assert_eq!(boundary_skip_reason(None, Some(2), 0), None);
+        assert_eq!(boundary_skip_reason(Some(1), None, 0), None);
+    }
+
+    #[test]
+    fn scan_of_one_volume_reports_no_boundary_skips() {
+        let root = tempfile::tempdir().expect("create fixture root");
+        fs::create_dir(root.path().join("nested")).expect("create nested directory");
+        fs::write(root.path().join("nested/file.bin"), [1_u8; 9]).expect("write fixture file");
+        let root_metadata = fs::symlink_metadata(root.path()).expect("root metadata");
+        let unreadable = UnreadableRegistry::default();
+
+        let tree = disk_usage_thread_pool()
+            .expect("create disk usage pool")
+            .install(|| {
+                build_tree_parallel(
+                    root.path(),
+                    OsStringDisplay::os_string_from(root.path()),
+                    MAX_SCAN_DEPTH,
+                    &CancellationToken::new(),
+                    &unreadable,
+                    &AtomicU64::new(0),
+                    &Mutex::new(HashSet::new()),
+                    ScanBoundary::for_root(&root_metadata),
+                )
+            })
+            .expect("scan fixture");
+
+        assert_eq!(unreadable.count(), 0);
+        assert_eq!(tree.children().len(), 1);
+        assert_eq!(tree.children()[0].children().len(), 1);
+    }
+
     #[cfg(unix)]
     #[test]
     fn build_tree_parallel_deduplicates_hardlinks_during_traversal() {
@@ -1173,6 +1328,7 @@ mod tests {
                     &unreadable,
                     &scanned_entries,
                     &seen_hardlinks,
+                    ScanBoundary::default(),
                 )
             })
             .expect("scan fixture");
@@ -1227,6 +1383,7 @@ mod tests {
                         &unreadable,
                         &scanned_entries,
                         &seen_hardlinks,
+                        ScanBoundary::default(),
                     )
                 })
         });
