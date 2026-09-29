@@ -131,6 +131,26 @@ describe('DiskUsageView', () => {
     expect(onOpenFolder).toHaveBeenCalledWith(child.location);
   });
 
+  it('shows the list left of the treemap and lets the user hide it', () => {
+    mountLoaded({ ...directory('tmp', 80), children: [directory('projects', 80)] });
+    const body = root.querySelector('.fm-disk-usage-body');
+    expect(body?.firstElementChild?.classList.contains('fm-disk-usage-items')).toBe(true);
+    const toggle = root.querySelector<HTMLButtonElement>('.fm-disk-usage-list-toggle');
+    expect(toggle?.textContent).toBe('Hide list');
+
+    toggle?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-disk-usage-items')).toBeNull();
+    expect(root.querySelector('.fm-disk-usage-canvas')).not.toBeNull();
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle?.textContent).toBe('Show list');
+
+    toggle?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-disk-usage-items')).not.toBeNull();
+  });
+
   it('opens a real directory even when its name resembles the aggregate label', () => {
     const onOpenFolder = vi.fn();
     const child = directory('Small files (archive)', 80);

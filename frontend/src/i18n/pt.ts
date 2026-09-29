@@ -994,6 +994,8 @@ export const pt = {
     zoomOut: 'Voltar à pasta superior',
     breadcrumbLabel: 'Caminho de pastas da utilização do disco',
     openInOtherPane: 'Abrir no outro painel',
+    showList: 'Mostrar lista',
+    hideList: 'Ocultar lista',
     itemsLabel: 'Maiores itens em {name}',
     zoomHint: 'Clique numa pasta para ampliar; prima Retrocesso ou Escape para reduzir.',
     cleanupButton: 'Limpar ({count} · {size})',

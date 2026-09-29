@@ -992,6 +992,8 @@ export const es = {
     zoomOut: 'Volver a la carpeta superior',
     breadcrumbLabel: 'Ruta de carpetas del uso de disco',
     openInOtherPane: 'Abrir en el otro panel',
+    showList: 'Mostrar lista',
+    hideList: 'Ocultar lista',
     itemsLabel: 'Elementos más grandes en {name}',
     zoomHint: 'Haga clic en una carpeta para ampliarla; pulse Retroceso o Escape para alejarse.',
     cleanupButton: 'Limpiar ({count} · {size})',

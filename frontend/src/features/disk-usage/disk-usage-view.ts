@@ -48,6 +48,9 @@ export interface DiskUsageViewAttrs {
 const VIEW_BOUNDS: TreemapBounds = { x: 0, y: 0, width: 1000, height: 600 };
 const MAX_DEVICE_SCALE = 2;
 const MAX_LISTED_ITEMS = 200;
+
+/** Kept across disk-usage views for the session, so hiding the list sticks. */
+let listVisible = true;
 const LABEL_CSS_FONT_SIZE = 11;
 
 function formatBytes(value: number): string {
@@ -701,15 +704,30 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
                   renderBreadcrumbs(trail),
                   m('span.fm-disk-usage-current-size', formatBytes(current.physicalBytes)),
                   m(
+                    'button.btn-flat.fm-disk-usage-list-toggle',
+                    {
+                      type: 'button',
+                      'aria-pressed': String(listVisible),
+                      onclick: () => {
+                        listVisible = !listVisible;
+                      },
+                    },
+                    t('diskUsage', listVisible ? 'hideList' : 'showList'),
+                  ),
+                  m(
                     'button.btn-flat.fm-disk-usage-open-current',
                     { type: 'button', onclick: () => attrs.onOpenFolder(current.location) },
                     t('diskUsage', 'openInOtherPane'),
                   ),
                 ]),
-                m('.fm-disk-usage-body', [
-                  renderMap(current, trail, attrs),
-                  renderItems(current, palette, attrs),
-                ]),
+                m(
+                  '.fm-disk-usage-body',
+                  { class: listVisible ? undefined : 'fm-disk-usage-body--map-only' },
+                  [
+                    listVisible ? renderItems(current, palette, attrs) : undefined,
+                    renderMap(current, trail, attrs),
+                  ],
+                ),
               ]),
           hovered !== undefined && hoverPoint !== undefined
             ? m(

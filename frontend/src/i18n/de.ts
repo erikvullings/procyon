@@ -1000,6 +1000,8 @@ export const de = {
     zoomOut: 'Zurück zum übergeordneten Ordner',
     breadcrumbLabel: 'Ordnerpfad der Speicherbelegung',
     openInOtherPane: 'Im anderen Bereich öffnen',
+    showList: 'Liste anzeigen',
+    hideList: 'Liste ausblenden',
     itemsLabel: 'Größte Elemente in {name}',
     zoomHint: 'Klicken Sie auf einen Ordner zum Vergrößern; Rücktaste oder Escape verkleinert.',
     cleanupButton: 'Aufräumen ({count} · {size})',

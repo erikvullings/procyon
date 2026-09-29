@@ -1663,6 +1663,8 @@ export const en = {
     zoomOut: 'Back to the parent folder',
     breadcrumbLabel: 'Disk usage folder path',
     openInOtherPane: 'Open in other pane',
+    showList: 'Show list',
+    hideList: 'Hide list',
     itemsLabel: 'Largest items in {name}',
     zoomHint: 'Click a folder to zoom in; press Backspace or Escape to zoom out.',
     cleanupButton: 'Clean up ({count} · {size})',

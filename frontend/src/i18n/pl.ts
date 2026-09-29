@@ -989,6 +989,8 @@ export const pl = {
     zoomOut: 'Wróć do folderu nadrzędnego',
     breadcrumbLabel: 'Ścieżka folderów użycia dysku',
     openInOtherPane: 'Otwórz w drugim panelu',
+    showList: 'Pokaż listę',
+    hideList: 'Ukryj listę',
     itemsLabel: 'Największe elementy w {name}',
     zoomHint: 'Kliknij folder, aby powiększyć; naciśnij Backspace lub Escape, aby pomniejszyć.',
     cleanupButton: 'Posprzątaj ({count} · {size})',

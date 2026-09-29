@@ -988,6 +988,8 @@ export const it = {
     zoomOut: 'Torna alla cartella superiore',
     breadcrumbLabel: "Percorso cartelle dell'utilizzo disco",
     openInOtherPane: "Apri nell'altro riquadro",
+    showList: 'Mostra elenco',
+    hideList: 'Nascondi elenco',
     itemsLabel: 'Elementi più grandi in {name}',
     zoomHint: 'Fai clic su una cartella per ingrandire; premi Backspace o Esc per rimpicciolire.',
     cleanupButton: 'Pulisci ({count} · {size})',
