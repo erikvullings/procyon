@@ -4724,7 +4724,7 @@ describe('tabs per pane (task 0069)', () => {
       undefined,
     );
     await vi.waitFor(() =>
-      expect(activePane()?.querySelector('.fm-disk-usage-map')).not.toBeNull(),
+      expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull(),
     );
     expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(2);
 
@@ -4845,7 +4845,7 @@ describe('tabs per pane (task 0069)', () => {
         'Scanner worker stopped unexpectedly',
       ),
     );
-    expect(activePane()?.querySelector('.fm-disk-usage-map')).not.toBeNull();
+    expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull();
     expect(activePane()?.textContent).toContain('.olmx');
     expect(activePane()?.querySelector('.fm-disk-usage-progress')).toBeNull();
   });
@@ -4922,7 +4922,7 @@ describe('tabs per pane (task 0069)', () => {
       new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
     await vi.waitFor(() =>
-      expect(activePane()?.querySelector('.fm-disk-usage-map')).not.toBeNull(),
+      expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull(),
     );
 
     activePane()?.querySelector<HTMLButtonElement>('.fm-disk-usage-item-activate')?.click();
@@ -4933,10 +4933,14 @@ describe('tabs per pane (task 0069)', () => {
       expandRoot: true,
     });
     await vi.waitFor(() =>
-      expect(activePane()?.querySelector('.fm-disk-usage-toolbar')?.textContent).toContain('100 B'),
+      expect(activePane()?.querySelector('.fm-disk-usage-statusbar')?.textContent).toContain(
+        '100 B',
+      ),
     );
-    const toolbar = activePane()?.querySelector('.fm-disk-usage-toolbar');
-    expect(toolbar?.querySelector('strong')?.textContent).toBe('/');
+    const toolbar = activePane()?.querySelector('.fm-disk-usage-statusbar');
+    expect(
+      activePane()?.querySelector('.fm-disk-usage-header .fm-breadcrumb-segment')?.textContent,
+    ).toBe('/');
     expect(toolbar?.textContent).toContain('100 B');
     expect(toolbar?.querySelector('.fm-disk-usage-warning')?.textContent).toContain('2');
 

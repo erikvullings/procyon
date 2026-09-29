@@ -1665,6 +1665,7 @@ export const en = {
     openInOtherPane: 'Open in other pane',
     showList: 'Show list',
     hideList: 'Hide list',
+    zoomedSize: '{size} of {total} ({share})',
     itemsLabel: 'Largest items in {name}',
     zoomHint: 'Click a folder to zoom in; press Backspace or Escape to zoom out.',
     cleanupButton: 'Clean up ({count} · {size})',

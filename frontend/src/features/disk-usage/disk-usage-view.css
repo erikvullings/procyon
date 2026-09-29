@@ -1,116 +1,99 @@
 .fm-disk-usage-view {
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
   background: var(--fm-surface);
 }
 
-.fm-disk-usage-toolbar {
+.fm-disk-usage-header {
+  flex: 0 0 auto;
+}
+
+.fm-disk-usage-header-action {
   display: flex;
-  gap: 0.75rem;
   align-items: center;
-  padding: 0.45rem 0.65rem;
-  color: var(--fm-text);
-  background: var(--fm-surface-elevated);
-}
-
-.fm-disk-usage-toolbar {
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.fm-disk-usage-summary {
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-  margin-inline-end: auto;
-}
-
-.fm-disk-usage-summary-size {
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--fm-row-height) !important;
+  height: var(--fm-row-height) !important;
+  min-width: var(--fm-row-height) !important;
+  min-height: var(--fm-row-height) !important;
+  padding: 0 !important;
+  border: 0;
+  background: transparent;
   color: var(--fm-text-muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-disk-usage-header-action .fm-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.fm-disk-usage-header-action:hover,
+.fm-disk-usage-header-action:focus-visible {
+  color: var(--fm-text);
+}
+
+.fm-disk-usage-list-toggle[aria-pressed="true"] {
+  color: var(--fm-accent);
+}
+
+button.fm-disk-usage-crumb,
+button.fm-disk-usage-ancestor {
+  cursor: pointer;
+}
+
+button.fm-disk-usage-crumb:hover,
+button.fm-disk-usage-ancestor:hover {
+  color: var(--fm-text);
+}
+
+.fm-disk-usage-statusbar {
+  flex: 0 0 auto;
+}
+
+.fm-disk-usage-total {
+  color: var(--fm-text);
 }
 
 .fm-disk-usage-progress {
   display: inline-flex;
   gap: 0.4rem;
   align-items: center;
-  margin-inline-start: auto;
+}
+
+.fm-disk-usage-status-action {
+  height: calc(var(--fm-row-height) - 2px) !important;
+  padding: 0 0.4rem !important;
   color: var(--fm-text-muted);
-}
-
-.fm-disk-usage-map {
-  grid-row: 3;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 240px;
-}
-
-.fm-disk-usage-navigation {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  min-width: 0;
-  padding: 0.25rem 0.65rem;
-  border-bottom: 1px solid var(--fm-border);
-}
-
-.fm-disk-usage-breadcrumbs {
-  display: flex;
-  flex: 1 1 auto;
-  gap: 0.15rem;
-  align-items: center;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.fm-disk-usage-crumb {
-  overflow: hidden;
-  padding: 0.1rem 0.3rem;
-  color: var(--fm-text);
-  text-overflow: ellipsis;
-  background: none;
-  border: 0;
-  border-radius: var(--fm-radius);
   font: inherit;
+  line-height: calc(var(--fm-row-height) - 2px) !important;
+  text-transform: none;
 }
 
-button.fm-disk-usage-crumb {
-  flex: 0 1 auto;
-  color: var(--fm-accent);
-  cursor: pointer;
+.fm-disk-usage-status-action:hover,
+.fm-disk-usage-status-action[aria-expanded="true"] {
+  color: var(--fm-text);
 }
 
-button.fm-disk-usage-crumb:hover,
-button.fm-disk-usage-crumb:focus-visible {
-  background: var(--fm-surface-elevated);
+.fm-disk-usage-cleanup-toggle,
+.fm-disk-usage-warning {
+  margin-inline-start: auto;
 }
 
-button.fm-disk-usage-crumb::after {
-  margin-inline-start: 0.3rem;
-  color: var(--fm-text-muted);
-  content: "›";
-}
-
-span.fm-disk-usage-crumb {
-  flex: 0 0 auto;
-  font-weight: 650;
-}
-
-.fm-disk-usage-current-size {
-  flex: 0 0 auto;
-  color: var(--fm-text-muted);
-}
-
-.fm-disk-usage-zoom-out,
-.fm-disk-usage-open-current {
-  flex: 0 0 auto;
+.fm-disk-usage-cleanup-toggle + .fm-disk-usage-warning {
+  margin-inline-start: 0;
 }
 
 .fm-disk-usage-body {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
   min-height: 0;
 }
@@ -266,8 +249,8 @@ span.fm-disk-usage-crumb {
 }
 
 .fm-disk-usage-status {
-  grid-row: 3;
   display: grid;
+  flex: 1 1 auto;
   place-content: center;
   gap: 0.75rem;
   height: 100%;
@@ -305,14 +288,12 @@ span.fm-disk-usage-crumb {
   }
 }
 
-.fm-disk-usage-warning {
-  border-color: color-mix(in srgb, var(--fm-warning) 45%, transparent);
+.fm-disk-usage-status-action.fm-disk-usage-warning {
   color: var(--fm-warning);
-  background: color-mix(in srgb, var(--fm-warning) 9%, transparent);
 }
 
 .fm-disk-usage-notices {
-  grid-row: 2;
+  flex: 0 0 auto;
   max-height: min(34vh, 280px);
   overflow: auto;
 }

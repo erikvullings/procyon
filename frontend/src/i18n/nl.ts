@@ -1686,6 +1686,7 @@ export const nl = {
     openInOtherPane: 'Openen in het andere paneel',
     showList: 'Lijst tonen',
     hideList: 'Lijst verbergen',
+    zoomedSize: '{size} van {total} ({share})',
     itemsLabel: 'Grootste items in {name}',
     zoomHint: 'Klik op een map om in te zoomen; druk op Backspace of Escape om uit te zoomen.',
     cleanupButton: 'Opruimen ({count} · {size})',

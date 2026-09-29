@@ -329,3 +329,15 @@ export const refreshIcon = trustedStrokeIcon(
     '<path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />',
   'fm-icon-refresh',
 );
+
+/** "layout-sidebar" — show or hide a view's side list. */
+export const layoutSidebarIcon = trustedStrokeIcon(
+  '<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><path d="M9 4l0 16" />',
+  'fm-icon-layout-sidebar',
+);
+
+/** "arrow-bar-to-right" — open a folder in the other pane. */
+export const arrowBarToRightIcon = trustedStrokeIcon(
+  '<path d="M14 12l-10 0" /><path d="M14 12l-4 4" /><path d="M14 12l-4 -4" /><path d="M20 4l0 16" />',
+  'fm-icon-arrow-bar-to-right',
+);

@@ -996,6 +996,7 @@ export const fr = {
     openInOtherPane: "Ouvrir dans l'autre panneau",
     showList: 'Afficher la liste',
     hideList: 'Masquer la liste',
+    zoomedSize: '{size} sur {total} ({share})',
     itemsLabel: 'Éléments les plus volumineux dans {name}',
     zoomHint:
       'Cliquez sur un dossier pour zoomer ; appuyez sur Retour arrière ou Échap pour dézoomer.',

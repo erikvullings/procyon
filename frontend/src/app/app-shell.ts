@@ -1523,6 +1523,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           }
         : {
             ...existing,
+            location: expansionLocation === undefined ? location : existing.location,
             abort,
             scanId,
             progressComplete: false,
@@ -1568,6 +1569,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const entry = diskUsageByTab.get(key);
     if (entry === undefined) return;
     startDiskUsageScan(entry.paneId, entry.tabId, location, location);
+  }
+
+  function scanDiskUsageFolder(key: string, location: Location): void {
+    const entry = diskUsageByTab.get(key);
+    if (entry === undefined) return;
+    startDiskUsageScan(entry.paneId, entry.tabId, location);
   }
 
   function stopDiskUsage(key: string): void {
@@ -3244,6 +3251,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     replaceWorkspace,
     openDiskUsageFolder,
     expandDiskUsageFolder,
+    scanDiskUsageFolder,
     retryDiskUsage: (key) => {
       const entry = diskUsageByTab.get(key);
       if (entry !== undefined) startDiskUsageScan(entry.paneId, entry.tabId, entry.location);

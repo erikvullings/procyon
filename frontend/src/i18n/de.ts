@@ -1002,6 +1002,7 @@ export const de = {
     openInOtherPane: 'Im anderen Bereich öffnen',
     showList: 'Liste anzeigen',
     hideList: 'Liste ausblenden',
+    zoomedSize: '{size} von {total} ({share})',
     itemsLabel: 'Größte Elemente in {name}',
     zoomHint: 'Klicken Sie auf einen Ordner zum Vergrößern; Rücktaste oder Escape verkleinert.',
     cleanupButton: 'Aufräumen ({count} · {size})',

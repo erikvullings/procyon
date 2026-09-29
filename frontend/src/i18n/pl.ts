@@ -991,6 +991,7 @@ export const pl = {
     openInOtherPane: 'Otwórz w drugim panelu',
     showList: 'Pokaż listę',
     hideList: 'Ukryj listę',
+    zoomedSize: '{size} z {total} ({share})',
     itemsLabel: 'Największe elementy w {name}',
     zoomHint: 'Kliknij folder, aby powiększyć; naciśnij Backspace lub Escape, aby pomniejszyć.',
     cleanupButton: 'Posprzątaj ({count} · {size})',

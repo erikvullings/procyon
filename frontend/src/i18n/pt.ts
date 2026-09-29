@@ -996,6 +996,7 @@ export const pt = {
     openInOtherPane: 'Abrir no outro painel',
     showList: 'Mostrar lista',
     hideList: 'Ocultar lista',
+    zoomedSize: '{size} de {total} ({share})',
     itemsLabel: 'Maiores itens em {name}',
     zoomHint: 'Clique numa pasta para ampliar; prima Retrocesso ou Escape para reduzir.',
     cleanupButton: 'Limpar ({count} · {size})',

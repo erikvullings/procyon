@@ -1,7 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiskUsageNode, Location } from '../../models';
-import { DiskUsageView, diskUsageTrail } from './disk-usage-view';
+import { DiskUsageView, diskUsageAncestors, diskUsageTrail } from './disk-usage-view';
 
 let root: HTMLElement;
 let fillText: ReturnType<typeof vi.fn>;
@@ -136,7 +136,7 @@ describe('DiskUsageView', () => {
     const body = root.querySelector('.fm-disk-usage-body');
     expect(body?.firstElementChild?.classList.contains('fm-disk-usage-items')).toBe(true);
     const toggle = root.querySelector<HTMLButtonElement>('.fm-disk-usage-list-toggle');
-    expect(toggle?.textContent).toBe('Hide list');
+    expect(toggle?.getAttribute('aria-label')).toBe('Hide list (L)');
 
     toggle?.click();
     m.redraw.sync();
@@ -144,7 +144,7 @@ describe('DiskUsageView', () => {
     expect(root.querySelector('.fm-disk-usage-items')).toBeNull();
     expect(root.querySelector('.fm-disk-usage-canvas')).not.toBeNull();
     expect(toggle?.getAttribute('aria-pressed')).toBe('false');
-    expect(toggle?.textContent).toBe('Show list');
+    expect(toggle?.getAttribute('aria-label')).toBe('Show list (L)');
 
     toggle?.click();
     m.redraw.sync();
@@ -238,7 +238,7 @@ describe('DiskUsageView', () => {
     root.querySelector<HTMLButtonElement>('button.fm-disk-usage-crumb')?.click();
     m.redraw.sync();
     expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('tmp');
-    expect(root.querySelector('.fm-disk-usage-zoom-out')).toBeNull();
+    expect(root.querySelector('button.fm-disk-usage-crumb')).toBeNull();
   });
 
   it('opens the zoomed folder in the other pane', () => {
@@ -273,14 +273,20 @@ describe('DiskUsageView', () => {
     expect(diskUsageTrail(tree, 'file:///elsewhere').map((node) => node.name)).toEqual(['tmp']);
   });
 
-  it('stacks the root size beneath its folder name', () => {
+  it('shows the full path as pane breadcrumbs and the size in the status bar', () => {
+    const onScanFolder = vi.fn();
+    const projects = { ...directory('projects', 60), children: [directory('inner', 60)] };
     m.mount(root, {
       view: () =>
         m(DiskUsageView, {
           state: {
             type: 'loaded',
             result: {
-              root: { ...directory('tmp', 80), children: [directory('projects', 80)] },
+              root: {
+                ...directory('tmp', 80),
+                location: { providerId: 'local', uri: 'file:///tmp' },
+                children: [projects, directory('other', 20)],
+              },
               unreadableEntries: 0,
             },
           },
@@ -288,11 +294,65 @@ describe('DiskUsageView', () => {
           onExpandFolder: vi.fn(),
           onRetry: vi.fn(),
           onStop: vi.fn(),
+          onScanFolder,
         }),
     });
 
-    expect(root.querySelector('.fm-disk-usage-summary > strong')?.textContent).toBe('tmp');
-    expect(root.querySelector('.fm-disk-usage-summary-size')?.textContent).toBe('80 B');
+    const crumbs = () =>
+      [...root.querySelectorAll('.fm-breadcrumb-row .fm-breadcrumb-segment')].map(
+        (crumb) => crumb.textContent,
+      );
+    expect(crumbs()).toEqual(['/', 'tmp']);
+    expect(root.querySelector('.fm-pane-status .fm-disk-usage-total')?.textContent).toBe('80 B');
+
+    itemButton('projects')?.click();
+    m.redraw.sync();
+    expect(crumbs()).toEqual(['/', 'tmp', 'projects']);
+    expect(root.querySelector('.fm-disk-usage-total')?.textContent).toBe('60 B of 80 B (75%)');
+
+    root.querySelector<HTMLButtonElement>('button.fm-disk-usage-ancestor')?.click();
+    expect(onScanFolder).toHaveBeenCalledWith({ providerId: 'local', uri: 'file:///' });
+  });
+
+  it('toggles the list with the L key and describes the shortcut', () => {
+    mountLoaded({ ...directory('tmp', 80), children: [directory('projects', 80)] });
+    expect(
+      root
+        .querySelector('.fm-disk-usage-list-toggle')
+        ?.closest('[data-tooltip]')
+        ?.getAttribute('data-tooltip'),
+    ).toBe('Hide list (L)');
+
+    const view = root.querySelector('.fm-disk-usage-view');
+    view?.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-disk-usage-items')).toBeNull();
+
+    view?.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-disk-usage-items')).toBeNull();
+
+    view?.dispatchEvent(new KeyboardEvent('keydown', { key: 'L', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-disk-usage-items')).not.toBeNull();
+  });
+
+  it('lists the ancestors of a scanned folder for POSIX and drive-letter URIs', () => {
+    expect(
+      diskUsageAncestors({ providerId: 'local', uri: 'file:///Users/me/My%20Files' }).map(
+        (crumb) => [crumb.label, crumb.location.uri],
+      ),
+    ).toEqual([
+      ['/', 'file:///'],
+      ['Users', 'file:///Users'],
+      ['me', 'file:///Users/me'],
+    ]);
+    expect(
+      diskUsageAncestors({ providerId: 'local', uri: 'file:///C:/Data/big' }).map(
+        (crumb) => crumb.label,
+      ),
+    ).toEqual(['C:', 'Data']);
+    expect(diskUsageAncestors({ providerId: 'local', uri: 'file:///' })).toEqual([]);
   });
 
   it('shows scan activity and lets the user stop from a progressive result', () => {

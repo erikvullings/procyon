@@ -1,4 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
+import { arrowBarToRightIcon, layoutSidebarIcon } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
   DiskUsageCleanupCandidate,
@@ -40,6 +42,8 @@ export interface DiskUsageViewAttrs {
   readonly onExpandFolder: (location: Location) => void;
   readonly onRetry: () => void;
   readonly onStop: () => void;
+  /** Starts a new scan at an ancestor of the scanned folder, from its breadcrumb. */
+  readonly onScanFolder?: (location: Location) => void;
   /** Moves a clean-up candidate to the Trash through the confirmed operation flow; resolves
    * `true` once the operation was started. Omitted when the host cannot trash. */
   readonly onTrashFolder?: (location: Location) => Promise<boolean>;
@@ -51,6 +55,7 @@ const MAX_LISTED_ITEMS = 200;
 
 /** Kept across disk-usage views for the session, so hiding the list sticks. */
 let listVisible = true;
+const LIST_TOGGLE_KEY = 'l';
 const LABEL_CSS_FONT_SIZE = 11;
 
 function formatBytes(value: number): string {
@@ -99,6 +104,35 @@ export function diskUsageTrail(root: DiskUsageNode, uri: string | undefined): Di
   };
   const found = search(root);
   return found === undefined ? [root] : [root, ...found];
+}
+
+/** Breadcrumb targets above a scanned folder, from the filesystem root down to its parent. */
+export function diskUsageAncestors(
+  location: Location,
+): readonly { readonly label: string; readonly location: Location }[] {
+  const match = /^([a-z][\w+.-]*:\/\/[^/]*)(\/.*)?$/iu.exec(location.uri);
+  if (match === null) return [];
+  const prefix = match[1] ?? '';
+  const parts = (match[2] ?? '').split('/').filter(Boolean);
+  const decode = (part: string) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return part;
+    }
+  };
+  const hasDrive = /^[a-z]:$/iu.test(decode(parts[0] ?? ''));
+  const crumbs = parts.map((part, index) => ({
+    label: decode(part),
+    location: {
+      providerId: location.providerId,
+      uri: `${prefix}/${parts.slice(0, index + 1).join('/')}`,
+    },
+  }));
+  const withRoot = hasDrive
+    ? crumbs
+    : [{ label: '/', location: { providerId: location.providerId, uri: `${prefix}/` } }, ...crumbs];
+  return withRoot.slice(0, -1);
 }
 
 function rgbCss([r, g, b]: Rgb): string {
@@ -341,28 +375,75 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
     ]);
   }
 
-  function renderBreadcrumbs(trail: readonly DiskUsageNode[]): m.Children {
-    return m('nav.fm-disk-usage-breadcrumbs', { 'aria-label': t('diskUsage', 'breadcrumbLabel') }, [
-      trail.length > 1
-        ? m(
-            'button.btn-flat.fm-disk-usage-zoom-out',
-            {
-              type: 'button',
-              title: t('diskUsage', 'zoomOut'),
-              'aria-label': t('diskUsage', 'zoomOut'),
-              onclick: () => zoomTo(trail.at(-2)),
+  function renderHeader(
+    root: DiskUsageNode,
+    trail: readonly DiskUsageNode[],
+    current: DiskUsageNode,
+    attrs: DiskUsageViewAttrs,
+  ): m.Children {
+    const onScanFolder = attrs.onScanFolder;
+    const listLabel = `${t('diskUsage', listVisible ? 'hideList' : 'showList')} (${LIST_TOGGLE_KEY.toUpperCase()})`;
+    return m('.fm-breadcrumb-row.fm-disk-usage-header', [
+      m('nav.fm-breadcrumb', { 'aria-label': t('diskUsage', 'breadcrumbLabel') }, [
+        m('.fm-breadcrumb-segments', [
+          ...diskUsageAncestors(root.location).map((ancestor) =>
+            onScanFolder === undefined || attrs.state.type !== 'loaded' || attrs.state.scanning
+              ? m('span.fm-breadcrumb-segment', { key: ancestor.location.uri }, ancestor.label)
+              : m(
+                  'button.fm-breadcrumb-segment.fm-disk-usage-ancestor',
+                  {
+                    key: ancestor.location.uri,
+                    type: 'button',
+                    onclick: () => {
+                      zoomTo(undefined);
+                      onScanFolder(ancestor.location);
+                    },
+                  },
+                  ancestor.label,
+                ),
+          ),
+          ...trail.map((node, index) =>
+            index === trail.length - 1
+              ? m(
+                  'span.fm-breadcrumb-segment',
+                  { key: node.location.uri, 'aria-current': 'location' },
+                  node.name,
+                )
+              : m(
+                  'button.fm-breadcrumb-segment.fm-disk-usage-crumb',
+                  { key: node.location.uri, type: 'button', onclick: () => zoomTo(node) },
+                  node.name,
+                ),
+          ),
+        ]),
+      ]),
+      tooltip(
+        listLabel,
+        m(
+          'button.btn-flat.btn-icon.fm-disk-usage-header-action.fm-disk-usage-list-toggle',
+          {
+            type: 'button',
+            'aria-label': listLabel,
+            'aria-pressed': String(listVisible),
+            'aria-keyshortcuts': LIST_TOGGLE_KEY.toUpperCase(),
+            onclick: () => {
+              listVisible = !listVisible;
             },
-            '↑',
-          )
-        : undefined,
-      trail.map((node, index) =>
-        index === trail.length - 1
-          ? m('span.fm-disk-usage-crumb', { 'aria-current': 'location' }, node.name)
-          : m(
-              'button.fm-disk-usage-crumb',
-              { type: 'button', onclick: () => zoomTo(node) },
-              node.name,
-            ),
+          },
+          layoutSidebarIcon({ size: 16 }),
+        ),
+      ),
+      tooltip(
+        t('diskUsage', 'openInOtherPane'),
+        m(
+          'button.btn-flat.btn-icon.fm-disk-usage-header-action.fm-disk-usage-open-current',
+          {
+            type: 'button',
+            'aria-label': t('diskUsage', 'openInOtherPane'),
+            onclick: () => attrs.onOpenFolder(current.location),
+          },
+          arrowBarToRightIcon({ size: 16 }),
+        ),
       ),
     ]);
   }
@@ -430,15 +511,17 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
               ],
             ),
             node.kind === 'directory'
-              ? m(
-                  'button.btn-flat.fm-disk-usage-item-open',
-                  {
-                    type: 'button',
-                    title: t('diskUsage', 'openInOtherPane'),
-                    'aria-label': `${t('diskUsage', 'openInOtherPane')}: ${node.name}`,
-                    onclick: () => attrs.onOpenFolder(node.location),
-                  },
-                  '↗',
+              ? tooltip(
+                  t('diskUsage', 'openInOtherPane'),
+                  m(
+                    'button.btn-flat.fm-disk-usage-item-open',
+                    {
+                      type: 'button',
+                      'aria-label': `${t('diskUsage', 'openInOtherPane')}: ${node.name}`,
+                      onclick: () => attrs.onOpenFolder(node.location),
+                    },
+                    arrowBarToRightIcon({ size: 14 }),
+                  ),
                 )
               : undefined,
           ],
@@ -470,6 +553,11 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       {
         tabindex: 0,
         oncreate: ({ dom }: m.VnodeDOM) => {
+          // Take over focus from the surrounding pane so the view's keys (L, Backspace) work.
+          const focused = document.activeElement;
+          if (focused === document.body || focused === dom.closest('.fm-pane')) {
+            (dom as HTMLElement).focus();
+          }
           const updateBounds = () => {
             const { width, height } = dom.getBoundingClientRect();
             if (width <= 0 || height <= 0) return;
@@ -580,6 +668,18 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
         {
           onkeydown: (event: KeyboardEvent) => {
             if (
+              event.key.toLowerCase() === LIST_TOGGLE_KEY &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey &&
+              !event.shiftKey
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              listVisible = !listVisible;
+              return;
+            }
+            if (
               (event.key === 'Backspace' || event.key === 'Escape') &&
               trail.length > 1 &&
               !event.ctrlKey &&
@@ -593,65 +693,17 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
           },
         },
         [
-          m('.fm-disk-usage-toolbar', [
-            m('.fm-disk-usage-summary', [
-              m('strong', result.root.name),
-              m('span.fm-disk-usage-summary-size', formatBytes(result.root.physicalBytes)),
-            ]),
-            attrs.state.scanning === true
-              ? m('.fm-disk-usage-progress', [
-                  m('.fm-disk-usage-spinner.fm-disk-usage-spinner--compact', {
-                    'aria-hidden': 'true',
-                  }),
-                  m(
-                    'span',
-                    attrs.state.finalizing === true
-                      ? t('diskUsage', 'finalizing', {
-                          seconds: elapsedSeconds,
-                          count: new Intl.NumberFormat().format(scannedEntries),
-                        })
-                      : t('diskUsage', 'updating', {
-                          seconds: elapsedSeconds,
-                          count: new Intl.NumberFormat().format(scannedEntries),
-                        }),
-                  ),
-                  m(
-                    'button.btn.fm-disk-usage-stop',
-                    { type: 'button', onclick: attrs.onStop },
-                    t('diskUsage', 'stop'),
-                  ),
-                ])
-              : undefined,
-            cleanupCandidates.length > 0
-              ? m(
-                  'button.btn.fm-disk-usage-cleanup-toggle',
-                  {
-                    type: 'button',
-                    'aria-expanded': cleanupOpen,
-                    onclick: () => {
-                      cleanupOpen = !cleanupOpen;
-                    },
-                  },
-                  t('diskUsage', 'cleanupButton', {
-                    count: cleanupCandidates.length,
-                    size: formatBytes(cleanupBytes),
-                  }),
-                )
-              : undefined,
-            result.unreadableEntries > 0
-              ? m(
-                  'button.btn.fm-disk-usage-warning',
-                  {
-                    type: 'button',
-                    'aria-expanded': warningsOpen,
-                    onclick: () => {
-                      warningsOpen = !warningsOpen;
-                    },
-                  },
-                  t('diskUsage', 'unreadable', { count: result.unreadableEntries }),
-                )
-              : undefined,
-          ]),
+          renderHeader(result.root, trail, current, attrs),
+          !hasContent && trail.length === 1
+            ? m('.fm-disk-usage-status', t('diskUsage', 'empty'))
+            : m(
+                '.fm-disk-usage-body',
+                { class: listVisible ? undefined : 'fm-disk-usage-body--map-only' },
+                [
+                  listVisible ? renderItems(current, palette, attrs) : undefined,
+                  renderMap(current, trail, attrs),
+                ],
+              ),
           attrs.state.error !== undefined ||
           (warningsOpen && unreadable.length > 0) ||
           (cleanupOpen && cleanupCandidates.length > 0)
@@ -697,38 +749,72 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
                   : undefined,
               ])
             : undefined,
-          !hasContent && trail.length === 1
-            ? m('.fm-disk-usage-status', t('diskUsage', 'empty'))
-            : m('.fm-disk-usage-map', [
-                m('.fm-disk-usage-navigation', [
-                  renderBreadcrumbs(trail),
-                  m('span.fm-disk-usage-current-size', formatBytes(current.physicalBytes)),
+          m('.fm-pane-status.fm-disk-usage-statusbar', [
+            m(
+              'span.fm-disk-usage-total',
+              { role: 'status' },
+              trail.length > 1
+                ? t('diskUsage', 'zoomedSize', {
+                    size: formatBytes(current.physicalBytes),
+                    total: formatBytes(result.root.physicalBytes),
+                    share: formatShare(current.physicalBytes, result.root.physicalBytes),
+                  })
+                : formatBytes(result.root.physicalBytes),
+            ),
+            attrs.state.scanning === true
+              ? m('.fm-disk-usage-progress', [
+                  m('.fm-disk-usage-spinner.fm-disk-usage-spinner--compact', {
+                    'aria-hidden': 'true',
+                  }),
                   m(
-                    'button.btn-flat.fm-disk-usage-list-toggle',
-                    {
-                      type: 'button',
-                      'aria-pressed': String(listVisible),
-                      onclick: () => {
-                        listVisible = !listVisible;
-                      },
+                    'span',
+                    attrs.state.finalizing === true
+                      ? t('diskUsage', 'finalizing', {
+                          seconds: elapsedSeconds,
+                          count: new Intl.NumberFormat().format(scannedEntries),
+                        })
+                      : t('diskUsage', 'updating', {
+                          seconds: elapsedSeconds,
+                          count: new Intl.NumberFormat().format(scannedEntries),
+                        }),
+                  ),
+                  m(
+                    'button.btn-flat.fm-disk-usage-status-action.fm-disk-usage-stop',
+                    { type: 'button', onclick: attrs.onStop },
+                    t('diskUsage', 'stop'),
+                  ),
+                ])
+              : undefined,
+            cleanupCandidates.length > 0
+              ? m(
+                  'button.btn-flat.fm-disk-usage-status-action.fm-disk-usage-cleanup-toggle',
+                  {
+                    type: 'button',
+                    'aria-expanded': String(cleanupOpen),
+                    onclick: () => {
+                      cleanupOpen = !cleanupOpen;
                     },
-                    t('diskUsage', listVisible ? 'hideList' : 'showList'),
-                  ),
-                  m(
-                    'button.btn-flat.fm-disk-usage-open-current',
-                    { type: 'button', onclick: () => attrs.onOpenFolder(current.location) },
-                    t('diskUsage', 'openInOtherPane'),
-                  ),
-                ]),
-                m(
-                  '.fm-disk-usage-body',
-                  { class: listVisible ? undefined : 'fm-disk-usage-body--map-only' },
-                  [
-                    listVisible ? renderItems(current, palette, attrs) : undefined,
-                    renderMap(current, trail, attrs),
-                  ],
-                ),
-              ]),
+                  },
+                  t('diskUsage', 'cleanupButton', {
+                    count: cleanupCandidates.length,
+                    size: formatBytes(cleanupBytes),
+                  }),
+                )
+              : undefined,
+            result.unreadableEntries > 0
+              ? m(
+                  'button.btn-flat.fm-disk-usage-status-action.fm-disk-usage-warning',
+                  {
+                    type: 'button',
+                    'aria-expanded': String(warningsOpen),
+                    onclick: () => {
+                      warningsOpen = !warningsOpen;
+                    },
+                  },
+                  t('diskUsage', 'unreadable', { count: result.unreadableEntries }),
+                )
+              : undefined,
+          ]),
           hovered !== undefined && hoverPoint !== undefined
             ? m(
                 '.fm-disk-usage-tooltip',

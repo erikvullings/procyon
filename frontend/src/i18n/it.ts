@@ -990,6 +990,7 @@ export const it = {
     openInOtherPane: "Apri nell'altro riquadro",
     showList: 'Mostra elenco',
     hideList: 'Nascondi elenco',
+    zoomedSize: '{size} di {total} ({share})',
     itemsLabel: 'Elementi più grandi in {name}',
     zoomHint: 'Fai clic su una cartella per ingrandire; premi Backspace o Esc per rimpicciolire.',
     cleanupButton: 'Pulisci ({count} · {size})',

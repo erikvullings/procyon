@@ -218,6 +218,7 @@ export interface PaneContentContext {
   replaceWorkspace(next: WorkspaceProjection): void;
   openDiskUsageFolder(paneId: PaneId, location: Location): void;
   expandDiskUsageFolder(key: string, location: Location): void;
+  scanDiskUsageFolder(key: string, location: Location): void;
   retryDiskUsage(key: string): void;
   stopDiskUsage(key: string): void;
 }
@@ -881,6 +882,7 @@ export function createPaneContentBuilder(
                       state: diskUsage.state,
                       onOpenFolder: (location) => context.openDiskUsageFolder(paneId, location),
                       onExpandFolder: (location) => context.expandDiskUsageFolder(key, location),
+                      onScanFolder: (location) => context.scanDiskUsageFolder(key, location),
                       onRetry: () => context.retryDiskUsage(key),
                       onStop: () => context.stopDiskUsage(key),
                       onTrashFolder: (location) =>
