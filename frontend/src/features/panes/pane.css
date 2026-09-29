@@ -69,11 +69,6 @@
   grid-template-rows: none;
 }
 
-/* .fm-pane[data-active="true"] {
-  border-color: var(--fm-accent);
-  box-shadow: inset 0 2px var(--fm-accent);
-} */
-
 .fm-pane-tabs {
   display: flex;
   align-items: stretch;
@@ -157,6 +152,11 @@
 .fm-pane-tab[aria-selected="true"] {
   background: var(--fm-surface-elevated);
   color: inherit;
+}
+
+/* The cursor fill marks the active pane; the inactive pane's tab title recedes to muted. */
+.fm-pane[data-active="false"] .fm-pane-tab[aria-selected="true"] {
+  color: var(--fm-text-muted);
 }
 
 .fm-pane-tab-title {

@@ -305,11 +305,9 @@ describe('theme stylesheet', () => {
     // The filled/tinted treatment additionally requires `:focus-within` (task 0139 follow-up):
     // an "active" pane that lost real DOM focus to the directory-tree sidebar falls through to
     // the unconditional box-shadow-only rule below instead.
+    // Marked names are amber in both panes; only the focused active pane adds the wash.
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
-    );
-    expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s+:is\([^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\)\s*\{[^}]*color:\s*inherit/s,
+      /(?:^|\n)\.fm-selected-row \.fm-entry-name\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
     );
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*42%/s,
@@ -365,14 +363,14 @@ describe('theme stylesheet', () => {
     expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);
   });
 
-  it('keeps the command toolbar at header height with muted icons', () => {
+  it('keeps the command toolbar at header height with full-contrast icons', () => {
     const toolbar = themeBlock(/\.fm-workspace-toolbar\s*\{([^}]*position:\s*relative[^}]*)\}/);
     const toolbarIcons = themeBlock(/\.fm-workspace-toolbar \.fm-icon\s*\{([^}]*)\}/);
 
     expect(toolbar).toContain('height: var(--fm-header-height)');
     expect(toolbar).toContain('min-height: var(--fm-header-height)');
     expect(toolbar).toContain('--mm-control-height: var(--fm-header-height)');
-    expect(toolbarIcons).toContain('color: var(--fm-text-muted)');
+    expect(toolbarIcons).toContain('color: var(--fm-text);');
   });
 
   it('uses full touch targets for the command toolbar on coarse pointers', () => {

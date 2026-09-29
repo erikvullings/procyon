@@ -56,6 +56,54 @@
   font-weight: 400;
 }
 
+/*
+ * The confirming action (last footer button in every Procyon dialog) stays identifiable while
+ * focus sits in a field or on Cancel: accent outline at rest, full accent fill once focused.
+ */
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer
+  button.btn-flat:last-child:not(:only-child):not(:disabled, :focus),
+.fm-app-shell .fm-settings-editor-actions button.fm-settings-save:not(:disabled, :focus-visible) {
+  border-color: var(--fm-accent);
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer.mm-modal-footer
+  button.btn-flat[data-destructive="true"]:not(:disabled, :focus),
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer.mm-modal-footer
+  button.btn-flat.fm-permanent-delete-confirm:not(:disabled, :focus),
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer.mm-modal-footer
+  button.btn-flat.fm-dialog-destructive:not(:disabled, :focus) {
+  border-color: var(--fm-error);
+  color: var(--fm-error);
+  font-weight: 600;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat:disabled,
+.fm-app-shell
+  .fm-settings-editor-actions
+  button.btn-flat:is(.fm-settings-save, .fm-settings-cancel):disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fm-text-muted);
+  opacity: 0.7;
+}
+
+.fm-app-shell .fm-settings-editor-actions button.fm-settings-save:focus-visible {
+  border-color: var(--fm-accent);
+  outline: none;
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+}
+
 .fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat:focus {
   border-color: var(--fm-accent);
   outline: none;
@@ -68,6 +116,10 @@
   .modal
   .modal-footer
   button.btn-flat[data-destructive="true"]:focus,
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .modal
+  .modal-footer
+  button.fm-dialog-destructive:focus,
 .fm-app-shell[data-mm-preset="compact-minimal"]
   .modal
   .modal-footer

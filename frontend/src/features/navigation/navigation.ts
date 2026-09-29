@@ -189,7 +189,7 @@ export function parentLocation(location: Location): Location {
 }
 
 /** Returns the final path segment (decoded) of a location, e.g. for cursor restoration after `..`. */
-function lastPathSegment(location: Location): string | undefined {
+export function lastPathSegment(location: Location): string | undefined {
   try {
     if (location.providerId === 'archive' && location.uri.startsWith('archive://')) {
       const [outer, rawInner = ''] = location.uri.slice('archive://'.length).split('!', 2);

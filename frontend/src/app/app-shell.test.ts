@@ -3393,8 +3393,8 @@ describe('AppShell', () => {
     const entry = [
       ...root.querySelectorAll<HTMLElement>('.fm-command-palette .mm-command-palette-command'),
     ].find((candidate) => candidate.textContent?.includes('Semantic Search…'));
-    expect(entry?.textContent).toContain('client.searchKnowledge');
-    expect(entry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+k');
+    expect(entry?.textContent).not.toContain('client.searchKnowledge');
+    expect(entry?.querySelector('kbd')?.textContent).toBe('Ctrl+Shift+K');
   });
 
   it('hides Search Knowledge when no retrieval capability is reported (task 0206)', async () => {
@@ -3469,7 +3469,7 @@ describe('AppShell', () => {
     const askPaletteEntry = [
       ...root.querySelectorAll<HTMLElement>('.fm-command-palette .mm-command-palette-command'),
     ].find((entry) => entry.textContent?.includes('Ask your files'));
-    expect(askPaletteEntry?.querySelector('kbd')?.textContent).toBe('Ctrl/Cmd+Shift+f');
+    expect(askPaletteEntry?.querySelector('kbd')?.textContent).toBe('Ctrl+Shift+F');
     root
       .querySelector<HTMLElement>('.fm-command-palette')
       ?.closest('.modal-container')
@@ -4028,12 +4028,16 @@ describe('AppShell', () => {
     const searchResultActions = [
       ...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item'),
     ];
-    expect(searchResultActions.find((button) => button.textContent === 'Rename')?.disabled).toBe(
-      false,
-    );
-    expect(searchResultActions.find((button) => button.textContent === 'Delete')?.disabled).toBe(
-      false,
-    );
+    expect(
+      searchResultActions.find(
+        (button) => button.querySelector('.fm-context-menu-label')?.textContent === 'Rename',
+      )?.disabled,
+    ).toBe(false);
+    expect(
+      searchResultActions.find(
+        (button) => button.querySelector('.fm-context-menu-label')?.textContent === 'Delete',
+      )?.disabled,
+    ).toBe(false);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
     rows?.item(1).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
@@ -4307,7 +4311,10 @@ describe('AppShell', () => {
 
     const revealButton = [
       ...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item'),
-    ].find((button) => button.textContent === 'Reveal in File Manager');
+    ].find(
+      (button) =>
+        button.querySelector('.fm-context-menu-label')?.textContent === 'Reveal in File Manager',
+    );
     expect(revealButton).not.toBeUndefined();
     revealButton?.click();
     m.redraw.sync();
@@ -4422,7 +4429,10 @@ describe('AppShell', () => {
 
     const terminalButton = [
       ...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item'),
-    ].find((button) => button.textContent === 'Open Terminal Here');
+    ].find(
+      (button) =>
+        button.querySelector('.fm-context-menu-label')?.textContent === 'Open Terminal Here',
+    );
     expect(terminalButton).not.toBeUndefined();
     terminalButton?.click();
     m.redraw.sync();

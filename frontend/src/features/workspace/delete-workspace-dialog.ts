@@ -32,7 +32,11 @@ export const DeleteWorkspaceDialog: FactoryComponent<DeleteWorkspaceDialogAttrs>
           onclick: attrs.onCancel,
           className: 'fm-delete-workspace-cancel',
         },
-        { label: t('button', 'delete'), onclick: attrs.onConfirm },
+        {
+          label: t('button', 'delete'),
+          onclick: attrs.onConfirm,
+          className: 'fm-dialog-destructive',
+        },
       ],
     }),
 });

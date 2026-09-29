@@ -219,6 +219,19 @@ export function actionTitle(actionId: string, fallback: string): string {
   return t('action', key as keyof EnglishCatalogue['action']);
 }
 
+/** Labels core command categories; plugin categories are humanised from their camelCase id. */
+export function actionCategoryLabel(category: string): string {
+  if (Object.hasOwn(en.commandCategory, category)) {
+    return t('commandCategory', category as keyof EnglishCatalogue['commandCategory']);
+  }
+  const words = category
+    .replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replaceAll(/[._-]+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  return words.length === 0 ? category : words[0]?.toUpperCase() + words.slice(1);
+}
+
 /**
  * Switches the process-wide translator to another catalogue at runtime, with
  * no page reload. Callers persist the choice through the settings service and

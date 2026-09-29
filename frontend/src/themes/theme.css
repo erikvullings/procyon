@@ -319,127 +319,95 @@ main.fm-workspace {
 }
 
 .fm-operation-confirmation-modal {
-  --mm-modal-width: min(40rem, calc(100vw - 2rem));
-  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
+  --mm-modal-width: min(36rem, calc(100vw - 2rem));
+  --mm-modal-max-width: min(36rem, calc(100vw - 2rem));
 }
 
-.fm-operation-confirmation-summary {
-  margin: 0 0 0.6rem;
-}
-
-.fm-operation-confirmation-route {
+/* Copy/move/delete confirmations read as a short label/value list: what, from where, to where.
+   Paths use the body face, break only at "/", and emphasise the folder that actually matters. */
+.fm-operation-confirmation-facts {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: center;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  margin: 0.25rem 0 0;
 }
 
-.fm-operation-confirmation-endpoint {
-  min-width: 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--fm-border);
-  border-radius: 2px;
-  background: var(--fm-surface);
+.fm-operation-confirmation-facts > dt,
+.fm-operation-confirmation-facts > dd {
+  margin: 0;
 }
 
 .fm-operation-confirmation-label {
-  display: block;
-  margin-block-end: 0.2rem;
   color: var(--fm-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.85em;
 }
 
-.fm-operation-confirmation-locations {
+.fm-operation-confirmation-facts > dd {
+  min-width: 0;
+  color: var(--fm-text);
+  line-height: 1.4;
+}
+
+.fm-operation-confirmation-source {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.15rem;
   max-height: 6rem;
   overflow-y: auto;
 }
 
-.fm-operation-confirmation-endpoint code {
+.fm-operation-path {
   display: block;
   overflow-wrap: anywhere;
-  color: var(--fm-text);
-  font-family: var(--fm-font-mono);
-  font-size: 0.85rem;
 }
 
-.fm-operation-confirmation-arrow {
-  display: grid;
-  color: var(--fm-accent);
-  place-items: center;
+.fm-operation-path-connection {
+  font-weight: 600;
 }
 
-@media (max-width: 40rem) {
-  .fm-operation-confirmation-route {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .fm-operation-confirmation-arrow {
-    transform: rotate(90deg);
-  }
-}
-
-.fm-operation-confirmation-modal {
-  --mm-modal-width: min(40rem, calc(100vw - 2rem));
-  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
-}
-
-.fm-operation-confirmation-summary {
-  margin: 0 0 0.6rem;
-}
-
-.fm-operation-confirmation-route {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.fm-operation-confirmation-endpoint {
-  min-width: 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--fm-border);
-  border-radius: 2px;
-  background: var(--fm-surface);
-}
-
-.fm-operation-confirmation-label {
-  display: block;
-  margin-block-end: 0.2rem;
+.fm-operation-path-connection::after {
+  content: " · ";
   color: var(--fm-text-muted);
-  font-size: 0.82rem;
+  font-weight: 400;
 }
 
-.fm-operation-confirmation-locations {
-  display: grid;
-  gap: 0.2rem;
-  max-height: 6rem;
-  overflow-y: auto;
+.fm-operation-path-parent {
+  color: var(--fm-text-muted);
+  overflow-wrap: normal;
 }
 
-.fm-operation-confirmation-endpoint code {
+.fm-operation-path-leaf {
+  font-weight: 600;
+}
+
+.fm-affected-items-list {
   display: block;
+  max-height: 4.5rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fm-affected-items-list > li {
+  display: inline;
+  font-weight: 600;
   overflow-wrap: anywhere;
-  color: var(--fm-text);
-  font-family: var(--fm-font-mono);
-  font-size: 0.85rem;
 }
 
-.fm-operation-confirmation-arrow {
-  display: grid;
-  color: var(--fm-accent);
-  place-items: center;
+.fm-affected-items-list > li + li::before {
+  content: ", ";
+  font-weight: 400;
 }
 
-@media (max-width: 40rem) {
-  .fm-operation-confirmation-route {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.fm-affected-items-list > li.fm-affected-items-more {
+  color: var(--fm-text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
 
-  .fm-operation-confirmation-arrow {
-    transform: rotate(90deg);
-  }
+.fm-permanent-delete-warning .fm-operation-confirmation-facts {
+  margin-block: 0.5rem;
 }
 
 /* Directory-tree sidebar (task 0139): a fixed-width column beside the pane split, sized so
@@ -778,7 +746,7 @@ main.fm-workspace {
 .fm-workspace-toolbar {
   position: relative;
   box-sizing: border-box;
-  gap: 0rem;
+  gap: 2px;
   height: var(--fm-header-height);
   min-height: var(--fm-header-height);
   font-size: 0.92em;
@@ -787,9 +755,10 @@ main.fm-workspace {
 }
 
 .fm-toolbar-separator {
+  flex: 0 0 auto;
   width: 1px;
-  height: 1rem;
-  margin-inline: 0.25rem;
+  height: 14px;
+  margin-inline: 0.5rem;
   background: var(--fm-border);
 }
 
@@ -801,10 +770,13 @@ main.fm-workspace {
 .fm-search-controls {
   display: flex;
   align-items: center;
+  gap: 2px;
 }
 
+/* Enabled toolbar glyphs use the body text colour so the 18px strokes read clearly against the
+   raised toolbar; disabled buttons still recede through their own opacity. */
 .fm-workspace-toolbar .fm-icon {
-  color: var(--fm-text-muted);
+  color: var(--fm-text);
 }
 
 /*
@@ -1002,7 +974,7 @@ main.fm-workspace {
 
 .fm-navigation-controls {
   display: flex;
-  gap: 0.125rem;
+  gap: 2px;
 }
 
 .fm-navigation-controls button,
@@ -1025,7 +997,7 @@ main.fm-workspace {
 
 .fm-navigation-controls button:disabled,
 .fm-workspace-toolbar button:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
 }
 
 .fm-navigation-controls button:hover:not(:disabled),
@@ -1035,6 +1007,17 @@ main.fm-workspace {
 .fm-diagnostics-button:hover,
 .fm-diagnostics-editor button:hover:not(:disabled) {
   background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+/* Keyboard focus on toolbar controls: the same tonal wash as hover plus a hairline accent inset,
+   so Tab traversal is visible without a thick ring or glow (DESIGN.md buttons). */
+.fm-navigation-controls button:focus-visible,
+.fm-workspace-toolbar button:focus-visible,
+.fm-pane-tabs button:focus-visible {
+  outline: 0;
+  background: var(--fm-hover);
+  box-shadow: inset 0 0 0 1px var(--fm-accent);
   color: var(--fm-text);
 }
 
@@ -1945,6 +1928,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-context-menu-item {
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
   min-height: var(--fm-header-height);
   border: 0;
   border-radius: 2px;
@@ -1956,19 +1942,53 @@ input[type="text"].fm-shortcuts-help-capture-input {
   text-align: left;
 }
 
+.fm-context-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-context-menu-shortcut {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--fm-text-muted);
+  font: inherit;
+  font-size: var(--fm-type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-context-menu-separator {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--fm-border);
+}
+
 .fm-context-menu-submenu::after {
-  float: right;
-  content: ">";
+  margin-inline-start: auto;
+  content: "›";
 }
 
 .fm-context-menu-item:hover:not(:disabled),
-.fm-context-menu-item:focus-visible {
+.fm-context-menu-item:focus-visible,
+.fm-context-menu:focus .fm-context-menu-item-active:not(:disabled) {
   outline: 0;
   background: var(--mm-dropdown-hover);
 }
 
+.fm-context-menu-item-destructive:not(:disabled) {
+  color: var(--fm-error);
+}
+
 .fm-context-menu-item:disabled {
   color: var(--fm-text-muted);
+  opacity: 0.75;
+}
+
+.fm-context-menu-item:disabled .fm-context-menu-shortcut {
+  opacity: 0.6;
 }
 
 .fm-operation-centre {
@@ -3285,21 +3305,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * for command routing. In that case the pane below falls through to the outline-only rule
  * further down, which is unconditional on focus - the same "not focused, but still showing
  * where the cursor is" treatment used for the grid view's cursor tile. */
-.fm-pane[data-active="true"]:focus-within .fm-selected-row {
-  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
+/* Marked rows: the name turns amber in both panes (details stay neutral); the focused active
+   pane adds the selection wash. Inactive panes use coloured text only - fills are reserved for
+   the pane that receives keystrokes. */
+.fm-selected-row .fm-entry-name {
   color: var(--fm-selected-row-text);
 }
 
-.fm-pane[data-active="true"]:focus-within
-  .fm-selected-row
-  :is(
-    .fm-entry-name,
-    .fm-directory-type,
-    .fm-directory-size,
-    .fm-directory-modified,
-    .fm-directory-file-age
-  ) {
-  color: inherit;
+.fm-pane[data-active="true"]:focus-within .fm-selected-row {
+  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
 }
 
 .fm-pane[data-active="true"]:focus-within .fm-cursor-row:not(.fm-selected-row) {
@@ -3326,6 +3340,22 @@ input[type="text"].fm-shortcuts-help-capture-input {
    `:focus-within`, so the cursor position stays visible when focus moves to the directory tree. */
 .fm-pane[data-active="true"] .fm-cursor-row {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
+}
+
+/* In the inactive pane the cursor row keeps its place through accent-coloured text only, with no
+   fill or outline, so it reads as "parked" rather than competing with the active cursor. */
+.fm-pane:not([data-active="true"])
+  .fm-cursor-row:not(.fm-selected-row)
+  :is(
+    .fm-entry-icon,
+    .fm-entry-name,
+    .fm-directory-type,
+    .fm-directory-size,
+    .fm-directory-modified,
+    .fm-directory-file-age,
+    .fm-search-result-parent
+  ) {
+  color: var(--fm-accent);
 }
 
 [data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {

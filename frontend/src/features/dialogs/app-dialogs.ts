@@ -79,6 +79,7 @@ export interface AppDialogsContext {
   getPendingConflict(): OperationConflict | undefined;
   setPendingConflict(conflict: OperationConflict | undefined): void;
   getConnections(): readonly Connection[];
+  getHomeDirectory?(): string | undefined;
   setConnections(conns: readonly Connection[]): void;
   getConnectionsManagerOpen(): boolean;
   setConnectionsManagerOpen(open: boolean): void;
@@ -181,6 +182,7 @@ export function renderAppDialogs(
     m(OperationConfirmationDialog, {
       ...(operationConfirmation === undefined ? {} : { request: operationConfirmation }),
       connections: ctx.getConnections(),
+      homeDirectory: ctx.getHomeDirectory?.(),
       onConfirm: () => ctx.resolveOperationConfirmation(true),
       onCancel: () => ctx.resolveOperationConfirmation(false),
     }),
@@ -450,6 +452,7 @@ export function renderAppDialogs(
       ...(pendingDelete === undefined ? {} : { operationId: pendingDelete.id }),
       itemCount: pendingDelete?.progress.totalItems ?? 0,
       totalBytes: pendingDelete?.progress.totalBytes ?? 0,
+      sources: pendingDelete?.sources.map((source) => source.location) ?? [],
       formatSettings: ctx.getFormatSettings(),
       onCancel: () => {
         if (pendingDelete !== undefined) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ActionDescriptor } from '../../models';
-import { filterPaletteActions } from './command-palette';
+import { arrangePaletteEntries, filterPaletteActions, formatShortcut } from './command-palette';
 
 const actions: readonly ActionDescriptor[] = [
   {
@@ -95,5 +95,41 @@ describe('command palette filtering', () => {
     expect(filterPaletteActions(manyActions, 'cmd', new Map(), availabilityContext)).toHaveLength(
       400,
     );
+  });
+
+  it('browses runnable commands as recent first, then one section per category', () => {
+    const entries = arrangePaletteEntries(
+      actions,
+      '',
+      new Map([['core.copyPath', 100]]),
+      availabilityContext,
+    );
+
+    expect(entries.map(({ action, group }) => [action.id, group])).toEqual([
+      ['core.copyPath', 'Recently used'],
+      ['core.createDirectory', 'File operations'],
+    ]);
+    expect(entries.every((entry) => entry.detail === undefined)).toBe(true);
+  });
+
+  it('shows a flat ranked list with category and unavailable reason while searching', () => {
+    const entries = arrangePaletteEntries(actions, 'extract', new Map(), availabilityContext);
+
+    expect(entries).toMatchObject([
+      {
+        action: { id: 'plugin.archive.extract' },
+        available: false,
+        detail: 'Tools · Not available yet',
+      },
+    ]);
+    expect(entries[0]?.group).toBeUndefined();
+  });
+
+  it('names modifiers for the host platform', () => {
+    const chord = { key: 'p', ctrl: true, shift: true };
+    expect(formatShortcut(chord, 'macos')).toBe('Cmd+Shift+P');
+    expect(formatShortcut(chord, 'windows')).toBe('Ctrl+Shift+P');
+    expect(formatShortcut({ key: 'F3', alt: true }, 'macos')).toBe('Option+F3');
+    expect(formatShortcut(chord)).toBe('Ctrl/Cmd+Shift+P');
   });
 });

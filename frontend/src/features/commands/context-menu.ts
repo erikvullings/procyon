@@ -1,13 +1,20 @@
 import m, { type FactoryComponent } from 'mithril';
 
 import { t } from '../../i18n';
-import type { AvailableAction } from './availability';
+import type { SelectionPlatform } from '../selection/keybindings';
+import {
+  type AvailableAction,
+  contextMenuGroup,
+  DESTRUCTIVE_CONTEXT_ACTION_IDS,
+} from './availability';
+import { formatShortcut } from './shortcut-label';
 
 export interface ContextMenuAttrs {
   readonly open: boolean;
   readonly x: number;
   readonly y: number;
   readonly actions: readonly AvailableAction[];
+  readonly platform?: SelectionPlatform;
   readonly platformSubmenu?: {
     readonly title: string;
     readonly onOpen: () => void;
@@ -67,26 +74,62 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
       if (!attrs.open) return undefined;
       const itemCount = attrs.actions.length + (attrs.platformSubmenu === undefined ? 0 : 1);
       activeIndex = Math.min(activeIndex, Math.max(0, itemCount - 1));
-      const menuItems = attrs.actions.map((item, index) =>
-        m(
-          'button.fm-context-menu-item',
-          {
-            key: item.action.id,
-            type: 'button',
-            role: 'menuitem',
-            disabled: !item.available,
-            tabindex: index === activeIndex ? 0 : -1,
-            title: item.reason,
-            onclick: () => invoke(attrs, index),
-          },
-          item.action.title,
-        ),
-      );
+      const menuItems: m.Vnode[] = [];
+      attrs.actions.forEach((item, index) => {
+        const previous = attrs.actions[index - 1];
+        if (
+          previous !== undefined &&
+          contextMenuGroup(previous.action.id) !== contextMenuGroup(item.action.id)
+        ) {
+          menuItems.push(
+            m('.fm-context-menu-separator', {
+              key: `separator-${item.action.id}`,
+              role: 'separator',
+            }),
+          );
+        }
+        const shortcut = item.action.defaultShortcuts[0];
+        menuItems.push(
+          m(
+            'button.fm-context-menu-item',
+            {
+              key: item.action.id,
+              type: 'button',
+              role: 'menuitem',
+              class: [
+                DESTRUCTIVE_CONTEXT_ACTION_IDS.has(item.action.id)
+                  ? 'fm-context-menu-item-destructive'
+                  : '',
+                index === activeIndex ? 'fm-context-menu-item-active' : '',
+              ]
+                .filter(Boolean)
+                .join(' '),
+              disabled: !item.available,
+              tabindex: index === activeIndex ? 0 : -1,
+              title: item.reason,
+              onclick: () => invoke(attrs, index),
+            },
+            [
+              m('span.fm-context-menu-label', item.action.title),
+              shortcut === undefined
+                ? undefined
+                : m(
+                    'kbd.fm-context-menu-shortcut',
+                    { 'aria-hidden': 'true' },
+                    formatShortcut(shortcut, attrs.platform),
+                  ),
+            ],
+          ),
+        );
+      });
       if (attrs.platformSubmenu !== undefined) {
         menuItems.push(
+          m('.fm-context-menu-separator', { key: 'separator-platform', role: 'separator' }),
           m(
             'button.fm-context-menu-item.fm-context-menu-submenu',
             {
+              class:
+                attrs.actions.length === activeIndex ? 'fm-context-menu-item-active' : undefined,
               key: 'platform-submenu',
               type: 'button',
               role: 'menuitem',

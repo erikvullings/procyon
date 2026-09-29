@@ -1,13 +1,17 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
+import type { Location } from '../../models';
 import { type EntryFormatSettings, formatEntrySize } from '../entry-formatting/entry-formatting';
+import { affectedItems } from './affected-items';
 
 export interface PermanentDeleteDialogAttrs {
   readonly open: boolean;
   readonly operationId?: string;
   readonly itemCount: number;
   readonly totalBytes: number;
+  /** Top-level items the user selected; named so the confirmation is about files, not a count. */
+  readonly sources?: readonly Location[];
   readonly formatSettings: EntryFormatSettings;
   readonly onConfirm: () => void | Promise<void>;
   readonly onCancel: () => void;
@@ -72,6 +76,9 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
                 size: formattedSize,
               }),
             ),
+            (attrs.sources ?? []).length === 0
+              ? undefined
+              : m('dl.fm-operation-confirmation-facts', affectedItems(attrs.sources ?? [])),
             m('strong', t('operation', 'irreversible')),
           ],
         ),
