@@ -991,6 +991,12 @@ export const fr = {
     retry: 'Réessayer',
     empty: 'Ce dossier ne contient aucun fichier alloué.',
     treemapLabel: "Carte proportionnelle de l'utilisation du disque pour {name}",
+    zoomOut: 'Revenir au dossier parent',
+    breadcrumbLabel: "Chemin des dossiers de l'utilisation du disque",
+    openInOtherPane: "Ouvrir dans l'autre panneau",
+    itemsLabel: 'Éléments les plus volumineux dans {name}',
+    zoomHint:
+      'Cliquez sur un dossier pour zoomer ; appuyez sur Retour arrière ou Échap pour dézoomer.',
     logical: 'Logique',
     physical: 'Physique',
     unreadable: 'Examiner {count} éléments ignorés',

@@ -19,8 +19,9 @@ const MICRO_FILE_RATIO = 0.005;
 export function visibleTreemapChildren(
   children: readonly DiskUsageNode[],
   parentPhysicalBytes: number,
+  microRatio = MICRO_FILE_RATIO,
 ): readonly DiskUsageNode[] {
-  const threshold = parentPhysicalBytes * MICRO_FILE_RATIO;
+  const threshold = parentPhysicalBytes * microRatio;
   const visible: DiskUsageNode[] = [];
   const tiny: DiskUsageNode[] = [];
   for (const child of children) {

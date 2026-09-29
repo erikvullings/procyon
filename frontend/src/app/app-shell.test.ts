@@ -4728,8 +4728,8 @@ describe('tabs per pane (task 0069)', () => {
     expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(2);
 
     activePane()
-      ?.querySelector<SVGRectElement>('.fm-disk-usage-block[aria-label^="Documents,"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      ?.querySelector<HTMLButtonElement>('.fm-disk-usage-item-open[aria-label$=": Documents"]')
+      ?.click();
 
     await vi.waitFor(() =>
       expect(navigatePane).toHaveBeenCalledWith(
@@ -4924,9 +4924,7 @@ describe('tabs per pane (task 0069)', () => {
       expect(activePane()?.querySelector('.fm-disk-usage-map')).not.toBeNull(),
     );
 
-    activePane()
-      ?.querySelector<SVGRectElement>('.fm-disk-usage-block')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    activePane()?.querySelector<HTMLButtonElement>('.fm-disk-usage-item-activate')?.click();
 
     await vi.waitFor(() => expect(scanDiskUsage).toHaveBeenCalledTimes(2));
     expect(scanDiskUsage.mock.calls[1]?.[0]).toMatchObject({

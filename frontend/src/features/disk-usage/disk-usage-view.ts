@@ -1,7 +1,20 @@
 import m, { type FactoryComponent } from 'mithril';
 import { t } from '../../i18n';
 import type { DiskUsageNode, Location, ScanDiskUsageResult } from '../../models';
-import { squarify, type TreemapBounds, visibleTreemapChildren } from './treemap-layout';
+import {
+  buildTreemapScene,
+  hitTestTreemap,
+  paintTreemap,
+  type TreemapScene,
+} from './cushion-treemap';
+import {
+  DEFAULT_TREEMAP_COLOURS,
+  nodeColour,
+  type Rgb,
+  readTreemapPalette,
+  type TreemapPalette,
+} from './file-type-colours';
+import { type TreemapBounds, visibleTreemapChildren } from './treemap-layout';
 import './disk-usage-view.css';
 
 export type DiskUsageViewState =
@@ -25,24 +38,9 @@ export interface DiskUsageViewAttrs {
 }
 
 const VIEW_BOUNDS: TreemapBounds = { x: 0, y: 0, width: 1000, height: 600 };
-const MAX_RENDER_DEPTH = 3;
-const DIRECTORY_HEADER_HEIGHT = 22;
-const MEDIA = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp3', 'wav', 'mp4', 'mov']);
-const CODE = new Set(['ts', 'tsx', 'js', 'jsx', 'rs', 'go', 'py', 'java', 'css', 'html']);
-const ARCHIVES = new Set(['zip', '7z', 'rar', 'tar', 'gz', 'bz2', 'xz']);
-const EXECUTABLES = new Set(['exe', 'dll', 'dylib', 'so', 'app', 'bin']);
-
-export function diskUsageColour(node: DiskUsageNode): string {
-  if (node.kind === 'directory') return 'var(--fm-disk-usage-directory)';
-  const extension = node.name.includes('.')
-    ? (node.name.split('.').at(-1)?.toLowerCase() ?? '')
-    : '';
-  if (MEDIA.has(extension)) return 'var(--fm-disk-usage-media)';
-  if (CODE.has(extension)) return 'var(--fm-disk-usage-code)';
-  if (ARCHIVES.has(extension)) return 'var(--fm-disk-usage-archive)';
-  if (EXECUTABLES.has(extension)) return 'var(--fm-disk-usage-executable)';
-  return 'var(--fm-disk-usage-other)';
-}
+const MAX_DEVICE_SCALE = 2;
+const MAX_LISTED_ITEMS = 200;
+const LABEL_CSS_FONT_SIZE = 11;
 
 function formatBytes(value: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -55,14 +53,11 @@ function formatBytes(value: number): string {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(size)} ${units[unit]}`;
 }
 
-function inset(bounds: TreemapBounds): TreemapBounds {
-  const padding = Math.min(2, bounds.width / 8, bounds.height / 8);
-  return {
-    x: bounds.x + padding,
-    y: bounds.y + padding,
-    width: Math.max(0, bounds.width - padding * 2),
-    height: Math.max(0, bounds.height - padding * 2),
-  };
+function formatShare(part: number, whole: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'percent',
+    maximumFractionDigits: 1,
+  }).format(whole <= 0 ? 0 : part / whole);
 }
 
 function displayLocation(location: Location): string {
@@ -74,9 +69,89 @@ function displayLocation(location: Location): string {
   }
 }
 
-function truncateLabel(name: string, width: number): string {
-  const maximumCharacters = Math.max(4, Math.floor((width - 12) / 7));
-  return name.length <= maximumCharacters ? name : `${name.slice(0, maximumCharacters - 1)}…`;
+function canDrillInto(node: DiskUsageNode): boolean {
+  return node.kind === 'directory' && !node.collapsed && node.children.length > 0;
+}
+
+/** Nodes from `root` down to the node with `uri`, or `[root]` when it is no longer present. */
+export function diskUsageTrail(root: DiskUsageNode, uri: string | undefined): DiskUsageNode[] {
+  if (uri === undefined || root.location.uri === uri) return [root];
+  const search = (node: DiskUsageNode): DiskUsageNode[] | undefined => {
+    for (const child of node.children) {
+      if (child.location.uri === uri) return [child];
+      if (child.kind === 'directory' && uri.startsWith(child.location.uri)) {
+        const found = search(child);
+        if (found !== undefined) return [child, ...found];
+      }
+    }
+    return undefined;
+  };
+  const found = search(root);
+  return found === undefined ? [root] : [root, ...found];
+}
+
+function rgbCss([r, g, b]: Rgb): string {
+  return `rgb(${r} ${g} ${b})`;
+}
+
+function truncateToWidth(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maximumWidth: number,
+): string {
+  if (context.measureText(text).width <= maximumWidth) return text;
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (context.measureText(`${text.slice(0, middle)}…`).width <= maximumWidth) low = middle;
+    else high = middle - 1;
+  }
+  return low <= 0 ? '' : `${text.slice(0, low)}…`;
+}
+
+function paintScene(canvas: HTMLCanvasElement, scene: TreemapScene, palette: TreemapPalette) {
+  let context: CanvasRenderingContext2D | null = null;
+  try {
+    context = canvas.getContext('2d');
+  } catch {
+    context = null;
+  }
+  if (context === null || scene.width === 0 || scene.height === 0) return;
+  canvas.width = scene.width;
+  canvas.height = scene.height;
+  context.putImageData(
+    new ImageData(paintTreemap(scene, palette.strip), scene.width, scene.height),
+    0,
+    0,
+  );
+  const style = getComputedStyle(canvas);
+  const fontFamily = style.getPropertyValue('--fm-font-family').trim() || 'sans-serif';
+  const labelColour = style.getPropertyValue('--fm-disk-usage-label').trim() || '#ffffff';
+  context.font = `600 ${LABEL_CSS_FONT_SIZE * scene.scale}px ${fontFamily}`;
+  context.textBaseline = 'middle';
+  context.fillStyle = labelColour;
+  const padding = 5 * scene.scale;
+  for (const label of scene.labels) {
+    const x = label.bounds.x * scene.scale;
+    const y = label.bounds.y * scene.scale;
+    const width = label.bounds.width * scene.scale;
+    const height = label.bounds.height * scene.scale;
+    const size = formatBytes(label.node.physicalBytes);
+    const sizeWidth = context.measureText(size).width;
+    const showSize = width > sizeWidth * 3;
+    const text = truncateToWidth(
+      context,
+      label.text,
+      width - padding * 2 - (showSize ? sizeWidth + padding : 0),
+    );
+    context.fillText(text, x + padding, y + height / 2);
+    if (showSize) {
+      context.globalAlpha = 0.75;
+      context.fillText(size, x + width - padding - sizeWidth, y + height / 2);
+      context.globalAlpha = 1;
+    }
+  }
 }
 
 export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
@@ -89,11 +164,25 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
         readonly height: number;
       }
     | undefined;
+  let highlight: TreemapBounds | undefined;
   let warningsOpen = false;
   let elapsedSeconds = 0;
   let progressTimer: ReturnType<typeof setInterval> | undefined;
   let resizeObserver: ResizeObserver | undefined;
   let viewBounds = VIEW_BOUNDS;
+  let zoomUri: string | undefined;
+  let scene: TreemapScene | undefined;
+  let sceneKey:
+    | {
+        readonly node: DiskUsageNode;
+        readonly width: number;
+        readonly height: number;
+        readonly scale: number;
+        readonly palette: string;
+      }
+    | undefined;
+  let paintedScene: TreemapScene | undefined;
+  let palette: TreemapPalette = DEFAULT_TREEMAP_COLOURS;
 
   function updateProgressTimer(state: DiskUsageViewState): void {
     const scanning =
@@ -110,109 +199,267 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
     }
   }
 
-  function renderNode(
-    node: DiskUsageNode,
-    bounds: TreemapBounds,
-    parentLocation: Location,
-    attrs: DiskUsageViewAttrs,
-    depth: number,
-  ): m.Children {
-    const target = node.kind === 'directory' ? node.location : parentLocation;
-    const children =
-      node.kind === 'directory' && depth < MAX_RENDER_DEPTH
-        ? visibleTreemapChildren(node.children, node.physicalBytes)
-        : [];
-    const showDirectoryHeader =
-      node.kind === 'directory' &&
-      children.length > 0 &&
-      bounds.width > 70 &&
-      bounds.height > DIRECTORY_HEADER_HEIGHT * 2;
-    const innerBounds = inset(bounds);
-    const childBounds = showDirectoryHeader
-      ? {
-          ...innerBounds,
-          y: innerBounds.y + DIRECTORY_HEADER_HEIGHT,
-          height: Math.max(0, innerBounds.height - DIRECTORY_HEADER_HEIGHT),
-        }
-      : innerBounds;
-    const showDirectoryLabel =
-      node.kind === 'directory' && bounds.width > 70 && bounds.height > DIRECTORY_HEADER_HEIGHT * 2;
-    const showLabel =
-      showDirectoryLabel ||
-      (depth === 0 && children.length === 0 && bounds.width > 75 && bounds.height > 24);
-    const activate = () => {
-      if (node.collapsed && attrs.state.type === 'loaded' && attrs.state.scanning !== true) {
+  function deviceScale(): number {
+    const ratio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    return Math.min(MAX_DEVICE_SCALE, Math.max(1, ratio));
+  }
+
+  /** Rebuilds the layout only when its inputs change; hit-testing reuses the cached scene. */
+  function sceneFor(node: DiskUsageNode, palette: TreemapPalette): TreemapScene {
+    const scale = deviceScale();
+    const paletteKey = JSON.stringify(palette);
+    if (
+      scene === undefined ||
+      sceneKey?.node !== node ||
+      sceneKey.width !== viewBounds.width ||
+      sceneKey.height !== viewBounds.height ||
+      sceneKey.scale !== scale ||
+      sceneKey.palette !== paletteKey
+    ) {
+      scene = buildTreemapScene(node, viewBounds.width, viewBounds.height, scale, palette);
+      sceneKey = {
+        node,
+        width: viewBounds.width,
+        height: viewBounds.height,
+        scale,
+        palette: paletteKey,
+      };
+    }
+    return scene;
+  }
+
+  function clearHover(): void {
+    hovered = undefined;
+    hoverPoint = undefined;
+    highlight = undefined;
+  }
+
+  function pointFrom(event: MouseEvent, element: Element | null) {
+    const view = element?.closest('.fm-disk-usage-view');
+    const bounds = view?.getBoundingClientRect();
+    return bounds === undefined
+      ? undefined
+      : {
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+          width: bounds.width,
+          height: bounds.height,
+        };
+  }
+
+  function zoomTo(node: DiskUsageNode | undefined): void {
+    zoomUri = node?.location.uri;
+    clearHover();
+  }
+
+  /** Drills into a directory, rescans a collapsed one, or opens a file's folder elsewhere. */
+  function activate(node: DiskUsageNode, parent: DiskUsageNode, attrs: DiskUsageViewAttrs): void {
+    if (node.kind === 'directory' && node.collapsed) {
+      if (attrs.state.type === 'loaded' && attrs.state.scanning !== true) {
+        zoomTo(node);
         attrs.onExpandFolder(node.location);
-        return;
       }
-      attrs.onOpenFolder(target);
+      return;
+    }
+    if (canDrillInto(node)) {
+      zoomTo(node);
+      return;
+    }
+    attrs.onOpenFolder(node.kind === 'directory' ? node.location : parent.location);
+  }
+
+  function renderBreadcrumbs(trail: readonly DiskUsageNode[]): m.Children {
+    return m('nav.fm-disk-usage-breadcrumbs', { 'aria-label': t('diskUsage', 'breadcrumbLabel') }, [
+      trail.length > 1
+        ? m(
+            'button.btn-flat.fm-disk-usage-zoom-out',
+            {
+              type: 'button',
+              title: t('diskUsage', 'zoomOut'),
+              'aria-label': t('diskUsage', 'zoomOut'),
+              onclick: () => zoomTo(trail.at(-2)),
+            },
+            '↑',
+          )
+        : undefined,
+      trail.map((node, index) =>
+        index === trail.length - 1
+          ? m('span.fm-disk-usage-crumb', { 'aria-current': 'location' }, node.name)
+          : m(
+              'button.fm-disk-usage-crumb',
+              { type: 'button', onclick: () => zoomTo(node) },
+              node.name,
+            ),
+      ),
+    ]);
+  }
+
+  function renderItems(
+    current: DiskUsageNode,
+    colours: TreemapPalette,
+    attrs: DiskUsageViewAttrs,
+  ): m.Children {
+    const items = visibleTreemapChildren(current.children, current.physicalBytes).slice(
+      0,
+      MAX_LISTED_ITEMS,
+    );
+    return m(
+      'ul.fm-disk-usage-items',
+      { 'aria-label': t('diskUsage', 'itemsLabel', { name: current.name }) },
+      items.map((node) => {
+        const size = formatBytes(node.physicalBytes);
+        const share = current.physicalBytes <= 0 ? 0 : node.physicalBytes / current.physicalBytes;
+        const tileBounds = () =>
+          scene?.tiles.find((candidate) => candidate.depth === 1 && candidate.node === node)
+            ?.bounds;
+        return m(
+          'li.fm-disk-usage-item',
+          {
+            key: `${node.location.uri}\u0000${node.name}`,
+            class: hovered === node ? 'fm-disk-usage-item--hovered' : undefined,
+            onpointerenter: (event: PointerEvent) => {
+              hovered = node;
+              hoverPoint = pointFrom(event, event.currentTarget as Element | null);
+              highlight = tileBounds();
+            },
+            onpointerleave: clearHover,
+          },
+          [
+            m(
+              'button.fm-disk-usage-item-activate',
+              {
+                type: 'button',
+                'aria-label': `${node.name}, ${size}`,
+                onclick: () => activate(node, current, attrs),
+                onfocus: () => {
+                  hovered = node;
+                  hoverPoint = undefined;
+                  highlight = tileBounds();
+                },
+                onblur: clearHover,
+              },
+              [
+                m('span.fm-disk-usage-swatch', {
+                  style: { background: rgbCss(nodeColour(node, colours)) },
+                  'aria-hidden': 'true',
+                }),
+                m('span.fm-disk-usage-item-name', node.name),
+                m('span.fm-disk-usage-item-size', size),
+                m(
+                  'span.fm-disk-usage-item-share',
+                  { 'aria-hidden': 'true' },
+                  m('span', { style: { width: `${Math.max(1, share * 100)}%` } }),
+                ),
+                m(
+                  'span.fm-disk-usage-item-percent',
+                  formatShare(node.physicalBytes, current.physicalBytes),
+                ),
+              ],
+            ),
+            node.kind === 'directory'
+              ? m(
+                  'button.btn-flat.fm-disk-usage-item-open',
+                  {
+                    type: 'button',
+                    title: t('diskUsage', 'openInOtherPane'),
+                    'aria-label': `${t('diskUsage', 'openInOtherPane')}: ${node.name}`,
+                    onclick: () => attrs.onOpenFolder(node.location),
+                  },
+                  '↗',
+                )
+              : undefined,
+          ],
+        );
+      }),
+    );
+  }
+
+  function renderMap(
+    current: DiskUsageNode,
+    trail: readonly DiskUsageNode[],
+    attrs: DiskUsageViewAttrs,
+  ): m.Children {
+    const repaint = (canvas: HTMLCanvasElement) => {
+      palette = readTreemapPalette(canvas);
+      const next = sceneFor(current, palette);
+      if (paintedScene === next) return;
+      paintScene(canvas, next, palette);
+      paintedScene = next;
     };
-    return m('g', [
-      m('rect.fm-disk-usage-block', {
-        x: bounds.x,
-        y: bounds.y,
-        width: Math.max(0, bounds.width),
-        height: Math.max(0, bounds.height),
-        fill: diskUsageColour(node),
+    const tileAt = (event: MouseEvent) => {
+      const target = event.currentTarget as HTMLCanvasElement | null;
+      const bounds = target?.getBoundingClientRect();
+      if (scene === undefined || bounds === undefined) return undefined;
+      return hitTestTreemap(scene, event.clientX - bounds.left, event.clientY - bounds.top);
+    };
+    return m(
+      '.fm-disk-usage-canvas-host',
+      {
         tabindex: 0,
-        role: 'button',
-        'aria-label': `${node.name}, ${formatBytes(node.physicalBytes)}`,
-        onclick: activate,
-        onkeydown: (event: KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            activate();
+        oncreate: ({ dom }: m.VnodeDOM) => {
+          const updateBounds = () => {
+            const { width, height } = dom.getBoundingClientRect();
+            if (width <= 0 || height <= 0) return;
+            if (width === viewBounds.width && height === viewBounds.height) return;
+            viewBounds = { x: 0, y: 0, width, height };
+            m.redraw();
+          };
+          updateBounds();
+          if (typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(updateBounds);
+            resizeObserver.observe(dom);
           }
         },
-        onpointerenter: (event: PointerEvent) => {
-          hovered = node;
-          const view = (event.currentTarget as SVGRectElement | null)?.closest(
-            '.fm-disk-usage-view',
-          );
-          const bounds = view?.getBoundingClientRect();
-          hoverPoint =
-            bounds === undefined
-              ? undefined
-              : {
-                  x: event.clientX - bounds.left,
-                  y: event.clientY - bounds.top,
-                  width: bounds.width,
-                  height: bounds.height,
-                };
-        },
-        onfocus: () => {
-          hovered = node;
-          hoverPoint = undefined;
-        },
-        onpointerleave: () => {
-          hovered = undefined;
-          hoverPoint = undefined;
-        },
-      }),
-      ...squarify(children, childBounds).map((child) =>
-        renderNode(child.node, child.bounds, node.location, attrs, depth + 1),
-      ),
-      showLabel
-        ? [
-            showDirectoryLabel
-              ? m('rect.fm-disk-usage-label-backdrop', {
-                  x: innerBounds.x,
-                  y: innerBounds.y,
-                  width: innerBounds.width,
-                  height: DIRECTORY_HEADER_HEIGHT,
-                })
-              : undefined,
-            m(
-              'text.fm-disk-usage-label',
-              {
-                x: innerBounds.x + 6,
-                y: innerBounds.y + 15,
+      },
+      [
+        m('canvas.fm-disk-usage-canvas', {
+          role: 'img',
+          'aria-label': t('diskUsage', 'treemapLabel', { name: current.name }),
+          oncreate: ({ dom }: m.VnodeDOM) => repaint(dom as HTMLCanvasElement),
+          onupdate: ({ dom }: m.VnodeDOM) => repaint(dom as HTMLCanvasElement),
+          onpointermove: (event: PointerEvent) => {
+            const tile = tileAt(event);
+            if (tile?.node === hovered && hoverPoint !== undefined) {
+              hoverPoint = pointFrom(event, event.currentTarget as Element | null);
+              return;
+            }
+            hovered = tile?.node;
+            highlight = tile?.bounds;
+            hoverPoint =
+              tile === undefined
+                ? undefined
+                : pointFrom(event, event.currentTarget as Element | null);
+          },
+          onpointerleave: clearHover,
+          onclick: (event: MouseEvent) => {
+            // The workspace pane's own click handler focuses its section after this one runs;
+            // reclaim focus afterwards so Backspace/Escape reach this view's zoom-out handler.
+            const host = (event.currentTarget as HTMLElement | null)?.parentElement;
+            setTimeout(() => host?.focus(), 0);
+            const tile = tileAt(event);
+            const target = tile?.trail[0];
+            if (target === undefined) return;
+            if (target.kind !== 'directory') {
+              hovered = tile?.node;
+              return;
+            }
+            activate(target, current, attrs);
+          },
+        }),
+        highlight === undefined
+          ? undefined
+          : m('.fm-disk-usage-highlight', {
+              'aria-hidden': 'true',
+              style: {
+                left: `${highlight.x}px`,
+                top: `${highlight.y}px`,
+                width: `${highlight.width}px`,
+                height: `${highlight.height}px`,
               },
-              truncateLabel(node.name, innerBounds.width),
-            ),
-          ]
-        : undefined,
-    ]);
+            }),
+        trail.length > 1 ? m('span.fm-visually-hidden', t('diskUsage', 'zoomHint')) : undefined,
+      ],
+    );
   }
 
   return {
@@ -243,158 +490,164 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
         ]);
       }
       const { result } = attrs.state;
-      const children = visibleTreemapChildren(result.root.children, result.root.physicalBytes);
+      const trail = diskUsageTrail(result.root, zoomUri);
+      const current = trail.at(-1) ?? result.root;
       const unreadable = result.unreadable ?? [];
       const scannedEntries = result.scannedEntries ?? 0;
-      return m('.fm-disk-usage-view', [
-        m('.fm-disk-usage-toolbar', [
-          m('.fm-disk-usage-summary', [
-            m('strong', result.root.name),
-            m('span.fm-disk-usage-summary-size', formatBytes(result.root.physicalBytes)),
+      const hasContent = visibleTreemapChildren(current.children, current.physicalBytes).length > 0;
+      return m(
+        '.fm-disk-usage-view',
+        {
+          onkeydown: (event: KeyboardEvent) => {
+            if (
+              (event.key === 'Backspace' || event.key === 'Escape') &&
+              trail.length > 1 &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              zoomTo(trail.at(-2));
+            }
+          },
+        },
+        [
+          m('.fm-disk-usage-toolbar', [
+            m('.fm-disk-usage-summary', [
+              m('strong', result.root.name),
+              m('span.fm-disk-usage-summary-size', formatBytes(result.root.physicalBytes)),
+            ]),
+            attrs.state.scanning === true
+              ? m('.fm-disk-usage-progress', [
+                  m('.fm-disk-usage-spinner.fm-disk-usage-spinner--compact', {
+                    'aria-hidden': 'true',
+                  }),
+                  m(
+                    'span',
+                    attrs.state.finalizing === true
+                      ? t('diskUsage', 'finalizing', {
+                          seconds: elapsedSeconds,
+                          count: new Intl.NumberFormat().format(scannedEntries),
+                        })
+                      : t('diskUsage', 'updating', {
+                          seconds: elapsedSeconds,
+                          count: new Intl.NumberFormat().format(scannedEntries),
+                        }),
+                  ),
+                  m(
+                    'button.btn.fm-disk-usage-stop',
+                    { type: 'button', onclick: attrs.onStop },
+                    t('diskUsage', 'stop'),
+                  ),
+                ])
+              : undefined,
+            result.unreadableEntries > 0
+              ? m(
+                  'button.btn.fm-disk-usage-warning',
+                  {
+                    type: 'button',
+                    'aria-expanded': warningsOpen,
+                    onclick: () => {
+                      warningsOpen = !warningsOpen;
+                    },
+                  },
+                  t('diskUsage', 'unreadable', { count: result.unreadableEntries }),
+                )
+              : undefined,
           ]),
-          attrs.state.scanning === true
-            ? m('.fm-disk-usage-progress', [
-                m('.fm-disk-usage-spinner.fm-disk-usage-spinner--compact', {
-                  'aria-hidden': 'true',
-                }),
-                m(
-                  'span',
-                  attrs.state.finalizing === true
-                    ? t('diskUsage', 'finalizing', {
-                        seconds: elapsedSeconds,
-                        count: new Intl.NumberFormat().format(scannedEntries),
-                      })
-                    : t('diskUsage', 'updating', {
-                        seconds: elapsedSeconds,
-                        count: new Intl.NumberFormat().format(scannedEntries),
-                      }),
-                ),
-                m(
-                  'button.btn.fm-disk-usage-stop',
-                  { type: 'button', onclick: attrs.onStop },
-                  t('diskUsage', 'stop'),
-                ),
+          attrs.state.error !== undefined || (warningsOpen && unreadable.length > 0)
+            ? m('.fm-disk-usage-notices', [
+                attrs.state.error === undefined
+                  ? undefined
+                  : m('.fm-disk-usage-failure', { role: 'alert' }, [
+                      m('span', attrs.state.error),
+                      m(
+                        'button.btn',
+                        { type: 'button', onclick: attrs.onRetry },
+                        t('diskUsage', 'retry'),
+                      ),
+                    ]),
+                warningsOpen && unreadable.length > 0
+                  ? m('.fm-disk-usage-warnings', [
+                      m('strong', t('diskUsage', 'unreadableHeading')),
+                      m('p', t('diskUsage', 'unreadableExplanation')),
+                      m(
+                        'ul',
+                        unreadable.map((entry) =>
+                          m('li', [
+                            m('span', displayLocation(entry.location)),
+                            m(
+                              'span.fm-disk-usage-warning-reason',
+                              t('diskUsage', `unreadableReason_${entry.reason}`),
+                            ),
+                          ]),
+                        ),
+                      ),
+                      result.unreadableEntries > unreadable.length
+                        ? m(
+                            'p',
+                            t('diskUsage', 'unreadableMore', {
+                              count: result.unreadableEntries - unreadable.length,
+                            }),
+                          )
+                        : undefined,
+                    ])
+                  : undefined,
               ])
             : undefined,
-          result.unreadableEntries > 0
+          !hasContent && trail.length === 1
+            ? m('.fm-disk-usage-status', t('diskUsage', 'empty'))
+            : m('.fm-disk-usage-map', [
+                m('.fm-disk-usage-navigation', [
+                  renderBreadcrumbs(trail),
+                  m('span.fm-disk-usage-current-size', formatBytes(current.physicalBytes)),
+                  m(
+                    'button.btn-flat.fm-disk-usage-open-current',
+                    { type: 'button', onclick: () => attrs.onOpenFolder(current.location) },
+                    t('diskUsage', 'openInOtherPane'),
+                  ),
+                ]),
+                m('.fm-disk-usage-body', [
+                  renderMap(current, trail, attrs),
+                  renderItems(current, palette, attrs),
+                ]),
+              ]),
+          hovered !== undefined && hoverPoint !== undefined
             ? m(
-                'button.btn.fm-disk-usage-warning',
+                '.fm-disk-usage-tooltip',
                 {
-                  type: 'button',
-                  'aria-expanded': warningsOpen,
-                  onclick: () => {
-                    warningsOpen = !warningsOpen;
+                  style: {
+                    left:
+                      hoverPoint.x <= hoverPoint.width / 2
+                        ? `${Math.max(8, hoverPoint.x + 12)}px`
+                        : undefined,
+                    right:
+                      hoverPoint.x > hoverPoint.width / 2
+                        ? `${Math.max(8, hoverPoint.width - hoverPoint.x + 12)}px`
+                        : undefined,
+                    top:
+                      hoverPoint.y <= hoverPoint.height / 2
+                        ? `${Math.max(8, hoverPoint.y + 12)}px`
+                        : undefined,
+                    bottom:
+                      hoverPoint.y > hoverPoint.height / 2
+                        ? `${Math.max(8, hoverPoint.height - hoverPoint.y + 12)}px`
+                        : undefined,
                   },
                 },
-                t('diskUsage', 'unreadable', { count: result.unreadableEntries }),
+                [
+                  m('strong', hovered.name),
+                  m('span', displayLocation(hovered.location)),
+                  m(
+                    'span',
+                    `${t('diskUsage', 'logical')}: ${formatBytes(hovered.logicalBytes)} · ${t('diskUsage', 'physical')}: ${formatBytes(hovered.physicalBytes)} · ${formatShare(hovered.physicalBytes, current.physicalBytes)}`,
+                  ),
+                ],
               )
             : undefined,
-        ]),
-        attrs.state.error !== undefined || (warningsOpen && unreadable.length > 0)
-          ? m('.fm-disk-usage-notices', [
-              attrs.state.error === undefined
-                ? undefined
-                : m('.fm-disk-usage-failure', { role: 'alert' }, [
-                    m('span', attrs.state.error),
-                    m(
-                      'button.btn',
-                      { type: 'button', onclick: attrs.onRetry },
-                      t('diskUsage', 'retry'),
-                    ),
-                  ]),
-              warningsOpen && unreadable.length > 0
-                ? m('.fm-disk-usage-warnings', [
-                    m('strong', t('diskUsage', 'unreadableHeading')),
-                    m('p', t('diskUsage', 'unreadableExplanation')),
-                    m(
-                      'ul',
-                      unreadable.map((entry) =>
-                        m('li', [
-                          m('span', displayLocation(entry.location)),
-                          m(
-                            'span.fm-disk-usage-warning-reason',
-                            t('diskUsage', `unreadableReason_${entry.reason}`),
-                          ),
-                        ]),
-                      ),
-                    ),
-                    result.unreadableEntries > unreadable.length
-                      ? m(
-                          'p',
-                          t('diskUsage', 'unreadableMore', {
-                            count: result.unreadableEntries - unreadable.length,
-                          }),
-                        )
-                      : undefined,
-                  ])
-                : undefined,
-            ])
-          : undefined,
-        children.length === 0
-          ? m('.fm-disk-usage-status', t('diskUsage', 'empty'))
-          : m(
-              'svg.fm-disk-usage-map',
-              {
-                viewBox: `0 0 ${viewBounds.width} ${viewBounds.height}`,
-                preserveAspectRatio: 'none',
-                role: 'img',
-                'aria-label': t('diskUsage', 'treemapLabel', { name: result.root.name }),
-                onpointerleave: () => {
-                  hovered = undefined;
-                  hoverPoint = undefined;
-                },
-                oncreate: ({ dom }: m.VnodeDOM) => {
-                  const updateBounds = () => {
-                    const { width, height } = dom.getBoundingClientRect();
-                    if (width <= 0 || height <= 0) return;
-                    viewBounds = { x: 0, y: 0, width, height };
-                    m.redraw();
-                  };
-                  updateBounds();
-                  if (typeof ResizeObserver !== 'undefined') {
-                    resizeObserver = new ResizeObserver(updateBounds);
-                    resizeObserver.observe(dom);
-                  }
-                },
-              },
-              squarify(children, viewBounds).map((item) =>
-                renderNode(item.node, item.bounds, result.root.location, attrs, 0),
-              ),
-            ),
-        hovered !== undefined && hoverPoint !== undefined
-          ? m(
-              '.fm-disk-usage-tooltip',
-              {
-                style: {
-                  left:
-                    hoverPoint.x <= hoverPoint.width / 2
-                      ? `${Math.max(8, hoverPoint.x + 12)}px`
-                      : undefined,
-                  right:
-                    hoverPoint.x > hoverPoint.width / 2
-                      ? `${Math.max(8, hoverPoint.width - hoverPoint.x + 12)}px`
-                      : undefined,
-                  top:
-                    hoverPoint.y <= hoverPoint.height / 2
-                      ? `${Math.max(8, hoverPoint.y + 12)}px`
-                      : undefined,
-                  bottom:
-                    hoverPoint.y > hoverPoint.height / 2
-                      ? `${Math.max(8, hoverPoint.height - hoverPoint.y + 12)}px`
-                      : undefined,
-                },
-              },
-              [
-                m('strong', hovered.name),
-                m('span', displayLocation(hovered.location)),
-                m(
-                  'span',
-                  `${t('diskUsage', 'logical')}: ${formatBytes(hovered.logicalBytes)} · ${t('diskUsage', 'physical')}: ${formatBytes(hovered.physicalBytes)}`,
-                ),
-              ],
-            )
-          : undefined,
-      ]);
+        ],
+      );
     },
   };
 };

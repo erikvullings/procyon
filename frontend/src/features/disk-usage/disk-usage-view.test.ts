@@ -1,9 +1,60 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DiskUsageNode } from '../../models';
-import { DiskUsageView } from './disk-usage-view';
+import type { DiskUsageNode, Location } from '../../models';
+import { DiskUsageView, diskUsageTrail } from './disk-usage-view';
 
 let root: HTMLElement;
+let fillText: ReturnType<typeof vi.fn>;
+
+class FakeImageData {
+  constructor(
+    readonly data: Uint8ClampedArray,
+    readonly width: number,
+    readonly height: number,
+  ) {}
+}
+
+function stubCanvas(): void {
+  fillText = vi.fn();
+  vi.stubGlobal('ImageData', FakeImageData);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    putImageData: vi.fn(),
+    fillText,
+    measureText: (text: string) => ({ width: text.length * 6 }),
+    font: '',
+    textBaseline: 'alphabetic',
+    fillStyle: '',
+    globalAlpha: 1,
+  } as unknown as CanvasRenderingContext2D);
+}
+
+function mountLoaded(
+  rootNode: DiskUsageNode,
+  overrides: {
+    onOpenFolder?: (location: Location) => void;
+    onExpandFolder?: (location: Location) => void;
+  } = {},
+): void {
+  m.mount(root, {
+    view: () =>
+      m(DiskUsageView, {
+        state: {
+          type: 'loaded',
+          result: { root: rootNode, unreadableEntries: 0 },
+        },
+        onOpenFolder: overrides.onOpenFolder ?? vi.fn(),
+        onExpandFolder: overrides.onExpandFolder ?? vi.fn(),
+        onRetry: vi.fn(),
+        onStop: vi.fn(),
+      }),
+  });
+}
+
+function itemButton(name: string): HTMLButtonElement | null {
+  return root.querySelector<HTMLButtonElement>(
+    `.fm-disk-usage-item-activate[aria-label^="${name},"]`,
+  );
+}
 
 function directory(name: string, physicalBytes: number): DiskUsageNode {
   return {
@@ -18,6 +69,7 @@ function directory(name: string, physicalBytes: number): DiskUsageNode {
 }
 
 beforeEach(() => {
+  stubCanvas();
   root = document.createElement('div');
   document.body.appendChild(root);
 });
@@ -26,6 +78,8 @@ afterEach(() => {
   m.mount(root, null);
   root.remove();
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('DiskUsageView', () => {
@@ -68,86 +122,135 @@ describe('DiskUsageView', () => {
     expect(onStop).toHaveBeenCalledOnce();
   });
 
-  it('opens a clicked directory block through the supplied opposite-pane callback', () => {
+  it('opens an empty directory row through the supplied opposite-pane callback', () => {
     const onOpenFolder = vi.fn();
     const child = directory('projects', 80);
-    m.mount(root, {
-      view: () =>
-        m(DiskUsageView, {
-          state: {
-            type: 'loaded',
-            result: {
-              root: { ...directory('tmp', 80), children: [child] },
-              unreadableEntries: 0,
-            },
-          },
-          onOpenFolder,
-          onExpandFolder: vi.fn(),
-          onRetry: vi.fn(),
-          onStop: vi.fn(),
-        }),
-    });
+    mountLoaded({ ...directory('tmp', 80), children: [child] }, { onOpenFolder });
 
-    root
-      .querySelector<SVGRectElement>('.fm-disk-usage-block')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    itemButton('projects')?.click();
     expect(onOpenFolder).toHaveBeenCalledWith(child.location);
   });
 
   it('opens a real directory even when its name resembles the aggregate label', () => {
     const onOpenFolder = vi.fn();
     const child = directory('Small files (archive)', 80);
-    m.mount(root, {
-      view: () =>
-        m(DiskUsageView, {
-          state: {
-            type: 'loaded',
-            result: {
-              root: { ...directory('tmp', 80), children: [child] },
-              unreadableEntries: 0,
-            },
-          },
-          onOpenFolder,
-          onExpandFolder: vi.fn(),
-          onRetry: vi.fn(),
-          onStop: vi.fn(),
-        }),
-    });
+    mountLoaded({ ...directory('tmp', 80), children: [child] }, { onOpenFolder });
 
-    root
-      .querySelector<SVGRectElement>('.fm-disk-usage-block')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    root.querySelector<HTMLButtonElement>('.fm-disk-usage-item-open')?.click();
     expect(onOpenFolder).toHaveBeenCalledWith(child.location);
   });
 
   it('shows complete hover details in the tooltip without a redundant footer row', () => {
     const child = directory('projects', 80);
-    m.mount(root, {
-      view: () =>
-        m(DiskUsageView, {
-          state: {
-            type: 'loaded',
-            result: {
-              root: { ...directory('tmp', 80), children: [child] },
-              unreadableEntries: 0,
-            },
-          },
-          onOpenFolder: vi.fn(),
-          onExpandFolder: vi.fn(),
-          onRetry: vi.fn(),
-          onStop: vi.fn(),
-        }),
-    });
+    mountLoaded({ ...directory('tmp', 80), children: [child] });
 
     root
-      .querySelector<SVGRectElement>('.fm-disk-usage-block')
+      .querySelector('.fm-disk-usage-item')
       ?.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
     m.redraw.sync();
-    expect(root.querySelector('.fm-disk-usage-tooltip')?.textContent).toContain('/tmp/projects');
-    expect(root.querySelector('.fm-disk-usage-tooltip')?.textContent).toContain('Logical');
-    expect(root.querySelector('.fm-disk-usage-tooltip')?.textContent).toContain('Physical');
+    const tooltip = root.querySelector('.fm-disk-usage-tooltip')?.textContent;
+    expect(tooltip).toContain('/tmp/projects');
+    expect(tooltip).toContain('Logical');
+    expect(tooltip).toContain('Physical');
     expect(root.querySelector('.fm-disk-usage-details')).toBeNull();
     expect(root.querySelector('title')).toBeNull();
+    expect(root.querySelector('.fm-disk-usage-highlight')).not.toBeNull();
+  });
+
+  it('hit-tests the canvas to show the tile under the pointer', () => {
+    const photo = { ...directory('photo.jpg', 80), kind: 'file' as const };
+    const pictures = {
+      ...directory('pictures', 80),
+      location: { providerId: 'local', uri: 'file:///tmp/pictures/' },
+      children: [
+        {
+          ...photo,
+          location: { providerId: 'local', uri: 'file:///tmp/pictures/photo.jpg' },
+        },
+      ],
+    };
+    mountLoaded({ ...directory('tmp', 80), children: [pictures] });
+
+    root
+      .querySelector('.fm-disk-usage-canvas')
+      ?.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 500, clientY: 300 }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-disk-usage-tooltip')?.textContent).toContain(
+      '/tmp/pictures/photo.jpg',
+    );
+  });
+
+  it('zooms into a folder from the canvas, the list and back out via breadcrumbs and keys', () => {
+    const file = (name: string, bytes: number, parent: string) => ({
+      ...directory(name, bytes),
+      kind: 'file' as const,
+      location: { providerId: 'local', uri: `file:///tmp/${parent}/${name}` },
+    });
+    const inner = {
+      ...directory('inner', 60),
+      location: { providerId: 'local', uri: 'file:///tmp/projects/inner/' },
+      children: [file('a.bin', 30, 'projects/inner'), file('b.bin', 30, 'projects/inner')],
+    };
+    const projects = {
+      ...directory('projects', 100),
+      location: { providerId: 'local', uri: 'file:///tmp/projects/' },
+      children: [inner, file('notes.txt', 40, 'projects')],
+    };
+    mountLoaded({ ...directory('tmp', 100), children: [projects] });
+
+    root
+      .querySelector('.fm-disk-usage-canvas')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 300 }));
+    m.redraw.sync();
+    expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('projects');
+
+    itemButton('inner')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('inner');
+    expect(itemButton('a.bin')).not.toBeNull();
+
+    root
+      .querySelector('.fm-disk-usage-view')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('projects');
+
+    root.querySelector<HTMLButtonElement>('button.fm-disk-usage-crumb')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('tmp');
+    expect(root.querySelector('.fm-disk-usage-zoom-out')).toBeNull();
+  });
+
+  it('opens the zoomed folder in the other pane', () => {
+    const onOpenFolder = vi.fn();
+    mountLoaded(
+      { ...directory('tmp', 80), children: [directory('projects', 80)] },
+      {
+        onOpenFolder,
+      },
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-disk-usage-open-current')?.click();
+    expect(onOpenFolder).toHaveBeenCalledWith({ providerId: 'local', uri: 'file:///tmp/tmp' });
+  });
+
+  it('finds the zoom trail by location and falls back to the root', () => {
+    const inner = {
+      ...directory('inner', 10),
+      location: { providerId: 'local', uri: 'file:///tmp/a/inner/' },
+    };
+    const a = {
+      ...directory('a', 10),
+      location: { providerId: 'local', uri: 'file:///tmp/a/' },
+      children: [inner],
+    };
+    const tree = { ...directory('tmp', 10), children: [a] };
+    expect(diskUsageTrail(tree, inner.location.uri).map((node) => node.name)).toEqual([
+      'tmp',
+      'a',
+      'inner',
+    ]);
+    expect(diskUsageTrail(tree, 'file:///elsewhere').map((node) => node.name)).toEqual(['tmp']);
   });
 
   it('stacks the root size beneath its folder name', () => {
@@ -291,14 +394,12 @@ describe('DiskUsageView', () => {
         }),
     });
 
-    const labels = [...root.querySelectorAll('.fm-disk-usage-label')].map(
-      (label) => label.textContent,
-    );
+    const labels = fillText.mock.calls.map(([text]) => text);
     expect(labels).toContain('model-cache');
     expect(labels).not.toContain('sha256-deadbeef');
   });
 
-  it('expands a collapsed directory when its block is activated', () => {
+  it('expands a collapsed directory when its row is activated', () => {
     const onExpandFolder = vi.fn();
     const child = { ...directory('node_modules', 80), collapsed: true };
     m.mount(root, {
@@ -318,9 +419,7 @@ describe('DiskUsageView', () => {
         }),
     });
 
-    root
-      .querySelector<SVGRectElement>('.fm-disk-usage-block')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    itemButton('node_modules')?.click();
 
     expect(onExpandFolder).toHaveBeenCalledWith(child.location);
     expect(root.querySelector('.fm-disk-usage-details')).toBeNull();
