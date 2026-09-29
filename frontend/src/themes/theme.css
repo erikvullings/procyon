@@ -3289,21 +3289,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * for command routing. In that case the pane below falls through to the outline-only rule
  * further down, which is unconditional on focus - the same "not focused, but still showing
  * where the cursor is" treatment used for the grid view's cursor tile. */
-.fm-pane[data-active="true"]:focus-within .fm-selected-row {
-  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
+/* Marked rows: the name turns amber in both panes (details stay neutral); the focused active
+   pane adds the selection wash. Inactive panes use coloured text only - fills are reserved for
+   the pane that receives keystrokes. */
+.fm-selected-row .fm-entry-name {
   color: var(--fm-selected-row-text);
 }
 
-.fm-pane[data-active="true"]:focus-within
-  .fm-selected-row
-  :is(
-    .fm-entry-name,
-    .fm-directory-type,
-    .fm-directory-size,
-    .fm-directory-modified,
-    .fm-directory-file-age
-  ) {
-  color: inherit;
+.fm-pane[data-active="true"]:focus-within .fm-selected-row {
+  background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
 }
 
 .fm-pane[data-active="true"]:focus-within .fm-cursor-row:not(.fm-selected-row) {

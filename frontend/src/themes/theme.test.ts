@@ -305,11 +305,9 @@ describe('theme stylesheet', () => {
     // The filled/tinted treatment additionally requires `:focus-within` (task 0139 follow-up):
     // an "active" pane that lost real DOM focus to the directory-tree sidebar falls through to
     // the unconditional box-shadow-only rule below instead.
+    // Marked names are amber in both panes; only the focused active pane adds the wash.
     expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
-    );
-    expect(themeCss).toMatch(
-      /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s+:is\([^)]*\.fm-entry-name[^)]*\.fm-directory-modified[^)]*\)\s*\{[^}]*color:\s*inherit/s,
+      /(?:^|\n)\.fm-selected-row \.fm-entry-name\s*\{[^}]*color:\s*var\(--fm-selected-row-text\)/s,
     );
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-selected-row\s*\{[^}]*background:[^}]*42%/s,
