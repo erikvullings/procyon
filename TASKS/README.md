@@ -264,7 +264,7 @@ disk-usage visualization.
 - [x] 0231 Disk usage: canvas cushion treemap with zoom and richer colours
 - [x] 0232 Disk usage: clean-up candidates *(needs 0231)*
 - [x] 0233 Disk usage: flat-array tree transport *(needs 0230–0232)*
-- [ ] 0234 Disk usage: macOS getattrlistbulk scanner *(needs 0230)*
+- [x] 0234 Disk usage: macOS getattrlistbulk scanner *(needs 0230)*
 - [ ] 0170 Perceptual image duplicate detection *(needs 0077, 0134)*
 - [ ] 0145 Surface Finder tags/Spotlight comment editing in the Properties dialog *(split out of
   0136; 0140 landed mid-task, after 0136's own standalone dialogs were already built)*

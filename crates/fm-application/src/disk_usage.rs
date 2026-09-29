@@ -1,7 +1,9 @@
 //! Parallel local disk-usage scanning for the WinDirStat-style treemap (task 0118).
 
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs;
+use std::io;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::path::{Path, PathBuf};
@@ -401,12 +403,143 @@ impl ScanBoundary {
     }
 
     /// Why a directory must not be descended, if it crosses the scan's boundary.
-    fn skip_reason(self, metadata: &fs::Metadata) -> Option<UnreadableReason> {
-        boundary_skip_reason(
-            self.root_device,
-            device_of(metadata),
-            bsd_flags_of(metadata),
+    fn skip_reason(self, info: &EntryInfo) -> Option<UnreadableReason> {
+        boundary_skip_reason(self.root_device, info.device, info.bsd_flags)
+    }
+}
+
+/// What the scanner needs to know about one entry, from `lstat` or a bulk directory listing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EntryInfo {
+    size: DiskUsageSize,
+    device: Option<u64>,
+    bsd_flags: u32,
+    /// `(device, inode)` of a file with more than one hard link, on Unix.
+    shared_identity: Option<FileIdentity>,
+}
+
+impl EntryInfo {
+    fn from_metadata(metadata: &fs::Metadata) -> Self {
+        let size = GetDiskUsageSize.get_size(metadata);
+        #[cfg(unix)]
+        let shared_identity = {
+            use std::os::unix::fs::MetadataExt;
+
+            (size.kind == ScannedEntryKind::File && metadata.nlink() > 1).then(|| FileIdentity {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            })
+        };
+        #[cfg(not(unix))]
+        let shared_identity = None;
+        Self {
+            size,
+            device: device_of(metadata),
+            bsd_flags: bsd_flags_of(metadata),
+            shared_identity,
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn from_bulk(attributes: &fm_vfs_local::bulk_listing::BulkAttributes) -> Self {
+        use fm_vfs_local::bulk_listing::BulkEntryKind;
+
+        let kind = match attributes.kind {
+            BulkEntryKind::Directory => ScannedEntryKind::Directory,
+            BulkEntryKind::Symlink => ScannedEntryKind::Symlink,
+            BulkEntryKind::Other => ScannedEntryKind::File,
+        };
+        Self {
+            size: DiskUsageSize {
+                logical_bytes: attributes.logical_bytes,
+                physical_bytes: attributes.physical_bytes,
+                kind,
+            },
+            device: Some(attributes.device),
+            bsd_flags: attributes.bsd_flags,
+            shared_identity: (kind == ScannedEntryKind::File && attributes.link_count > 1)
+                .then_some(FileIdentity {
+                    device: attributes.device,
+                    inode: attributes.file_id,
+                }),
+        }
+    }
+}
+
+/// One directory entry; `info` is `None` when the listing didn't provide metadata and the entry
+/// must be `lstat`ed.
+struct ListedEntry {
+    name: OsString,
+    info: Option<EntryInfo>,
+}
+
+/// How directories are listed. macOS uses `getattrlistbulk`, which returns each batch of entries
+/// with their metadata and so avoids one `lstat` per entry; elsewhere, and as the reference
+/// implementation, `read_dir` is followed by `lstat` per entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DirectoryLister {
+    #[cfg_attr(
+        all(target_os = "macos", not(test)),
+        expect(
+            dead_code,
+            reason = "macOS lists with Bulk; Portable is its parity reference"
         )
+    )]
+    Portable,
+    #[cfg(target_os = "macos")]
+    Bulk,
+}
+
+impl DirectoryLister {
+    const fn native() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            Self::Bulk
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Self::Portable
+        }
+    }
+
+    /// Lists `path`. Failures of individual entries are recorded against `path`, because the
+    /// entry's own name can't be recovered from them.
+    fn list(self, path: &Path, unreadable: &UnreadableRegistry) -> io::Result<Vec<ListedEntry>> {
+        match self {
+            Self::Portable => {
+                let mut entries = Vec::new();
+                for entry in fs::read_dir(path)? {
+                    match entry {
+                        Ok(entry) => entries.push(ListedEntry {
+                            name: entry.file_name(),
+                            info: None,
+                        }),
+                        Err(error) => unreadable.record(path, error.kind()),
+                    }
+                }
+                Ok(entries)
+            }
+            #[cfg(target_os = "macos")]
+            Self::Bulk => {
+                let listing = fm_vfs_local::bulk_listing::list_directory_bulk(path)?;
+                for kind in listing.failures {
+                    unreadable.record(path, kind);
+                }
+                Ok(listing
+                    .entries
+                    .into_iter()
+                    .map(|entry| ListedEntry {
+                        name: entry.name,
+                        // A mount point's listed attributes describe the covered directory, so
+                        // it is `lstat`ed like the portable path to see the mounted volume.
+                        info: entry
+                            .attributes
+                            .filter(|attributes| !attributes.mount_point)
+                            .map(|attributes| EntryInfo::from_bulk(&attributes)),
+                    })
+                    .collect())
+            }
+        }
     }
 }
 
@@ -469,45 +602,42 @@ fn bsd_flags_of(_metadata: &fs::Metadata) -> u32 {
 fn build_tree_parallel(
     path: &Path,
     name: OsStringDisplay,
+    listed_info: Option<EntryInfo>,
     max_depth: u64,
     cancellation: &CancellationToken,
     unreadable: &UnreadableRegistry,
     scanned_entries: &AtomicU64,
     seen_hardlinks: &Mutex<HashSet<FileIdentity>>,
     boundary: ScanBoundary,
+    lister: DirectoryLister,
 ) -> Result<ScanTree, ApplicationError> {
     if cancellation.is_cancelled() {
         return Err(ApplicationError::OperationCancelled);
     }
 
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) => {
-            unreadable.record(path, error.kind());
-            return Ok(DataTree::dir(name, DiskUsageSize::default(), Vec::new()));
-        }
+    let info = match listed_info {
+        Some(info) => info,
+        None => match fs::symlink_metadata(path) {
+            Ok(metadata) => EntryInfo::from_metadata(&metadata),
+            Err(error) => {
+                unreadable.record(path, error.kind());
+                return Ok(DataTree::dir(name, DiskUsageSize::default(), Vec::new()));
+            }
+        },
     };
     scanned_entries.fetch_add(1, Ordering::Relaxed);
-    let mut size = GetDiskUsageSize.get_size(&metadata);
-    #[cfg(unix)]
-    if size.kind == ScannedEntryKind::File {
-        use std::os::unix::fs::MetadataExt;
-
-        // Deduplicate while the inode metadata is already available. The dependency's tree-wide
-        // post-pass filters every hardlink path at every retained node, which becomes pathological
-        // for multi-million-entry trees.
-        if metadata.nlink() > 1
-            && !seen_hardlinks
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .insert(FileIdentity {
-                    device: metadata.dev(),
-                    inode: metadata.ino(),
-                })
-        {
-            size.logical_bytes = 0;
-            size.physical_bytes = 0;
-        }
+    let mut size = info.size;
+    // Deduplicate while the inode identity is already available. The dependency's tree-wide
+    // post-pass filters every hardlink path at every retained node, which becomes pathological
+    // for multi-million-entry trees.
+    if let Some(identity) = info.shared_identity
+        && !seen_hardlinks
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(identity)
+    {
+        size.logical_bytes = 0;
+        size.physical_bytes = 0;
     }
     #[cfg(not(unix))]
     {
@@ -528,48 +658,38 @@ fn build_tree_parallel(
     if size.kind != ScannedEntryKind::Directory {
         return Ok(DataTree::dir(name, size, Vec::new()));
     }
-    if let Some(reason) = boundary.skip_reason(&metadata) {
+    if let Some(reason) = boundary.skip_reason(&info) {
         unreadable.record_reason(path, reason);
         return Ok(DataTree::dir(name, size, Vec::new()));
     }
 
-    let mut entry_names = Vec::new();
-    match fs::read_dir(path) {
-        Ok(entries) => {
-            for entry in entries {
-                if cancellation.is_cancelled() {
-                    return Err(ApplicationError::OperationCancelled);
-                }
-                match entry {
-                    Ok(entry) => entry_names.push(entry.file_name()),
-                    // The failing entry's own name is unrecoverable from `io::Error` here, so the
-                    // failure is attributed to the directory being iterated instead.
-                    Err(error) => unreadable.record(path, error.kind()),
-                }
-            }
-        }
+    let mut entries = match lister.list(path, unreadable) {
+        Ok(entries) => entries,
         Err(error) => {
             unreadable.record(path, error.kind());
             return Ok(DataTree::dir(name, size, Vec::new()));
         }
-    }
-    entry_names.sort_unstable();
+    };
+    ensure_not_cancelled(cancellation)?;
+    entries.sort_unstable_by(|left, right| left.name.cmp(&right.name));
 
     let next_depth = max_depth.saturating_sub(1);
-    let children = entry_names
+    let children = entries
         .into_par_iter()
-        .map(|entry_name| {
+        .map(|entry| {
             ensure_not_cancelled(cancellation)?;
-            let child_path = path.join(&entry_name);
+            let child_path = path.join(&entry.name);
             build_tree_parallel(
                 &child_path,
-                OsStringDisplay::os_string_from(entry_name),
+                OsStringDisplay::os_string_from(entry.name),
+                entry.info,
                 next_depth,
                 cancellation,
                 unreadable,
                 scanned_entries,
                 seen_hardlinks,
                 boundary,
+                lister,
             )
         })
         .collect::<Result<Vec<_>, ApplicationError>>()?;
@@ -617,28 +737,21 @@ fn scan_local_tree(
     let unreadable = UnreadableRegistry::default();
     let scanned_entries = AtomicU64::new(0);
     let root_metadata = fs::symlink_metadata(&root).map_err(map_io_error)?;
-    let root_size = GetDiskUsageSize.get_size(&root_metadata);
+    let root_info = EntryInfo::from_metadata(&root_metadata);
+    let root_size = root_info.size;
     let boundary = ScanBoundary::for_root(&root_metadata);
-    let mut child_paths = Vec::new();
+    let lister = DirectoryLister::native();
     // The root is on its own device by definition; only its cloud-only state can stop the scan.
-    let root_entries = if boundary.skip_reason(&root_metadata).is_some() {
+    let mut child_entries = if boundary.skip_reason(&root_info).is_some() {
         unreadable.record_reason(&root, UnreadableReason::CloudOnly);
         Vec::new()
     } else {
-        fs::read_dir(&root).map_err(map_io_error)?.collect()
+        lister.list(&root, &unreadable).map_err(map_io_error)?
     };
-    for entry in root_entries {
-        match entry {
-            Ok(entry) => child_paths.push(entry.path()),
-            // The failing entry's own name is unrecoverable from `io::Error` here, so the
-            // failure is attributed to the root being iterated instead.
-            Err(error) => unreadable.record(&root, error.kind()),
-        }
-    }
-    child_paths.sort_unstable_by(|left, right| left.file_name().cmp(&right.file_name()));
+    child_entries.sort_unstable_by(|left, right| left.name.cmp(&right.name));
 
     let audience = EventAudience::Workspace(request.workspace_id.into());
-    if child_paths.is_empty() {
+    if child_entries.is_empty() {
         let response = snapshot_response(
             &root,
             root_size,
@@ -652,7 +765,7 @@ fn scan_local_tree(
         return Ok(response);
     }
 
-    let child_count = child_paths.len();
+    let child_count = child_entries.len();
     let (sender, receiver) = mpsc::channel();
     let mut trees = (0..child_count).map(|_| None).collect::<Vec<_>>();
     let pool = disk_usage_thread_pool()?;
@@ -665,23 +778,24 @@ fn scan_local_tree(
         let cancellation_ref = &cancellation;
         let seen_hardlinks_ref = &seen_hardlinks;
         let pool_ref = &pool;
+        let root_ref = root.as_path();
         thread_scope.spawn(move || {
             pool_ref.scope(|rayon_scope| {
-                for (index, path) in child_paths.into_iter().enumerate() {
+                for (index, entry) in child_entries.into_iter().enumerate() {
                     let sender = scan_sender.clone();
+                    let path = root_ref.join(&entry.name);
                     rayon_scope.spawn(move |_| {
-                        let name = OsStringDisplay::os_string_from(
-                            path.file_name().unwrap_or_else(|| path.as_os_str()),
-                        );
                         let result = build_tree_parallel(
                             &path,
-                            name,
+                            OsStringDisplay::os_string_from(entry.name),
+                            entry.info,
                             MAX_SCAN_DEPTH.saturating_sub(1),
                             cancellation_ref,
                             unreadable_ref,
                             scanned_entries_ref,
                             seen_hardlinks_ref,
                             boundary,
+                            lister,
                         );
                         let _ = sender.send((index, result));
                     });
@@ -1396,12 +1510,14 @@ mod tests {
                 build_tree_parallel(
                     root.path(),
                     OsStringDisplay::os_string_from(root.path()),
+                    None,
                     MAX_SCAN_DEPTH,
                     &CancellationToken::new(),
                     &unreadable,
                     &AtomicU64::new(0),
                     &Mutex::new(HashSet::new()),
                     ScanBoundary::for_root(&root_metadata),
+                    DirectoryLister::native(),
                 )
             })
             .expect("scan fixture");
@@ -1428,12 +1544,14 @@ mod tests {
                 build_tree_parallel(
                     root.path(),
                     OsStringDisplay::os_string_from(root.path()),
+                    None,
                     MAX_SCAN_DEPTH,
                     &cancellation,
                     &UnreadableRegistry::default(),
                     &AtomicU64::new(0),
                     &Mutex::new(HashSet::new()),
                     ScanBoundary::for_root(&root_metadata),
+                    DirectoryLister::native(),
                 )
             })
             .expect("scan fixture");
@@ -1467,12 +1585,14 @@ mod tests {
                 build_tree_parallel(
                     root.path(),
                     OsStringDisplay::os_string_from(root.path()),
+                    None,
                     MAX_SCAN_DEPTH,
                     &cancellation,
                     &unreadable,
                     &scanned_entries,
                     &seen_hardlinks,
                     ScanBoundary::default(),
+                    DirectoryLister::native(),
                 )
             })
             .expect("scan fixture");
@@ -1484,6 +1604,89 @@ mod tests {
             .sum::<u64>();
 
         assert_eq!(file_bytes, 17);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn flatten_scan(tree: &ScanTree, prefix: &str, out: &mut Vec<(String, DiskUsageSize)>) {
+        let path = format!("{prefix}/{}", tree.name());
+        out.push((path.clone(), tree.size()));
+        for child in tree.children() {
+            flatten_scan(child, &path, out);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn scan_with(root: &Path, lister: DirectoryLister) -> (Vec<(String, DiskUsageSize)>, u64) {
+        let cancellation = CancellationToken::new();
+        let scanned_entries = AtomicU64::new(0);
+        let unreadable = UnreadableRegistry::default();
+        let seen_hardlinks = Mutex::new(HashSet::new());
+        let tree = disk_usage_thread_pool()
+            .expect("create disk usage pool")
+            .install(|| {
+                build_tree_parallel(
+                    root,
+                    OsStringDisplay::os_string_from("root"),
+                    None,
+                    MAX_SCAN_DEPTH,
+                    &cancellation,
+                    &unreadable,
+                    &scanned_entries,
+                    &seen_hardlinks,
+                    ScanBoundary::default(),
+                    lister,
+                )
+            })
+            .expect("scan fixture");
+        let mut flat = Vec::new();
+        flatten_scan(&tree, "", &mut flat);
+        flat.sort();
+        (flat, unreadable.count())
+    }
+
+    /// The `getattrlistbulk` lister must produce exactly the tree the portable
+    /// `read_dir` + `lstat` lister does: same entries, kinds, logical and physical bytes,
+    /// hardlinks counted once, and the same unreadable count.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn bulk_lister_matches_the_portable_lister() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let root = tempfile::tempdir().expect("create fixture root");
+        let base = root.path();
+        fs::create_dir_all(base.join("a/b/c")).expect("nested dirs");
+        fs::create_dir(base.join("empty")).expect("empty dir");
+        fs::write(base.join("a/small.txt"), b"hi").expect("small file");
+        fs::write(base.join("a/b/medium.bin"), vec![1_u8; 70_000]).expect("medium file");
+        fs::write(base.join("a/b/c/zero"), b"").expect("empty file");
+        fs::write(base.join("a/b/c/ünïcødé ☃.txt"), vec![2_u8; 5_000]).expect("unicode file");
+        fs::write(base.join("linked.bin"), vec![3_u8; 9_000]).expect("hardlink source");
+        fs::hard_link(base.join("linked.bin"), base.join("a/linked-copy.bin")).expect("hardlink");
+        symlink("a/small.txt", base.join("to-small")).expect("symlink");
+        symlink("a", base.join("to-dir")).expect("dir symlink");
+        let locked = base.join("locked");
+        fs::create_dir(&locked).expect("locked dir");
+        fs::write(locked.join("hidden"), b"secret").expect("locked file");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod 000");
+
+        let portable = scan_with(base, DirectoryLister::Portable);
+        let bulk = scan_with(base, DirectoryLister::Bulk);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("restore mode");
+
+        assert_eq!(bulk, portable);
+        assert!(
+            portable
+                .0
+                .iter()
+                .any(|(path, _)| path.ends_with("ünïcødé ☃.txt"))
+        );
+        let hardlinked = portable
+            .0
+            .iter()
+            .filter(|(path, _)| path.ends_with("linked.bin") || path.ends_with("linked-copy.bin"))
+            .map(|(_, size)| size.logical_bytes)
+            .sum::<u64>();
+        assert_eq!(hardlinked, 9_000);
     }
 
     /// `build_tree_parallel` must check `cancellation` at every entry/directory it visits (not
@@ -1522,12 +1725,14 @@ mod tests {
                     build_tree_parallel(
                         root.path(),
                         OsStringDisplay::os_string_from(root.path()),
+                        None,
                         MAX_SCAN_DEPTH,
                         &cancellation,
                         &unreadable,
                         &scanned_entries,
                         &seen_hardlinks,
                         ScanBoundary::default(),
+                        DirectoryLister::native(),
                     )
                 })
         });

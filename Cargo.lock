@@ -3460,6 +3460,7 @@ dependencies = [
  "fm-vfs",
  "fs2",
  "futures",
+ "libc",
  "notify",
  "tempfile",
  "tokio",

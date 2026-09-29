@@ -7,6 +7,9 @@
 //! as a single opaque item in listings; the underlying path is still a real
 //! directory and can be listed by navigating into it directly.
 
+#[cfg(target_os = "macos")]
+pub mod bulk_listing;
+
 use std::{
     collections::BTreeMap,
     io,
