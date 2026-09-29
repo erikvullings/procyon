@@ -996,6 +996,25 @@ export const pt = {
     openInOtherPane: 'Abrir no outro painel',
     itemsLabel: 'Maiores itens em {name}',
     zoomHint: 'Clique numa pasta para ampliar; prima Retrocesso ou Escape para reduzir.',
+    cleanupButton: 'Limpar ({count} · {size})',
+    cleanupHeading: 'Candidatos a limpeza',
+    cleanupExplanation:
+      'Normalmente estas pastas podem ser regeneradas reinstalando, recompilando ou transferindo novamente. Verifique cada uma primeiro; nada é removido sem a sua ação.',
+    cleanupShow: 'Mostrar',
+    cleanupTrash: 'Mover para o lixo',
+    cleanupKind_nodeModules: 'Dependências JavaScript; reinstale com npm, pnpm ou yarn',
+    cleanupKind_pythonVirtualEnvironment:
+      'Ambiente virtual Python; recrie-o a partir dos requisitos do projeto',
+    cleanupKind_rustBuildOutput: 'Resultado de compilação Rust; o cargo volta a gerá-lo',
+    cleanupKind_nextBuildOutput:
+      'Resultado de compilação Next.js; gerado de novo na próxima compilação',
+    cleanupKind_xcodeDerivedData: 'Dados de compilação do Xcode; o Xcode volta a gerá-los',
+    cleanupKind_xcodeDeviceSupport:
+      'Símbolos de dispositivos do Xcode; transferidos de novo ao ligar um dispositivo',
+    cleanupKind_applicationCaches:
+      'Caches de aplicações; as aplicações recriam-nas quando necessário',
+    cleanupKind_toolCache:
+      'Cache de ferramenta ou gestor de pacotes; transferida de novo quando necessário',
     logical: 'Lógico',
     physical: 'Físico',
     unreadable: 'Rever {count} entradas ignoradas',

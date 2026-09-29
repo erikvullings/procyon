@@ -76,6 +76,8 @@ export * from './directoryViewModeDto.ts';
 export * from './directoryViewPatchDto.ts';
 export * from './discoverApplicationUninstallCandidatesRequestDto.ts';
 export * from './discoverApplicationUninstallCandidatesResponseDto.ts';
+export * from './diskUsageCleanupCandidateDto.ts';
+export * from './diskUsageCleanupKindDto.ts';
 export * from './diskUsageNodeDto.ts';
 export * from './diskUsageNodeKindDto.ts';
 export * from './diskUsageUnreadableEntryDto.ts';

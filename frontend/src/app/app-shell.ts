@@ -73,6 +73,7 @@ import {
   withExpanded,
   withLoading,
 } from '../features/directory-tree/directory-tree-state';
+import { mergeCleanupCandidates } from '../features/disk-usage/cleanup-candidates';
 import type { DiskUsageViewState } from '../features/disk-usage/disk-usage-view';
 import {
   createFileEditorController,
@@ -1450,6 +1451,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             unreadableEntries: baseResult.unreadableEntries,
             unreadable: baseResult.unreadable ?? [],
             scannedEntries: result.scannedEntries ?? 0,
+            cleanupCandidates: mergeCleanupCandidates(
+              baseResult.cleanupCandidates ?? [],
+              result.cleanupCandidates ?? [],
+              entry.expansionLocation,
+            ),
           };
     entry.state = {
       type: 'loaded',

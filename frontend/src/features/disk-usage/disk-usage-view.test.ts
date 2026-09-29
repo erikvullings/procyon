@@ -424,4 +424,85 @@ describe('DiskUsageView', () => {
     expect(onExpandFolder).toHaveBeenCalledWith(child.location);
     expect(root.querySelector('.fm-disk-usage-details')).toBeNull();
   });
+
+  describe('clean-up candidates', () => {
+    const candidate = {
+      location: { providerId: 'local', uri: 'file:///tmp/app/node_modules' },
+      kind: 'nodeModules' as const,
+      logicalBytes: 60,
+      physicalBytes: 60,
+    };
+
+    function mountWithCandidates(
+      onOpenFolder: (location: Location) => void,
+      onTrashFolder?: (location: Location) => Promise<boolean>,
+    ): void {
+      m.mount(root, {
+        view: () =>
+          m(DiskUsageView, {
+            state: {
+              type: 'loaded',
+              result: {
+                root: { ...directory('tmp', 80), children: [directory('app', 80)] },
+                unreadableEntries: 0,
+                cleanupCandidates: [candidate],
+              },
+            },
+            onOpenFolder,
+            onExpandFolder: vi.fn(),
+            onRetry: vi.fn(),
+            onStop: vi.fn(),
+            ...(onTrashFolder === undefined ? {} : { onTrashFolder }),
+          }),
+      });
+    }
+
+    it('lists candidates with their rule and lets the user show one in the other pane', () => {
+      const onOpenFolder = vi.fn();
+      mountWithCandidates(onOpenFolder);
+
+      const toggle = root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-toggle');
+      expect(toggle?.textContent).toContain('1');
+      expect(root.querySelector('.fm-disk-usage-cleanup')).toBeNull();
+      toggle?.click();
+      m.redraw.sync();
+
+      const panel = root.querySelector('.fm-disk-usage-cleanup');
+      expect(panel?.textContent).toContain('/tmp/app/node_modules');
+      expect(panel?.textContent).toContain('JavaScript dependencies');
+      expect(root.querySelector('.fm-disk-usage-cleanup-trash')).toBeNull();
+      root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-show')?.click();
+      expect(onOpenFolder).toHaveBeenCalledWith(candidate.location);
+    });
+
+    it('hides a candidate once its move to Trash has started', async () => {
+      const onTrashFolder = vi.fn(() => Promise.resolve(true));
+      mountWithCandidates(vi.fn(), onTrashFolder);
+      root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-toggle')?.click();
+      m.redraw.sync();
+
+      root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-trash')?.click();
+      expect(onTrashFolder).toHaveBeenCalledWith(candidate.location);
+      await vi.waitFor(() => {
+        m.redraw.sync();
+        expect(root.querySelector('.fm-disk-usage-cleanup-toggle')).toBeNull();
+      });
+    });
+
+    it('keeps a candidate when the user declines the Trash confirmation', async () => {
+      const onTrashFolder = vi.fn(() => Promise.resolve(false));
+      mountWithCandidates(vi.fn(), onTrashFolder);
+      root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-toggle')?.click();
+      m.redraw.sync();
+
+      root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-trash')?.click();
+      await vi.waitFor(() => {
+        m.redraw.sync();
+        expect(
+          root.querySelector<HTMLButtonElement>('.fm-disk-usage-cleanup-trash')?.disabled,
+        ).toBe(false);
+      });
+      expect(root.querySelector('.fm-disk-usage-cleanup')).not.toBeNull();
+    });
+  });
 });

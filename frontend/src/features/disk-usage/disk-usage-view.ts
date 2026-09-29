@@ -1,6 +1,11 @@
 import m, { type FactoryComponent } from 'mithril';
 import { t } from '../../i18n';
-import type { DiskUsageNode, Location, ScanDiskUsageResult } from '../../models';
+import type {
+  DiskUsageCleanupCandidate,
+  DiskUsageNode,
+  Location,
+  ScanDiskUsageResult,
+} from '../../models';
 import {
   buildTreemapScene,
   hitTestTreemap,
@@ -35,6 +40,9 @@ export interface DiskUsageViewAttrs {
   readonly onExpandFolder: (location: Location) => void;
   readonly onRetry: () => void;
   readonly onStop: () => void;
+  /** Moves a clean-up candidate to the Trash through the confirmed operation flow; resolves
+   * `true` once the operation was started. Omitted when the host cannot trash. */
+  readonly onTrashFolder?: (location: Location) => Promise<boolean>;
 }
 
 const VIEW_BOUNDS: TreemapBounds = { x: 0, y: 0, width: 1000, height: 600 };
@@ -166,6 +174,9 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
     | undefined;
   let highlight: TreemapBounds | undefined;
   let warningsOpen = false;
+  let cleanupOpen = false;
+  const trashedUris = new Set<string>();
+  const trashingUris = new Set<string>();
   let elapsedSeconds = 0;
   let progressTimer: ReturnType<typeof setInterval> | undefined;
   let resizeObserver: ResizeObserver | undefined;
@@ -266,6 +277,65 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       return;
     }
     attrs.onOpenFolder(node.kind === 'directory' ? node.location : parent.location);
+  }
+
+  function canTrash(location: Location): boolean {
+    return location.providerId === 'local' || location.providerId === 'file';
+  }
+
+  function trashCandidate(location: Location, attrs: DiskUsageViewAttrs): void {
+    if (attrs.onTrashFolder === undefined || trashingUris.has(location.uri)) return;
+    trashingUris.add(location.uri);
+    void attrs
+      .onTrashFolder(location)
+      .then((started) => {
+        if (started) trashedUris.add(location.uri);
+      })
+      .catch((error: unknown) => {
+        console.warn('Failed to move disk-usage clean-up candidate to Trash', error);
+      })
+      .finally(() => {
+        trashingUris.delete(location.uri);
+        m.redraw();
+      });
+  }
+
+  function renderCleanup(
+    candidates: readonly DiskUsageCleanupCandidate[],
+    attrs: DiskUsageViewAttrs,
+  ): m.Children {
+    return m('.fm-disk-usage-cleanup', [
+      m('strong', t('diskUsage', 'cleanupHeading')),
+      m('p', t('diskUsage', 'cleanupExplanation')),
+      m(
+        'ul',
+        candidates.map((candidate) =>
+          m('li', { key: candidate.location.uri }, [
+            m('.fm-disk-usage-cleanup-details', [
+              m('span.fm-disk-usage-cleanup-path', displayLocation(candidate.location)),
+              m('span.fm-disk-usage-cleanup-kind', t('diskUsage', `cleanupKind_${candidate.kind}`)),
+            ]),
+            m('span.fm-disk-usage-cleanup-size', formatBytes(candidate.physicalBytes)),
+            m(
+              'button.btn-flat.fm-disk-usage-cleanup-show',
+              { type: 'button', onclick: () => attrs.onOpenFolder(candidate.location) },
+              t('diskUsage', 'cleanupShow'),
+            ),
+            attrs.onTrashFolder === undefined || !canTrash(candidate.location)
+              ? undefined
+              : m(
+                  'button.btn.fm-disk-usage-cleanup-trash',
+                  {
+                    type: 'button',
+                    disabled: trashingUris.has(candidate.location.uri),
+                    onclick: () => trashCandidate(candidate.location, attrs),
+                  },
+                  t('diskUsage', 'cleanupTrash'),
+                ),
+          ]),
+        ),
+      ),
+    ]);
   }
 
   function renderBreadcrumbs(trail: readonly DiskUsageNode[]): m.Children {
@@ -493,6 +563,13 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       const trail = diskUsageTrail(result.root, zoomUri);
       const current = trail.at(-1) ?? result.root;
       const unreadable = result.unreadable ?? [];
+      const cleanupCandidates = (result.cleanupCandidates ?? []).filter(
+        (candidate) => !trashedUris.has(candidate.location.uri),
+      );
+      const cleanupBytes = cleanupCandidates.reduce(
+        (total, candidate) => total + candidate.physicalBytes,
+        0,
+      );
       const scannedEntries = result.scannedEntries ?? 0;
       const hasContent = visibleTreemapChildren(current.children, current.physicalBytes).length > 0;
       return m(
@@ -542,6 +619,22 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
                   ),
                 ])
               : undefined,
+            cleanupCandidates.length > 0
+              ? m(
+                  'button.btn.fm-disk-usage-cleanup-toggle',
+                  {
+                    type: 'button',
+                    'aria-expanded': cleanupOpen,
+                    onclick: () => {
+                      cleanupOpen = !cleanupOpen;
+                    },
+                  },
+                  t('diskUsage', 'cleanupButton', {
+                    count: cleanupCandidates.length,
+                    size: formatBytes(cleanupBytes),
+                  }),
+                )
+              : undefined,
             result.unreadableEntries > 0
               ? m(
                   'button.btn.fm-disk-usage-warning',
@@ -556,8 +649,13 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
                 )
               : undefined,
           ]),
-          attrs.state.error !== undefined || (warningsOpen && unreadable.length > 0)
+          attrs.state.error !== undefined ||
+          (warningsOpen && unreadable.length > 0) ||
+          (cleanupOpen && cleanupCandidates.length > 0)
             ? m('.fm-disk-usage-notices', [
+                cleanupOpen && cleanupCandidates.length > 0
+                  ? renderCleanup(cleanupCandidates, attrs)
+                  : undefined,
                 attrs.state.error === undefined
                   ? undefined
                   : m('.fm-disk-usage-failure', { role: 'alert' }, [

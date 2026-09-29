@@ -133,6 +133,7 @@ export type BackendEventPayload =
       unreadableEntries: number;
       unreadable: NonNullable<ScanDiskUsageResult['unreadable']>;
       scannedEntries: number;
+      cleanupCandidates?: NonNullable<ScanDiskUsageResult['cleanupCandidates']>;
       isComplete: boolean;
     }
   | {

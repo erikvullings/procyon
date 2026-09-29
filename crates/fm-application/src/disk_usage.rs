@@ -13,13 +13,14 @@ use std::time::{Duration, Instant};
 use fm_checksum::FileIdentity;
 use fm_domain::Location;
 use fm_events::{
-    BackendEventPayload, DiskUsageNodeKindPayload, DiskUsageNodePayload,
-    DiskUsageUnreadableEntryPayload, DiskUsageUnreadableReasonPayload, EventAudience, EventBus,
-    LocationPayload,
+    BackendEventPayload, DiskUsageCleanupCandidatePayload, DiskUsageCleanupKindPayload,
+    DiskUsageNodeKindPayload, DiskUsageNodePayload, DiskUsageUnreadableEntryPayload,
+    DiskUsageUnreadableReasonPayload, EventAudience, EventBus, LocationPayload,
 };
 use fm_transport_dto::{
-    DiskUsageNodeDto, DiskUsageNodeKindDto, DiskUsageUnreadableEntryDto,
-    DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto, ScanDiskUsageResponseDto,
+    DiskUsageCleanupCandidateDto, DiskUsageCleanupKindDto, DiskUsageNodeDto, DiskUsageNodeKindDto,
+    DiskUsageUnreadableEntryDto, DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto,
+    ScanDiskUsageResponseDto,
 };
 use parallel_disk_usage::data_tree::DataTree;
 use parallel_disk_usage::get_size::GetSize;
@@ -30,6 +31,9 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use tokio_util::sync::CancellationToken;
 
 use crate::ApplicationError;
+use crate::disk_usage_cleanup::{
+    CleanupCandidate, CleanupKind, CleanupTreeNode, MIN_CLEANUP_BYTES, find_cleanup_candidates,
+};
 
 const MAX_SCAN_DEPTH: u64 = 12;
 /// The UI only renders a few nested levels and can explicitly rescan any collapsed directory.
@@ -53,6 +57,24 @@ const PROGRESS_INTERVALS: [Duration; 5] = [
 ];
 type ScanTree = DataTree<OsStringDisplay, DiskUsageSize>;
 type ChildScanResult = (usize, Result<ScanTree, ApplicationError>);
+
+impl CleanupTreeNode for ScanTree {
+    fn entry_name(&self) -> &std::ffi::OsStr {
+        self.name().as_os_str()
+    }
+    fn is_directory(&self) -> bool {
+        self.size().kind == ScannedEntryKind::Directory
+    }
+    fn logical_bytes(&self) -> u64 {
+        self.size().logical_bytes
+    }
+    fn physical_bytes(&self) -> u64 {
+        self.size().physical_bytes
+    }
+    fn child_nodes(&self) -> &[Self] {
+        self.children()
+    }
+}
 
 #[derive(Clone, Copy)]
 struct MapNodeOptions {
@@ -709,6 +731,11 @@ fn scan_local_tree(
     let children = trees.into_iter().flatten().collect::<Vec<_>>();
     let tree = DataTree::dir(OsStringDisplay::os_string_from(&root), root_size, children);
     ensure_not_cancelled(&cancellation)?;
+    let cleanup_candidates =
+        find_cleanup_candidates(&tree, &root, MIN_CLEANUP_BYTES, &cancellation)?
+            .iter()
+            .map(cleanup_candidate_dto)
+            .collect::<Result<Vec<_>, _>>()?;
     #[cfg(unix)]
     let mut seen_hardlinks = HashSet::new();
     #[cfg(not(unix))]
@@ -734,6 +761,7 @@ fn scan_local_tree(
         unreadable_entries: unreadable.count(),
         unreadable: unreadable.details(),
         scanned_entries: scanned_entries.load(Ordering::Relaxed),
+        cleanup_candidates,
     };
     publish_progress(&events, audience, request.scan_id, &response, true);
     Ok(response)
@@ -889,6 +917,7 @@ fn snapshot_response(
         unreadable_entries: unreadable.count(),
         unreadable: unreadable.details(),
         scanned_entries: scanned_entries.load(Ordering::Relaxed),
+        cleanup_candidates: Vec::new(),
     })
 }
 
@@ -907,9 +936,73 @@ fn publish_progress(
             unreadable_entries: response.unreadable_entries,
             unreadable: response.unreadable.iter().map(event_unreadable).collect(),
             scanned_entries: response.scanned_entries,
+            cleanup_candidates: response
+                .cleanup_candidates
+                .iter()
+                .map(event_cleanup_candidate)
+                .collect(),
             is_complete,
         },
     );
+}
+
+fn cleanup_candidate_dto(
+    candidate: &CleanupCandidate,
+) -> Result<DiskUsageCleanupCandidateDto, ApplicationError> {
+    Ok(DiskUsageCleanupCandidateDto {
+        location: Location::from_native_path(&candidate.path)
+            .map_err(|_| ApplicationError::Internal)?
+            .into(),
+        kind: match candidate.kind {
+            CleanupKind::NodeModules => DiskUsageCleanupKindDto::NodeModules,
+            CleanupKind::PythonVirtualEnvironment => {
+                DiskUsageCleanupKindDto::PythonVirtualEnvironment
+            }
+            CleanupKind::RustBuildOutput => DiskUsageCleanupKindDto::RustBuildOutput,
+            CleanupKind::NextBuildOutput => DiskUsageCleanupKindDto::NextBuildOutput,
+            CleanupKind::XcodeDerivedData => DiskUsageCleanupKindDto::XcodeDerivedData,
+            CleanupKind::XcodeDeviceSupport => DiskUsageCleanupKindDto::XcodeDeviceSupport,
+            CleanupKind::ApplicationCaches => DiskUsageCleanupKindDto::ApplicationCaches,
+            CleanupKind::ToolCache => DiskUsageCleanupKindDto::ToolCache,
+        },
+        logical_bytes: candidate.logical_bytes,
+        physical_bytes: candidate.physical_bytes,
+    })
+}
+
+fn event_cleanup_candidate(
+    candidate: &DiskUsageCleanupCandidateDto,
+) -> DiskUsageCleanupCandidatePayload {
+    DiskUsageCleanupCandidatePayload {
+        location: LocationPayload {
+            provider_id: fm_domain::ProviderId::new(candidate.location.provider_id.clone()),
+            uri: candidate.location.uri.clone(),
+        },
+        kind: match candidate.kind {
+            DiskUsageCleanupKindDto::NodeModules => DiskUsageCleanupKindPayload::NodeModules,
+            DiskUsageCleanupKindDto::PythonVirtualEnvironment => {
+                DiskUsageCleanupKindPayload::PythonVirtualEnvironment
+            }
+            DiskUsageCleanupKindDto::RustBuildOutput => {
+                DiskUsageCleanupKindPayload::RustBuildOutput
+            }
+            DiskUsageCleanupKindDto::NextBuildOutput => {
+                DiskUsageCleanupKindPayload::NextBuildOutput
+            }
+            DiskUsageCleanupKindDto::XcodeDerivedData => {
+                DiskUsageCleanupKindPayload::XcodeDerivedData
+            }
+            DiskUsageCleanupKindDto::XcodeDeviceSupport => {
+                DiskUsageCleanupKindPayload::XcodeDeviceSupport
+            }
+            DiskUsageCleanupKindDto::ApplicationCaches => {
+                DiskUsageCleanupKindPayload::ApplicationCaches
+            }
+            DiskUsageCleanupKindDto::ToolCache => DiskUsageCleanupKindPayload::ToolCache,
+        },
+        logical_bytes: candidate.logical_bytes,
+        physical_bytes: candidate.physical_bytes,
+    }
 }
 
 fn event_unreadable(entry: &DiskUsageUnreadableEntryDto) -> DiskUsageUnreadableEntryPayload {
@@ -1303,6 +1396,44 @@ mod tests {
         assert_eq!(unreadable.count(), 0);
         assert_eq!(tree.children().len(), 1);
         assert_eq!(tree.children()[0].children().len(), 1);
+    }
+
+    #[test]
+    fn cleanup_candidates_are_found_in_the_scanned_tree() {
+        let root = tempfile::tempdir().expect("create fixture root");
+        let project = root.path().join("app");
+        fs::create_dir_all(project.join("target/debug")).expect("create target");
+        fs::write(project.join("Cargo.toml"), b"[package]").expect("write manifest");
+        fs::write(project.join("target/debug/app"), [1_u8; 4096]).expect("write build output");
+        fs::create_dir(root.path().join("target")).expect("create unrelated target");
+        let root_metadata = fs::symlink_metadata(root.path()).expect("root metadata");
+        let cancellation = CancellationToken::new();
+
+        let tree = disk_usage_thread_pool()
+            .expect("create disk usage pool")
+            .install(|| {
+                build_tree_parallel(
+                    root.path(),
+                    OsStringDisplay::os_string_from(root.path()),
+                    MAX_SCAN_DEPTH,
+                    &cancellation,
+                    &UnreadableRegistry::default(),
+                    &AtomicU64::new(0),
+                    &Mutex::new(HashSet::new()),
+                    ScanBoundary::for_root(&root_metadata),
+                )
+            })
+            .expect("scan fixture");
+        let candidates =
+            find_cleanup_candidates(&tree, root.path(), 1, &cancellation).expect("find candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].path, project.join("target"));
+        assert_eq!(candidates[0].kind, CleanupKind::RustBuildOutput);
+        assert!(candidates[0].logical_bytes >= 4096);
+        let dto = cleanup_candidate_dto(&candidates[0]).expect("map candidate");
+        assert_eq!(dto.kind, DiskUsageCleanupKindDto::RustBuildOutput);
+        assert!(dto.location.uri.ends_with("/app/target"));
     }
 
     #[cfg(unix)]

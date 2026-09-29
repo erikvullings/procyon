@@ -449,6 +449,7 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
           unreadableEntries: payload.unreadableEntries,
           unreadable: payload.unreadable,
           scannedEntries: payload.scannedEntries,
+          cleanupCandidates: payload.cleanupCandidates ?? [],
         },
         payload.isComplete,
       );

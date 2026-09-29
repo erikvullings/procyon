@@ -990,6 +990,22 @@ export const it = {
     openInOtherPane: "Apri nell'altro riquadro",
     itemsLabel: 'Elementi più grandi in {name}',
     zoomHint: 'Fai clic su una cartella per ingrandire; premi Backspace o Esc per rimpicciolire.',
+    cleanupButton: 'Pulisci ({count} · {size})',
+    cleanupHeading: 'Candidati alla pulizia',
+    cleanupExplanation:
+      'Queste cartelle di solito possono essere rigenerate reinstallando, ricompilando o scaricando di nuovo. Controlla ciascuna prima; nulla viene rimosso senza una tua azione.',
+    cleanupShow: 'Mostra',
+    cleanupTrash: 'Sposta nel cestino',
+    cleanupKind_nodeModules: 'Dipendenze JavaScript; reinstallale con npm, pnpm o yarn',
+    cleanupKind_pythonVirtualEnvironment:
+      'Ambiente virtuale Python; ricrealo dai requisiti del progetto',
+    cleanupKind_rustBuildOutput: 'Output di compilazione Rust; cargo lo rigenera',
+    cleanupKind_nextBuildOutput: 'Output di compilazione Next.js; rigenerato alla prossima build',
+    cleanupKind_xcodeDerivedData: 'Dati di compilazione Xcode; Xcode li rigenera',
+    cleanupKind_xcodeDeviceSupport:
+      'Simboli dei dispositivi Xcode; riscaricati quando si collega un dispositivo',
+    cleanupKind_applicationCaches: 'Cache delle applicazioni; le app le ricreano quando serve',
+    cleanupKind_toolCache: 'Cache di strumenti o gestori di pacchetti; riscaricata quando serve',
     logical: 'Logico',
     physical: 'Fisico',
     unreadable: 'Rivedi {count} voci ignorate',

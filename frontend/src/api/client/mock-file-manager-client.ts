@@ -3323,8 +3323,29 @@ export class MockFileManagerClient implements FileManagerClient {
       const name = decodeURIComponent(
         request.location.uri.replace(/\/+$/u, '').split('/').at(-1) ?? '/',
       );
+      const root = build(request.location.uri, name, true);
+      // Mirrors the backend's clean-up heuristics for the one rule the fixtures can exercise; the
+      // backend's 50 MB threshold is ignored because fixture sizes are tiny.
+      const cleanupCandidates: NonNullable<ScanDiskUsageResult['cleanupCandidates']> = [];
+      const collectCandidates = (node: ScanDiskUsageResult['root']): void => {
+        for (const child of node.children) {
+          if (child.kind !== 'directory') continue;
+          if (child.name === 'node_modules') {
+            cleanupCandidates.push({
+              location: child.location,
+              kind: 'nodeModules',
+              logicalBytes: child.logicalBytes,
+              physicalBytes: child.physicalBytes,
+            });
+          } else {
+            collectCandidates(child);
+          }
+        }
+      };
+      collectCandidates(root);
+      cleanupCandidates.sort((left, right) => right.physicalBytes - left.physicalBytes);
       const result = {
-        root: build(request.location.uri, name, true),
+        root,
         unreadableEntries: 0,
         unreadable: [],
         scannedEntries: 1,
@@ -3364,6 +3385,7 @@ export class MockFileManagerClient implements FileManagerClient {
           unreadableEntries: 0,
           unreadable: [],
           scannedEntries: 1,
+          cleanupCandidates,
           isComplete: true,
         },
       });

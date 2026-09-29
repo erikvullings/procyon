@@ -82,6 +82,42 @@ pub struct DiskUsageUnreadableEntryDto {
     pub reason: DiskUsageUnreadableReasonDto,
 }
 
+/// Why a scanned folder is suggested as a clean-up candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DiskUsageCleanupKindDto {
+    /// A JavaScript `node_modules` dependency tree.
+    NodeModules,
+    /// A Python virtual environment (`.venv`, or `venv`/`env` with `pyvenv.cfg`).
+    PythonVirtualEnvironment,
+    /// A Rust `target` directory next to `Cargo.toml`.
+    RustBuildOutput,
+    /// A Next.js `.next` directory next to `package.json`.
+    NextBuildOutput,
+    /// Xcode `DerivedData` build products.
+    XcodeDerivedData,
+    /// Xcode device-support symbol caches.
+    XcodeDeviceSupport,
+    /// Application caches under `Library/Caches` (or simulator caches).
+    ApplicationCaches,
+    /// Package-manager or tool caches such as `~/.cache` or the npm cache.
+    ToolCache,
+}
+
+/// A large folder that can usually be regenerated, found by structural heuristics only.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageCleanupCandidateDto {
+    /// The candidate folder.
+    pub location: LocationDto,
+    /// Rule that matched the folder.
+    pub kind: DiskUsageCleanupKindDto,
+    /// Apparent byte length of the folder's contents.
+    pub logical_bytes: u64,
+    /// Allocated bytes of the folder's contents.
+    pub physical_bytes: u64,
+}
+
 /// Completed hierarchical disk-usage scan.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +134,10 @@ pub struct ScanDiskUsageResponseDto {
     /// top-level subtree has finished.
     #[serde(default)]
     pub scanned_entries: u64,
+    /// Largest regenerable folders in the whole scanned tree, largest first and capped. Only
+    /// populated once traversal has finished.
+    #[serde(default)]
+    pub cleanup_candidates: Vec<DiskUsageCleanupCandidateDto>,
 }
 
 #[cfg(test)]
@@ -148,6 +188,15 @@ mod tests {
                 reason: DiskUsageUnreadableReasonDto::PermissionDenied,
             }],
             scanned_entries: 42,
+            cleanup_candidates: vec![DiskUsageCleanupCandidateDto {
+                location: LocationDto {
+                    provider_id: "local".to_owned(),
+                    uri: "file:///tmp/src/node_modules".to_owned(),
+                },
+                kind: DiskUsageCleanupKindDto::NodeModules,
+                logical_bytes: 10,
+                physical_bytes: 20,
+            }],
         };
 
         let json = serde_json::to_string(&response).expect("serialization must succeed");
@@ -156,6 +205,8 @@ mod tests {
         assert!(json.contains("\"unreadableEntries\":1"));
         assert!(json.contains("\"scannedEntries\":42"));
         assert!(json.contains("\"permissionDenied\""));
+        assert!(json.contains("\"cleanupCandidates\":[{"));
+        assert!(json.contains("\"nodeModules\""));
         assert_eq!(
             serde_json::from_str::<ScanDiskUsageResponseDto>(&json)
                 .expect("deserialization must succeed"),
@@ -198,6 +249,7 @@ mod tests {
         .expect("response must deserialize without the new fields");
 
         assert!(response.unreadable.is_empty());
+        assert!(response.cleanup_candidates.is_empty());
         assert_eq!(response.scanned_entries, 0);
     }
 }

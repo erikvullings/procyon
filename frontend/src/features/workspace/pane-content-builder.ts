@@ -883,6 +883,11 @@ export function createPaneContentBuilder(
                       onExpandFolder: (location) => context.expandDiskUsageFolder(key, location),
                       onRetry: () => context.retryDiskUsage(key),
                       onStop: () => context.stopDiskUsage(key),
+                      onTrashFolder: (location) =>
+                        context
+                          .getOpsController()
+                          .trash([location])
+                          .then((operation) => operation !== undefined),
                     });
               })(),
             }

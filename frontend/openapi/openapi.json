@@ -9338,6 +9338,52 @@
           }
         }
       },
+      "DiskUsageCleanupCandidateDto": {
+        "type": "object",
+        "description": "A large folder that can usually be regenerated, found by structural heuristics only.",
+        "required": [
+          "location",
+          "kind",
+          "logicalBytes",
+          "physicalBytes"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DiskUsageCleanupKindDto",
+            "description": "Rule that matched the folder."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The candidate folder."
+          },
+          "logicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Apparent byte length of the folder's contents.",
+            "minimum": 0
+          },
+          "physicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Allocated bytes of the folder's contents.",
+            "minimum": 0
+          }
+        }
+      },
+      "DiskUsageCleanupKindDto": {
+        "type": "string",
+        "description": "Why a scanned folder is suggested as a clean-up candidate.",
+        "enum": [
+          "nodeModules",
+          "pythonVirtualEnvironment",
+          "rustBuildOutput",
+          "nextBuildOutput",
+          "xcodeDerivedData",
+          "xcodeDeviceSupport",
+          "applicationCaches",
+          "toolCache"
+        ]
+      },
       "DiskUsageNodeDto": {
         "type": "object",
         "description": "One node in the hierarchical disk-usage result.",
@@ -15974,6 +16020,13 @@
           "unreadableEntries"
         ],
         "properties": {
+          "cleanupCandidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiskUsageCleanupCandidateDto"
+            },
+            "description": "Largest regenerable folders in the whole scanned tree, largest first and capped. Only\npopulated once traversal has finished."
+          },
           "root": {
             "$ref": "#/components/schemas/DiskUsageNodeDto",
             "description": "Root of the scanned hierarchy."

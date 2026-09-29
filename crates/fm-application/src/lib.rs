@@ -17,6 +17,7 @@ mod content_streaming;
 pub mod diagnostics;
 mod directory;
 mod disk_usage;
+mod disk_usage_cleanup;
 mod disk_usage_coordinator;
 mod document_conversion;
 pub mod document_summary;

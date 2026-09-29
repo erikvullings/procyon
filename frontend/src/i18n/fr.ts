@@ -997,6 +997,24 @@ export const fr = {
     itemsLabel: 'Éléments les plus volumineux dans {name}',
     zoomHint:
       'Cliquez sur un dossier pour zoomer ; appuyez sur Retour arrière ou Échap pour dézoomer.',
+    cleanupButton: 'Nettoyer ({count} · {size})',
+    cleanupHeading: 'Candidats au nettoyage',
+    cleanupExplanation:
+      "Ces dossiers peuvent généralement être régénérés en réinstallant, en recompilant ou en retéléchargeant. Vérifiez chacun d'abord ; rien n'est supprimé sans votre action.",
+    cleanupShow: 'Afficher',
+    cleanupTrash: 'Mettre à la corbeille',
+    cleanupKind_nodeModules: 'Dépendances JavaScript ; réinstallez-les avec npm, pnpm ou yarn',
+    cleanupKind_pythonVirtualEnvironment:
+      'Environnement virtuel Python ; recréez-le à partir des dépendances du projet',
+    cleanupKind_rustBuildOutput: 'Sortie de compilation Rust ; cargo la régénère',
+    cleanupKind_nextBuildOutput: 'Sortie de compilation Next.js ; régénérée au prochain build',
+    cleanupKind_xcodeDerivedData: 'Données de compilation Xcode ; Xcode les régénère',
+    cleanupKind_xcodeDeviceSupport:
+      "Symboles d'appareils Xcode ; retéléchargés à la connexion d'un appareil",
+    cleanupKind_applicationCaches:
+      'Caches d’applications ; recréés par les applications si nécessaire',
+    cleanupKind_toolCache:
+      "Cache d'outil ou de gestionnaire de paquets ; retéléchargé si nécessaire",
     logical: 'Logique',
     physical: 'Physique',
     unreadable: 'Examiner {count} éléments ignorés',

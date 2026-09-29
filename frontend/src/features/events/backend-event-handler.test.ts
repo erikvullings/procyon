@@ -135,6 +135,14 @@ describe('createBackendEventHandler', () => {
         unreadableEntries: 0,
         unreadable: [],
         scannedEntries: 17,
+        cleanupCandidates: [
+          {
+            location: { providerId: 'local', uri: 'file:///home/app/node_modules' },
+            kind: 'nodeModules' as const,
+            logicalBytes: 9,
+            physicalBytes: 9,
+          },
+        ],
       };
 
       handler(
@@ -146,6 +154,7 @@ describe('createBackendEventHandler', () => {
             unreadableEntries: result.unreadableEntries,
             unreadable: result.unreadable,
             scannedEntries: result.scannedEntries,
+            cleanupCandidates: result.cleanupCandidates,
             isComplete: false,
           },
           WS_ID,

@@ -262,7 +262,7 @@ disk-usage visualization.
 - [x] 0118 Integrate parallel-disk-usage with WinDirStat Treemap View
 - [x] 0230 Disk usage: stop at volume and cloud-only boundaries *(ideas from BlitzTree)*
 - [x] 0231 Disk usage: canvas cushion treemap with zoom and richer colours
-- [ ] 0232 Disk usage: clean-up candidates *(needs 0231)*
+- [x] 0232 Disk usage: clean-up candidates *(needs 0231)*
 - [ ] 0233 Disk usage: flat-array tree transport *(needs 0230–0232)*
 - [ ] 0234 Disk usage: macOS getattrlistbulk scanner *(needs 0230)*
 - [ ] 0170 Perceptual image duplicate detection *(needs 0077, 0134)*

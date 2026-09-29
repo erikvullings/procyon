@@ -1,3 +1,4 @@
+import type { DiskUsageCleanupCandidateDto } from '../api/generated/models/diskUsageCleanupCandidateDto';
 import type { DiskUsageNodeDto } from '../api/generated/models/diskUsageNodeDto';
 import type { ScanDiskUsageRequestDto } from '../api/generated/models/scanDiskUsageRequestDto';
 import type { ScanDiskUsageResponseDto } from '../api/generated/models/scanDiskUsageResponseDto';
@@ -5,3 +6,4 @@ import type { ScanDiskUsageResponseDto } from '../api/generated/models/scanDiskU
 export type DiskUsageNode = DiskUsageNodeDto;
 export type ScanDiskUsageRequest = ScanDiskUsageRequestDto;
 export type ScanDiskUsageResult = ScanDiskUsageResponseDto;
+export type DiskUsageCleanupCandidate = DiskUsageCleanupCandidateDto;

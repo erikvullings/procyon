@@ -991,6 +991,24 @@ export const pl = {
     openInOtherPane: 'Otwórz w drugim panelu',
     itemsLabel: 'Największe elementy w {name}',
     zoomHint: 'Kliknij folder, aby powiększyć; naciśnij Backspace lub Escape, aby pomniejszyć.',
+    cleanupButton: 'Posprzątaj ({count} · {size})',
+    cleanupHeading: 'Kandydaci do usunięcia',
+    cleanupExplanation:
+      'Te foldery zwykle można odtworzyć przez ponowną instalację, kompilację lub pobranie. Najpierw sprawdź każdy z nich; nic nie zostanie usunięte bez Twojej decyzji.',
+    cleanupShow: 'Pokaż',
+    cleanupTrash: 'Przenieś do kosza',
+    cleanupKind_nodeModules: 'Zależności JavaScript; zainstaluj ponownie przez npm, pnpm lub yarn',
+    cleanupKind_pythonVirtualEnvironment:
+      'Środowisko wirtualne Pythona; odtwórz je z wymagań projektu',
+    cleanupKind_rustBuildOutput: 'Wynik kompilacji Rust; cargo odtworzy go',
+    cleanupKind_nextBuildOutput: 'Wynik kompilacji Next.js; odtworzony przy następnej kompilacji',
+    cleanupKind_xcodeDerivedData: 'Dane kompilacji Xcode; Xcode je odtworzy',
+    cleanupKind_xcodeDeviceSupport:
+      'Symbole urządzeń Xcode; pobierane ponownie po podłączeniu urządzenia',
+    cleanupKind_applicationCaches:
+      'Pamięć podręczna aplikacji; aplikacje odtworzą ją w razie potrzeby',
+    cleanupKind_toolCache:
+      'Pamięć podręczna narzędzia lub menedżera pakietów; pobierana ponownie w razie potrzeby',
     logical: 'Logiczny',
     physical: 'Fizyczny',
     unreadable: 'Przejrzyj {count} pominiętych wpisów',

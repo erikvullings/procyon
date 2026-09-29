@@ -121,6 +121,42 @@ pub struct DiskUsageUnreadableEntryPayload {
     pub reason: DiskUsageUnreadableReasonPayload,
 }
 
+/// Why a scanned folder is suggested as a clean-up candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DiskUsageCleanupKindPayload {
+    /// A JavaScript `node_modules` dependency tree.
+    NodeModules,
+    /// A Python virtual environment.
+    PythonVirtualEnvironment,
+    /// A Rust `target` directory next to `Cargo.toml`.
+    RustBuildOutput,
+    /// A Next.js `.next` directory next to `package.json`.
+    NextBuildOutput,
+    /// Xcode `DerivedData` build products.
+    XcodeDerivedData,
+    /// Xcode device-support symbol caches.
+    XcodeDeviceSupport,
+    /// Application caches under `Library/Caches`.
+    ApplicationCaches,
+    /// Package-manager or tool caches.
+    ToolCache,
+}
+
+/// A large regenerable folder found in a disk-usage scan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageCleanupCandidatePayload {
+    /// The candidate folder.
+    pub location: LocationPayload,
+    /// Rule that matched the folder.
+    pub kind: DiskUsageCleanupKindPayload,
+    /// Apparent byte length of the folder's contents.
+    pub logical_bytes: u64,
+    /// Allocated bytes of the folder's contents.
+    pub physical_bytes: u64,
+}
+
 /// Provider-neutral entry reference used by operation events.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1049,6 +1085,9 @@ pub enum BackendEventPayload {
         /// top-level subtree has finished.
         #[serde(default)]
         scanned_entries: u64,
+        /// Largest regenerable folders, populated once traversal has finished.
+        #[serde(default)]
+        cleanup_candidates: Vec<DiskUsageCleanupCandidatePayload>,
         /// Whether no further snapshots will be emitted.
         is_complete: bool,
     },
@@ -1270,7 +1309,8 @@ mod tests {
     use super::{
         BackendEventPayload, ColumnConfigurationPayload, ConflictPolicyPayload,
         ConnectionStatusPayload, DirectoryDeltaPayload, DirectorySnapshotPayload,
-        DirectoryViewConfigurationPayload, DiskUsageNodeKindPayload, DiskUsageNodePayload,
+        DirectoryViewConfigurationPayload, DiskUsageCleanupCandidatePayload,
+        DiskUsageCleanupKindPayload, DiskUsageNodeKindPayload, DiskUsageNodePayload,
         DiskUsageUnreadableEntryPayload, DiskUsageUnreadableReasonPayload, EntryKindPayload,
         EventEnvelope, LoadingStatePayload, LocationPayload, NotificationLevelPayload,
         NotificationPayload, OperationConflictEntryPayload, OperationConflictPayload,
@@ -1583,6 +1623,15 @@ mod tests {
                 reason: DiskUsageUnreadableReasonPayload::PermissionDenied,
             }],
             scanned_entries: 7,
+            cleanup_candidates: vec![DiskUsageCleanupCandidatePayload {
+                location: LocationPayload {
+                    provider_id: ProviderId::new("local"),
+                    uri: "file:///root/node_modules".to_owned(),
+                },
+                kind: DiskUsageCleanupKindPayload::NodeModules,
+                logical_bytes: 12,
+                physical_bytes: 4096,
+            }],
             is_complete: false,
         };
 
@@ -1618,6 +1667,12 @@ mod tests {
                     "reason": "permissionDenied"
                 }],
                 "scannedEntries": 7,
+                "cleanupCandidates": [{
+                    "location": {"providerId": "local", "uri": "file:///root/node_modules"},
+                    "kind": "nodeModules",
+                    "logicalBytes": 12,
+                    "physicalBytes": 4096
+                }],
                 "isComplete": false
             })
         );
@@ -1824,6 +1879,7 @@ mod tests {
                         reason: DiskUsageUnreadableReasonPayload::IoError,
                     }],
                     scanned_entries: 2,
+                    cleanup_candidates: Vec::new(),
                     is_complete: false,
                 },
                 Self::DiskUsageFinalizing {

@@ -1686,6 +1686,23 @@ export const nl = {
     openInOtherPane: 'Openen in het andere paneel',
     itemsLabel: 'Grootste items in {name}',
     zoomHint: 'Klik op een map om in te zoomen; druk op Backspace of Escape om uit te zoomen.',
+    cleanupButton: 'Opruimen ({count} · {size})',
+    cleanupHeading: 'Kandidaten om op te ruimen',
+    cleanupExplanation:
+      'Deze mappen kunnen meestal opnieuw worden aangemaakt door opnieuw te installeren, te bouwen of te downloaden. Controleer ze eerst; er wordt niets verwijderd tenzij u daarvoor kiest.',
+    cleanupShow: 'Tonen',
+    cleanupTrash: 'Naar prullenbak',
+    cleanupKind_nodeModules:
+      'JavaScript-afhankelijkheden; opnieuw installeren met npm, pnpm of yarn',
+    cleanupKind_pythonVirtualEnvironment:
+      'Python virtuele omgeving; opnieuw aanmaken vanuit de projectvereisten',
+    cleanupKind_rustBuildOutput: 'Rust-builduitvoer; cargo bouwt deze opnieuw',
+    cleanupKind_nextBuildOutput: 'Next.js-builduitvoer; opnieuw gebouwd bij de volgende build',
+    cleanupKind_xcodeDerivedData: 'Xcode-buildgegevens; Xcode bouwt deze opnieuw',
+    cleanupKind_xcodeDeviceSupport:
+      'Xcode-apparaatsymbolen; opnieuw gedownload als een apparaat verbindt',
+    cleanupKind_applicationCaches: 'Applicatiecaches; apps maken deze opnieuw aan wanneer nodig',
+    cleanupKind_toolCache: 'Cache van tool of pakketbeheerder; opnieuw gedownload wanneer nodig',
     logical: 'Logisch',
     physical: 'Fysiek',
     unreadable: 'Bekijk {count} overgeslagen items',
