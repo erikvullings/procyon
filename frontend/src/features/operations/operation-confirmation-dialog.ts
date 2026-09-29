@@ -59,7 +59,7 @@ export function displayLocation(
     }
     return { path };
   }
-  if (url !== undefined && url.pathname.startsWith('/')) {
+  if (url?.pathname.startsWith('/')) {
     return { path: `${decode(url.host)}${decode(url.pathname)}` };
   }
   return { path: decode(location.uri) };
