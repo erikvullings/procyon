@@ -3332,12 +3332,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
 }
 
-/* The inactive pane keeps a faint, neutral cursor outline so both cursor positions stay legible
-   when switching panes with Tab, without competing with the active pane's accent cursor. */
-.fm-pane[data-active="false"] .fm-cursor-row {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fm-text-muted) 55%, transparent);
-}
-
 [data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {
   background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
 }
