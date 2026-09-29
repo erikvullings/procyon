@@ -3332,6 +3332,22 @@ input[type="text"].fm-shortcuts-help-capture-input {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
 }
 
+/* In the inactive pane the cursor row keeps its place through accent-coloured text only, with no
+   fill or outline, so it reads as "parked" rather than competing with the active cursor. */
+.fm-pane:not([data-active="true"])
+  .fm-cursor-row:not(.fm-selected-row)
+  :is(
+    .fm-entry-icon,
+    .fm-entry-name,
+    .fm-directory-type,
+    .fm-directory-size,
+    .fm-directory-modified,
+    .fm-directory-file-age,
+    .fm-search-result-parent
+  ) {
+  color: var(--fm-accent);
+}
+
 [data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {
   background: color-mix(in srgb, var(--fm-selection) 42%, var(--fm-surface));
 }
