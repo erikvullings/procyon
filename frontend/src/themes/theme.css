@@ -303,137 +303,69 @@ main.fm-workspace {
 }
 
 .fm-operation-confirmation-modal {
-  --mm-modal-width: min(40rem, calc(100vw - 2rem));
-  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
+  --mm-modal-width: min(36rem, calc(100vw - 2rem));
+  --mm-modal-max-width: min(36rem, calc(100vw - 2rem));
 }
 
-.fm-operation-confirmation-summary {
-  margin: 0 0 0.6rem;
-}
-
-.fm-operation-confirmation-route {
+/* Copy/move/delete confirmations read as a short label/value list: what, from where, to where.
+   Paths use the body face, break only at "/", and emphasise the folder that actually matters. */
+.fm-operation-confirmation-facts {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: center;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  margin: 0.25rem 0 0;
 }
 
-.fm-operation-confirmation-endpoint {
-  min-width: 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--fm-border);
-  border-radius: 2px;
-  background: var(--fm-surface);
+.fm-operation-confirmation-facts > dt,
+.fm-operation-confirmation-facts > dd {
+  margin: 0;
 }
 
 .fm-operation-confirmation-label {
-  display: block;
-  margin-block-end: 0.2rem;
   color: var(--fm-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.85em;
 }
 
-.fm-operation-confirmation-locations {
+.fm-operation-confirmation-facts > dd {
+  min-width: 0;
+  color: var(--fm-text);
+  line-height: 1.4;
+}
+
+.fm-operation-confirmation-source {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.15rem;
   max-height: 6rem;
   overflow-y: auto;
 }
 
-.fm-operation-confirmation-endpoint code {
+.fm-operation-path {
   display: block;
   overflow-wrap: anywhere;
-  color: var(--fm-text);
-  font-family: var(--fm-font-mono);
-  font-size: 0.85rem;
 }
 
-.fm-operation-confirmation-arrow {
-  display: grid;
-  color: var(--fm-accent);
-  place-items: center;
+.fm-operation-path-connection {
+  font-weight: 600;
 }
 
-@media (max-width: 40rem) {
-  .fm-operation-confirmation-route {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .fm-operation-confirmation-arrow {
-    transform: rotate(90deg);
-  }
-}
-
-.fm-operation-confirmation-modal {
-  --mm-modal-width: min(40rem, calc(100vw - 2rem));
-  --mm-modal-max-width: min(40rem, calc(100vw - 2rem));
-}
-
-.fm-operation-confirmation-summary {
-  margin: 0 0 0.6rem;
-}
-
-.fm-operation-confirmation-route {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.fm-operation-confirmation-endpoint {
-  min-width: 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--fm-border);
-  border-radius: 2px;
-  background: var(--fm-surface);
-}
-
-.fm-operation-confirmation-label {
-  display: block;
-  margin-block-end: 0.2rem;
+.fm-operation-path-connection::after {
+  content: " · ";
   color: var(--fm-text-muted);
-  font-size: 0.82rem;
+  font-weight: 400;
 }
 
-.fm-operation-confirmation-locations {
-  display: grid;
-  gap: 0.2rem;
-  max-height: 6rem;
-  overflow-y: auto;
+.fm-operation-path-parent {
+  color: var(--fm-text-muted);
+  overflow-wrap: normal;
 }
 
-.fm-operation-confirmation-endpoint code {
-  display: block;
-  overflow-wrap: anywhere;
-  color: var(--fm-text);
-  font-family: var(--fm-font-mono);
-  font-size: 0.85rem;
-}
-
-.fm-operation-confirmation-arrow {
-  display: grid;
-  color: var(--fm-accent);
-  place-items: center;
-}
-
-@media (max-width: 40rem) {
-  .fm-operation-confirmation-route {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .fm-operation-confirmation-arrow {
-    transform: rotate(90deg);
-  }
-}
-
-.fm-affected-items {
-  margin-block-end: 0.6rem;
+.fm-operation-path-leaf {
+  font-weight: 600;
 }
 
 .fm-affected-items-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  display: block;
   max-height: 4.5rem;
   margin: 0;
   padding: 0;
@@ -442,23 +374,24 @@ main.fm-workspace {
 }
 
 .fm-affected-items-list > li {
-  max-width: 100%;
-  padding: 0 0.4rem;
-  overflow: hidden;
-  border: 1px solid var(--fm-border);
-  border-radius: 2px;
-  background: var(--fm-surface);
-  color: var(--fm-text);
+  display: inline;
   font-weight: 600;
-  line-height: calc(var(--fm-row-height) - 2px);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.fm-affected-items-list > li + li::before {
+  content: ", ";
+  font-weight: 400;
 }
 
 .fm-affected-items-list > li.fm-affected-items-more {
-  border-style: dashed;
   color: var(--fm-text-muted);
   font-weight: 400;
+  white-space: nowrap;
+}
+
+.fm-permanent-delete-warning .fm-operation-confirmation-facts {
+  margin-block: 0.5rem;
 }
 
 /* Directory-tree sidebar (task 0139): a fixed-width column beside the pane split, sized so

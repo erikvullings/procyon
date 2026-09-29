@@ -76,7 +76,9 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
                 size: formattedSize,
               }),
             ),
-            affectedItems(attrs.sources ?? []),
+            (attrs.sources ?? []).length === 0
+              ? undefined
+              : m('dl.fm-operation-confirmation-facts', affectedItems(attrs.sources ?? [])),
             m('strong', t('operation', 'irreversible')),
           ],
         ),

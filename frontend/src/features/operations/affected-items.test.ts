@@ -21,7 +21,7 @@ describe('affectedItems', () => {
       providerId: 'local',
       uri: `file:///tmp/${name}`,
     }));
-    m.render(root, affectedItems(locations));
+    m.render(root, m('dl', affectedItems(locations)));
 
     const items = [...root.querySelectorAll('.fm-affected-items-list li')].map(
       (li) => li.textContent,

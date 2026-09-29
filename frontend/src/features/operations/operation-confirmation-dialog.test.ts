@@ -59,12 +59,17 @@ describe('OperationConfirmationDialog', () => {
     const dialog = document.querySelector('[role="alertdialog"]');
     expect(dialog?.querySelector('h4')?.textContent).toBe('Copy 1 item?');
     expect(dialog?.querySelector('.fm-operation-confirmation-summary')).toBeNull();
-    const route = document.querySelector('.fm-operation-confirmation-route');
-    expect(route?.textContent).toContain('Source');
-    expect(route?.textContent).toContain('file:///source folder#one');
-    expect(route?.textContent).toContain('Destination');
-    expect(route?.textContent).toContain('file:///target folder');
-    expect(route?.textContent).not.toContain('%20');
+    const facts = document.querySelector('.fm-operation-confirmation-facts');
+    expect(facts?.textContent).toContain('Source');
+    expect(facts?.textContent).toContain('/source folder#one');
+    expect(facts?.textContent).toContain('Destination');
+    expect(facts?.textContent).toContain('/target folder');
+    expect(facts?.textContent).not.toContain('%20');
+    expect(facts?.textContent).not.toContain('file://');
+    expect(
+      facts?.querySelector('.fm-operation-confirmation-destination .fm-operation-path-leaf')
+        ?.textContent,
+    ).toBe('target folder');
     expect(document.activeElement?.textContent?.trim()).toBe('Copy');
     document.activeElement?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
@@ -104,15 +109,38 @@ describe('OperationConfirmationDialog', () => {
     expect(dialog?.querySelector('h4')?.textContent).toBe('Move 3 items?');
     expect(dialog?.querySelector('.fm-operation-confirmation-summary')).toBeNull();
     const sourceLocations = [
-      ...document.querySelectorAll('.fm-operation-confirmation-source code'),
-    ].map((element) => element.textContent);
-    expect(sourceLocations).toEqual(['file:///source folder#one', 'Home Assistant · /incoming']);
+      ...document.querySelectorAll('.fm-operation-confirmation-source .fm-operation-path'),
+    ].map((element) => element.getAttribute('title'));
+    expect(sourceLocations).toEqual(['/source folder#one', 'Home Assistant · /incoming']);
     expect(
-      dialog?.querySelector(
-        '.fm-operation-confirmation-endpoint:not(.fm-operation-confirmation-source) code',
-      )?.textContent,
+      dialog
+        ?.querySelector('.fm-operation-confirmation-destination .fm-operation-path')
+        ?.getAttribute('title'),
     ).toBe('Home Assistant · /target folder');
     expect(dialog?.textContent).not.toContain('connection-id');
+  });
+
+  it('abbreviates the home directory in local paths', () => {
+    m.mount(root, {
+      view: () =>
+        m(OperationConfirmationDialog, {
+          request: {
+            kind: 'copy',
+            sources: [{ providerId: 'local', uri: 'file:///Users/ada/Downloads/v2612' }],
+            destination: { providerId: 'local', uri: 'file:///Users/ada/OneDrive/Plaatjes' },
+          },
+          connections: [],
+          homeDirectory: '/Users/ada/',
+          onConfirm: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const titles = [...document.querySelectorAll('.fm-operation-path')].map((element) =>
+      element.getAttribute('title'),
+    );
+    expect(titles).toEqual(['~/Downloads', '~/OneDrive/Plaatjes']);
   });
 
   it('marks Trash as destructive and can be cancelled', () => {
@@ -131,7 +159,7 @@ describe('OperationConfirmationDialog', () => {
     const dialog = document.querySelector('[role="alertdialog"]');
     expect(dialog?.querySelector('h4')?.textContent).toBe('Move 1 item to Trash?');
     const scope = dialog?.querySelector('.fm-operation-confirmation-focus-scope');
-    expect(scope?.querySelector('.fm-operation-confirmation-route')).toBeNull();
+    expect(scope?.querySelector('.fm-operation-confirmation-destination')).toBeNull();
     expect(
       [...(scope?.querySelectorAll('.fm-affected-items-list li') ?? [])].map(
         (li) => li.textContent,

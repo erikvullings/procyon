@@ -3418,6 +3418,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   const appDialogsContext: AppDialogsContext = {
+    getHomeDirectory: () => homeDirectory,
     getOperationCentreVisible: () => workspace?.operationCentre.visible === true,
     toggleOperationCentre,
     getOperations: () => operations,
