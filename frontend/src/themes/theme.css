@@ -3345,9 +3345,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
   box-shadow: inset 0 0 0 1px var(--fm-cursor-row-background);
 }
 
-/* In the inactive pane the cursor row keeps its place through accent-coloured text only, with no
-   fill or outline, so it reads as "parked" rather than competing with the active cursor. */
-.fm-pane:not([data-active="true"])
+/* Active pane without focus (window blurred, or focus in the tree sidebar): the outline above plus
+   accent text, so it still out-ranks the inactive pane's neutral outline. */
+.fm-pane[data-active="true"]:not(:focus-within)
   .fm-cursor-row:not(.fm-selected-row)
   :is(
     .fm-entry-icon,
@@ -3359,6 +3359,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
     .fm-search-result-parent
   ) {
   color: var(--fm-accent);
+}
+
+/* In the inactive pane the cursor row keeps its place through a neutral outline only - no accent,
+   no fill - so it reads as "parked" and never competes with the active pane's cursor. */
+.fm-pane:not([data-active="true"]) .fm-cursor-row {
+  box-shadow: inset 0 0 0 1px var(--fm-text-muted);
 }
 
 [data-theme="dark"] .fm-pane[data-active="true"]:focus-within .fm-selected-row:not(.fm-cursor-row) {
