@@ -6,6 +6,7 @@ import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
+import { encodeDiskUsageTree } from '../models';
 import {
   AppShell,
   knowledgeEvidencePage,
@@ -4794,7 +4795,7 @@ describe('tabs per pane (task 0069)', () => {
         payload: {
           type: 'diskUsage.progress',
           scanId: request.scanId,
-          root: {
+          tree: encodeDiskUsageTree({
             name: '/',
             location: request.location,
             kind: 'directory',
@@ -4812,7 +4813,7 @@ describe('tabs per pane (task 0069)', () => {
                 children: [],
               },
             ],
-          },
+          }),
           unreadableEntries: 0,
           unreadable: [],
           scannedEntries: 12,
@@ -4871,7 +4872,7 @@ describe('tabs per pane (task 0069)', () => {
           payload: {
             type: 'diskUsage.progress',
             scanId: request.scanId,
-            root: {
+            tree: encodeDiskUsageTree({
               name: '/',
               location: { providerId: 'file', uri: 'mock:///' },
               kind: 'directory',
@@ -4879,7 +4880,7 @@ describe('tabs per pane (task 0069)', () => {
               physicalBytes: 80,
               collapsed: false,
               children: [collapsed],
-            },
+            }),
             unreadableEntries: 2,
             unreadable: [],
             scannedEntries: 10,
@@ -4905,7 +4906,7 @@ describe('tabs per pane (task 0069)', () => {
           payload: {
             type: 'diskUsage.progress',
             scanId: request.scanId,
-            root: result.root,
+            tree: encodeDiskUsageTree(result.root),
             unreadableEntries: 3,
             unreadable: [],
             scannedEntries: 12,
@@ -4948,12 +4949,12 @@ describe('tabs per pane (task 0069)', () => {
       payload: {
         type: 'diskUsage.progress',
         scanId: expansionRequest.scanId,
-        root: {
+        tree: encodeDiskUsageTree({
           ...collapsed,
           logicalBytes: 120,
           physicalBytes: 120,
           collapsed: false,
-        },
+        }),
         unreadableEntries: 4,
         unreadable: [],
         scannedEntries: 14,

@@ -9442,6 +9442,82 @@
           "symlink"
         ]
       },
+      "DiskUsageTreeDto": {
+        "type": "object",
+        "description": "A disk-usage hierarchy as parallel arrays in pre-order (every parent precedes its children,\nand siblings keep their order), so a large tree doesn't repeat a full location per node.\n\nNode `0` is the root. A node's URI is its parent's URI joined with `/` and its name, unless\n`uri_overrides` holds an explicit URI for its index (names needing percent-encoding, or\nsynthetic nodes that share their parent's location).",
+        "required": [
+          "providerId",
+          "rootUri",
+          "parents",
+          "names",
+          "flags",
+          "logicalBytes",
+          "physicalBytes"
+        ],
+        "properties": {
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Kind (bits 0–1) and collapsed flag (bit 2) of each node."
+          },
+          "logicalBytes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "description": "Apparent byte length of each node."
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Display name of each node."
+          },
+          "parents": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Index of each node's parent; the root's own entry is `0` and is ignored."
+          },
+          "physicalBytes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "description": "Allocated byte length of each node."
+          },
+          "providerId": {
+            "type": "string",
+            "description": "Provider shared by every node."
+          },
+          "rootUri": {
+            "type": "string",
+            "description": "URI of the root node."
+          },
+          "uriOverrides": {
+            "type": "object",
+            "description": "Explicit URIs keyed by decimal node index, for nodes whose URI is not derivable.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "DiskUsageUnreadableEntryDto": {
         "type": "object",
         "description": "One filesystem entry skipped during a disk-usage scan, with enough context to show the\ncaller which path was unreadable and why, without leaking raw OS error strings.",

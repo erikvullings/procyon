@@ -5331,10 +5331,14 @@ mod tests {
             let (event_scan_id, root, is_complete) = match envelope.payload {
                 BackendEventPayload::DiskUsageProgress {
                     scan_id,
-                    root,
+                    tree,
                     is_complete,
                     ..
-                } => (scan_id, root, is_complete),
+                } => (
+                    scan_id,
+                    crate::disk_usage::node_from_event_tree(tree),
+                    is_complete,
+                ),
                 BackendEventPayload::DiskUsageFinalizing {
                     scan_id: finalizing_scan_id,
                     scanned_entries,
@@ -5375,9 +5379,7 @@ mod tests {
             .map(|child| child.name.as_str())
             .collect::<Vec<_>>();
         assert_eq!(final_names, ["alpha.bin", "bravo.bin", "charlie.bin"]);
-        assert_eq!(snapshots.last().expect("final snapshot").0, {
-            crate::disk_usage::event_node(&response.root)
-        });
+        assert_eq!(snapshots.last().expect("final snapshot").0, response.root);
     }
 
     #[tokio::test]

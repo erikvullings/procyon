@@ -14,13 +14,13 @@ use fm_checksum::FileIdentity;
 use fm_domain::Location;
 use fm_events::{
     BackendEventPayload, DiskUsageCleanupCandidatePayload, DiskUsageCleanupKindPayload,
-    DiskUsageNodeKindPayload, DiskUsageNodePayload, DiskUsageUnreadableEntryPayload,
-    DiskUsageUnreadableReasonPayload, EventAudience, EventBus, LocationPayload,
+    DiskUsageTreePayload, DiskUsageUnreadableEntryPayload, DiskUsageUnreadableReasonPayload,
+    EventAudience, EventBus, LocationPayload,
 };
 use fm_transport_dto::{
     DiskUsageCleanupCandidateDto, DiskUsageCleanupKindDto, DiskUsageNodeDto, DiskUsageNodeKindDto,
-    DiskUsageUnreadableEntryDto, DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto,
-    ScanDiskUsageResponseDto,
+    DiskUsageTreeDto, DiskUsageUnreadableEntryDto, DiskUsageUnreadableReasonDto,
+    ScanDiskUsageRequestDto, ScanDiskUsageResponseDto,
 };
 use parallel_disk_usage::data_tree::DataTree;
 use parallel_disk_usage::get_size::GetSize;
@@ -38,8 +38,9 @@ use crate::disk_usage_cleanup::{
 const MAX_SCAN_DEPTH: u64 = 12;
 /// The UI only renders a few nested levels and can explicitly rescan any collapsed directory.
 /// Capping the response depth avoids remapping and serializing millions of already-counted leaf
-/// nodes after traversal has finished.
-const MAX_RESPONSE_DEPTH: u64 = 4;
+/// nodes after traversal has finished. Five levels in the flat event encoding (task 0233) is
+/// still smaller than four levels were as nested JSON on a real `~/Library` scan.
+const MAX_RESPONSE_DEPTH: u64 = 5;
 const MAX_CHILDREN_PER_DIRECTORY: usize = 2048;
 /// Hard cap on total filesystem scan worker threads. Recursive work stealing prevents one large
 /// subtree from stranding the other workers while keeping CPU usage bounded independently of
@@ -932,7 +933,7 @@ fn publish_progress(
         audience,
         BackendEventPayload::DiskUsageProgress {
             scan_id,
-            root: event_node(&response.root),
+            tree: event_tree(&response.root),
             unreadable_entries: response.unreadable_entries,
             unreadable: response.unreadable.iter().map(event_unreadable).collect(),
             scanned_entries: response.scanned_entries,
@@ -1027,23 +1028,35 @@ fn event_unreadable(entry: &DiskUsageUnreadableEntryDto) -> DiskUsageUnreadableE
     }
 }
 
-pub(crate) fn event_node(node: &DiskUsageNodeDto) -> DiskUsageNodePayload {
-    DiskUsageNodePayload {
-        name: node.name.clone(),
-        location: LocationPayload {
-            provider_id: fm_domain::ProviderId::new(node.location.provider_id.clone()),
-            uri: node.location.uri.clone(),
-        },
-        kind: match node.kind {
-            DiskUsageNodeKindDto::Directory => DiskUsageNodeKindPayload::Directory,
-            DiskUsageNodeKindDto::File => DiskUsageNodeKindPayload::File,
-            DiskUsageNodeKindDto::Symlink => DiskUsageNodeKindPayload::Symlink,
-        },
-        logical_bytes: node.logical_bytes,
-        physical_bytes: node.physical_bytes,
-        collapsed: node.collapsed,
-        children: node.children.iter().map(event_node).collect(),
+pub(crate) fn event_tree(root: &DiskUsageNodeDto) -> DiskUsageTreePayload {
+    let tree = DiskUsageTreeDto::from_root(root);
+    DiskUsageTreePayload {
+        provider_id: tree.provider_id,
+        root_uri: tree.root_uri,
+        parents: tree.parents,
+        names: tree.names,
+        flags: tree.flags,
+        logical_bytes: tree.logical_bytes,
+        physical_bytes: tree.physical_bytes,
+        uri_overrides: tree.uri_overrides,
     }
+}
+
+/// Decodes a progress-event tree back into nested nodes, for asserting on emitted events.
+#[cfg(test)]
+pub(crate) fn node_from_event_tree(tree: DiskUsageTreePayload) -> DiskUsageNodeDto {
+    DiskUsageTreeDto {
+        provider_id: tree.provider_id,
+        root_uri: tree.root_uri,
+        parents: tree.parents,
+        names: tree.names,
+        flags: tree.flags,
+        logical_bytes: tree.logical_bytes,
+        physical_bytes: tree.physical_bytes,
+        uri_overrides: tree.uri_overrides,
+    }
+    .to_root()
+    .expect("progress events carry a consistent tree")
 }
 
 fn map_node(

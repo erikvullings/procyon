@@ -204,7 +204,11 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
-import { defaultKnowledgeSearchOptions, sanitizeFrontendDiagnostic } from '../../models';
+import {
+  defaultKnowledgeSearchOptions,
+  encodeDiskUsageTree,
+  sanitizeFrontendDiagnostic,
+} from '../../models';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import {
@@ -3360,12 +3364,12 @@ export class MockFileManagerClient implements FileManagerClient {
           payload: {
             type: 'diskUsage.progress',
             scanId: request.scanId,
-            root: {
+            tree: encodeDiskUsageTree({
               ...result.root,
               logicalBytes: first.logicalBytes,
               physicalBytes: first.physicalBytes,
               children: [first],
-            },
+            }),
             unreadableEntries: 0,
             unreadable: [],
             scannedEntries: 1,
@@ -3381,7 +3385,7 @@ export class MockFileManagerClient implements FileManagerClient {
         payload: {
           type: 'diskUsage.progress',
           scanId: request.scanId,
-          root: result.root,
+          tree: encodeDiskUsageTree(result.root),
           unreadableEntries: 0,
           unreadable: [],
           scannedEntries: 1,

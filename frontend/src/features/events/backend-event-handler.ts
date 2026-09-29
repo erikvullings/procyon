@@ -16,6 +16,7 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
+import { decodeDiskUsageTree } from '../../models';
 import {
   type ChecksumState,
   type DuplicateState,
@@ -442,10 +443,15 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
     }
 
     if (payload.type === 'diskUsage.progress') {
+      const root = decodeDiskUsageTree(payload.tree);
+      if (root === undefined) {
+        console.warn('Ignoring disk-usage progress with an inconsistent tree', payload.scanId);
+        return;
+      }
       ctx.applyDiskUsageProgress(
         payload.scanId,
         {
-          root: payload.root,
+          root,
           unreadableEntries: payload.unreadableEntries,
           unreadable: payload.unreadable,
           scannedEntries: payload.scannedEntries,

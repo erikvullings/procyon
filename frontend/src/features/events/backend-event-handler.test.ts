@@ -7,6 +7,7 @@ import type {
   OperationConflict,
   WorkspaceProjection,
 } from '../../models';
+import { encodeDiskUsageTree } from '../../models';
 import {
   type ChecksumState,
   type DuplicateState,
@@ -150,7 +151,7 @@ describe('createBackendEventHandler', () => {
           {
             type: 'diskUsage.progress',
             scanId: 'scan-1',
-            root: result.root,
+            tree: encodeDiskUsageTree(result.root),
             unreadableEntries: result.unreadableEntries,
             unreadable: result.unreadable,
             scannedEntries: result.scannedEntries,
@@ -163,6 +164,39 @@ describe('createBackendEventHandler', () => {
 
       expect(ctx.applyDiskUsageProgress).toHaveBeenCalledWith('scan-1', result, false);
       expect(ctx.redraw).toHaveBeenCalled();
+    });
+
+    it('ignores a progress event whose flat tree is inconsistent', () => {
+      const ctx = makeContext();
+      const handler = createBackendEventHandler(ctx);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      handler(
+        makeEvent(
+          {
+            type: 'diskUsage.progress',
+            scanId: 'scan-1',
+            tree: {
+              providerId: 'local',
+              rootUri: 'file:///home',
+              parents: [0],
+              names: ['home'],
+              flags: [],
+              logicalBytes: [1],
+              physicalBytes: [1],
+            },
+            unreadableEntries: 0,
+            unreadable: [],
+            scannedEntries: 1,
+            isComplete: true,
+          },
+          WS_ID,
+        ),
+      );
+
+      expect(ctx.applyDiskUsageProgress).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
     });
 
     describe('diskUsage.failed', () => {

@@ -76,9 +76,10 @@ pub use diagnostics::{
     PluginStatusDto,
 };
 pub use disk_usage::{
-    DiskUsageCleanupCandidateDto, DiskUsageCleanupKindDto, DiskUsageNodeDto, DiskUsageNodeKindDto,
+    DISK_USAGE_FLAG_COLLAPSED, DISK_USAGE_FLAG_KIND_MASK, DiskUsageCleanupCandidateDto,
+    DiskUsageCleanupKindDto, DiskUsageNodeDto, DiskUsageNodeKindDto, DiskUsageTreeDto,
     DiskUsageUnreadableEntryDto, DiskUsageUnreadableReasonDto, ScanDiskUsageRequestDto,
-    ScanDiskUsageResponseDto,
+    ScanDiskUsageResponseDto, join_disk_usage_uri,
 };
 pub use document_summary::{
     DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummarySelectionModeDto,

@@ -122,14 +122,15 @@ async fn scans_disk_usage_with_progress_correlation_fields() {
             };
             if let BackendEventPayload::DiskUsageProgress {
                 scan_id: event_scan_id,
-                root,
+                tree,
                 is_complete: true,
                 ..
             } = event.payload
                 && event_scan_id == scan_id
             {
-                assert_eq!(root.children[0].name, "fixture.bin");
-                assert!(root.logical_bytes >= 9);
+                assert_eq!(tree.names[1], "fixture.bin");
+                assert_eq!(tree.parents[1], 0);
+                assert!(tree.logical_bytes[0] >= 9);
                 break;
             }
         }

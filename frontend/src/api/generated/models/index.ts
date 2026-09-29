@@ -80,6 +80,8 @@ export * from './diskUsageCleanupCandidateDto.ts';
 export * from './diskUsageCleanupKindDto.ts';
 export * from './diskUsageNodeDto.ts';
 export * from './diskUsageNodeKindDto.ts';
+export * from './diskUsageTreeDto.ts';
+export * from './diskUsageTreeDtoUriOverrides.ts';
 export * from './diskUsageUnreadableEntryDto.ts';
 export * from './diskUsageUnreadableReasonDto.ts';
 export * from './documentSummaryDto.ts';

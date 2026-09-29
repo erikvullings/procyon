@@ -62,37 +62,29 @@ pub struct LocationPayload {
     pub uri: String,
 }
 
-/// Filesystem-entry kind in a progressive disk-usage result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DiskUsageNodeKindPayload {
-    /// Directory or filesystem root.
-    Directory,
-    /// Regular file.
-    File,
-    /// Unfollowed symbolic link.
-    Symlink,
-}
-
-/// One node in a progressive disk-usage result.
+/// A progressive disk-usage hierarchy as parallel pre-order arrays; see the transport
+/// `DiskUsageTreeDto` for the encoding (node `0` is the root, URIs derive from parent URI + name
+/// unless overridden, flags hold the kind in bits 0–1 and the collapsed bit 2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DiskUsageNodePayload {
-    /// Display name of the entry.
-    pub name: String,
-    /// Provider-neutral location used for navigation.
-    pub location: LocationPayload,
-    /// Filesystem kind.
-    pub kind: DiskUsageNodeKindPayload,
-    /// Apparent byte length, with hard-linked data counted once.
-    pub logical_bytes: u64,
-    /// Allocated bytes on platforms that expose them.
-    pub physical_bytes: u64,
-    /// Whether descendants were intentionally omitted.
+pub struct DiskUsageTreePayload {
+    /// Provider shared by every node.
+    pub provider_id: String,
+    /// URI of the root node.
+    pub root_uri: String,
+    /// Index of each node's parent; the root's own entry is ignored.
+    pub parents: Vec<u32>,
+    /// Display name of each node.
+    pub names: Vec<String>,
+    /// Kind and collapsed flags of each node.
+    pub flags: Vec<u8>,
+    /// Apparent byte length of each node.
+    pub logical_bytes: Vec<u64>,
+    /// Allocated byte length of each node.
+    pub physical_bytes: Vec<u64>,
+    /// Explicit URIs keyed by decimal node index.
     #[serde(default)]
-    pub collapsed: bool,
-    /// Currently known descendants.
-    pub children: Vec<DiskUsageNodePayload>,
+    pub uri_overrides: std::collections::BTreeMap<String, String>,
 }
 
 /// Why one filesystem entry could not be included in a disk-usage scan.
@@ -1075,7 +1067,7 @@ pub enum BackendEventPayload {
         /// The scan this snapshot belongs to.
         scan_id: Uuid,
         /// Currently known hierarchy.
-        root: DiskUsageNodePayload,
+        tree: DiskUsageTreePayload,
         /// Cumulative entries skipped because they could not be read.
         unreadable_entries: u64,
         /// Bounded detail list (capped) for entries counted in `unreadable_entries`.
@@ -1310,11 +1302,11 @@ mod tests {
         BackendEventPayload, ColumnConfigurationPayload, ConflictPolicyPayload,
         ConnectionStatusPayload, DirectoryDeltaPayload, DirectorySnapshotPayload,
         DirectoryViewConfigurationPayload, DiskUsageCleanupCandidatePayload,
-        DiskUsageCleanupKindPayload, DiskUsageNodeKindPayload, DiskUsageNodePayload,
-        DiskUsageUnreadableEntryPayload, DiskUsageUnreadableReasonPayload, EntryKindPayload,
-        EventEnvelope, LoadingStatePayload, LocationPayload, NotificationLevelPayload,
-        NotificationPayload, OperationConflictEntryPayload, OperationConflictPayload,
-        OperationKindPayload, OperationPayload, OperationProgressDetails, OperationProgressPayload,
+        DiskUsageCleanupKindPayload, DiskUsageTreePayload, DiskUsageUnreadableEntryPayload,
+        DiskUsageUnreadableReasonPayload, EntryKindPayload, EventEnvelope, LoadingStatePayload,
+        LocationPayload, NotificationLevelPayload, NotificationPayload,
+        OperationConflictEntryPayload, OperationConflictPayload, OperationKindPayload,
+        OperationPayload, OperationProgressDetails, OperationProgressPayload,
         OperationStatePayload, PersistedFilterPayload, PluginPayload, SearchExecutionModePayload,
         SortDescriptorPayload, SortDirectionPayload, WorkspaceLayoutPayload,
     };
@@ -1587,32 +1579,19 @@ mod tests {
     }
 
     #[test]
-    fn disk_usage_progress_serializes_recursive_camel_case_payload() {
+    fn disk_usage_progress_serializes_flat_camel_case_tree() {
         let scan_id = Uuid::from_str(OPERATION_ID).expect("fixture scan id must be valid");
         let event = BackendEventPayload::DiskUsageProgress {
             scan_id,
-            root: DiskUsageNodePayload {
-                name: "root".to_owned(),
-                location: LocationPayload {
-                    provider_id: ProviderId::new("local"),
-                    uri: "file:///root".to_owned(),
-                },
-                kind: DiskUsageNodeKindPayload::Directory,
-                logical_bytes: 12,
-                physical_bytes: 4096,
-                collapsed: false,
-                children: vec![DiskUsageNodePayload {
-                    name: "node_modules".to_owned(),
-                    location: LocationPayload {
-                        provider_id: ProviderId::new("local"),
-                        uri: "file:///root/node_modules".to_owned(),
-                    },
-                    kind: DiskUsageNodeKindPayload::Directory,
-                    logical_bytes: 12,
-                    physical_bytes: 4096,
-                    collapsed: true,
-                    children: vec![],
-                }],
+            tree: DiskUsageTreePayload {
+                provider_id: "local".to_owned(),
+                root_uri: "file:///root".to_owned(),
+                parents: vec![0, 0],
+                names: vec!["root".to_owned(), "node_modules".to_owned()],
+                flags: vec![0, 4],
+                logical_bytes: vec![12, 12],
+                physical_bytes: vec![4096, 4096],
+                uri_overrides: std::collections::BTreeMap::new(),
             },
             unreadable_entries: 2,
             unreadable: vec![DiskUsageUnreadableEntryPayload {
@@ -1641,25 +1620,15 @@ mod tests {
             json!({
                 "type": "diskUsage.progress",
                 "scanId": scan_id,
-                "root": {
-                    "name": "root",
-                    "location": {"providerId": "local", "uri": "file:///root"},
-                    "kind": "directory",
-                    "logicalBytes": 12,
-                    "physicalBytes": 4096,
-                    "collapsed": false,
-                    "children": [{
-                        "name": "node_modules",
-                        "location": {
-                            "providerId": "local",
-                            "uri": "file:///root/node_modules"
-                        },
-                        "kind": "directory",
-                        "logicalBytes": 12,
-                        "physicalBytes": 4096,
-                        "collapsed": true,
-                        "children": []
-                    }]
+                "tree": {
+                    "providerId": "local",
+                    "rootUri": "file:///root",
+                    "parents": [0, 0],
+                    "names": ["root", "node_modules"],
+                    "flags": [0, 4],
+                    "logicalBytes": [12, 12],
+                    "physicalBytes": [4096, 4096],
+                    "uriOverrides": {}
                 },
                 "unreadableEntries": 2,
                 "unreadable": [{
@@ -1853,25 +1822,15 @@ mod tests {
                 },
                 Self::DiskUsageProgress {
                     scan_id: Uuid::from_str(OPERATION_ID).expect("fixture scan id must be valid"),
-                    root: DiskUsageNodePayload {
-                        name: "fixture".to_owned(),
-                        location: location.clone(),
-                        kind: DiskUsageNodeKindPayload::Directory,
-                        logical_bytes: 12,
-                        physical_bytes: 4096,
-                        collapsed: false,
-                        children: vec![DiskUsageNodePayload {
-                            name: "file.txt".to_owned(),
-                            location: LocationPayload {
-                                provider_id: ProviderId::new("file"),
-                                uri: "file:///fixture/file.txt".to_owned(),
-                            },
-                            kind: DiskUsageNodeKindPayload::File,
-                            logical_bytes: 12,
-                            physical_bytes: 4096,
-                            collapsed: false,
-                            children: vec![],
-                        }],
+                    tree: DiskUsageTreePayload {
+                        provider_id: "file".to_owned(),
+                        root_uri: "file:///fixture".to_owned(),
+                        parents: vec![0, 0],
+                        names: vec!["fixture".to_owned(), "file.txt".to_owned()],
+                        flags: vec![0, 1],
+                        logical_bytes: vec![12, 12],
+                        physical_bytes: vec![4096, 4096],
+                        uri_overrides: std::collections::BTreeMap::new(),
                     },
                     unreadable_entries: 1,
                     unreadable: vec![DiskUsageUnreadableEntryPayload {

@@ -40,7 +40,10 @@ use utoipa::OpenApi;
 #[derive(OpenApi)]
 #[openapi(
     info(title = "File Manager API", version = "1.0.0"),
-    components(schemas(fm_transport_dto::ScanDiskUsageResponseDto))
+    components(schemas(
+        fm_transport_dto::ScanDiskUsageResponseDto,
+        fm_transport_dto::DiskUsageTreeDto
+    ))
 )]
 struct ApiDoc;
 

@@ -1,7 +1,7 @@
 import type { ChecksumEntry, DuplicateGroup } from './checksum';
 import type { ComparisonEntry } from './comparison';
 import type { ConnectionStatus } from './connection';
-import type { ScanDiskUsageResult } from './disk-usage';
+import type { DiskUsageTree, ScanDiskUsageResult } from './disk-usage';
 import type { EntrySummary } from './entry';
 import type { ConnectionId, OperationId, PaneId, TabId, WorkspaceId } from './ids';
 import type { Location } from './location';
@@ -129,7 +129,7 @@ export type BackendEventPayload =
   | {
       type: 'diskUsage.progress';
       scanId: string;
-      root: ScanDiskUsageResult['root'];
+      tree: DiskUsageTree;
       unreadableEntries: number;
       unreadable: NonNullable<ScanDiskUsageResult['unreadable']>;
       scannedEntries: number;
