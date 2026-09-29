@@ -325,6 +325,16 @@ describe('theme stylesheet', () => {
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]\s+\.fm-cursor-row\s*\{[^}]*box-shadow:[^}]*var\(--fm-cursor-row-background\)/s,
     );
+    // Unfocused active pane adds accent text; the inactive pane gets a neutral outline only.
+    expect(themeCss).toMatch(
+      /\.fm-pane\[data-active="true"\]:not\(:focus-within\)\s+\.fm-cursor-row:not\(\.fm-selected-row\)\s+:is\([^)]*\.fm-entry-name[^)]*\)\s*\{[^}]*color:\s*var\(--fm-accent\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-pane:not\(\[data-active="true"\]\)\s+\.fm-cursor-row\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--fm-text-muted\)/s,
+    );
+    expect(themeCss).not.toMatch(
+      /\.fm-pane:not\(\[data-active="true"\]\)[^{]*\.fm-cursor-row[^{]*\{[^}]*var\(--fm-accent\)/s,
+    );
     expect(themeCss).toMatch(
       /\.fm-pane\[data-active="true"\]:focus-within\s+\.fm-cursor-row\.fm-selected-row\s*\{[^}]*background-color:\s*var\(--fm-cursor-row-background\)[^}]*color:\s*var\(--fm-cursor-row-text\)/s,
     );
