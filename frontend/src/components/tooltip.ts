@@ -1,4 +1,5 @@
 import m from 'mithril';
+import { visibleBounds } from './floating-position';
 
 /**
  * Wraps `child` in an anchor that shows `label` as a tooltip on hover/focus (native `title`
@@ -51,18 +52,31 @@ function showTooltipPortal(target: EventTarget | null, label: string): void {
   element.style.display = 'block';
   const anchorRect = target.getBoundingClientRect();
   const portalRect = element.getBoundingClientRect();
-  const left = Math.max(
+  const bounds = visibleBounds(
+    { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight },
     4,
+  );
+  const left = Math.max(
+    bounds.left,
     Math.min(
       anchorRect.left + anchorRect.width / 2 - portalRect.width / 2,
-      window.innerWidth - portalRect.width - 4,
+      bounds.right - portalRect.width,
     ),
   );
+  const below = anchorRect.bottom + 6;
+  const above = anchorRect.top - portalRect.height - 6;
+  const preferAbove = target.dataset.tooltipPlacement === 'above';
+  const fitsBelow = below + portalRect.height <= bounds.bottom;
+  const fitsAbove = above >= bounds.top;
+  const top = preferAbove
+    ? fitsAbove || !fitsBelow
+      ? above
+      : below
+    : fitsBelow || !fitsAbove
+      ? below
+      : above;
   element.style.left = `${left}px`;
-  element.style.top =
-    target.dataset.tooltipPlacement === 'above'
-      ? `${Math.max(4, anchorRect.top - portalRect.height - 6)}px`
-      : `${anchorRect.bottom + 6}px`;
+  element.style.top = `${Math.max(bounds.top, Math.min(top, bounds.bottom - portalRect.height))}px`;
 }
 
 function hideTooltipPortal(): void {

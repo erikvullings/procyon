@@ -177,12 +177,12 @@
     white-space: nowrap;
   }
 
-  .fm-workspace-layout > .fm-workspace-split {
-    height: auto;
-  }
-
   .fm-workspace-split {
     display: block;
+  }
+
+  .fm-workspace-layout > .fm-workspace-split {
+    height: auto;
   }
 
   .fm-workspace-split[data-contains-active="false"],

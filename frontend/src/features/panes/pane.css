@@ -683,8 +683,19 @@ button.fm-breadcrumb-scheme:hover {
   cursor: pointer !important;
 }
 
+/* Recent locations are selectable menu items, not section headings. */
 .fm-favourites-recents > button {
-  cursor: pointer;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fm-text-muted) !important;
+  font-size: 0.9em !important;
+  font-weight: normal !important;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer !important;
 }
 
 .fm-favourites-recents.fm-smart-folders > button {
@@ -740,21 +751,6 @@ button.fm-breadcrumb-scheme:hover {
   display: grid;
   gap: 0;
   margin-top: 0.25rem;
-}
-
-/* Recent locations are selectable menu items, not section headings. */
-.fm-favourites-recents > button {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--fm-text-muted) !important;
-  font-size: 0.9em !important;
-  font-weight: normal !important;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer !important;
 }
 
 .fm-path-editor > input[type="text"]:not(.browser-default).fm-path-input {

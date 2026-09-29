@@ -108,6 +108,20 @@
   margin: 0 0 0.75rem;
 }
 
+.fm-file-viewer-metadata-field dt {
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+  margin-bottom: 0.15rem;
+}
+
+.fm-file-viewer-metadata-field dd {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  word-break: break-word;
+}
+
 .fm-file-viewer-metadata-row .fm-file-viewer-metadata-field {
   display: flex;
   align-items: baseline;
@@ -125,20 +139,6 @@
 
 .fm-file-viewer-metadata-row .fm-file-viewer-metadata-field dd {
   margin: 0;
-}
-
-.fm-file-viewer-metadata-field dt {
-  color: var(--fm-text-muted);
-  font-size: 0.85em;
-  margin-bottom: 0.15rem;
-}
-
-.fm-file-viewer-metadata-field dd {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  word-break: break-word;
 }
 
 .fm-file-viewer-metadata-field dd a {

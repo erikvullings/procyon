@@ -286,10 +286,6 @@
   z-index: 2;
 }
 
-.fm-app-shell .select-wrapper input.select-dropdown:focus + svg.caret {
-  transform: translateY(-50%) rotate(180deg);
-}
-
 /*
  * mm's `disabled` prop on Select blocks opening/keyboard interaction and
  * sets `tabindex="-1"` on `.select-wrapper`, but never sets the underlying
@@ -308,6 +304,10 @@
 
 .fm-app-shell .select-wrapper[tabindex="-1"] svg.caret {
   opacity: 0.4;
+}
+
+.fm-app-shell .select-wrapper input.select-dropdown:focus + svg.caret {
+  transform: translateY(-50%) rotate(180deg);
 }
 
 /* mm's own `.switch, .switch * { margin: 12px 0 17px 0; }` inflates every switch descendant. */
@@ -504,9 +504,9 @@
   background-image: none !important;
 }
 
-.fm-app-shell .select-wrapper .dropdown-content li:hover:not(.disabled) > span,
 .fm-app-shell .select-wrapper .dropdown-content li.selected > span,
-.fm-app-shell .select-wrapper .dropdown-content li.active > span {
+.fm-app-shell .select-wrapper .dropdown-content li.active > span,
+.fm-app-shell .select-wrapper .dropdown-content li:hover:not(.disabled) > span {
   background-color: transparent !important;
 }
 

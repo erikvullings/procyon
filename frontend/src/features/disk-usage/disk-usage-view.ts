@@ -1,4 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
+import { placeFloating, visibleBounds } from '../../components/floating-position';
 import { arrowBarToRightIcon, layoutSidebarIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -205,8 +206,6 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
     | {
         readonly x: number;
         readonly y: number;
-        readonly width: number;
-        readonly height: number;
       }
     | undefined;
   let highlight: TreemapBounds | undefined;
@@ -290,9 +289,20 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       : {
           x: event.clientX - bounds.left,
           y: event.clientY - bounds.top,
-          width: bounds.width,
-          height: bounds.height,
         };
+  }
+
+  function placeHoverTooltip(dom: Element): void {
+    const view = dom.parentElement;
+    if (hoverPoint === undefined || !(dom instanceof HTMLElement) || view === null) return;
+    const viewRect = view.getBoundingClientRect();
+    const { left, top } = placeFloating(
+      { x: viewRect.left + hoverPoint.x, y: viewRect.top + hoverPoint.y },
+      { width: dom.offsetWidth, height: dom.offsetHeight },
+      visibleBounds(viewRect),
+    );
+    dom.style.left = `${left - viewRect.left}px`;
+    dom.style.top = `${top - viewRect.top}px`;
   }
 
   function zoomTo(node: DiskUsageNode | undefined): void {
@@ -819,24 +829,8 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
             ? m(
                 '.fm-disk-usage-tooltip',
                 {
-                  style: {
-                    left:
-                      hoverPoint.x <= hoverPoint.width / 2
-                        ? `${Math.max(8, hoverPoint.x + 12)}px`
-                        : undefined,
-                    right:
-                      hoverPoint.x > hoverPoint.width / 2
-                        ? `${Math.max(8, hoverPoint.width - hoverPoint.x + 12)}px`
-                        : undefined,
-                    top:
-                      hoverPoint.y <= hoverPoint.height / 2
-                        ? `${Math.max(8, hoverPoint.y + 12)}px`
-                        : undefined,
-                    bottom:
-                      hoverPoint.y > hoverPoint.height / 2
-                        ? `${Math.max(8, hoverPoint.height - hoverPoint.y + 12)}px`
-                        : undefined,
-                  },
+                  oncreate: ({ dom }: m.VnodeDOM) => placeHoverTooltip(dom),
+                  onupdate: ({ dom }: m.VnodeDOM) => placeHoverTooltip(dom),
                 },
                 [
                   m('strong', hovered.name),
