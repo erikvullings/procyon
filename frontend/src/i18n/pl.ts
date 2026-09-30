@@ -17,6 +17,8 @@ export const pl = {
     refresh: 'Odśwież odwołania',
     clear: 'Opróżnij koszyk',
     noSelected: 'Najpierw zaznacz element koszyka.',
+    overlap:
+      'Elementy koszyka nakładają się: folder zawiera inny element lub dwa wpisy mają tę samą lokalizację. Usuń jeden z nich.',
     hint: 'Zaznacz elementy przed uruchomieniem działania na koszyku.',
     persist: 'Przywróć ten koszyk po ponownym uruchomieniu',
     missing: 'Brak lub przeniesiono',

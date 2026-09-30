@@ -17,6 +17,8 @@ export const fr = {
     refresh: 'Actualiser les références',
     clear: 'Vider le panier',
     noSelected: 'Sélectionnez d’abord un élément du panier.',
+    overlap:
+      'Des éléments du panier se chevauchent : un dossier en contient un autre ou deux éléments partagent le même emplacement. Supprimez-en un.',
     hint: 'Sélectionnez des éléments avant de lancer une action sur le panier.',
     persist: 'Restaurer ce panier après le redémarrage',
     missing: 'Absent ou déplacé',

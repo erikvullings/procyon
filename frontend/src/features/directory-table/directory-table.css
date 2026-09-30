@@ -191,8 +191,7 @@
   background: var(--fm-directory-row-base, transparent);
 }
 
-.fm-directory-row,
-.fm-directory-row-filler {
+.fm-directory-row {
   position: absolute;
   top: 0;
   right: 0;
@@ -211,8 +210,7 @@
   opacity: 0.5;
 }
 
-.fm-directory-row[data-row-stripe="alternate"],
-.fm-directory-row-filler[data-row-stripe="alternate"] {
+.fm-directory-row[data-row-stripe="alternate"] {
   background: var(
     --fm-directory-row-highlight,
     color-mix(in srgb, var(--fm-text) 2.5%, transparent)

@@ -4789,7 +4789,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: var(--fm-surface);
+  background: var(--fm-directory-row-base, var(--fm-surface));
 }
 
 .fm-basket-empty {
@@ -4805,10 +4805,14 @@ input[type="text"].fm-shortcuts-help-capture-input {
   position: absolute;
   inset-inline: 0;
   height: 20px;
+  background: var(--fm-directory-row-base, var(--fm-surface));
 }
 
 .fm-basket-row-striped {
-  background: var(--fm-surface-elevated);
+  background: var(
+    --fm-directory-row-highlight,
+    color-mix(in srgb, var(--fm-text) 2.5%, transparent)
+  );
 }
 
 .fm-basket-row:hover {

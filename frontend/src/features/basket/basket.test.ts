@@ -6,6 +6,7 @@ import {
   basketSummary,
   classifyBasketAbsence,
   emptyBasket,
+  findBasketOverlap,
   loadBasket,
   refreshBasket,
   removeFromBasket,
@@ -33,6 +34,72 @@ describe('collection basket', () => {
       ['local-1', local.location],
       ['remote-1', remote.location],
     ]);
+  });
+
+  it('replaces collected children with a newly added parent folder', () => {
+    const folder = { ...entry('folder', 'local', 'file:///docs'), kind: 'directory' as const };
+    const child = entry('child', 'local', 'file:///docs/sub/report.txt');
+    const basket = addToBasket(emptyBasket, [
+      child,
+      entry('another-child', 'local', 'file:///docs/other.txt'),
+      entry('sibling', 'local', 'file:///docs-other/report.txt'),
+    ]);
+    const selected = selectBasketItems(basket, [basket.items[0]?.key ?? '']);
+    const replaced = addToBasket(selected, [folder]);
+    expect(replaced.items.map((item) => item.id)).toEqual(['sibling', 'folder']);
+    expect(replaced.selectedKeys).toEqual([]);
+    expect(addToBasket(emptyBasket, [child, folder]).items.map((item) => item.id)).toEqual([
+      'folder',
+    ]);
+  });
+
+  it('prevents adding a child of a collected folder across providers and path prefixes', () => {
+    const folder = { ...entry('folder', 'local', 'file:///docs'), kind: 'directory' as const };
+    const child = entry('child', 'local', 'file:///docs/sub/report.txt');
+    const basket = addToBasket(emptyBasket, [
+      folder,
+      entry('sibling', 'local', 'file:///docs-other/report.txt'),
+      entry('remote', 'sftp', 'sftp://server/docs/sub/report.txt'),
+    ]);
+    expect(() => addToBasket(basket, [child])).toThrow();
+    expect(() => addToBasket(emptyBasket, [folder, child])).toThrow();
+    expect(basket.items).toHaveLength(3);
+    expect(findBasketOverlap(basket.items)).toBeUndefined();
+    expect(
+      addToBasket(emptyBasket, [
+        folder,
+        entry('another-host', 'sftp', 'sftp://other/docs/sub/report.txt'),
+      ]).items,
+    ).toHaveLength(2);
+    const remoteFolder = {
+      ...entry('remote-folder', 'sftp', 'sftp://server/docs'),
+      kind: 'directory' as const,
+    };
+    expect(
+      addToBasket(addToBasket(emptyBasket, [remoteFolder]), [
+        entry('other-host-child', 'sftp', 'sftp://other/docs/report.txt'),
+      ]).items,
+    ).toHaveLength(2);
+    const root = { ...entry('root', 'local', 'file:///'), kind: 'directory' as const };
+    expect(findBasketOverlap(addToBasket(emptyBasket, [root]).items)).toBeUndefined();
+    expect(() => addToBasket(addToBasket(emptyBasket, [root]), [folder])).toThrow();
+  });
+
+  it('detects selected overlaps in previously persisted baskets', () => {
+    const folder = addToBasket(emptyBasket, [
+      { ...entry('folder', 'local', 'file:///docs'), kind: 'directory' },
+    ]).items[0];
+    const child = addToBasket(emptyBasket, [entry('child', 'local', 'file:///docs/report.txt')])
+      .items[0];
+    expect(folder).toBeDefined();
+    expect(child).toBeDefined();
+    if (folder === undefined || child === undefined) return;
+    expect(findBasketOverlap([folder, child])).toEqual([folder, child]);
+    expect(findBasketOverlap([child])).toBeUndefined();
+    const root = { ...entry('root', 'local', 'file:///'), kind: 'directory' as const };
+    expect(
+      addToBasket({ ...emptyBasket, items: [folder, child], selectedKeys: [child.key] }, [root]),
+    ).toEqual({ ...emptyBasket, items: [expect.objectContaining({ id: 'root' })] });
   });
 
   it('removes a single item without touching the other provider', () => {

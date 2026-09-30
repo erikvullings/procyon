@@ -276,16 +276,21 @@ describe('DirectoryTable rows', () => {
     });
   });
 
-  it('clips the final filler stripe to the unused viewport height', () => {
+  it('does not stripe the empty space after a short listing', () => {
     mount({
       state: { type: 'loaded' },
       source: entryArraySource([entry()]),
       viewportHeight: 113,
     });
 
-    const fillers = root.querySelectorAll<HTMLElement>('.fm-directory-row-filler');
-    expect(fillers).toHaveLength(5);
-    expect(fillers.item(4).style.height).toBe('13px');
+    expect(root.querySelectorAll('.fm-directory-row')).toHaveLength(1);
+    expect(root.querySelectorAll('.fm-directory-row-filler')).toHaveLength(0);
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([]),
+      viewportHeight: 113,
+    });
+    expect(root.querySelectorAll('.fm-directory-row-filler')).toHaveLength(0);
   });
 
   it('renders the themed icon matching each entry kind and extension', () => {

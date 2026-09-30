@@ -17,6 +17,8 @@ export const nl = {
     refresh: 'Verwijzingen vernieuwen',
     clear: 'Mand leegmaken',
     noSelected: 'Selecteer eerst een item in de mand.',
+    overlap:
+      'Manditems overlappen: een map bevat een ander item of beide verwijzen naar dezelfde locatie. Verwijder er een.',
     hint: 'Selecteer items voordat je een mandactie uitvoert.',
     persist: 'Deze werkruimtemand herstellen na herstart',
     missing: 'Ontbreekt of verplaatst',

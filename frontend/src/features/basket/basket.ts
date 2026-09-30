@@ -27,6 +27,54 @@ export function basketKey(id: string, location: Location): string {
   return `${location.providerId}\0${id}`;
 }
 
+function basketPath(item: BasketItem): { prefix: string; pathname: string } {
+  const url = new URL(item.location.uri);
+  return {
+    prefix: `${item.location.providerId}\0${url.protocol}\0${url.host}\0`,
+    pathname: url.pathname.replace(/\/+$/, '') || '/',
+  };
+}
+
+function basketAncestor(
+  item: BasketItem,
+  paths: ReadonlyMap<string, BasketItem>,
+  onlyFolders?: ReadonlyMap<string, number>,
+): BasketItem | undefined {
+  const { prefix, pathname } = basketPath(item);
+  if (pathname === '/') return undefined;
+  let slash = pathname.lastIndexOf('/');
+  while (slash >= 0) {
+    const parent = paths.get(prefix + (pathname.slice(0, slash) || '/'));
+    if (
+      parent?.kind === 'directory' &&
+      (onlyFolders === undefined || onlyFolders.has(parent.key))
+    ) {
+      return parent;
+    }
+    if (slash === 0) break;
+    slash = pathname.lastIndexOf('/', slash - 1);
+  }
+  return undefined;
+}
+
+export function findBasketOverlap(
+  items: readonly BasketItem[],
+): readonly [BasketItem, BasketItem] | undefined {
+  const paths = new Map<string, BasketItem>();
+  for (const item of items) {
+    const { prefix, pathname } = basketPath(item);
+    const path = prefix + pathname;
+    const duplicate = paths.get(path);
+    if (duplicate !== undefined) return [duplicate, item];
+    paths.set(path, item);
+  }
+  for (const item of items) {
+    const parent = basketAncestor(item, paths);
+    if (parent !== undefined) return [parent, item];
+  }
+  return undefined;
+}
+
 function safeLocation(location: Location): boolean {
   try {
     const url = new URL(location.uri);
@@ -38,11 +86,15 @@ function safeLocation(location: Location): boolean {
 
 export function addToBasket(state: BasketState, entries: readonly EntrySummary[]): BasketState {
   const items = new Map(state.items.map((item) => [item.key, item]));
-  for (const entry of entries) {
+  const newFolders = new Map<string, number>();
+  const incomingOrder = new Map<string, number>();
+  for (const [index, entry] of entries.entries()) {
     if (!safeLocation(entry.location)) {
       throw new Error(t('basket', 'credentials'));
     }
     const key = basketKey(entry.id, entry.location);
+    if (entry.kind === 'directory' && !items.has(key)) newFolders.set(key, index);
+    incomingOrder.set(key, index);
     items.set(key, {
       key,
       id: entry.id,
@@ -55,7 +107,32 @@ export function addToBasket(state: BasketState, entries: readonly EntrySummary[]
       status: 'ready',
     });
   }
-  return { ...state, items: [...items.values()] };
+  const collected = [...items.values()];
+  const paths = new Map<string, BasketItem>();
+  for (const item of collected) {
+    const { prefix, pathname } = basketPath(item);
+    const path = prefix + pathname;
+    if (paths.has(path)) throw new Error(t('basket', 'overlap'));
+    paths.set(path, item);
+  }
+  const retained = collected.filter((item) => {
+    const newParent = basketAncestor(item, paths, newFolders);
+    if (newParent !== undefined) {
+      const parentOrder = newFolders.get(newParent.key);
+      const childOrder = incomingOrder.get(item.key);
+      if (parentOrder !== undefined && (childOrder === undefined || childOrder < parentOrder)) {
+        return false;
+      }
+    }
+    if (basketAncestor(item, paths) === undefined) return true;
+    throw new Error(t('basket', 'overlap'));
+  });
+  const retainedKeys = new Set(retained.map((item) => item.key));
+  return {
+    ...state,
+    items: retained,
+    selectedKeys: state.selectedKeys.filter((key) => retainedKeys.has(key)),
+  };
 }
 
 export function removeFromBasket(state: BasketState, key: string): BasketState {

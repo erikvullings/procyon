@@ -1029,31 +1029,6 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
             ),
           );
         }
-        // Extend the row stripe pattern into unused viewport space below short directory listings.
-        const contentHeight = source.length * rowHeight;
-        const fillerCount = Math.max(0, Math.ceil((viewportHeight - contentHeight) / rowHeight));
-        for (let i = 0; i < fillerCount; i += 1) {
-          const index = source.length + i;
-          const fillerTop = contentHeight + i * rowHeight;
-          const fillerHeight = Math.min(rowHeight, viewportHeight - fillerTop);
-          rows.push(
-            m('.fm-directory-row-filler', {
-              key: `filler-${i}`,
-              'aria-hidden': 'true',
-              'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
-              oncontextmenu: (event: MouseEvent) => {
-                event.preventDefault();
-                attrs.onContextMenu?.(undefined, event.clientX, event.clientY);
-              },
-              style: {
-                height: `${fillerHeight}px`,
-                transform: `translateY(${fillerTop}px)`,
-                gridTemplateColumns: gridTemplate(columns, columnWidths),
-                ...directoryGridStyle(columns),
-              },
-            }),
-          );
-        }
         const prefetchRows = Math.ceil(viewportHeight / rowHeight);
         const approachingUnloadedEntries =
           source.loadedLength !== undefined &&

@@ -17,6 +17,8 @@ export const es = {
     refresh: 'Actualizar referencias',
     clear: 'Vaciar la cesta',
     noSelected: 'Selecciona primero un elemento de la cesta.',
+    overlap:
+      'Hay elementos solapados en la cesta: una carpeta contiene otro elemento o ambos tienen la misma ubicación. Elimina uno.',
     hint: 'Selecciona elementos antes de iniciar una acción de la cesta.',
     persist: 'Restaurar esta cesta tras reiniciar',
     missing: 'Falta o se ha movido',

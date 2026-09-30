@@ -27,6 +27,8 @@ export const en = {
     noDestination: 'Open a writable destination folder in the other pane.',
     noAvailable: 'No available selected basket items to process.',
     noSelected: 'Select at least one basket item first.',
+    overlap:
+      'Basket entries overlap: a folder contains another entry or both refer to the same location. Remove one before continuing.',
     restoreFailed: 'Could not restore collection basket.',
     saveFailed: 'Could not save collection basket.',
     collectFailed: 'Could not collect selection.',

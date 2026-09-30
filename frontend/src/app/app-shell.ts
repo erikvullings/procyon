@@ -34,6 +34,7 @@ import {
   basketSources,
   classifyBasketAbsence,
   emptyBasket,
+  findBasketOverlap,
   loadBasket,
   refreshBasket,
   removeFromBasket,
@@ -2726,6 +2727,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .then(async (checked) => {
         if (workspace?.id !== current.id || basketFor(current.id) !== checked) return;
         const sources = basketSources(checked);
+        const selected = new Set(checked.selectedKeys);
+        if (
+          findBasketOverlap(
+            checked.items.filter((item) => item.status === 'ready' && selected.has(item.key)),
+          ) !== undefined
+        ) {
+          toast({ html: t('basket', 'overlap') });
+          return;
+        }
         if (sources.length === 0) {
           toast({ html: t('basket', 'noAvailable') });
           return;

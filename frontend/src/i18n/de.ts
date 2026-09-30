@@ -17,6 +17,8 @@ export const de = {
     refresh: 'Verweise aktualisieren',
     clear: 'Korb leeren',
     noSelected: 'Wählen Sie zuerst einen Korbeintrag aus.',
+    overlap:
+      'Korb-Einträge überschneiden sich: Ein Ordner enthält einen anderen Eintrag oder beide haben denselben Pfad. Entfernen Sie einen.',
     hint: 'Wählen Sie Einträge aus, bevor Sie eine Korbaktion ausführen.',
     persist: 'Diesen Arbeitsbereichskorb nach Neustart wiederherstellen',
     missing: 'Fehlt oder verschoben',

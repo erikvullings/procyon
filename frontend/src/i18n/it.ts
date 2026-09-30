@@ -17,6 +17,8 @@ export const it = {
     refresh: 'Aggiorna riferimenti',
     clear: 'Svuota raccolta',
     noSelected: 'Seleziona prima un elemento della raccolta.',
+    overlap:
+      'Gli elementi della raccolta si sovrappongono: una cartella contiene un altro elemento o entrambi hanno lo stesso percorso. Rimuovine uno.',
     hint: 'Seleziona elementi prima di avviare un’azione sulla raccolta.',
     persist: 'Ripristina questa raccolta dopo il riavvio',
     missing: 'Mancante o spostato',

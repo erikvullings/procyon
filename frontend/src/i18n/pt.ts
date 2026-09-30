@@ -17,6 +17,8 @@ export const pt = {
     refresh: 'Atualizar referências',
     clear: 'Esvaziar cesto',
     noSelected: 'Selecione primeiro um item do cesto.',
+    overlap:
+      'Os itens do cesto sobrepõem-se: uma pasta contém outro item ou ambos têm a mesma localização. Remova um deles.',
     hint: 'Selecione itens antes de executar uma ação do cesto.',
     persist: 'Restaurar este cesto após reiniciar',
     missing: 'Em falta ou movido',

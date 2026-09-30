@@ -41,7 +41,9 @@ providers before applying one deliberate action to the collection.
   References are deduplicated by provider and stable ID, persisted only when opted in, and
   identity-checked before actions. Missing entries are marked "Missing or moved" unless the
   same stable identity is visible at its new location; changed identities are stale. Basket actions
-  use the existing operation confirmation, archive, checksum, and delete flows, with checked
-  subsets or all available entries. Remote providers without object-stable IDs use repeatable
-  path IDs plus available size and modification time; identical-metadata replacements cannot
-  be distinguished. The list is virtualized and uses keyboard-accessible checkboxes.
+  use the existing operation confirmation, archive, checksum, and delete flows, with explicitly
+  checked entries only. Adding a parent folder replaces collected descendants; adding a child
+  under an existing folder is blocked, and actions reject overlapping restored selections.
+  Remote providers without object-stable IDs use repeatable path IDs plus available size and
+  modification time; identical-metadata replacements cannot be distinguished. The list is
+  virtualized and uses keyboard-accessible checkboxes.

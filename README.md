@@ -185,6 +185,10 @@ Check individual entries or use **Select all** before running an action. **Desel
 the collection intact; **Clear basket** removes its references. Copy, move, and archive target the
 directory in the other pane; checksums and delete use their existing flows. Actions are unavailable
 when nothing is checked, and Copy and Move show the normal operation confirmation before starting.
+Folders can be collected: adding a folder removes any already collected children, while adding an
+item inside an already collected folder is blocked. Removed children's checkmarks are cleared; the
+new folder is not checked automatically. Overlapping entries restored from older baskets cannot
+be acted on together until one is removed.
 Use **Refresh references** to recheck availability; unavailable entries are excluded from actions. The
 basket survives navigation, and **Restore this workspace basket after restart** opts its
 references into local restart persistence. Restored entries must be rechecked before use.
