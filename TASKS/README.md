@@ -200,7 +200,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0160 Safe operation undo
 - [ ] 0161 Saved synchronization profiles *(needs 0030, 0075)*
 - [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
-- [ ] 0165 File collection basket *(needs 0035, 0048, 0108)*
+- [x] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [x] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
 - [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
 
