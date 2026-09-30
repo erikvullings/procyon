@@ -171,6 +171,22 @@ available in the desktop app. The
 [Total Commander parity audit](TASKS/0128-total-commander-shortcuts-quick-wins.md) records design
 decisions and intentionally unsupported bindings.
 
+## Collection basket
+
+Select entries in any folder, tab, or provider and use the shopping-basket toolbar button to add
+them. Open the basket with the adjacent toolbar button; it appears as a tab in the active pane.
+Adding an entry again updates its reference rather than duplicating it. The basket does not cut
+files or replace the clipboard.
+
+Check individual entries to act on a subset, or leave all unchecked to act on every available
+entry. Copy, move, and archive target the directory in the other pane; checksums and delete use
+their existing flows. Copy and move show the normal operation confirmation before starting.
+Use **Check items** to recheck references; unavailable entries are excluded from actions. The
+basket survives navigation, and **Restore this workspace basket after restart** opts its
+references into local restart persistence. Restored entries must be rechecked before use.
+For remote providers with path-based identities, the recheck also compares known size and
+modification time; a replacement with identical metadata cannot be distinguished.
+
 ## Architecture
 
 ```text

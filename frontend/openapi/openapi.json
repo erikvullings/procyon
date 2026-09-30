@@ -10050,9 +10050,30 @@
             "format": "uuid",
             "description": "The entry to fetch metadata for."
           },
+          "expectedModifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Expected modification time, when the provider cannot supply an object-stable identity."
+          },
+          "expectedSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Expected file size, when the provider cannot supply an object-stable identity.",
+            "minimum": 0
+          },
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "The entry's location, so the request can be dispatched to the owning\nprovider without a prior lookup."
+          },
+          "verifyIdentity": {
+            "type": "boolean",
+            "description": "Require the entry still at this location to have the supplied provider identity."
           }
         },
         "example": {

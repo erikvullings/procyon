@@ -95,6 +95,9 @@ export interface NavigateRequest {
 export interface EntryMetadataRequest {
   entryId: EntryId;
   location: Location;
+  verifyIdentity?: boolean;
+  expectedSize?: number;
+  expectedModifiedAt?: string;
 }
 
 /**

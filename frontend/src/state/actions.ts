@@ -1,3 +1,4 @@
+import type { BasketState } from '../features/basket/basket';
 import type {
   BackendNotification,
   ClipboardState,
@@ -16,6 +17,7 @@ import type {
 import type { ConnectionState, RuntimeState } from './model';
 import type { AppUpdate } from './patch';
 import {
+  basketPatch,
   cacheContentMatchesPatch,
   clipboardPatch,
   connectionPatch,
@@ -38,6 +40,7 @@ import {
 export interface AppActions {
   setRuntime(runtime: RuntimeState): void;
   replaceClipboard(clipboard: ClipboardState): void;
+  replaceBasket(workspaceId: string, basket: BasketState): void;
   replaceWorkspace(workspace: WorkspaceProjection): void;
   replaceWorkspaceView(viewState: WorkspaceViewState): void;
   replaceDirectory(snapshot: DirectorySnapshot): void;
@@ -59,6 +62,7 @@ export function createAppActions(update: AppUpdate): AppActions {
   return {
     setRuntime: (runtime) => update(runtimePatch(runtime)),
     replaceClipboard: (clipboard) => update(clipboardPatch(clipboard)),
+    replaceBasket: (workspaceId, basket) => update(basketPatch(workspaceId, basket)),
     replaceWorkspace: (workspace) => update(workspaceSnapshotPatch(workspace)),
     replaceWorkspaceView: (viewState) => update(workspaceViewPatch(viewState)),
     replaceDirectory: (snapshot) => update(directorySnapshotPatch(snapshot)),

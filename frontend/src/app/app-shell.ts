@@ -9,6 +9,7 @@ import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
   arrowLeftIcon,
   arrowRightIcon,
+  basketIcon,
   closeIcon,
   commandIcon,
   compareIcon,
@@ -17,6 +18,7 @@ import {
   layoutGridIcon,
   listIcon,
   messageCircleIcon,
+  plusIcon,
   searchIcon,
   settingsIcon,
 } from '../components/tabler-icons';
@@ -26,6 +28,19 @@ import {
   type ActionCommandControllerContext,
   createActionCommandController,
 } from '../features/actions/action-command-controller';
+import {
+  addToBasket,
+  type BasketState,
+  basketSources,
+  classifyBasketAbsence,
+  emptyBasket,
+  loadBasket,
+  refreshBasket,
+  removeFromBasket,
+  saveBasket,
+  selectBasketItems,
+} from '../features/basket/basket';
+import { BasketView } from '../features/basket/basket-view';
 import {
   type ChecksumController,
   type ChecksumControllerContext,
@@ -41,7 +56,7 @@ import {
   wouldDeleteEveryCopy,
 } from '../features/checksums/checksum-state';
 import { DuplicateReviewView } from '../features/checksums/duplicate-review-view';
-import { emptyClipboard } from '../features/clipboard/clipboard';
+import { emptyClipboard, validatePasteTarget } from '../features/clipboard/clipboard';
 import { CommandPalette } from '../features/command-palette/command-palette';
 import {
   evaluateActionAvailability,
@@ -223,6 +238,7 @@ import type {
 import {
   type AppState,
   applyAppPatches,
+  basketPatch,
   cacheContentMatchesPatch,
   clipboardPatch,
   connectionPatch,
@@ -781,6 +797,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   /** Composite `paneId:tabId` keys of tabs with an open terminal drawer; a terminal stays bound
    * to the tab that opened it, not the folder it happened to be showing at the time. */
   const openTerminalTabKeys = new Set<string>();
+  const basketTabIds = new Set<TabId>();
+  let basketBusy = false;
   let disposeTerminalTab: ((tabKey: string) => void) | undefined;
   /** Directory-tree sidebar (task 0139): open/closed, lazily-fetched expansion/children cache,
    * the provider root it is currently rooted at, and the active-pane location it was last
@@ -1626,6 +1644,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   /** Clears every per-tab runtime cache for a closed tab, cancelling its in-flight request. */
   function clearTabState(paneId: PaneId, tabId: TabId): void {
+    basketTabIds.delete(tabId);
     const key = tabKey(paneId, tabId);
     viewerByTab.get(key)?.controller.dispose();
     viewerByTab.delete(key);
@@ -2542,6 +2561,208 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let findFilesController: FindFilesController;
   let comparisonController: ComparisonController;
   let checksumController: ChecksumController;
+  function basketFor(workspaceId: string): BasketState {
+    if (appState === undefined) return emptyBasket;
+    const cached = appState.baskets[workspaceId];
+    if (cached !== undefined) return cached;
+    let restored = emptyBasket;
+    try {
+      restored = loadBasket(localStorage, workspaceId);
+    } catch (error) {
+      toast({ html: workspaceErrorMessage(error, t('basket', 'restoreFailed')) });
+    }
+    appState = applyAppPatches(appState, basketPatch(workspaceId, restored));
+    return restored;
+  }
+
+  function updateBasket(workspaceId: string, next: BasketState): void {
+    if (appState === undefined) return;
+    try {
+      saveBasket(localStorage, workspaceId, next);
+    } catch (error) {
+      toast({ html: workspaceErrorMessage(error, t('basket', 'saveFailed')) });
+      return;
+    }
+    appState = applyAppPatches(appState, basketPatch(workspaceId, next));
+    m.redraw();
+  }
+
+  function collectSelection(): void {
+    const current = workspace;
+    const paneId = current?.activePaneId;
+    if (current === undefined || paneId === undefined) return;
+    const tabId = current.panesById[paneId]?.activeTabId;
+    if (tabId === undefined || basketTabIds.has(tabId)) return;
+    const key = activeTabKey(paneId);
+    const selected = getSelectedEntriesOrCursor(
+      selections.get(key),
+      directories.get(key)?.entries ?? [],
+    ).filter((entry) => !isParentEntry(entry.id));
+    if (selected.length === 0) return;
+    try {
+      updateBasket(current.id, addToBasket(basketFor(current.id), selected));
+    } catch (error) {
+      toast({ html: workspaceErrorMessage(error, t('basket', 'collectFailed')) });
+    }
+  }
+
+  function openBasket(): void {
+    const current = workspace;
+    if (current === undefined) return;
+    for (const paneId of current.paneOrder) {
+      const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
+      if (tabId !== undefined) {
+        selectTab(attrsClient, paneId, tabId);
+        return;
+      }
+    }
+    const paneId = current.activePaneId;
+    const location =
+      current.panesById[paneId]?.tabsById[current.panesById[paneId]?.activeTabId ?? '']?.location;
+    if (location === undefined) return;
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'addTransientTab',
+        workspaceId: current.id,
+        paneId,
+        location,
+        expectedRevision: current.revision,
+      },
+      (next) => {
+        workspace = next;
+        const tabId = next.panesById[paneId]?.activeTabId;
+        if (tabId !== undefined) basketTabIds.add(tabId);
+        basketFor(next.id);
+        m.redraw();
+      },
+    ).catch((error: unknown) => {
+      toast({ html: workspaceErrorMessage(error, t('basket', 'openFailed')) });
+    });
+  }
+
+  function basketDestination(
+    paneId: PaneId,
+  ): { location: Location; writable: boolean } | undefined {
+    const otherId = workspace?.paneOrder.find((id) => id !== paneId);
+    if (otherId === undefined || basketTabIds.has(workspace?.panesById[otherId]?.activeTabId ?? ''))
+      return undefined;
+    const directory = directories.get(activeTabKey(otherId));
+    return directory?.location === undefined
+      ? undefined
+      : {
+          location: directory.location,
+          writable: directory.writable === true,
+        };
+  }
+
+  async function recheckBasket(workspaceId: string, selectedOnly = false): Promise<BasketState> {
+    const before = basketFor(workspaceId);
+    const visibleEntries = [...directories.values()].flatMap((directory) => directory.entries);
+    const selected =
+      selectedOnly && before.selectedKeys.length > 0 ? new Set(before.selectedKeys) : undefined;
+    basketBusy = true;
+    m.redraw();
+    try {
+      const checked = await refreshBasket(
+        before,
+        async (item) => {
+          try {
+            await attrsClient.getEntryMetadata({
+              entryId: item.id,
+              location: item.location,
+              verifyIdentity: true,
+              ...(item.size === undefined ? {} : { expectedSize: item.size }),
+              ...(item.modifiedAt === undefined ? {} : { expectedModifiedAt: item.modifiedAt }),
+            });
+            return 'ready';
+          } catch (error) {
+            if (typeof error === 'object' && error !== null && 'code' in error) {
+              if (error.code === 'notFound') {
+                return classifyBasketAbsence(item, visibleEntries);
+              }
+              if (error.code === 'invalidRequest') return 'stale';
+            }
+            throw error;
+          }
+        },
+        selected,
+      );
+      if (basketFor(workspaceId) === before) updateBasket(workspaceId, checked);
+      return checked;
+    } finally {
+      basketBusy = false;
+      m.redraw();
+    }
+  }
+
+  function runBasketAction(
+    paneId: PaneId,
+    kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete',
+  ): void {
+    const current = workspace;
+    if (current === undefined || basketBusy) return;
+    void recheckBasket(current.id, true)
+      .then(async (checked) => {
+        if (workspace?.id !== current.id || basketFor(current.id) !== checked) return;
+        const sources = basketSources(checked);
+        if (sources.length === 0) {
+          toast({ html: t('basket', 'noAvailable') });
+          return;
+        }
+        if (kind === 'checksum') {
+          const chosen = new Set(sources.map((source) => `${source.providerId}\0${source.uri}`));
+          const files = checked.items.filter(
+            (item) =>
+              item.kind === 'file' &&
+              chosen.has(`${item.location.providerId}\0${item.location.uri}`),
+          );
+          if (files.length === 0) {
+            toast({ html: t('basket', 'checksumFiles') });
+            return;
+          }
+          checksumController.calculateChecksums(
+            ['sha256'],
+            files.map((item) => item.location),
+          );
+          return;
+        }
+        if (kind === 'delete') {
+          await opsController.delete(
+            sources,
+            currentSettings?.confirmPermanentDelete === false,
+            false,
+          );
+          return;
+        }
+        const destination = basketDestination(paneId);
+        if (destination === undefined || !destination.writable) {
+          toast({ html: t('basket', 'noDestination') });
+          return;
+        }
+        if (kind === 'archive') {
+          dialogs.openArchiveCreate({
+            sources: [...sources],
+            destinationDirectory: destination.location,
+            moveSources: false,
+          });
+          return;
+        }
+        const validation = validatePasteTarget(
+          { mode: kind, locations: [...sources] },
+          { location: destination.location, writable: true, loaded: true },
+        );
+        if (!validation.ok) {
+          toast({ html: validation.message });
+          return;
+        }
+        if (kind === 'copy') await opsController.copy(sources, destination.location);
+        else await opsController.move(sources, destination.location);
+      })
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('basket', 'actionFailed')) });
+      });
+  }
   let actionCommandController: ActionCommandController;
 
   const workspaceControllerContext: WorkspaceControllerContext = {
@@ -4000,6 +4221,40 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'aria-orientation': 'vertical',
             }),
             tooltip(
+              t('basket', 'add'),
+              m(
+                IconButton,
+                {
+                  className: 'fm-basket-add-button',
+                  disabled:
+                    workspace === undefined ||
+                    basketTabIds.has(
+                      workspace.panesById[workspace.activePaneId]?.activeTabId ?? '',
+                    ),
+                  'aria-label': t('basket', 'add'),
+                  onclick: collectSelection,
+                },
+                plusIcon(),
+              ),
+            ),
+            tooltip(
+              t('basket', 'open'),
+              m(
+                IconButton,
+                {
+                  className: 'fm-basket-open-button',
+                  disabled: workspace === undefined,
+                  'aria-label': t('basket', 'open'),
+                  onclick: openBasket,
+                },
+                basketIcon(),
+              ),
+            ),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
+            tooltip(
               labelWithShortcut(t('shell', 'comparePanes'), shortcutFor('core.compareDirectories')),
               m(
                 IconButton,
@@ -4337,12 +4592,63 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ? m('.fm-workspace-loading', workspaceError ?? t('shell', 'loading'))
               : m(WorkspaceLayoutView, {
                   workspace,
-                  paneContent: (paneId) =>
-                    paneContentBuilder(
+                  paneContent: (paneId) => {
+                    const content = paneContentBuilder(
                       attrs.client,
                       attrs.entryFormatSettings ?? loadedEntryFormatSettings,
                       paneId,
-                    ),
+                    );
+                    const tabId = workspace?.panesById[paneId]?.activeTabId;
+                    if (
+                      workspace === undefined ||
+                      tabId === undefined ||
+                      !basketTabIds.has(tabId)
+                    ) {
+                      return content;
+                    }
+                    const workspaceId = workspace.id;
+                    const basket = basketFor(workspaceId);
+                    const destination = basketDestination(paneId);
+                    return {
+                      ...content,
+                      viewerTitles: new Map([
+                        ...(content.viewerTitles ?? []),
+                        [tabId, t('basket', 'title')],
+                      ]),
+                      viewerContent: m(BasketView, {
+                        basket,
+                        ...(destination?.writable ? { destination: destination.location } : {}),
+                        busy: basketBusy,
+                        onToggle: (key) =>
+                          updateBasket(
+                            workspaceId,
+                            selectBasketItems(
+                              basketFor(workspaceId),
+                              basket.selectedKeys.includes(key)
+                                ? basket.selectedKeys.filter((id) => id !== key)
+                                : [...basket.selectedKeys, key],
+                            ),
+                          ),
+                        onRemove: (key) =>
+                          updateBasket(workspaceId, removeFromBasket(basketFor(workspaceId), key)),
+                        onClear: () =>
+                          updateBasket(workspaceId, {
+                            ...basketFor(workspaceId),
+                            items: [],
+                            selectedKeys: [],
+                          }),
+                        onPersist: (persist) =>
+                          updateBasket(workspaceId, { ...basketFor(workspaceId), persist }),
+                        onRefresh: () =>
+                          void recheckBasket(workspaceId).catch((error: unknown) => {
+                            toast({
+                              html: workspaceErrorMessage(error, t('basket', 'checkFailed')),
+                            });
+                          }),
+                        onAction: (kind) => runBasketAction(paneId, kind),
+                      }),
+                    };
+                  },
                   onActivatePane: (paneId) =>
                     void activatePane(attrs.client, paneId).catch(() => undefined),
                   onUpdateLayout: (layout) => updateLayout(attrs.client, layout),

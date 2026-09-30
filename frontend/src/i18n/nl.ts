@@ -1,8 +1,19 @@
-import type { EnglishCatalogue } from './en';
+import { type EnglishCatalogue, en } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Dutch catalogue (task 0098). Keep the key set identical to `en`. */
 export const nl = {
+  basket: {
+    ...en.basket,
+    title: 'Verzamelmand',
+    add: 'Selectie aan mand toevoegen',
+    open: 'Verzamelmand openen',
+    check: 'Items controleren',
+    clear: 'Leegmaken',
+    persist: 'Deze werkruimtemand herstellen na herstart',
+    missing: 'Ontbreekt of verplaatst',
+    stale: 'Verouderd of niet beschikbaar',
+  },
   button: {
     save: 'Opslaan',
     saving: 'Opslaan…',

@@ -2892,14 +2892,32 @@ export class MockFileManagerClient implements FileManagerClient {
   }
 
   getEntryMetadata(request: EntryMetadataRequest, signal?: AbortSignal): Promise<EntryMetadata> {
-    return this.perform('getEntryMetadata', signal, () => ({
-      entryId: request.entryId,
-      permissions: { readable: true, writable: true, executable: false },
-      ownership: { owner: 'mock-user', group: 'mock-group' },
-      extendedAttributes: {},
-      checksums: {},
-      pluginFields: {},
-    }));
+    return this.perform('getEntryMetadata', signal, () => {
+      if (request.verifyIdentity) {
+        const actual = Object.entries(directories)
+          .flatMap(([parent, fixtures]) => fixtures.map((fixture) => fixtureEntry(parent, fixture)))
+          .find((entry) => entry.location.uri === request.location.uri);
+        if (actual === undefined) throw new MockClientError('notFound', 'Entry no longer exists.');
+        if (actual.id !== request.entryId) {
+          throw new MockClientError('invalidRequest', 'Entry identity changed.');
+        }
+        if (
+          (request.expectedSize !== undefined && actual.size !== request.expectedSize) ||
+          (request.expectedModifiedAt !== undefined &&
+            actual.modifiedAt !== request.expectedModifiedAt)
+        ) {
+          throw new MockClientError('invalidRequest', 'Entry metadata changed.');
+        }
+      }
+      return {
+        entryId: request.entryId,
+        permissions: { readable: true, writable: true, executable: false },
+        ownership: { owner: 'mock-user', group: 'mock-group' },
+        extendedAttributes: {},
+        checksums: {},
+        pluginFields: {},
+      };
+    });
   }
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {

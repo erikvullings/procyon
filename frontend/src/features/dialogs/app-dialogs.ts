@@ -263,6 +263,7 @@ export function renderAppDialogs(
     m(ArchiveCreateDialog, {
       open: ds.archiveCreateRequest !== undefined,
       moveSources: ds.archiveCreateRequest?.moveSources ?? false,
+      sources: ds.archiveCreateRequest?.sources ?? [],
       onCancel: () => dialogs.cancelArchiveCreate(),
       onConfirm: (name: string, format: ArchiveFormat, compressionLevel?: number) => {
         const request = ds.archiveCreateRequest;

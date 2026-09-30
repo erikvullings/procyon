@@ -12,8 +12,21 @@ export interface EntryMetadataRequest {
   /** The entry to fetch metadata for. */
   entryId: string;
   /**
+     * Expected modification time, when the provider cannot supply an object-stable identity.
+     * @nullable
+     */
+  expectedModifiedAt?: string | null;
+  /**
+     * Expected file size, when the provider cannot supply an object-stable identity.
+     * @minimum 0
+     * @nullable
+     */
+  expectedSize?: number | null;
+  /**
      * The entry's location, so the request can be dispatched to the owning
      * provider without a prior lookup.
      */
   location: LocationDto;
+  /** Require the entry still at this location to have the supplied provider identity. */
+  verifyIdentity?: boolean;
 }

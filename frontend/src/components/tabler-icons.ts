@@ -85,6 +85,12 @@ export const folderOpenIcon = trustedStrokeIcon(
   'fm-icon-folder-open',
 );
 
+/** Shopping basket for the workspace collection tool. */
+export const basketIcon = trustedStrokeIcon(
+  '<path d="M3 10h18l-2 11H5L3 10z" /><path d="M7 10l5 -7l5 7" /><path d="M9 14v4m6 -4v4" />',
+  'fm-icon-basket',
+);
+
 /** Directory hierarchy — include nested directories in a search. */
 export const directoryTreeIcon = (attrs?: IconAttrs): m.Children => {
   const size = attrs?.size ?? 18;

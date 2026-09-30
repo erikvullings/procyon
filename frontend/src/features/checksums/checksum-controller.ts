@@ -51,7 +51,7 @@ export interface ChecksumControllerContext {
 /** Controller interface for checksum and duplicate-detection features (task 0077). */
 export interface ChecksumController {
   /** Starts a checksum job over the active pane's selection. */
-  calculateChecksums(algorithms: readonly ChecksumAlgorithm[]): void;
+  calculateChecksums(algorithms: readonly ChecksumAlgorithm[], sources?: readonly Location[]): void;
 
   /** Cancels the active checksum job, if any, and clears its panel. */
   cancelChecksums(): void;
@@ -124,11 +124,19 @@ function message(error: unknown, fallback: string): string {
 /** Factory function to create a ChecksumController. */
 export function createChecksumController(context: ChecksumControllerContext): ChecksumController {
   return {
-    calculateChecksums(algorithms: readonly ChecksumAlgorithm[]): void {
+    calculateChecksums(
+      algorithms: readonly ChecksumAlgorithm[],
+      sources?: readonly Location[],
+    ): void {
       const workspace = context.getWorkspace();
       if (workspace === undefined) return;
-      const entries = context.getSelectedEntries().filter((entry) => entry.kind === 'file');
-      if (entries.length === 0) {
+      const locations =
+        sources ??
+        context
+          .getSelectedEntries()
+          .filter((entry) => entry.kind === 'file')
+          .map((entry) => entry.location);
+      if (locations.length === 0) {
         context.setChecksumState(
           withChecksumError(context.getChecksumState(), t('checksums', 'selectFilesToCalculate')),
         );
@@ -149,12 +157,12 @@ export function createChecksumController(context: ChecksumControllerContext): Ch
         .getClient()
         .startChecksums({
           workspaceId: workspace.id,
-          entries: entries.map((entry) => entry.location),
+          entries: [...locations],
           algorithms: [...algorithms],
         })
         .then((result) => {
           context.setChecksumState(
-            withChecksumJobStarted(result.jobId, algorithms, entries.length),
+            withChecksumJobStarted(result.jobId, algorithms, locations.length),
           );
           context.redraw();
         })

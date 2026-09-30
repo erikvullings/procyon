@@ -15,6 +15,7 @@ use reqwest::{Method, StatusCode};
 use tokio::sync::RwLock;
 use tokio_util::io::{ReaderStream, StreamReader};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::digest::{DigestChallenge, generate_client_nonce};
 use crate::xml::parse_multistatus;
@@ -377,9 +378,13 @@ fn invalid(location: &str) -> VfsError {
 
 fn entry(location: Location) -> EntryRef {
     EntryRef {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
     }
+}
+
+fn entry_id_for(location: &Location) -> EntryId {
+    EntryId::from(Uuid::new_v5(&Uuid::NAMESPACE_URL, location.uri.as_bytes()))
 }
 
 fn decoded_path(text: &str) -> String {
@@ -503,7 +508,7 @@ impl FileSystemProvider for WebDavFileSystemProvider {
             }
             let child_location = location.join(&name).map_err(|_| invalid(&location.uri))?;
             summaries.push(EntrySummary {
-                id: EntryId::new(),
+                id: entry_id_for(&child_location),
                 location: child_location,
                 name: name.clone(),
                 kind: if dav_entry.is_collection {

@@ -3,6 +3,17 @@ import type { LocalisedCatalogue } from './types';
 
 /** French catalogue (task 0098). Keep the key set identical to `en`. */
 export const fr = {
+  basket: {
+    ...en.basket,
+    title: 'Panier de fichiers',
+    add: 'Ajouter la sélection au panier',
+    open: 'Ouvrir le panier',
+    check: 'Vérifier les éléments',
+    clear: 'Vider',
+    persist: 'Restaurer ce panier après le redémarrage',
+    missing: 'Absent ou déplacé',
+    stale: 'Périmé ou indisponible',
+  },
   button: {
     save: 'Enregistrer',
     saving: 'Enregistrement…',

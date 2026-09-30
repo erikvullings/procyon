@@ -1,12 +1,15 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
+import type { Location } from '../../models';
+import { affectedItems } from './affected-items';
 
 export type ArchiveFormat = 'zip' | 'sevenZip';
 
 export interface ArchiveCreateDialogAttrs {
   readonly open: boolean;
   readonly moveSources: boolean;
+  readonly sources?: readonly Location[];
   readonly onConfirm: (name: string, format: ArchiveFormat, compressionLevel?: number) => void;
   readonly onCancel: () => void;
 }
@@ -65,6 +68,9 @@ export const ArchiveCreateDialog: FactoryComponent<ArchiveCreateDialogAttrs> = (
           : t('archiveCreate', 'createTitle'),
         className: 'fm-dense-modal',
         description: m('.fm-create-directory-field', [
+          attrs.sources === undefined
+            ? undefined
+            : m('dl.fm-operation-confirmation-facts', affectedItems(attrs.sources)),
           m('label', [
             m('span', t('archiveCreate', 'nameLabel')),
             m('input#archive-create-name', {

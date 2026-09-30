@@ -3,6 +3,17 @@ import type { LocalisedCatalogue } from './types';
 
 /** Italian catalogue (task 0098). Keep the key set identical to `en`. */
 export const it = {
+  basket: {
+    ...en.basket,
+    title: 'Raccolta file',
+    add: 'Aggiungi selezione alla raccolta',
+    open: 'Apri raccolta',
+    check: 'Verifica elementi',
+    clear: 'Svuota',
+    persist: 'Ripristina questa raccolta dopo il riavvio',
+    missing: 'Mancante o spostato',
+    stale: 'Obsoleto o non disponibile',
+  },
   button: {
     save: 'Salva',
     saving: 'Salvataggio…',

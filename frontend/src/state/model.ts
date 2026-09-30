@@ -1,3 +1,4 @@
+import type { BasketState } from '../features/basket/basket';
 import type {
   BackendNotification,
   ClipboardState,
@@ -92,6 +93,7 @@ export interface AppState {
   readonly runtime: RuntimeState;
   /** In-application copy/cut references; never the system clipboard contents. */
   readonly clipboard: ClipboardState;
+  readonly baskets: Readonly<Record<string, BasketState>>;
   readonly workspace: WorkspaceState;
   readonly workspaceView: DeepReadonly<WorkspaceViewState> | undefined;
   readonly operations: OperationsState;
@@ -108,6 +110,7 @@ export function createInitialAppState(kind: RuntimeKind): AppState {
   return {
     runtime: { kind },
     clipboard: { locations: [] },
+    baskets: {},
     workspace: { directories: {} },
     workspaceView: undefined,
     operations: { byId: {} },

@@ -3,6 +3,17 @@ import type { LocalisedCatalogue } from './types';
 
 /** Portuguese (European) catalogue (task 0098). Keep the key set identical to `en`. */
 export const pt = {
+  basket: {
+    ...en.basket,
+    title: 'Cesto de ficheiros',
+    add: 'Adicionar seleção ao cesto',
+    open: 'Abrir cesto',
+    check: 'Verificar itens',
+    clear: 'Limpar',
+    persist: 'Restaurar este cesto após reiniciar',
+    missing: 'Em falta ou movido',
+    stale: 'Desatualizado ou indisponível',
+  },
   button: {
     save: 'Guardar',
     saving: 'A guardar…',

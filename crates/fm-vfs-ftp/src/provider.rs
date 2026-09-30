@@ -14,6 +14,7 @@ use suppaftp::{
     tokio::{AsyncFtpStream, AsyncRustlsConnector, AsyncRustlsFtpStream},
 };
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 /// Resolved connection parameters. The password must never be logged.
 #[derive(Clone)]
@@ -492,9 +493,12 @@ fn map_ftp(e: suppaftp::FtpError) -> VfsError {
 }
 fn entry(location: Location) -> EntryRef {
     EntryRef {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
     }
+}
+fn entry_id_for(location: &Location) -> EntryId {
+    EntryId::from(Uuid::new_v5(&Uuid::NAMESPACE_URL, location.uri.as_bytes()))
 }
 fn summary(location: Location, f: &File) -> EntrySummary {
     let name = f.name().to_owned();
@@ -506,7 +510,7 @@ fn summary(location: Location, f: &File) -> EntrySummary {
         EntryKind::File
     };
     EntrySummary {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
         name: name.clone(),
         kind,

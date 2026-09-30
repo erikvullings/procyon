@@ -3,6 +3,17 @@ import type { LocalisedCatalogue } from './types';
 
 /** Polish catalogue (task 0098). Keep the key set identical to `en`. */
 export const pl = {
+  basket: {
+    ...en.basket,
+    title: 'Koszyk plików',
+    add: 'Dodaj zaznaczenie do koszyka',
+    open: 'Otwórz koszyk',
+    check: 'Sprawdź elementy',
+    clear: 'Wyczyść',
+    persist: 'Przywróć ten koszyk po ponownym uruchomieniu',
+    missing: 'Brak lub przeniesiono',
+    stale: 'Nieaktualne lub niedostępne',
+  },
   button: {
     save: 'Zapisz',
     saving: 'Zapisywanie…',

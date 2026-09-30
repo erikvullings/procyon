@@ -15,6 +15,7 @@ use rusty_s3::actions::{CreateMultipartUpload, DeleteObject, GetObject, ListObje
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use tokio_util::io::StreamReader;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::resolver::{S3ConnectionParameters, S3ConnectionResolver};
 
@@ -1019,9 +1020,13 @@ fn invalid(uri: &str) -> VfsError {
 
 fn entry_ref(location: Location) -> EntryRef {
     EntryRef {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
     }
+}
+
+fn entry_id_for(location: &Location) -> EntryId {
+    EntryId::from(Uuid::new_v5(&Uuid::NAMESPACE_URL, location.uri.as_bytes()))
 }
 
 fn directory_name(prefix: &str, parent_prefix: &str) -> Option<String> {
@@ -1032,7 +1037,7 @@ fn directory_name(prefix: &str, parent_prefix: &str) -> Option<String> {
 
 fn directory_summary(location: Location, name: &str) -> EntrySummary {
     EntrySummary {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
         name: name.to_owned(),
         kind: EntryKind::Directory,
@@ -1051,7 +1056,7 @@ fn directory_summary(location: Location, name: &str) -> EntrySummary {
 
 fn file_summary(location: Location, name: &str, size: u64, last_modified: &str) -> EntrySummary {
     EntrySummary {
-        id: EntryId::new(),
+        id: entry_id_for(&location),
         location,
         name: name.to_owned(),
         kind: EntryKind::File,

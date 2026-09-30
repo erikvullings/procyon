@@ -443,14 +443,24 @@ impl DirectoryService {
     ) -> Result<EntryMetadata, ApplicationError> {
         let location = request.location.into();
         let provider = self.providers.resolve(&location)?;
+        let entry = EntryRef {
+            id: request.entry_id.into(),
+            location,
+        };
+        if request.verify_identity {
+            let current = provider
+                .inspect(&entry, CancellationToken::new())
+                .await
+                .map_err(ApplicationError::from)?;
+            Self::verify_entry_identity(
+                entry.id,
+                request.expected_size,
+                request.expected_modified_at,
+                &current,
+            )?;
+        }
         provider
-            .metadata(
-                &EntryRef {
-                    id: request.entry_id.into(),
-                    location,
-                },
-                CancellationToken::new(),
-            )
+            .metadata(&entry, CancellationToken::new())
             .await
             .map_err(Into::into)
     }
@@ -472,6 +482,27 @@ impl DirectoryService {
             .retain(|entry| entry.kind == EntryKind::Directory && (show_hidden || !entry.hidden));
         entries.sort_by_key(|entry| entry.name.to_lowercase());
         Ok(entries)
+    }
+
+    fn verify_entry_identity(
+        expected: EntryId,
+        expected_size: Option<u64>,
+        expected_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+        current: &fm_domain::EntrySummary,
+    ) -> Result<(), ApplicationError> {
+        if current.id != expected {
+            return Err(ApplicationError::InvalidRequest(
+                "entry at this location no longer has the collected identity".to_owned(),
+            ));
+        }
+        if expected_size.is_some_and(|size| current.size != Some(size))
+            || expected_modified_at.is_some_and(|modified| current.modified_at != Some(modified))
+        {
+            return Err(ApplicationError::InvalidRequest(
+                "entry metadata has changed since it was collected".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     /// Fetches a file's git commit history for the Alt+Space metadata panel's history section
@@ -2041,6 +2072,27 @@ mod tests {
             metadata_revision: 0,
             git_status: None,
         }
+    }
+
+    #[test]
+    fn basket_identity_check_rejects_a_replacement_at_the_same_path() {
+        let current = sample_entry(EntryKind::File, Some(5));
+        assert!(
+            DirectoryService::verify_entry_identity(current.id, Some(5), None, &current).is_ok()
+        );
+        assert!(matches!(
+            DirectoryService::verify_entry_identity(
+                fm_domain::EntryId::new(),
+                None,
+                None,
+                &current
+            ),
+            Err(ApplicationError::InvalidRequest(_))
+        ));
+        assert!(matches!(
+            DirectoryService::verify_entry_identity(current.id, Some(6), None, &current),
+            Err(ApplicationError::InvalidRequest(_))
+        ));
     }
 
     #[test]

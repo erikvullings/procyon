@@ -1,6 +1,7 @@
 //! Request DTOs for the milestone-1 navigation and metadata endpoints
 //! (spec §8, §12).
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -129,6 +130,15 @@ pub struct EntryMetadataRequest {
     /// The entry's location, so the request can be dispatched to the owning
     /// provider without a prior lookup.
     pub location: LocationDto,
+    /// Require the entry still at this location to have the supplied provider identity.
+    #[serde(default)]
+    pub verify_identity: bool,
+    /// Expected file size, when the provider cannot supply an object-stable identity.
+    #[serde(default)]
+    pub expected_size: Option<u64>,
+    /// Expected modification time, when the provider cannot supply an object-stable identity.
+    #[serde(default)]
+    pub expected_modified_at: Option<DateTime<Utc>>,
 }
 
 /// Marks whether a pane is currently in the foreground, so a poll-tracked
@@ -229,12 +239,30 @@ mod tests {
         let request = EntryMetadataRequest {
             entry_id: Uuid::new_v4(),
             location: sample_location(),
+            verify_identity: false,
+            expected_size: None,
+            expected_modified_at: None,
         };
         let json = serde_json::to_string(&request).expect("serialization must succeed");
         assert!(json.contains("\"entryId\""));
         let parsed: EntryMetadataRequest =
             serde_json::from_str(&json).expect("deserialization must succeed");
         assert_eq!(request, parsed);
+        let legacy = format!(
+            r#"{{"entryId":"{}","location":{{"providerId":"local","uri":"file:///a"}}}}"#,
+            request.entry_id
+        );
+        let parsed: EntryMetadataRequest = serde_json::from_str(&legacy).unwrap();
+        assert!(!parsed.verify_identity);
+        let checked = EntryMetadataRequest {
+            verify_identity: true,
+            ..request
+        };
+        assert!(
+            serde_json::to_string(&checked)
+                .unwrap()
+                .contains("\"verifyIdentity\":true")
+        );
     }
 
     #[test]

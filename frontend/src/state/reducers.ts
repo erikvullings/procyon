@@ -1,3 +1,4 @@
+import type { BasketState } from '../features/basket/basket';
 import type {
   BackendNotification,
   ClipboardState,
@@ -80,6 +81,10 @@ export function runtimeState(
 /** Replaces the frontend-owned in-application clipboard. */
 export function clipboardPatch(clipboard: ClipboardState): AppPatch {
   return { clipboard: () => clipboard };
+}
+
+export function basketPatch(workspaceId: string, basket: BasketState): AppPatch {
+  return { baskets: (current) => ({ ...current, [workspaceId]: basket }) };
 }
 
 /** Replaces the workspace projection without copying or invalidating directory sessions. */

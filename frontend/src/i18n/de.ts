@@ -3,6 +3,17 @@ import type { LocalisedCatalogue } from './types';
 
 /** German catalogue (task 0098). Keep the key set identical to `en`. */
 export const de = {
+  basket: {
+    ...en.basket,
+    title: 'Sammelkorb',
+    add: 'Auswahl zum Korb hinzufügen',
+    open: 'Sammelkorb öffnen',
+    check: 'Einträge prüfen',
+    clear: 'Leeren',
+    persist: 'Diesen Arbeitsbereichskorb nach Neustart wiederherstellen',
+    missing: 'Fehlt oder verschoben',
+    stale: 'Veraltet oder nicht verfügbar',
+  },
   button: {
     save: 'Speichern',
     saving: 'Wird gespeichert…',
