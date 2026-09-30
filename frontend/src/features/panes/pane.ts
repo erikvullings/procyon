@@ -92,6 +92,7 @@ import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
 import { breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
 import { createRenameEditingController } from './rename-edit-controller';
 import type { PaneTab } from './tab-strip';
@@ -293,26 +294,6 @@ function selectedSize(
     (total, entry) => total + (selectedEntryIds.has(entry.id) ? (entry.size ?? 0) : 0),
     0,
   );
-}
-
-function sizeLabel(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
-  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1_024)), units.length - 1);
-  const value = bytes / 1_024 ** unitIndex;
-  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} ${units[unitIndex]}`;
-}
-
-function formatListingSummary(fileCount: number, folderCount: number, totalSize: number): string {
-  const filesPart = t('pane', 'fileCount', fileCount);
-  const foldersPart = t('pane', 'folderCount', folderCount);
-  const countsText =
-    folderCount === 0
-      ? filesPart
-      : fileCount === 0
-        ? foldersPart
-        : t('pane', 'filesAndFolders', { files: filesPart, folders: foldersPart });
-  return t('pane', 'sizeIn', { size: sizeLabel(totalSize), counts: countsText });
 }
 
 function volumeCapacityLabel(capacity: VolumeCapacity): string | undefined {

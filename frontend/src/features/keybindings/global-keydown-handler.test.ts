@@ -214,6 +214,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     openFindFiles: vi.fn(),
     replaceClipboard: vi.fn(),
     selectedLocations: () => [],
+    collectIntoBasketIfVisible: () => false,
     invokeActionById: vi.fn(),
     openViewer: vi.fn(),
     openEditor: vi.fn(),

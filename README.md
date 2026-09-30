@@ -175,8 +175,11 @@ decisions and intentionally unsupported bindings.
 
 Select entries in any folder, tab, or provider and use the shopping-basket toolbar button to add
 them. Open the basket with the adjacent toolbar button; it appears as a tab in the active pane.
+While that tab is visible, **F5** or **Add to basket** collects the selection from the directory
+pane (including when the basket pane has focus). When the basket is closed, F5 is Copy as usual.
 Adding an entry again updates its reference rather than duplicating it. The basket does not cut
-files or replace the clipboard.
+files or replace the clipboard. Its status bar shows file and folder counts, the sum of known
+available file sizes, the checked subset, and any unavailable references.
 
 Check individual entries to act on a subset, or leave all unchecked to act on every available
 entry. Copy, move, and archive target the directory in the other pane; checksums and delete use

@@ -79,6 +79,45 @@ export function basketSources(state: BasketState): readonly Location[] {
     .map((item) => item.location);
 }
 
+export function basketSummary(state: BasketState): {
+  fileCount: number;
+  folderCount: number;
+  knownSize: number;
+  incompleteSize: boolean;
+  unavailableCount: number;
+  selectedCount: number;
+  selectedKnownSize: number;
+} {
+  const selected = new Set(state.selectedKeys);
+  let fileCount = 0;
+  let folderCount = 0;
+  let knownSize = 0;
+  let selectedKnownSize = 0;
+  let incompleteSize = false;
+  let unavailableCount = 0;
+  for (const item of state.items) {
+    if (item.kind === 'directory') folderCount += 1;
+    else fileCount += 1;
+    if (item.status !== 'ready') unavailableCount += 1;
+    if (item.status !== 'ready' || (item.kind !== 'directory' && item.size === undefined)) {
+      incompleteSize = true;
+    }
+    if (item.status === 'ready' && item.kind !== 'directory' && item.size !== undefined) {
+      knownSize += item.size;
+      if (selected.has(item.key)) selectedKnownSize += item.size;
+    }
+  }
+  return {
+    fileCount,
+    folderCount,
+    knownSize,
+    incompleteSize,
+    unavailableCount,
+    selectedCount: selected.size,
+    selectedKnownSize,
+  };
+}
+
 export function classifyBasketAbsence(
   item: BasketItem,
   visibleEntries: readonly EntrySummary[],

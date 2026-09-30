@@ -4643,44 +4643,133 @@ input[type="text"].fm-shortcuts-help-capture-input {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 0.75rem;
-  gap: 0.6rem;
   background: var(--fm-surface);
 }
 
 .fm-basket-header,
+.fm-basket-columns,
+.fm-basket-list,
 .fm-basket-actions {
+  font-size: 0.92em;
+}
+
+.fm-basket-header {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  flex: 0 0 20px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
 }
 
 .fm-basket-header h2 {
   margin: 0;
-  font-size: var(--fm-type-heading);
+  min-width: 0;
+  overflow: hidden;
+  font-size: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.fm-basket-header span {
-  margin-inline-end: auto;
-}
-
-.fm-basket-persist,
-.fm-basket-hint {
+.fm-basket-count {
+  flex: 0 0 auto;
   color: var(--fm-text-muted);
 }
 
-.fm-basket-select {
+.fm-basket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-basket-action {
+  min-height: 24px;
+}
+
+.fm-basket-add {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 0 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-basket-add:hover,
+.fm-basket-add:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-basket-options {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fm-basket-persist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  color: var(--fm-text-muted);
+  min-width: 0;
+}
+
+.fm-basket-persist-label {
+  min-width: 0;
+}
+
+.fm-basket-checkbox {
+  margin: 0;
+}
+
+.fm-basket-columns,
+.fm-basket-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1.25fr) 24px;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 0.35rem;
+  column-gap: 0.25rem;
+}
+
+.fm-basket-columns {
   flex: 0 0 20px;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  font-weight: 600;
+}
+
+.fm-basket-column-name {
+  grid-column: 1 / 3;
+}
+
+.fm-basket-select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 20px;
 }
 
 .fm-basket-list {
   flex: 1;
-  min-height: 6rem;
+  min-height: 0;
   overflow: auto;
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+}
+
+.fm-basket-empty {
+  margin: 0.75rem;
+  color: var(--fm-text-muted);
 }
 
 .fm-basket-spacer {
@@ -4690,44 +4779,67 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-basket-row {
   position: absolute;
   inset-inline: 0;
-  display: flex;
-  box-sizing: border-box;
-  align-items: center;
-  height: 48px;
-  padding: 0 0.5rem;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--fm-border);
+  height: 20px;
+}
+
+.fm-basket-row-striped {
+  background: var(--fm-surface-elevated);
+}
+
+.fm-basket-row:hover {
+  background: var(--fm-hover);
 }
 
 .fm-basket-entry {
   display: flex;
-  flex: 1;
   min-width: 0;
-  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.fm-basket-entry strong,
-.fm-basket-entry small {
+.fm-basket-name,
+.fm-basket-location {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fm-basket-entry small {
+.fm-basket-location {
   color: var(--fm-text-muted);
 }
 
 .fm-basket-warning {
+  flex: 0 0 auto;
   color: var(--fm-warning);
+}
+
+.fm-basket-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text-muted);
+}
+
+.fm-basket-remove:hover,
+.fm-basket-remove:focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
 }
 
 .fm-basket-actions {
   border-top: 1px solid var(--fm-border);
-  padding-top: 0.5rem;
+  border-bottom: 0;
 }
 
-.fm-basket-actions span {
+.fm-basket-destination {
   flex-basis: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

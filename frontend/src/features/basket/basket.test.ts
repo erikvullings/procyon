@@ -3,6 +3,7 @@ import type { EntrySummary } from '../../models';
 import {
   addToBasket,
   basketSources,
+  basketSummary,
   classifyBasketAbsence,
   emptyBasket,
   loadBasket,
@@ -10,6 +11,7 @@ import {
   removeFromBasket,
   saveBasket,
   selectBasketItems,
+  withBasketStatus,
 } from './basket';
 
 const entry = (id: string, providerId: string, uri: string): EntrySummary => ({
@@ -50,6 +52,39 @@ describe('collection basket', () => {
       basket.items[1]!.location,
     ]);
     expect(basketSources(basket)).toHaveLength(2);
+  });
+
+  it('summarizes mixed entries and counts only available, known file sizes', () => {
+    const basket = addToBasket(emptyBasket, [
+      { ...entry('a', 'local', 'file:///a'), size: 2_048 },
+      { ...entry('b', 'sftp', 'sftp://server/b'), size: 1_024 },
+      { ...entry('c', 'local', 'file:///c'), kind: 'directory' as const },
+      entry('d', 'local', 'file:///d'),
+      { ...entry('e', 'local', 'file:///e'), size: 4_096 },
+    ]);
+    const selected = selectBasketItems(basket, [
+      basket.items[1]?.key ?? '',
+      basket.items[4]?.key ?? '',
+    ]);
+    const unavailable = withBasketStatus(selected, basket.items[4]?.key ?? '', 'missing');
+    expect(basketSummary(unavailable)).toEqual({
+      fileCount: 4,
+      folderCount: 1,
+      knownSize: 3_072,
+      incompleteSize: true,
+      unavailableCount: 1,
+      selectedCount: 2,
+      selectedKnownSize: 1_024,
+    });
+    expect(basketSummary(emptyBasket)).toEqual({
+      fileCount: 0,
+      folderCount: 0,
+      knownSize: 0,
+      incompleteSize: false,
+      unavailableCount: 0,
+      selectedCount: 0,
+      selectedKnownSize: 0,
+    });
   });
 
   it('restores only an opted-in workspace basket and marks references stale until rechecked', () => {

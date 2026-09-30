@@ -106,6 +106,8 @@ export interface GlobalKeydownContext {
   openFindFiles(): void;
   replaceClipboard(next?: ClipboardState): void;
   selectedLocations(): readonly Location[];
+  /** Consumes bare F5 when the collection basket is the visible destination. */
+  collectIntoBasketIfVisible(): boolean;
   invokeActionById(actionId: string, parameters: unknown, ctx: ActionInvocationContext): void;
   openViewer(
     paneId: PaneId,
@@ -809,6 +811,18 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'core.copy',
     tryHandle: (context, event, state) => {
       if (state.dispatchedAction === 'core.copy') {
+        if (
+          event.key === 'F5' &&
+          !event.altKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.shiftKey &&
+          !isEditableTarget(event.target) &&
+          context.collectIntoBasketIfVisible()
+        ) {
+          event.preventDefault();
+          return;
+        }
         const active = context.activeDirectory();
         const selection =
           active === undefined

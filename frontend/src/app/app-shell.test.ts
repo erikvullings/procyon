@@ -1150,6 +1150,69 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-cut-row')).toBeNull();
   });
 
+  it('uses F5 to collect from the directory pane while the basket is visible', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-basket-list')).not.toBeNull());
+    expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F5 Add to basket');
+    directoryRowNamed(root, 'report.pdf')?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-row')?.textContent).toContain('report.pdf'),
+    );
+    expect(root.querySelector('.fm-basket-status')?.textContent).toContain('8 KB in 1 file');
+    expect(startOperation).not.toHaveBeenCalled();
+
+    directoryRowNamed(root, 'Projects')?.click();
+    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+      .find((tab) => tab.textContent?.includes('Collection basket'))
+      ?.click();
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+          .find((tab) => tab.textContent?.includes('Collection basket'))
+          ?.getAttribute('aria-selected'),
+      ).toBe('true'),
+    );
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
+    expect(root.querySelector('.fm-basket-status')?.textContent).toContain(
+      '8 KB in 1 file, and 1 folder',
+    );
+    root.querySelector<HTMLInputElement>('input[aria-label="Select Projects"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 1 selected'),
+    );
+    expect(startOperation).not.toHaveBeenCalled();
+
+    root
+      .querySelector<HTMLButtonElement>('button[aria-label="Remove Projects from basket"]')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(1));
+    [...root.querySelectorAll<HTMLElement>('.fm-function-key')]
+      .find((key) => key.textContent?.includes('F5 Add to basket'))
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
+    root.querySelector<HTMLButtonElement>('.fm-basket-add')?.click();
+    expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2);
+    expect(startOperation).not.toHaveBeenCalled();
+
+    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+      .find((tab) => tab.textContent?.includes('Mock files'))
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-basket-list')).toBeNull());
+    expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F5 Copy');
+    directoryRowNamed(root, '.env')?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
+    );
+    await confirmRoutineOperation('Cancel');
+  });
+
   it('previews a checked basket subset and preserves it when the operation is cancelled', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');
@@ -1162,7 +1225,7 @@ describe('AppShell', () => {
     (await toolbarButton('Open collection basket')).click();
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
     root.querySelector<HTMLInputElement>('input[aria-label="Select .env"]')?.click();
-    root.querySelector<HTMLButtonElement>('.fm-basket-actions button')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-basket-action')?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
     );

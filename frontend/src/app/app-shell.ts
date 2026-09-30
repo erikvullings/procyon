@@ -2587,9 +2587,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     m.redraw();
   }
 
+  function basketVisible(): boolean {
+    return (
+      workspace?.paneOrder.some((paneId) =>
+        basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''),
+      ) ?? false
+    );
+  }
+
+  function basketSourcePaneId(): PaneId | undefined {
+    if (workspace === undefined) return undefined;
+    const active = workspace.activePaneId;
+    if (!basketTabIds.has(workspace.panesById[active]?.activeTabId ?? '')) return active;
+    return workspace.paneOrder.find(
+      (paneId) => !basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''),
+    );
+  }
+
   function collectSelection(): void {
     const current = workspace;
-    const paneId = current?.activePaneId;
+    const paneId = basketSourcePaneId();
     if (current === undefined || paneId === undefined) return;
     const tabId = current.panesById[paneId]?.activeTabId;
     if (tabId === undefined || basketTabIds.has(tabId)) return;
@@ -2932,6 +2949,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getSelections: () => selections,
     getDirectories: () => directories,
     getRegisteredActions: keybindingActions,
+    collectIntoBasketIfVisible: () => {
+      if (!basketVisible()) return false;
+      collectSelection();
+      return true;
+    },
     clipboard,
     getFindFilesOpen: () => findFilesOpen,
     getViewer: (paneId) => {
@@ -4044,6 +4066,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       );
       const shortcutFor = (actionId: string): string | undefined =>
         liveShortcuts.find((binding) => binding.actionId === actionId)?.shortcut;
+      const basketF5 = basketVisible() && shortcutFor('core.copy') === 'F5';
       return m(
         '.fm-app-shell',
         {
@@ -4226,11 +4249,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 IconButton,
                 {
                   className: 'fm-basket-add-button',
-                  disabled:
-                    workspace === undefined ||
-                    basketTabIds.has(
-                      workspace.panesById[workspace.activePaneId]?.activeTabId ?? '',
-                    ),
+                  disabled: basketSourcePaneId() === undefined,
                   'aria-label': t('basket', 'add'),
                   onclick: collectSelection,
                 },
@@ -4617,6 +4636,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       ]),
                       viewerContent: m(BasketView, {
                         basket,
+                        onAdd: collectSelection,
+                        ...(basketF5 ? { addShortcut: 'F5' } : {}),
                         ...(destination?.writable ? { destination: destination.location } : {}),
                         busy: basketBusy,
                         onToggle: (key) =>
@@ -4890,21 +4911,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             '.fm-function-key-bar',
             m(
               '.fm-function-key-list',
-              footerBindings.map((binding) =>
-                m(
+              footerBindings.map((binding) => {
+                const collect =
+                  basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
+                const available = collect
+                  ? basketSourcePaneId() !== undefined
+                  : binding.actionAvailable;
+                return m(
                   'span.fm-function-key',
                   {
                     key: binding.actionId,
                     role: 'button',
-                    tabindex: binding.actionAvailable ? 0 : -1,
-                    'aria-disabled': binding.actionAvailable ? undefined : 'true',
-                    onclick: binding.actionAvailable
+                    tabindex: available ? 0 : -1,
+                    'aria-disabled': available ? undefined : 'true',
+                    onclick: available
                       ? () => invokeFunctionKeyShortcut(binding.shortcut)
                       : undefined,
                   },
-                  `${binding.key} ${functionKeyTitle(binding)}`,
-                ),
-              ),
+                  `${binding.key} ${collect ? t('basket', 'addShort') : functionKeyTitle(binding)}`,
+                );
+              }),
             ),
           ),
         ],
