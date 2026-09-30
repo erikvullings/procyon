@@ -1,4 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
+import { IconButton } from 'mithril-materialized';
 import { trashIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -80,15 +81,9 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
         disabled: boolean,
         className: string,
       ): m.Children =>
-        tooltip(
-          label,
-          m(
-            `button.btn-flat.${className}`,
-            { type: 'button', 'aria-label': label, onclick, disabled },
-            icon,
-          ),
-          { 'data-tooltip-placement': 'above' },
-        );
+        tooltip(label, m(IconButton, { className, 'aria-label': label, onclick, disabled }, icon), {
+          'data-tooltip-placement': 'above',
+        });
       return m('.fm-basket', [
         m('.fm-basket-header', [
           m('span.fm-basket-count', t('basket', 'count', basket.items.length)),

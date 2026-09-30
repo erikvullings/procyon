@@ -585,6 +585,13 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(startComparison).toHaveBeenCalled();
   });
 
+  it('does not compare directories when the active pane has no directory', () => {
+    const startComparison = vi.fn();
+    const context = makeContext({ activeDirectory: () => undefined, startComparison });
+    createGlobalKeydownHandler(context)(keydown('F2', { shiftKey: true }));
+    expect(startComparison).not.toHaveBeenCalled();
+  });
+
   it('dispatches the checksum command to the checksum controller (task 0077)', () => {
     const calculateChecksums = vi.fn();
     const context = makeContext({ calculateChecksums });

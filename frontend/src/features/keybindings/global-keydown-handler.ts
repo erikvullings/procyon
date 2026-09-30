@@ -1231,6 +1231,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'core.compareDirectories',
     tryHandle: (context, event, state) => {
       if (state.dispatchedAction === 'core.compareDirectories') {
+        if (context.activeDirectory() === undefined) return;
         event.preventDefault();
         context.startComparison();
         return;

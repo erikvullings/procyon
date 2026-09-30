@@ -1946,6 +1946,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   function activeDirectory(): { paneId: PaneId; location: Location } | undefined {
     const paneId = workspace?.activePaneId;
+    if (paneId !== undefined && basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''))
+      return undefined;
     const location =
       paneId === undefined ? undefined : directories.get(activeTabKey(paneId))?.location;
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
@@ -4208,6 +4210,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const shortcutFor = (actionId: string): string | undefined =>
         liveShortcuts.find((binding) => binding.actionId === actionId)?.shortcut;
       const basketF5 = basketVisible() && shortcutFor('core.copy') === 'F5';
+      const basketFocused =
+        workspace !== undefined &&
+        basketTabIds.has(workspace.panesById[workspace.activePaneId]?.activeTabId ?? '');
       return m(
         '.fm-app-shell',
         {
@@ -4288,6 +4293,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   IconButton,
                   {
                     disabled:
+                      activeDirectory() === undefined ||
                       workspace?.panesById[workspace.activePaneId]?.tabsById[
                         workspace.panesById[workspace.activePaneId]?.activeTabId ?? ''
                       ]?.canNavigateBack !== true,
@@ -4303,6 +4309,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   IconButton,
                   {
                     disabled:
+                      activeDirectory() === undefined ||
                       workspace?.panesById[workspace.activePaneId]?.tabsById[
                         workspace.panesById[workspace.activePaneId]?.activeTabId ?? ''
                       ]?.canNavigateForward !== true,
@@ -4317,7 +4324,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 m(
                   IconButton,
                   {
-                    disabled: workspace === undefined,
+                    disabled: activeDirectory() === undefined,
                     'aria-label': t('shell', 'parentDirectory'),
                     onclick: () => void navigation.parent(workspace?.activePaneId ?? ''),
                   },
@@ -4419,7 +4426,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               m(
                 IconButton,
                 {
-                  disabled: (workspace?.paneOrder.length ?? 0) < 2,
+                  disabled:
+                    activeDirectory() === undefined || (workspace?.paneOrder.length ?? 0) < 2,
                   'aria-label': t('shell', 'comparePanes'),
                   onclick: () => comparisonController.startComparison('sizeAndTimestamp'),
                 },
@@ -5076,7 +5084,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
                 const available = collect
                   ? basketSourcePaneId() !== undefined
-                  : binding.actionAvailable;
+                  : (!basketFocused || binding.actionId === 'core.showShortcutsHelp') &&
+                    binding.actionAvailable;
                 return m(
                   'span.fm-function-key',
                   {

@@ -48,3 +48,7 @@ providers before applying one deliberate action to the collection.
   modification time; identical-metadata replacements cannot be distinguished. The list is
   virtualized and uses keyboard-accessible checkboxes. Basket folder totals are calculated
   asynchronously using the existing folder-size capability.
+- Directory navigation, comparison, and directory-only function keys are unavailable while the
+  basket tab is active; F5 still collects from the other pane. Basket icon controls share the
+  workspace toolbar's button component, with selection-state transitions kept instantaneous to
+  avoid flashing the action row.

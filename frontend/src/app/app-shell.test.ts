@@ -1340,6 +1340,42 @@ describe('AppShell', () => {
     await confirmRoutineOperation('Cancel');
   });
 
+  it('disables directory commands while the basket is active and restores them on a directory tab', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
+    directoryRowNamed(root, '.env')?.click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-basket-list')).not.toBeNull());
+
+    for (const label of ['Parent directory', 'Find files', 'Compare panes']) {
+      expect((await toolbarButton(label)).disabled).toBe(true);
+    }
+    for (const key of ['F2', 'F3', 'F4', 'F6', 'F7', 'F8']) {
+      expect(
+        [...root.querySelectorAll<HTMLElement>('.fm-function-key')]
+          .find((button) => button.textContent?.startsWith(key))
+          ?.getAttribute('aria-disabled'),
+        `${key} should be disabled`,
+      ).toBe('true');
+    }
+    expect(root.querySelector('.fm-function-key')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(root.querySelector('.fm-function-key-bar')?.textContent).toContain('F5 Add to basket');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    expect(root.querySelector('.fm-operation-confirmation-modal.active')).toBeNull();
+    expect(root.querySelector('.fm-rename-dialog.active')).toBeNull();
+    expect(startOperation).not.toHaveBeenCalled();
+
+    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+      .find((tab) => tab.textContent?.includes('Mock files'))
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-basket-list')).toBeNull());
+    expect((await toolbarButton('Parent directory')).disabled).toBe(false);
+    expect((await toolbarButton('Find files')).disabled).toBe(false);
+  });
+
   it('previews a checked basket subset and preserves it when the operation is cancelled', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');
@@ -1388,7 +1424,11 @@ describe('AppShell', () => {
     ).toBe('Select all');
     expect(root.querySelector('.fm-basket-header h2')).toBeNull();
 
-    root.querySelector<HTMLButtonElement>('.fm-basket-options button')?.click();
+    const actionRow = root.querySelector('.fm-basket-actions');
+    const selectAll = root.querySelector<HTMLButtonElement>('.fm-basket-options button');
+    expect(selectAll?.classList.contains('btn-icon')).toBe(true);
+    expect(selectAll?.classList.contains('waves-effect')).toBe(true);
+    selectAll?.click();
     await vi.waitFor(() =>
       expect(
         [...root.querySelectorAll<HTMLInputElement>('.fm-basket-select input')].every(
@@ -1396,6 +1436,8 @@ describe('AppShell', () => {
         ),
       ).toBe(true),
     );
+    expect(root.querySelector('.fm-basket-actions')).toBe(actionRow);
+    expect(selectAll?.isConnected).toBe(true);
     expect(actions().every((button) => !button.disabled)).toBe(true);
     const deselect = root.querySelector<HTMLButtonElement>('button[aria-label="Deselect all"]');
     deselect?.click();
