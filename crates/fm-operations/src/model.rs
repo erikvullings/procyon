@@ -292,6 +292,8 @@ pub enum OperationKind {
     CreateDirectory,
     /// Create an empty file.
     CreateFile,
+    /// Create a symbolic link, junction, or shell shortcut.
+    CreateLink,
     /// Rename one entry.
     Rename,
     /// Copy entries.

@@ -294,7 +294,9 @@ impl From<VfsError> for ApplicationError {
     fn from(error: VfsError) -> Self {
         match error {
             VfsError::NotFound { .. } => Self::NotFound,
-            VfsError::PermissionDenied { .. } => Self::PermissionDenied,
+            VfsError::PermissionDenied { .. } | VfsError::PrivilegeRequired { .. } => {
+                Self::PermissionDenied
+            }
             VfsError::Locked { .. } => Self::FileLocked,
             VfsError::AlreadyExists { .. } => Self::DestinationAlreadyExists,
             VfsError::Cancelled => Self::OperationCancelled,
@@ -306,6 +308,7 @@ impl From<VfsError> for ApplicationError {
             | VfsError::PathTraversalName
             | VfsError::NotADirectory { .. }
             | VfsError::IsADirectory { .. }
+            | VfsError::LinkCycle { .. }
             | VfsError::UnsupportedCapability { .. } => {
                 Self::InvalidRequest("the requested filesystem operation is not valid".to_owned())
             }

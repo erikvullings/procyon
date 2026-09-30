@@ -46,6 +46,7 @@ async fn run(
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: true,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -237,6 +238,7 @@ async fn archive_creation_validates_format_and_compression_options() {
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,
+            link: None,
         },
         None,
     );
@@ -264,6 +266,7 @@ async fn archive_creation_validates_format_and_compression_options() {
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,
+            link: None,
         },
         None,
     );

@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import type { Location, Operation } from '../../models';
+import type { LinkRequest, Location, Operation } from '../../models';
 
 export interface OperationsController {
   copy(
@@ -37,6 +37,14 @@ export interface OperationsController {
   ): Promise<Operation>;
   /** Creates an empty file at `location` (Shift+F4). */
   createFile(location: Location, name: string, signal?: AbortSignal): Promise<Operation>;
+  /** Creates a link named `name` in `destination` that points at `target` (task 0168). */
+  createLink(
+    target: Location,
+    destination: Location,
+    name: string,
+    link: LinkRequest,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
   rename(source: Location, destination: Location, signal?: AbortSignal): Promise<Operation>;
   multiRename(
     sources: readonly Location[],
@@ -162,6 +170,20 @@ export function createOperationsController(client: FileManagerClient): Operation
           destination: location,
           conflictPolicy: 'ask',
           name,
+        },
+        signal,
+      );
+    },
+
+    createLink(target, destination, name, link, signal) {
+      return client.startOperation(
+        {
+          type: 'createLink',
+          sources: [target],
+          destination,
+          conflictPolicy: 'ask',
+          name,
+          link,
         },
         signal,
       );

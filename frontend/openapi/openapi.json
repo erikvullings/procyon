@@ -2933,6 +2933,44 @@
         }
       }
     },
+    "/api/v1/link-options": {
+      "post": {
+        "summary": "Lists the link kinds that can point at a target from a destination directory (task 0168).",
+        "operationId": "getLinkOptions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkOptionsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkOptionsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles": {
       "get": {
         "operationId": "listLlmProfiles",
@@ -12417,6 +12455,114 @@
           "pl"
         ]
       },
+      "LinkKindDto": {
+        "type": "string",
+        "description": "Filesystem link or shell shortcut requested by `createLink`.\n\nThe three kinds are deliberately distinct: a symbolic link stores target text, an NTFS\njunction is a directory mount point with an absolute target, and a `.lnk` shortcut is an\nordinary file that only the Windows shell interprets.",
+        "enum": [
+          "symbolicLink",
+          "junction",
+          "shortcut"
+        ]
+      },
+      "LinkKindOptionDto": {
+        "type": "object",
+        "description": "One link kind available for a target/destination pair.",
+        "required": [
+          "kind",
+          "supportsRelative",
+          "requirements",
+          "suggestedName"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkKindDto",
+            "description": "Link kind."
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkRequirementDto"
+            },
+            "description": "Preconditions to explain before execution."
+          },
+          "suggestedName": {
+            "type": "string",
+            "description": "Default file name for the new link inside the destination."
+          },
+          "supportsRelative": {
+            "type": "boolean",
+            "description": "Whether a relative target may be requested."
+          }
+        }
+      },
+      "LinkOptionsDto": {
+        "type": "object",
+        "description": "Link kinds supported for a target placed in a destination directory.",
+        "required": [
+          "kinds"
+        ],
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkKindOptionDto"
+            },
+            "description": "Supported kinds, most portable first. Empty when links cannot be created here."
+          }
+        }
+      },
+      "LinkOptionsRequestDto": {
+        "type": "object",
+        "description": "Asks which link kinds can point at `target` from inside `destination`.",
+        "required": [
+          "target",
+          "destination"
+        ],
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Directory that will contain the new link."
+          },
+          "target": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Entry the link will point at."
+          }
+        }
+      },
+      "LinkRequestDto": {
+        "type": "object",
+        "description": "Link parameters carried by a `createLink` start request.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkKindDto",
+            "description": "Link kind to create."
+          },
+          "targetStyle": {
+            "$ref": "#/components/schemas/LinkTargetStyleDto",
+            "description": "Target form; only symbolic links honour `relative`."
+          }
+        }
+      },
+      "LinkRequirementDto": {
+        "type": "string",
+        "description": "A precondition the user should know about before creating a link kind.",
+        "enum": [
+          "developerModeOrAdministrator",
+          "localDirectoryTarget",
+          "shellOnly"
+        ]
+      },
+      "LinkTargetStyleDto": {
+        "type": "string",
+        "description": "How a symbolic link records its target.",
+        "enum": [
+          "relative",
+          "absolute"
+        ]
+      },
       "ListDirectoryChildrenRequest": {
         "type": "object",
         "description": "Requests the immediate child directories of a location, for the directory-tree sidebar\n(`POST /api/v1/directories/children`, task 0139). Unlike [`ListDirectoryRequest`], this is not\nbound to a pane or workspace: expanding a tree node is independent of any pane's own listing\nsession.",
@@ -13847,6 +13993,7 @@
           "moveToArchive",
           "createDirectory",
           "createFile",
+          "createLink",
           "rename",
           "copy",
           "move",
@@ -19717,6 +19864,17 @@
               "$ref": "#/components/schemas/LocationDto"
             },
             "description": "Per-source destinations for a batch `rename` (task 0072 multi-rename), one entry per\n`sources` item in the same order. Empty for every other operation kind and for a\nsingle-entry rename, which keeps using `destination` instead."
+          },
+          "link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LinkRequestDto",
+                "description": "Link kind and target form for a `createLink` operation (task 0168)."
+              }
+            ]
           },
           "name": {
             "type": [

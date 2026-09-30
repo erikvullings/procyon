@@ -226,6 +226,7 @@ export const pl = {
     copyRelativePath: 'Kopiuj ścieżkę względną',
     compareDirectories: 'Porównaj katalogi',
     createFile: 'Nowy plik',
+    createLink: 'Utwórz łącze',
     duplicate: 'Duplikuj',
     quit: 'Zakończ',
     sortByName: 'Sortuj według nazwy',
@@ -427,6 +428,28 @@ export const pl = {
     kindMoveToArchive: 'Przenieś do archiwum',
     kindCreateDirectory: 'Utwórz katalog',
     kindCreateFile: 'Utwórz plik',
+    kindCreateLink: 'Utwórz łącze',
+    createLinkTitle: 'Utwórz łącze',
+    linkName: 'Nazwa łącza',
+    linkKind: 'Typ łącza',
+    linkKindSymbolicLink: 'Łącze symboliczne',
+    linkKindJunction: 'Połączenie katalogów (NTFS)',
+    linkKindShortcut: 'Skrót (.lnk)',
+    linkTargetStyle: 'Ścieżka docelowa',
+    linkTargetRelative: 'Względna wobec łącza',
+    linkTargetAbsolute: 'Bezwzględna',
+    linkRequirementDeveloperMode:
+      'Windows pozwala tworzyć łącza symboliczne tylko w trybie dewelopera lub gdy Procyon działa jako administrator.',
+    linkRequirementLocalDirectory:
+      'Połączenie katalogów może wskazywać tylko folder na dysku lokalnym.',
+    linkRequirementShellOnly:
+      'Skróty są obsługiwane tylko przez Eksplorator Windows i aplikacje zgodne z powłoką, a nie przez inne programy.',
+    linkLoadingOptions: 'Sprawdzanie dostępnych typów łączy…',
+    linkUnsupported: 'Nie można tworzyć łączy między tymi lokalizacjami.',
+    failureRecoveryPrivilegeRequired:
+      'Utworzenie tego łącza wymaga dodatkowych uprawnień. Włącz tryb dewelopera, uruchom Procyon jako administrator lub utwórz skrót.',
+    failureRecoveryLinkCycle:
+      'Łącze wskazywałoby na siebie lub na własny folder nadrzędny. Wybierz inne miejsce docelowe.',
     kindRename: 'Zmień nazwę',
     kindCopy: 'Kopiuj',
     kindMove: 'Przenieś',

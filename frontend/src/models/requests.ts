@@ -50,7 +50,7 @@ import {
 } from './comparison';
 import type { ActionId, EntryId, OperationId, PaneId } from './ids';
 import type { Location } from './location';
-import type { ConflictPolicy, OperationKind } from './operation';
+import type { ConflictPolicy, LinkRequest, OperationKind } from './operation';
 import type { SearchExecutionMode, SearchProviderLimitation, SearchQuery } from './search';
 
 /** Open column sort descriptor shared by workspace views and directory requests. */
@@ -140,6 +140,8 @@ export interface StartOperationRequest {
   symlinkPolicy?: 'copyLink' | 'copyTarget';
   permanentDeleteConfirmed?: boolean;
   overrideReadOnly?: boolean;
+  /** Link kind and target style for a `createLink` operation (task 0168). */
+  link?: LinkRequest;
 }
 
 /** Submits the user's decision for a queued conflict (spec §17). */

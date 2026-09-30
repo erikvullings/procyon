@@ -228,6 +228,7 @@ export const fr = {
     copyRelativePath: 'Copier le chemin relatif',
     compareDirectories: 'Comparer les répertoires',
     createFile: 'Nouveau fichier',
+    createLink: 'Créer un lien',
     duplicate: 'Dupliquer',
     quit: 'Quitter',
     sortByName: 'Trier par nom',
@@ -432,6 +433,28 @@ export const fr = {
     kindMoveToArchive: 'Déplacer vers une archive',
     kindCreateDirectory: 'Créer un répertoire',
     kindCreateFile: 'Créer un fichier',
+    kindCreateLink: 'Créer un lien',
+    createLinkTitle: 'Créer un lien',
+    linkName: 'Nom du lien',
+    linkKind: 'Type de lien',
+    linkKindSymbolicLink: 'Lien symbolique',
+    linkKindJunction: 'Jonction (NTFS)',
+    linkKindShortcut: 'Raccourci (.lnk)',
+    linkTargetStyle: 'Chemin cible',
+    linkTargetRelative: 'Relatif au lien',
+    linkTargetAbsolute: 'Absolu',
+    linkRequirementDeveloperMode:
+      'Windows n’autorise les liens symboliques qu’avec le mode développeur activé ou si Procyon s’exécute en administrateur.',
+    linkRequirementLocalDirectory:
+      'Une jonction ne peut pointer que vers un dossier d’un lecteur local.',
+    linkRequirementShellOnly:
+      'Les raccourcis ne sont suivis que par l’Explorateur Windows et les applications compatibles, pas par les autres programmes.',
+    linkLoadingOptions: 'Vérification des types de lien disponibles…',
+    linkUnsupported: 'Impossible de créer des liens entre ces emplacements.',
+    failureRecoveryPrivilegeRequired:
+      'La création de ce lien exige des privilèges supplémentaires. Activez le mode développeur, lancez Procyon en administrateur ou créez plutôt un raccourci.',
+    failureRecoveryLinkCycle:
+      'Le lien pointerait vers lui-même ou vers son dossier parent. Choisissez une autre destination.',
     kindRename: 'Renommer',
     kindCopy: 'Copier',
     kindMove: 'Déplacer',

@@ -77,6 +77,7 @@ export interface GlobalKeydownContext {
   getArchiveCreateRequest(): ArchiveCreateRequest | undefined;
   getCreateDirectoryOpen(): boolean;
   getCreateFileOpen(): boolean;
+  getCreateLinkOpen(): boolean;
   getAppState(): AppState | undefined;
   /** Last non-empty Quick Filter query committed on this pane's active tab (Ctrl+Shift+S). */
   getLastQuickFilterQuery(paneId: PaneId): string | undefined;
@@ -88,6 +89,8 @@ export interface GlobalKeydownContext {
   setArchiveCreateRequest(req: ArchiveCreateRequest | undefined): void;
   setCreateDirectoryOpen(open: boolean): void;
   setCreateFileOpen(open: boolean): void;
+  /** Opens the Create link dialog for `target`, creating the link in `destination`. */
+  openCreateLink(target: Location, destination: Location): void;
   setAppState(state: AppState): void;
   setQuickFilterOpen(key: string, open: boolean): void;
   /** Sets (`query` defined) or clears (`query` undefined) the active tab's committed Quick Filter. */
@@ -1413,6 +1416,32 @@ const ACTION_KEYDOWN_ROUTES = [
         return;
       }
       return false;
+    },
+  },
+  {
+    id: 'core.createLink',
+    tryHandle: (context, event, state) => {
+      if (state.dispatchedAction !== 'core.createLink' || context.getCreateLinkOpen()) return false;
+      const active = context.activeDirectory();
+      if (active === undefined) return;
+      const key = context.activeTabKey(active.paneId);
+      const directory = context.getDirectories().get(key);
+      const selected = getSelectedEntriesOrCursor(
+        context.getSelections().get(key),
+        directory?.entries ?? [],
+      );
+      const target = selected.length === 1 ? selected[0] : undefined;
+      const otherPaneId = context.getWorkspace()?.paneOrder.find((id) => id !== active.paneId);
+      const destination =
+        (otherPaneId === undefined
+          ? undefined
+          : context.getDirectories().get(context.activeTabKey(otherPaneId))?.location) ??
+        directory?.location;
+      if (target === undefined || destination === undefined) return;
+      event.preventDefault();
+      context.openCreateLink(target.location, destination);
+      context.redraw();
+      return;
     },
   },
   {

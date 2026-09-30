@@ -126,6 +126,7 @@ fn copy_request(source: Location, destination_directory: Location) -> StartOpera
         symlink_policy: Default::default(),
         permanent_delete_confirmed: false,
         override_read_only: false,
+        link: None,
     }
 }
 

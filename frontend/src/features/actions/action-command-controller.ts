@@ -98,6 +98,8 @@ export interface ActionCommandControllerContext {
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
   /** Starts the pane's F2 rename flow (inline, or multi-rename for several entries). */
   requestRename?(paneId: PaneId, entryIds: readonly EntryId[]): void;
+  /** Opens the Create link dialog for `target`, creating the link in `destination` (task 0168). */
+  openCreateLink?(target: Location, destination: Location): void;
   /** Toggles the directory-tree sidebar (task 0139). */
   toggleDirectoryTree(): void;
   /** Toggles the Operations Centre panel. */
@@ -406,6 +408,22 @@ export function createActionCommandController(
           paneId,
           targetEntries.map((entry) => entry.id),
         );
+      return;
+    }
+    if (action.id === 'core.createLink') {
+      const target = targetEntries.length === 1 ? targetEntries[0] : undefined;
+      const otherPaneId = context
+        .getWorkspace()
+        ?.paneOrder.find((candidate) => candidate !== paneId);
+      const destination =
+        (otherPaneId === undefined
+          ? undefined
+          : context.getDirectories().get(context.getActiveTabKey(otherPaneId))?.location) ??
+        directory?.location;
+      if (target !== undefined && destination !== undefined) {
+        context.openCreateLink?.(target.location, destination);
+        context.redraw();
+      }
       return;
     }
     // File operations run as confirmed, cancellable jobs through the operations controller - the

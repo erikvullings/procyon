@@ -47,6 +47,7 @@ async fn copy_directory_with_policy(
                 symlink_policy,
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -206,6 +207,7 @@ async fn cancellation_during_large_tree_planning_stops_before_writes() {
                 symlink_policy: SymlinkPolicyDto::CopyLink,
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )

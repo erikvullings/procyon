@@ -51,6 +51,7 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )

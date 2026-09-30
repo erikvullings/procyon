@@ -73,6 +73,8 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkOptions,
+  LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
   LlmProfile,
@@ -247,6 +249,7 @@ import {
   executeKnowledgeSearch as requestKnowledgeSearchExecution,
   planKnowledgeSearch as requestKnowledgeSearchPlan,
   resolveKnowledgeSource as requestKnowledgeSourceResolution,
+  getLinkOptions as requestLinkOptions,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
   createLlmProfile as requestLlmProfileCreation,
@@ -1563,6 +1566,17 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected startOperation response status: ${response.status}`);
     }
     return operationFromDto(response.data);
+  }
+
+  async getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions> {
+    const response = await requestLinkOptions(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getLinkOptions response status: ${response.status}`);
+    }
+    return response.data;
   }
 
   async listOperations(signal?: AbortSignal): Promise<Operation[]> {

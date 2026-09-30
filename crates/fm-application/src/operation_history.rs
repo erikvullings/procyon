@@ -315,6 +315,7 @@ pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -
             fm_operations::OperationKind::MoveToArchive => OperationKindDto::MoveToArchive,
             fm_operations::OperationKind::CreateDirectory => OperationKindDto::CreateDirectory,
             fm_operations::OperationKind::CreateFile => OperationKindDto::CreateFile,
+            fm_operations::OperationKind::CreateLink => OperationKindDto::CreateLink,
             fm_operations::OperationKind::Rename => OperationKindDto::Rename,
             fm_operations::OperationKind::Copy => OperationKindDto::Copy,
             fm_operations::OperationKind::Move => OperationKindDto::Move,

@@ -28,6 +28,7 @@ fn request(
         symlink_policy: Default::default(),
         permanent_delete_confirmed: confirmed,
         override_read_only,
+        link: None,
     }
 }
 

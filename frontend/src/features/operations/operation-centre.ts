@@ -63,6 +63,12 @@ function failureRecovery(code: string): string {
   if (code === 'insufficientSpace') {
     return t('operation', 'failureRecoveryInsufficientSpace');
   }
+  if (code === 'privilegeRequired') {
+    return t('operation', 'failureRecoveryPrivilegeRequired');
+  }
+  if (code === 'linkCycle') {
+    return t('operation', 'failureRecoveryLinkCycle');
+  }
   return t('operation', 'failureRecovery');
 }
 
@@ -138,6 +144,8 @@ function operationKindLabel(kind: OperationKind | null | undefined): string {
       return t('operation', 'kindCreateDirectory');
     case 'createFile':
       return t('operation', 'kindCreateFile');
+    case 'createLink':
+      return t('operation', 'kindCreateLink');
     case 'rename':
       return t('operation', 'kindRename');
     case 'copy':

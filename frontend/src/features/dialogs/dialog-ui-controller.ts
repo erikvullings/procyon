@@ -4,6 +4,7 @@ import type {
   FinderTag,
   Location,
 } from '../../models';
+import type { CreateLinkDialogRequest } from '../operations/create-link-dialog';
 
 export interface ArchiveCreateRequest {
   readonly sources: readonly Location[];
@@ -45,6 +46,7 @@ export interface DialogUIState {
   createDirectoryLocation: Location | undefined;
   createFileOpen: boolean;
   createFileLocation: Location | undefined;
+  createLinkRequest: CreateLinkDialogRequest | undefined;
   archiveCreateRequest: ArchiveCreateRequest | undefined;
   multiRenameOpen: boolean;
   multiRenameEntries: readonly EntrySummary[];
@@ -82,6 +84,8 @@ export interface DialogUIController {
     activeLocation: Location | undefined,
     createFile: (location: Location, name: string) => Promise<void>,
   ): void;
+  openCreateLink(request: CreateLinkDialogRequest): void;
+  cancelCreateLink(): void;
   openArchiveCreate(request: ArchiveCreateRequest): void;
   cancelArchiveCreate(): void;
   openMultiRename(
@@ -112,6 +116,7 @@ export function createDialogUIController(): DialogUIController {
     createDirectoryLocation: undefined,
     createFileOpen: false,
     createFileLocation: undefined,
+    createLinkRequest: undefined,
     archiveCreateRequest: undefined,
     multiRenameOpen: false,
     multiRenameEntries: [],
@@ -179,6 +184,14 @@ export function createDialogUIController(): DialogUIController {
       void createFile(location, name).catch(() => {
         state.pendingCreatedLocation = undefined;
       });
+    },
+
+    openCreateLink(request: CreateLinkDialogRequest): void {
+      state.createLinkRequest = request;
+    },
+
+    cancelCreateLink(): void {
+      state.createLinkRequest = undefined;
     },
 
     openArchiveCreate(request: ArchiveCreateRequest): void {

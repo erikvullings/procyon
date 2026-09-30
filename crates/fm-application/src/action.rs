@@ -464,6 +464,19 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::selection(),
         ),
         core_action(
+            "core.createLink",
+            "Create Link",
+            "fileOperations",
+            // Ctrl+Shift+F5 is Total Commander's "create symbolic link" shortcut.
+            vec![KeyChord {
+                key: "F5".to_owned(),
+                ctrl: true,
+                shift: true,
+                ..KeyChord::default()
+            }],
+            ActionContextRequirements::single_selection(),
+        ),
+        core_action(
             "core.createFile",
             "New File",
             "fileOperations",
@@ -1051,6 +1064,7 @@ mod tests {
             "core.toggleSelectionAndAdvance",
             "core.restoreSelection",
             "core.duplicate",
+            "core.createLink",
             "core.createFile",
             "core.rootDirectory",
             "core.openInNewTab",
@@ -1509,6 +1523,27 @@ mod tests {
         registry
             .require_available(&action_id, &ActionInvocationContext::default())
             .expect_err("duplicate must require a selection");
+    }
+
+    #[test]
+    fn create_link_requires_single_selection_and_uses_ctrl_shift_f5() {
+        let registry = ActionRegistry::with_core_actions(PlatformCapabilities::empty());
+        let action_id = ActionId::new("core.createLink");
+        let create_link = registry
+            .get(&action_id)
+            .expect("core.createLink must be registered");
+        assert_eq!(
+            create_link.default_shortcuts,
+            vec![KeyChord {
+                key: "F5".to_owned(),
+                ctrl: true,
+                shift: true,
+                ..KeyChord::default()
+            }]
+        );
+        registry
+            .require_available(&action_id, &ActionInvocationContext::default())
+            .expect_err("create link must require a selection");
     }
 
     #[test]

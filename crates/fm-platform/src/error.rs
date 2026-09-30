@@ -18,6 +18,12 @@ pub enum PlatformError {
         /// Path that could not be found.
         path: String,
     },
+    /// The destination path is already occupied and was not replaced.
+    #[error("path already exists: {path}")]
+    AlreadyExists {
+        /// Path that already exists.
+        path: String,
+    },
     /// The native call failed for a reason safe to report across layers.
     #[error("platform operation failed: {message}")]
     Io {

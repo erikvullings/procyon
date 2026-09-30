@@ -38,6 +38,7 @@ async fn copy(
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -115,6 +116,7 @@ async fn copies_multiple_selected_sources_in_one_operation() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -164,6 +166,7 @@ async fn skips_a_stale_source_and_copies_the_remaining_selection() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -336,6 +339,7 @@ async fn pause_and_resume_large_copy_retains_planned_totals() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )

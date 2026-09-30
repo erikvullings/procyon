@@ -33,10 +33,10 @@ use fm_transport_dto::{
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    InvokeActionRequestDto, ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto,
-    LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest, OperationDto,
-    PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto, RagScopeDto,
-    RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto, ListDirectoryRequest,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto,
+    RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
     RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
     ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
@@ -3377,6 +3377,22 @@ impl FileManagerService {
         platform_mapping::read_file_icon(&self.platform, uri)
     }
 
+    /// Lists the link kinds that can be created for `target` inside the
+    /// `destination` directory (task 0168). An empty list means the pair has no
+    /// link semantics, e.g. a remote provider or targets on different providers.
+    pub async fn link_options(
+        &self,
+        request: LinkOptionsRequestDto,
+    ) -> Result<LinkOptionsDto, ApplicationError> {
+        crate::link_operation::link_options(
+            &self.providers,
+            &self.platform,
+            &request.target.into(),
+            &request.destination.into(),
+        )
+        .await
+    }
+
     /// Reads an entry's Finder tags (task 0136). Missing capability support
     /// or a vanished entry are both reported as [`ApplicationError::NotFound`]
     /// so a lazy per-entry frontend loader can treat them as "no tags"
@@ -6233,6 +6249,7 @@ mod tests {
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,
+            link: None,
         }
     }
 
@@ -6847,6 +6864,7 @@ mod tests {
             symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,
+            link: None,
         })
         .expect("must serialize the operation request");
 

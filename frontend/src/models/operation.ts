@@ -7,6 +7,7 @@ export type OperationKind =
   | 'moveToArchive'
   | 'createDirectory'
   | 'createFile'
+  | 'createLink'
   | 'rename'
   | 'copy'
   | 'move'
@@ -16,6 +17,37 @@ export type OperationKind =
   | 'undo'
   | 'search'
   | 'compare';
+
+/** Link kinds a Create link operation can produce (task 0168); never interchangeable. */
+export type LinkKind = 'symbolicLink' | 'junction' | 'shortcut';
+
+/** Whether a symbolic link stores its target relative to the link or as an absolute path. */
+export type LinkTargetStyle = 'relative' | 'absolute';
+
+/** Preconditions explained before a link is created. */
+export type LinkRequirement = 'developerModeOrAdministrator' | 'localDirectoryTarget' | 'shellOnly';
+
+export interface LinkRequest {
+  kind: LinkKind;
+  targetStyle: LinkTargetStyle;
+}
+
+export interface LinkKindOption {
+  kind: LinkKind;
+  supportsRelative: boolean;
+  requirements: readonly LinkRequirement[];
+  suggestedName: string;
+}
+
+/** Link kinds supported for one target/destination pair, most portable first. */
+export interface LinkOptions {
+  kinds: readonly LinkKindOption[];
+}
+
+export interface LinkOptionsRequest {
+  target: Location;
+  destination: Location;
+}
 
 /** Operation lifecycle states (spec §17). */
 export type OperationState =

@@ -632,9 +632,15 @@ async fn metadata_is_separate_and_capabilities_are_truthful() {
     let provider = LocalFileSystemProvider::new();
 
     assert_eq!(provider.id(), ProviderId::new("local"));
+    let link_capabilities = if cfg!(windows) {
+        ProviderCapabilities::CREATE_SYMLINK | ProviderCapabilities::CREATE_JUNCTION
+    } else {
+        ProviderCapabilities::CREATE_SYMLINK
+    };
     assert_eq!(
         provider.capabilities(),
-        ProviderCapabilities::LIST
+        link_capabilities
+            | ProviderCapabilities::LIST
             | ProviderCapabilities::WATCH
             | ProviderCapabilities::CREATE_DIRECTORY
             | ProviderCapabilities::RENAME

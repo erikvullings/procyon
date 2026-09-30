@@ -270,6 +270,35 @@ pub trait FileSystemProvider: Send + Sync {
         })
     }
 
+    /// Creates a symbolic link at `link` storing `target` verbatim. The target text may be
+    /// relative to the link's parent and is never resolved or dereferenced. `target_is_directory`
+    /// selects the Windows directory-link flavour and is ignored where links are untyped.
+    async fn create_symlink(
+        &self,
+        link: &Location,
+        target: &str,
+        target_is_directory: bool,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        let _ = (link, target, target_is_directory, cancellation);
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::CREATE_SYMLINK,
+        })
+    }
+
+    /// Creates an NTFS directory junction at `link` pointing at the absolute directory `target`.
+    async fn create_junction(
+        &self,
+        link: &Location,
+        target: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        let _ = (link, target, cancellation);
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::CREATE_JUNCTION,
+        })
+    }
+
     /// Resolves a symbolic link for an explicit copy-target request.
     async fn resolve_symlink(
         &self,

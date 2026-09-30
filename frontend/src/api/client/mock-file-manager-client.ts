@@ -82,6 +82,8 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkOptions,
+  LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
   LlmProfile,
@@ -343,6 +345,7 @@ export type MockClientMethod =
   | 'removeApplicationDockIcon'
   | 'gitFileHistory'
   | 'startOperation'
+  | 'getLinkOptions'
   | 'listOperations'
   | 'cancelOperation'
   | 'undoOperation'
@@ -3478,6 +3481,25 @@ export class MockFileManagerClient implements FileManagerClient {
       };
       this.operations.set(operation.id, operation);
       return operation;
+    });
+  }
+
+  getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions> {
+    return this.perform('getLinkOptions', signal, () => {
+      const sameProvider = request.target.providerId === request.destination.providerId;
+      const name = request.target.uri.split('/').filter(Boolean).at(-1) ?? 'link';
+      return {
+        kinds: sameProvider
+          ? [
+              {
+                kind: 'symbolicLink',
+                supportsRelative: true,
+                requirements: [],
+                suggestedName: decodeURIComponent(name),
+              },
+            ]
+          : [],
+      };
     });
   }
 

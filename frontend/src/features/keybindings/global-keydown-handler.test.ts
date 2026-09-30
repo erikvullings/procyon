@@ -96,6 +96,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
   { id: 'core.createFile', title: 'New file', defaultShortcuts: [{ key: 'F4', shift: true }] },
   { id: 'core.duplicate', title: 'Duplicate', defaultShortcuts: [{ key: 'F5', shift: true }] },
   {
+    id: 'core.createLink',
+    title: 'Create Link',
+    defaultShortcuts: [{ key: 'F5', ctrl: true, shift: true }],
+  },
+  {
     id: 'core.openMultiRename',
     title: 'Multi-rename',
     defaultShortcuts: [{ key: 'm', ctrl: true }],
@@ -179,6 +184,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     getArchiveCreateRequest: () => undefined,
     getCreateDirectoryOpen: () => false,
     getCreateFileOpen: () => false,
+    getCreateLinkOpen: () => false,
     getAppState: () => undefined,
     getLastQuickFilterQuery: () => undefined,
     getShortcutsHelpOpen: () => false,
@@ -187,6 +193,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     setArchiveCreateRequest: vi.fn(),
     setCreateDirectoryOpen: vi.fn(),
     setCreateFileOpen: vi.fn(),
+    openCreateLink: vi.fn(),
     setAppState: vi.fn(),
     setQuickFilterOpen: vi.fn(),
     setActiveTabQuickFilter: vi.fn(),
@@ -548,6 +555,58 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     createGlobalKeydownHandler(context)(keydown('F5', { shiftKey: true }));
     await Promise.resolve();
     expect(duplicate).toHaveBeenCalledWith([src]);
+  });
+
+  it('Ctrl+Shift+F5 opens Create link for the cursor entry, targeting the other pane', () => {
+    const openCreateLink = vi.fn();
+    const target: EntrySummary = {
+      id: 'file-1' as never,
+      location: { providerId: 'local', uri: 'file:///a/file.txt' },
+      name: 'file.txt',
+      kind: 'file',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    };
+    const otherLocation: Location = { providerId: 'local', uri: 'file:///b' };
+    const context = makeContext({
+      openCreateLink,
+      getSelections: () =>
+        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: 'file-1' as never }]]),
+      getDirectories: () =>
+        new Map([
+          ['pane-a:tab', { entries: [target] } as unknown as PaneDirectoryView],
+          ['pane-b:tab', { entries: [], location: otherLocation } as unknown as PaneDirectoryView],
+        ]),
+    });
+    createGlobalKeydownHandler(context)(keydown('F5', { ctrlKey: true, shiftKey: true }));
+    expect(openCreateLink).toHaveBeenCalledWith(target.location, otherLocation);
+  });
+
+  it('Ctrl+Shift+F5 does nothing when several entries are selected', () => {
+    const openCreateLink = vi.fn();
+    const entry = (id: string): EntrySummary => ({
+      id: id as never,
+      location: { providerId: 'local', uri: `file:///a/${id}` },
+      name: id,
+      kind: 'file',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    });
+    const context = makeContext({
+      openCreateLink,
+      getSelections: () =>
+        new Map([
+          ['pane-a:tab', { selectedEntryIds: ['x', 'y'] as never, cursorEntryId: 'x' as never }],
+        ]),
+      getDirectories: () =>
+        new Map([
+          ['pane-a:tab', { entries: [entry('x'), entry('y')] } as unknown as PaneDirectoryView],
+        ]),
+    });
+    createGlobalKeydownHandler(context)(keydown('F5', { ctrlKey: true, shiftKey: true }));
+    expect(openCreateLink).not.toHaveBeenCalled();
   });
 
   it('Ctrl+M opens the Multi-Rename Tool directly', () => {

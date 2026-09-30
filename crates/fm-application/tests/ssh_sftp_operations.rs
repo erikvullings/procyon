@@ -153,6 +153,7 @@ async fn run_transfer(
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -329,6 +330,7 @@ async fn same_connection_sftp_move_uses_the_shared_operation_engine_and_the_serv
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -386,6 +388,7 @@ async fn cancelling_a_local_to_sftp_copy_mid_transfer_leaves_no_partial_file_any
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
