@@ -70,6 +70,19 @@ export function linkNameStemEnd(name: string): number {
   return dot > 0 ? dot : base.length;
 }
 
+/** Names the only available kind in the title (no choice to offer), else the generic title. */
+export function dialogTitle(options: readonly LinkKindOption[] | undefined): string {
+  if (options?.length !== 1) return t('operation', 'createLinkTitle');
+  switch (options[0]?.kind) {
+    case 'symbolicLink':
+      return t('operation', 'createSymbolicLinkTitle');
+    case 'junction':
+      return t('operation', 'createJunctionTitle');
+    default:
+      return t('operation', 'createShortcutTitle');
+  }
+}
+
 function focusNameStem(): void {
   const input = document.getElementById('create-link-name');
   if (!(input instanceof HTMLInputElement)) return;
@@ -91,7 +104,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
   let options: readonly LinkKindOption[] | undefined;
   let loadError: string | undefined;
   let selectedKind: LinkKind | undefined;
-  let targetStyle: LinkTargetStyle = 'relative';
+  let targetStyle: LinkTargetStyle = 'absolute';
   let name = '';
   let nameEdited = false;
   let nameError: string | undefined;
@@ -114,7 +127,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
     options = undefined;
     loadError = undefined;
     selectedKind = undefined;
-    targetStyle = 'relative';
+    targetStyle = 'absolute';
     name = '';
     nameEdited = false;
     nameError = undefined;
@@ -180,21 +193,23 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
         }),
       ]),
       nameError === undefined ? undefined : m('.fm-field-error', nameError),
-      m('label', [
-        m('span', t('operation', 'linkKind')),
-        m(
-          'select.browser-default#create-link-kind',
-          {
-            value: selectedKind,
-            onchange: (event: Event) => {
-              selectKind((event.currentTarget as HTMLSelectElement).value as LinkKind);
-            },
-          },
-          options.map((candidate) =>
-            m('option', { value: candidate.kind }, linkKindLabel(candidate.kind)),
-          ),
-        ),
-      ]),
+      options.length < 2
+        ? undefined
+        : m('label', [
+            m('span', t('operation', 'linkKind')),
+            m(
+              'select.browser-default#create-link-kind',
+              {
+                value: selectedKind,
+                onchange: (event: Event) => {
+                  selectKind((event.currentTarget as HTMLSelectElement).value as LinkKind);
+                },
+              },
+              options.map((candidate) =>
+                m('option', { value: candidate.kind }, linkKindLabel(candidate.kind)),
+              ),
+            ),
+          ]),
       option?.supportsRelative === true
         ? m('label', [
             m('span', t('operation', 'linkTargetStyle')),
@@ -207,8 +222,8 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
                 },
               },
               [
-                m('option', { value: 'relative' }, t('operation', 'linkTargetRelative')),
                 m('option', { value: 'absolute' }, t('operation', 'linkTargetAbsolute')),
+                m('option', { value: 'relative' }, t('operation', 'linkTargetRelative')),
               ],
             ),
           ])
@@ -231,7 +246,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
     onupdate: ({ attrs }) => syncRequest(attrs),
     view: ({ attrs }) =>
       m(ModalPanel, {
-        title: t('operation', 'createLinkTitle'),
+        title: dialogTitle(options),
         className: 'fm-dense-modal',
         description: m('.fm-create-directory-field', body(attrs)),
         isOpen: attrs.request !== undefined,
