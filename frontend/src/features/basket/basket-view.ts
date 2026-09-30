@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
-import { copyIcon, trashIcon } from '../../components/tabler-icons';
+import { trashIcon } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import { formatListingSummary, sizeLabel } from '../panes/pane-status-summary';
@@ -13,8 +14,8 @@ function basketGlyph(path: string): m.Children {
     {
       'aria-hidden': 'true',
       viewBox: '0 0 24 24',
-      width: 16,
-      height: 16,
+      width: 18,
+      height: 18,
       fill: 'none',
       stroke: 'currentColor',
       'stroke-width': 2,
@@ -39,7 +40,9 @@ export interface BasketViewAttrs {
   readonly onDeselectAll: () => void;
   readonly onRemove: (key: string) => void;
   readonly onClear: () => void;
-  readonly onAction: (kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete') => void;
+  readonly onAction: (
+    kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete' | 'copyNames' | 'copyPaths',
+  ) => void;
 }
 
 /** Virtualized collection list; the native checkboxes/buttons provide keyboard and screen-reader access. */
@@ -77,10 +80,14 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
         disabled: boolean,
         className: string,
       ): m.Children =>
-        m(
-          `button.btn-flat.${className}`,
-          { type: 'button', title: label, 'aria-label': label, onclick, disabled },
-          icon,
+        tooltip(
+          label,
+          m(
+            `button.btn-flat.${className}`,
+            { type: 'button', 'aria-label': label, onclick, disabled },
+            icon,
+          ),
+          { 'data-tooltip-placement': 'above' },
         );
       return m('.fm-basket', [
         m('.fm-basket-header', [
@@ -268,13 +275,19 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
                       ? t('button', 'delete')
                       : t('operation', kind),
                 kind === 'copy'
-                  ? copyIcon({ size: 16 })
+                  ? basketGlyph(
+                      'M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666 M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1',
+                    )
                   : kind === 'delete'
-                    ? trashIcon({ size: 16 })
+                    ? trashIcon({ size: 18 })
                     : kind === 'move'
-                      ? basketGlyph('M4 6h7v4 M4 6v13h16v-8 M9 12h11m-4-4 4 4-4 4')
+                      ? basketGlyph(
+                          'M14 3v4a1 1 0 0 0 1 1h4 M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2 M9 15h6 M12.5 17.5l2.5 -2.5l-2.5 -2.5',
+                        )
                       : kind === 'checksum'
-                        ? basketGlyph('M12 3l8 3v6c0 5-3 8-8 9-5-1-8-4-8-9V6z M9 10h6m-6 4h6')
+                        ? basketGlyph(
+                            'M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06 M15 19l2 2l4 -4',
+                          )
                         : basketGlyph('M3 5h18v4H3z M5 9v11h14V9 M12 11v6m-3-3 3 3 3-3'),
                 () => attrs.onAction(kind),
                 attrs.busy ||
@@ -284,6 +297,26 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
                 'fm-basket-action',
               ),
             ),
+            m('.fm-basket-clipboard', [
+              iconButton(
+                t('basket', 'copyNames'),
+                basketGlyph(
+                  'M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2 M9 5a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2',
+                ),
+                () => attrs.onAction('copyNames'),
+                attrs.busy || !actionable,
+                'fm-basket-clipboard-action',
+              ),
+              iconButton(
+                t('basket', 'copyPaths'),
+                basketGlyph(
+                  'M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2 M9 5a2 2 0 0 1 2 -2h2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2 M9 12l.01 0 M13 12l2 0 M9 16l.01 0 M13 16l2 0',
+                ),
+                () => attrs.onAction('copyPaths'),
+                attrs.busy || !actionable,
+                'fm-basket-clipboard-action',
+              ),
+            ]),
           ),
         ]),
         m('.fm-pane-status.fm-basket-status', { role: 'status' }, [

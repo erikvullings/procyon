@@ -15,6 +15,8 @@ export const pl = {
     selectAll: 'Zaznacz wszystko',
     deselectAll: 'Odznacz wszystko',
     clear: 'Opróżnij koszyk',
+    copyNames: 'Kopiuj nazwy plików do schowka',
+    copyPaths: 'Kopiuj pełne ścieżki do schowka',
     resizeName: 'Zmień szerokość kolumny Nazwa',
     calculatingSizes: 'Obliczanie rozmiarów folderów…',
     folderSizeFailed: {

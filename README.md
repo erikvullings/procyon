@@ -184,8 +184,10 @@ the size of available files and recursively measured folders, the checked subset
 references. Folder sizes are calculated when the basket opens (and when a folder is added); until
 then the displayed size is a partial total.
 
-Check individual entries or use the icon buttons (with tooltips) to **Select all** before running
-an action. **Deselect all** leaves the collection intact; **Empty basket** removes its references.
+Check individual entries or use the icon buttons (with localized tooltips) to **Select all** before
+running an action. The clipboard buttons copy checked, available filenames or full paths as
+newline-separated text without changing the basket. **Deselect all** leaves the collection intact;
+**Empty basket** removes its references.
 The Name/Location divider can be dragged or adjusted with arrow keys. Copy, move, and archive target the
 directory in the other pane; checksums and delete use their existing flows. Actions are unavailable
 when nothing is checked, and Copy and Move show the normal operation confirmation before starting.

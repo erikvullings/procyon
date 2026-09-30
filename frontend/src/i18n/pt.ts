@@ -15,6 +15,8 @@ export const pt = {
     selectAll: 'Selecionar tudo',
     deselectAll: 'Desmarcar tudo',
     clear: 'Esvaziar cesto',
+    copyNames: 'Copiar nomes dos ficheiros para a área de transferência',
+    copyPaths: 'Copiar caminhos completos para a área de transferência',
     resizeName: 'Redimensionar coluna Nome',
     calculatingSizes: 'A calcular tamanhos das pastas…',
     folderSizeFailed: {

@@ -15,6 +15,8 @@ export const fr = {
     selectAll: 'Tout sélectionner',
     deselectAll: 'Tout désélectionner',
     clear: 'Vider le panier',
+    copyNames: 'Copier les noms de fichiers dans le presse-papiers',
+    copyPaths: 'Copier les chemins complets dans le presse-papiers',
     resizeName: 'Redimensionner la colonne Nom',
     calculatingSizes: 'Calcul de la taille des dossiers…',
     folderSizeFailed: {

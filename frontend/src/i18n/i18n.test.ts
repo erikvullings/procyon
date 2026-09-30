@@ -48,6 +48,29 @@ describe('i18n', () => {
   });
 
   describe('runtime switching', () => {
+    it.each(LOCALES)('localises both basket clipboard tooltips in %s', (locale) => {
+      setLocale(locale);
+      const basketTooltipKeys = [
+        'selectAll',
+        'deselectAll',
+        'clear',
+        'copyNames',
+        'copyPaths',
+      ] as const;
+      for (const key of basketTooltipKeys) {
+        expect(t('basket', key)).toBe(catalogues[locale].basket[key]);
+      }
+      expect(t('checksums', 'title')).toBe(catalogues[locale].checksums.title);
+      expect(t('archiveCreate', 'createTitle')).toBe(catalogues[locale].archiveCreate.createTitle);
+      expect(t('button', 'delete')).toBe(catalogues[locale].button.delete);
+      expect(t('operation', 'copy')).toBe(catalogues[locale].operation.copy);
+      expect(t('operation', 'move')).toBe(catalogues[locale].operation.move);
+      if (locale !== 'en') {
+        expect(t('basket', 'copyNames')).not.toBe(catalogues.en.basket.copyNames);
+        expect(t('basket', 'copyPaths')).not.toBe(catalogues.en.basket.copyPaths);
+      }
+    });
+
     it('switches to Dutch without a page reload', () => {
       setLocale('nl');
       expect(getLocale()).toBe('nl');

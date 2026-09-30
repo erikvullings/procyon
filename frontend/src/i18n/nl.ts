@@ -15,6 +15,8 @@ export const nl = {
     selectAll: 'Alles selecteren',
     deselectAll: 'Selectie opheffen',
     clear: 'Mand leegmaken',
+    copyNames: 'Bestandsnamen naar klembord kopiëren',
+    copyPaths: 'Volledige paden naar klembord kopiëren',
     resizeName: 'Breedte van kolom Naam aanpassen',
     calculatingSizes: 'Mapgroottes berekenen…',
     folderSizeFailed: {

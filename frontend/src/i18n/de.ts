@@ -15,6 +15,8 @@ export const de = {
     selectAll: 'Alle auswählen',
     deselectAll: 'Auswahl aufheben',
     clear: 'Korb leeren',
+    copyNames: 'Dateinamen in die Zwischenablage kopieren',
+    copyPaths: 'Vollständige Pfade in die Zwischenablage kopieren',
     resizeName: 'Breite der Spalte Name ändern',
     calculatingSizes: 'Ordnergrößen werden berechnet…',
     folderSizeFailed: {

@@ -1383,9 +1383,9 @@ describe('AppShell', () => {
     expect(actions()).toHaveLength(5);
     expect(actions().every((button) => button.disabled)).toBe(true);
     expect(root.querySelector('.fm-basket-destination')).toBeNull();
-    expect(root.querySelector('.fm-basket-options button')?.getAttribute('title')).toBe(
-      'Select all',
-    );
+    expect(
+      root.querySelector('.fm-basket-options [data-tooltip]')?.getAttribute('data-tooltip'),
+    ).toBe('Select all');
     expect(root.querySelector('.fm-basket-header h2')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('.fm-basket-options button')?.click();
@@ -1413,6 +1413,46 @@ describe('AppShell', () => {
     clear?.click();
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(0));
     expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 0 files');
+  });
+
+  it('copies checked basket filenames and full paths without copying unchecked entries', async () => {
+    const client = new MockFileManagerClient();
+    const getEntryMetadata = vi.spyOn(client, 'getEntryMetadata');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
+    directoryRowNamed(root, '.env')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    directoryRowNamed(root, 'Documents')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
+    await vi.waitFor(() => expect(getEntryMetadata).toHaveBeenCalledTimes(2));
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+
+    const names = root.querySelector<HTMLButtonElement>(
+      '.fm-basket-clipboard button[aria-label="Copy filenames to clipboard"]',
+    );
+    const paths = root.querySelector<HTMLButtonElement>(
+      '.fm-basket-clipboard button[aria-label="Copy full paths to clipboard"]',
+    );
+    expect(names?.disabled).toBe(true);
+    expect(paths?.disabled).toBe(true);
+    expect(names?.closest('[data-tooltip]')?.getAttribute('data-tooltip')).toBe(
+      'Copy filenames to clipboard',
+    );
+    expect(names?.hasAttribute('title')).toBe(false);
+
+    root.querySelector<HTMLInputElement>('input[aria-label="Select .env"]')?.click();
+    await vi.waitFor(() => expect(names?.disabled).toBe(false));
+    names?.click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('.env'));
+    expect(getEntryMetadata).toHaveBeenCalledTimes(3);
+    root.querySelector<HTMLInputElement>('input[aria-label="Select Documents"]')?.click();
+    await vi.waitFor(() => expect(paths?.disabled).toBe(false));
+    paths?.click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/.env\n/Documents'));
+    expect(getEntryMetadata).toHaveBeenCalledTimes(5);
   });
 
   it('keeps every function-key action available in the compact command grid', async () => {

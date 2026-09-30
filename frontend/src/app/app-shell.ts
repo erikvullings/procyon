@@ -59,6 +59,7 @@ import {
 } from '../features/checksums/checksum-state';
 import { DuplicateReviewView } from '../features/checksums/duplicate-review-view';
 import { emptyClipboard, validatePasteTarget } from '../features/clipboard/clipboard';
+import { writeSystemClipboardText } from '../features/clipboard/copy-selection-actions';
 import { CommandPalette } from '../features/command-palette/command-palette';
 import {
   evaluateActionAvailability,
@@ -2812,7 +2813,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   function runBasketAction(
     paneId: PaneId,
-    kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete',
+    kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete' | 'copyNames' | 'copyPaths',
   ): void {
     const current = workspace;
     if (current === undefined || basketBusy) return;
@@ -2825,6 +2826,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         if (workspace?.id !== current.id || basketFor(current.id) !== checked) return;
         const sources = basketSources(checked);
         const selected = new Set(checked.selectedKeys);
+        if (kind === 'copyNames' || kind === 'copyPaths') {
+          const items = checked.items.filter(
+            (item) => selected.has(item.key) && item.status === 'ready',
+          );
+          if (items.length === 0) {
+            toast({ html: t('basket', 'noAvailable') });
+            return;
+          }
+          await writeSystemClipboardText(
+            items
+              .map((item) => (kind === 'copyNames' ? item.name : pathFromUri(item.location.uri)))
+              .join('\n'),
+          );
+          return;
+        }
         if (
           findBasketOverlap(
             checked.items.filter((item) => item.status === 'ready' && selected.has(item.key)),
@@ -2887,7 +2903,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         else await opsController.move(sources, destination.location);
       })
       .catch((error: unknown) => {
-        toast({ html: workspaceErrorMessage(error, t('basket', 'actionFailed')) });
+        toast({
+          html: workspaceErrorMessage(
+            error,
+            kind === 'copyNames' || kind === 'copyPaths'
+              ? t('clipboard', 'writeFailed')
+              : t('basket', 'actionFailed'),
+          ),
+        });
       });
   }
   let actionCommandController: ActionCommandController;

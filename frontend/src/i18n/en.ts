@@ -14,6 +14,8 @@ export const en = {
     selectAll: 'Select all',
     deselectAll: 'Deselect all',
     clear: 'Empty basket',
+    copyNames: 'Copy filenames to clipboard',
+    copyPaths: 'Copy full paths to clipboard',
     resizeName: 'Resize Name column',
     calculatingSizes: 'Calculating folder sizes…',
     folderSizeFailed: {

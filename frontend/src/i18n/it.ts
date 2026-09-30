@@ -15,6 +15,8 @@ export const it = {
     selectAll: 'Seleziona tutto',
     deselectAll: 'Deseleziona tutto',
     clear: 'Svuota raccolta',
+    copyNames: 'Copia i nomi dei file negli appunti',
+    copyPaths: 'Copia i percorsi completi negli appunti',
     resizeName: 'Ridimensiona la colonna Nome',
     calculatingSizes: 'Calcolo delle dimensioni delle cartelle…',
     folderSizeFailed: {

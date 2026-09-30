@@ -15,6 +15,8 @@ export const es = {
     selectAll: 'Seleccionar todo',
     deselectAll: 'Deseleccionar todo',
     clear: 'Vaciar la cesta',
+    copyNames: 'Copiar nombres de archivos al portapapeles',
+    copyPaths: 'Copiar rutas completas al portapapeles',
     resizeName: 'Cambiar el ancho de la columna Nombre',
     calculatingSizes: 'Calculando tamaños de carpetas…',
     folderSizeFailed: {
