@@ -13,6 +13,8 @@ export interface BasketViewAttrs {
   readonly addShortcut?: string;
   readonly onAdd: () => void;
   readonly onToggle: (key: string) => void;
+  readonly onSelectAll: () => void;
+  readonly onDeselectAll: () => void;
   readonly onRemove: (key: string) => void;
   readonly onClear: () => void;
   readonly onPersist: (enabled: boolean) => void;
@@ -34,7 +36,10 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
       const selected = new Set(basket.selectedKeys);
       const summary = basketSummary(basket);
       const actionable = basket.items.some(
-        (item) => item.status === 'ready' && (selected.size === 0 || selected.has(item.key)),
+        (item) => item.status === 'ready' && selected.has(item.key),
+      );
+      const actionableFile = basket.items.some(
+        (item) => item.kind === 'file' && item.status === 'ready' && selected.has(item.key),
       );
       return m('.fm-basket', [
         m('.fm-basket-header', [
@@ -57,7 +62,6 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
             role: 'list',
             'aria-label': t('basket', 'list'),
             'aria-description': t('basket', 'hint'),
-            title: t('basket', 'hint'),
             oncreate: ({ dom }) => {
               const element = dom as HTMLElement;
               viewportHeight = element.clientHeight || viewportHeight;
@@ -133,13 +137,40 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
         m('.fm-basket-actions', [
           m('.fm-basket-options', [
             m(
-              'button.fm-basket-tool',
-              { type: 'button', onclick: attrs.onRefresh, disabled: attrs.busy },
-              t('basket', 'check'),
+              'button.btn-flat.fm-basket-tool',
+              {
+                type: 'button',
+                onclick: attrs.onSelectAll,
+                disabled:
+                  attrs.busy || basket.items.length === 0 || selected.size === basket.items.length,
+              },
+              t('basket', 'selectAll'),
             ),
             m(
-              'button.fm-basket-tool',
-              { type: 'button', onclick: attrs.onClear, disabled: basket.items.length === 0 },
+              'button.btn-flat.fm-basket-tool',
+              {
+                type: 'button',
+                onclick: attrs.onDeselectAll,
+                disabled: attrs.busy || selected.size === 0,
+              },
+              t('basket', 'deselectAll'),
+            ),
+            m(
+              'button.btn-flat.fm-basket-tool',
+              {
+                type: 'button',
+                onclick: attrs.onRefresh,
+                disabled: attrs.busy || basket.items.length === 0,
+              },
+              t('basket', 'refresh'),
+            ),
+            m(
+              'button.btn-flat.fm-basket-tool.fm-basket-clear',
+              {
+                type: 'button',
+                onclick: attrs.onClear,
+                disabled: attrs.busy || basket.items.length === 0,
+              },
               t('basket', 'clear'),
             ),
             m('label.fm-basket-persist', [
@@ -152,21 +183,14 @@ export const BasketView: FactoryComponent<BasketViewAttrs> = () => {
               m('span.fm-basket-persist-label', t('basket', 'persist')),
             ]),
           ]),
-          attrs.destination === undefined
-            ? m('span.fm-basket-destination', t('basket', 'noDestination'))
-            : m(
-                'span.fm-basket-destination',
-                { title: attrs.destination.uri },
-                t('basket', 'destination', { uri: attrs.destination.uri }),
-              ),
           ...(['copy', 'move', 'checksum', 'archive', 'delete'] as const).map((kind) =>
             m(
-              'button.fm-basket-action',
+              'button.btn-flat.fm-basket-action',
               {
                 type: 'button',
                 disabled:
                   attrs.busy ||
-                  !actionable ||
+                  (kind === 'checksum' ? !actionableFile : !actionable) ||
                   ((kind === 'copy' || kind === 'move' || kind === 'archive') &&
                     attrs.destination === undefined),
                 onclick: () => attrs.onAction(kind),

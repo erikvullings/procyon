@@ -2676,8 +2676,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   async function recheckBasket(workspaceId: string, selectedOnly = false): Promise<BasketState> {
     const before = basketFor(workspaceId);
     const visibleEntries = [...directories.values()].flatMap((directory) => directory.entries);
-    const selected =
-      selectedOnly && before.selectedKeys.length > 0 ? new Set(before.selectedKeys) : undefined;
+    const selected = selectedOnly ? new Set(before.selectedKeys) : undefined;
     basketBusy = true;
     m.redraw();
     try {
@@ -2719,6 +2718,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   ): void {
     const current = workspace;
     if (current === undefined || basketBusy) return;
+    if (basketFor(current.id).selectedKeys.length === 0) {
+      toast({ html: t('basket', 'noSelected') });
+      return;
+    }
     void recheckBasket(current.id, true)
       .then(async (checked) => {
         if (workspace?.id !== current.id || basketFor(current.id) !== checked) return;
@@ -4650,6 +4653,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 : [...basket.selectedKeys, key],
                             ),
                           ),
+                        onSelectAll: () => {
+                          const currentBasket = basketFor(workspaceId);
+                          updateBasket(
+                            workspaceId,
+                            selectBasketItems(
+                              currentBasket,
+                              currentBasket.items.map((item) => item.key),
+                            ),
+                          );
+                        },
+                        onDeselectAll: () =>
+                          updateBasket(workspaceId, selectBasketItems(basketFor(workspaceId), [])),
                         onRemove: (key) =>
                           updateBasket(workspaceId, removeFromBasket(basketFor(workspaceId), key)),
                         onClear: () =>

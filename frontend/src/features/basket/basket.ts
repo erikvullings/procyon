@@ -17,7 +17,6 @@ export interface BasketItem {
 
 export interface BasketState {
   readonly items: readonly BasketItem[];
-  /** An empty selection means "use the complete basket". */
   readonly selectedKeys: readonly string[];
   readonly persist: boolean;
 }
@@ -75,7 +74,7 @@ export function selectBasketItems(state: BasketState, keys: readonly string[]): 
 export function basketSources(state: BasketState): readonly Location[] {
   const selected = new Set(state.selectedKeys);
   return state.items
-    .filter((item) => (selected.size === 0 || selected.has(item.key)) && item.status === 'ready')
+    .filter((item) => selected.has(item.key) && item.status === 'ready')
     .map((item) => item.location);
 }
 

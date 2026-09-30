@@ -4687,8 +4687,33 @@ input[type="text"].fm-shortcuts-help-capture-input {
   border-bottom: 1px solid var(--fm-border);
 }
 
-.fm-basket-action {
+.fm-basket-actions .btn-flat {
+  height: 24px;
   min-height: 24px;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--fm-text);
+  font: inherit;
+  text-transform: none;
+}
+
+.fm-basket-actions .btn-flat:not(:disabled):hover,
+.fm-basket-actions .btn-flat:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-basket-actions .btn-flat:disabled {
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.fm-basket-actions .fm-basket-clear:not(:disabled) {
+  color: var(--fm-error);
 }
 
 .fm-basket-add {
@@ -4835,12 +4860,4 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-basket-actions {
   border-top: 1px solid var(--fm-border);
   border-bottom: 0;
-}
-
-.fm-basket-destination {
-  flex-basis: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

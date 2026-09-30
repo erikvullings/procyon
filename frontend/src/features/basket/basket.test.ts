@@ -43,7 +43,7 @@ describe('collection basket', () => {
     expect(removeFromBasket(basket, basket.items[0]!.key).items).toHaveLength(1);
   });
 
-  it('runs only the checked subset, but runs all when none are checked', () => {
+  it('runs only checked entries and none when no entries are checked', () => {
     const basket = addToBasket(emptyBasket, [
       entry('a', 'local', 'file:///a'),
       entry('b', 'sftp', 'sftp://server/b'),
@@ -51,7 +51,7 @@ describe('collection basket', () => {
     expect(basketSources(selectBasketItems(basket, [basket.items[1]!.key]))).toEqual([
       basket.items[1]!.location,
     ]);
-    expect(basketSources(basket)).toHaveLength(2);
+    expect(basketSources(basket)).toEqual([]);
   });
 
   it('summarizes mixed entries and counts only available, known file sizes', () => {
@@ -122,8 +122,12 @@ describe('collection basket', () => {
       entry('c', 'local', 'file:///c'),
       entry('d', 'sftp', 'sftp://two/d'),
     ]);
-    const checked = await refreshBasket(basket, async (item) =>
-      item.id === 'b' ? 'missing' : item.id === 'c' ? 'stale' : 'ready',
+    const checked = await refreshBasket(
+      selectBasketItems(
+        basket,
+        basket.items.map((item) => item.key),
+      ),
+      async (item) => (item.id === 'b' ? 'missing' : item.id === 'c' ? 'stale' : 'ready'),
     );
     expect(basketSources(checked)).toEqual([basket.items[0]!.location, basket.items[3]!.location]);
   });

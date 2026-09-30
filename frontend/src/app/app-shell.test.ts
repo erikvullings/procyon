@@ -1225,6 +1225,9 @@ describe('AppShell', () => {
     (await toolbarButton('Open collection basket')).click();
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
     root.querySelector<HTMLInputElement>('input[aria-label="Select .env"]')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-basket-action')?.disabled).toBe(false),
+    );
     root.querySelector<HTMLButtonElement>('.fm-basket-action')?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
@@ -1236,6 +1239,54 @@ describe('AppShell', () => {
     await confirmRoutineOperation('Cancel');
     expect(startOperation).not.toHaveBeenCalled();
     expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2);
+  });
+
+  it('selects and deselects basket items without deleting them or running unchecked actions', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
+    directoryRowNamed(root, '.env')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    directoryRowNamed(root, 'Documents')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
+    const actions = () => [...root.querySelectorAll<HTMLButtonElement>('.fm-basket-action')];
+    expect(actions()).toHaveLength(5);
+    expect(actions().every((button) => button.disabled)).toBe(true);
+    expect(root.querySelector('.fm-basket-destination')).toBeNull();
+    expect(root.querySelector('.fm-basket-options')?.textContent).toContain('Refresh references');
+
+    root.querySelector<HTMLButtonElement>('.fm-basket-options button')?.click();
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLInputElement>('.fm-basket-select input')].every(
+          (input) => input.checked,
+        ),
+      ).toBe(true),
+    );
+    expect(actions().every((button) => !button.disabled)).toBe(true);
+    const deselect = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-basket-options button'),
+    ].find((button) => button.textContent?.includes('Deselect all'));
+    deselect?.click();
+    await vi.waitFor(() => expect(actions().every((button) => button.disabled)).toBe(true));
+    expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2);
+    expect(startOperation).not.toHaveBeenCalled();
+
+    root.querySelector<HTMLInputElement>('input[aria-label="Select Documents"]')?.click();
+    await vi.waitFor(() => expect(actions()[0]?.disabled).toBe(false));
+    expect(actions()[2]?.disabled).toBe(true);
+    root.querySelector<HTMLInputElement>('input[aria-label="Select Documents"]')?.click();
+    await vi.waitFor(() => expect(actions().every((button) => button.disabled)).toBe(true));
+
+    const clear = [...root.querySelectorAll<HTMLButtonElement>('.fm-basket-options button')].find(
+      (button) => button.textContent?.includes('Clear basket'),
+    );
+    clear?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(0));
+    expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 0 files');
   });
 
   it('keeps every function-key action available in the compact command grid', async () => {

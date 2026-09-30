@@ -181,10 +181,11 @@ Adding an entry again updates its reference rather than duplicating it. The bask
 files or replace the clipboard. Its status bar shows file and folder counts, the sum of known
 available file sizes, the checked subset, and any unavailable references.
 
-Check individual entries to act on a subset, or leave all unchecked to act on every available
-entry. Copy, move, and archive target the directory in the other pane; checksums and delete use
-their existing flows. Copy and move show the normal operation confirmation before starting.
-Use **Check items** to recheck references; unavailable entries are excluded from actions. The
+Check individual entries or use **Select all** before running an action. **Deselect all** leaves
+the collection intact; **Clear basket** removes its references. Copy, move, and archive target the
+directory in the other pane; checksums and delete use their existing flows. Actions are unavailable
+when nothing is checked, and Copy and Move show the normal operation confirmation before starting.
+Use **Refresh references** to recheck availability; unavailable entries are excluded from actions. The
 basket survives navigation, and **Restore this workspace basket after restart** opts its
 references into local restart persistence. Restored entries must be rechecked before use.
 For remote providers with path-based identities, the recheck also compares known size and
