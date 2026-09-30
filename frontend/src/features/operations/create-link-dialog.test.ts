@@ -116,11 +116,14 @@ describe('CreateLinkDialog', () => {
     const input = document.querySelector<HTMLInputElement>('#create-link-name');
     expect(input?.value).toBe('résumé.txt');
     expect(root.textContent).toContain('Developer Mode');
-    select('#create-link-target-style', 'absolute');
+    expect(document.querySelector<HTMLSelectElement>('#create-link-target-style')?.value).toBe(
+      'absolute',
+    );
+    select('#create-link-target-style', 'relative');
     pressEnter();
     expect(onConfirm).toHaveBeenCalledWith('résumé.txt', {
       kind: 'symbolicLink',
-      targetStyle: 'absolute',
+      targetStyle: 'relative',
     });
   });
 
@@ -135,6 +138,17 @@ describe('CreateLinkDialog', () => {
     pressEnter();
     expect(onConfirm).toHaveBeenCalledWith('résumé.txt.lnk', {
       kind: 'shortcut',
+      targetStyle: 'absolute',
+    });
+  });
+
+  it('names the only available kind in the title instead of offering a choice', async () => {
+    const { onConfirm } = await mountDialog({ kinds: [symlink] });
+    expect(document.querySelector('#create-link-kind')).toBeNull();
+    expect(document.body.textContent).toContain('Create symbolic link');
+    pressEnter();
+    expect(onConfirm).toHaveBeenCalledWith('résumé.txt', {
+      kind: 'symbolicLink',
       targetStyle: 'absolute',
     });
   });
