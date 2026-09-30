@@ -202,6 +202,7 @@ export const de = {
     copyRelativePath: 'Relativen Pfad kopieren',
     compareDirectories: 'Verzeichnisse vergleichen',
     createFile: 'Neue Datei',
+    createLink: 'Verknüpfung erstellen',
     duplicate: 'Duplizieren',
     quit: 'Beenden',
     sortByName: 'Nach Name sortieren',
@@ -405,6 +406,28 @@ export const de = {
     kindMoveToArchive: 'In Archiv verschieben',
     kindCreateDirectory: 'Verzeichnis erstellen',
     kindCreateFile: 'Datei erstellen',
+    kindCreateLink: 'Verknüpfung erstellen',
+    createLinkTitle: 'Verknüpfung erstellen',
+    linkName: 'Name der Verknüpfung',
+    linkKind: 'Verknüpfungstyp',
+    linkKindSymbolicLink: 'Symbolischer Link',
+    linkKindJunction: 'Verzeichnisverbindung (NTFS)',
+    linkKindShortcut: 'Verknüpfung (.lnk)',
+    linkTargetStyle: 'Zielpfad',
+    linkTargetRelative: 'Relativ zur Verknüpfung',
+    linkTargetAbsolute: 'Absolut',
+    linkRequirementDeveloperMode:
+      'Windows erlaubt symbolische Links nur mit aktiviertem Entwicklermodus oder wenn Procyon als Administrator läuft.',
+    linkRequirementLocalDirectory:
+      'Verzeichnisverbindungen können nur auf ein Verzeichnis auf einem lokalen Laufwerk zeigen.',
+    linkRequirementShellOnly:
+      'Verknüpfungen werden nur vom Windows-Explorer und Shell-fähigen Apps aufgelöst, nicht von anderen Programmen.',
+    linkLoadingOptions: 'Verfügbare Verknüpfungstypen werden geprüft…',
+    linkUnsupported: 'Zwischen diesen Orten können keine Verknüpfungen erstellt werden.',
+    failureRecoveryPrivilegeRequired:
+      'Für diese Verknüpfung sind zusätzliche Rechte nötig. Aktivieren Sie den Entwicklermodus, starten Sie Procyon als Administrator oder erstellen Sie stattdessen eine .lnk-Verknüpfung.',
+    failureRecoveryLinkCycle:
+      'Die Verknüpfung würde auf sich selbst oder ihr eigenes übergeordnetes Verzeichnis zeigen. Wählen Sie ein anderes Ziel.',
     kindRename: 'Umbenennen',
     kindCopy: 'Kopieren',
     kindMove: 'Verschieben',

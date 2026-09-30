@@ -44,6 +44,7 @@ import { ArchiveCreateDialog, type ArchiveFormat } from '../operations/archive-c
 import { ConflictDialog } from '../operations/conflict-dialog';
 import { CreateDirectoryDialog } from '../operations/create-directory-dialog';
 import { CreateFileDialog } from '../operations/create-file-dialog';
+import { CreateLinkDialog } from '../operations/create-link-dialog';
 import { MultiRenameDialog } from '../operations/multi-rename-dialog';
 import { OperationCentre } from '../operations/operation-centre';
 import { OperationConfirmationDialog } from '../operations/operation-confirmation-dialog';
@@ -259,6 +260,21 @@ export function renderAppDialogs(
               ctx.openEditorForCreatedFile(loc, n);
             }),
         ),
+    }),
+    m(CreateLinkDialog, {
+      request: ds.createLinkRequest,
+      loadOptions: (request) => client.getLinkOptions(request),
+      onCancel: () => dialogs.cancelCreateLink(),
+      onConfirm: (name, link) => {
+        const request = ds.createLinkRequest;
+        if (request === undefined) return;
+        dialogs.cancelCreateLink();
+        void ctx
+          .getOpsController()
+          .createLink(request.target, request.destination, name, link)
+          .then(() => ctx.refetchAffectedPanes())
+          .catch(() => undefined);
+      },
     }),
     m(ArchiveCreateDialog, {
       open: ds.archiveCreateRequest !== undefined,

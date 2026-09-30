@@ -32,6 +32,10 @@ bitflags::bitflags! {
         const SET_PERMISSIONS = 1 << 12;
         /// Calculate entry checksums.
         const CHECKSUM = 1 << 13;
+        /// Create a symbolic link whose stored target text is never dereferenced.
+        const CREATE_SYMLINK = 1 << 14;
+        /// Create an NTFS directory junction (Windows local volumes only).
+        const CREATE_JUNCTION = 1 << 15;
     }
 }
 

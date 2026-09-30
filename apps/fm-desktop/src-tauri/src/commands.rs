@@ -40,17 +40,18 @@ use fm_transport_dto::{
     GenerateDocumentSummaryRequestDto, GenerateSyncPlanRequestDto, GetDocumentSummaryRequestDto,
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
-    InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, ListDirectoryChildrenRequest,
-    ListDirectoryRequest, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
-    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
-    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
-    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
-    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
-    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
-    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
+    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
+    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
+    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
+    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
+    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
+    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
+    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
+    PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
@@ -1976,6 +1977,18 @@ pub(crate) async fn start_operation(
     state
         .service
         .start_operation(request, idempotency_key)
+        .map_err(|e| e.into_dto(Uuid::new_v4()))
+}
+/// Lists link kinds for a target/destination pair, same as `POST /api/v1/link-options` (task 0168).
+#[tauri::command]
+pub(crate) async fn get_link_options(
+    state: State<'_, AppState>,
+    request: LinkOptionsRequestDto,
+) -> Result<LinkOptionsDto, ApplicationErrorDto> {
+    state
+        .service
+        .link_options(request)
+        .await
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
 /// Lists operation snapshots through the shared service.

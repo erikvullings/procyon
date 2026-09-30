@@ -138,10 +138,11 @@ pub use llm_profile::{
 };
 pub use location::LocationDto;
 pub use operation::{
-    ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, OperationConflictPolicyDto, OperationDto,
-    OperationEntryErrorDto, OperationKindDto, OperationPageDto, OperationProgressDto,
-    OperationStateDto, OperationUndoDto, ResolveOperationConflictRequestDto,
-    StartOperationRequestDto, SymlinkPolicyDto,
+    ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, LinkKindDto, LinkKindOptionDto,
+    LinkOptionsDto, LinkOptionsRequestDto, LinkRequestDto, LinkRequirementDto, LinkTargetStyleDto,
+    OperationConflictPolicyDto, OperationDto, OperationEntryErrorDto, OperationKindDto,
+    OperationPageDto, OperationProgressDto, OperationStateDto, OperationUndoDto,
+    ResolveOperationConflictRequestDto, StartOperationRequestDto, SymlinkPolicyDto,
 };
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,

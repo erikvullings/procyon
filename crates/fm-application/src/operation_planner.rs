@@ -171,6 +171,9 @@ impl OperationPlanner {
                     name,
                 })
             }
+            OperationKindDto::CreateLink => {
+                crate::link_operation::plan_create_link(&self.providers, &self.platform, request)?
+            }
             OperationKindDto::Rename if request.destinations.is_empty() => {
                 if request.sources.len() != 1 {
                     return Err(ApplicationError::InvalidRequest(
@@ -530,6 +533,7 @@ impl OperationPlanner {
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             };
             let inner = self.plan(OperationKindDto::Move, &request)?;
             return Ok(Arc::new(GuardedUndoExecutor { guard, inner }));
@@ -801,7 +805,7 @@ impl ArchiveCreationFormat {
 /*  OperationExecutor implementations                                         */
 /* -------------------------------------------------------------------------- */
 
-async fn fingerprint(
+pub(crate) async fn fingerprint(
     provider: &Arc<dyn FileSystemProvider>,
     location: &Location,
     cancellation: &CancellationToken,
@@ -2945,7 +2949,7 @@ impl OperationExecutor for CreateFileExecutor {
 /*  Helper functions                                                          */
 /* -------------------------------------------------------------------------- */
 
-fn copy_name(name: &str, suffix: u32) -> String {
+pub(crate) fn copy_name(name: &str, suffix: u32) -> String {
     let path = std::path::Path::new(name);
     let stem = path
         .file_stem()
@@ -2957,7 +2961,7 @@ fn copy_name(name: &str, suffix: u32) -> String {
     }
 }
 
-fn effective_resolution(
+pub(crate) fn effective_resolution(
     policy: fm_operations::ConflictPolicy,
     resolution: Option<ConflictResolution>,
 ) -> Option<ConflictResolution> {
@@ -2970,7 +2974,7 @@ fn effective_resolution(
     })
 }
 
-fn conflict_error(
+pub(crate) fn conflict_error(
     source: &fm_domain::EntrySummary,
     destination: &fm_domain::EntrySummary,
 ) -> ExecutionError {
@@ -3040,6 +3044,7 @@ mod tests {
             archive_compression_level: None,
             create_intermediate_directories: false,
             override_read_only: false,
+            link: None,
             permanent_delete_confirmed: false,
             destinations: Vec::new(),
         }

@@ -46,6 +46,91 @@ pub struct StartOperationRequestDto {
     /// The user explicitly allowed deletion of read-only entries.
     #[serde(default)]
     pub override_read_only: bool,
+    /// Link kind and target form for a `createLink` operation (task 0168).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<LinkRequestDto>,
+}
+
+/// Filesystem link or shell shortcut requested by `createLink`.
+///
+/// The three kinds are deliberately distinct: a symbolic link stores target text, an NTFS
+/// junction is a directory mount point with an absolute target, and a `.lnk` shortcut is an
+/// ordinary file that only the Windows shell interprets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkKindDto {
+    /// POSIX or Windows symbolic link.
+    SymbolicLink,
+    /// Windows NTFS directory junction.
+    Junction,
+    /// Windows shell `.lnk` shortcut file.
+    Shortcut,
+}
+
+/// How a symbolic link records its target.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkTargetStyleDto {
+    /// Path relative to the directory containing the link.
+    #[default]
+    Relative,
+    /// Absolute native path.
+    Absolute,
+}
+
+/// Link parameters carried by a `createLink` start request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkRequestDto {
+    /// Link kind to create.
+    pub kind: LinkKindDto,
+    /// Target form; only symbolic links honour `relative`.
+    #[serde(default)]
+    pub target_style: LinkTargetStyleDto,
+}
+
+/// A precondition the user should know about before creating a link kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkRequirementDto {
+    /// Windows symbolic links need Developer Mode or an elevated process.
+    DeveloperModeOrAdministrator,
+    /// Junctions can only point at local directories.
+    LocalDirectoryTarget,
+    /// Shortcuts are only interpreted by the Windows shell, not by other programs.
+    ShellOnly,
+}
+
+/// One link kind available for a target/destination pair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkKindOptionDto {
+    /// Link kind.
+    pub kind: LinkKindDto,
+    /// Whether a relative target may be requested.
+    pub supports_relative: bool,
+    /// Preconditions to explain before execution.
+    pub requirements: Vec<LinkRequirementDto>,
+    /// Default file name for the new link inside the destination.
+    pub suggested_name: String,
+}
+
+/// Asks which link kinds can point at `target` from inside `destination`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkOptionsRequestDto {
+    /// Entry the link will point at.
+    pub target: LocationDto,
+    /// Directory that will contain the new link.
+    pub destination: LocationDto,
+}
+
+/// Link kinds supported for a target placed in a destination directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkOptionsDto {
+    /// Supported kinds, most portable first. Empty when links cannot be created here.
+    pub kinds: Vec<LinkKindOptionDto>,
 }
 
 /// Controls recursive-copy handling of symbolic links.
@@ -69,6 +154,8 @@ pub enum OperationKindDto {
     MoveToArchive,
     CreateDirectory,
     CreateFile,
+    /// Create a symbolic link, junction, or shell shortcut (task 0168).
+    CreateLink,
     Rename,
     Copy,
     Move,

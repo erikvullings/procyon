@@ -199,6 +199,7 @@ export const nl = {
     copyRelativePath: 'Relatief pad kopiëren',
     compareDirectories: 'Mappen vergelijken',
     createFile: 'Nieuw bestand',
+    createLink: 'Koppeling maken',
     duplicate: 'Dupliceren',
     quit: 'Afsluiten',
     sortByName: 'Op naam sorteren',
@@ -406,6 +407,28 @@ export const nl = {
     kindMoveToArchive: 'Naar archief verplaatsen',
     kindCreateDirectory: 'Map aanmaken',
     kindCreateFile: 'Bestand aanmaken',
+    kindCreateLink: 'Koppeling maken',
+    createLinkTitle: 'Koppeling maken',
+    linkName: 'Naam van koppeling',
+    linkKind: 'Type koppeling',
+    linkKindSymbolicLink: 'Symbolische koppeling',
+    linkKindJunction: 'Junction (NTFS)',
+    linkKindShortcut: 'Snelkoppeling (.lnk)',
+    linkTargetStyle: 'Doelpad',
+    linkTargetRelative: 'Relatief ten opzichte van de koppeling',
+    linkTargetAbsolute: 'Absoluut',
+    linkRequirementDeveloperMode:
+      'Windows staat symbolische koppelingen alleen toe met de ontwikkelaarsmodus ingeschakeld of wanneer Procyon als beheerder draait.',
+    linkRequirementLocalDirectory:
+      'Een junction kan alleen naar een map op een lokale schijf verwijzen.',
+    linkRequirementShellOnly:
+      'Snelkoppelingen worden alleen gevolgd door Windows Verkenner en shell-bewuste apps, niet door andere programma’s.',
+    linkLoadingOptions: 'Beschikbare koppelingstypen controleren…',
+    linkUnsupported: 'Tussen deze locaties kunnen geen koppelingen worden gemaakt.',
+    failureRecoveryPrivilegeRequired:
+      'Voor deze koppeling zijn extra rechten nodig. Schakel de ontwikkelaarsmodus in, start Procyon als beheerder of maak een snelkoppeling.',
+    failureRecoveryLinkCycle:
+      'De koppeling zou naar zichzelf of naar de eigen bovenliggende map verwijzen. Kies een andere bestemming.',
     kindRename: 'Hernoemen',
     kindCopy: 'Kopiëren',
     kindMove: 'Verplaatsen',

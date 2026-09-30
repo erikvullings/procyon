@@ -142,6 +142,25 @@ describe('OperationsController', () => {
     );
   });
 
+  it('createLink passes the target as source, name and link choice', async () => {
+    const target = { ...dest, uri: 'file:///tmp/target.txt' };
+    await controller.createLink(target, dest, 'target link', {
+      kind: 'symbolicLink',
+      targetStyle: 'relative',
+    });
+    expect(client.startOperation).toHaveBeenCalledWith(
+      {
+        type: 'createLink',
+        sources: [target],
+        destination: dest,
+        conflictPolicy: 'ask',
+        name: 'target link',
+        link: { kind: 'symbolicLink', targetStyle: 'relative' },
+      },
+      undefined,
+    );
+  });
+
   it('duplicate calls startOperation with type duplicate and no destination', async () => {
     await controller.duplicate([src]);
     expect(client.startOperation).toHaveBeenCalledWith(

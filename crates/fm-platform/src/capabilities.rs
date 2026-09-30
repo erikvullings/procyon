@@ -43,6 +43,8 @@ bitflags::bitflags! {
         const QUICK_LOOK = 1 << 15;
         /// Resolve macOS Finder alias files to their targets.
         const FINDER_ALIASES = 1 << 16;
+        /// Create a Windows shell `.lnk` shortcut (distinct from filesystem links).
+        const CREATE_SHORTCUT = 1 << 17;
     }
 }
 

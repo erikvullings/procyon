@@ -84,6 +84,8 @@ import type {
   KnowledgeSearchPlanDto,
   KnowledgeSearchResultDto,
   KnowledgeSourceLocationDto,
+  LinkOptionsDto,
+  LinkOptionsRequestDto,
   ListDirectoryChildrenRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequestDto,
@@ -3787,6 +3789,63 @@ export const getFileIcon = async (params: GetFileIconParams, options?: Parameter
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type getLinkOptionsResponse200 = {
+  data: LinkOptionsDto
+  status: 200
+}
+
+export type getLinkOptionsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type getLinkOptionsResponseSuccess = (getLinkOptionsResponse200) & {
+  headers: Headers;
+};
+export type getLinkOptionsResponseError = (getLinkOptionsResponse400) & {
+  headers: Headers;
+};
+
+export type getLinkOptionsResponse = (getLinkOptionsResponseSuccess | getLinkOptionsResponseError)
+
+export const getGetLinkOptionsUrl = () => {
+
+
+
+
+  return `/api/v1/link-options`
+}
+
+/**
+ * @summary Lists the link kinds that can point at a target from a destination directory (task 0168).
+ */
+export const getLinkOptions = async (linkOptionsRequestDto: LinkOptionsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getLinkOptionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<getLinkOptionsResponse>(getGetLinkOptionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(linkOptionsRequestDto)
   }
 );}
 

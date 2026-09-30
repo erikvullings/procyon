@@ -11,8 +11,8 @@ use axum::{
 };
 use fm_domain::OperationId;
 use fm_transport_dto::{
-    ApplicationErrorDto, OperationDto, OperationPageDto, ResolveOperationConflictRequestDto,
-    StartOperationRequestDto,
+    ApplicationErrorDto, LinkOptionsDto, LinkOptionsRequestDto, OperationDto, OperationPageDto,
+    ResolveOperationConflictRequestDto, StartOperationRequestDto,
 };
 use serde::Deserialize;
 use std::time::Instant;
@@ -46,6 +46,37 @@ pub(crate) struct OperationPageQuery {
     offset: Option<u64>,
     /// Page size, clamped to 1 through 100.
     limit: Option<u16>,
+}
+
+/// Lists the link kinds that can point at a target from a destination directory (task 0168).
+#[utoipa::path(
+    post,
+    path = "/api/v1/link-options",
+    operation_id = "getLinkOptions",
+    request_body = LinkOptionsRequestDto,
+    responses(
+        (status = 200, body = LinkOptionsDto),
+        (status = 400, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn get_link_options(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<LinkOptionsRequestDto>,
+) -> Result<Json<LinkOptionsDto>, ApiError> {
+    let correlation_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.target, &state.accessible_roots, correlation_id)?;
+    crate::error::require_within_roots(
+        &request.destination,
+        &state.accessible_roots,
+        correlation_id,
+    )?;
+    state
+        .service
+        .link_options(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, correlation_id))
 }
 
 #[utoipa::path(

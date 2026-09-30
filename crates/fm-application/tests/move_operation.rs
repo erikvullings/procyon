@@ -116,6 +116,7 @@ fn start_move(
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -151,6 +152,7 @@ async fn moves_a_unicode_directory_to_another_directory() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )
@@ -194,6 +196,7 @@ async fn forced_cross_volume_move_copies_then_deletes_the_source() {
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
+                link: None,
             },
             None,
         )

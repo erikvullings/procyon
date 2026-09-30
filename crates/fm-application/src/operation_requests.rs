@@ -52,6 +52,7 @@ pub(crate) fn copy_request(
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: false,
         override_read_only: false,
+        link: None,
     })
 }
 
@@ -83,6 +84,7 @@ pub(crate) fn delete_request(
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: true,
         override_read_only: false,
+        link: None,
     })
 }
 
@@ -92,6 +94,7 @@ pub(crate) fn operation_kind(kind: OperationKindDto) -> fm_operations::Operation
         OperationKindDto::MoveToArchive => fm_operations::OperationKind::MoveToArchive,
         OperationKindDto::CreateDirectory => fm_operations::OperationKind::CreateDirectory,
         OperationKindDto::CreateFile => fm_operations::OperationKind::CreateFile,
+        OperationKindDto::CreateLink => fm_operations::OperationKind::CreateLink,
         OperationKindDto::Rename => fm_operations::OperationKind::Rename,
         OperationKindDto::Copy => fm_operations::OperationKind::Copy,
         OperationKindDto::Move => fm_operations::OperationKind::Move,
@@ -136,6 +139,7 @@ pub(crate) fn mutating_operation_kind(id: &ActionId) -> Option<OperationKindDto>
         "core.delete" => Some(OperationKindDto::Delete),
         "core.createDirectory" => Some(OperationKindDto::CreateDirectory),
         "core.createFile" => Some(OperationKindDto::CreateFile),
+        "core.createLink" => Some(OperationKindDto::CreateLink),
         "core.duplicate" => Some(OperationKindDto::Duplicate),
         _ => None,
     }

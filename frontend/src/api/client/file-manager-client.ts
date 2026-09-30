@@ -74,6 +74,8 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkOptions,
+  LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
   LlmProfile,
@@ -562,6 +564,10 @@ export interface FileManagerClient {
   ): Promise<GitFileHistoryResult>;
 
   startOperation(request: StartOperationRequest, signal?: AbortSignal): Promise<Operation>;
+
+  /** Lists the link kinds that can point at a target from a destination directory (task 0168);
+   * an empty list means the pair has no link semantics (remote providers, mixed providers). */
+  getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions>;
 
   listOperations(signal?: AbortSignal): Promise<Operation[]>;
 

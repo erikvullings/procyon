@@ -199,6 +199,7 @@ export const es = {
     copyRelativePath: 'Copiar ruta relativa',
     compareDirectories: 'Comparar directorios',
     createFile: 'Nuevo archivo',
+    createLink: 'Crear enlace',
     duplicate: 'Duplicar',
     quit: 'Salir',
     sortByName: 'Ordenar por nombre',
@@ -402,6 +403,28 @@ export const es = {
     kindMoveToArchive: 'Mover a archivo comprimido',
     kindCreateDirectory: 'Crear directorio',
     kindCreateFile: 'Crear archivo',
+    kindCreateLink: 'Crear enlace',
+    createLinkTitle: 'Crear enlace',
+    linkName: 'Nombre del enlace',
+    linkKind: 'Tipo de enlace',
+    linkKindSymbolicLink: 'Enlace simbólico',
+    linkKindJunction: 'Unión (NTFS)',
+    linkKindShortcut: 'Acceso directo (.lnk)',
+    linkTargetStyle: 'Ruta de destino',
+    linkTargetRelative: 'Relativa al enlace',
+    linkTargetAbsolute: 'Absoluta',
+    linkRequirementDeveloperMode:
+      'Windows solo permite enlaces simbólicos con el Modo de desarrollador activado o si Procyon se ejecuta como administrador.',
+    linkRequirementLocalDirectory:
+      'Las uniones solo pueden apuntar a una carpeta de una unidad local.',
+    linkRequirementShellOnly:
+      'Los accesos directos solo los siguen el Explorador de Windows y las aplicaciones compatibles con el shell, no otros programas.',
+    linkLoadingOptions: 'Comprobando los tipos de enlace disponibles…',
+    linkUnsupported: 'No se pueden crear enlaces entre estas ubicaciones.',
+    failureRecoveryPrivilegeRequired:
+      'Crear este enlace requiere privilegios adicionales. Active el Modo de desarrollador, ejecute Procyon como administrador o cree un acceso directo.',
+    failureRecoveryLinkCycle:
+      'El enlace apuntaría a sí mismo o a su carpeta superior. Elija otro destino.',
     kindRename: 'Renombrar',
     kindCopy: 'Copiar',
     kindMove: 'Mover',

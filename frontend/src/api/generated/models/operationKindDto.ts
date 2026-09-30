@@ -14,6 +14,7 @@ export const OperationKindDto = {
   moveToArchive: 'moveToArchive',
   createDirectory: 'createDirectory',
   createFile: 'createFile',
+  createLink: 'createLink',
   rename: 'rename',
   copy: 'copy',
   move: 'move',

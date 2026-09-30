@@ -615,6 +615,65 @@ fn volume_label(root: &Path) -> Option<String> {
 
 /// Rejects a missing path before a native call, so callers get a typed
 /// `NotFound` instead of an opaque shell failure.
+/// Creates a `.lnk` shell shortcut without replacing an existing file.
+///
+/// An empty placeholder is created exclusively first so a concurrent writer can never be
+/// overwritten by `IPersistFile::Save`; the placeholder is removed if saving fails.
+fn create_shell_shortcut(shortcut: &Path, target: &Path) -> Result<(), PlatformError> {
+    use windows::Win32::System::Com::{
+        CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+        CoUninitialize, IPersistFile,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    use windows::core::{HSTRING, Interface};
+
+    struct Apartment(bool);
+    impl Drop for Apartment {
+        fn drop(&mut self) {
+            if self.0 {
+                unsafe { CoUninitialize() };
+            }
+        }
+    }
+
+    let target = require_existing(target)?;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(shortcut)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::AlreadyExists => PlatformError::AlreadyExists {
+                path: shortcut.display().to_string(),
+            },
+            std::io::ErrorKind::NotFound => PlatformError::NotFound {
+                path: shortcut.display().to_string(),
+            },
+            _ => PlatformError::Io {
+                message: format!("could not create the shortcut file: {error}"),
+            },
+        })?;
+    let saved = (|| -> windows::core::Result<()> {
+        let initialized = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        let _apartment = Apartment(initialized.is_ok());
+        let link: IShellLinkW =
+            unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }?;
+        unsafe {
+            link.SetPath(&HSTRING::from(target.as_os_str()))?;
+            if let Some(parent) = target.parent() {
+                link.SetWorkingDirectory(&HSTRING::from(parent.as_os_str()))?;
+            }
+        }
+        let persist: IPersistFile = link.cast()?;
+        unsafe { persist.Save(&HSTRING::from(shortcut.as_os_str()), true) }
+    })();
+    saved.map_err(|error| {
+        let _ = std::fs::remove_file(shortcut);
+        PlatformError::Io {
+            message: format!("could not save the shortcut: {}", error.message()),
+        }
+    })
+}
+
 fn require_existing(path: &Path) -> Result<PathBuf, PlatformError> {
     if path.exists() {
         Ok(shell_path(path))
@@ -999,6 +1058,11 @@ impl PlatformAdapter for WindowsPlatformAdapter {
             | PlatformCapabilities::FILE_ICONS
             | PlatformCapabilities::NATIVE_MENUS
             | PlatformCapabilities::PLATFORM_CONTEXT_MENU
+            | PlatformCapabilities::CREATE_SHORTCUT
+    }
+
+    fn create_shortcut(&self, shortcut: &Path, target: &Path) -> Result<(), PlatformError> {
+        create_shell_shortcut(shortcut, target)
     }
 
     fn file_icon(&self, path: &Path) -> Result<Vec<u8>, PlatformError> {
@@ -1375,6 +1439,29 @@ mod tests {
                 .Save(&HSTRING::from(shortcut.as_os_str()), true)
                 .expect("save shortcut");
         }
+    }
+
+    #[test]
+    fn creates_a_shortcut_without_replacing_an_existing_file() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let target = temp.path().join("doel ✓.txt");
+        std::fs::write(&target, b"x").unwrap();
+        let shortcut = temp.path().join("doel ✓.txt.lnk");
+        let adapter = WindowsPlatformAdapter::new();
+        assert!(
+            adapter
+                .capabilities()
+                .contains(PlatformCapabilities::CREATE_SHORTCUT)
+        );
+
+        adapter
+            .create_shortcut(&shortcut, &target)
+            .expect("create shortcut");
+        assert!(std::fs::metadata(&shortcut).unwrap().len() > 0);
+
+        let occupied = adapter.create_shortcut(&shortcut, &target);
+        assert!(matches!(occupied, Err(PlatformError::AlreadyExists { .. })));
+        assert_eq!(std::fs::read(&target).unwrap(), b"x");
     }
 
     #[test]

@@ -9,11 +9,13 @@
 
 #[cfg(target_os = "macos")]
 pub mod bulk_listing;
+#[cfg(windows)]
+mod junction;
 
 use std::{
     collections::BTreeMap,
     io,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -83,7 +85,10 @@ impl FileSystemProvider for LocalFileSystemProvider {
             | ProviderCapabilities::RANDOM_ACCESS
             // Checksums are computed by streaming `open_read`, so any
             // provider that can read can checksum (task 0077, spec §6).
-            | ProviderCapabilities::CHECKSUM;
+            | ProviderCapabilities::CHECKSUM
+            | ProviderCapabilities::CREATE_SYMLINK;
+        #[cfg(windows)]
+        let capabilities = capabilities | ProviderCapabilities::CREATE_JUNCTION;
         capabilities | ProviderCapabilities::MOVE | ProviderCapabilities::DELETE
     }
 
@@ -280,7 +285,13 @@ impl FileSystemProvider for LocalFileSystemProvider {
         let metadata = tokio::fs::symlink_metadata(&path)
             .await
             .map_err(|error| map_io_error(error, &entry.location.uri))?;
-        if metadata.file_type().is_symlink() || metadata.is_file() {
+        if is_directory_link(&metadata) {
+            // Windows directory symlinks and junctions are removed as directories; this removes
+            // only the link and never touches its target.
+            tokio::fs::remove_dir(path)
+                .await
+                .map_err(|error| map_io_error(error, &entry.location.uri))
+        } else if metadata.file_type().is_symlink() || metadata.is_file() {
             tokio::fs::remove_file(path)
                 .await
                 .map_err(|error| map_io_error(error, &entry.location.uri))
@@ -509,6 +520,72 @@ impl FileSystemProvider for LocalFileSystemProvider {
         })
     }
 
+    async fn create_symlink(
+        &self,
+        link: &Location,
+        target: &str,
+        target_is_directory: bool,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        if target.is_empty() || target.contains('\0') {
+            return Err(invalid_location(link));
+        }
+        let link_path = link.to_native_path().map_err(|_| invalid_location(link))?;
+        let target = PathBuf::from(target);
+        let path = link_path.clone();
+        tokio::task::spawn_blocking(move || {
+            create_typed_symlink(&target, &path, target_is_directory)
+        })
+        .await
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?
+        .map_err(|error| map_io_error(error, &link.uri))?;
+        let metadata = tokio::fs::symlink_metadata(&link_path)
+            .await
+            .map_err(|error| map_io_error(error, &link.uri))?;
+        Ok(EntryRef {
+            id: stable_entry_id(&metadata, link),
+            location: link.clone(),
+        })
+    }
+
+    #[cfg(windows)]
+    async fn create_junction(
+        &self,
+        link: &Location,
+        target: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let link_path = link.to_native_path().map_err(|_| invalid_location(link))?;
+        let target_path = target
+            .to_native_path()
+            .map_err(|_| invalid_location(target))?;
+        let path = link_path.clone();
+        tokio::task::spawn_blocking(move || junction::create(&target_path, &path))
+            .await
+            .map_err(|error| VfsError::Io {
+                message: error.to_string(),
+            })?
+            .map_err(|error| match error {
+                junction::JunctionError::InvalidTarget => invalid_location(target),
+                junction::JunctionError::Io(error) => map_io_error(error, &link.uri),
+            })?;
+        let metadata = tokio::fs::symlink_metadata(&link_path)
+            .await
+            .map_err(|error| map_io_error(error, &link.uri))?;
+        Ok(EntryRef {
+            id: stable_entry_id(&metadata, link),
+            location: link.clone(),
+        })
+    }
+
     async fn resolve_symlink(
         &self,
         source: &EntryRef,
@@ -526,7 +603,21 @@ impl FileSystemProvider for LocalFileSystemProvider {
             .map_err(|error| map_io_error(error, &source.location.uri))?;
         let target_location = Location::from_native_path(&target_path)
             .map_err(|_| invalid_location(&source.location))?;
-        summarize_path(&target_path, &target_location).await
+        let mut summary = summarize_path(&target_path, &target_location).await?;
+        // A canonical path can still be a non-link reparse point on Windows (e.g. a OneDrive
+        // folder); describe what the link resolves to, not how that final entry is stored.
+        if summary.kind == EntryKind::Symlink
+            && let Ok(followed) = tokio::fs::metadata(&target_path).await
+        {
+            if followed.is_dir() {
+                summary.kind = EntryKind::Directory;
+                summary.size = None;
+            } else if followed.is_file() {
+                summary.kind = EntryKind::File;
+                summary.size = Some(followed.len());
+            }
+        }
+        Ok(summary)
     }
 
     async fn preserve_metadata(
@@ -780,6 +871,31 @@ fn create_symlink(target: &Path, destination: &Path) -> io::Result<()> {
     } else {
         std::os::windows::fs::symlink_file(target, destination)
     }
+}
+
+#[cfg(unix)]
+fn create_typed_symlink(target: &Path, link: &Path, _target_is_directory: bool) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn create_typed_symlink(target: &Path, link: &Path, target_is_directory: bool) -> io::Result<()> {
+    if target_is_directory {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
+
+#[cfg(windows)]
+fn is_directory_link(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::FileTypeExt;
+    metadata.file_type().is_symlink_dir()
+}
+
+#[cfg(not(windows))]
+fn is_directory_link(_metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// Synchronous core of [`LocalFileSystemProvider::list`], run inside one
@@ -1226,6 +1342,11 @@ fn map_io_error(error: io::Error, location: &str) -> VfsError {
             location: location.to_owned(),
         };
     }
+    if is_privilege_error(&error) {
+        return VfsError::PrivilegeRequired {
+            location: location.to_owned(),
+        };
+    }
     match error.kind() {
         io::ErrorKind::NotFound => VfsError::NotFound {
             location: location.to_owned(),
@@ -1278,6 +1399,19 @@ fn is_locked_error(error: &io::Error) -> bool {
 
 #[cfg(not(windows))]
 fn is_locked_error(_error: &io::Error) -> bool {
+    false
+}
+
+/// `ERROR_PRIVILEGE_NOT_HELD`: Windows symbolic links need Developer Mode or
+/// `SeCreateSymbolicLinkPrivilege`.
+#[cfg(windows)]
+fn is_privilege_error(error: &io::Error) -> bool {
+    const ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
+    error.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD)
+}
+
+#[cfg(not(windows))]
+fn is_privilege_error(_error: &io::Error) -> bool {
     false
 }
 

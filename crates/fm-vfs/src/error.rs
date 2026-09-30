@@ -93,6 +93,19 @@ pub enum VfsError {
         /// Bytes required when the operation could determine the value.
         required: Option<u64>,
     },
+    /// The operating system requires an elevated privilege for this request, e.g. Windows
+    /// symbolic links without Developer Mode or `SeCreateSymbolicLinkPrivilege`.
+    #[error("an elevated privilege is required: {location}")]
+    PrivilegeRequired {
+        /// Provider-neutral URI the request targeted.
+        location: String,
+    },
+    /// Creating the requested link would make a directory reachable from itself.
+    #[error("the link would create a cycle: {location}")]
+    LinkCycle {
+        /// Provider-neutral URI of the rejected link.
+        location: String,
+    },
     /// The caller cancelled the operation.
     #[error("operation cancelled")]
     Cancelled,
@@ -138,6 +151,8 @@ impl VfsError {
             Self::InvalidCredential => "invalidCredential",
             Self::AuthenticationFailed { .. } => "authenticationFailed",
             Self::InsufficientSpace { .. } => "insufficientSpace",
+            Self::PrivilegeRequired { .. } => "privilegeRequired",
+            Self::LinkCycle { .. } => "linkCycle",
             Self::Cancelled => "cancelled",
             Self::Io { .. } => "io",
             Self::InvalidLocation { .. } => "invalidLocation",

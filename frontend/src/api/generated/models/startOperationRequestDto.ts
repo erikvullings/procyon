@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ArchiveFormatDto } from './archiveFormatDto.ts';
+import type { LinkRequestDto } from './linkRequestDto.ts';
 import type { LocationDto } from './locationDto.ts';
 import type { OperationConflictPolicyDto } from './operationConflictPolicyDto.ts';
 import type { OperationKindDto } from './operationKindDto.ts';
@@ -29,6 +30,7 @@ export interface StartOperationRequestDto {
      * single-entry rename, which keeps using `destination` instead.
      */
   destinations?: LocationDto[];
+  link?: null | LinkRequestDto;
   /**
      * New child name for `createDirectory`.
      * @nullable

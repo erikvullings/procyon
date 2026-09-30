@@ -2721,6 +2721,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getArchiveCreateRequest: () => dialogs.getState().archiveCreateRequest,
     getCreateDirectoryOpen: () => dialogs.getState().createDirectoryOpen,
     getCreateFileOpen: () => dialogs.getState().createFileOpen,
+    getCreateLinkOpen: () => dialogs.getState().createLinkRequest !== undefined,
     getAppState: () => appState,
     getLastQuickFilterQuery: (paneId) => lastQuickFilterQueryByTabKey.get(activeTabKey(paneId)),
     getShortcutsHelpOpen: () => shortcutsHelpOpen,
@@ -2741,6 +2742,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (open) dialogs.openCreateFile();
       else dialogs.cancelCreateFile();
     },
+    openCreateLink: (target, destination) => dialogs.openCreateLink({ target, destination }),
     setAppState: (state) => {
       appState = state;
     },
@@ -3140,6 +3142,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       renameRequests.set(paneId, { revision, entryIds });
       m.redraw();
     },
+    openCreateLink: (target, destination) => dialogs.openCreateLink({ target, destination }),
     toggleDirectoryTree,
     toggleOperationCentre,
     redraw: () => m.redraw(),

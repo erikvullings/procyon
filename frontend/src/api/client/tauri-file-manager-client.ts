@@ -80,6 +80,8 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkOptions,
+  LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
   LlmProfile,
@@ -948,6 +950,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async startOperation(request: StartOperationRequest, _signal?: AbortSignal): Promise<Operation> {
     return operationFromDto(await invoke<OperationDto>('start_operation', { request }));
+  }
+
+  getLinkOptions(request: LinkOptionsRequest, _signal?: AbortSignal): Promise<LinkOptions> {
+    return invoke<LinkOptions>('get_link_options', { request });
   }
 
   async listOperations(_signal?: AbortSignal): Promise<Operation[]> {

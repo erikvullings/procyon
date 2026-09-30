@@ -329,6 +329,8 @@ fn capabilities_match_the_exact_specification_bits() {
         ProviderCapabilities::SET_TIMESTAMPS,
         ProviderCapabilities::SET_PERMISSIONS,
         ProviderCapabilities::CHECKSUM,
+        ProviderCapabilities::CREATE_SYMLINK,
+        ProviderCapabilities::CREATE_JUNCTION,
     ];
 
     for (index, capability) in capabilities.into_iter().enumerate() {

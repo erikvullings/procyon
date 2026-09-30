@@ -131,3 +131,5 @@ some in the new Freezer section of `TASKS/README.md`, split others into real tas
   Net: this task's own "done" bar (every row triaged into split/decline/merge) is unchanged — nothing
   here newly reaches (a)/(b)/(c) triage, two notes just got more accurate. Still `open` pending the
   same product-priority call on which of the remaining rows to split out vs. freeze.
+- 2026-09-30 Copilot: Shift+Ctrl+F5 row resolved by 0168 (`core.createLink`: symbolic links,
+  Windows junctions and `.lnk` shortcuts as operation-engine jobs).

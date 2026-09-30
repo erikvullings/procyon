@@ -54,6 +54,17 @@ pub trait PlatformAdapter: Send + Sync + std::any::Any {
         })
     }
 
+    /// Creates a shell shortcut file at `shortcut` pointing at the absolute `target`.
+    ///
+    /// The shortcut path must not exist; an occupied path fails with
+    /// [`PlatformError::AlreadyExists`] rather than being replaced.
+    fn create_shortcut(&self, shortcut: &Path, target: &Path) -> Result<(), PlatformError> {
+        let _ = (shortcut, target);
+        Err(PlatformError::Unsupported {
+            capability: PlatformCapabilities::CREATE_SHORTCUT,
+        })
+    }
+
     /// Moves an entry to the system trash/recycle bin.
     fn trash(&self, path: &Path) -> Result<(), PlatformError> {
         let _ = path;

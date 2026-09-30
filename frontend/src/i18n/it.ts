@@ -199,6 +199,7 @@ export const it = {
     copyRelativePath: 'Copia percorso relativo',
     compareDirectories: 'Confronta cartelle',
     createFile: 'Nuovo file',
+    createLink: 'Crea collegamento',
     duplicate: 'Duplica',
     quit: 'Esci',
     sortByName: 'Ordina per nome',
@@ -402,6 +403,28 @@ export const it = {
     kindMoveToArchive: 'Sposta in archivio',
     kindCreateDirectory: 'Crea cartella',
     kindCreateFile: 'Crea file',
+    kindCreateLink: 'Crea collegamento',
+    createLinkTitle: 'Crea collegamento',
+    linkName: 'Nome del collegamento',
+    linkKind: 'Tipo di collegamento',
+    linkKindSymbolicLink: 'Collegamento simbolico',
+    linkKindJunction: 'Giunzione (NTFS)',
+    linkKindShortcut: 'Collegamento (.lnk)',
+    linkTargetStyle: 'Percorso di destinazione',
+    linkTargetRelative: 'Relativo al collegamento',
+    linkTargetAbsolute: 'Assoluto',
+    linkRequirementDeveloperMode:
+      'Windows consente i collegamenti simbolici solo con la Modalità sviluppatore attiva o se Procyon è eseguito come amministratore.',
+    linkRequirementLocalDirectory:
+      'Le giunzioni possono puntare solo a una cartella su un’unità locale.',
+    linkRequirementShellOnly:
+      'I collegamenti .lnk vengono seguiti solo da Esplora risorse e dalle app compatibili con la shell, non da altri programmi.',
+    linkLoadingOptions: 'Verifica dei tipi di collegamento disponibili…',
+    linkUnsupported: 'Impossibile creare collegamenti tra queste posizioni.',
+    failureRecoveryPrivilegeRequired:
+      'Questo collegamento richiede privilegi aggiuntivi. Attiva la Modalità sviluppatore, esegui Procyon come amministratore o crea un collegamento .lnk.',
+    failureRecoveryLinkCycle:
+      'Il collegamento punterebbe a se stesso o alla propria cartella superiore. Scegli un’altra destinazione.',
     kindRename: 'Rinomina',
     kindCopy: 'Copia',
     kindMove: 'Sposta',
