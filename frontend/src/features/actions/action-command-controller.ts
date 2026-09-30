@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import type {
   ActionDescriptor,
   ActionInvocationContext,
+  EntryId,
   EntrySummary,
   Location,
   PaneId,
@@ -20,6 +21,7 @@ import { evaluateActionAvailability } from '../commands/availability';
 import type { ArchiveCreateRequest } from '../dialogs/dialog-ui-controller';
 import type { NavigationController, PaneDirectoryView } from '../navigation/navigation';
 import type { OperationsController } from '../operations/operations-controller';
+import { canUseSystemTrash } from '../operations/system-trash';
 import { isParentEntry } from '../panes/parent-entry';
 import type { SelectionState } from '../selection/selection';
 
@@ -94,6 +96,8 @@ export interface ActionCommandControllerContext {
   /** Scans `entry`'s well-known related-file locations and opens the review checklist before
    * anything is deleted (task 0148's macOS application uninstaller). */
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
+  /** Starts the pane's F2 rename flow (inline, or multi-rename for several entries). */
+  requestRename?(paneId: PaneId, entryIds: readonly EntryId[]): void;
   /** Toggles the directory-tree sidebar (task 0139). */
   toggleDirectoryTree(): void;
   /** Toggles the Operations Centre panel. */
@@ -149,6 +153,13 @@ export interface ActionCommandController {
    */
   invokeContextMenuAction(actionId: string): void;
 }
+
+const FILE_OPERATION_ACTION_IDS: ReadonlySet<string> = new Set([
+  'core.copy',
+  'core.move',
+  'core.trash',
+  'core.delete',
+]);
 
 /**
  * Factory function to create an ActionCommandController.
@@ -275,6 +286,32 @@ export function createActionCommandController(
     return false;
   }
 
+  function runFileOperation(
+    actionId: string,
+    paneId: PaneId,
+    locations: readonly Location[],
+  ): void {
+    const ops = context.getOpsController();
+    const skipConfirmation = context.getCurrentSettings()?.confirmPermanentDelete === false;
+    if (actionId === 'core.trash' && canUseSystemTrash(locations)) {
+      void ops.trash(locations);
+      return;
+    }
+    if (actionId === 'core.trash' || actionId === 'core.delete') {
+      void ops.delete(locations, skipConfirmation, false);
+      return;
+    }
+    const otherPaneId = context.getWorkspace()?.paneOrder.find((candidate) => candidate !== paneId);
+    const destination =
+      otherPaneId === undefined
+        ? undefined
+        : context.getDirectories().get(context.getActiveTabKey(otherPaneId))?.location;
+    if (destination === undefined) return;
+    void (actionId === 'core.move'
+      ? ops.move(locations, destination)
+      : ops.copy(locations, destination));
+  }
+
   function invokePaletteAction(
     action: ActionDescriptor,
     parameters?: unknown,
@@ -356,6 +393,28 @@ export function createActionCommandController(
       const bundle = selectedEntries[0];
       if (paneId !== undefined && bundle !== undefined)
         context.uninstallApplication(paneId, bundle);
+      return;
+    }
+    const cursorEntry =
+      selectedEntries.length > 0 || isParentEntry(contextParam.cursorEntryId)
+        ? undefined
+        : directory?.entries.find((entry) => entry.id === contextParam.cursorEntryId);
+    const targetEntries = cursorEntry === undefined ? selectedEntries : [cursorEntry];
+    if (action.id === 'core.rename') {
+      if (paneId !== undefined && targetEntries.length > 0)
+        context.requestRename?.(
+          paneId,
+          targetEntries.map((entry) => entry.id),
+        );
+      return;
+    }
+    // File operations run as confirmed, cancellable jobs through the operations controller - the
+    // same path as their F5/F6/F8 keybindings. The generic `invokeActionById` fallthrough sends no
+    // operation parameters, which the backend rejects.
+    if (FILE_OPERATION_ACTION_IDS.has(action.id)) {
+      const locations = targetEntries.map((entry) => entry.location);
+      if (paneId !== undefined && locations.length > 0)
+        runFileOperation(action.id, paneId, locations);
       return;
     }
     if (isCopySelectionAction(action.id)) {

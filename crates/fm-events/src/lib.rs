@@ -101,6 +101,8 @@ pub enum DiskUsageUnreadableReasonPayload {
     OtherVolume,
     /// A directory whose contents are stored only in the cloud; not descended to avoid a download.
     CloudOnly,
+    /// An entry whose name this host cannot represent as a location; recorded against its parent.
+    UnsupportedName,
 }
 
 /// One filesystem entry skipped during a disk-usage scan.

@@ -1046,7 +1046,8 @@ fn canonicalize_local_trailing_slash<'a>(scheme: &str, uri: &'a str) -> &'a str 
     }
 }
 
-/// Validates a single path segment name (empty, traversal, separators, null bytes, Windows reserved names).
+/// Validates a single path segment name (empty, traversal, separators, null bytes, and reserved
+/// Windows device names on Windows hosts).
 pub fn validate_name(name: &str) -> Result<(), LocationError> {
     if name.is_empty() {
         return Err(LocationError::EmptySegment);
@@ -1060,25 +1061,32 @@ pub fn validate_name(name: &str) -> Result<(), LocationError> {
     reject_windows_device_name(name)
 }
 
+/// Device names such as `NUL` are only unusable on Windows; elsewhere `nul.yaml` is an ordinary
+/// file that must stay listable, scannable and nameable.
 fn reject_windows_device_name(name: &str) -> Result<(), LocationError> {
+    if cfg!(windows) && is_windows_device_name(name) {
+        Err(LocationError::ReservedWindowsName(name.to_owned()))
+    } else {
+        Ok(())
+    }
+}
+
+/// Whether `name` is a reserved Windows device name (`CON`, `nul.txt`, `COM1`, ...), independent
+/// of the host platform.
+pub fn is_windows_device_name(name: &str) -> bool {
     let stem = name
         .trim_end_matches([' ', '.'])
         .split('.')
         .next()
         .unwrap_or_default()
         .to_ascii_uppercase();
-    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$")
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$")
         || stem.strip_prefix("COM").is_some_and(|number| {
             matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
         })
         || stem.strip_prefix("LPT").is_some_and(|number| {
             matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
-        });
-    if reserved {
-        Err(LocationError::ReservedWindowsName(name.to_owned()))
-    } else {
-        Ok(())
-    }
+        })
 }
 
 fn normalize_segments(segments: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, LocationError> {

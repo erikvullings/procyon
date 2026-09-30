@@ -298,8 +298,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
       {
         rootId: 'pending-root',
-        label: 'Basisschool',
-        location: { providerId: 'local', uri: 'file:///OneDrive/Basisschool' },
+        label: '/Users/me/OneDrive/Basisschool',
+        location: { providerId: 'local', uri: 'file:///Users/me/OneDrive/Basisschool' },
         recursive: true,
         indexedGeneration: 0,
         available: true,
@@ -310,10 +310,34 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'This folder is included and still being indexed. You can search documents that are already available.',
+      'The folder “Basisschool” is included and still being indexed. You can search documents that are already available.',
     );
+    expect(root.textContent).not.toContain('/Users/me/OneDrive/Basisschool is included');
     expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
     expect(searchButton().disabled).toBe(false);
+  });
+
+  it('names every enrolled root that is still being indexed', async () => {
+    const client = new MockFileManagerClient();
+    const pending = (name: string) => ({
+      rootId: `pending-${name}`,
+      label: name,
+      location: { providerId: 'local', uri: `file:///Users/me/${encodeURIComponent(name)}` },
+      recursive: true,
+      indexedGeneration: 0,
+      available: true,
+    });
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      pending('semantic'),
+      pending('Research notes'),
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).toContain(
+      'The folders “semantic”, “Research notes” are included and still being indexed.',
+    );
   });
 
   it('keeps answer-generation copy out of the common flow when it is unavailable', async () => {

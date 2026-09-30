@@ -393,6 +393,24 @@ describe('Pane inline rename', () => {
     expect(document.activeElement).toBe(pane);
   });
 
+  it('starts inline rename on the requested entry when the rename request changes, not on first render', () => {
+    const base = attrs({ cursorIndex: 0, selectedEntryIds: new Set(['one' as EntryId]) });
+    const rerender = mountUpdating({
+      ...base,
+      renameRequest: { revision: 3, entryIds: ['one' as EntryId] },
+    });
+    m.redraw.sync();
+    expect(root.querySelector('.fm-inline-rename-input')).toBeNull();
+
+    // The cursor stays on "one", but the context menu targeted the second entry.
+    const target = base.entries[1] as EntrySummary;
+    rerender({ ...base, renameRequest: { revision: 4, entryIds: [target.id] } });
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-inline-rename-input')?.value).toBe(
+      target.name,
+    );
+  });
+
   it('blocks folder navigation until inline rename is committed or cancelled', () => {
     const onNavigate = vi.fn();
     const onOpenEntry = vi.fn();

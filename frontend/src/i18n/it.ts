@@ -1022,6 +1022,7 @@ export const it = {
     unreadableReason_ioError: 'Errore di I/O',
     unreadableReason_otherVolume: 'Su un altro volume (non scansionato)',
     unreadableReason_cloudOnly: 'Solo nel cloud (non scaricato)',
+    unreadableReason_unsupportedName: 'Contiene un nome che questo sistema non può rappresentare',
     unreadableMore: '{count} voci aggiuntive non mostrate.',
     scanFailed: "La scansione dell'utilizzo disco non è riuscita.",
     rootRemoved: 'La cartella analizzata non esiste più.',

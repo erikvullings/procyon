@@ -444,6 +444,32 @@ describe('DiskUsageView', () => {
     expect(root.querySelector('.fm-disk-usage-warnings')?.textContent).toContain(
       'Permission denied',
     );
+
+    root.querySelector<HTMLButtonElement>('.fm-disk-usage-warning')?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-disk-usage-warnings')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.fm-disk-usage-warning')?.click();
+    m.redraw.sync();
+    root
+      .querySelector<HTMLButtonElement>('.fm-disk-usage-warnings .fm-disk-usage-notice-close')
+      ?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-disk-usage-warnings')).toBeNull();
+    expect(root.querySelector('.fm-disk-usage-warning')?.getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+
+    root.querySelector<HTMLButtonElement>('.fm-disk-usage-warning')?.click();
+    m.redraw.sync();
+    root
+      .querySelector('.fm-disk-usage-view')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-disk-usage-warnings')).toBeNull();
   });
 
   it('prioritizes folder labels over deeply nested hash filenames', () => {

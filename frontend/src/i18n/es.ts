@@ -1029,6 +1029,7 @@ export const es = {
     unreadableReason_ioError: 'Error de E/S',
     unreadableReason_otherVolume: 'En otro volumen (no analizado)',
     unreadableReason_cloudOnly: 'Solo en la nube (no descargado)',
+    unreadableReason_unsupportedName: 'Contiene un nombre que este sistema no puede representar',
     unreadableMore: '{count} entradas adicionales no se muestran.',
     scanFailed: 'El análisis de uso de disco falló.',
     rootRemoved: 'La carpeta analizada ya no existe.',

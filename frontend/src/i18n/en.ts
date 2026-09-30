@@ -945,7 +945,9 @@ export const en = {
     searchNoSources:
       'No indexed documents are available in this scope. Choose another scope or index a folder, then try again.',
     searchIndexPending:
-      'This folder is included and still being indexed. You can search documents that are already available.',
+      'The folder {folder} is included and still being indexed. You can search documents that are already available.',
+    searchIndexPendingMany:
+      'The folders {folders} are included and still being indexed. You can search documents that are already available.',
     searchUnavailable:
       'Semantic search is unavailable. Check Semantic Search settings and try again.',
     searchDenied: 'This search scope is no longer authorized. Choose another scope and try again.',
@@ -1696,6 +1698,7 @@ export const en = {
     unreadableReason_ioError: 'I/O error',
     unreadableReason_otherVolume: 'On another volume (not scanned)',
     unreadableReason_cloudOnly: 'Stored only in the cloud (not downloaded)',
+    unreadableReason_unsupportedName: "Contains a name this system can't represent",
     unreadableMore: '{count} additional entries are not shown.',
     scanFailed: 'The disk-usage scan failed.',
     rootRemoved: 'The scanned folder no longer exists.',

@@ -99,7 +99,11 @@ async fn create_directory_rejects_typed_invalid_names_and_collisions() {
             .await,
         Err(VfsError::AlreadyExists { .. })
     ));
-    for name in ["", "bad\0name", "../escape", ".", "CON", "com1.txt"] {
+    let mut invalid_names = vec!["", "bad\0name", "../escape", "."];
+    if cfg!(windows) {
+        invalid_names.extend(["CON", "com1.txt"]);
+    }
+    for name in invalid_names {
         let error = provider
             .create_directory(&location, name, CancellationToken::new())
             .await

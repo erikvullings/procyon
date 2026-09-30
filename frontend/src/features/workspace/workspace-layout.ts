@@ -41,7 +41,7 @@ import type {
   PaneNavigationAttrs,
   TableConfigAttrs,
 } from '../panes/pane';
-import { Pane } from '../panes/pane';
+import { Pane, type PaneRenameRequest } from '../panes/pane';
 import type { SearchPresentation } from '../search/search-presentation';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
@@ -131,6 +131,7 @@ export interface WorkspacePaneContent {
   /** F2 with more than one entry selected opens the multi-rename dialog (task 0072) instead of
    * the single-entry inline rename input. */
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
+  readonly renameRequest?: PaneRenameRequest;
   readonly onContextMenu?: (entries: readonly EntrySummary[], x: number, y: number) => void;
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
   readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
@@ -692,6 +693,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
         onSortChange: content.onSortChange,
         onRename: content.onRename,
         ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
+        ...(content.renameRequest === undefined ? {} : { renameRequest: content.renameRequest }),
         onContextMenu: content.onContextMenu ?? (() => undefined),
         ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
         ...(content.onPointerDragStart === undefined

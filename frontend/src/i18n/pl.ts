@@ -1025,6 +1025,7 @@ export const pl = {
     unreadableReason_ioError: 'Błąd we/wy',
     unreadableReason_otherVolume: 'Na innym woluminie (nie skanowano)',
     unreadableReason_cloudOnly: 'Tylko w chmurze (nie pobrano)',
+    unreadableReason_unsupportedName: 'Zawiera nazwę, której ten system nie może przedstawić',
     unreadableMore: 'Nie pokazano {count} dodatkowych wpisów.',
     scanFailed: 'Skanowanie użycia dysku nie powiodło się.',
     rootRemoved: 'Przeanalizowany folder już nie istnieje.',

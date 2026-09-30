@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { placeFloating, visibleBounds } from '../../components/floating-position';
-import { arrowBarToRightIcon, layoutSidebarIcon } from '../../components/tabler-icons';
+import { arrowBarToRightIcon, closeIcon, layoutSidebarIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
@@ -347,12 +347,34 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       });
   }
 
+  function noticeHeading(heading: string, onClose: () => void): m.Children {
+    const label = `${t('button', 'close')} (Esc)`;
+    return m('.fm-disk-usage-notice-heading', [
+      m('strong', heading),
+      tooltip(
+        label,
+        m(
+          'button.btn-flat.btn-icon.fm-disk-usage-notice-close',
+          {
+            type: 'button',
+            'aria-label': t('button', 'close'),
+            'aria-keyshortcuts': 'Escape',
+            onclick: onClose,
+          },
+          closeIcon({ size: 16 }),
+        ),
+      ),
+    ]);
+  }
+
   function renderCleanup(
     candidates: readonly DiskUsageCleanupCandidate[],
     attrs: DiskUsageViewAttrs,
   ): m.Children {
     return m('.fm-disk-usage-cleanup', [
-      m('strong', t('diskUsage', 'cleanupHeading')),
+      noticeHeading(t('diskUsage', 'cleanupHeading'), () => {
+        cleanupOpen = false;
+      }),
       m('p', t('diskUsage', 'cleanupExplanation')),
       m(
         'ul',
@@ -690,6 +712,19 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
               return;
             }
             if (
+              event.key === 'Escape' &&
+              (warningsOpen || cleanupOpen) &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              warningsOpen = false;
+              cleanupOpen = false;
+              return;
+            }
+            if (
               (event.key === 'Backspace' || event.key === 'Escape') &&
               trail.length > 1 &&
               !event.ctrlKey &&
@@ -733,7 +768,9 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
                     ]),
                 warningsOpen && unreadable.length > 0
                   ? m('.fm-disk-usage-warnings', [
-                      m('strong', t('diskUsage', 'unreadableHeading')),
+                      noticeHeading(t('diskUsage', 'unreadableHeading'), () => {
+                        warningsOpen = false;
+                      }),
                       m('p', t('diskUsage', 'unreadableExplanation')),
                       m(
                         'ul',

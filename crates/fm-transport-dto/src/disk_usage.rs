@@ -71,6 +71,8 @@ pub enum DiskUsageUnreadableReasonDto {
     OtherVolume,
     /// A directory whose contents are stored only in the cloud; not descended to avoid a download.
     CloudOnly,
+    /// An entry whose name this host cannot represent as a location; recorded against its parent.
+    UnsupportedName,
 }
 
 /// One filesystem entry skipped during a disk-usage scan, with enough context to show the
@@ -520,6 +522,10 @@ mod tests {
             (DiskUsageUnreadableReasonDto::IoError, "\"ioError\""),
             (DiskUsageUnreadableReasonDto::OtherVolume, "\"otherVolume\""),
             (DiskUsageUnreadableReasonDto::CloudOnly, "\"cloudOnly\""),
+            (
+                DiskUsageUnreadableReasonDto::UnsupportedName,
+                "\"unsupportedName\"",
+            ),
         ] {
             assert_eq!(
                 serde_json::to_string(&reason).expect("reason must serialize"),
