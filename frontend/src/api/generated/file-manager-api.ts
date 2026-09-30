@@ -132,6 +132,7 @@ import type {
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
   ResolveKnowledgeSourceRequestDto,
+  ResolveLinkTargetRequestDto,
   ResolveOperationConflictRequestDto,
   ResolveRagCitationRequestDto,
   ResolvedRagCitationDto,
@@ -3846,6 +3847,73 @@ return fetchMutator<getLinkOptionsResponse>(getGetLinkOptionsUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(linkOptionsRequestDto)
+  }
+);}
+
+
+
+export type resolveLinkTargetResponse200 = {
+  data: EntrySummaryDto
+  status: 200
+}
+
+export type resolveLinkTargetResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type resolveLinkTargetResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type resolveLinkTargetResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type resolveLinkTargetResponseSuccess = (resolveLinkTargetResponse200) & {
+  headers: Headers;
+};
+export type resolveLinkTargetResponseError = (resolveLinkTargetResponse400 | resolveLinkTargetResponse403 | resolveLinkTargetResponse404) & {
+  headers: Headers;
+};
+
+export type resolveLinkTargetResponse = (resolveLinkTargetResponseSuccess | resolveLinkTargetResponseError)
+
+export const getResolveLinkTargetUrl = () => {
+
+
+
+
+  return `/api/v1/link-target`
+}
+
+/**
+ * @summary Resolves a symbolic link to the entry it points at, for read-only viewers.
+ */
+export const resolveLinkTarget = async (resolveLinkTargetRequestDto: ResolveLinkTargetRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveLinkTargetResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<resolveLinkTargetResponse>(getResolveLinkTargetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveLinkTargetRequestDto)
   }
 );}
 

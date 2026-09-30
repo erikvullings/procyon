@@ -2971,6 +2971,64 @@
         }
       }
     },
+    "/api/v1/link-target": {
+      "post": {
+        "summary": "Resolves a symbolic link to the entry it points at, for read-only viewers.",
+        "operationId": "resolveLinkTarget",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveLinkTargetRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntrySummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles": {
       "get": {
         "operationId": "listLlmProfiles",
@@ -15650,6 +15708,19 @@
             "type": "string",
             "format": "uuid",
             "description": "Workspace through which the source is opened."
+          }
+        }
+      },
+      "ResolveLinkTargetRequestDto": {
+        "type": "object",
+        "description": "Asks which entry a symbolic link ultimately points at.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The link (or any other entry, which resolves to itself)."
           }
         }
       },

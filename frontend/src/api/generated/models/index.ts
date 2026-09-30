@@ -292,6 +292,7 @@ export * from './removeApplicationDockIconResponseDto.ts';
 export * from './renderChecksumFileRequestDto.ts';
 export * from './resolvedRagCitationDto.ts';
 export * from './resolveKnowledgeSourceRequestDto.ts';
+export * from './resolveLinkTargetRequestDto.ts';
 export * from './resolveOperationConflictRequestDto.ts';
 export * from './resolveRagCitationRequestDto.ts';
 export * from './resumeSemanticCleanupRequestDto.ts';

@@ -2,7 +2,7 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LinkKindOption, LinkOptions, Location } from '../../models';
-import { CreateLinkDialog, linkRequestFor } from './create-link-dialog';
+import { CreateLinkDialog, linkNameStemEnd, linkRequestFor } from './create-link-dialog';
 
 let root: HTMLElement;
 
@@ -80,7 +80,36 @@ describe('linkRequestFor', () => {
   });
 });
 
+describe('linkNameStemEnd', () => {
+  it('selects the name without its extension or shortcut suffix', () => {
+    expect(linkNameStemEnd('résumé.txt')).toBe(6);
+    expect(linkNameStemEnd('data.json.LNK')).toBe(4);
+    expect(linkNameStemEnd('archive.tar.gz')).toBe(11);
+    expect(linkNameStemEnd('Makefile')).toBe(8);
+    expect(linkNameStemEnd('.bashrc')).toBe(7);
+  });
+});
+
 describe('CreateLinkDialog', () => {
+  it('shows its choices in visible native selects and preselects the name stem', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const frame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    await mountDialog({ kinds: [symlink, shortcut] });
+    frame.mockRestore();
+    for (const callback of frames) callback(0);
+    for (const id of ['#create-link-kind', '#create-link-target-style']) {
+      const element = document.querySelector<HTMLSelectElement>(id);
+      expect(element?.classList.contains('browser-default')).toBe(true);
+      expect(element?.selectedOptions[0]?.textContent).not.toBe('');
+    }
+    const input = document.querySelector<HTMLInputElement>('#create-link-name');
+    expect(document.activeElement).toBe(input);
+    expect([input?.selectionStart, input?.selectionEnd]).toEqual([0, 6]);
+  });
+
   it('loads options, suggests the name and explains requirements before confirming', async () => {
     const { onConfirm, loadOptions } = await mountDialog({ kinds: [symlink, shortcut] });
     expect(loadOptions).toHaveBeenCalledWith({ target, destination });

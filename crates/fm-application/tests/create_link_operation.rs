@@ -470,3 +470,35 @@ async fn providers_without_link_semantics_are_gated() {
         .unwrap();
     assert!(cross_provider.kinds.is_empty());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn resolve_link_target_follows_symlinks_and_returns_other_entries_unchanged() {
+    let fixture = fixture();
+    let service = service(&fixture.root);
+    let target = fixture.targets.join("doel ✓.txt");
+    let link = fixture.links.join("data.json");
+    std::os::unix::fs::symlink("../doelen/doel ✓.txt", &link).unwrap();
+
+    let resolved = service
+        .resolve_link_target(fm_transport_dto::ResolveLinkTargetRequestDto {
+            location: location(&link).into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(resolved.kind, fm_transport_dto::EntryKindDto::File);
+    assert_eq!(resolved.size, Some(6));
+    assert_eq!(
+        Location::from(resolved.location).to_native_path().unwrap(),
+        fs::canonicalize(&target).unwrap()
+    );
+
+    let plain = service
+        .resolve_link_target(fm_transport_dto::ResolveLinkTargetRequestDto {
+            location: location(&target).into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(plain.kind, fm_transport_dto::EntryKindDto::File);
+    assert_eq!(plain.name, "doel ✓.txt");
+}

@@ -346,6 +346,7 @@ export type MockClientMethod =
   | 'gitFileHistory'
   | 'startOperation'
   | 'getLinkOptions'
+  | 'resolveLinkTarget'
   | 'listOperations'
   | 'cancelOperation'
   | 'undoOperation'
@@ -3481,6 +3482,24 @@ export class MockFileManagerClient implements FileManagerClient {
       };
       this.operations.set(operation.id, operation);
       return operation;
+    });
+  }
+
+  resolveLinkTarget(location: Location, signal?: AbortSignal): Promise<EntrySummary> {
+    return this.perform('resolveLinkTarget', signal, () => {
+      const separator = location.uri.lastIndexOf('/');
+      const rawParent = location.uri.slice(0, separator);
+      const parentUri = rawParent === 'mock://' ? 'mock:///' : rawParent;
+      const name = decodeURIComponent(location.uri.slice(separator + 1));
+      const fixture = (directories[parentUri] ?? []).find((candidate) => candidate.name === name);
+      if (fixture === undefined) {
+        throw new MockClientError('notFound', `no mock entry at ${location.uri}`);
+      }
+      // Mock links have no stored target; they resolve to a file with the link's own name.
+      return fixtureEntry(
+        parentUri,
+        fixture.kind === 'symlink' ? { ...fixture, kind: 'file' } : fixture,
+      );
     });
   }
 

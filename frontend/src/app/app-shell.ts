@@ -1288,6 +1288,43 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openMetadata?: boolean,
     initialPage?: number,
   ): void {
+    if (entry.kind === 'symlink') {
+      // View what the link points at: the target's kind and extension pick the viewer.
+      const unavailable = () => {
+        const message = document.createElement('span');
+        message.textContent = t('viewer', 'previewUnavailable', { name: entry.name });
+        toast({ html: message.outerHTML });
+      };
+      client
+        .resolveLinkTarget(entry.location)
+        .then((resolved) => {
+          if (resolved.kind !== 'file') {
+            // A link to a folder opens with the OS default application, as the folder itself would.
+            const osOpen = registeredActions.find((action) => action.id === 'core.open');
+            const parameters = actionCommandController.platformActionParameters(
+              'core.view',
+              [entry],
+              undefined,
+            );
+            if (
+              osOpen?.contextRequirements.featureAvailable === false ||
+              parameters === undefined
+            ) {
+              unavailable();
+              return;
+            }
+            actionCommandController.invokeActionById(
+              'core.view',
+              parameters,
+              actionCommandController.actionContext(),
+            );
+            return;
+          }
+          openViewer(client, paneId, resolved, initialSearch, openMetadata, initialPage);
+        })
+        .catch(unavailable);
+      return;
+    }
     const existingViewer = [...viewerByTab.entries()][0];
     if (existingViewer !== undefined) {
       const [key, viewer] = existingViewer;

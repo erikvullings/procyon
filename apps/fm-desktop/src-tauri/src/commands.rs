@@ -1979,6 +1979,18 @@ pub(crate) async fn start_operation(
         .start_operation(request, idempotency_key)
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
+/// Resolves a symbolic link to its target, same as `POST /api/v1/link-target`.
+#[tauri::command]
+pub(crate) async fn resolve_link_target(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ResolveLinkTargetRequestDto,
+) -> Result<fm_transport_dto::EntrySummaryDto, ApplicationErrorDto> {
+    state
+        .service
+        .resolve_link_target(request)
+        .await
+        .map_err(|e| e.into_dto(Uuid::new_v4()))
+}
 /// Lists link kinds for a target/destination pair, same as `POST /api/v1/link-options` (task 0168).
 #[tauri::command]
 pub(crate) async fn get_link_options(

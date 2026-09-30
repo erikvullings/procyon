@@ -224,6 +224,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::operation::list_operations))
         .routes(utoipa_axum::routes!(routes::operation::start_operation))
         .routes(utoipa_axum::routes!(routes::operation::get_link_options))
+        .routes(utoipa_axum::routes!(routes::operation::resolve_link_target))
         .routes(utoipa_axum::routes!(routes::operation::get_operation))
         .routes(utoipa_axum::routes!(routes::operation::cancel_operation))
         .routes(utoipa_axum::routes!(routes::operation::undo_operation))

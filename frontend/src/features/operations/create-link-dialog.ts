@@ -59,6 +59,24 @@ export function linkRequirementText(requirement: LinkRequirement): string {
   }
 }
 
+/**
+ * End offset of the part of a link name the user most likely wants to replace: the name without
+ * its extension, and without the `.lnk` suffix a shortcut adds (`notes.json.lnk` → `notes`).
+ * Dot-files and extensionless names select the whole name.
+ */
+export function linkNameStemEnd(name: string): number {
+  const base = name.toLowerCase().endsWith('.lnk') ? name.slice(0, -4) : name;
+  const dot = base.lastIndexOf('.');
+  return dot > 0 ? dot : base.length;
+}
+
+function focusNameStem(): void {
+  const input = document.getElementById('create-link-name');
+  if (!(input instanceof HTMLInputElement)) return;
+  input.focus();
+  input.setSelectionRange(0, linkNameStemEnd(input.value));
+}
+
 function blurActive(): void {
   const active = document.activeElement;
   if (active instanceof HTMLElement) active.blur();
@@ -107,7 +125,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
         const first = loaded.kinds[0];
         if (first !== undefined) selectKind(first.kind);
         m.redraw();
-        requestAnimationFrame(() => document.getElementById('create-link-name')?.focus());
+        requestAnimationFrame(focusNameStem);
       },
       (error: unknown) => {
         if (activeRequest !== request) return;
@@ -165,7 +183,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
       m('label', [
         m('span', t('operation', 'linkKind')),
         m(
-          'select#create-link-kind',
+          'select.browser-default#create-link-kind',
           {
             value: selectedKind,
             onchange: (event: Event) => {
@@ -181,7 +199,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
         ? m('label', [
             m('span', t('operation', 'linkTargetStyle')),
             m(
-              'select#create-link-target-style',
+              'select.browser-default#create-link-target-style',
               {
                 value: targetStyle,
                 onchange: (event: Event) => {

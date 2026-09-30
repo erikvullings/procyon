@@ -568,6 +568,8 @@ export interface FileManagerClient {
   /** Lists the link kinds that can point at a target from a destination directory (task 0168);
    * an empty list means the pair has no link semantics (remote providers, mixed providers). */
   getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions>;
+  /** Resolves a symbolic link to the entry it points at; other entries resolve to themselves. */
+  resolveLinkTarget(location: Location, signal?: AbortSignal): Promise<EntrySummary>;
 
   listOperations(signal?: AbortSignal): Promise<Operation[]>;
 

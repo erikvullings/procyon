@@ -3393,6 +3393,17 @@ impl FileManagerService {
         .await
     }
 
+    /// Resolves a symbolic link to the entry it points at, for read-only
+    /// consumers such as the F3 viewer. Non-link entries are returned as-is.
+    pub async fn resolve_link_target(
+        &self,
+        request: fm_transport_dto::ResolveLinkTargetRequestDto,
+    ) -> Result<fm_transport_dto::EntrySummaryDto, ApplicationError> {
+        crate::link_operation::resolve_link_target(&self.providers, &request.location.into())
+            .await
+            .map(fm_transport_dto::EntrySummaryDto::from)
+    }
+
     /// Reads an entry's Finder tags (task 0136). Missing capability support
     /// or a vanished entry are both reported as [`ApplicationError::NotFound`]
     /// so a lazy per-entry frontend loader can treat them as "no tags"

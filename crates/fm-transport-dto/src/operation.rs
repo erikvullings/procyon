@@ -125,6 +125,14 @@ pub struct LinkOptionsRequestDto {
     pub destination: LocationDto,
 }
 
+/// Asks which entry a symbolic link ultimately points at.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveLinkTargetRequestDto {
+    /// The link (or any other entry, which resolves to itself).
+    pub location: LocationDto,
+}
+
 /// Link kinds supported for a target placed in a destination directory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

@@ -222,7 +222,7 @@ function cursorOnlyEntry(
 }
 
 /** Resolves the cursor entry F3 (or Alt+Space, when no viewer is already open) would open: the
- * single non-parent file entry under the active pane's cursor, and the opposite pane to open it
+ * single non-parent file (or symlink) entry under the active pane's cursor, and the opposite pane to open it
  * into. Shared so Alt+Space can open a viewer exactly the way F3 would, rather than duplicating
  * this resolution logic. */
 function resolveViewTarget(context: GlobalKeydownContext):
@@ -247,7 +247,12 @@ function resolveViewTarget(context: GlobalKeydownContext):
       ? undefined
       : directory?.entries.find((entry) => entry.id === selection.cursorEntryId);
   const otherPaneId = workspace?.paneOrder.find((paneId) => paneId !== active?.paneId);
-  if (viewEntry === undefined || viewEntry.kind !== 'file' || isParentEntry(viewEntry.id))
+  // Symlinks are resolved to their target by `openViewer`, so a link to a file views that file.
+  if (
+    viewEntry === undefined ||
+    (viewEntry.kind !== 'file' && viewEntry.kind !== 'symlink') ||
+    isParentEntry(viewEntry.id)
+  )
     return undefined;
   if (otherPaneId === undefined) return undefined;
   const initialSearch =

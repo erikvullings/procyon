@@ -289,6 +289,7 @@ import {
   generateRagAnswer as requestRagGeneration,
   previewRag as requestRagPreview,
   readFileRange as requestReadFileRange,
+  resolveLinkTarget as requestResolveLinkTarget,
   getRuntimeCapabilities as requestRuntimeCapabilities,
   saveEditableFile as requestSaveEditableFile,
   cancelSearch as requestSearchCancel,
@@ -1577,6 +1578,17 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected getLinkOptions response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  async resolveLinkTarget(location: FileLocation, signal?: AbortSignal): Promise<EntrySummary> {
+    const response = await requestResolveLinkTarget(
+      { location },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected resolveLinkTarget response status: ${response.status}`);
+    }
+    return entrySummaryFromDto(response.data);
   }
 
   async listOperations(signal?: AbortSignal): Promise<Operation[]> {
