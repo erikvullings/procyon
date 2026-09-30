@@ -96,7 +96,7 @@ export const ArchiveCreateDialog: FactoryComponent<ArchiveCreateDialogAttrs> = (
           m('label', [
             m('span', t('archiveCreate', 'formatLabel')),
             m(
-              'select',
+              'select.browser-default',
               {
                 value: format,
                 onchange: (event: Event) => {
@@ -113,7 +113,7 @@ export const ArchiveCreateDialog: FactoryComponent<ArchiveCreateDialogAttrs> = (
             ? m('label', [
                 m('span', t('archiveCreate', 'compressionLabel')),
                 m(
-                  'select',
+                  'select.browser-default',
                   {
                     value: String(compressionLevel),
                     onchange: (event: Event) => {

@@ -413,7 +413,7 @@ function rootStatusView(
             return m('label.fm-semantic-library-override', [
               m('span', reasonLabel(reason)),
               m(
-                'select',
+                'select.browser-default',
                 {
                   'aria-label': `${reasonLabel(reason)} ${t('semanticLibrary', 'override')}`,
                   value: selected,

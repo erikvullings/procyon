@@ -194,6 +194,11 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('/docs/Scanned reference.pdf');
     expect(root.textContent).toContain('OCR remediation controls below');
     expect(root.querySelectorAll('.fm-semantic-library-override')).toHaveLength(7);
+    expect(
+      [...root.querySelectorAll<HTMLSelectElement>('.fm-semantic-library-override select')].every(
+        (select) => select.classList.contains('browser-default'),
+      ),
+    ).toBe(true);
     expect(root.textContent).not.toContain('Symlink outside root');
     expect(root.textContent).not.toContain('Over budget');
   });

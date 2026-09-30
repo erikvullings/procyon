@@ -634,6 +634,7 @@ describe('SemanticComponentManagement', () => {
     const normalization = localModelDetails?.querySelector<HTMLSelectElement>(
       '#fm-semantic-local-normalization',
     );
+    expect(normalization?.classList.contains('browser-default')).toBe(true);
     expect(normalization?.value).toBe('unitLength');
     expect(normalization?.selectedOptions[0]?.textContent).toBe('Unit length');
     const values: ReadonlyArray<readonly [string, string]> = [

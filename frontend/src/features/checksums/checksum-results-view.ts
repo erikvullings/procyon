@@ -110,7 +110,7 @@ export const ChecksumResultsView: FactoryComponent<ChecksumResultsViewAttrs> = (
           m('label.checksum-results__algorithm', [
             t('checksums', 'algorithmLabel'),
             m(
-              'select',
+              'select.browser-default',
               {
                 value: algorithm,
                 onchange: (event: Event) => {

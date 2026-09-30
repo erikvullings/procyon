@@ -46,6 +46,13 @@ function render(attrs: Partial<ChecksumResultsViewAttrs> = {}): HTMLElement {
 }
 
 describe('ChecksumResultsView', () => {
+  it('shows the active algorithm in a visible native select', () => {
+    const root = render({ algorithms: ['sha256', 'blake3'] });
+    const select = root.querySelector<HTMLSelectElement>('.checksum-results__algorithm select');
+    expect(select?.classList.contains('browser-default')).toBe(true);
+    expect(select?.selectedOptions[0]?.textContent).toContain('SHA-256');
+  });
+
   it('lists an entry with its abbreviated digest', () => {
     const root = render();
     expect(root.textContent).toContain('a.txt');

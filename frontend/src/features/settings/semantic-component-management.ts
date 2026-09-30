@@ -1380,7 +1380,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               m('label.fm-semantic-field', { for: 'fm-semantic-local-normalization' }, [
                 m('span', t('semanticComponents', 'normalization')),
                 m(
-                  'select#fm-semantic-local-normalization',
+                  'select#fm-semantic-local-normalization.browser-default',
                   {
                     value: localModel.normalization,
                     onchange: (event: Event) => {
