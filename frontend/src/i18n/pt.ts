@@ -1058,6 +1058,7 @@ export const pt = {
     unreadableReason_ioError: 'Erro de E/S',
     unreadableReason_otherVolume: 'Noutro volume (não analisado)',
     unreadableReason_cloudOnly: 'Apenas na nuvem (não transferido)',
+    unreadableReason_unsupportedName: 'Contém um nome que este sistema não consegue representar',
     unreadableMore: '{count} entradas adicionais não apresentadas.',
     scanFailed: 'A análise de utilização do disco falhou.',
     rootRemoved: 'A pasta analisada já não existe.',

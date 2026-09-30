@@ -136,6 +136,7 @@ import {
   type OperationsController,
   withOperationConfirmation,
 } from '../features/operations/operations-controller';
+import type { PaneRenameRequest } from '../features/panes/pane';
 import { isParentEntry } from '../features/panes/parent-entry';
 import {
   createTabController,
@@ -3466,6 +3467,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     redraw: () => m.redraw(),
   };
 
+  const renameRequests = new Map<PaneId, PaneRenameRequest>();
   const actionCommandControllerContext: ActionCommandControllerContext = {
     getCommandPaletteOpen: () => commandPaletteOpen,
     setCommandPaletteOpen: (open) => {
@@ -3509,6 +3511,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
+    requestRename: (paneId, entryIds) => {
+      const revision = (renameRequests.get(paneId)?.revision ?? 0) + 1;
+      renameRequests.set(paneId, { revision, entryIds });
+      m.redraw();
+    },
     toggleDirectoryTree,
     toggleOperationCentre,
     redraw: () => m.redraw(),
@@ -3539,6 +3546,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDraggedLocations: () => draggedLocations,
     getNativeDragOutSupported: () => nativeDragOutSupported,
     getNativeDropInProgress: () => nativeDropInProgress,
+    getRenameRequest: (paneId) => renameRequests.get(paneId),
     getAppState: () => appState,
     clipboard,
     getDirectories: () => directories,

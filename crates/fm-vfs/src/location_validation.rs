@@ -91,14 +91,18 @@ mod tests {
     #[test]
     fn connection_validation_preserves_the_existing_uri_safety_contract() {
         let valid_id = "11111111-1111-4111-8111-111111111111";
-        for uri in [
+        let mut invalid = vec![
             "sftp://not-a-uuid/home",
             "sftp://11111111-1111-4111-8111-111111111111",
             "sftp://11111111-1111-4111-8111-111111111111//home",
             "sftp://11111111-1111-4111-8111-111111111111/bad%2Fname",
-            "sftp://11111111-1111-4111-8111-111111111111/CON.txt",
             "sftp://11111111-1111-4111-8111-111111111111/home?query=1",
-        ] {
+        ];
+        // Windows device names are only unrepresentable when the host itself is Windows.
+        if cfg!(windows) {
+            invalid.push("sftp://11111111-1111-4111-8111-111111111111/CON.txt");
+        }
+        for uri in invalid {
             let location = Location::new(ProviderId::new("sftp"), uri);
             assert!(
                 validate_connection_location(&location, "sftp", &["sftp"], true).is_err(),

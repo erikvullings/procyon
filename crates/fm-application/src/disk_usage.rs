@@ -276,6 +276,9 @@ enum UnreadableReason {
     /// A directory whose contents live only in the cloud (macOS `SF_DATALESS`). Listing it would
     /// ask the file provider to download it, so it is never descended.
     CloudOnly,
+    /// A child whose name this host cannot represent as a location. Its bytes stay in the parent's
+    /// total; the entry is recorded against the parent directory.
+    UnsupportedName,
 }
 
 impl UnreadableReason {
@@ -296,6 +299,7 @@ impl From<UnreadableReason> for DiskUsageUnreadableReasonDto {
             UnreadableReason::IoError => Self::IoError,
             UnreadableReason::OtherVolume => Self::OtherVolume,
             UnreadableReason::CloudOnly => Self::CloudOnly,
+            UnreadableReason::UnsupportedName => Self::UnsupportedName,
         }
     }
 }
@@ -308,6 +312,7 @@ impl From<UnreadableReason> for DiskUsageUnreadableReasonPayload {
             UnreadableReason::IoError => Self::IoError,
             UnreadableReason::OtherVolume => Self::OtherVolume,
             UnreadableReason::CloudOnly => Self::CloudOnly,
+            UnreadableReason::UnsupportedName => Self::UnsupportedName,
         }
     }
 }
@@ -849,8 +854,8 @@ fn scan_local_tree(
     let cleanup_candidates =
         find_cleanup_candidates(&tree, &root, MIN_CLEANUP_BYTES, &cancellation)?
             .iter()
-            .map(cleanup_candidate_dto)
-            .collect::<Result<Vec<_>, _>>()?;
+            .filter_map(cleanup_candidate_dto)
+            .collect::<Vec<_>>();
     #[cfg(unix)]
     let mut seen_hardlinks = HashSet::new();
     #[cfg(not(unix))]
@@ -867,8 +872,10 @@ fn scan_local_tree(
             deduplicate_hardlinks: cfg!(not(unix)),
             remaining_depth: MAX_RESPONSE_DEPTH,
         },
+        Some(&unreadable),
         &cancellation,
-    )?;
+    )?
+    .ok_or(ApplicationError::Internal)?;
     aggregate_excess_children(&mut root_node, &cancellation)?;
     ensure_not_cancelled(&cancellation)?;
     let response = ScanDiskUsageResponseDto {
@@ -984,12 +991,14 @@ fn snapshot_response(
 ) -> Result<ScanDiskUsageResponseDto, ApplicationError> {
     let mut seen_hardlinks = HashSet::new();
     let mut children = Vec::new();
+    let mut unsupported = DiskUsageSize::default();
     for tree in trees.iter().flatten() {
         ensure_not_cancelled(cancellation)?;
         // Each top-level tree's own `name` is only its basename (`build_tree_parallel` never
         // sees the full path), so its absolute location must be rejoined against `root` here —
         // `map_node`'s `is_root` branch otherwise uses `path` as-is.
-        children.push(map_node(
+        // Snapshots repeat every progress tick, so only the final mapping records skips.
+        match map_node(
             tree,
             &root.join(tree.name().as_os_str()),
             &mut seen_hardlinks,
@@ -999,14 +1008,20 @@ fn snapshot_response(
                 deduplicate_hardlinks: cfg!(not(unix)),
                 remaining_depth: MAX_RESPONSE_DEPTH,
             },
+            None,
             cancellation,
-        )?);
+        )? {
+            Some(child) => children.push(child),
+            None => unsupported += tree.size(),
+        }
     }
     let logical_bytes = root_size
         .logical_bytes
+        .saturating_add(unsupported.logical_bytes)
         .saturating_add(children.iter().map(|child| child.logical_bytes).sum());
     let physical_bytes = root_size
         .physical_bytes
+        .saturating_add(unsupported.physical_bytes)
         .saturating_add(children.iter().map(|child| child.physical_bytes).sum());
     let name = root
         .file_name()
@@ -1061,13 +1076,10 @@ fn publish_progress(
     );
 }
 
-fn cleanup_candidate_dto(
-    candidate: &CleanupCandidate,
-) -> Result<DiskUsageCleanupCandidateDto, ApplicationError> {
-    Ok(DiskUsageCleanupCandidateDto {
-        location: Location::from_native_path(&candidate.path)
-            .map_err(|_| ApplicationError::Internal)?
-            .into(),
+/// `None` for a candidate this host cannot represent as a location; it is simply not suggested.
+fn cleanup_candidate_dto(candidate: &CleanupCandidate) -> Option<DiskUsageCleanupCandidateDto> {
+    Some(DiskUsageCleanupCandidateDto {
+        location: Location::from_native_path(&candidate.path).ok()?.into(),
         kind: match candidate.kind {
             CleanupKind::NodeModules => DiskUsageCleanupKindDto::NodeModules,
             CleanupKind::PythonVirtualEnvironment => {
@@ -1138,6 +1150,9 @@ fn event_unreadable(entry: &DiskUsageUnreadableEntryDto) -> DiskUsageUnreadableE
                 DiskUsageUnreadableReasonPayload::OtherVolume
             }
             DiskUsageUnreadableReasonDto::CloudOnly => DiskUsageUnreadableReasonPayload::CloudOnly,
+            DiskUsageUnreadableReasonDto::UnsupportedName => {
+                DiskUsageUnreadableReasonPayload::UnsupportedName
+            }
         },
     }
 }
@@ -1173,18 +1188,31 @@ pub(crate) fn node_from_event_tree(tree: DiskUsageTreePayload) -> DiskUsageNodeD
     .expect("progress events carry a consistent tree")
 }
 
+/// Maps one scanned subtree to its DTO. Returns `None` for an entry this host cannot represent as
+/// a location, recording it against its parent in `unsupported` when given; callers keep its bytes
+/// in the parent's total so one odd name never fails the whole scan.
 fn map_node(
     tree: &DataTree<OsStringDisplay, DiskUsageSize>,
     path: &Path,
     seen_hardlinks: &mut HashSet<FileIdentity>,
     options: MapNodeOptions,
+    unsupported: Option<&UnreadableRegistry>,
     cancellation: &CancellationToken,
-) -> Result<DiskUsageNodeDto, ApplicationError> {
+) -> Result<Option<DiskUsageNodeDto>, ApplicationError> {
     ensure_not_cancelled(cancellation)?;
     let node_path = if options.is_root {
         path.to_owned()
     } else {
         path.join(tree.name().as_os_str())
+    };
+    let Ok(location) = Location::from_native_path(&node_path) else {
+        if let Some(registry) = unsupported {
+            registry.record_reason(
+                node_path.parent().unwrap_or(&node_path),
+                UnreadableReason::UnsupportedName,
+            );
+        }
+        return Ok(None);
     };
     let kind = match tree.size().kind {
         ScannedEntryKind::Directory => DiskUsageNodeKindDto::Directory,
@@ -1210,24 +1238,23 @@ fn map_node(
         } else {
             (tree.size().logical_bytes, tree.size().physical_bytes)
         };
-        return Ok(DiskUsageNodeDto {
+        return Ok(Some(DiskUsageNodeDto {
             name,
-            location: Location::from_native_path(&node_path)
-                .map_err(|_| ApplicationError::Internal)?
-                .into(),
+            location: location.into(),
             kind,
             logical_bytes,
             physical_bytes,
             collapsed: true,
             children: Vec::new(),
-        });
+        }));
     }
     let mut children = Vec::with_capacity(tree.children().len());
+    let mut unmapped = DiskUsageSize::default();
     for child in tree.children() {
         if child.size().kind == ScannedEntryKind::Aggregate {
             continue;
         }
-        children.push(map_node(
+        let mapped = map_node(
             child,
             &node_path,
             seen_hardlinks,
@@ -1237,8 +1264,13 @@ fn map_node(
                 deduplicate_hardlinks: options.deduplicate_hardlinks,
                 remaining_depth: options.remaining_depth.saturating_sub(1),
             },
+            unsupported,
             cancellation,
-        )?);
+        )?;
+        match mapped {
+            Some(mapped) => children.push(mapped),
+            None => unmapped += child.size(),
+        }
     }
     children.sort_unstable_by(|left, right| left.name.cmp(&right.name));
     let (logical_bytes, physical_bytes) = if kind == DiskUsageNodeKindDto::Directory {
@@ -1252,11 +1284,13 @@ fn map_node(
             .size()
             .logical_bytes
             .saturating_sub(raw_children.logical_bytes)
+            .saturating_add(unmapped.logical_bytes)
             .saturating_add(children.iter().map(|child| child.logical_bytes).sum())
             .min(raw_total.logical_bytes);
         let physical_total = raw_total
             .physical_bytes
             .saturating_sub(raw_children.physical_bytes)
+            .saturating_add(unmapped.physical_bytes)
             .saturating_add(children.iter().map(|child| child.physical_bytes).sum())
             .min(raw_total.physical_bytes);
         (logical_total, physical_total)
@@ -1270,12 +1304,9 @@ fn map_node(
     } else {
         (tree.size().logical_bytes, tree.size().physical_bytes)
     };
-    let location = Location::from_native_path(&node_path)
-        .map_err(|_| ApplicationError::Internal)?
-        .into();
     let mut node = DiskUsageNodeDto {
         name,
-        location,
+        location: location.into(),
         kind,
         logical_bytes,
         physical_bytes,
@@ -1283,7 +1314,7 @@ fn map_node(
         children,
     };
     fit_child_totals(&mut node);
-    Ok(node)
+    Ok(Some(node))
 }
 
 fn deduplicate_collapsed_size(
@@ -1877,11 +1908,81 @@ mod tests {
                 deduplicate_hardlinks: true,
                 remaining_depth: MAX_RESPONSE_DEPTH,
             },
+            None,
             &CancellationToken::new(),
         )
-        .expect("an unreadable child must not fail the scan");
+        .expect("an unreadable child must not fail the scan")
+        .expect("representable fixture");
 
         assert!(mapped.children.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mapping_skips_and_counts_unrepresentable_names_but_keeps_their_bytes() {
+        let root = tempfile::tempdir().expect("create fixture root");
+        let directory = |name: &str, children| {
+            DataTree::dir(
+                OsStringDisplay::os_string_from(name),
+                DiskUsageSize {
+                    kind: ScannedEntryKind::Directory,
+                    ..DiskUsageSize::default()
+                },
+                children,
+            )
+        };
+        let file = |name: &str, bytes: u64| {
+            DataTree::file(
+                OsStringDisplay::os_string_from(name),
+                DiskUsageSize {
+                    logical_bytes: bytes,
+                    physical_bytes: bytes,
+                    kind: ScannedEntryKind::File,
+                },
+            )
+        };
+        // A backslash is legal in a Unix file name but can never form a location segment.
+        let tree = DataTree::dir(
+            OsStringDisplay::os_string_from(root.path()),
+            DiskUsageSize {
+                kind: ScannedEntryKind::Directory,
+                ..DiskUsageSize::default()
+            },
+            vec![directory(
+                "words",
+                vec![file("plain.yaml", 10), file("back\\slash.yaml", 30)],
+            )],
+        );
+        let registry = UnreadableRegistry::default();
+
+        let mapped = map_node(
+            &tree,
+            root.path(),
+            &mut HashSet::new(),
+            MapNodeOptions {
+                is_root: true,
+                expand_root: false,
+                deduplicate_hardlinks: false,
+                remaining_depth: MAX_RESPONSE_DEPTH,
+            },
+            Some(&registry),
+            &CancellationToken::new(),
+        )
+        .expect("an unrepresentable name must not fail the scan")
+        .expect("representable root");
+
+        let words = &mapped.children[0];
+        assert_eq!(words.children.len(), 1);
+        assert_eq!(words.children[0].name, "plain.yaml");
+        assert_eq!(words.logical_bytes, 40);
+        assert_eq!(mapped.physical_bytes, 40);
+        assert_eq!(registry.count(), 1);
+        let details = registry.details();
+        assert!(details[0].location.uri.ends_with("/words"));
+        assert_eq!(
+            details[0].reason,
+            DiskUsageUnreadableReasonDto::UnsupportedName
+        );
     }
 
     #[test]
@@ -1914,9 +2015,11 @@ mod tests {
                 deduplicate_hardlinks: true,
                 remaining_depth: 0,
             },
+            None,
             &CancellationToken::new(),
         )
-        .expect("collapsed mapping");
+        .expect("collapsed mapping")
+        .expect("representable fixture");
 
         assert!(mapped.collapsed);
         assert!(mapped.children.is_empty());
@@ -1958,9 +2061,11 @@ mod tests {
                 deduplicate_hardlinks: true,
                 remaining_depth: 0,
             },
+            None,
             &CancellationToken::new(),
         )
-        .expect("collapsed mapping");
+        .expect("collapsed mapping")
+        .expect("representable fixture");
 
         assert!(mapped.collapsed);
         assert!(mapped.children.is_empty());
@@ -2027,9 +2132,11 @@ mod tests {
                 deduplicate_hardlinks: true,
                 remaining_depth: MAX_RESPONSE_DEPTH,
             },
+            None,
             &CancellationToken::new(),
         )
-        .expect("map tree");
+        .expect("map tree")
+        .expect("representable fixture");
 
         assert_eq!(
             mapped

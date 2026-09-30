@@ -189,6 +189,11 @@ export interface PaneNavigationAttrs {
 }
 
 /** Inputs for the presentation-only pane surface (39 properties, < 40). */
+export interface PaneRenameRequest {
+  readonly revision: number;
+  readonly entryIds: readonly EntryId[];
+}
+
 export interface PaneAttrs {
   // Location display (4)
   readonly path: string;
@@ -241,6 +246,8 @@ export interface PaneAttrs {
   readonly onSortChange: (sort: readonly SortDescriptor[]) => void;
   readonly onRename: (entry: EntrySummary, name: string) => void | Promise<void>;
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
+  /** A new revision starts the F2 rename flow from outside the pane (context menu, palette). */
+  readonly renameRequest?: PaneRenameRequest;
   readonly onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
   // Drag/drop into the directory table (3)
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
@@ -604,15 +611,21 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
     items[nextIndex]?.focus();
   }
 
-  function beginRename(attrs: PaneAttrs): void {
+  function beginRename(attrs: PaneAttrs, targetEntryIds?: readonly EntryId[]): void {
+    const targets = targetEntryIds === undefined ? attrs.selectedEntryIds : new Set(targetEntryIds);
     const selectedEntries = attrs.entries.filter(
-      (entry) => attrs.selectedEntryIds.has(entry.id) && !isParentEntry(entry.id),
+      (entry) => targets.has(entry.id) && !isParentEntry(entry.id),
     );
     if (selectedEntries.length > 1) {
       attrs.onMultiRename?.(selectedEntries);
       return;
     }
-    const entry = attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
+    const entry =
+      targetEntryIds !== undefined
+        ? selectedEntries[0]
+        : attrs.cursorIndex === undefined
+          ? undefined
+          : attrs.entries[attrs.cursorIndex];
     if (entry === undefined || isParentEntry(entry.id)) return;
     renameCtrl.open(entry);
     renameContext = { path: attrs.path, tabId: attrs.activeTabId };
@@ -654,11 +667,24 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
     m.redraw();
   }
 
+  let renameRequestSeen = false;
+  let handledRenameRevision: number | undefined;
+
   return {
     onremove: () => {
       typeaheadCtrl.clearTimer();
     },
     view: ({ attrs }) => {
+      if (!renameRequestSeen) {
+        renameRequestSeen = true;
+        handledRenameRevision = attrs.renameRequest?.revision;
+      } else if (
+        attrs.renameRequest !== undefined &&
+        attrs.renameRequest.revision !== handledRenameRevision
+      ) {
+        handledRenameRevision = attrs.renameRequest.revision;
+        beginRename(attrs, attrs.renameRequest.entryIds);
+      }
       if (
         renameCtrl.entry !== undefined &&
         (renameContext?.path !== attrs.path || renameContext.tabId !== attrs.activeTabId)

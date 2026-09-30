@@ -82,6 +82,22 @@ button.fm-disk-usage-ancestor:hover {
   color: var(--fm-text);
 }
 
+.fm-disk-usage-status-action[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--fm-text) 10%, transparent);
+}
+
+.fm-disk-usage-notice-heading {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fm-disk-usage-notice-close {
+  flex: 0 0 auto;
+  margin-block: -0.25rem;
+}
+
 .fm-disk-usage-cleanup-toggle,
 .fm-disk-usage-warning {
   margin-inline-start: auto;

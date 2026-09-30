@@ -28,6 +28,7 @@ import type { CommandAvailabilityContext } from '../commands/availability';
 import type { NavigationController, PaneDirectoryView } from '../navigation/navigation';
 import { rootLocationFor } from '../navigation/root-location';
 import type { OperationsController } from '../operations/operations-controller';
+import { canUseSystemTrash } from '../operations/system-trash';
 import { isParentEntry } from '../panes/parent-entry';
 import type { TabController } from '../panes/tab-controller';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
@@ -311,12 +312,6 @@ function isViewerNavigationTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
     (target.matches('.fm-file-viewer-search-input') || target.closest('.cm-editor') !== null)
-  );
-}
-
-function canUseSystemTrash(locations: readonly Location[]): boolean {
-  return locations.every(
-    (location) => location.providerId === 'file' || location.providerId === 'local',
   );
 }
 

@@ -97,7 +97,11 @@ async fn rejects_collision_and_invalid_names_without_mutating_outside_temp_root(
     let location = Location::from_native_path(root.path()).expect("location");
     let service = service(&root);
 
-    for name in ["existing", "", "../escape", "CON"] {
+    let mut invalid_names = vec!["existing", "", "../escape"];
+    if cfg!(windows) {
+        invalid_names.push("CON");
+    }
+    for name in invalid_names {
         assert_eq!(
             create(&service, &location, name, false).await.state,
             OperationStateDto::Failed,

@@ -15,4 +15,5 @@ export const DiskUsageUnreadableReasonDto = {
   ioError: 'ioError',
   otherVolume: 'otherVolume',
   cloudOnly: 'cloudOnly',
+  unsupportedName: 'unsupportedName',
 } as const;

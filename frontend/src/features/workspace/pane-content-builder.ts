@@ -48,6 +48,7 @@ import {
   parentLocation,
 } from '../navigation/navigation';
 import type { OperationsController } from '../operations/operations-controller';
+import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
 import { FileViewer } from '../preview/file-viewer';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
@@ -115,6 +116,8 @@ export interface PaneContentContext {
   getNativeDragOutSupported(): boolean;
   getNativeDropInProgress(): boolean;
   getAppState(): AppState | undefined;
+  /** Revision bumped when the context menu or palette asks this pane to start renaming. */
+  getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
   clipboard(): ClipboardState;
 
   // Map state (mutable reference — callers may .get()/.set()/.delete() directly)
@@ -318,6 +321,7 @@ export function createPaneContentBuilder(
         ? filteredFresh
         : withParentEntry(pathFromUri(tab.location.uri), filteredFresh);
     }
+    const renameRequest = context.getRenameRequest?.(paneId);
     const cursorIndex =
       selection.cursorEntryId === undefined ? undefined : entryIds.indexOf(selection.cursorEntryId);
     const selectedEntryIds = new Set<EntryId>(selection.selectedEntryIds);
@@ -435,6 +439,7 @@ export function createPaneContentBuilder(
       actions: context.getRegisteredActions(),
       keybindingOverrides: currentSettings?.keybindings ?? {},
       ...(cursorIndex === undefined || cursorIndex < 0 ? {} : { cursorIndex }),
+      ...(renameRequest === undefined ? {} : { renameRequest }),
       onNavigate: async (path) => {
         if (tab !== undefined) {
           await context

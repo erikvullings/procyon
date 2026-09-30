@@ -936,7 +936,9 @@ export const nl = {
     searchNoSources:
       'Er zijn geen geïndexeerde documenten beschikbaar in dit bereik. Kies een ander bereik of indexeer een map en probeer het opnieuw.',
     searchIndexPending:
-      'Deze map is toegevoegd en wordt nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
+      'De map {folder} is toegevoegd en wordt nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
+    searchIndexPendingMany:
+      'De mappen {folders} zijn toegevoegd en worden nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
     searchUnavailable:
       'Semantisch zoeken is niet beschikbaar. Controleer de instellingen voor semantisch zoeken en probeer het opnieuw.',
     searchDenied:
@@ -1746,6 +1748,7 @@ export const nl = {
     unreadableReason_ioError: 'I/O-fout',
     unreadableReason_otherVolume: 'Op een ander volume (niet gescand)',
     unreadableReason_cloudOnly: 'Alleen in de cloud (niet gedownload)',
+    unreadableReason_unsupportedName: 'Bevat een naam die dit systeem niet kan weergeven',
     unreadableMore: '{count} extra items worden niet getoond.',
     scanFailed: 'De schijfgebruikscan is mislukt.',
     rootRemoved: 'De gescande map bestaat niet meer.',

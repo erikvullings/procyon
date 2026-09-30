@@ -1058,6 +1058,7 @@ export const fr = {
     unreadableReason_ioError: "Erreur d'E/S",
     unreadableReason_otherVolume: 'Sur un autre volume (non analysé)',
     unreadableReason_cloudOnly: 'Stocké uniquement dans le cloud (non téléchargé)',
+    unreadableReason_unsupportedName: 'Contient un nom que ce système ne peut pas représenter',
     unreadableMore: '{count} éléments supplémentaires ne sont pas affichés.',
     scanFailed: "L'analyse de l'utilisation du disque a échoué.",
     rootRemoved: "Le dossier analysé n'existe plus.",

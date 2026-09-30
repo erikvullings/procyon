@@ -9544,7 +9544,8 @@
           "disappeared",
           "ioError",
           "otherVolume",
-          "cloudOnly"
+          "cloudOnly",
+          "unsupportedName"
         ]
       },
       "DocumentSummaryDto": {

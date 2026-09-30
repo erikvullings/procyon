@@ -36,6 +36,7 @@ import type {
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { lastPathSegment } from '../navigation/navigation';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
 
@@ -1374,15 +1375,21 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           t('knowledgeSearch', 'searchNoSources'),
         );
       }
+      const pendingRoots = roots.filter((root) => root.available && root.indexedGeneration === 0);
       if (
         capabilities !== undefined &&
         attrs.semanticSourceIds.length === 0 &&
-        roots.some((root) => root.available && root.indexedGeneration === 0)
+        pendingRoots.length > 0
       ) {
+        const folders = pendingRoots
+          .map((root) => `“${lastPathSegment(root.location) ?? root.label}”`)
+          .join(', ');
         return m(
           'p.fm-knowledge-warning',
           { role: 'status' },
-          t('knowledgeSearch', 'searchIndexPending'),
+          pendingRoots.length === 1
+            ? t('knowledgeSearch', 'searchIndexPending', { folder: folders })
+            : t('knowledgeSearch', 'searchIndexPendingMany', { folders }),
         );
       }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));

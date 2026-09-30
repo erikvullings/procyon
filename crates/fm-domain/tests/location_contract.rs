@@ -470,12 +470,39 @@ fn validates_provider_and_rejects_invalid_segments() {
             .validate_local_uri(),
         Err(LocationError::EmptySegment)
     );
+    #[cfg(windows)]
     assert_eq!(
         Location::parse("file:///tmp/CON.txt")
             .unwrap()
             .validate_local_uri(),
         Err(LocationError::ReservedWindowsName("CON.txt".to_owned()))
     );
+    #[cfg(not(windows))]
+    assert_eq!(
+        Location::parse("file:///tmp/CON.txt")
+            .unwrap()
+            .validate_local_uri(),
+        Ok(())
+    );
+}
+
+#[test]
+fn windows_device_names_are_detected_on_every_host() {
+    for name in ["CON", "nul.adjective.yaml", "com1.txt", "LPT9", "aux."] {
+        assert!(fm_domain::location::is_windows_device_name(name), "{name}");
+    }
+    for name in ["console", "nullable.txt", "COM10", "LPT0", "file"] {
+        assert!(!fm_domain::location::is_windows_device_name(name), "{name}");
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn windows_device_names_are_ordinary_names_on_other_hosts() {
+    let path = std::path::Path::new("/tmp/words/nul.adjective.yaml");
+    let location = Location::from_native_path(path).expect("representable on non-Windows hosts");
+    assert_eq!(location.to_native_path().unwrap(), path);
+    assert_eq!(fm_domain::location::validate_name("CON"), Ok(()));
 }
 
 #[test]

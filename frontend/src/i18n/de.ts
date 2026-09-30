@@ -1060,6 +1060,8 @@ export const de = {
     unreadableReason_ioError: 'E/A-Fehler',
     unreadableReason_otherVolume: 'Auf einem anderen Volume (nicht gescannt)',
     unreadableReason_cloudOnly: 'Nur in der Cloud gespeichert (nicht heruntergeladen)',
+    unreadableReason_unsupportedName:
+      'Enthält einen Namen, den dieses System nicht darstellen kann',
     unreadableMore: '{count} weitere Einträge werden nicht angezeigt.',
     scanFailed: 'Der Speicherplatz-Scan ist fehlgeschlagen.',
     rootRemoved: 'Der gescannte Ordner existiert nicht mehr.',
