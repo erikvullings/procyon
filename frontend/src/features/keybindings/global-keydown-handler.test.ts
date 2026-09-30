@@ -1349,6 +1349,39 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     createGlobalKeydownHandler(context)(keydown('F3'));
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorFile, undefined);
   });
+
+  it('F3 hands a symlink under the cursor to the viewer, which resolves its target', () => {
+    const openViewer = vi.fn();
+    const cursorLink: EntrySummary = {
+      id: 'link-1' as never,
+      location: { providerId: 'local', uri: 'file:///a/b/data.json' },
+      name: 'data.json',
+      kind: 'symlink',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    };
+    const coreViewAction: ActionDescriptor = {
+      id: 'core.view',
+      title: 'View',
+      defaultShortcuts: [{ key: 'F3' }],
+      category: 'test',
+      contextRequirements: {},
+      source: { kind: 'core' },
+    };
+    const context = makeContext({
+      getRegisteredActions: () => [...ACTIONS, coreViewAction],
+      actionsWithFavourites: () => [...ACTIONS, coreViewAction],
+      getViewer: () => undefined,
+      openViewer,
+      getSelections: () =>
+        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: 'link-1' as never }]]),
+      getDirectories: () =>
+        new Map([['pane-a:tab', { entries: [cursorLink] } as unknown as PaneDirectoryView]]),
+    });
+    createGlobalKeydownHandler(context)(keydown('F3'));
+    expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorLink, undefined);
+  });
 });
 
 describe('createGlobalKeydownHandler clipboard paste', () => {

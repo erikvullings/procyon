@@ -11,8 +11,9 @@ use axum::{
 };
 use fm_domain::OperationId;
 use fm_transport_dto::{
-    ApplicationErrorDto, LinkOptionsDto, LinkOptionsRequestDto, OperationDto, OperationPageDto,
-    ResolveOperationConflictRequestDto, StartOperationRequestDto,
+    ApplicationErrorDto, EntrySummaryDto, LinkOptionsDto, LinkOptionsRequestDto, OperationDto,
+    OperationPageDto, ResolveLinkTargetRequestDto, ResolveOperationConflictRequestDto,
+    StartOperationRequestDto,
 };
 use serde::Deserialize;
 use std::time::Instant;
@@ -46,6 +47,40 @@ pub(crate) struct OperationPageQuery {
     offset: Option<u64>,
     /// Page size, clamped to 1 through 100.
     limit: Option<u16>,
+}
+
+/// Resolves a symbolic link to the entry it points at, for read-only viewers.
+#[utoipa::path(
+    post,
+    path = "/api/v1/link-target",
+    operation_id = "resolveLinkTarget",
+    request_body = ResolveLinkTargetRequestDto,
+    responses(
+        (status = 200, body = EntrySummaryDto),
+        (status = 400, body = ApplicationErrorDto),
+        (status = 403, body = ApplicationErrorDto),
+        (status = 404, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn resolve_link_target(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ResolveLinkTargetRequestDto>,
+) -> Result<Json<EntrySummaryDto>, ApiError> {
+    let correlation_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, correlation_id)?;
+    let resolved = state
+        .service
+        .resolve_link_target(request)
+        .await
+        .map_err(|error| ApiError::new(error, correlation_id))?;
+    // A link must not expose an entry outside the server's accessible roots.
+    crate::error::require_within_roots(
+        &resolved.location,
+        &state.accessible_roots,
+        correlation_id,
+    )?;
+    Ok(Json(resolved))
 }
 
 /// Lists the link kinds that can point at a target from a destination directory (task 0168).

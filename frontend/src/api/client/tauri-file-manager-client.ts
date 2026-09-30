@@ -956,6 +956,12 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<LinkOptions>('get_link_options', { request });
   }
 
+  async resolveLinkTarget(location: Location, _signal?: AbortSignal): Promise<EntrySummary> {
+    return entrySummaryFromDto(
+      await invoke<EntrySummaryDto>('resolve_link_target', { request: { location } }),
+    );
+  }
+
   async listOperations(_signal?: AbortSignal): Promise<Operation[]> {
     return (await invoke<OperationDto[]>('list_operations')).map(operationFromDto);
   }

@@ -171,6 +171,39 @@ pub(crate) async fn link_options(
     Ok(LinkOptionsDto { kinds })
 }
 
+/// Returns the entry a symbolic link ultimately points at, so read-only consumers such as the
+/// viewer can open the target itself. Any other entry kind is returned unchanged.
+pub(crate) async fn resolve_link_target(
+    providers: &ProviderRegistry,
+    location: &Location,
+) -> Result<fm_domain::EntrySummary, ApplicationError> {
+    let provider = providers
+        .resolve(location)
+        .map_err(ApplicationError::from)?;
+    let cancellation = CancellationToken::new();
+    let summary = provider
+        .inspect(
+            &EntryRef {
+                id: EntryId::new(),
+                location: location.clone(),
+            },
+            cancellation.clone(),
+        )
+        .await
+        .map_err(ApplicationError::from)?;
+    if summary.kind != EntryKind::Symlink {
+        return Ok(summary);
+    }
+    let entry = EntryRef {
+        id: summary.id,
+        location: summary.location.clone(),
+    };
+    provider
+        .resolve_symlink(&entry, cancellation)
+        .await
+        .map_err(ApplicationError::from)
+}
+
 fn shortcuts_supported(platform: &Arc<dyn PlatformAdapter>, location: &Location) -> bool {
     platform
         .capabilities()

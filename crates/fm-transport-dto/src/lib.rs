@@ -142,7 +142,8 @@ pub use operation::{
     LinkOptionsDto, LinkOptionsRequestDto, LinkRequestDto, LinkRequirementDto, LinkTargetStyleDto,
     OperationConflictPolicyDto, OperationDto, OperationEntryErrorDto, OperationKindDto,
     OperationPageDto, OperationProgressDto, OperationStateDto, OperationUndoDto,
-    ResolveOperationConflictRequestDto, StartOperationRequestDto, SymlinkPolicyDto,
+    ResolveLinkTargetRequestDto, ResolveOperationConflictRequestDto, StartOperationRequestDto,
+    SymlinkPolicyDto,
 };
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,
