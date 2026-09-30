@@ -4710,7 +4710,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text);
   font: inherit;
   text-transform: none;
-  transition-property: background-color, box-shadow;
 }
 
 .fm-basket-actions .btn-flat:not(:disabled):hover,

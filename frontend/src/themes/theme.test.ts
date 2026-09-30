@@ -269,6 +269,18 @@ describe('theme stylesheet', () => {
     );
   });
 
+  it('limits button feedback to brief hover/focus surfaces and instant disabled states', () => {
+    expect(materializedCss).toMatch(
+      /:is\(\.fm-app-shell, \.fm-session-token-gate\) :is\(button, \[role="button"\]\)\s*\{\s*transition:\s*background-color 120ms ease-out,\s*box-shadow 120ms ease-out;/,
+    );
+    expect(materializedCss).toMatch(
+      /:is\(\.fm-app-shell, \.fm-session-token-gate\)\s+:is\(button:disabled, \[role="button"\]\[aria-disabled="true"\]\)\s*\{\s*transition:\s*none;/,
+    );
+    expect(
+      themeBlock(/\.fm-app-shell \.fm-basket-actions button\.btn-flat\s*\{([^}]*)\}/),
+    ).not.toContain('transition');
+  });
+
   it('meets WCAG AA for text on surfaces and both selection states', () => {
     const themes = [
       themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/),

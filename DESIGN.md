@@ -199,6 +199,7 @@ Compact and explicit, with no ornamental lift.
 - **Shape:** 2px radius, 1px border, minimum 20px height, and 2px 4px padding.
 - **Primary:** Instrument Blue fill with high-contrast text; reserve it for the decisive action in a dialog or compact action group.
 - **Hover / Focus:** Use a tonal hover change. Do not add a shadow or transform; keyboard focus must remain accessible through the component's semantic state and surrounding context.
+- **Motion:** Keep icon-button click waves; limit button hover/focus surface changes to 120ms. Never animate position, scale, text color, opacity, or enabled/disabled state.
 - **Flat:** Transparent with normal text; hover uses the theme hover wash and no border emphasis.
 
 ### Inputs / Fields

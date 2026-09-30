@@ -19,6 +19,19 @@
   text-transform: none;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  :is(.fm-app-shell, .fm-session-token-gate) :is(button, [role="button"]) {
+    transition:
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  :is(.fm-app-shell, .fm-session-token-gate)
+    :is(button:disabled, [role="button"][aria-disabled="true"]) {
+    transition: none;
+  }
+}
+
 .fm-app-shell .btn:hover,
 .fm-app-shell .btn:focus,
 .fm-app-shell .btn-flat:hover,

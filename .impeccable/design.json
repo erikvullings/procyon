@@ -126,6 +126,11 @@
         "purpose": "Default for dense controls and labels; state changes should feel immediate."
       },
       {
+        "name": "button-surface",
+        "value": "120ms ease-out",
+        "purpose": "Hover and focus background or shadow only; click waves remain and disabled states change instantly."
+      },
+      {
         "name": "short-spatial",
         "value": "120ms ease-out",
         "purpose": "Reserved for small spatial cues such as a caret rotation."
