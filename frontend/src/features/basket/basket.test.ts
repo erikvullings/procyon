@@ -12,6 +12,7 @@ import {
   removeFromBasket,
   saveBasket,
   selectBasketItems,
+  withBasketFolderSize,
   withBasketStatus,
 } from './basket';
 
@@ -154,7 +155,26 @@ describe('collection basket', () => {
     });
   });
 
-  it('restores only an opted-in workspace basket and marks references stale until rechecked', () => {
+  it('includes calculated folder contents in total and selected sizes', () => {
+    const basket = addToBasket(emptyBasket, [
+      entry('file', 'local', 'file:///file.txt'),
+      { ...entry('folder', 'local', 'file:///folder'), kind: 'directory' },
+    ]);
+    const measured = withBasketFolderSize(
+      selectBasketItems(basket, [basket.items[1]?.key ?? '']),
+      basket.items[1]?.key ?? '',
+      8_192,
+    );
+    expect(basketSummary(measured)).toMatchObject({
+      knownSize: 8_192,
+      selectedKnownSize: 8_192,
+      incompleteSize: true,
+    });
+    const complete = withBasketFolderSize(measured, basket.items[1]?.key ?? '', 0);
+    expect(basketSummary(complete).selectedKnownSize).toBe(0);
+  });
+
+  it('persists each workspace basket automatically and marks restored references stale', () => {
     const storage = new Map<string, string>();
     const store = {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -165,14 +185,11 @@ describe('collection basket', () => {
         storage.delete(key);
       },
     };
-    const persistent = {
-      ...addToBasket(emptyBasket, [entry('a', 'local', 'file:///a')]),
-      persist: true,
-    };
+    const persistent = addToBasket(emptyBasket, [entry('a', 'local', 'file:///a')]);
     saveBasket(store, 'workspace-a', persistent);
     expect(loadBasket(store, 'workspace-a').items[0]?.status).toBe('stale');
     expect(loadBasket(store, 'workspace-b')).toEqual(emptyBasket);
-    saveBasket(store, 'workspace-a', { ...persistent, persist: false });
+    saveBasket(store, 'workspace-a', emptyBasket);
     expect(loadBasket(store, 'workspace-a')).toEqual(emptyBasket);
   });
 

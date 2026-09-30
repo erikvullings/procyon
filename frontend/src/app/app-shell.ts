@@ -40,6 +40,7 @@ import {
   removeFromBasket,
   saveBasket,
   selectBasketItems,
+  withBasketFolderSize,
 } from '../features/basket/basket';
 import { BasketView } from '../features/basket/basket-view';
 import {
@@ -2619,6 +2620,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (selected.length === 0) return;
     try {
       updateBasket(current.id, addToBasket(basketFor(current.id), selected));
+      if (basketVisible()) {
+        void calculateBasketFolderSizes(current.id).catch((error: unknown) => {
+          toast({
+            html: workspaceErrorMessage(error, t('basket', 'folderSizeFailed', 1)),
+          });
+        });
+      }
     } catch (error) {
       toast({ html: workspaceErrorMessage(error, t('basket', 'collectFailed')) });
     }
@@ -2711,6 +2719,95 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       basketBusy = false;
       m.redraw();
     }
+  }
+
+  let basketFolderScan: AbortController | undefined;
+  let basketSizing = false;
+
+  async function calculateBasketFolderSizes(
+    workspaceId: string,
+    refreshKnownSizes = false,
+  ): Promise<void> {
+    basketFolderScan?.abort();
+    const controller = new AbortController();
+    basketFolderScan = controller;
+    const current = basketFor(workspaceId);
+    const folders = current.items.filter(
+      (item) =>
+        item.kind === 'directory' &&
+        item.status === 'ready' &&
+        (refreshKnownSizes || item.folderSize === undefined),
+    );
+    if (refreshKnownSizes && folders.some((item) => item.folderSize !== undefined)) {
+      const keys = new Set(folders.map((item) => item.key));
+      updateBasket(workspaceId, {
+        ...current,
+        items: current.items.map((item) => {
+          if (!keys.has(item.key)) return item;
+          const { folderSize: _previousSize, ...unmeasuredItem } = item;
+          return unmeasuredItem;
+        }),
+      });
+    }
+    basketSizing = folders.length > 0;
+    m.redraw();
+    let index = 0;
+    let failures = 0;
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(2, folders.length) }, async () => {
+          while (!controller.signal.aborted && index < folders.length) {
+            const item = folders[index++];
+            if (item === undefined) continue;
+            let result: Awaited<ReturnType<typeof attrsClient.calculateFolderSize>>;
+            try {
+              result = await attrsClient.calculateFolderSize(
+                { location: item.location },
+                controller.signal,
+              );
+            } catch {
+              if (controller.signal.aborted) return;
+              failures += 1;
+              continue;
+            }
+            if (controller.signal.aborted) return;
+            const current = basketFor(workspaceId);
+            if (
+              current.items.some(
+                (candidate) => candidate.key === item.key && candidate.status === 'ready',
+              )
+            ) {
+              updateBasket(workspaceId, withBasketFolderSize(current, item.key, result.totalBytes));
+            }
+          }
+        }),
+      );
+      if (failures > 0 && !controller.signal.aborted) {
+        toast({ html: t('basket', 'folderSizeFailed', failures) });
+      }
+    } finally {
+      if (basketFolderScan === controller) {
+        basketFolderScan = undefined;
+        basketSizing = false;
+        m.redraw();
+      }
+    }
+  }
+
+  function inspectBasketOnOpen(workspaceId: string): void {
+    void recheckBasket(workspaceId)
+      .then(() => {
+        if (workspace?.id === workspaceId && basketVisible()) {
+          void calculateBasketFolderSizes(workspaceId, true).catch((error: unknown) => {
+            toast({
+              html: workspaceErrorMessage(error, t('basket', 'folderSizeFailed', 1)),
+            });
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('basket', 'checkFailed')) });
+      });
   }
 
   function runBasketAction(
@@ -4630,29 +4727,44 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       attrs.entryFormatSettings ?? loadedEntryFormatSettings,
                       paneId,
                     );
+                    const basketTabs = workspace?.panesById[paneId]?.tabOrder.filter((id) =>
+                      basketTabIds.has(id),
+                    );
+                    const titledContent =
+                      basketTabs === undefined || basketTabs.length === 0
+                        ? content
+                        : {
+                            ...content,
+                            viewerTitles: new Map([
+                              ...(content.viewerTitles ?? []),
+                              ...basketTabs.map((id): [TabId, string] => [
+                                id,
+                                t('basket', 'title'),
+                              ]),
+                            ]),
+                          };
                     const tabId = workspace?.panesById[paneId]?.activeTabId;
                     if (
                       workspace === undefined ||
                       tabId === undefined ||
                       !basketTabIds.has(tabId)
                     ) {
-                      return content;
+                      return titledContent;
                     }
                     const workspaceId = workspace.id;
                     const basket = basketFor(workspaceId);
                     const destination = basketDestination(paneId);
                     return {
-                      ...content,
-                      viewerTitles: new Map([
-                        ...(content.viewerTitles ?? []),
-                        [tabId, t('basket', 'title')],
-                      ]),
+                      ...titledContent,
                       viewerContent: m(BasketView, {
                         basket,
                         onAdd: collectSelection,
                         ...(basketF5 ? { addShortcut: 'F5' } : {}),
                         ...(destination?.writable ? { destination: destination.location } : {}),
                         busy: basketBusy,
+                        sizingFolders: basketSizing,
+                        onOpen: () => inspectBasketOnOpen(workspaceId),
+                        onClose: () => basketFolderScan?.abort(),
                         onToggle: (key) =>
                           updateBasket(
                             workspaceId,
@@ -4682,14 +4794,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                             ...basketFor(workspaceId),
                             items: [],
                             selectedKeys: [],
-                          }),
-                        onPersist: (persist) =>
-                          updateBasket(workspaceId, { ...basketFor(workspaceId), persist }),
-                        onRefresh: () =>
-                          void recheckBasket(workspaceId).catch((error: unknown) => {
-                            toast({
-                              html: workspaceErrorMessage(error, t('basket', 'checkFailed')),
-                            });
                           }),
                         onAction: (kind) => runBasketAction(paneId, kind),
                       }),

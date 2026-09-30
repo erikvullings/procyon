@@ -10,6 +10,7 @@ export interface BasketItem {
   readonly name: string;
   readonly kind: EntrySummary['kind'];
   readonly size?: number;
+  readonly folderSize?: number;
   readonly modifiedAt?: string;
   readonly metadataRevision: number;
   readonly status: BasketStatus;
@@ -18,10 +19,9 @@ export interface BasketItem {
 export interface BasketState {
   readonly items: readonly BasketItem[];
   readonly selectedKeys: readonly string[];
-  readonly persist: boolean;
 }
 
-export const emptyBasket: BasketState = { items: [], selectedKeys: [], persist: false };
+export const emptyBasket: BasketState = { items: [], selectedKeys: [] };
 
 export function basketKey(id: string, location: Location): string {
   return `${location.providerId}\0${id}`;
@@ -155,6 +155,15 @@ export function basketSources(state: BasketState): readonly Location[] {
     .map((item) => item.location);
 }
 
+export function withBasketFolderSize(state: BasketState, key: string, size: number): BasketState {
+  return {
+    ...state,
+    items: state.items.map((item) =>
+      item.key === key && item.kind === 'directory' ? { ...item, folderSize: size } : item,
+    ),
+  };
+}
+
 export function basketSummary(state: BasketState): {
   fileCount: number;
   folderCount: number;
@@ -175,12 +184,13 @@ export function basketSummary(state: BasketState): {
     if (item.kind === 'directory') folderCount += 1;
     else fileCount += 1;
     if (item.status !== 'ready') unavailableCount += 1;
-    if (item.status !== 'ready' || (item.kind !== 'directory' && item.size === undefined)) {
+    const itemSize = item.kind === 'directory' ? item.folderSize : item.size;
+    if (item.status !== 'ready' || itemSize === undefined) {
       incompleteSize = true;
     }
-    if (item.status === 'ready' && item.kind !== 'directory' && item.size !== undefined) {
-      knownSize += item.size;
-      if (selected.has(item.key)) selectedKnownSize += item.size;
+    if (item.status === 'ready' && itemSize !== undefined) {
+      knownSize += itemSize;
+      if (selected.has(item.key)) selectedKnownSize += itemSize;
     }
   }
   return {
@@ -259,10 +269,10 @@ function storageKey(workspaceId: string): string {
 }
 
 export function saveBasket(storage: BasketStorage, workspaceId: string, state: BasketState): void {
-  if (state.persist) {
-    storage.setItem(storageKey(workspaceId), JSON.stringify(state));
-  } else {
+  if (state.items.length === 0) {
     storage.removeItem(storageKey(workspaceId));
+  } else {
+    storage.setItem(storageKey(workspaceId), JSON.stringify(state));
   }
 }
 
@@ -273,7 +283,6 @@ export function loadBasket(storage: BasketStorage, workspaceId: string): BasketS
   if (
     typeof value !== 'object' ||
     value === null ||
-    !('persist' in value && value.persist === true) ||
     !('items' in value && Array.isArray(value.items)) ||
     !('selectedKeys' in value && Array.isArray(value.selectedKeys))
   ) {
@@ -318,6 +327,5 @@ export function loadBasket(storage: BasketStorage, workspaceId: string): BasketS
   return {
     items: [...new Map(items.map((item) => [item.key, item])).values()],
     selectedKeys,
-    persist: true,
   };
 }

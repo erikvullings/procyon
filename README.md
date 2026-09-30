@@ -178,20 +178,22 @@ them. Open the basket with the adjacent toolbar button; it appears as a tab in t
 While that tab is visible, **F5** or **Add to basket** collects the selection from the directory
 pane (including when the basket pane has focus). When the basket is closed, F5 is Copy as usual.
 Adding an entry again updates its reference rather than duplicating it. The basket does not cut
-files or replace the clipboard. Its status bar shows file and folder counts, the sum of known
-available file sizes, the checked subset, and any unavailable references.
+files or replace the clipboard. The workspace basket is saved locally and its references are
+checked when opened and again before every action. Its status bar shows file and folder counts,
+the size of available files and recursively measured folders, the checked subset, and unavailable
+references. Folder sizes are calculated when the basket opens (and when a folder is added); until
+then the displayed size is a partial total.
 
-Check individual entries or use **Select all** before running an action. **Deselect all** leaves
-the collection intact; **Clear basket** removes its references. Copy, move, and archive target the
+Check individual entries or use the icon buttons (with tooltips) to **Select all** before running
+an action. **Deselect all** leaves the collection intact; **Empty basket** removes its references.
+The Name/Location divider can be dragged or adjusted with arrow keys. Copy, move, and archive target the
 directory in the other pane; checksums and delete use their existing flows. Actions are unavailable
 when nothing is checked, and Copy and Move show the normal operation confirmation before starting.
 Folders can be collected: adding a folder removes any already collected children, while adding an
 item inside an already collected folder is blocked. Removed children's checkmarks are cleared; the
 new folder is not checked automatically. Overlapping entries restored from older baskets cannot
 be acted on together until one is removed.
-Use **Refresh references** to recheck availability; unavailable entries are excluded from actions. The
-basket survives navigation, and **Restore this workspace basket after restart** opts its
-references into local restart persistence. Restored entries must be rechecked before use.
+Unavailable entries are excluded from actions. The basket survives navigation and restarts.
 For remote providers with path-based identities, the recheck also compares known size and
 modification time; a replacement with identical metadata cannot be distinguished.
 

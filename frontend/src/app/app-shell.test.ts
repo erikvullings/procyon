@@ -222,6 +222,10 @@ async function openOperationCentre(container: HTMLElement = root): Promise<void>
 beforeEach(() => {
   vi.stubGlobal('EventSource', TestEventSource);
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('procyon.basket.')) localStorage.removeItem(key);
+  }
   root = document.createElement('div');
   document.body.appendChild(root);
 });
@@ -230,6 +234,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   m.mount(root, null);
   root.remove();
+  document.querySelectorAll('.toast').forEach((toast) => {
+    toast.remove();
+  });
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
   document.documentElement.removeAttribute('data-theme');
 });
@@ -1130,6 +1137,8 @@ describe('AppShell', () => {
 
   it('collects a file without cutting it and opens the basket in a tab', async () => {
     const client = new MockFileManagerClient();
+    const calculateFolderSize = vi.spyOn(client, 'calculateFolderSize');
+    const getEntryMetadata = vi.spyOn(client, 'getEntryMetadata');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
     directoryRowNamed(root, 'Documents')?.click();
@@ -1138,7 +1147,12 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-basket-row')?.textContent).toContain('Documents'),
     );
-    expect(root.querySelector('.fm-basket-persist input')).not.toBeNull();
+    expect(root.querySelector('.fm-basket-persist')).toBeNull();
+    await vi.waitFor(() => expect(getEntryMetadata).toHaveBeenCalled());
+    await vi.waitFor(() => expect(calculateFolderSize).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('10 KB in 1 folder'),
+    );
     const checkbox = root.querySelector<HTMLInputElement>('input[aria-label="Select Documents"]');
     expect(checkbox?.type).toBe('checkbox');
     checkbox?.focus();
@@ -1148,6 +1162,117 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(checkbox);
     expect(root.querySelectorAll('.fm-pane-tab')).toHaveLength(3);
     expect(root.querySelector('.fm-cut-row')).toBeNull();
+    expect(
+      Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).some(
+        (key) => key?.startsWith('procyon.basket.'),
+      ),
+    ).toBe(true);
+    const resize = root.querySelector<HTMLElement>('.fm-basket-resize-handle');
+    resize?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector<HTMLElement>('.fm-basket-columns')
+          ?.style.getPropertyValue('--fm-basket-name-width'),
+      ).toMatch(/px$/),
+    );
+    expect(
+      root
+        .querySelector<HTMLElement>('.fm-basket-row')
+        ?.style.getPropertyValue('--fm-basket-name-width'),
+    ).toMatch(/px$/);
+
+    m.mount(root, null);
+    const restoredClient = new MockFileManagerClient();
+    const recheckRestored = vi.spyOn(restoredClient, 'getEntryMetadata');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client: restoredClient }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-row')?.textContent).toContain('Documents'),
+    );
+    await vi.waitFor(() => expect(recheckRestored).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('10 KB in 1 folder'),
+    );
+  });
+
+  it('shows a partial folder total while measuring and updates it when complete', async () => {
+    const client = new MockFileManagerClient();
+    let resolveSize:
+      | ((result: Awaited<ReturnType<MockFileManagerClient['calculateFolderSize']>>) => void)
+      | undefined;
+    vi.spyOn(client, 'calculateFolderSize').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSize = resolve;
+        }),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
+    directoryRowNamed(root, 'Documents')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain(
+        'Calculating folder sizes',
+      ),
+    );
+    expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 1 folder');
+    resolveSize?.({ totalBytes: 10_240, fileCount: 2 });
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('10 KB in 1 folder'),
+    );
+  });
+
+  it('reports a folder-size failure and leaves the total marked as partial', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'calculateFolderSize').mockRejectedValue(new Error('Size unavailable'));
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
+    directoryRowNamed(root, 'Documents')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain('Could not calculate 1 folder size.'),
+    );
+    expect(root.querySelector('.fm-basket-status')?.textContent).toContain(
+      'Known available sizes only',
+    );
+  });
+
+  it('rechecks references and recalculates folder sizes when the basket tab is reopened', async () => {
+    const client = new MockFileManagerClient();
+    const getEntryMetadata = vi.spyOn(client, 'getEntryMetadata');
+    const calculateFolderSize = vi
+      .spyOn(client, 'calculateFolderSize')
+      .mockResolvedValueOnce({ totalBytes: 10_240, fileCount: 2 })
+      .mockResolvedValueOnce({ totalBytes: 20_480, fileCount: 3 });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
+    directoryRowNamed(root, 'Documents')?.click();
+    (await toolbarButton('Add selection to basket')).click();
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('10 KB in 1 folder'),
+    );
+    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+      .find((tab) => tab.textContent?.includes('Mock files'))
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-basket-list')).toBeNull());
+    expect(
+      [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')].some((tab) =>
+        tab.textContent?.includes('Collection basket'),
+      ),
+    ).toBe(true);
+    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+      .find((tab) => tab.textContent?.includes('Collection basket'))
+      ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('20 KB in 1 folder'),
+    );
+    expect(getEntryMetadata).toHaveBeenCalledTimes(2);
+    expect(calculateFolderSize).toHaveBeenCalledTimes(2);
   });
 
   it('uses F5 to collect from the directory pane while the basket is visible', async () => {
@@ -1179,12 +1304,14 @@ describe('AppShell', () => {
     );
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true }));
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2));
-    expect(root.querySelector('.fm-basket-status')?.textContent).toContain(
-      '8 KB in 1 file, and 1 folder',
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain(
+        '10 KB in 1 file, and 1 folder',
+      ),
     );
     root.querySelector<HTMLInputElement>('input[aria-label="Select Projects"]')?.click();
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 1 selected'),
+      expect(root.querySelector('.fm-basket-status')?.textContent).toContain('2 KB in 1 selected'),
     );
     expect(startOperation).not.toHaveBeenCalled();
 
@@ -1256,7 +1383,10 @@ describe('AppShell', () => {
     expect(actions()).toHaveLength(5);
     expect(actions().every((button) => button.disabled)).toBe(true);
     expect(root.querySelector('.fm-basket-destination')).toBeNull();
-    expect(root.querySelector('.fm-basket-options')?.textContent).toContain('Refresh references');
+    expect(root.querySelector('.fm-basket-options button')?.getAttribute('title')).toBe(
+      'Select all',
+    );
+    expect(root.querySelector('.fm-basket-header h2')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('.fm-basket-options button')?.click();
     await vi.waitFor(() =>
@@ -1267,9 +1397,7 @@ describe('AppShell', () => {
       ).toBe(true),
     );
     expect(actions().every((button) => !button.disabled)).toBe(true);
-    const deselect = [
-      ...root.querySelectorAll<HTMLButtonElement>('.fm-basket-options button'),
-    ].find((button) => button.textContent?.includes('Deselect all'));
+    const deselect = root.querySelector<HTMLButtonElement>('button[aria-label="Deselect all"]');
     deselect?.click();
     await vi.waitFor(() => expect(actions().every((button) => button.disabled)).toBe(true));
     expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(2);
@@ -1281,9 +1409,7 @@ describe('AppShell', () => {
     root.querySelector<HTMLInputElement>('input[aria-label="Select Documents"]')?.click();
     await vi.waitFor(() => expect(actions().every((button) => button.disabled)).toBe(true));
 
-    const clear = [...root.querySelectorAll<HTMLButtonElement>('.fm-basket-options button')].find(
-      (button) => button.textContent?.includes('Clear basket'),
-    );
+    const clear = root.querySelector<HTMLButtonElement>('button[aria-label="Empty basket"]');
     clear?.click();
     await vi.waitFor(() => expect(root.querySelectorAll('.fm-basket-row')).toHaveLength(0));
     expect(root.querySelector('.fm-basket-status')?.textContent).toContain('0 B in 0 files');
