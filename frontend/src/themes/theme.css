@@ -22,6 +22,7 @@
   --fm-selected-row-text: #b45309;
   --fm-cursor-row-background: #285fa8;
   --fm-cursor-row-text: #ffffff;
+  --fm-cursor-selected-row-text: #fde68a;
   --fm-disk-usage-video: #f28038;
   --fm-disk-usage-image: #c47ee8;
   --fm-disk-usage-audio: #60c470;
@@ -106,6 +107,7 @@
   --fm-selected-row-text: #fbbf24;
   --fm-cursor-row-background: #285fa8;
   --fm-cursor-row-text: #ffffff;
+  --fm-cursor-selected-row-text: #fde68a;
   --fm-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   --fm-directory-row-base: #21252d;
   --fm-directory-row-highlight: #232730;
@@ -182,6 +184,7 @@
     --fm-selected-row-text: #fbbf24;
     --fm-cursor-row-background: #285fa8;
     --fm-cursor-row-text: #ffffff;
+    --fm-cursor-selected-row-text: #fde68a;
     --fm-shadow: 0 8px 24px rgb(0 0 0 / 45%);
     --fm-directory-row-base: #21252d;
     --fm-directory-row-highlight: #232730;
@@ -3361,6 +3364,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-accent);
 }
 
+/* A marked row keeps its amber name under the cursor too; the cursor rules above would otherwise
+   reset it and hide whether the cursor entry is marked. */
+.fm-pane[data-active="true"] .fm-cursor-row.fm-selected-row .fm-entry-name {
+  color: var(--fm-selected-row-text);
+}
+
 /* In the inactive pane the cursor row keeps its place through a neutral outline only - no accent,
    no fill - so it reads as "parked" and never competes with the active pane's cursor. */
 .fm-pane:not([data-active="true"]) .fm-cursor-row {
@@ -3382,6 +3391,11 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-pane[data-active="true"]:focus-within .fm-cursor-row.fm-selected-row {
   background-color: var(--fm-cursor-row-background);
   color: var(--fm-cursor-row-text);
+}
+
+/* On the cursor fill the marked name switches to a light amber that stays legible on blue. */
+.fm-pane[data-active="true"]:focus-within .fm-cursor-row.fm-selected-row .fm-entry-name {
+  color: var(--fm-cursor-selected-row-text);
 }
 
 .fm-plugin-list {
