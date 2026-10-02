@@ -104,4 +104,94 @@ describe('ContextMenu', () => {
 
     expect(onOpenPlatformSubmenu).toHaveBeenCalledOnce();
   });
+
+  it('shows recommended applications beside Open With and invokes the selected bundle', async () => {
+    const onChoose = vi.fn();
+    const onInvoke = vi.fn();
+    const onClose = vi.fn();
+    const openWith: AvailableAction = {
+      action: {
+        id: 'core.openWith',
+        title: 'Open With',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const load = vi
+      .fn()
+      .mockResolvedValue([{ name: 'Preview', path: '/Applications/Preview.app' }]);
+    const iconFor = vi.fn().mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [openWith],
+          openWithSubmenu: { load, iconFor, onChoose, onOther: vi.fn() },
+          onClose,
+          onInvoke,
+        }),
+    });
+
+    root.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll('[role="menu"]')).toHaveLength(2));
+    await vi.waitFor(() => expect(root.textContent).toContain('Preview'));
+    expect(load).toHaveBeenCalledOnce();
+    expect(onInvoke).not.toHaveBeenCalled();
+    const item = [...root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) =>
+      button.textContent?.includes('Preview'),
+    );
+    await vi.waitFor(() =>
+      expect(item?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/png;base64,/),
+    );
+    item?.click();
+    expect(onChoose).toHaveBeenCalledWith('/Applications/Preview.app');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('moves keyboard focus into a submenu already opened by hover', async () => {
+    const openWith: AvailableAction = {
+      action: {
+        id: 'core.openWith',
+        title: 'Open With',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [openWith],
+          openWithSubmenu: {
+            load: async () => [{ name: 'Preview', path: '/Applications/Preview.app' }],
+            iconFor: async () => undefined,
+            onChoose: vi.fn(),
+            onOther: vi.fn(),
+          },
+          onClose: vi.fn(),
+          onInvoke: vi.fn(),
+        }),
+    });
+    root
+      .querySelector<HTMLElement>('[aria-haspopup="menu"]')
+      ?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    await vi.waitFor(() => expect(root.textContent).toContain('Preview'));
+    expect(root.querySelector('[aria-haspopup="menu"]')?.getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    root
+      .querySelector<HTMLElement>('[role="menu"]')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(document.activeElement?.textContent).toContain('Preview');
+  });
 });

@@ -93,6 +93,13 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('theme stylesheet', () => {
+  it('presents clipboard and drop warnings as padded, dismissible overlays without resizing panes', () => {
+    expect(themeCss).toMatch(
+      /\.fm-clipboard-message\s*\{[^}]*position:\s*fixed;[^}]*padding:\s*8px 8px 8px 12px;[^}]*background:\s*var\(--fm-surface-elevated\)/s,
+    );
+    expect(themeCss).toMatch(/\.fm-app-shell \.fm-clipboard-dismiss\.btn-flat:focus-visible\s*\{/);
+  });
+
   it('shows one solid focus treatment for dialog actions', () => {
     const focus = materializedCss.match(
       /\.fm-app-shell\[data-mm-preset=["']compact-minimal["']\][^{]*button\.btn-flat:focus\s*\{([^}]*)\}/,
@@ -170,6 +177,26 @@ describe('theme stylesheet', () => {
     expect(themeCss).toMatch(
       /@media \(prefers-color-scheme: dark\)[\s\S]*:root:not\(\[data-theme\]\)/,
     );
+  });
+
+  it('keeps syntax colors legible on the editor selection in every theme', () => {
+    for (const block of [
+      themeBlock(/:root,\s*\[data-theme="light"\]\s*\{([^}]*)\}/),
+      themeBlock(/\[data-theme="dark"\]\s*\{([^}]*)\}/),
+      themeBlock(/:root:not\(\[data-theme\]\)\s*\{([^}]*)\}/),
+    ]) {
+      const selection = tokenValue(block, '--fm-editor-selection');
+      for (const token of [
+        '--fm-text',
+        '--fm-text-muted',
+        '--fm-accent',
+        '--fm-success',
+        '--fm-warning',
+        '--fm-error',
+      ]) {
+        expect(contrastRatio(tokenValue(block, token), selection)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   it('maps mithril-materialized theme variables to file-manager tokens', () => {

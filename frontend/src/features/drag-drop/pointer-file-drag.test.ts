@@ -127,6 +127,34 @@ describe('pointer file drag', () => {
     expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
   });
 
+  it('cancels an in-app drag with Escape without dropping or starting a native drag', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const onDrop = vi.fn();
+    const onNativeDragOut = vi.fn();
+    registerPointerFileDropTarget(root, { onDragOver: () => true, onDrop });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => root),
+    });
+    beginPointerFileDrag(
+      new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 8 }),
+      { index: 0, onStart: vi.fn(), onNativeDragOut },
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 8 }),
+    );
+    const escapeKey = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    window.dispatchEvent(escapeKey);
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 8 }));
+
+    expect(escapeKey.defaultPrevented).toBe(true);
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(onNativeDragOut).not.toHaveBeenCalled();
+    expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
+    expect(consumePointerFileDragClick()).toBe(true);
+  });
+
   it('suppresses a delayed click after native handoff but preserves the next intentional click', () => {
     beginPointerFileDrag(
       new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 4 }),
@@ -153,5 +181,74 @@ describe('pointer file drag', () => {
     );
     expect(consumePointerFileDragClick()).toBe(false);
     window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 5 }));
+  });
+
+  it('pauses only the source viewport until the native drag session finishes', async () => {
+    const viewport = document.createElement('div');
+    viewport.className = 'fm-directory-viewport';
+    const row = document.createElement('div');
+    viewport.append(row);
+    document.body.append(viewport);
+    viewport.scrollTop = 150;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => row),
+    });
+    let finishDrag: (() => void) | undefined;
+    const onNativeDragOut = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDrag = resolve;
+        }),
+    );
+    row.addEventListener('pointerdown', (event) => {
+      beginPointerFileDrag(event, { index: 0, onStart: vi.fn(), onNativeDragOut });
+    });
+
+    row.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, pointerId: 6 }),
+    );
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, pointerId: 6 }));
+    expect(viewport.style.overflowY).toBe('');
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: -1, pointerId: 6 }));
+    expect(onNativeDragOut).toHaveBeenCalledExactlyOnceWith(0);
+    expect(viewport.style.overflowY).toBe('hidden');
+    expect(viewport.scrollTop).toBe(150);
+    viewport.scrollTop = 320;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(viewport.scrollTop).toBe(150);
+
+    finishDrag?.();
+    await vi.waitFor(() => expect(viewport.style.overflowY).toBe(''));
+    viewport.scrollTop = 320;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(viewport.scrollTop).toBe(320);
+  });
+
+  it('hands off when dragging onto the pane status bar before leaving the window', () => {
+    const viewport = document.createElement('div');
+    viewport.className = 'fm-directory-viewport';
+    const row = document.createElement('div');
+    viewport.append(row);
+    const status = document.createElement('div');
+    status.className = 'fm-pane-status';
+    document.body.append(viewport, status);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((_, y: number) => (y > 30 ? status : row)),
+    });
+    const onNativeDragOut = vi.fn();
+    row.addEventListener('pointerdown', (event) =>
+      beginPointerFileDrag(event, { index: 1, onStart: vi.fn(), onNativeDragOut }),
+    );
+    row.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, pointerId: 7 }),
+    );
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, pointerId: 7 }));
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 40, pointerId: 7 }),
+    );
+    expect(onNativeDragOut).toHaveBeenCalledExactlyOnceWith(1);
   });
 });

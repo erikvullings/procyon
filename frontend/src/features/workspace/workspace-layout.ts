@@ -137,7 +137,7 @@ export interface WorkspacePaneContent {
   readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
   readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
-  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void;
+  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void | Promise<void>;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   readonly onTabDragOver?: (tabId: TabId, event: DropEventState) => boolean;
   readonly onTabDrop?: (tabId: TabId, event: DropModifiers) => void;

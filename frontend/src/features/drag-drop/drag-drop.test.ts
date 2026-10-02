@@ -60,7 +60,24 @@ describe('drag and drop targets', () => {
         pane,
         true,
       ),
-    ).toMatchObject({ ok: false });
+    ).toMatchObject({ ok: false, noOp: true });
+    expect(
+      validateDropTarget(
+        [{ providerId: 'file', uri: 'file:///home/user/Documents/report.pdf' }],
+        pane,
+        false,
+      ),
+    ).toMatchObject({ ok: false, noOp: true });
+    expect(
+      validateDropTarget(
+        [
+          { providerId: 'file', uri: 'file:///home/user/Documents/report.pdf' },
+          { providerId: 'file', uri: 'file:///home/user/Elsewhere/other.pdf' },
+        ],
+        pane,
+        true,
+      ),
+    ).toMatchObject({ ok: false, message: 'The files are already in this directory.' });
   });
 
   it('uses move by default and the platform copy modifier without inspecting every source', () => {

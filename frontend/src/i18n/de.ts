@@ -1147,6 +1147,10 @@ export const de = {
     services: 'Dienste',
     sendTo: 'Senden an',
     platformMenuFailed: 'Das Betriebssystemmenü konnte nicht geöffnet werden.',
+    loadingApplications: 'Programme werden geladen…',
+    applicationsFailed: 'Programme konnten nicht geladen werden.',
+    openWithFailed: 'Die Datei konnte mit diesem Programm nicht geöffnet werden.',
+    otherApplications: 'Andere Programme…',
   },
   quickFilter: {
     placeholder: 'Filter…',

@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 
+import type { OpenWithApplication } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { SelectionPlatform } from '../selection/keybindings';
 import {
@@ -18,6 +19,12 @@ export interface ContextMenuAttrs {
   readonly platformSubmenu?: {
     readonly title: string;
     readonly onOpen: () => void;
+  };
+  readonly openWithSubmenu?: {
+    readonly load: () => Promise<readonly OpenWithApplication[]>;
+    readonly iconFor: (path: string) => Promise<Uint8Array | undefined>;
+    readonly onChoose: (path: string) => void;
+    readonly onOther: () => void;
   };
   readonly onClose: () => void;
   readonly onInvoke: (actionId: string) => void;
@@ -46,8 +53,73 @@ export function clampContextMenuPosition(
 export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let activeIndex = 0;
   let previousFocus: HTMLElement | undefined;
+  let submenu: 'closed' | 'loading' | 'ready' | 'error' = 'closed';
+  let applications: readonly OpenWithApplication[] = [];
+  const icons = new Map<string, string>();
+  let loadGeneration = 0;
+  let openWithItem: HTMLElement | undefined;
+  let focusApplication = false;
+
+  function iconDataUri(bytes: Uint8Array): string {
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return `data:image/png;base64,${btoa(binary)}`;
+  }
+
+  function showOpenWith(attrs: ContextMenuAttrs, fromKeyboard = false): void {
+    if (attrs.openWithSubmenu === undefined) return;
+    if (submenu !== 'closed') {
+      if (fromKeyboard) {
+        if (submenu === 'loading') focusApplication = true;
+        else
+          openWithItem
+            ?.closest('.fm-context-menu-backdrop')
+            ?.querySelector<HTMLElement>('.fm-context-menu-open-with button')
+            ?.focus();
+      }
+      return;
+    }
+    focusApplication = fromKeyboard;
+    submenu = 'loading';
+    const generation = ++loadGeneration;
+    void attrs.openWithSubmenu
+      .load()
+      .then((apps) => {
+        if (generation !== loadGeneration) return;
+        applications = apps;
+        submenu = 'ready';
+        m.redraw();
+        for (const app of apps) {
+          void attrs.openWithSubmenu
+            ?.iconFor(app.path)
+            .then((bytes) => {
+              if (generation !== loadGeneration || bytes === undefined) return;
+              icons.set(app.path, iconDataUri(bytes));
+              m.redraw();
+            })
+            .catch((error: unknown) => {
+              console.warn(`Could not load application icon for ${app.name}`, error);
+            });
+        }
+      })
+      .catch((error: unknown) => {
+        if (generation !== loadGeneration) return;
+        console.error('Failed to load Open With applications', error);
+        submenu = 'error';
+        m.redraw();
+      });
+  }
+
+  function dismissSubmenu(): void {
+    ++loadGeneration;
+    applications = [];
+    icons.clear();
+    submenu = 'closed';
+    focusApplication = false;
+  }
 
   function close(attrs: ContextMenuAttrs): void {
+    dismissSubmenu();
     attrs.onClose();
     previousFocus?.focus();
     previousFocus = undefined;
@@ -61,6 +133,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     }
     const item = attrs.actions[index];
     if (item === undefined || !item.available) return;
+    if (item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined) {
+      showOpenWith(attrs, true);
+      return;
+    }
     attrs.onInvoke(item.action.id);
     close(attrs);
   }
@@ -71,7 +147,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
         previousFocus = document.activeElement as HTMLElement;
     },
     view: ({ attrs }) => {
-      if (!attrs.open) return undefined;
+      if (!attrs.open) {
+        dismissSubmenu();
+        return undefined;
+      }
       const itemCount = attrs.actions.length + (attrs.platformSubmenu === undefined ? 0 : 1);
       activeIndex = Math.min(activeIndex, Math.max(0, itemCount - 1));
       const menuItems: m.Vnode[] = [];
@@ -100,6 +179,9 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 DESTRUCTIVE_CONTEXT_ACTION_IDS.has(item.action.id)
                   ? 'fm-context-menu-item-destructive'
                   : '',
+                item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined
+                  ? 'fm-context-menu-submenu'
+                  : '',
                 index === activeIndex ? 'fm-context-menu-item-active' : '',
               ]
                 .filter(Boolean)
@@ -107,6 +189,24 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
               disabled: !item.available,
               tabindex: index === activeIndex ? 0 : -1,
               title: item.reason,
+              ...(item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined
+                ? {
+                    'aria-haspopup': 'menu',
+                    'aria-expanded': submenu === 'closed' ? 'false' : 'true',
+                    'aria-controls': 'fm-open-with-submenu',
+                    onmouseenter: (event: MouseEvent) => {
+                      openWithItem = event.currentTarget as HTMLElement;
+                      if (item.available) showOpenWith(attrs);
+                    },
+                    oncreate: ({ dom }: m.VnodeDOM) => {
+                      openWithItem = dom as HTMLElement;
+                    },
+                  }
+                : {
+                    onmouseenter: () => {
+                      if (submenu !== 'closed') dismissSubmenu();
+                    },
+                  }),
               onclick: () => invoke(attrs, index),
             },
             [
@@ -172,11 +272,100 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
               } else if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 invoke(attrs, activeIndex);
+              } else if (
+                event.key === 'ArrowRight' &&
+                attrs.actions[activeIndex]?.action.id === 'core.openWith'
+              ) {
+                event.preventDefault();
+                showOpenWith(attrs, true);
               }
             },
           },
           menuItems,
         ),
+        submenu === 'closed' || attrs.openWithSubmenu === undefined
+          ? undefined
+          : m(
+              '.fm-context-menu.fm-context-menu-open-with',
+              {
+                id: 'fm-open-with-submenu',
+                role: 'menu',
+                'aria-label': attrs.actions.find((item) => item.action.id === 'core.openWith')
+                  ?.action.title,
+                oncreate: ({ dom }) => positionSubmenu(dom as HTMLElement, openWithItem),
+                onupdate: ({ dom }) => {
+                  positionSubmenu(dom as HTMLElement, openWithItem);
+                  if (focusApplication && submenu !== 'loading') {
+                    (dom as HTMLElement).querySelector<HTMLButtonElement>('button')?.focus();
+                    focusApplication = false;
+                  }
+                },
+                onclick: (event: MouseEvent) => event.stopPropagation(),
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    dismissSubmenu();
+                    openWithItem?.focus();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close(attrs);
+                  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const items = [
+                      ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+                        'button',
+                      ),
+                    ];
+                    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                    items[
+                      (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                    ]?.focus();
+                  }
+                },
+              },
+              [
+                submenu === 'loading'
+                  ? m('.fm-context-menu-message', t('contextMenu', 'loadingApplications'))
+                  : submenu === 'error'
+                    ? m('.fm-context-menu-message', t('contextMenu', 'applicationsFailed'))
+                    : applications.map((app) =>
+                        m(
+                          'button.fm-context-menu-item',
+                          {
+                            key: app.path,
+                            type: 'button',
+                            role: 'menuitem',
+                            onclick: () => {
+                              attrs.openWithSubmenu?.onChoose(app.path);
+                              close(attrs);
+                            },
+                          },
+                          [
+                            icons.has(app.path)
+                              ? m('img.fm-context-menu-app-icon', {
+                                  src: icons.get(app.path),
+                                  alt: '',
+                                })
+                              : m('span.fm-context-menu-app-icon'),
+                            m('span.fm-context-menu-label', app.name),
+                          ],
+                        ),
+                      ),
+                m('.fm-context-menu-separator', { role: 'separator' }),
+                m(
+                  'button.fm-context-menu-item',
+                  {
+                    type: 'button',
+                    role: 'menuitem',
+                    onclick: () => {
+                      attrs.openWithSubmenu?.onOther();
+                      close(attrs);
+                    },
+                  },
+                  t('contextMenu', 'otherApplications'),
+                ),
+              ],
+            ),
       ]);
     },
   };
@@ -194,4 +383,12 @@ function positionMenu(menu: HTMLElement, attrs: ContextMenuAttrs): void {
   );
   menu.style.left = `${position.x}px`;
   menu.style.top = `${position.y}px`;
+}
+
+function positionSubmenu(menu: HTMLElement, trigger?: HTMLElement): void {
+  if (trigger === undefined) return;
+  const rect = trigger.getBoundingClientRect();
+  const width = menu.getBoundingClientRect().width;
+  menu.style.left = `${rect.right + width + 8 > window.innerWidth ? rect.left - width : rect.right}px`;
+  menu.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - menu.offsetHeight - 8))}px`;
 }

@@ -9,6 +9,7 @@
   --fm-border: #c8ced8;
   --fm-accent: #075ea8;
   --fm-selection: #c9e2ff;
+  --fm-editor-selection: #edf6ff;
   --fm-selection-inactive: #e2e8f0;
   --fm-tab-inactive-background: var(--fm-background);
   --fm-search-highlight: #ffe066;
@@ -98,6 +99,7 @@
   --fm-border: #485463;
   --fm-accent: #79b8ff;
   --fm-selection: #244f78;
+  --fm-editor-selection: #203851;
   --fm-selection-inactive: #343e4b;
   --fm-tab-inactive-background: #1d2026;
   --fm-hover: #29333f;
@@ -175,6 +177,7 @@
     --fm-border: #485463;
     --fm-accent: #79b8ff;
     --fm-selection: #244f78;
+    --fm-editor-selection: #203851;
     --fm-selection-inactive: #343e4b;
     --fm-tab-inactive-background: #1d2026;
     --fm-hover: #29333f;
@@ -284,6 +287,55 @@ textarea {
   height: 100vh;
   min-width: 0;
   overflow: hidden;
+}
+
+.fm-clipboard-message {
+  position: fixed;
+  right: 12px;
+  top: 10vh;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-clipboard-message-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-app-shell .fm-clipboard-dismiss.btn-flat {
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-app-shell .fm-clipboard-dismiss.btn-flat:hover {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-app-shell .fm-clipboard-dismiss.btn-flat:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+}
+
+.fm-clipboard-dismiss .material-icons {
+  font-size: var(--fm-type-body);
 }
 
 /*
@@ -1930,6 +1982,24 @@ input[type="text"].fm-shortcuts-help-capture-input {
   padding: 2px;
   background: var(--mm-card-background);
   box-shadow: var(--fm-shadow);
+}
+
+.fm-context-menu-open-with {
+  z-index: 1;
+  max-height: calc(100vh - 1rem);
+  overflow-y: auto;
+}
+
+.fm-context-menu-message {
+  padding: 0.4rem 0.6rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-context-menu-app-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .fm-context-menu-item {

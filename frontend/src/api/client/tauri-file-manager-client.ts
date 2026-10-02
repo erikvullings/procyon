@@ -550,6 +550,20 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<void>('show_platform_context_menu', { locations });
   }
 
+  listOpenWithApplications(
+    location: Location,
+  ): Promise<import('./file-manager-client').OpenWithApplication[]> {
+    return invoke('list_open_with_applications', { location });
+  }
+
+  openWithApplication(location: Location, applicationPath: string): Promise<void> {
+    return invoke('open_with_application', { location, applicationPath });
+  }
+
+  openWithAnyApplication(location: Location): Promise<void> {
+    return invoke('open_with_any_application', { location });
+  }
+
   async quit(): Promise<void> {
     await getCurrentWindow().close();
   }

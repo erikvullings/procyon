@@ -199,6 +199,11 @@ export class NotImplementedError extends Error {
   }
 }
 
+export interface OpenWithApplication {
+  readonly name: string;
+  readonly path: string;
+}
+
 /** A native file-reference drop reported by the desktop window. */
 export interface NativeFileDrop {
   readonly locations: readonly Location[];
@@ -340,6 +345,11 @@ export interface FileManagerClient {
 
   /** Opens the native Services (macOS) or Send To (Windows) submenu for a local selection. */
   showPlatformContextMenu(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
+
+  /** Desktop-only Launch Services applications for a local file's Open With submenu. */
+  listOpenWithApplications(location: Location): Promise<OpenWithApplication[]>;
+  openWithApplication(location: Location, applicationPath: string): Promise<void>;
+  openWithAnyApplication(location: Location): Promise<void>;
 
   /** Opens a user-confirmed external URL in the host's default browser. */
   openExternalUrl(url: string): Promise<void>;

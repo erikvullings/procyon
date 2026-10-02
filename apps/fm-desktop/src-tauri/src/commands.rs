@@ -166,6 +166,9 @@ pub(crate) enum NativeDragError {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     #[error("failed to start native drag: {0}")]
     Start(String),
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[error("native drag ended without a completion callback")]
+    CompletionLost,
 }
 
 impl serde::Serialize for NativeDragError {
@@ -220,6 +223,85 @@ fn platform_context_menu_paths(
                 })
         })
         .collect()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OpenWithApplication {
+    name: String,
+    path: PathBuf,
+}
+
+#[tauri::command]
+pub(crate) async fn list_open_with_applications(
+    location: LocationDto,
+) -> Result<Vec<OpenWithApplication>, String> {
+    let path = fm_domain::Location::from(location)
+        .to_native_path()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            fm_platform_macos::open_with_applications(&path)
+                .map(|apps| {
+                    apps.into_iter()
+                        .map(|(name, path)| OpenWithApplication { name, path })
+                        .collect()
+                })
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Err("Open With applications are unavailable on this platform".to_owned())
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn open_with_application(
+    location: LocationDto,
+    application_path: PathBuf,
+) -> Result<(), String> {
+    let path = fm_domain::Location::from(location)
+        .to_native_path()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            fm_platform_macos::open_with_application(&path, &application_path)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, application_path);
+        Err("Open With applications are unavailable on this platform".to_owned())
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn open_with_any_application(location: LocationDto) -> Result<(), String> {
+    let path = fm_domain::Location::from(location)
+        .to_native_path()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            fm_platform_macos::open_with_any_application(&path).map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Err("Open With applications are unavailable on this platform".to_owned())
+    }
 }
 
 fn native_drag_paths(
@@ -314,12 +396,22 @@ pub(crate) async fn start_native_drag<R: Runtime>(
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (done_sender, done_receiver) = tokio::sync::oneshot::channel();
         app.run_on_main_thread(move || {
+            let done_sender = std::sync::Mutex::new(Some(done_sender));
             let result = drag::start_drag(
                 &window,
                 drag::DragItem::Files(paths),
                 drag::Image::Raw(include_bytes!("../icons/32x32.png").to_vec()),
-                |_, _| {},
+                move |_, _| {
+                    if let Some(sender) = done_sender
+                        .lock()
+                        .expect("native drag callback lock")
+                        .take()
+                    {
+                        let _ = sender.send(());
+                    }
+                },
                 drag::Options {
                     mode: drag::DragMode::CopyMove,
                     ..drag::Options::default()
@@ -331,7 +423,10 @@ pub(crate) async fn start_native_drag<R: Runtime>(
         .map_err(|error| NativeDragError::Schedule(error.to_string()))?;
         receiver
             .await
-            .map_err(|error| NativeDragError::Schedule(error.to_string()))?
+            .map_err(|error| NativeDragError::Schedule(error.to_string()))??;
+        done_receiver
+            .await
+            .map_err(|_| NativeDragError::CompletionLost)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {

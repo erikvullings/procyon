@@ -149,7 +149,7 @@ export interface DirectoryTableAttrs {
   readonly onDragOver?: (index: number | undefined, event: DropEventState) => boolean;
   readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
-  readonly onPointerDragOut?: (index: number) => void;
+  readonly onPointerDragOut?: (index: number) => void | Promise<void>;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** Persisted per-column widths; a column with no entry falls back to its default track. */
   readonly columnWidths?: readonly ColumnWidthEntry[];

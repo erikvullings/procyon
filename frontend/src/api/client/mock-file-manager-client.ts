@@ -2441,6 +2441,20 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('showPlatformContextMenu', signal, () => undefined);
   }
 
+  listOpenWithApplications(
+    _location: Location,
+  ): Promise<import('./file-manager-client').OpenWithApplication[]> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
+  openWithApplication(_location: Location, _applicationPath: string): Promise<void> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
+  openWithAnyApplication(_location: Location): Promise<void> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
   subscribeNativeFileDrops(_listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
     return Promise.resolve(() => undefined);
   }

@@ -292,3 +292,11 @@ Depends on: none
     (only the already-documented pre-existing `fm-plugin-runtime` icon-count failure, unrelated).
     Frontend: `tsc --noEmit` (clean), `vitest run` (468 tests, 59 files, all passing, up from 466),
     repo-wide `pnpm run lint` (cargo fmt --check + clippy + `biome check .`, all clean).
+- 2026-10-02 Copilot: On macOS Tauri, the right-click Open With action now expands a
+  keyboard-accessible submenu of Launch Services' recommended apps, with icons loaded after
+  names so the menu appears promptly. Other Applications opens the unfiltered OS picker directly;
+  the keyboard shortcut retains the filtered chooser. Both now activate Finder and ask Finder to host the
+  AppleScript dialog: activating the background `osascript` process did not make its window
+  frontmost, whereas the Finder-hosted dialog did. Bundle selection is checked against the
+  current recommended list before passing the app path to `open -a`; browser and other desktop
+  hosts retain their existing action behaviour.

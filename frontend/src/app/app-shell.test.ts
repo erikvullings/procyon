@@ -2849,7 +2849,13 @@ describe('AppShell', () => {
       platform: 'macos',
       runtime: 'tauri',
     });
-    const startNativeDrag = vi.spyOn(client, 'startNativeDrag');
+    let finishDrag: (() => void) | undefined;
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDrag = resolve;
+        }),
+    );
     m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('.env'));
 
@@ -2878,6 +2884,11 @@ describe('AppShell', () => {
     );
 
     expect(startNativeDrag).toHaveBeenCalledWith([{ providerId: 'file', uri: 'mock:///.env' }]);
+    const viewport = source?.closest<HTMLElement>('.fm-directory-viewport');
+    await Promise.resolve();
+    expect(viewport?.style.overflowY).toBe('hidden');
+    finishDrag?.();
+    await vi.waitFor(() => expect(viewport?.style.overflowY).toBe(''));
   });
 
   it('moves an in-app pointer drag without routing it through the native drag host', async () => {
@@ -3026,6 +3037,81 @@ describe('AppShell', () => {
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 3 }));
 
     expect(startOperation).not.toHaveBeenCalled();
+  });
+
+  it('silently cancels a native drag dropped back in its source pane, but keeps genuine drop errors dismissible', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    let nativeDropListener:
+      | ((drop: {
+          locations: readonly Location[];
+          position: { readonly x: number; readonly y: number };
+        }) => void)
+      | undefined;
+    vi.spyOn(client, 'subscribeNativeFileDrops').mockImplementation(async (listener) => {
+      nativeDropListener = listener;
+      return () => undefined;
+    });
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag').mockResolvedValue(undefined);
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+
+    const source = [...root.querySelectorAll<HTMLElement>('.fm-directory-row')].find((candidate) =>
+      candidate.textContent?.includes('.env'),
+    );
+    const target = source
+      ?.closest<HTMLElement>('.fm-pane')
+      ?.querySelector('.fm-directory-viewport');
+    source?.click();
+    const elementFromPoint = vi.fn((): Element | null => null);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: elementFromPoint,
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 1 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointerout', { clientX: -1, clientY: 10, pointerId: 1 }),
+    );
+    expect(startNativeDrag).toHaveBeenCalledOnce();
+    elementFromPoint.mockReturnValue(target ?? null);
+    nativeDropListener?.({
+      locations: [{ providerId: 'file', uri: 'mock:///.env' }],
+      position: { x: 30, y: 10 },
+    });
+    m.redraw.sync();
+    expect(startOperation).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-clipboard-message')).toBeNull();
+
+    elementFromPoint.mockReturnValue(directoryRowNamed(root, 'Documents') ?? null);
+    nativeDropListener?.({
+      locations: [{ providerId: 'file', uri: 'mock:///' }],
+      position: { x: 30, y: 10 },
+    });
+    m.redraw.sync();
+    const alert = root.querySelector('.fm-clipboard-message');
+    expect(alert?.textContent).toContain('Cannot drop a location into itself');
+    const dismiss = alert?.querySelector<HTMLButtonElement>('button');
+    expect(dismiss?.getAttribute('aria-label')).toBe('Dismiss');
+    dismiss?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-clipboard-message')).toBeNull();
   });
 
   it('copies a native file drop through the operation engine', async () => {
@@ -4754,6 +4840,74 @@ describe('AppShell', () => {
         uri: `file:///tmp/${encodeURIComponent('日本語.txt')}`,
       },
     ]);
+  });
+
+  it('opens a recommended application from the macOS Open With context submenu', async () => {
+    const client = new MockFileManagerClient();
+    const capabilities = client.getRuntimeCapabilities.bind(client);
+    vi.spyOn(client, 'getRuntimeCapabilities').mockImplementation(async () => ({
+      ...(await capabilities()),
+      platform: 'macos',
+      runtime: 'tauri',
+    }));
+    const listDirectory = client.listDirectory.bind(client);
+    vi.spyOn(client, 'listDirectory').mockImplementation(async (request, signal) => {
+      const snapshot = await listDirectory(request, signal);
+      return {
+        ...snapshot,
+        entries: snapshot.entries.map((entry) => ({
+          ...entry,
+          location: {
+            providerId: 'local',
+            uri: `file:///tmp/${encodeURIComponent(entry.name)}`,
+          },
+        })),
+      };
+    });
+    const listApps = vi
+      .spyOn(client, 'listOpenWithApplications')
+      .mockResolvedValue([{ name: 'Preview', path: '/Applications/Preview.app' }]);
+    const open = vi.spyOn(client, 'openWithApplication').mockResolvedValue();
+    const openAny = vi.spyOn(client, 'openWithAnyApplication').mockResolvedValue();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).not.toBeUndefined());
+
+    directoryRowNamed(root, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    const button = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
+      (item) => item.textContent?.includes('Open With'),
+    );
+    expect(button?.getAttribute('aria-haspopup')).toBe('menu');
+    button?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Preview'));
+    const location = {
+      providerId: 'local',
+      uri: `file:///tmp/${encodeURIComponent('日本語.txt')}`,
+    };
+    expect(listApps).toHaveBeenCalledWith(location);
+    const preview = [...root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (item) => item.textContent?.includes('Preview'),
+    );
+    preview?.click();
+    expect(open).toHaveBeenCalledWith(location, '/Applications/Preview.app');
+    expect(invokeAction).not.toHaveBeenCalled();
+
+    directoryRowNamed(root, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')]
+      .find((item) => item.textContent?.includes('Open With'))
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Other Applications'));
+    [...root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((item) => item.textContent?.includes('Other Applications'))
+      ?.click();
+    expect(openAny).toHaveBeenCalledWith(location);
+    expect(invokeAction).not.toHaveBeenCalled();
   });
 
   it('opens a terminal at the current directory via the context menu, passing its uri (task 0061)', async () => {

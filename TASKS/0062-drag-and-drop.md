@@ -102,3 +102,17 @@ from Finder/Explorer) and §33 step 10.
   cursor/selecting the dragged row and consequently triggering cursor-driven virtual-list
   scrolling. Added helper and directory-table regression coverage; interactive Finder/Explorer
   verification remains outstanding.
+- 2026-10-02 Copilot: Reproduced macOS WKWebView auto-scrolling the source directory after native
+  drag-out (several selected SVGs, pointer held outside the Tauri window). The pane now hands off
+  when the pointer reaches its status bar and holds that viewport's scroll offset during the native
+  session, restoring ordinary scrolling when the session ends. Tauri waits for the drag completion
+  callback rather than reporting success immediately; the completion promise is preserved through
+  the pane callbacks. Manual macOS retest confirmed the pane stays painted and stationary while
+  dragging out and scrolls normally after release. A previously reported disappearing window on
+  drag-out to Inkscape remains unconfirmed; Windows/Explorer verification is still outstanding.
+- 2026-10-02 Copilot: Dropping an entire selection back into its source directory remains a
+  rejected target, but is treated as a silent cancellation rather than an error. Mixed-source
+  drops with any unchanged source remain rejected with feedback. Other drop and clipboard errors
+  appear in a compact, dismissible overlay instead of adding an undismissable row below the
+  workspace. Escape cancels an in-app pointer drag before native handoff; after handoff the OS
+  owns the native drag session.

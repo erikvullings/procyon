@@ -31,6 +31,22 @@ describe('CodeMirrorEditor', () => {
     expect(content?.getAttribute('contenteditable')).toBe('true');
   });
 
+  it('uses the app selection color even when the editor is focused', () => {
+    m.mount(root, { view: () => m(CodeMirrorEditor, { content: 'sites:\n  devices:' }) });
+    const focusedSelectionRules = Array.from(document.styleSheets).flatMap((sheet) =>
+      Array.from(sheet.cssRules)
+        .filter(
+          (rule): rule is CSSStyleRule =>
+            rule instanceof CSSStyleRule &&
+            rule.selectorText.includes(
+              '.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground',
+            ),
+        )
+        .map((rule) => rule.style.backgroundColor),
+    );
+    expect(focusedSelectionRules).toContain('var(--fm-editor-selection)');
+  });
+
   it('opens its own find panel on Mod-F by default', () => {
     m.mount(root, { view: () => m(CodeMirrorEditor, { content: 'hello world' }) });
     const content = root.querySelector('.cm-content') as HTMLElement;

@@ -5,6 +5,8 @@
 Procyon combines a Rust operation engine with a shared Mithril interface for the desktop and
 browser. Browse large directories, move files between providers, inspect documents, open remote
 shells, and automate repetitive work without leaving the file manager.
+Its name comes from the raccoon genus: a gatherer of things from many places, much like the
+collection basket gathers files across folders and providers.
 
 [![CI](https://github.com/erikvullings/procyon/actions/workflows/ci.yml/badge.svg)](https://github.com/erikvullings/procyon/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/erikvullings/procyon)](LICENSE)

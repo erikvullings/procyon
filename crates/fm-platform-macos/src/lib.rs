@@ -166,11 +166,11 @@ fn open_with_chooser_command(path: &Path) -> std::process::Command {
         .arg("-e")
         .arg("set targetPath to item 1 of argv")
         .arg("-e")
-        .arg("activate")
+        .arg("tell application \"Finder\" to activate")
         .arg("-e")
         .arg("try")
         .arg("-e")
-        .arg("set chosenApp to (choose application)")
+        .arg("tell application \"Finder\" to set chosenApp to (choose application)")
         .arg("-e")
         .arg("on error number -128")
         .arg("-e")
@@ -226,6 +226,46 @@ fn recommended_applications(path: &Path) -> Result<Vec<(String, PathBuf)>, Platf
     Ok(apps)
 }
 
+/// The native applications recommended by Launch Services for an Open With submenu.
+/// Icons are fetched separately so the menu is not delayed by rendering every bundle icon.
+pub fn open_with_applications(path: &Path) -> Result<Vec<(String, PathBuf)>, PlatformError> {
+    recommended_applications(path)
+}
+
+/// Opens only an application offered for this file; the webview cannot supply an arbitrary
+/// executable path. The selected bundle path is passed as an argument, never a shell command.
+pub fn open_with_application(path: &Path, application: &Path) -> Result<(), PlatformError> {
+    if !recommended_applications(path)?
+        .iter()
+        .any(|(_, candidate)| candidate == application)
+    {
+        return Err(PlatformError::Io {
+            message: "the selected application is not recommended for this file".to_owned(),
+        });
+    }
+    let status = std::process::Command::new("open")
+        .arg("-a")
+        .arg(application)
+        .arg(path)
+        .status()
+        .map_err(|error| PlatformError::Io {
+            message: format!("failed to launch {}: {error}", application.display()),
+        })?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(PlatformError::Io {
+            message: format!("{} launch exited with {status}", application.display()),
+        })
+    }
+}
+
+/// Opens the unfiltered system application picker for the submenu's final item.
+pub fn open_with_any_application(path: &Path) -> Result<(), PlatformError> {
+    run_osascript(open_with_chooser_command(path))?;
+    Ok(())
+}
+
 /// What the user picked from [`MacosPlatformAdapter::open_with_chooser`]'s
 /// filtered `choose from list` dialog, decoded from its raw stdout.
 #[derive(Debug, PartialEq, Eq)]
@@ -278,11 +318,11 @@ fn choose_from_list_command(names: &[String]) -> std::process::Command {
         .arg("-e")
         .arg("on run argv")
         .arg("-e")
-        .arg("activate")
+        .arg("tell application \"Finder\" to activate")
         .arg("-e")
         .arg("try")
         .arg("-e")
-        .arg("set chosenNameList to (choose from list argv with title \"Open With\" without multiple selections allowed)")
+        .arg("tell application \"Finder\" to set chosenNameList to (choose from list argv with title \"Open With\" without multiple selections allowed)")
         .arg("-e")
         .arg("on error number -128")
         .arg("-e")
@@ -713,8 +753,7 @@ impl PlatformAdapter for MacosPlatformAdapter {
     fn open_with_chooser(&self, path: &Path) -> Result<(), PlatformError> {
         let recommended = recommended_applications(path)?;
         if recommended.is_empty() {
-            run_osascript(open_with_chooser_command(path))?;
-            return Ok(());
+            return open_with_any_application(path);
         }
 
         let mut names: Vec<String> = recommended.iter().map(|(name, _)| name.clone()).collect();
@@ -724,10 +763,7 @@ impl PlatformAdapter for MacosPlatformAdapter {
 
         match resolve_open_with_choice(&chosen, &recommended) {
             OpenWithChoice::Cancelled => Ok(()),
-            OpenWithChoice::Other => {
-                run_osascript(open_with_chooser_command(path))?;
-                Ok(())
-            }
+            OpenWithChoice::Other => open_with_any_application(path),
             OpenWithChoice::App(app_path) => {
                 let status = std::process::Command::new("open")
                     .arg("-a")
@@ -2153,7 +2189,7 @@ mod tests {
         );
         let activate = args
             .iter()
-            .position(|arg| arg == "activate")
+            .position(|arg| arg.to_string_lossy().contains("to activate"))
             .expect("the chooser host must be activated");
         let choose = args
             .iter()
@@ -2162,6 +2198,36 @@ mod tests {
         assert!(
             activate < choose,
             "activation must happen before the chooser opens"
+        );
+        assert!(
+            args.iter().any(|arg| arg
+                .to_string_lossy()
+                .contains("tell application \"Finder\" to set chosenApp")),
+            "the activated Finder must own the dialog, not the background osascript process"
+        );
+    }
+
+    #[test]
+    fn open_with_application_rejects_a_bundle_not_recommended_for_the_file() {
+        let dir = tempdir().expect("temp dir");
+        let file = dir.path().join("example.txt");
+        std::fs::write(&file, b"example").expect("fixture");
+        let error = open_with_application(&file, dir.path().join("unrelated.app").as_path())
+            .expect_err("unlisted bundles must not be launched");
+        assert!(error.to_string().contains("not recommended"));
+    }
+
+    #[test]
+    fn open_with_applications_lists_recommended_bundles_for_a_plain_text_file() {
+        let dir = tempdir().expect("temp dir");
+        let file = dir.path().join("example.txt");
+        std::fs::write(&file, b"example").expect("fixture");
+        let applications = open_with_applications(&file).expect("Launch Services applications");
+        assert!(!applications.is_empty());
+        assert!(
+            applications
+                .iter()
+                .all(|(name, path)| !name.is_empty() && path.is_absolute())
         );
     }
 
@@ -2236,7 +2302,10 @@ mod tests {
         );
         let activate = args
             .iter()
-            .position(|arg| arg == "activate")
+            .position(|arg| {
+                arg.to_string_lossy()
+                    .contains("tell application \"Finder\" to activate")
+            })
             .expect("the chooser host must be activated");
         let choose = args
             .iter()
@@ -2245,6 +2314,12 @@ mod tests {
         assert!(
             activate < choose,
             "activation must happen before the chooser opens"
+        );
+        assert!(
+            args.iter().any(|arg| arg
+                .to_string_lossy()
+                .contains("tell application \"Finder\" to set chosenNameList")),
+            "the activated Finder must own the list dialog"
         );
     }
 

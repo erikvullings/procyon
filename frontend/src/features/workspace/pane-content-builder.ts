@@ -776,7 +776,7 @@ export function createPaneContentBuilder(
               const locations = draggedEntries.map((entry) => entry.location);
               context.setDraggedLocations(locations);
               context.setNativeDragSourceInternal(true);
-              void client.startNativeDrag(locations).catch((error: unknown) => {
+              return client.startNativeDrag(locations).catch((error: unknown) => {
                 context.setClipboardMessage(
                   context.workspaceErrorMessage(error, 'Unable to start native drag'),
                 );
@@ -807,7 +807,7 @@ export function createPaneContentBuilder(
           directory.writable === true,
         );
         if (!validation.ok) {
-          context.setClipboardMessage(validation.message);
+          if (!validation.noOp) context.setClipboardMessage(validation.message);
           return;
         }
         const sources = context.getDraggedLocations();
@@ -839,7 +839,7 @@ export function createPaneContentBuilder(
           targetDirectory?.writable === true,
         );
         if (!validation.ok || targetTab === undefined) {
-          if (!validation.ok) context.setClipboardMessage(validation.message);
+          if (!validation.ok && !validation.noOp) context.setClipboardMessage(validation.message);
           return;
         }
         const sources = context.getDraggedLocations();

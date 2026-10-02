@@ -1144,6 +1144,10 @@ export const fr = {
     services: 'Services',
     sendTo: 'Envoyer vers',
     platformMenuFailed: "Le menu du système d'exploitation n'a pas pu être ouvert.",
+    loadingApplications: 'Chargement des applications…',
+    applicationsFailed: 'Impossible de charger les applications.',
+    openWithFailed: "Impossible d'ouvrir le fichier avec cette application.",
+    otherApplications: 'Autres applications…',
   },
   quickFilter: {
     placeholder: 'Filtre…',

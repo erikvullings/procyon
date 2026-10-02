@@ -1135,6 +1135,10 @@ export const it = {
     services: 'Servizi',
     sendTo: 'Invia a',
     platformMenuFailed: 'Impossibile aprire il menu del sistema operativo.',
+    loadingApplications: 'Caricamento applicazioni…',
+    applicationsFailed: 'Impossibile caricare le applicazioni.',
+    openWithFailed: 'Impossibile aprire il file con questa applicazione.',
+    otherApplications: 'Altre applicazioni…',
   },
   quickFilter: {
     placeholder: 'Filtro…',

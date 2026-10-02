@@ -99,10 +99,11 @@ export const CodeMirrorEditor: FactoryComponent<CodeMirrorEditorAttrs> = () => {
       },
       '.cm-content': { caretColor: 'var(--fm-accent)' },
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fm-accent)' },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'var(--fm-selection)',
-        color: 'var(--fm-text)',
-      },
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+        {
+          backgroundColor: 'var(--fm-editor-selection)',
+          color: 'var(--fm-text)',
+        },
       '.cm-gutters': {
         backgroundColor: 'var(--fm-surface)',
         color: 'var(--fm-text-muted)',

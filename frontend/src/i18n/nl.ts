@@ -1834,6 +1834,10 @@ export const nl = {
     services: 'Voorzieningen',
     sendTo: 'Verzenden naar',
     platformMenuFailed: 'Het besturingssysteemmenu kon niet worden geopend.',
+    loadingApplications: 'Programma’s laden…',
+    applicationsFailed: 'Programma’s konden niet worden geladen.',
+    openWithFailed: 'Het bestand kon niet met dit programma worden geopend.',
+    otherApplications: 'Andere programma’s…',
   },
   quickFilter: {
     placeholder: 'Filter…',

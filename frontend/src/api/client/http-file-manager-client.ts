@@ -396,6 +396,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
   }
 
+  listOpenWithApplications(
+    _location: FileLocation,
+  ): Promise<import('./file-manager-client').OpenWithApplication[]> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
+  openWithApplication(_location: FileLocation, _applicationPath: string): Promise<void> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
+  openWithAnyApplication(_location: FileLocation): Promise<void> {
+    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+  }
+
   subscribeNativeFileDrops(_listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
     return Promise.resolve(() => undefined);
   }

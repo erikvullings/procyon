@@ -487,7 +487,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   overflow:hidden;
 }
 .code .pm{color:oklch(80% 0.14 145);flex:none}
-.code code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}
+.code code{overflow-wrap:anywhere;color:inherit}
 .plat .alt{font-size:12.5px;color:var(--muted)}
 
 /* ---------- open source ---------- */
@@ -561,7 +561,11 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 }
 @media (max-width:720px){
   .nav-links{display:none}
+  .nav-cta .link{display:none}
   .feat-grid,.plug-grid,.plat-grid{grid-template-columns:1fr}
+  .plat-grid{grid-template-columns:minmax(0,1fr)}
+  .os-grid{grid-template-columns:minmax(0,1fr)}
+  .os-row .v{min-width:0;overflow-wrap:anywhere}
   .stats-inner{grid-template-columns:1fr;gap:22px}
   .stat + .stat{border-left:none;padding-left:0}
   .hero{padding:52px 0 56px}
@@ -569,6 +573,9 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   .kbd-strip-inner{gap:8px}
   .hint .k{width:70px}
   .cta-mascot{width:208px}
+}
+@media (max-width:420px){
+  .brand small{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -589,6 +596,8 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   <symbol id="i-rename" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
   <symbol id="i-tabs" viewBox="0 0 24 24"><path d="M4 9a2 2 0 0 1 2-2h3l1.5 2H18a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-basket" viewBox="0 0 24 24"><path d="M3 10h18l-2 10H5L3 10ZM8 10l4-7 4 7M9 13v4m6-4v4"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L11 5M14 11a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 0 0 7.07 7.07L13 19"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7V5h16v2M6 7l-1 13h14L18 7M9 11h6M4 7h16"/></symbol>
@@ -644,19 +653,20 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <span class="eyebrow">Open source · MIT / Apache-2.0</span>
         <h1 data-od-id="hero-title">Gather <span class="hl">every file</span> in two panes.</h1>
         <p class="lede">
-          Procyon (<b>PROH-see-on</b>) — Latin for <em>raccoon</em> — is a keyboard-first dual-pane file manager.
-          Local folders, archives, and SSH hosts share one pane-wise workflow, powered by a
+          Procyon (<b>PROH-see-on</b>) takes its name from the raccoon genus: a gatherer and
+          collector, just as this keyboard-first file manager brings files from many places together.
+          Local folders, archives, and SSH hosts share one dual-pane workflow, powered by a
           Rust operation engine and a virtualized table that holds its own at a million entries.
         </p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi" data-od-id="hero-cta-primary">Download for Windows</a>
+          <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_x64_en-US.msi" data-od-id="hero-cta-primary">Download for Windows</a>
           <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon" data-od-id="hero-cta-github">
             View source
             <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-arrow-up-right"/></svg>
           </a>
         </div>
         <p class="hero-note" data-od-id="hero-credit">
-          <span class="dot">●</span> Alpha desktop builds for Windows, macOS &amp; Linux
+          <span class="dot">●</span> Desktop builds for Windows, macOS &amp; Linux
         </p>
       </div>
 
@@ -737,6 +747,18 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <h3>Total-Commander-style selection</h3>
           <p>Cursor and selection stay independent, keyed by stable IDs. Invert, select-by-mask, range select, and type-to-select prefix matching.</p>
           <div class="keys"><span class="kbd">Space</span><span class="kbd">⇧*</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-basket">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-basket"/></svg></div>
+          <h3>Collection basket</h3>
+          <p>Collect files and folders from different locations with the basket toolbar button. Open the workspace basket as a pane tab, check what you need, then copy, move, archive, checksum or delete through the normal confirmations. The basket survives a restart.</p>
+          <div class="keys"><span class="kbd">F5 when basket is open</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-links">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-link"/></svg></div>
+          <h3>Symbolic links &amp; shortcuts</h3>
+          <p>Create relative or absolute symbolic links. On Windows, choose junctions or .lnk shortcuts when supported; the dialog explains requirements before a conflict-safe operation starts.</p>
+          <div class="keys"><span class="kbd">Ctrl+Shift+F5</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-tabs">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-tabs"/></svg></div>
@@ -983,11 +1005,11 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <div class="cap"><span>Finder tags &amp; Spotlight comments</span><span class="st">on</span></div>
           <div class="cap"><span>Native menu bar</span><span class="st">on</span></div>
           <div class="install">
-            <div class="code"><span class="pm">$</span><code>brew install --cask procyon</code></div>
+            <div class="code"><span class="pm">$</span><code>brew install --cask erikvullings/tap/procyon</code></div>
             <div class="install-actions">
-              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_universal.dmg">Download DMG</a>
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_universal.dmg">Download DMG</a>
             </div>
-            <span class="alt">Tap erikvullings/tap first — or install the unsigned alpha DMG directly.</span>
+            <span class="alt">Signed and notarized universal DMG.</span>
           </div>
         </article>
         <article class="plat" data-od-id="platform-windows">
@@ -998,10 +1020,10 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <div class="cap"><span>Native menu bar</span><span class="st no">todo</span></div>
           <div class="install">
             <div class="install-actions">
-              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi">Download MSI</a>
-              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64-setup.exe">Download setup EXE</a>
+              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_x64_en-US.msi">Download MSI</a>
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_x64-setup.exe">Download setup EXE</a>
             </div>
-            <span class="alt">Unsigned alpha installers. Chocolatey availability currently trails the latest release.</span>
+            <span class="alt">Unsigned installers. Chocolatey availability can trail the latest release.</span>
           </div>
         </article>
         <article class="plat" data-od-id="platform-linux">
@@ -1011,12 +1033,12 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <div class="cap"><span>Native desktop integration</span><span class="st">partial</span></div>
           <div class="cap"><span>In-memory credential fallback</span><span class="st">partial</span></div>
           <div class="install">
-            <div class="code"><span class="pm">$</span><code>sudo apt install ./Procyon_0.1.0-13_amd64.deb</code></div>
+            <div class="code"><span class="pm">$</span><code>sudo apt install ./Procyon_0.3.0_amd64.deb</code></div>
             <div class="install-actions">
-              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_amd64.deb">Download .deb</a>
-              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_amd64.AppImage">Download AppImage</a>
+              <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_amd64.deb">Download .deb</a>
+              <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_amd64.AppImage">Download AppImage</a>
             </div>
-            <span class="alt">Unsigned x86-64 alpha builds.</span>
+            <span class="alt">x86-64 builds.</span>
           </div>
         </article>
       </div>
@@ -1046,7 +1068,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <div class="os-row"><span class="l">Language</span><span class="v">Rust · TypeScript · Mithril</span></div>
         <div class="os-row"><span class="l">Shell</span><span class="v">Tauri 2 + Axum</span></div>
         <div class="os-row"><span class="l">Crates</span><span class="v">fm-operations · fm-vfs · fm-search</span></div>
-        <div class="os-row"><span class="l">Status</span><span class="v">v0.1.0-13 · alpha</span></div>
+        <div class="os-row"><span class="l">Status</span><span class="v">v0.3.0</span></div>
         <div class="license-line">
           <span class="tag full" style="font-size:11px">MIT</span>
           <span class="tag full" style="font-size:11px">Apache-2.0</span>
@@ -1075,7 +1097,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
       <div class="cta-right">
         <img class="cta-mascot" data-od-id="install-mascot" src="raccoon---body.png" alt="Procyon, the raccoon mascot — a gatherer of files" width="512" height="512">
         <div class="hero-actions" data-od-id="install-commands">
-          <a class="btn" href="https://github.com/erikvullings/procyon/releases/download/v0.1.0-13/Procyon_0.1.0-13_x64_en-US.msi">Download for Windows</a>
+          <a class="btn" href="https://github.com/erikvullings/procyon/releases/download/v0.3.0/Procyon_0.3.0_x64_en-US.msi">Download for Windows</a>
           <a class="btn secondary" href="#platforms">macOS &amp; Linux downloads</a>
         </div>
       </div>

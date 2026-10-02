@@ -8,7 +8,7 @@ export interface PointerFileDropTarget {
 export interface PointerFileDragSource {
   readonly index: number;
   readonly onStart: (index: number, modifiers: DropModifiers) => void;
-  readonly onNativeDragOut: (index: number) => void;
+  readonly onNativeDragOut: (index: number) => void | Promise<void>;
   readonly effectForModifiers?: (modifiers: DropModifiers) => 'copy' | 'move';
 }
 
@@ -80,6 +80,9 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   const startX = event.clientX;
   const startY = event.clientY;
   const pointerId = event.pointerId;
+  const viewport = (event.currentTarget as Element | null)?.closest<HTMLElement>(
+    '.fm-directory-viewport, .fm-directory-grid-viewport',
+  );
   let started = false;
   let highlighted: HTMLElement | undefined;
   let lastX = startX;
@@ -122,7 +125,7 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     window.removeEventListener('pointercancel', cancel);
     window.removeEventListener('pointerout', leaveWindow);
     window.removeEventListener('blur', leaveWindow);
-    window.removeEventListener('keydown', modifierChange);
+    window.removeEventListener('keydown', modifierChange, true);
     window.removeEventListener('keyup', modifierChange);
     if (activeCleanup === cleanup) activeCleanup = undefined;
   };
@@ -136,6 +139,10 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   };
   const updateFeedback = (currentModifiers: DropModifiers): void => {
     if (lastX < 0 || lastY < 0 || lastX >= window.innerWidth || lastY >= window.innerHeight) {
+      handOffToNative();
+      return;
+    }
+    if ((document.elementFromPoint(lastX, lastY)?.closest('.fm-pane-status') ?? null) !== null) {
       handOffToNative();
       return;
     }
@@ -154,6 +161,13 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   };
   const modifierChange = (current: KeyboardEvent): void => {
     if (!started) return;
+    if (current.key === 'Escape') {
+      current.preventDefault();
+      current.stopImmediatePropagation();
+      suppressNextClick(true);
+      cleanup();
+      return;
+    }
     lastModifiers = keyboardModifiers(current);
     updateFeedback(lastModifiers);
   };
@@ -177,7 +191,31 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
     // control to this WebView, well beyond the current event loop turn.
     suppressNextClick(false);
     cleanup();
-    source.onNativeDragOut(source.index);
+    const previousOverflow = viewport?.style.overflowY;
+    const lockedScrollTop = viewport?.scrollTop;
+    const holdScroll = (event: Event): void => {
+      event.stopImmediatePropagation();
+      if (viewport !== null && viewport !== undefined && lockedScrollTop !== undefined) {
+        viewport.scrollTop = lockedScrollTop;
+      }
+    };
+    if (viewport !== null && viewport !== undefined) {
+      // WebKit can auto-scroll a hidden overflow viewport during a native drag.
+      viewport.addEventListener('scroll', holdScroll, true);
+      viewport.style.overflowY = 'hidden';
+    }
+    const restoreScroll = (): void => {
+      if (viewport !== null && viewport !== undefined) {
+        viewport.removeEventListener('scroll', holdScroll, true);
+        viewport.style.overflowY = previousOverflow ?? '';
+      }
+    };
+    try {
+      void Promise.resolve(source.onNativeDragOut(source.index)).finally(restoreScroll);
+    } catch (error) {
+      restoreScroll();
+      throw error;
+    }
   };
   const leaveWindow = (current: PointerEvent | Event): void => {
     if (current instanceof PointerEvent) {
@@ -192,7 +230,7 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
   window.addEventListener('pointercancel', cancel);
   window.addEventListener('pointerout', leaveWindow);
   window.addEventListener('blur', leaveWindow);
-  window.addEventListener('keydown', modifierChange);
+  window.addEventListener('keydown', modifierChange, true);
   window.addEventListener('keyup', modifierChange);
 }
 

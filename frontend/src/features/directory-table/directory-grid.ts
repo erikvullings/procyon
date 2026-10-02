@@ -57,7 +57,7 @@ export interface DirectoryGridAttrs {
   readonly onDragOver?: (index: number | undefined, event: DropEventState) => boolean;
   readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
-  readonly onPointerDragOut?: (index: number) => void;
+  readonly onPointerDragOut?: (index: number) => void | Promise<void>;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
 }
 

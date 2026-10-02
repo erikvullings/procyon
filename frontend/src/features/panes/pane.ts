@@ -254,7 +254,7 @@ export interface PaneAttrs {
   readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
   readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
-  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void;
+  readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void | Promise<void>;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** When set, replaces the entire directory-listing surface (task 0088). */
   readonly viewerContent?: m.Children;
@@ -1814,7 +1814,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                               !isParentEntry(entry.id) && attrs.selectedEntryIds.has(entry.id),
                           )
                         : [dragged];
-                      attrs.onPointerDragOut?.(selection);
+                      return attrs.onPointerDragOut?.(selection);
                     },
                   }),
               ...(attrs.pointerDragEffect === undefined

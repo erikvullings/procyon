@@ -4984,7 +4984,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             : undefined,
           clipboardMessage === undefined
             ? undefined
-            : m('.fm-clipboard-message', { role: 'alert' }, clipboardMessage),
+            : m('.fm-clipboard-message', { role: 'alert' }, [
+                m('span.fm-clipboard-message-text', clipboardMessage),
+                m(
+                  'button.fm-clipboard-dismiss.btn-flat',
+                  {
+                    type: 'button',
+                    'aria-label': t('button', 'dismiss'),
+                    title: t('button', 'dismiss'),
+                    onclick: () => {
+                      clipboardMessage = undefined;
+                    },
+                  },
+                  m('i.material-icons', { 'aria-hidden': 'true' }, 'close'),
+                ),
+              ]),
           m(CommandPalette, {
             open: commandPaletteOpen,
             actions: actionsWithFavourites(),
@@ -5047,6 +5061,54 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
             onInvoke: actionCommandController.invokeContextMenuAction,
             platform,
+            ...(platform === 'macos' &&
+            runtimeKind === 'tauri' &&
+            contextMenu?.entries.length === 1 &&
+            contextMenu.entries[0]?.location.providerId === 'local' &&
+            contextMenu.entries[0]?.kind === 'file'
+              ? {
+                  openWithSubmenu: {
+                    load: () => {
+                      const location = contextMenu?.entries[0]?.location;
+                      if (location === undefined) {
+                        return Promise.reject(
+                          new Error('Open With selection is no longer available'),
+                        );
+                      }
+                      return attrsClient.listOpenWithApplications(location);
+                    },
+                    iconFor: (path: string) => {
+                      const url = new URL('file:///');
+                      url.pathname = path;
+                      return attrsClient.getFileIcon(url.href);
+                    },
+                    onChoose: (applicationPath: string) => {
+                      const location = contextMenu?.entries[0]?.location;
+                      if (location === undefined) {
+                        toast({ html: t('contextMenu', 'openWithFailed') });
+                        return;
+                      }
+                      void attrsClient
+                        .openWithApplication(location, applicationPath)
+                        .catch((error: unknown) => {
+                          console.error('Failed to open with selected application', error);
+                          toast({ html: t('contextMenu', 'openWithFailed') });
+                        });
+                    },
+                    onOther: () => {
+                      const location = contextMenu?.entries[0]?.location;
+                      if (location === undefined) {
+                        toast({ html: t('contextMenu', 'openWithFailed') });
+                        return;
+                      }
+                      void attrsClient.openWithAnyApplication(location).catch((error: unknown) => {
+                        console.error('Failed to open application picker', error);
+                        toast({ html: t('contextMenu', 'openWithFailed') });
+                      });
+                    },
+                  },
+                }
+              : {}),
             ...(platformContextMenuSupported &&
             contextMenu !== undefined &&
             contextMenu.entries.length > 0 &&

@@ -1138,6 +1138,10 @@ export const pl = {
     services: 'Usługi',
     sendTo: 'Wyślij do',
     platformMenuFailed: 'Nie udało się otworzyć menu systemu operacyjnego.',
+    loadingApplications: 'Wczytywanie aplikacji…',
+    applicationsFailed: 'Nie udało się wczytać aplikacji.',
+    openWithFailed: 'Nie udało się otworzyć pliku w tej aplikacji.',
+    otherApplications: 'Inne aplikacje…',
   },
   quickFilter: {
     placeholder: 'Filtr…',

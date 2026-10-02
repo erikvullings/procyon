@@ -15,7 +15,7 @@ export interface DropEventState extends DropModifiers {
 
 export type DropValidation =
   | { readonly ok: true }
-  | { readonly ok: false; readonly message: string };
+  | { readonly ok: false; readonly message: string; readonly noOp?: true };
 
 /** A directory row receives the drop; files and empty space resolve to the pane directory. */
 export function resolveDropTarget(paneLocation: Location, row: EntrySummary | undefined): Location {
@@ -62,6 +62,9 @@ export function validateDropTarget(
 ): DropValidation {
   if (sources.length === 0) return { ok: false, message: t('clipboard', 'nothingDragged') };
   if (target === undefined) return { ok: false, message: t('clipboard', 'destinationUnavailable') };
+  if (sources.every((source) => isCurrentParent(source, target))) {
+    return { ok: false, message: t('clipboard', 'destinationUnchanged'), noOp: true };
+  }
   if (!writable) return { ok: false, message: t('clipboard', 'destinationReadOnly') };
   if (sources.some((source) => isCurrentParent(source, target))) {
     return { ok: false, message: t('clipboard', 'destinationUnchanged') };

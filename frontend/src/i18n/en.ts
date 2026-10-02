@@ -1827,6 +1827,10 @@ export const en = {
     services: 'Services',
     sendTo: 'Send to',
     platformMenuFailed: 'The operating system menu could not be opened.',
+    loadingApplications: 'Loading applications…',
+    applicationsFailed: 'Applications could not be loaded.',
+    openWithFailed: 'The file could not be opened with that application.',
+    otherApplications: 'Other Applications…',
   },
   quickFilter: {
     placeholder: 'Filter…',
