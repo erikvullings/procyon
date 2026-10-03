@@ -94,7 +94,8 @@ second plugin system.
   the other release gates remain outstanding.
 - 2026-10-03 Copilot: The editor now owns a transient, switchable opposite-pane tab. Tab
   switches hide but retain its child WebView and unsaved work; closing the tab tears it down.
-  Its Procyon-specific build starts in Tree view with a closed menu and equal split, puts
+  Its Procyon-specific build starts in Tree view with a closed menu, the tree above
+  the preview in equal-height halves, and puts
   Save in the primary button and Copy in the menu, and retains optimizer settings but
   never the SVG or separate theme. Native interaction and remaining security release gates
   are still unverified. Since private child WebViews cannot guarantee localStorage persistence,

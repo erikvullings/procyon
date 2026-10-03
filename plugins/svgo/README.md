@@ -1,7 +1,7 @@
 # SVGO panel
 
 The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `9bbccab116b65ee7f7a05a820321a106f9b332ae`
+`erikvullings/svgo` at commit `d11f373c09eab688f186a1a620dfe2fedf13dc54`
 with `pnpm build:procyon`. It includes local Monaco resources; no network or
 general filesystem capability is granted.
 
@@ -11,9 +11,10 @@ command palette. The editor opens as a tab in the opposite pane, titled
 **SVGO: filename**. Switch to other tabs without losing unsaved changes; the
 live editor tab cannot be dragged to another pane. Close it with its tab-strip
 close button or **Cmd+W** (Ctrl+W elsewhere).
-It starts in Tree view with a closed menu and an even horizontal tree/preview
-split. Save is the primary button, and Copy is in the menu; File → Open and the
-in-app title are absent in the Procyon build.
+It starts in Tree view with a closed menu and an even vertical stack: the tree
+occupies the top half and the SVG preview the bottom half. Save is the primary
+button, and Copy is in the menu; File → Open and the in-app title are absent
+in the Procyon build.
 Save writes only the originally opened file and rejects revisions that changed
 outside the panel. A successful atomic Save keeps the source pane's cursor on
 the SVG when its filesystem entry identity changes. Download remains available
