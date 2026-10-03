@@ -1,9 +1,11 @@
 # SVGO panel
 
-The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `ee29ff2c46912dc9318fbaf8f5d408e898a71f7b`
-with `pnpm build:procyon`. The Procyon build is Tree-only and omits Monaco;
-no network or general filesystem capability is granted.
+The packaged `dist/` is built from the
+[source and build instructions](../../plugin-sources/svgo/README.md) in this
+repository, initially copied from `erikvullings/svgo` at commit
+`ee29ff2c46912dc9318fbaf8f5d408e898a71f7b`. The Procyon build is
+Tree-only and omits Monaco; no network or general filesystem capability is
+granted. Do not hand-edit the generated `dist/` files.
 
 Enable **SVGO** in plugin settings, position the active pane's cursor on an SVG
 file, and use **Cmd+Shift+F4** on macOS (**Ctrl+Shift+F4** elsewhere) or the

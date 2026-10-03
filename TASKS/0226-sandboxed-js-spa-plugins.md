@@ -124,3 +124,8 @@ second plugin system.
   a presentation-only Light, Dark, or Checkerboard selector; Light and Dark use the
   matching Procyon status-bar colors. The default follows the current theme unless
   explicitly overridden, and Save does not include the background.
+- 2026-10-03 Copilot: Procyon's SVGO panel source, tests, static assets, locked
+  dependencies, and build configuration now live in `plugin-sources/svgo/`. Its
+  reproducible `build:procyon` output is copied into the checked-in
+  `plugins/svgo/dist/` package. The source stays outside Tauri's bundled
+  `plugins/` resource directory to avoid shipping build dependencies.
