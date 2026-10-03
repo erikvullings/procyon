@@ -129,3 +129,7 @@ second plugin system.
   reproducible `build:procyon` output is copied into the checked-in
   `plugins/svgo/dist/` package. The source stays outside Tauri's bundled
   `plugins/` resource directory to avoid shipping build dependencies.
+- 2026-10-03 Copilot: Release security review found that Tauri's window-scoped native
+  plugin permissions also applied to child SPA WebViews, bypassing the app-command
+  label guard. The desktop capability is now scoped to trusted WebView labels
+  instead. Native denial and platform smoke tests remain release gates.

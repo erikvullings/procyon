@@ -1207,6 +1207,21 @@ mod tests {
     }
 
     #[test]
+    fn native_plugin_permissions_are_scoped_to_trusted_webviews() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))
+                .expect("valid desktop capability");
+        assert_eq!(
+            capability["webviews"],
+            serde_json::json!(["main", "workspace-*"])
+        );
+        assert!(
+            capability.get("windows").is_none(),
+            "window-scoped permissions also authorize untrusted child WebViews"
+        );
+    }
+
+    #[test]
     fn bridge_rejects_spoofed_or_malformed_requests() {
         let valid = br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"abc"}"#;
         assert!(parse_bridge(valid, "abc").is_ok());
