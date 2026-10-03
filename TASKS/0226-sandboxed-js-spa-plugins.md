@@ -101,3 +101,8 @@ second plugin system.
   are still unverified. Since private child WebViews cannot guarantee localStorage persistence,
   optimizer preferences use a validated, permission-checked host settings bridge; normal tab
   close waits for a bounded final flush. Abrupt teardown can still lose the latest preference.
+- 2026-10-03 Copilot: The Procyon-only SVGO build now uses Procyon's raised surface for the
+  toolbar and preview work area, removes the permanent SVG canvas border, and softens the
+  divider without reducing its drag target. It also removes the Source SVG row, moves Tree/Code
+  into the menu, starts with Properties collapsed in a side rail, and relayouts Monaco when
+  opening Code. Native WKWebView Code rendering still needs verification.
