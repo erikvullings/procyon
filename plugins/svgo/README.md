@@ -1,7 +1,7 @@
 # SVGO panel
 
 The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `813491fe3ee239147193b2e50b22c8e6bfb9aca6`
+`erikvullings/svgo` at commit `5f18c7440d50a0f7362dfe7200a5451a0c893244`
 with `pnpm build:procyon`. It includes local Monaco resources; no network or
 general filesystem capability is granted.
 
@@ -19,6 +19,9 @@ File → Open, the Source SVG row, and the in-app title are absent in the
 Procyon build. The toolbar and preview work area match Procyon's status-bar
 surface; the SVG canvas uses a neutral contrasting surface without a persistent
 border. The split handle keeps its full draggable area.
+Code and Tree have a small vertical inset. The Code editor uses a narrower
+gutter and starts Monaco only when Code is first shown, so it can measure a
+visible editor rather than the hidden Tree-first container.
 Save writes only the originally opened file and rejects revisions that changed
 outside the panel. A successful atomic Save keeps the source pane's cursor on
 the SVG when its filesystem entry identity changes. Download remains available

@@ -106,3 +106,9 @@ second plugin system.
   divider without reducing its drag target. It also removes the Source SVG row, moves Tree/Code
   into the menu, starts with Properties collapsed in a side rail, and relayouts Monaco when
   opening Code. Native WKWebView Code rendering still needs verification.
+- 2026-10-03 Copilot: Reduced the embedded Code gutter, removed its focus border, and restored
+  small Code/Tree insets. A WebKit timing repro exposed a moving editor during the sidebar
+  transition and a zero-size Monaco startup while Tree was visible; the Procyon build now
+  disables that transition and defers Monaco creation until Code is shown. WebKit resize,
+  selection, and typing checks pass, but the reported persistent native WKWebView caret and
+  glyph-painting fault still requires confirmation in the Tauri child WebView.
