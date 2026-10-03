@@ -1,7 +1,7 @@
 # SVGO panel
 
 The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `3456b487818f2491fb18c8686236164b56ac7107`
+`erikvullings/svgo` at commit `8c97037669e2601094dc53178356b847fdbdf2da`
 with `pnpm build:procyon`. The Procyon build is Tree-only and omits Monaco;
 no network or general filesystem capability is granted.
 
@@ -16,11 +16,12 @@ occupies the top half and the SVG preview the bottom half. The Properties panel
 starts collapsed and can be expanded from the side rail. Save is the primary
 button, and Copy is in the menu; File → Open, the Source SVG row, and the
 in-app title are absent in the Procyon build. The toolbar and preview work
-area match Procyon's status-bar surface; the SVG canvas uses a neutral
-contrasting surface without a persistent border. The split handle keeps its
-full draggable area. Mouse-wheel zoom keeps the SVG point beneath the pointer
-stationary, including when scrollbars appear; the toolbar zoom controls retain
-their existing behavior.
+area match Procyon's status-bar surface. The borderless SVG preview has a fixed
+background selectable as White (default), Black, or Checkerboard; it does not
+zoom or pan with the artwork or become part of the saved SVG. The split handle
+keeps its full draggable area. Mouse-wheel zoom keeps the SVG point beneath the
+pointer stationary. Preview scrollbars stay hidden, while dragging can still
+pan zoomed artwork; the toolbar zoom controls retain their existing behavior.
 Tree has a small vertical inset. The standalone SVGO app retains its Code view.
 Save writes only the originally opened file and rejects revisions that changed
 outside the panel. A successful atomic Save keeps the source pane's cursor on

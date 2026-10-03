@@ -119,3 +119,6 @@ second plugin system.
 - 2026-10-03 Copilot: Mouse-wheel zoom in the SVGO preview now anchors the SVG point beneath
   the pointer. It compensates after layout changes such as scrollbars appearing or
   disappearing, while toolbar zoom and Reset retain their previous behavior.
+- 2026-10-03 Copilot: The Procyon preview hides zoom-induced scrollbars without disabling
+  drag panning. Its viewport background remains fixed as artwork zooms and pans, with
+  a presentation-only White, Black, or Checkerboard selector; Save does not include it.
