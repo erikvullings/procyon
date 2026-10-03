@@ -116,3 +116,6 @@ second plugin system.
   Tree editing and SVG preview only; Code and all packaged Monaco assets are removed.
   Standalone SVGO retains Code. Tree edits still update the preview and require an explicit
   Save. The native Monaco failure is bypassed rather than diagnosed or fixed.
+- 2026-10-03 Copilot: Mouse-wheel zoom in the SVGO preview now anchors the SVG point beneath
+  the pointer. It compensates after layout changes such as scrollbars appearing or
+  disappearing, while toolbar zoom and Reset retain their previous behavior.
