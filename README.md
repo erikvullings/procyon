@@ -23,7 +23,7 @@ collection basket gathers files across folders and providers.
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
 | **Inspect files in place** | Fast text, image, video, PDF, archive, CSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
-| **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua plugins |
+| **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua and JavaScript plugins |
 
 Procyon never implements file mutations in the frontend. Every operation goes through the same
 typed Rust engine, whether the app is running through Tauri, Axum, or the in-process mock client.
@@ -229,7 +229,7 @@ same application services, while filesystem access stays behind provider-neutral
 | `crates/fm-vfs-*` | Local and remote filesystem providers |
 | `crates/fm-semantic-*` | Optional semantic worker, conversion, and library services |
 | `frontend` | Shared Mithril and TypeScript interface |
-| `plugins` | Bundled Lua and icon-theme plugins |
+| `plugins` | Bundled Lua, JavaScript action, SPA panel, and icon-theme plugins |
 | `docs` | Architecture, security, and design decisions |
 | `TASKS` | Detailed implementation contracts and status |
 
@@ -296,6 +296,7 @@ Architecture and operational references:
 - [Architecture decisions](docs/decisions/)
 - [Server-mode security](docs/architecture/security.md)
 - [Plugin API](docs/plugin-api/README.md)
+- [Installing your own JavaScript plugins](docs/plugin-api/README.md#installing-your-own-javascript-plugin)
 - [Semantic operations](docs/semantic-operations.md)
 - [Semantic threat model](docs/semantic-threat-model.md)
 

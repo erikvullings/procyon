@@ -109,6 +109,37 @@ browser/server host, the panel action is explicitly unavailable. On macOS, WKWeb
 clipboard read and write directly to panel JavaScript; only panels declaring both grants can
 open. See the [threat model and remaining release gates](spa-threat-model.md).
 
+### Installing your own JavaScript plugin
+
+Put a folder containing `plugin.toml` and its referenced files under the user plugin directory:
+`<config directory>/procyon/plugins/<your-plugin>/`. The config directory is the platform's
+standard user config location (for example, `~/Library/Application Support` on macOS,
+`~/.config` on many Linux installations, or `%APPDATA%` on Windows). Procyon discovers
+immediate child folders; putting the manifest directly in `plugins/` does not work. User
+plugins take precedence over bundled plugins with the same ID. Restart Procyon after adding
+the folder, then enable the plugin in **Settings → Plugins**; invalid manifests appear there
+with a diagnostic. Only install code you trust and grant only the permissions it needs.
+
+For a JavaScript **action**, start with
+[`plugins/sample-js-svg-uri/plugin.toml`](../../plugins/sample-js-svg-uri/plugin.toml) and
+[`plugin.js`](../../plugins/sample-js-svg-uri/plugin.js). Copy both into a new folder, change
+the manifest `id` and action ID to your own matching namespace, and set
+`runtime = "javascript"` and `entrypoint = "plugin.js"`. The action can implement `actions()`
+and `invoke(actionId)` using only the host calls permitted by its manifest. It runs in the
+bounded embedded executor, not Node.js or a browser, and can appear in the command palette
+and context menu in both desktop and server hosts.
+
+For a JavaScript **SPA panel**, include the complete built site (HTML and all local assets)
+inside the same folder, declare `[contributions.spa_panel]` as above, and enable it in the
+desktop app. [`plugins/svgo/plugin.toml`](../../plugins/svgo/plugin.toml) and its
+[`README.md`](../../plugins/svgo/README.md) show the bundled panel. The SPA runs in a
+separate, isolated desktop WebView; browser/server mode does not open SPA panels. Merely
+declaring a panel does not provide generic file read/write or a general-purpose Save API:
+the selected-SVG Save and settings bridge used by SVGO are narrow, host-validated
+capabilities. Other panels cannot assume those endpoints are available for arbitrary file
+types or preferences. Review the [remaining platform and security gates](spa-threat-model.md)
+before distributing an untrusted panel.
+
 ## Lua entrypoint contract and isolation
 
 An entrypoint returns a Lua table. When `contributions.actions = true`, its `actions` field must be
