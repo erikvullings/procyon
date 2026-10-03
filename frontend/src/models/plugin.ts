@@ -14,6 +14,7 @@ export interface PluginColumn {
 export interface PluginPermissions {
   selectedEntryMetadata: boolean;
   selectedEntryContentRead: boolean;
+  selectedEntryContentWrite: boolean;
   filesystemRead: readonly string[];
   filesystemWrite: readonly string[];
   clipboardRead: boolean;
@@ -76,4 +77,8 @@ export interface PluginDescriptor {
   columns?: readonly PluginColumn[];
   permissions?: PluginPermissions;
   iconTheme?: PluginIconTheme;
+  spaPanel?: {
+    actionId: string;
+    extensions: readonly string[];
+  };
 }

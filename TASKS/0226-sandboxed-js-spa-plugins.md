@@ -74,3 +74,12 @@ second plugin system.
   the Tauri host. The central constraint is that rendering a WebView is easy but securely binding
   dynamic third-party code to Procyon's capability model is the actual feature. No implementation
   has started.
+- 2026-10-03 Copilot: Implemented the API-v1 Lua/JavaScript runtime selection, bounded QuickJS
+  actions, declarative SPA manifests, isolated Tauri scheme/bridge prototype, cursor-only panel
+  action, a JavaScript sample, and a packaged SVGO editor with explicit revision-checked Save.
+  `Cmd+F4` already sorts by extension, so SVGO uses `Cmd+Shift+F4`. The focused review and
+  [threat model](../docs/plugin-api/spa-threat-model.md) leave this task **open**: WKWebView
+  cannot deny clipboard reads on macOS, and the user declined that grant, so macOS panels fail
+  closed; Windows/Linux native smoke paths are unverified. Immediate WebView-crash cleanup,
+  cancellation-safe temporary-file cleanup, and atomic cross-process save conflicts are still
+  release gates. Do not treat bundled SVGO as usable on macOS yet.

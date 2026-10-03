@@ -7,13 +7,13 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use fm_plugin_api::{
     ActionContribution, ColumnContribution, IconThemeManifest, Permission, PluginManifest,
-    SelectedEntryContext,
+    PluginRuntimeKind, SelectedEntryContext,
 };
 use mlua::{Error as LuaError, HookTriggers, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, VmState};
 use serde::de::DeserializeOwned;
@@ -24,6 +24,25 @@ const DEFAULT_MEMORY_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const DEFAULT_INSTRUCTION_LIMIT: usize = 100_000;
 const DEFAULT_FAILURE_LIMIT: u8 = 3;
 const MAX_LOG_ENTRIES: usize = 100;
+const MAX_OUTPUT_BYTES: usize = 256 * 1024;
+const MAX_SOURCE_BYTES: usize = 1024 * 1024;
+
+mod javascript;
+
+/// Shared cancellation signal checked while executing plugin code.
+#[derive(Debug, Clone, Default)]
+pub struct PluginCancellation(Arc<AtomicBool>);
+
+impl PluginCancellation {
+    /// Requests cancellation of any call using this signal.
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 
 /// Bounded diagnostics retained for one plugin execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,11 +149,21 @@ impl PluginRuntime {
         manifest: &PluginManifest,
         directory: &Path,
     ) -> Result<Vec<ActionContribution>, PluginRuntimeError> {
+        self.actions_with_cancellation(manifest, directory, &PluginCancellation::default())
+    }
+
+    /// Executes actions with a caller-controlled cancellation signal.
+    pub fn actions_with_cancellation(
+        &self,
+        manifest: &PluginManifest,
+        directory: &Path,
+        cancellation: &PluginCancellation,
+    ) -> Result<Vec<ActionContribution>, PluginRuntimeError> {
         self.ensure_enabled(&manifest.id)?;
         if !manifest.contributions.actions {
             return Ok(Vec::new());
         }
-        let result = self.execute_contribution(manifest, directory, "actions");
+        let result = self.execute_contribution(manifest, directory, "actions", cancellation);
         match result {
             Ok(actions) => {
                 self.reset_failures(&manifest.id);
@@ -150,11 +179,21 @@ impl PluginRuntime {
         manifest: &PluginManifest,
         directory: &Path,
     ) -> Result<Vec<ColumnContribution>, PluginRuntimeError> {
+        self.columns_with_cancellation(manifest, directory, &PluginCancellation::default())
+    }
+
+    /// Executes column declarations with a caller-controlled cancellation signal.
+    pub fn columns_with_cancellation(
+        &self,
+        manifest: &PluginManifest,
+        directory: &Path,
+        cancellation: &PluginCancellation,
+    ) -> Result<Vec<ColumnContribution>, PluginRuntimeError> {
         self.ensure_enabled(&manifest.id)?;
         if !manifest.contributions.columns {
             return Ok(Vec::new());
         }
-        match self.execute_contribution(manifest, directory, "columns") {
+        match self.execute_contribution(manifest, directory, "columns", cancellation) {
             Ok(columns) => {
                 self.reset_failures(&manifest.id);
                 Ok(columns)
@@ -177,6 +216,24 @@ impl PluginRuntime {
         action_id: &str,
         selection: &[SelectedEntryContext],
     ) -> Result<PluginActionOutcome, PluginRuntimeError> {
+        self.invoke_action_with_cancellation(
+            manifest,
+            directory,
+            action_id,
+            selection,
+            &PluginCancellation::default(),
+        )
+    }
+
+    /// Invokes an action with a caller-controlled cancellation signal.
+    pub fn invoke_action_with_cancellation(
+        &self,
+        manifest: &PluginManifest,
+        directory: &Path,
+        action_id: &str,
+        selection: &[SelectedEntryContext],
+        cancellation: &PluginCancellation,
+    ) -> Result<PluginActionOutcome, PluginRuntimeError> {
         self.ensure_enabled(&manifest.id)?;
         if !manifest.contributions.actions {
             return Err(PluginRuntimeError::Execution {
@@ -184,7 +241,7 @@ impl PluginRuntime {
                 message: "plugin does not contribute actions".to_owned(),
             });
         }
-        match self.execute_invoke(manifest, directory, action_id, selection) {
+        match self.execute_invoke(manifest, directory, action_id, selection, cancellation) {
             Ok(outcome) => {
                 self.reset_failures(&manifest.id);
                 Ok(outcome)
@@ -228,14 +285,15 @@ impl PluginRuntime {
         manifest: &PluginManifest,
         directory: &Path,
         contribution: &str,
+        cancellation: &PluginCancellation,
     ) -> Result<Vec<T>, String> {
-        let entrypoint = manifest
-            .entrypoint
-            .as_ref()
-            .ok_or_else(|| "plugin declares no entrypoint".to_owned())?;
-        let source = fs::read_to_string(directory.join(entrypoint))
-            .map_err(|error| format!("could not load entrypoint: {error}"))?;
-        let lua = self.new_sandboxed_lua()?;
+        let source = read_plugin_source(manifest, directory)?;
+        if manifest.runtime == PluginRuntimeKind::Javascript {
+            let output = javascript::execute(self, manifest, &source, contribution, cancellation)?;
+            return serde_json::from_str(&output)
+                .map_err(|error| format!("malformed plugin result: {error}"));
+        }
+        let lua = self.new_sandboxed_lua(cancellation)?;
         install_host_services(&lua, manifest).map_err(|error| error.to_string())?;
         let module: Table = lua
             .load(&source)
@@ -245,8 +303,14 @@ impl PluginRuntime {
             .get::<mlua::Function>(contribution)
             .map_err(|error| format!("malformed plugin result: {error}"))?;
         let value: mlua::Value = function.call(()).map_err(|error| error.to_string())?;
-        lua.from_value(value)
-            .map_err(|error| format!("malformed plugin result: {error}"))
+        let data: serde_json::Value = lua
+            .from_value(value)
+            .map_err(|error| format!("malformed plugin result: {error}"))?;
+        let output = serde_json::to_vec(&data).map_err(|error| error.to_string())?;
+        if output.len() > MAX_OUTPUT_BYTES {
+            return Err("plugin output budget exceeded".to_owned());
+        }
+        serde_json::from_slice(&output).map_err(|error| format!("malformed plugin result: {error}"))
     }
 
     fn execute_invoke(
@@ -255,14 +319,15 @@ impl PluginRuntime {
         directory: &Path,
         action_id: &str,
         selection: &[SelectedEntryContext],
+        cancellation: &PluginCancellation,
     ) -> Result<PluginActionOutcome, String> {
-        let entrypoint = manifest
-            .entrypoint
-            .as_ref()
-            .ok_or_else(|| "plugin declares no entrypoint".to_owned())?;
-        let source = fs::read_to_string(directory.join(entrypoint))
-            .map_err(|error| format!("could not load entrypoint: {error}"))?;
-        let lua = self.new_sandboxed_lua()?;
+        let source = read_plugin_source(manifest, directory)?;
+        if manifest.runtime == PluginRuntimeKind::Javascript {
+            let clipboard_text =
+                javascript::invoke(self, manifest, &source, action_id, selection, cancellation)?;
+            return Ok(PluginActionOutcome { clipboard_text });
+        }
+        let lua = self.new_sandboxed_lua(cancellation)?;
         let clipboard_text = Arc::new(Mutex::new(None::<String>));
         install_action_host_services(&lua, manifest, selection, Arc::clone(&clipboard_text))
             .map_err(|error| error.to_string())?;
@@ -287,17 +352,18 @@ impl PluginRuntime {
     /// Creates a fresh VM containing only table, string, math and UTF-8
     /// helpers, with the shared memory limit, timeout and instruction-budget
     /// hook applied. Host services are installed separately by each caller.
-    fn new_sandboxed_lua(&self) -> Result<Lua, String> {
+    fn new_sandboxed_lua(&self, cancellation: &PluginCancellation) -> Result<Lua, String> {
         let lua = Lua::new_with(
             StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
         )
         .map_err(|error| error.to_string())?;
-        lua.set_memory_limit(self.memory_limit_bytes)
+        lua.set_memory_limit(self.memory_limit_bytes.max(1))
             .map_err(|error| error.to_string())?;
         let deadline = Instant::now() + self.timeout;
         let instructions = AtomicUsize::new(0);
         let instruction_limit = self.instruction_limit;
+        let cancellation = cancellation.clone();
         lua.set_hook(
             HookTriggers::new().every_nth_instruction(100),
             move |_, _| {
@@ -306,6 +372,9 @@ impl PluginRuntime {
                     return Err(LuaError::RuntimeError(
                         "plugin execution timed out".to_owned(),
                     ));
+                }
+                if cancellation.is_cancelled() {
+                    return Err(LuaError::RuntimeError("plugin call cancelled".to_owned()));
                 }
                 if executed > instruction_limit {
                     return Err(LuaError::RuntimeError(
@@ -417,6 +486,11 @@ fn install_action_host_services(
             clipboard_permissions
                 .require(Permission::ClipboardWrite)
                 .map_err(|error| LuaError::RuntimeError(error.to_string()))?;
+            if text.len() > MAX_OUTPUT_BYTES {
+                return Err(LuaError::RuntimeError(
+                    "plugin output budget exceeded".to_owned(),
+                ));
+            }
             *clipboard_text
                 .lock()
                 .unwrap_or_else(|error| error.into_inner()) = Some(text);
@@ -424,6 +498,26 @@ fn install_action_host_services(
         })?,
     )?;
     lua.globals().set("host", host)
+}
+
+fn read_plugin_source(manifest: &PluginManifest, directory: &Path) -> Result<String, String> {
+    let entrypoint = manifest
+        .entrypoint
+        .as_ref()
+        .ok_or_else(|| "plugin declares no entrypoint".to_owned())?;
+    let path = resolve_plugin_asset(directory, entrypoint)
+        .ok_or_else(|| "plugin entrypoint escapes the plugin directory or is missing".to_owned())?;
+    let metadata =
+        fs::metadata(&path).map_err(|error| format!("could not load entrypoint: {error}"))?;
+    if !metadata.is_file() || metadata.len() > MAX_SOURCE_BYTES as u64 {
+        return Err("plugin source budget exceeded or entrypoint is not a file".to_owned());
+    }
+    let source =
+        fs::read_to_string(path).map_err(|error| format!("could not load entrypoint: {error}"))?;
+    if source.len() > MAX_SOURCE_BYTES {
+        return Err("plugin source budget exceeded".to_owned());
+    }
+    Ok(source)
 }
 
 /// A discovered plugin, including disabled manifests and their diagnostics.
@@ -563,6 +657,20 @@ pub fn discover_plugins(directory: &Path) -> Vec<DiscoveredPlugin> {
 /// `plugin.toml` — an icon-theme contribution runs no code, so this is the only validation gate
 /// it gets.
 fn load_discovered_plugin(manifest: PluginManifest, directory: PathBuf) -> DiscoveredPlugin {
+    if let Some(panel) = &manifest.contributions.spa_panel {
+        let safe = resolve_plugin_asset(&directory, &panel.entrypoint)
+            .is_some_and(|asset| asset.is_file());
+        if !safe {
+            return DiscoveredPlugin {
+                manifest: None,
+                directory,
+                diagnostic: Some(
+                    "SPA panel entrypoint is missing or escapes the plugin directory".to_owned(),
+                ),
+                icon_theme: None,
+            };
+        }
+    }
     if !manifest.contributions.icon_theme {
         return DiscoveredPlugin {
             manifest: Some(manifest),
@@ -1085,5 +1193,302 @@ mod tests {
             .expect_err("clipboard write must be denied without the permission");
 
         assert!(error.to_string().contains("permission denied"));
+    }
+
+    fn js_manifest(permissions: &str) -> PluginManifest {
+        PluginManifest::parse(&format!(
+            "id='example.js'\nname='JS'\nversion='1'\napi_version='1'\ndescription='JavaScript'\nruntime='javascript'\nentrypoint='plugin.js'\n[permissions]\n{permissions}\n[contributions]\nactions=true"
+        ))
+        .expect("JS manifest")
+    }
+
+    fn write_js_script(source: &str) -> tempfile::TempDir {
+        let temporary = tempfile::tempdir().expect("plugin directory");
+        fs::write(temporary.path().join("plugin.js"), source).expect("script");
+        temporary
+    }
+
+    #[test]
+    fn javascript_actions_route_without_affecting_legacy_lua() {
+        let directory = write_js_script(
+            "({ actions() { return [{id:'example.js.open', title:'Open', description:'Opens'}] } })",
+        );
+        let actions = PluginRuntime::default()
+            .actions(&js_manifest(""), directory.path())
+            .expect("JS actions");
+        assert_eq!(actions[0].id, "example.js.open");
+    }
+
+    #[test]
+    fn javascript_columns_route_through_the_same_runtime() {
+        let directory =
+            write_js_script("({ columns() { return [{id:'example.js.age', title:'Age'}] } })");
+        let manifest = PluginManifest::parse(
+            "id='example.js'\nname='JS'\nversion='1'\napi_version='1'\ndescription='JavaScript'\nruntime='javascript'\nentrypoint='plugin.js'\n[contributions]\ncolumns=true",
+        )
+        .expect("manifest");
+        let columns = PluginRuntime::default()
+            .columns(&manifest, directory.path())
+            .expect("columns");
+        assert_eq!(columns[0].id, "example.js.age");
+    }
+
+    #[test]
+    fn javascript_calls_get_fresh_contexts_after_failure() {
+        let directory =
+            write_js_script("globalThis.leaked = true; throw Error('first call fails')");
+        let runtime = PluginRuntime::default();
+        runtime
+            .actions(&js_manifest(""), directory.path())
+            .expect_err("first call");
+        fs::write(
+            directory.path().join("plugin.js"),
+            "if (globalThis.leaked) throw Error('leaked VM'); ({ actions() { return [] } })",
+        )
+        .expect("replacement script");
+        assert!(runtime.actions(&js_manifest(""), directory.path()).is_ok());
+        assert!(runtime.disabled_reason("example.js").is_none());
+    }
+
+    #[test]
+    fn javascript_host_calls_are_permission_checked_and_have_no_ambient_authority() {
+        let directory = write_js_script(
+            "({ actions() { if (typeof process !== 'undefined' || typeof require !== 'undefined' || typeof fetch !== 'undefined' || typeof document !== 'undefined' || typeof window !== 'undefined' || typeof __TAURI__ !== 'undefined' || typeof __TAURI_INTERNALS__ !== 'undefined' || typeof WebSocket !== 'undefined' || typeof XMLHttpRequest !== 'undefined' || typeof navigator !== 'undefined' || typeof Deno !== 'undefined' || typeof Bun !== 'undefined') throw Error('ambient authority'); host.selected_entry_metadata(); return [] } })",
+        );
+        let runtime = PluginRuntime::default();
+        let error = runtime
+            .actions(&js_manifest(""), directory.path())
+            .expect_err("undeclared metadata");
+        assert!(error.to_string().contains("permission denied"), "{error}");
+        assert_eq!(runtime.logs("example.js").len(), 1);
+    }
+
+    #[test]
+    fn javascript_invoke_stages_permitted_clipboard_text() {
+        let directory = write_js_script(
+            "({ invoke(id) { const entries = host.selected_entry_metadata(); host.clipboard_write(entries[0].name + ':' + id) } })",
+        );
+        let outcome = PluginRuntime::default()
+            .invoke_action(
+                &js_manifest("selected_entry_metadata=true\nclipboard_write=true"),
+                directory.path(),
+                "example.js.open",
+                &[SelectedEntryContext {
+                    name: "test.svg".to_owned(),
+                    uri: "file:///test.svg".to_owned(),
+                }],
+            )
+            .expect("invocation");
+        assert_eq!(
+            outcome.clipboard_text.as_deref(),
+            Some("test.svg:example.js.open")
+        );
+    }
+
+    #[test]
+    fn javascript_loop_and_memory_budgets_isolate_failures() {
+        let loop_dir = write_js_script("while (true) {}");
+        let runtime = PluginRuntime::new(Duration::from_millis(20), 1_000_000, 1_000, 2);
+        let manifest = js_manifest("");
+        let error = runtime
+            .actions(&manifest, loop_dir.path())
+            .expect_err("loop");
+        assert!(
+            error.to_string().contains("budget") || error.to_string().contains("timed out"),
+            "{error}"
+        );
+        let memory_dir = write_js_script(
+            "({ actions() { const values = []; while (true) values.push('x'.repeat(1000)); } })",
+        );
+        let error = runtime
+            .actions(&manifest, memory_dir.path())
+            .expect_err("memory");
+        assert!(
+            error.to_string().contains("budget") || error.to_string().contains("memory"),
+            "{error}"
+        );
+        assert!(runtime.disabled_reason("example.js").is_some());
+        runtime.reenable("example.js");
+        assert!(runtime.disabled_reason("example.js").is_none());
+    }
+
+    #[test]
+    fn javascript_memory_limit_is_independent_of_the_instruction_limit() {
+        let directory = write_js_script(
+            "({ actions() { return [{id:'example.js.big', title:'x'.repeat(200000), description:'large'}] } })",
+        );
+        let runtime = PluginRuntime::new(Duration::from_secs(1), 200_000, usize::MAX, 3);
+        let error = runtime
+            .actions(&js_manifest(""), directory.path())
+            .expect_err("memory cap");
+        assert!(
+            error.to_string().contains("memory") || error.to_string().contains("budget"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn javascript_malformed_and_oversized_results_are_isolated() {
+        let malformed = write_js_script("({ actions() { return 'bad' } })");
+        let runtime = PluginRuntime::default();
+        assert!(
+            runtime
+                .actions(&js_manifest(""), malformed.path())
+                .expect_err("bad output")
+                .to_string()
+                .contains("malformed plugin result")
+        );
+        let oversized = write_js_script(
+            "({ actions() { return [{id:'example.js.open', title:'x'.repeat(300000), description:'large'}] } })",
+        );
+        assert!(
+            runtime
+                .actions(&js_manifest(""), oversized.path())
+                .expect_err("oversized output")
+                .to_string()
+                .contains("output")
+        );
+    }
+
+    #[test]
+    fn javascript_oversized_clipboard_text_is_denied_without_staging() {
+        let directory =
+            write_js_script("({ invoke() { host.clipboard_write('x'.repeat(300000)) } })");
+        let runtime = PluginRuntime::default();
+        let error = runtime
+            .invoke_action(
+                &js_manifest("clipboard_write=true"),
+                directory.path(),
+                "example.js.open",
+                &[],
+            )
+            .expect_err("oversized clipboard");
+        assert!(error.to_string().contains("output budget"), "{error}");
+    }
+
+    #[test]
+    fn javascript_cancellation_aborts_a_running_call_and_next_call_starts_clean() {
+        let directory = write_js_script("while (true) {}");
+        let runtime = PluginRuntime::default();
+        let cancellation = PluginCancellation::default();
+        cancellation.cancel();
+        assert!(
+            runtime
+                .actions_with_cancellation(&js_manifest(""), directory.path(), &cancellation)
+                .expect_err("cancelled")
+                .to_string()
+                .contains("cancel")
+        );
+        fs::write(
+            directory.path().join("plugin.js"),
+            "({ actions() { return [] } })",
+        )
+        .expect("replacement script");
+        assert!(runtime.actions(&js_manifest(""), directory.path()).is_ok());
+    }
+
+    #[test]
+    fn javascript_cancellation_interrupts_a_running_loop() {
+        let directory = write_js_script("while (true) {}");
+        let runtime = Arc::new(PluginRuntime::new(
+            Duration::from_secs(2),
+            4 * 1024 * 1024,
+            usize::MAX,
+            3,
+        ));
+        let cancellation = PluginCancellation::default();
+        let signal = cancellation.clone();
+        let running = Arc::clone(&runtime);
+        let path = directory.path().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            running.actions_with_cancellation(&js_manifest(""), &path, &signal)
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        cancellation.cancel();
+        let result = worker.join().expect("plugin call must not panic");
+        assert!(
+            result
+                .expect_err("running call cancelled")
+                .to_string()
+                .contains("cancel"),
+            "interrupt must report cancellation"
+        );
+    }
+
+    #[test]
+    fn javascript_denies_clipboard_without_permission() {
+        let directory = write_js_script("({ invoke() { host.clipboard_write('secret') } })");
+        let runtime = PluginRuntime::default();
+        let error = runtime
+            .invoke_action(&js_manifest(""), directory.path(), "example.js.open", &[])
+            .expect_err("clipboard denied");
+        assert!(error.to_string().contains("permission denied"), "{error}");
+    }
+
+    #[test]
+    fn discovery_rejects_missing_spa_panel_entrypoint() {
+        let root = tempfile::tempdir().expect("plugin root");
+        let directory = root.path().join("panel");
+        fs::create_dir(&directory).expect("plugin directory");
+        fs::write(
+            directory.join("plugin.toml"),
+            "id='example.panel'\nname='Panel'\nversion='1'\napi_version='1'\ndescription='Panel'\n[contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'",
+        )
+        .expect("manifest");
+        let plugin = discover_plugins(root.path()).pop().expect("discovered");
+        assert!(!plugin.is_valid());
+        assert!(plugin.diagnostic.unwrap().contains("SPA panel entrypoint"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discovery_rejects_panel_symlink_escape() {
+        let root = tempfile::tempdir().expect("plugin root");
+        let directory = root.path().join("panel");
+        fs::create_dir(&directory).expect("plugin directory");
+        fs::write(root.path().join("outside.html"), "<html></html>").expect("external asset");
+        std::os::unix::fs::symlink(
+            root.path().join("outside.html"),
+            directory.join("index.html"),
+        )
+        .expect("symlink");
+        fs::write(
+            directory.join("plugin.toml"),
+            "id='example.panel'\nname='Panel'\nversion='1'\napi_version='1'\ndescription='Panel'\n[contributions.spa_panel]\nentrypoint='index.html'\naction_id='example.panel.open'\ntitle='Open panel'",
+        )
+        .expect("manifest");
+        assert!(!discover_plugins(root.path())[0].is_valid());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lua_and_javascript_entrypoints_cannot_escape_via_symlink() {
+        let root = tempfile::tempdir().expect("plugin root");
+        let plugin = root.path().join("plugin");
+        fs::create_dir(&plugin).expect("plugin directory");
+        fs::write(root.path().join("outside.js"), "({actions() {return []}})").expect("external");
+        std::os::unix::fs::symlink(root.path().join("outside.js"), plugin.join("plugin.js"))
+            .expect("symlink");
+        assert!(
+            PluginRuntime::default()
+                .actions(&js_manifest(""), &plugin)
+                .expect_err("entrypoint escape")
+                .to_string()
+                .contains("escapes")
+        );
+        fs::write(
+            root.path().join("outside.lua"),
+            "return { actions = function() return {} end }",
+        )
+        .expect("external Lua");
+        std::os::unix::fs::symlink(root.path().join("outside.lua"), plugin.join("plugin.lua"))
+            .expect("Lua symlink");
+        assert!(
+            PluginRuntime::default()
+                .actions(&manifest(), &plugin)
+                .expect_err("Lua entrypoint escape")
+                .to_string()
+                .contains("escapes")
+        );
     }
 }

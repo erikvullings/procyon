@@ -5,6 +5,7 @@
 import type { PluginColumnDto } from './pluginColumnDto.ts';
 import type { PluginIconThemeDto } from './pluginIconThemeDto.ts';
 import type { PluginPermissionsDto } from './pluginPermissionsDto.ts';
+import type { PluginSpaPanelDto } from './pluginSpaPanelDto.ts';
 
 /**
  * A discovered plugin, including disabled plugins with safe diagnostics.
@@ -28,6 +29,7 @@ export interface PluginDescriptorDto {
   name: string;
   /** Capabilities the manifest requests; ungranted capabilities are denied (spec §19). */
   permissions: PluginPermissionsDto;
+  spaPanel?: null | PluginSpaPanelDto;
   /** Package version when available. */
   version: string;
 }

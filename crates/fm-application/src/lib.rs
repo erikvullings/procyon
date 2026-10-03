@@ -80,4 +80,5 @@ pub use action::{ActionRegistry, DuplicateActionId};
 pub use directory::DirectoryService;
 pub use error::ApplicationError;
 pub use fm_ssh::{RemoteShellChannel, RemoteShellEvent, RemoteShellReader, RemoteShellWriter};
+pub use plugin_manager::PluginPanel;
 pub use service::FileManagerService;

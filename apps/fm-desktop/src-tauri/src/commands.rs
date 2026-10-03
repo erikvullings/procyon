@@ -2214,14 +2214,17 @@ pub(crate) fn enable_plugin(
 
 /// Persists plugin disablement through the shared service.
 #[tauri::command]
-pub(crate) fn disable_plugin(
+pub(crate) fn disable_plugin<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     plugin_id: String,
 ) -> Result<(), ApplicationErrorDto> {
     state
         .service
-        .set_plugin_enabled(plugin_id, false)
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .set_plugin_enabled(plugin_id.clone(), false)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))?;
+    crate::plugin_spa::close_plugin_panels(&app, &plugin_id);
+    Ok(())
 }
 
 /// Returns one plugin's bounded diagnostic log through the shared service.

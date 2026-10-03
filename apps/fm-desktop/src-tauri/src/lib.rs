@@ -9,6 +9,7 @@ mod credentials;
 mod event_stream;
 mod native_menu;
 mod platform;
+mod plugin_spa;
 #[cfg(debug_assertions)]
 mod semantic_developer;
 mod semantic_production;
@@ -74,7 +75,9 @@ fn build_context<R: tauri::Runtime>() -> tauri::Context<R> {
 /// Tauri commands in [`commands`] call `FileManagerService` directly.
 pub fn run() {
     init_tracing();
-    tauri::Builder::default()
+    let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
+    plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
+        .manage(panel_registry)
         .setup(|app| {
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
             // needs `app.path().resource_dir()`, which only resolves once the app has finished
@@ -176,6 +179,18 @@ pub fn run() {
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
                 semantic_ocr_shutdown: semantic_ocr_shutdown.clone(),
             });
+            let panel_app = app.handle().clone();
+            let panel_shutdown = semantic_ocr_shutdown.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::select! {
+                        () = panel_shutdown.cancelled() => break,
+                        () = tokio::time::sleep(std::time::Duration::from_secs(2)) => {
+                            plugin_spa::reconcile_panels(&panel_app);
+                        }
+                    }
+                }
+            });
             if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
@@ -257,7 +272,13 @@ pub fn run() {
         // scope here).
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .map_label(commands::canonical_workspace_window_label)
+                .map_label(|label| {
+                    if label.starts_with("plugin-spa-") {
+                        "plugin-spa"
+                    } else {
+                        commands::canonical_workspace_window_label(label)
+                    }
+                })
                 .build(),
         )
         .manage(event_stream::EventSubscriptionRegistry::default())
@@ -266,6 +287,7 @@ pub fn run() {
         .manage(QuittingFlag::default())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
+                window.state::<Arc<plugin_spa::PanelRegistry>>().release(window.label());
                 window
                     .state::<event_stream::EventSubscriptionRegistry>()
                     .unsubscribe_window(window.label());
@@ -288,7 +310,8 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler({
+            let app_commands: fn(tauri::ipc::Invoke) -> bool = tauri::generate_handler![
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
@@ -404,6 +427,7 @@ pub fn run() {
             commands::disable_plugin,
             commands::get_plugin_logs,
             commands::get_plugin_icon_theme_asset,
+            plugin_spa::open_plugin_panel,
             commands::start_search,
             commands::cancel_search,
             commands::start_comparison,
@@ -473,7 +497,16 @@ pub fn run() {
             commands::subscribe_native_menu_actions,
             commands::initialize_window_handle,
             commands::set_native_menu,
-        ])
+            ];
+            move |invoke| {
+                if !plugin_spa::trusted_invoke_label(invoke.message.webview_ref().label()) {
+                    invoke.resolver.reject("plugin SPA windows cannot invoke app commands");
+                    true
+                } else {
+                    app_commands(invoke)
+                }
+            }
+        })
         .build(build_context())
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
@@ -831,6 +864,28 @@ mod tests {
 
         assert_eq!(response.runtime, RuntimeKindDto::Tauri);
         app.state::<AppState>();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_panel_fails_closed_without_clipboard_isolation() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+        let error = tauri::async_runtime::block_on(plugin_spa::open_plugin_panel(
+            app.handle().clone(),
+            webview.as_ref().window(),
+            app.state::<AppState>(),
+            "example.plugin".into(),
+            "example.plugin.edit".into(),
+            fm_transport_dto::LocationDto {
+                provider_id: "local".into(),
+                uri: "file:///selection.svg".into(),
+            },
+        ))
+        .expect_err("WKWebView cannot deny browser clipboard access");
+        assert!(matches!(error, plugin_spa::PanelError::Unavailable));
     }
 
     #[test]

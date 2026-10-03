@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 fm-plugin-api = { path = "../fm-plugin-api" }
 mlua.workspace = true
+rquickjs = "0.11"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -12,6 +12,17 @@ use thiserror::Error;
 /// The only plugin ABI revision accepted by this release.
 pub const API_VERSION: &str = "1";
 
+/// Execution language for code contributions; legacy manifests use Lua.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginRuntimeKind {
+    /// Restricted Lua VM.
+    #[default]
+    Lua,
+    /// Embedded, sandboxed JavaScript VM (not Node.js).
+    Javascript,
+}
+
 /// A versioned plugin manifest, read from `plugin.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -26,6 +37,9 @@ pub struct PluginManifest {
     pub api_version: String,
     /// User-facing description.
     pub description: String,
+    /// Code execution runtime, independent of the declared contributions.
+    #[serde(default)]
+    pub runtime: PluginRuntimeKind,
     /// Plugin entrypoint relative to the manifest directory. Required only when
     /// `contributions.actions` or `contributions.columns` is set — a plugin that
     /// contributes only an icon theme runs no code and needs no entrypoint.
@@ -34,7 +48,7 @@ pub struct PluginManifest {
     /// Explicit capability grants; omitted capabilities are denied.
     #[serde(default)]
     pub permissions: PluginPermissions,
-    /// Declarative contributions; arbitrary WebView UI is intentionally absent.
+    /// Declarative contributions, including an optional isolated SPA panel.
     #[serde(default)]
     pub contributions: PluginContributions,
 }
@@ -67,13 +81,63 @@ impl PluginManifest {
         }
         let runs_code = self.contributions.actions || self.contributions.columns;
         match &self.entrypoint {
-            Some(entrypoint)
-                if entrypoint.as_os_str().is_empty() || is_absolute_on_any_platform(entrypoint) =>
-            {
+            Some(entrypoint) if !is_safe_plugin_path(entrypoint) => {
                 return Err(ManifestError::InvalidField("entrypoint"));
             }
             None if runs_code => return Err(ManifestError::InvalidField("entrypoint")),
             _ => {}
+        }
+        if let Some(panel) = &self.contributions.spa_panel {
+            if !is_safe_plugin_path(&panel.entrypoint)
+                || panel
+                    .entrypoint
+                    .extension()
+                    .is_none_or(|extension| extension != "html")
+            {
+                return Err(ManifestError::InvalidField(
+                    "contributions.spa_panel.entrypoint",
+                ));
+            }
+            let Some(suffix) = panel.action_id.strip_prefix(&format!("{}.", self.id)) else {
+                return Err(ManifestError::InvalidField(
+                    "contributions.spa_panel.action_id",
+                ));
+            };
+            if suffix.is_empty()
+                || !suffix
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+            {
+                return Err(ManifestError::InvalidField(
+                    "contributions.spa_panel.action_id",
+                ));
+            }
+            if panel.title.trim().is_empty() {
+                return Err(ManifestError::InvalidField("contributions.spa_panel.title"));
+            }
+            if panel.shortcut.as_ref().is_some_and(|shortcut| {
+                shortcut.is_empty()
+                    || shortcut.len() > 64
+                    || !shortcut.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'_')
+                    })
+            }) {
+                return Err(ManifestError::InvalidField(
+                    "contributions.spa_panel.shortcut",
+                ));
+            }
+            let mut seen = std::collections::BTreeSet::new();
+            if panel.extensions.iter().any(|extension| {
+                extension.is_empty()
+                    || !extension
+                        .bytes()
+                        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+                    || !seen.insert(extension)
+            }) {
+                return Err(ManifestError::InvalidField(
+                    "contributions.spa_panel.extensions",
+                ));
+            }
         }
         Ok(())
     }
@@ -101,6 +165,8 @@ pub struct PluginPermissions {
     pub selected_entry_metadata: bool,
     /// Allows bounded content reads for the current selection.
     pub selected_entry_content_read: bool,
+    /// Allows bounded writes to the selected entry through a reviewed host bridge.
+    pub selected_entry_content_write: bool,
     /// Roots the plugin may read from.
     pub filesystem_read: Vec<PathBuf>,
     /// Roots the plugin may write to.
@@ -126,6 +192,8 @@ pub enum Permission {
     SelectedEntryMetadata,
     /// Selected-entry content.
     SelectedEntryContentRead,
+    /// Selected-entry content writes.
+    SelectedEntryContentWrite,
     /// Filesystem reads.
     FilesystemRead,
     /// Filesystem writes.
@@ -158,6 +226,7 @@ impl PluginPermissions {
         let granted = match permission {
             Permission::SelectedEntryMetadata => self.selected_entry_metadata,
             Permission::SelectedEntryContentRead => self.selected_entry_content_read,
+            Permission::SelectedEntryContentWrite => self.selected_entry_content_write,
             Permission::FilesystemRead => !self.filesystem_read.is_empty(),
             Permission::FilesystemWrite => !self.filesystem_write.is_empty(),
             Permission::ClipboardRead => self.clipboard_read,
@@ -184,6 +253,26 @@ pub struct PluginContributions {
     /// A directory-entry icon theme, described by a sibling `icon-theme.json`.
     /// Runs no code: no `entrypoint` is required for this contribution alone.
     pub icon_theme: bool,
+    /// An isolated child-WebView SPA with package-owned assets, independent of the code runtime.
+    pub spa_panel: Option<SpaPanelContribution>,
+}
+
+/// Panel entrypoint and optional file-extension activation matches.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpaPanelContribution {
+    /// HTML document inside the installed plugin package.
+    pub entrypoint: PathBuf,
+    /// Plugin-namespaced action id used to open the panel without running plugin code.
+    pub action_id: String,
+    /// Label for the host action registry, palette, and context menu.
+    pub title: String,
+    /// Optional shortcut hint (the host decides whether/how to bind it).
+    #[serde(default)]
+    pub shortcut: Option<String>,
+    /// Lowercase extensions without dots; an empty list means explicit activation only.
+    #[serde(default)]
+    pub extensions: Vec<String>,
 }
 
 /// One icon asset referenced by an icon theme (task 0095).
@@ -304,6 +393,15 @@ fn is_absolute_on_any_platform(path: &Path) -> bool {
         || matches!(bytes, [drive, b':', ..] if drive.is_ascii_alphabetic())
 }
 
+fn is_safe_plugin_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && !is_absolute_on_any_platform(path)
+        && !path
+            .components()
+            .any(|component| component == Component::ParentDir)
+        && !path.to_string_lossy().contains('\\')
+}
+
 /// Icon theme manifest parsing or validation failure.
 #[derive(Debug, Error)]
 pub enum IconThemeManifestError {
@@ -406,6 +504,90 @@ actions = true
     }
 
     #[test]
+    fn existing_lua_and_icon_theme_manifests_default_to_lua_without_a_panel() {
+        for source in [
+            "id='example.action'\nname='Action'\nversion='1'\napi_version='1'\ndescription='Action'\nentrypoint='plugin.lua'\n[contributions]\nactions=true",
+            "id='example.icons'\nname='Icons'\nversion='1'\napi_version='1'\ndescription='Icons'\n[contributions]\nicon_theme=true",
+        ] {
+            let manifest = PluginManifest::parse(source).expect("legacy manifest");
+            assert_eq!(manifest.runtime, PluginRuntimeKind::Lua);
+            assert!(manifest.contributions.spa_panel.is_none());
+        }
+    }
+
+    #[test]
+    fn javascript_actions_and_spa_panel_are_orthogonal() {
+        let manifest = PluginManifest::parse(
+            "id='example.js'\nname='JS'\nversion='1'\napi_version='1'\ndescription='JS action and panel'\nruntime='javascript'\nentrypoint='actions.js'\n[contributions]\nactions=true\n[contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.js.open'\ntitle='Open editor'\nshortcut='Cmd+F4'\nextensions=['svg','png']",
+        )
+        .expect("JS action and SPA");
+        assert_eq!(manifest.runtime, PluginRuntimeKind::Javascript);
+        assert!(manifest.contributions.actions);
+        let panel = manifest.contributions.spa_panel.expect("panel");
+        assert_eq!(panel.entrypoint, PathBuf::from("dist/index.html"));
+        assert_eq!(panel.action_id, "example.js.open");
+        assert_eq!(panel.title, "Open editor");
+        assert_eq!(panel.shortcut.as_deref(), Some("Cmd+F4"));
+    }
+
+    #[test]
+    fn panel_only_manifest_needs_no_action_entrypoint() {
+        let manifest = PluginManifest::parse(
+            "id='example.panel'\nname='Panel'\nversion='1'\napi_version='1'\ndescription='Panel'\n[contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'",
+        )
+        .expect("panel only");
+        assert!(manifest.entrypoint.is_none());
+    }
+
+    #[test]
+    fn lua_actions_can_contribute_an_independent_panel() {
+        let manifest = PluginManifest::parse(
+            "id='example.lua'\nname='Lua'\nversion='1'\napi_version='1'\ndescription='Lua action and panel'\nentrypoint='plugin.lua'\n[contributions]\nactions=true\n[contributions.spa_panel]\nentrypoint='panel/index.html'\naction_id='example.lua.open'\ntitle='Open panel'",
+        )
+        .expect("Lua action and panel");
+        assert_eq!(manifest.runtime, PluginRuntimeKind::Lua);
+        assert!(manifest.contributions.spa_panel.is_some());
+    }
+
+    #[test]
+    fn rejects_action_entrypoint_traversal() {
+        let error = PluginManifest::parse(
+            "id='example.action'\nname='Action'\nversion='1'\napi_version='1'\ndescription='Action'\nentrypoint='../outside.lua'\n[contributions]\nactions=true",
+        )
+        .expect_err("action may not load outside its package");
+        assert!(matches!(error, ManifestError::InvalidField("entrypoint")));
+    }
+
+    #[test]
+    fn rejects_unsafe_panel_assets_and_extensions() {
+        for panel in [
+            "entrypoint='../outside.html'\naction_id='example.panel.open'\ntitle='Open panel'",
+            "entrypoint='C:\\\\outside.html'\naction_id='example.panel.open'\ntitle='Open panel'",
+            "entrypoint='dist/index.js'\naction_id='example.panel.open'\ntitle='Open panel'",
+            "entrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'\nextensions=['.svg']",
+            "entrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'\nextensions=['SVG']",
+            "entrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'\nextensions=['svg','svg']",
+            "entrypoint='dist/index.html'\naction_id='other.plugin.open'\ntitle='Open panel'",
+            "entrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle=' '",
+            "entrypoint='dist/index.html'\naction_id='example.panel.open'\ntitle='Open panel'\nshortcut=' '",
+        ] {
+            let source = format!(
+                "id='example.panel'\nname='Panel'\nversion='1'\napi_version='1'\ndescription='Panel'\n[contributions.spa_panel]\n{panel}"
+            );
+            assert!(PluginManifest::parse(&source).is_err(), "{panel}");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_runtime() {
+        let error = PluginManifest::parse(
+            "id='example.plugin'\nname='Example'\nversion='1'\napi_version='1'\ndescription='Example'\nruntime='node'\nentrypoint='plugin.js'\n[contributions]\nactions=true",
+        )
+        .expect_err("unknown runtime");
+        assert!(matches!(error, ManifestError::Toml(_)));
+    }
+
+    #[test]
     fn rejects_unknown_api_versions() {
         let error = PluginManifest::parse(
             "id='example.plugin'\nname='Example'\nversion='1'\napi_version='99'\ndescription='Example'\nentrypoint='plugin.lua'",
@@ -432,6 +614,35 @@ actions = true
             .expect_err("omitted permission must be denied");
 
         assert_eq!(error.permission, Permission::ClipboardWrite);
+        assert_eq!(
+            PluginPermissions::default()
+                .require(Permission::SelectedEntryContentWrite)
+                .expect_err("selected content write denied by default")
+                .permission,
+            Permission::SelectedEntryContentWrite
+        );
+    }
+
+    #[test]
+    fn selected_entry_write_is_independent_of_scoped_filesystem_write() {
+        let manifest = PluginManifest::parse(
+            "id='example.svg'\nname='SVG'\nversion='1'\napi_version='1'\ndescription='Edit selected SVG'\n[permissions]\nselected_entry_content_write=true\n[contributions.spa_panel]\nentrypoint='index.html'\naction_id='example.svg.open'\ntitle='Open SVG'",
+        )
+        .expect("selected-entry write declaration");
+        assert!(
+            manifest
+                .permissions
+                .require(Permission::SelectedEntryContentWrite)
+                .is_ok()
+        );
+        assert_eq!(
+            manifest
+                .permissions
+                .require(Permission::FilesystemWrite)
+                .expect_err("selected-entry grant must not allow scoped writes")
+                .permission,
+            Permission::FilesystemWrite
+        );
     }
 
     #[test]

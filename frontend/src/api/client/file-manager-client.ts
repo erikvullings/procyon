@@ -683,6 +683,9 @@ export interface FileManagerClient {
 
   invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult>;
 
+  /** Opens a packaged SPA for the cursor entry; unsupported on browser hosts. */
+  openPluginPanel(pluginId: PluginId, actionId: string, location: Location): Promise<void>;
+
   /** Diagnostics view for troubleshooting and bug reports (spec §30). */
   getDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResult>;
 

@@ -2479,6 +2479,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getPlugins: () => plugins,
     setPlugins: (next) => {
       plugins = next;
+      void attrsClient
+        .listActions()
+        .then((actions) => {
+          registeredActions = actions;
+          m.redraw();
+        })
+        .catch(() => {
+          toast({ html: t('action', 'unableToRun') });
+        });
     },
     listPlugins: () => attrsClient.listPlugins(),
     getCurrentIconThemeSetting: () => currentSettings?.iconTheme,
@@ -3122,6 +3131,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getSelections: () => selections,
     getDirectories: () => directories,
     getRegisteredActions: keybindingActions,
+    getPlugins: () => plugins,
     collectIntoBasketIfVisible: () => {
       if (!basketVisible()) return false;
       collectSelection();
@@ -3526,6 +3536,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getCurrentSettings: () => currentSettings,
     getClient: () => attrsClient,
     getRegisteredActions: () => registeredActions,
+    getPlugins: () => plugins,
     getWorkspace: () => workspace,
     getNavigation: () => navigation,
     getOpsController: () => opsController,

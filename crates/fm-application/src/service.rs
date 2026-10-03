@@ -2689,13 +2689,43 @@ impl FileManagerService {
     /// Lists every registered action (spec §18).
     #[must_use]
     pub fn list_actions(&self) -> Vec<ActionDescriptorDto> {
-        self.action_invoker.list(&self.plugin_manager)
+        let mut actions = self.action_invoker.list(&self.plugin_manager);
+        actions.extend(
+            self.plugin_manager
+                .list_plugin_panels(
+                    self.runtime == RuntimeKindDto::Tauri && !cfg!(target_os = "macos"),
+                )
+                .into_iter()
+                .map(Into::into),
+        );
+        actions.sort_by(|left, right| left.id.cmp(&right.id));
+        actions
     }
 
     /// Lists discovered plugins, retaining malformed manifests as disabled records.
     #[must_use]
     pub fn list_plugins(&self) -> Vec<PluginDescriptorDto> {
         self.plugin_manager.list_plugins()
+    }
+
+    /// Resolves only the current file's enabled SPA contribution; the caller
+    /// cannot supply an extension independent of the validated location.
+    pub fn plugin_panel(
+        &self,
+        plugin_id: &str,
+        action_id: &str,
+        location: &fm_transport_dto::LocationDto,
+    ) -> Result<crate::PluginPanel, ApplicationError> {
+        if self.runtime != RuntimeKindDto::Tauri || cfg!(target_os = "macos") {
+            return Err(ApplicationError::ActionUnavailable(ActionId::new(
+                action_id.to_owned(),
+            )));
+        }
+        let file_name = fm_domain::Location::from(location.clone())
+            .name()
+            .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
+        self.plugin_manager
+            .plugin_panel(plugin_id, action_id, &file_name)
     }
 
     /// Overrides the bundled (read-only, shipped-with-the-app) plugin directory that

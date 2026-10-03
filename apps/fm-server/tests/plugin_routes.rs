@@ -37,8 +37,10 @@ async fn list_plugins_reports_only_the_bundled_plugins_and_unknown_enablement_is
         plugin_ids,
         vec![
             "catppuccin.icons",
+            "procyon.svgo",
             "sample.copy-markdown-path",
-            "sample.file-age"
+            "sample.file-age",
+            "sample.js-svg-uri"
         ]
     );
 
