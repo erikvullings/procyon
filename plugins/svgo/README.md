@@ -1,7 +1,7 @@
 # SVGO panel
 
 The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `d11f373c09eab688f186a1a620dfe2fedf13dc54`
+`erikvullings/svgo` at commit `7f3a80947dc410dc2ad5e369cdc4d7951ad36e45`
 with `pnpm build:procyon`. It includes local Monaco resources; no network or
 general filesystem capability is granted.
 
@@ -14,7 +14,9 @@ close button or **Cmd+W** (Ctrl+W elsewhere).
 It starts in Tree view with a closed menu and an even vertical stack: the tree
 occupies the top half and the SVG preview the bottom half. Save is the primary
 button, and Copy is in the menu; File → Open and the in-app title are absent
-in the Procyon build.
+in the Procyon build. The toolbar and preview work area match Procyon's
+status-bar surface; the SVG canvas uses a neutral contrasting surface without
+a persistent border. The split handle keeps its full draggable area.
 Save writes only the originally opened file and rejects revisions that changed
 outside the panel. A successful atomic Save keeps the source pane's cursor on
 the SVG when its filesystem entry identity changes. Download remains available
