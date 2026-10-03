@@ -121,4 +121,6 @@ second plugin system.
   disappearing, while toolbar zoom and Reset retain their previous behavior.
 - 2026-10-03 Copilot: The Procyon preview hides zoom-induced scrollbars without disabling
   drag panning. Its viewport background remains fixed as artwork zooms and pans, with
-  a presentation-only White, Black, or Checkerboard selector; Save does not include it.
+  a presentation-only Light, Dark, or Checkerboard selector; Light and Dark use the
+  matching Procyon status-bar colors. The default follows the current theme unless
+  explicitly overridden, and Save does not include the background.
