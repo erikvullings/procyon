@@ -92,12 +92,13 @@ other failures.
 
 `plugins/sample-js-svg-uri/` is a bundled action example: it uses only the selected-entry
 metadata and clipboard-write calls. `plugins/svgo/` bundles a separate, panel-only editor,
-which requires selected-entry content read/write but no general filesystem or network grant.
+which requires selected-entry content read/write and clipboard read/write but no general
+filesystem or network grant.
 Both are disabled until enabled in Settings. The SVG panel opens the file under the **cursor**
 (not a marked selection); Save writes that original file with revision checking. In the
-browser/server host, the panel action is explicitly unavailable. The current macOS build also
-blocks panel activation because WKWebView cannot deny clipboard reads to an untrusted plugin;
-see the [threat model and remaining release gates](spa-threat-model.md).
+browser/server host, the panel action is explicitly unavailable. On macOS, WKWebView exposes
+clipboard read and write directly to panel JavaScript; only panels declaring both grants can
+open. See the [threat model and remaining release gates](spa-threat-model.md).
 
 ## Lua entrypoint contract and isolation
 

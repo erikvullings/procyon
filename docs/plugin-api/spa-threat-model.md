@@ -1,10 +1,10 @@
 # Sandboxed plugin threat model (task 0226)
 
 **Status: incomplete.** This is the reviewed boundary for the prototype, not an assurance
-that every desktop host can safely run untrusted panels. On macOS panel opening fails closed:
-WKWebView exposes clipboard reads to page JavaScript, and Wry does not provide a reliable
-per-WebView read-denial switch. Granting only clipboard write would not fix that. Windows and
-Linux still need native isolation and Save-path smoke tests before this task can be closed.
+that every desktop host can safely run untrusted panels. On macOS, WKWebView exposes native
+clipboard reads and writes to page JavaScript; only panels declaring both grants may open.
+The bundled SVGO plugin now declares both grants. Windows and Linux still need native
+isolation and Save-path smoke tests before this task can be closed.
 
 ## Assets and adversary
 
@@ -22,7 +22,7 @@ same-user process capable of modifying installed plugin files is outside the cur
 | Action JavaScript | Fresh embedded QuickJS runtime; no Node, DOM, Tauri or ambient I/O bindings. Only metadata and staged clipboard-write host calls exist, each requiring its own manifest grant. Source, memory, stack, instruction count, elapsed time, input/output and cancellation are bounded; failures use the existing plugin diagnostic/auto-disable path. |
 | Package assets | Manifest entrypoints reject lexical traversal. Discovery and each served asset canonicalize against the installed package; requests reject hidden paths, encoded paths, unsupported asset extensions and oversized responses. |
 | Window identity | Sixteen pre-registered scheme origins are leased one per live panel. A host-generated WebView label is bound to that origin, plugin ID, action ID and selected file; requests from a different label/slot fail. All app commands are denied at the central invoke handler for non-app window labels, independent of Tauri's default ACL behavior. |
-| Browser authority | Panels are incognito. CSP defaults to none, allows only packaged scripts/styles/fonts, local/data images and blob workers, and restricts connections to the window's own bridge. Popups, downloads, foreign navigation, frames and objects are blocked. Clipboard cannot be made deny-by-default on macOS, so panels do not open there. |
+| Browser authority | Panels are incognito. CSP defaults to none, allows only packaged scripts/styles/fonts, local/data images and blob workers, and restricts connections to the window's own bridge. Popups, downloads, foreign navigation, frames and objects are blocked. WKWebView clipboard read/write on macOS bypasses the bridge, so a panel without both declared grants cannot open there. |
 | Host bridge | The package calls a version-1, token-bound, size-limited `save-svg` request. The custom-scheme handler checks the calling WebView label and origin, rejects unknown fields and revalidates enablement, package identity, `.svg` extension and selected-content permissions on each request. A typed response exposes no file contents or paths on error. |
 | Selected file | The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. Same-URI panels serialize saves; a reload closes the panel instead of replaying an outdated snapshot. |
 | Lifecycle | Closing or disabling releases the origin slot and cancels pending bridge requests; a periodic reconciliation closes windows whose plugin package/permission is no longer valid. JS calls use fresh runtimes. |
@@ -33,9 +33,12 @@ sanitization.
 
 ## Outstanding risks and release gates
 
-- **macOS is unavailable.** WKWebView can read the system clipboard independently of the
-  selected-file bridge. The user declined a clipboard-read grant for SVGO, so the host must
-  continue to reject activation until an enforceable process/WebView isolation design exists.
+- **macOS clipboard authority is broad.** WKWebView can read and write the system clipboard
+  independently of the selected-file bridge. The user authorized both grants for SVGO; other
+  panels without either grant remain unavailable on macOS. This is not a confined clipboard
+  bridge, and the host cannot apply per-operation limits or audit individual clipboard accesses.
+- **macOS native behavior is not smoke-tested.** Source-level checks and unit tests do not
+  prove WKWebView custom-scheme, CSP, clipboard or Save-path behavior.
 - **Windows and Linux are not smoke-tested.** Source-level checks and desktop unit tests do
   not prove WebView2/WebKitGTK custom-scheme, CSP, bridge, or worker behavior. A Windows
   cross-build was blocked by the local `aws-lc-sys` toolchain.
@@ -51,6 +54,6 @@ sanitization.
   commit sequence. No forced overwrite is requested, but the provider operation is not an
   atomic compare-and-swap. An atomic provider revision check is needed for a stronger guarantee.
 
-The focused security review found no exploitable vulnerability in the reviewed **enabled**
-paths, subject to these explicit availability and platform gaps. Do not change task 0226 to
-`done` until the release gates are resolved and smoke-tested on all target desktop platforms.
+The earlier focused security review covered the previously enabled paths, before macOS panel
+activation. Do not change task 0226 to `done` until the release gates are resolved and
+smoke-tested on all target desktop platforms, including a fresh review of the macOS path.

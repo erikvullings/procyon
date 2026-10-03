@@ -82,4 +82,8 @@ second plugin system.
   cannot deny clipboard reads on macOS, and the user declined that grant, so macOS panels fail
   closed; Windows/Linux native smoke paths are unverified. Immediate WebView-crash cleanup,
   cancellation-safe temporary-file cleanup, and atomic cross-process save conflicts are still
-  release gates. Do not treat bundled SVGO as usable on macOS yet.
+  release gates. At that point bundled SVGO was unavailable on macOS.
+- 2026-10-03 Copilot: The user authorized clipboard read as well as write for SVGO. Its manifest
+  now declares both, and macOS panel activation is allowed only for plugins with both grants;
+  other panels remain unavailable. The task remains open pending native platform smoke tests,
+  a fresh macOS security review, and the other release gates in the threat model.

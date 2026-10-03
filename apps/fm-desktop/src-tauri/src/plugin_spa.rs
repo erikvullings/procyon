@@ -619,12 +619,6 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     if !trusted_invoke_label(source.label()) {
         return Err(PanelError::Denied);
     }
-    // WKWebView exposes the system clipboard to page JavaScript by default;
-    // unlike Windows/Linux, Wry has no macOS clipboard-denial switch. A
-    // plugin with no clipboard permission must not be able to bypass it.
-    if cfg!(target_os = "macos") {
-        return Err(PanelError::Unavailable);
-    }
     let panel = state
         .service
         .plugin_panel(&plugin_id, &action_id, &location)

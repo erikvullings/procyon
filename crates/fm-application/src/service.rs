@@ -2692,9 +2692,7 @@ impl FileManagerService {
         let mut actions = self.action_invoker.list(&self.plugin_manager);
         actions.extend(
             self.plugin_manager
-                .list_plugin_panels(
-                    self.runtime == RuntimeKindDto::Tauri && !cfg!(target_os = "macos"),
-                )
+                .list_plugin_panels(self.runtime == RuntimeKindDto::Tauri)
                 .into_iter()
                 .map(Into::into),
         );
@@ -2716,7 +2714,7 @@ impl FileManagerService {
         action_id: &str,
         location: &fm_transport_dto::LocationDto,
     ) -> Result<crate::PluginPanel, ApplicationError> {
-        if self.runtime != RuntimeKindDto::Tauri || cfg!(target_os = "macos") {
+        if self.runtime != RuntimeKindDto::Tauri {
             return Err(ApplicationError::ActionUnavailable(ActionId::new(
                 action_id.to_owned(),
             )));
@@ -3884,6 +3882,55 @@ mod tests {
             dir.path().join("settings"),
         );
         (dir, service)
+    }
+
+    #[test]
+    fn bundled_svgo_panel_is_available_only_in_the_desktop_host() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let desktop = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            root.path(),
+            root.path().join("desktop-settings"),
+        );
+        desktop
+            .set_plugin_enabled("procyon.svgo".to_owned(), true)
+            .expect("enable SVGO");
+        let location = fm_transport_dto::LocationDto {
+            provider_id: "local".to_owned(),
+            uri: "file:///drawing.svg".to_owned(),
+        };
+        assert!(
+            desktop
+                .list_actions()
+                .iter()
+                .any(|action| action.id == "procyon.svgo.open"
+                    && action.context_requirements.feature_available)
+        );
+        assert!(
+            desktop
+                .plugin_panel("procyon.svgo", "procyon.svgo.open", &location)
+                .is_ok()
+        );
+
+        let browser = FileManagerService::new(
+            RuntimeKindDto::BrowserServer,
+            root.path(),
+            root.path().join("browser-settings"),
+        );
+        browser
+            .set_plugin_enabled("procyon.svgo".to_owned(), true)
+            .expect("enable SVGO");
+        assert!(
+            browser
+                .list_actions()
+                .iter()
+                .any(|action| action.id == "procyon.svgo.open"
+                    && !action.context_requirements.feature_available)
+        );
+        assert!(matches!(
+            browser.plugin_panel("procyon.svgo", "procyon.svgo.open", &location),
+            Err(ApplicationError::ActionUnavailable(_))
+        ));
     }
 
     #[test]

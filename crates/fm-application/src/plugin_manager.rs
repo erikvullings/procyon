@@ -52,6 +52,11 @@ pub struct PluginPanel {
     pub can_write_selected: bool,
 }
 
+fn panel_native_clipboard_granted(manifest: &PluginManifest) -> bool {
+    !cfg!(target_os = "macos")
+        || (manifest.permissions.clipboard_read && manifest.permissions.clipboard_write)
+}
+
 impl PluginManager {
     pub(crate) fn new(
         plugins: PluginDiscovery,
@@ -133,6 +138,11 @@ impl PluginManager {
                 "plugin permission denied: selected_entry_content_read".to_owned(),
             ));
         }
+        if !panel_native_clipboard_granted(&manifest) {
+            return Err(ApplicationError::ActionUnavailable(ActionId::new(
+                action_id.to_owned(),
+            )));
+        }
         Ok(PluginPanel {
             plugin_id: manifest.id,
             title: panel.title.clone(),
@@ -148,6 +158,7 @@ impl PluginManager {
             .into_iter()
             .filter(|(manifest, _)| self.plugin_runtime.disabled_reason(&manifest.id).is_none())
             .filter_map(|(manifest, _)| {
+                let panel_available = available && panel_native_clipboard_granted(&manifest);
                 let panel = manifest.contributions.spa_panel?;
                 let shortcut = panel.shortcut.as_deref().and_then(|shortcut| {
                     let parts = shortcut.split('+').collect::<Vec<_>>();
@@ -173,7 +184,7 @@ impl PluginManager {
                     category: "plugin".to_owned(),
                     default_shortcuts: shortcut.into_iter().collect(),
                     context_requirements: ActionContextRequirements {
-                        feature_available: available,
+                        feature_available: panel_available,
                         ..ActionContextRequirements::none()
                     },
                     parameter_schema: None,
@@ -634,6 +645,7 @@ mod tests {
             plugin.join("plugin.toml"),
             "id='example.svg'\nname='SVG'\nversion='1'\napi_version='1'\ndescription='SVG editor'\n\
              [permissions]\nselected_entry_content_read=true\nselected_entry_content_write=true\n\
+             clipboard_read=true\nclipboard_write=true\n\
              [contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.svg.edit'\n\
              title='Edit SVG'\nshortcut='Cmd+F4'\nextensions=['svg']",
         )
@@ -659,6 +671,55 @@ mod tests {
             manager.plugin_panel("example.svg", "example.svg.other", "logo.svg"),
             Err(ApplicationError::NotFound)
         ));
+        assert!(
+            manager
+                .list_plugin_panels(true)
+                .iter()
+                .any(|action| action.id.as_str() == "example.svg.edit"
+                    && action.context_requirements.feature_available)
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_panels_require_both_native_clipboard_grants() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let (plugins_dir, manager) = manager(&root);
+        for (id, grants) in [
+            ("no-clipboard", ""),
+            ("read-only", "clipboard_read=true\n"),
+            ("write-only", "clipboard_write=true\n"),
+        ] {
+            let plugin = plugins_dir.join(id);
+            std::fs::create_dir_all(plugin.join("dist")).expect("plugin directory");
+            std::fs::write(plugin.join("dist/index.html"), "<html></html>").expect("panel asset");
+            std::fs::write(
+                plugin.join("plugin.toml"),
+                format!(
+                    "id='example.{id}'\nname='{id}'\nversion='1'\napi_version='1'\n\
+                     description='SVG editor'\n[permissions]\nselected_entry_content_read=true\n\
+                     selected_entry_content_write=true\n{grants}\
+                     [contributions.spa_panel]\nentrypoint='dist/index.html'\n\
+                     action_id='example.{id}.edit'\ntitle='Edit SVG'\nextensions=['svg']"
+                ),
+            )
+            .expect("manifest");
+            manager
+                .set_plugin_enabled(format!("example.{id}"), true)
+                .expect("enable");
+            assert!(matches!(
+                manager.plugin_panel(
+                    &format!("example.{id}"),
+                    &format!("example.{id}.edit"),
+                    "logo.svg"
+                ),
+                Err(ApplicationError::ActionUnavailable(_))
+            ));
+            assert!(manager.list_plugin_panels(true).iter().any(|action| {
+                action.id.as_str() == format!("example.{id}.edit")
+                    && !action.context_requirements.feature_available
+            }));
+        }
     }
 
     #[test]
@@ -706,6 +767,12 @@ mod tests {
             .plugin_panel("procyon.svgo", "procyon.svgo.open", "image.svg")
             .expect("bundled SVG editor");
         assert!(panel.can_read_selected && panel.can_write_selected);
+        let svgo = manager
+            .list_plugins()
+            .into_iter()
+            .find(|plugin| plugin.id == "procyon.svgo")
+            .expect("SVGO descriptor");
+        assert!(svgo.permissions.clipboard_read && svgo.permissions.clipboard_write);
         assert!(panel.directory.join(&panel.entrypoint).is_file());
         assert!(
             manager
