@@ -50,6 +50,7 @@ import {
 import type { OperationsController } from '../operations/operations-controller';
 import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
+import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-host';
 import { FileViewer } from '../preview/file-viewer';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
 import { hiddenSelectedEntryCount } from '../quick-filter/quick-filter';
@@ -123,6 +124,7 @@ export interface PaneContentContext {
   // Map state (mutable reference — callers may .get()/.set()/.delete() directly)
   getDirectories(): Map<string, PaneDirectoryView>;
   getSelections(): Map<string, SelectionState>;
+  onSelectionAction(key: string): void;
   getSortedEntries(): Map<
     string,
     {
@@ -148,6 +150,7 @@ export interface PaneContentContext {
     PaneId,
     { readonly controller: FileEditorController; state: FileEditorState }
   >;
+  getPluginByPane(): Map<PaneId, PluginPaneState>;
   getDiskUsageByTab(): Map<string, { state: DiskUsageViewState }>;
   getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
 
@@ -593,6 +596,7 @@ export function createPaneContentBuilder(
                 action,
                 loadedEntryIds,
               );
+              context.onSelectionAction(key);
               context.getSelections().set(key, next);
               m.redraw();
             });
@@ -620,6 +624,7 @@ export function createPaneContentBuilder(
                 { type: 'setCursor', entryId: match.id },
                 loadedEntries.map((entry) => entry.id),
               );
+              context.onSelectionAction(key);
               context.getSelections().set(key, next);
               m.redraw();
             });
@@ -635,6 +640,7 @@ export function createPaneContentBuilder(
           action,
           entryIds,
         );
+        context.onSelectionAction(key);
         context.getSelections().set(key, next);
         // `m.redraw()` is throttled to the next animation frame, not synchronous. A plain
         // `m.redraw()` here left a window where a keypress arriving before that frame paints
@@ -863,9 +869,11 @@ export function createPaneContentBuilder(
           ),
         );
       },
-      ...(context.getEditorByPane().has(paneId)
+      ...(context.getEditorByPane().has(paneId) || context.getPluginByPane().has(paneId)
         ? {
             viewerContent: (() => {
+              const panel = context.getPluginByPane().get(paneId);
+              if (panel !== undefined) return m(PluginPanelHost, panel);
               const editor = context.getEditorByPane().get(paneId);
               return editor === undefined
                 ? undefined

@@ -49,7 +49,7 @@ fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
-tauri.workspace = true
+tauri = { workspace = true, features = ["unstable"] }
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-process.workspace = true

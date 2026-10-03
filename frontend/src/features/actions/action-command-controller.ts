@@ -60,6 +60,12 @@ export interface ActionCommandControllerContext {
   getDirectories(): Map<string, PaneDirectoryView>;
   getCurrentSettings(): Settings | undefined;
   getClient(): FileManagerClient;
+  openPluginPane(
+    paneId: PaneId,
+    plugin: PluginDescriptor,
+    actionId: string,
+    entry: EntrySummary,
+  ): 'opened' | 'blocked' | 'unavailable';
   getRegisteredActions(): readonly ActionDescriptor[];
   getPlugins(): readonly PluginDescriptor[];
   getWorkspace(): WorkspaceProjection | undefined;
@@ -278,6 +284,7 @@ export function createActionCommandController(
               ?.entries.find((candidate) => candidate.id === cursorId);
       const extension = entry?.name.split('.').at(-1)?.toLowerCase();
       if (
+        paneId === undefined ||
         !panelPlugin.enabled ||
         entry?.kind !== 'file' ||
         isParentEntry(entry.id) ||
@@ -287,14 +294,13 @@ export function createActionCommandController(
         context.toast({ html: t('availability', 'selectFiles') });
         return;
       }
-      void context
-        .getClient()
-        .openPluginPanel(panelPlugin.id, actionId, entry.location)
-        .then(() => {
-          context.getCommandPaletteRecency().set(actionId, Date.now());
-          context.redraw();
-        })
-        .catch(reportActionError);
+      const placement = context.openPluginPane(paneId, panelPlugin, actionId, entry);
+      if (placement === 'unavailable') {
+        context.toast({ html: t('action', 'unableToRun') });
+      } else if (placement === 'opened') {
+        context.getCommandPaletteRecency().set(actionId, Date.now());
+        context.redraw();
+      }
       return;
     }
     void context

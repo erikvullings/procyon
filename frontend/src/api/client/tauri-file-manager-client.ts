@@ -1138,8 +1138,24 @@ export class TauriFileManagerClient implements FileManagerClient {
     });
   }
 
-  async openPluginPanel(pluginId: PluginId, actionId: string, location: Location): Promise<void> {
-    await invoke('open_plugin_panel', { pluginId, actionId, location });
+  openPluginPanel(
+    pluginId: PluginId,
+    actionId: string,
+    location: Location,
+    bounds: import('./file-manager-client').PluginPanelBounds,
+  ): Promise<string> {
+    return invoke<string>('open_plugin_panel', { pluginId, actionId, location, bounds });
+  }
+
+  updatePluginPanelBounds(
+    label: string,
+    bounds: import('./file-manager-client').PluginPanelBounds,
+  ): Promise<void> {
+    return invoke<void>('update_plugin_panel_bounds', { label, bounds });
+  }
+
+  closePluginPanel(label: string): Promise<void> {
+    return invoke<void>('close_plugin_panel', { label });
   }
 
   listPlugins(_signal?: AbortSignal): Promise<PluginDescriptor[]> {

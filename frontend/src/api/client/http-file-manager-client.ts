@@ -1973,7 +1973,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
   }
 
-  openPluginPanel(_pluginId: PluginId, _actionId: string, _location: FileLocation): Promise<void> {
+  openPluginPanel(
+    _pluginId: PluginId,
+    _actionId: string,
+    _location: FileLocation,
+  ): Promise<string> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  updatePluginPanelBounds(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  closePluginPanel(): Promise<void> {
     return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
   }
 

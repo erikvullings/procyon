@@ -143,6 +143,7 @@ import {
   type TabController,
   type TabControllerContext,
 } from '../features/panes/tab-controller';
+import type { PluginPaneState } from '../features/plugins/plugin-panel-host';
 import {
   createFileViewerController,
   type FileViewerController,
@@ -836,6 +837,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    */
   const directories = new Map<string, PaneDirectoryView>();
   const selections = new Map<string, SelectionState>();
+  const pendingCursorRestorations = new Map<
+    string,
+    {
+      providerId: string;
+      uri: string;
+      kind: EntrySummary['kind'];
+      fallbackCursorId: SelectionState['cursorEntryId'];
+      wasSelected: boolean;
+      wasAnchor: boolean;
+      expiresAt: number;
+    }
+  >();
   /** The most recently started recursive folder-size walk (task 0071, Ctrl+.) - starting a new
    * one aborts whatever the previous one was still doing, since only one result is ever shown. */
   let folderSizeCalculation: AbortController | undefined;
@@ -855,6 +868,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     PaneId,
     { readonly controller: FileEditorController; state: FileEditorState }
   >();
+  const pluginByPane = new Map<PaneId, PluginPaneState>();
+  let nextPluginPanelId = 0;
   const sortedEntries = new Map<
     string,
     {
@@ -1418,6 +1433,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function openEditor(client: FileManagerClient, paneId: PaneId, entry: EntrySummary): void {
+    pluginByPane.delete(paneId);
     closeViewer(paneId);
     editorByPane.get(paneId)?.controller.dispose();
     const controller = createFileEditorController({
@@ -1444,6 +1460,48 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     editorByPane.get(paneId)?.controller.dispose();
     editorByPane.delete(paneId);
     m.redraw();
+  }
+
+  function openPluginPane(
+    sourcePaneId: PaneId,
+    plugin: PluginDescriptor,
+    actionId: string,
+    entry: EntrySummary,
+  ): 'opened' | 'blocked' | 'unavailable' {
+    if (runtimeKind !== 'tauri') return 'unavailable';
+    const target = workspace?.paneOrder.find((paneId) => paneId !== sourcePaneId);
+    if (target === undefined) return 'unavailable';
+    const tabId = workspace?.panesById[target]?.activeTabId;
+    if (tabId === undefined) return 'unavailable';
+    if (editorByPane.has(target)) {
+      requestCloseEditor(target);
+      if (editorByPane.has(target)) return 'blocked';
+    }
+    const panel: PluginPaneState = {
+      panelId: ++nextPluginPanelId,
+      tabId,
+      client: attrsClient,
+      pluginId: plugin.id,
+      actionId,
+      location: entry.location,
+      title: `${plugin.name} — ${entry.name}`,
+      onClose: () => {
+        if (pluginByPane.get(target) !== panel) return;
+        pluginByPane.delete(target);
+        m.redraw();
+      },
+      onError: (error) => {
+        if (pluginByPane.get(target) !== panel) return;
+        pluginByPane.delete(target);
+        const text = document.createElement('span');
+        text.textContent = workspaceErrorMessage(error, t('action', 'unableToRun'));
+        toast({ html: text.innerHTML });
+        m.redraw();
+      },
+    };
+    pluginByPane.set(target, panel);
+    m.redraw();
+    return 'opened';
   }
 
   function requestCloseEditor(paneId: PaneId): boolean {
@@ -1685,6 +1743,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   /** Clears every per-tab runtime cache for a closed tab, cancelling its in-flight request. */
   function clearTabState(paneId: PaneId, tabId: TabId): void {
+    if (pluginByPane.get(paneId)?.tabId === tabId) pluginByPane.delete(paneId);
     basketTabIds.delete(tabId);
     const key = tabKey(paneId, tabId);
     viewerByTab.get(key)?.controller.dispose();
@@ -1701,6 +1760,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     navigation.abort(paneId, tabId);
     directories.delete(key);
     selections.delete(key);
+    pendingCursorRestorations.delete(key);
     sortedEntries.delete(key);
     sortRequests.delete(key);
     if (appState !== undefined)
@@ -1713,6 +1773,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   /** Preserves tab-owned UI state when the authoritative tab moves to another pane. */
   function moveTabState(sourcePaneId: PaneId, targetPaneId: PaneId, tabId: TabId): void {
     if (sourcePaneId === targetPaneId) return;
+    if (pluginByPane.get(sourcePaneId)?.tabId === tabId) pluginByPane.delete(sourcePaneId);
     const sourceKey = tabKey(sourcePaneId, tabId);
     const targetKey = tabKey(targetPaneId, tabId);
     const rekey = <T>(values: Map<string, T>): void => {
@@ -1723,6 +1784,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     };
     rekey(directories);
     rekey(selections);
+    rekey(pendingCursorRestorations);
     rekey(sortedEntries);
     rekey(sortRequests);
     rekey(cursorLoadTokens);
@@ -1943,6 +2005,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         ? undefined
         : nextEntries.find((entry) => entry.location.uri === pendingCreatedLocation);
     if (created !== undefined) {
+      pendingCursorRestorations.delete(key);
       selections.set(
         key,
         reduceSelection(emptySelection, { type: 'selectOnly', entryId: created.id }, [created.id]),
@@ -1953,11 +2016,32 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
     const selection = selections.get(key);
     if (selection === undefined) return;
+    const pending = pendingCursorRestorations.get(key);
+    if (
+      pending !== undefined &&
+      (Date.now() > pending.expiresAt || selection.cursorEntryId !== pending.fallbackCursorId)
+    ) {
+      pendingCursorRestorations.delete(key);
+    }
     const nextIds = new Set(nextEntries.map((entry) => entry.id));
     const removedEntryIds = previousEntries
       .filter((entry) => !nextIds.has(entry.id))
       .map((entry) => entry.id);
-    if (removedEntryIds.length === 0) return;
+    const removedCursor = previousEntries.find(
+      (entry) => entry.id === selection.cursorEntryId && removedEntryIds.includes(entry.id),
+    );
+    const restoration = pendingCursorRestorations.get(key);
+    const candidate =
+      removedCursor === undefined && restoration === undefined
+        ? undefined
+        : nextEntries.find(
+            (entry) =>
+              entry.location.providerId ===
+                (removedCursor?.location.providerId ?? restoration?.providerId) &&
+              entry.location.uri === (removedCursor?.location.uri ?? restoration?.uri) &&
+              entry.kind === (removedCursor?.kind ?? restoration?.kind),
+          );
+    if (removedEntryIds.length === 0 && candidate === undefined) return;
 
     const tab = workspace?.panesById[paneId]?.tabsById[tabId];
     const previousVisibleEntries = entriesFilteredFor(
@@ -1971,14 +2055,46 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       ),
       quickFilterQueryFor(key, tab),
     );
-    selections.set(
-      key,
-      reduceSelection(
-        selection,
-        { type: 'prune', removedEntryIds },
-        previousVisibleEntries.map((entry) => entry.id),
-      ),
-    );
+    const nextSelection =
+      removedEntryIds.length === 0
+        ? selection
+        : reduceSelection(
+            selection,
+            { type: 'prune', removedEntryIds },
+            previousVisibleEntries.map((entry) => entry.id),
+          );
+    if (candidate !== undefined) {
+      pendingCursorRestorations.delete(key);
+      const wasSelected =
+        removedCursor !== undefined
+          ? selection.selectedEntryIds.includes(removedCursor.id)
+          : restoration?.wasSelected;
+      const wasAnchor =
+        removedCursor !== undefined
+          ? selection.anchorEntryId === removedCursor.id
+          : restoration?.wasAnchor;
+      selections.set(key, {
+        ...nextSelection,
+        cursorEntryId: candidate.id,
+        ...(wasSelected
+          ? { selectedEntryIds: [...nextSelection.selectedEntryIds, candidate.id] }
+          : {}),
+        ...(wasAnchor ? { anchorEntryId: candidate.id } : {}),
+      });
+      return;
+    }
+    if (removedCursor !== undefined) {
+      pendingCursorRestorations.set(key, {
+        providerId: removedCursor.location.providerId,
+        uri: removedCursor.location.uri,
+        kind: removedCursor.kind,
+        fallbackCursorId: nextSelection.cursorEntryId,
+        wasSelected: selection.selectedEntryIds.includes(removedCursor.id),
+        wasAnchor: selection.anchorEntryId === removedCursor.id,
+        expiresAt: Date.now() + 3000,
+      });
+    }
+    selections.set(key, nextSelection);
   }
 
   function activeDirectory(): { paneId: PaneId; location: Location } | undefined {
@@ -2479,6 +2595,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getPlugins: () => plugins,
     setPlugins: (next) => {
       plugins = next;
+      for (const [paneId, panel] of pluginByPane) {
+        if (!next.some((plugin) => plugin.id === panel.pluginId && plugin.enabled)) {
+          pluginByPane.delete(paneId);
+        }
+      }
       void attrsClient
         .listActions()
         .then((actions) => {
@@ -3535,6 +3656,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDirectories: () => directories,
     getCurrentSettings: () => currentSettings,
     getClient: () => attrsClient,
+    openPluginPane,
     getRegisteredActions: () => registeredActions,
     getPlugins: () => plugins,
     getWorkspace: () => workspace,
@@ -3604,11 +3726,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     clipboard,
     getDirectories: () => directories,
     getSelections: () => selections,
+    onSelectionAction: (key) => pendingCursorRestorations.delete(key),
     getSortedEntries: () => sortedEntries,
     getSortRequests: () => sortRequests,
     getCursorLoadTokens: () => cursorLoadTokens,
     getViewerByTab: () => viewerByTab,
     getEditorByPane: () => editorByPane,
+    getPluginByPane: () => pluginByPane,
     getDiskUsageByTab: () => diskUsageByTab,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
     setConnections: (conns) => {
@@ -4030,6 +4154,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               updatePane: (paneId, tabId, view, preferredCursorName) => {
                 const key = tabKey(paneId, tabId);
                 const previous = directories.get(key);
+                if (
+                  previous !== undefined &&
+                  (previous.location?.uri !== view.location?.uri ||
+                    previous.location?.providerId !== view.location?.providerId)
+                ) {
+                  pendingCursorRestorations.delete(key);
+                }
                 directories.set(key, respectSystemLocationReadOnly(view, systemLocations));
                 if (previous !== undefined && previous.location?.uri === view.location?.uri) {
                   reconcileSelectionAfterEntryChange(paneId, tabId, previous.entries, view.entries);
@@ -4039,6 +4170,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   // also avoids a transient empty first page leaving ".." focused after the real
                   // entries arrive during workspace restoration.
                   selections.set(key, { selectedEntryIds: [] });
+                  const pending = pendingCursorRestorations.get(key);
+                  if (pending !== undefined) {
+                    pendingCursorRestorations.set(key, { ...pending, fallbackCursorId: undefined });
+                  }
                 } else if (
                   selections.get(key)?.cursorEntryId === undefined ||
                   previous?.location?.uri !== view.location?.uri

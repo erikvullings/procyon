@@ -95,7 +95,10 @@ metadata and clipboard-write calls. `plugins/svgo/` bundles a separate, panel-on
 which requires selected-entry content read/write and clipboard read/write but no general
 filesystem or network grant.
 Both are disabled until enabled in Settings. The SVG panel opens the file under the **cursor**
-(not a marked selection); Save writes that original file with revision checking. In the
+(not a marked selection) in the opposite pane, in a separate child WebView rather than
+in the trusted application's WebView. Closing its pane host releases that WebView.
+Save writes the original file with revision checking and preserves the source cursor
+across an atomic file replacement. In the
 browser/server host, the panel action is explicitly unavailable. On macOS, WKWebView exposes
 clipboard read and write directly to panel JavaScript; only panels declaring both grants can
 open. See the [threat model and remaining release gates](spa-threat-model.md).

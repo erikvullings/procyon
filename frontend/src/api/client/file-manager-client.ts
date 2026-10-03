@@ -215,6 +215,13 @@ export interface NativeFileDrop {
  * on this interface, never on `fetch`, `EventSource` or Tauri's `invoke`
  * directly (spec §3 rule 1).
  */
+export interface PluginPanelBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
   readonly supportsAppUpdates: boolean;
@@ -684,7 +691,14 @@ export interface FileManagerClient {
   invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult>;
 
   /** Opens a packaged SPA for the cursor entry; unsupported on browser hosts. */
-  openPluginPanel(pluginId: PluginId, actionId: string, location: Location): Promise<void>;
+  openPluginPanel(
+    pluginId: PluginId,
+    actionId: string,
+    location: Location,
+    bounds: PluginPanelBounds,
+  ): Promise<string>;
+  updatePluginPanelBounds(label: string, bounds: PluginPanelBounds): Promise<void>;
+  closePluginPanel(label: string): Promise<void>;
 
   /** Diagnostics view for troubleshooting and bug reports (spec §30). */
   getDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResult>;

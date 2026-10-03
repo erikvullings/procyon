@@ -21,11 +21,11 @@ same-user process capable of modifying installed plugin files is outside the cur
 | --- | --- |
 | Action JavaScript | Fresh embedded QuickJS runtime; no Node, DOM, Tauri or ambient I/O bindings. Only metadata and staged clipboard-write host calls exist, each requiring its own manifest grant. Source, memory, stack, instruction count, elapsed time, input/output and cancellation are bounded; failures use the existing plugin diagnostic/auto-disable path. |
 | Package assets | Manifest entrypoints reject lexical traversal. Discovery and each served asset canonicalize against the installed package; requests reject hidden paths, encoded paths, unsupported asset extensions and oversized responses. |
-| Window identity | Sixteen pre-registered scheme origins are leased one per live panel. A host-generated WebView label is bound to that origin, plugin ID, action ID and selected file; requests from a different label/slot fail. All app commands are denied at the central invoke handler for non-app window labels, independent of Tauri's default ACL behavior. |
+| WebView identity | Sixteen pre-registered scheme origins are leased one per live panel. A host-generated child WebView label is bound to that origin, plugin ID, action ID, selected file and owning trusted window; requests from a different label/slot fail. All app commands are denied at the central invoke handler for non-app WebView labels, independent of Tauri's default ACL behavior. Only the owning trusted window can position or close its child. The separate WebView is placed over a host surface in the opposite pane, never loaded as an iframe in the trusted app WebView. |
 | Browser authority | Panels are incognito. CSP defaults to none, allows only packaged scripts/styles/fonts, local/data images and blob workers, and restricts connections to the window's own bridge. Popups, downloads, foreign navigation, frames and objects are blocked. WKWebView clipboard read/write on macOS bypasses the bridge, so a panel without both declared grants cannot open there. |
 | Host bridge | The package calls a version-1, token-bound, size-limited `save-svg` request. The custom-scheme handler checks the calling WebView label and origin, rejects unknown fields and revalidates enablement, package identity, `.svg` extension and selected-content permissions on each request. A typed response exposes no file contents or paths on error. |
 | Selected file | The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. Same-URI panels serialize saves; a reload closes the panel instead of replaying an outdated snapshot. |
-| Lifecycle | Closing or disabling releases the origin slot and cancels pending bridge requests; a periodic reconciliation closes windows whose plugin package/permission is no longer valid. JS calls use fresh runtimes. |
+| Lifecycle | Closing the host pane or parent window, reloading the trusted app WebView, or disabling the plugin releases the origin slot and cancels pending bridge requests; periodic reconciliation closes child WebViews whose plugin package/permission is no longer valid. JS calls use fresh runtimes. |
 
 The bundled SVGO preview also sanitizes imported SVG before inserting it into its DOM,
 including when calculating crop bounds. CSP is defense in depth, not a substitute for SVG
@@ -38,13 +38,14 @@ sanitization.
   panels without either grant remain unavailable on macOS. This is not a confined clipboard
   bridge, and the host cannot apply per-operation limits or audit individual clipboard accesses.
 - **macOS native behavior is not smoke-tested.** Source-level checks and unit tests do not
-  prove WKWebView custom-scheme, CSP, clipboard or Save-path behavior.
+  prove child WKWebView positioning, custom-scheme, CSP, clipboard or Save-path behavior.
 - **Windows and Linux are not smoke-tested.** Source-level checks and desktop unit tests do
   not prove WebView2/WebKitGTK custom-scheme, CSP, bridge, or worker behavior. A Windows
   cross-build was blocked by the local `aws-lc-sys` toolchain.
-- **Crash cleanup is not immediate.** Tauri has no WebView-crash callback here; the window
-  close event and periodic reconciliation are available, but a crashed WebView that leaves its
-  window open may retain an origin slot. Do not claim the crash teardown criterion is met.
+- **Crash cleanup is not immediate.** Tauri has no child-WebView crash callback here; the
+  parent-window close event and periodic reconciliation are available, but a crashed child
+  whose parent remains open may retain an origin slot. Do not claim the crash teardown
+  criterion is met.
 - **Timed-out saves can leave temporary files.** The existing file editor creates a sibling
   `.fm-edit-*.tmp` before commit; dropping a save future on panel shutdown/timeout does not
   guarantee that temporary copy is discarded. A cancellation-safe file-editor transaction is

@@ -87,3 +87,8 @@ second plugin system.
   now declares both, and macOS panel activation is allowed only for plugins with both grants;
   other panels remain unavailable. The task remains open pending native platform smoke tests,
   a fresh macOS security review, and the other release gates in the threat model.
+- 2026-10-03 Copilot: The bundled editor now occupies the opposite pane in its own native child
+  WebView rather than a separate window. Placement and close commands are restricted to the
+  owning trusted window. The source pane restores its cursor by file URI after atomic Save
+  replaces an entry ID, unless the user has moved the cursor. Native platform smoke tests and
+  the other release gates remain outstanding.

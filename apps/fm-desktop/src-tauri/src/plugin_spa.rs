@@ -11,9 +11,10 @@ use fm_application::FileManagerService;
 use fm_transport_dto::{LoadEditableFileRequestDto, LocationDto, SaveEditableFileRequestDto};
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Manager, Runtime, State, Url, WebviewUrl, Window,
+    AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, Rect, Runtime, State, Url,
+    WebviewBuilder, WebviewUrl, Window,
     http::{Method, Response, StatusCode},
-    webview::{NewWindowResponse, PageLoadEvent, WebviewWindowBuilder},
+    webview::{NewWindowResponse, PageLoadEvent},
 };
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
@@ -71,6 +72,7 @@ impl serde::Serialize for PanelError {
 
 struct PanelSession {
     label: String,
+    owner_window: String,
     plugin_id: String,
     action_id: String,
     directory: PathBuf,
@@ -194,6 +196,20 @@ impl PanelRegistry {
             .collect()
     }
 
+    fn owned_by(&self, label: &str, window: &str) -> bool {
+        self.sessions()
+            .iter()
+            .any(|session| session.label == label && session.owner_window == window)
+    }
+
+    pub(crate) fn labels_for_window(&self, window: &str) -> Vec<String> {
+        self.sessions()
+            .iter()
+            .filter(|session| session.owner_window == window)
+            .map(|session| session.label.clone())
+            .collect()
+    }
+
     fn sessions(&self) -> Vec<Arc<PanelSession>> {
         self.0
             .lock()
@@ -204,6 +220,44 @@ impl PanelRegistry {
                 _ => None,
             })
             .collect()
+    }
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PanelBounds {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
+}
+
+impl PanelBounds {
+    fn validate<R: Runtime>(self, window: &Window<R>) -> Result<Rect, PanelError> {
+        let size = window.inner_size().map_err(|_| PanelError::Unavailable)?;
+        let scale = window.scale_factor().map_err(|_| PanelError::Unavailable)?;
+        self.validate_for_size(size, scale)
+    }
+
+    fn validate_for_size(self, size: PhysicalSize<u32>, scale: f64) -> Result<Rect, PanelError> {
+        if ![self.x, self.y, self.width, self.height]
+            .iter()
+            .all(|value| value.is_finite())
+            || !scale.is_finite()
+            || scale <= 0.0
+            || self.x < 0.0
+            || self.y < 0.0
+            || self.width < 1.0
+            || self.height < 1.0
+            || self.x + self.width > f64::from(size.width) / scale + 1.0
+            || self.y + self.height > f64::from(size.height) / scale + 1.0
+        {
+            return Err(PanelError::Invalid);
+        }
+        Ok(Rect {
+            position: LogicalPosition::new(self.x, self.y).into(),
+            size: LogicalSize::new(self.width, self.height).into(),
+        })
     }
 }
 
@@ -605,8 +659,8 @@ pub(crate) fn register_schemes<R: Runtime>(
     builder
 }
 
-/// A trusted app window opens a bounded editable selection in a private,
-/// command-less plugin window. The plugin cannot choose its own origin or file.
+/// A trusted app window places a bounded editable selection in a private,
+/// command-less child WebView. The plugin cannot choose its own origin or file.
 #[tauri::command]
 pub(crate) async fn open_plugin_panel<R: Runtime>(
     app: AppHandle<R>,
@@ -615,6 +669,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     plugin_id: String,
     action_id: String,
     location: LocationDto,
+    bounds: PanelBounds,
 ) -> Result<String, PanelError> {
     if !trusted_invoke_label(source.label()) {
         return Err(PanelError::Denied);
@@ -623,6 +678,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         .service
         .plugin_panel(&plugin_id, &action_id, &location)
         .map_err(|_| PanelError::Unavailable)?;
+    let bounds = bounds.validate(&source)?;
     if !panel.can_read_selected {
         return Err(PanelError::Denied);
     }
@@ -661,6 +717,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let token = Uuid::new_v4().simple().to_string();
     let session = Arc::new(PanelSession {
         label: label.clone(),
+        owner_window: source.label().to_owned(),
         plugin_id,
         action_id,
         directory: panel.directory,
@@ -677,9 +734,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let load_script = deliver_load(&loaded.content, &location.uri, &token);
     let loaded_once = AtomicBool::new(false);
     let expected_url = url.clone();
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(url))
-        .title(panel.title)
-        .inner_size(1000.0, 750.0)
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .incognito(true)
         .use_https_scheme(cfg!(target_os = "windows"))
         .initialization_script(bootstrap(&token))
@@ -713,21 +768,68 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     tracing::warn!(%error, "could not close failed plugin panel");
                 }
             }
-        })
-        .build();
-    if window.is_err() {
+        });
+    let webview = source.add_child(builder, bounds.position, bounds.size);
+    if webview.is_err() {
         registry.release(&label);
     }
-    window.map_err(|_| PanelError::Unavailable)?;
+    webview.map_err(|_| PanelError::Unavailable)?;
     Ok(label)
+}
+
+#[tauri::command]
+pub(crate) fn update_plugin_panel_bounds<R: Runtime>(
+    source: Window<R>,
+    registry: State<'_, Arc<PanelRegistry>>,
+    label: String,
+    bounds: PanelBounds,
+) -> Result<(), PanelError> {
+    if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
+        return Err(PanelError::Denied);
+    }
+    let bounds = bounds.validate(&source)?;
+    source
+        .get_webview(&label)
+        .ok_or(PanelError::Unavailable)?
+        .set_bounds(bounds)
+        .map_err(|_| PanelError::Unavailable)
+}
+
+#[tauri::command]
+pub(crate) fn close_plugin_panel<R: Runtime>(
+    source: Window<R>,
+    registry: State<'_, Arc<PanelRegistry>>,
+    label: String,
+) -> Result<(), PanelError> {
+    if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
+        return Err(PanelError::Denied);
+    }
+    registry.release(&label);
+    source
+        .get_webview(&label)
+        .ok_or(PanelError::Unavailable)?
+        .close()
+        .map_err(|_| PanelError::Unavailable)
 }
 
 pub(crate) fn close_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
     let registry = app.state::<Arc<PanelRegistry>>();
     for label in registry.labels_for_plugin(plugin_id) {
         registry.release(&label);
-        if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.close();
+        if let Some(webview) = app.get_webview(&label) {
+            let _ = webview.close();
+        }
+    }
+}
+
+pub(crate) fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, owner: &str) {
+    let registry = app.state::<Arc<PanelRegistry>>();
+    for label in registry.labels_for_window(owner) {
+        registry.release(&label);
+        if let Some(webview) = app.get_webview(&label)
+            && let Err(error) = webview.close()
+        {
+            tracing::warn!(%error, "could not close plugin panel after host reload");
         }
     }
 }
@@ -738,8 +840,8 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
     for session in registry.sessions() {
         if checked_panel(service, &session).is_err() {
             registry.release(&session.label);
-            if let Some(window) = app.get_webview_window(&session.label) {
-                let _ = window.close();
+            if let Some(webview) = app.get_webview(&session.label) {
+                let _ = webview.close();
             }
         }
     }
@@ -748,6 +850,32 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn child_bounds_must_fit_the_owning_window() {
+        let size = PhysicalSize::new(800, 600);
+        let valid = PanelBounds {
+            x: 250.0,
+            y: 50.0,
+            width: 550.0,
+            height: 500.0,
+        };
+        assert!(valid.validate_for_size(size, 1.0).is_ok());
+        assert!(valid.validate_for_size(size, 2.0).is_err());
+        assert!(
+            PanelBounds {
+                x: f64::NAN,
+                ..valid
+            }
+            .validate_for_size(size, 1.0)
+            .is_err()
+        );
+        assert!(
+            PanelBounds { x: -1.0, ..valid }
+                .validate_for_size(size, 1.0)
+                .is_err()
+        );
+    }
 
     #[test]
     fn csp_denies_ambient_browser_authority() {
@@ -876,6 +1004,7 @@ mod tests {
                 slot,
                 Arc::new(PanelSession {
                     label: label.clone(),
+                    owner_window: "main".into(),
                     plugin_id: "first".into(),
                     action_id: "first.edit".into(),
                     directory: PathBuf::from("package"),
@@ -889,6 +1018,9 @@ mod tests {
             )
             .unwrap();
         assert_eq!(registry.labels_for_plugin("first"), vec![label.clone()]);
+        assert!(registry.owned_by(&label, "main"));
+        assert!(!registry.owned_by(&label, "another-window"));
+        assert_eq!(registry.labels_for_window("main"), vec![label.clone()]);
         assert!(registry.session_for(slot, "plugin-spa-other").is_none());
         assert!(registry.session_for(slot, &label).is_some());
         registry.release(&label);

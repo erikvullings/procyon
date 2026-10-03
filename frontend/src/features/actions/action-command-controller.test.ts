@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
 import type { ActionDescriptor, EntryId, EntrySummary, PaneId } from '../../models';
 import type { PaneDirectoryView } from '../navigation/navigation';
 import {
@@ -59,6 +58,7 @@ function fakeContext(
     getClient: () => {
       throw new Error('not needed for this test');
     },
+    openPluginPane: () => 'opened',
     getRegisteredActions: () => [],
     getPlugins: () => [],
     getWorkspace: () => undefined,
@@ -101,7 +101,7 @@ describe('SPA panel cursor activation', () => {
       name: 'drawing.SVG',
       location: { providerId: 'local', uri: 'file:///drawing.SVG' },
     };
-    const openPluginPanel = vi.fn().mockResolvedValue(undefined);
+    const openPluginPane = vi.fn().mockReturnValue('opened');
     const toast = vi.fn();
     const context = fakeContext({
       getActiveDirectory: () => ({ paneId, location: { providerId: 'local', uri: 'file:///' } }),
@@ -119,7 +119,7 @@ describe('SPA panel cursor activation', () => {
           spaPanel: { actionId: 'example.svgo.open', extensions: ['svg'] },
         },
       ],
-      getClient: () => ({ openPluginPanel }) as unknown as FileManagerClient,
+      openPluginPane,
       toast,
     });
     const controller = createActionCommandController(context);
@@ -129,25 +129,22 @@ describe('SPA panel cursor activation', () => {
       selectedEntryIds: [marked.id],
     };
     controller.invokeActionById('example.svgo.open', undefined, invocation);
-    await vi.waitFor(() =>
-      expect(openPluginPanel).toHaveBeenCalledWith(
-        'example.svgo',
-        'example.svgo.open',
-        svg.location,
-      ),
+    expect(openPluginPane).toHaveBeenCalledWith(
+      paneId,
+      expect.objectContaining({ id: 'example.svgo' }),
+      'example.svgo.open',
+      svg,
     );
-    openPluginPanel.mockRejectedValueOnce('<img src=x onerror=alert(1)>');
+    expect(toast).not.toHaveBeenCalled();
+
+    openPluginPane.mockReturnValueOnce('unavailable');
     controller.invokeActionById('example.svgo.open', undefined, invocation);
-    await vi.waitFor(() =>
-      expect(toast).toHaveBeenCalledWith({
-        html: '&lt;img src=x onerror=alert(1)&gt;',
-      }),
-    );
+    expect(toast).toHaveBeenCalledWith({ html: 'Unable to run command.' });
   });
 
   it('does not open a panel for a non-SVG cursor', () => {
     const entry = bundleEntry();
-    const openPluginPanel = vi.fn();
+    const openPluginPane = vi.fn();
     const context = fakeContext({
       getActiveDirectory: () => ({
         paneId: 'pane-1',
@@ -166,13 +163,13 @@ describe('SPA panel cursor activation', () => {
           spaPanel: { actionId: 'example.svgo.open', extensions: ['svg'] },
         },
       ],
-      getClient: () => ({ openPluginPanel }) as unknown as FileManagerClient,
+      openPluginPane,
     });
     createActionCommandController(context).invokeActionById('example.svgo.open', undefined, {
       paneId: 'pane-1',
       cursorEntryId: entry.id,
     });
-    expect(openPluginPanel).not.toHaveBeenCalled();
+    expect(openPluginPane).not.toHaveBeenCalled();
   });
 });
 

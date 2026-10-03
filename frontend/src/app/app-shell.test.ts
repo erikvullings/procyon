@@ -1070,6 +1070,213 @@ describe('AppShell', () => {
     );
   });
 
+  it('restores the cursor when an atomic save replaces the last file with a new entry ID', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+    const workspace = await client.startWorkspace();
+    const paneId = workspace.activePaneId;
+    const tab = workspace.panesById[paneId]?.tabsById[workspace.panesById[paneId]?.activeTabId];
+    if (tab === undefined) throw new Error('active tab missing');
+    const snapshot = await client.listDirectory({
+      workspaceId: workspace.id,
+      requestId: 'atomic-save-cursor',
+      paneId,
+      location: tab.location,
+    });
+    const pane = root.querySelector<HTMLElement>('.fm-workspace-pane[data-active="true"]');
+    const lastRow = [...(pane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].at(-1);
+    const name = lastRow?.querySelector('.fm-entry-name [title]')?.getAttribute('title');
+    const original = snapshot.entries.find((entry) => entry.name === name);
+    if (original === undefined || lastRow === undefined) throw new Error('last file missing');
+    lastRow.click();
+    m.redraw.sync();
+    expect(directoryRowNamed(pane, original.name)?.classList.contains('fm-cursor-row')).toBe(true);
+
+    client.emit({
+      eventId: 100,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId,
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...snapshot,
+            requestId: 'save-removed',
+            revision: snapshot.revision + 1,
+            entries: snapshot.entries.filter((entry) => entry.id !== original.id),
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(directoryRowNamed(pane, original.name)).toBeUndefined());
+
+    const replacement = { ...original, id: `${original.id}-saved` };
+    client.emit({
+      eventId: 101,
+      timestamp: '2030-09-06T16:00:01Z',
+      payload: {
+        type: 'directory.delta',
+        paneId,
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...snapshot,
+            requestId: 'save-replaced',
+            revision: snapshot.revision + 2,
+            entries: snapshot.entries.map((entry) =>
+              entry.id === original.id ? replacement : entry,
+            ),
+          },
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(pane, original.name)?.classList.contains('fm-cursor-row')).toBe(
+        true,
+      ),
+    );
+
+    client.emit({
+      eventId: 102,
+      timestamp: '2030-09-06T16:00:02Z',
+      payload: {
+        type: 'directory.delta',
+        paneId,
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...snapshot,
+            requestId: 'save-replaced-in-one-reset',
+            revision: snapshot.revision + 3,
+            entries: snapshot.entries.map((entry) =>
+              entry.id === original.id ? { ...original, id: `${original.id}-saved-again` } : entry,
+            ),
+          },
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(directoryRowNamed(pane, original.name)?.classList.contains('fm-cursor-row')).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('does not restore a replaced file after the user chooses the fallback cursor', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+    const workspace = await client.startWorkspace();
+    const paneId = workspace.activePaneId;
+    const tab = workspace.panesById[paneId]?.tabsById[workspace.panesById[paneId]?.activeTabId];
+    if (tab === undefined) throw new Error('active tab missing');
+    const snapshot = await client.listDirectory({
+      workspaceId: workspace.id,
+      requestId: 'save-user-movement',
+      paneId,
+      location: tab.location,
+    });
+    const pane = root.querySelector<HTMLElement>('.fm-workspace-pane[data-active="true"]');
+    const lastRow = [...(pane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].at(-1);
+    const name = lastRow?.querySelector('.fm-entry-name [title]')?.getAttribute('title');
+    const original = snapshot.entries.find((entry) => entry.name === name);
+    if (original === undefined || lastRow === undefined) throw new Error('last file missing');
+    lastRow.click();
+    m.redraw.sync();
+    client.emit({
+      eventId: 100,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId,
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...snapshot,
+            requestId: 'removed-before-user-movement',
+            revision: snapshot.revision + 1,
+            entries: snapshot.entries.filter((entry) => entry.id !== original.id),
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(directoryRowNamed(pane, original.name)).toBeUndefined());
+    const fallback = pane?.querySelector<HTMLElement>('.fm-directory-row.fm-cursor-row');
+    expect(fallback).toBeDefined();
+    const fallbackName = fallback?.querySelector('.fm-entry-name [title]')?.getAttribute('title');
+    if (fallbackName === null || fallbackName === undefined) throw new Error('fallback missing');
+    fallback?.click();
+    m.redraw.sync();
+    client.emit({
+      eventId: 101,
+      timestamp: '2030-09-06T16:00:01Z',
+      payload: {
+        type: 'directory.delta',
+        paneId,
+        delta: {
+          type: 'reset',
+          snapshot: {
+            ...snapshot,
+            requestId: 'replaced-after-user-movement',
+            revision: snapshot.revision + 2,
+            entries: snapshot.entries.map((entry) =>
+              entry.id === original.id ? { ...original, id: `${original.id}-saved` } : entry,
+            ),
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(directoryRowNamed(pane, original.name)).toBeDefined());
+    expect(directoryRowNamed(pane, fallbackName)?.classList.contains('fm-cursor-row')).toBe(true);
+    expect(directoryRowNamed(pane, original.name)?.classList.contains('fm-cursor-row')).toBe(false);
+  });
+
+  it('opens a plugin editor in the opposite pane rather than a separate window', async () => {
+    const client = new MockFileManagerClient();
+    const originalActions = client.listActions.bind(client);
+    const originalPlugins = client.listPlugins.bind(client);
+    vi.spyOn(client, 'listActions').mockImplementation(async (...args) => [
+      ...(await originalActions(...args)),
+      {
+        id: 'example.txt-editor.open',
+        title: 'Edit in plugin',
+        category: 'plugin',
+        defaultShortcuts: [{ key: 'F4', ctrl: true, shift: true }],
+        contextRequirements: { featureAvailable: true },
+        source: { kind: 'plugin', pluginId: 'example.txt-editor' },
+      },
+    ]);
+    vi.spyOn(client, 'listPlugins').mockImplementation(async (...args) => [
+      ...(await originalPlugins(...args)),
+      {
+        id: 'example.txt-editor',
+        name: 'Text plugin',
+        version: '1',
+        description: '',
+        enabled: true,
+        spaPanel: { actionId: 'example.txt-editor.open', extensions: ['txt'] },
+      },
+    ]);
+    vi.spyOn(client, 'openPluginPanel').mockResolvedValue('plugin-spa-test');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+    const source = directoryRowNamed(root, '日本語.txt')?.closest('.fm-workspace-pane');
+    const opposite = [...root.querySelectorAll('.fm-workspace-pane')].find(
+      (pane) => pane !== source,
+    );
+    directoryRowNamed(source, '日本語.txt')?.click();
+    m.redraw.sync();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F4', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(opposite?.querySelector('.fm-plugin-panel-host')).not.toBeNull());
+    expect(source?.querySelector('.fm-plugin-panel-host')).toBeNull();
+    expect(directoryRowNamed(source, '日本語.txt')).toBeDefined();
+  });
+
   it('shows a parent row outside the root and opens it with Enter', async () => {
     mountShell('mock');
 

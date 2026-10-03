@@ -6,9 +6,12 @@ local Monaco resources; no network or general filesystem capability is granted.
 
 Enable **SVGO** in plugin settings, position the active pane's cursor on an SVG
 file, and use **Cmd+Shift+F4** on macOS (**Ctrl+Shift+F4** elsewhere) or the
-command palette.
+command palette. The editor opens in the opposite pane; close it with the pane
+header button to return to that pane's previous view.
 Save writes only the originally opened file and rejects revisions that changed
-outside the panel. Download remains available when running SVGO standalone.
+outside the panel. A successful atomic Save keeps the source pane's cursor on
+the SVG when its filesystem entry identity changes. Download remains available
+when running SVGO standalone.
 
 The plugin declares clipboard read and write permissions. WKWebView exposes
 both capabilities directly to page JavaScript on macOS, so they cannot be

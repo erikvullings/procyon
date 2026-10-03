@@ -78,6 +78,13 @@ pub fn run() {
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
     plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
         .manage(panel_registry)
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished
+                && plugin_spa::trusted_invoke_label(webview.label())
+            {
+                plugin_spa::close_panels_for_window(webview.app_handle(), webview.window().label());
+            }
+        })
         .setup(|app| {
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
             // needs `app.path().resource_dir()`, which only resolves once the app has finished
@@ -287,7 +294,10 @@ pub fn run() {
         .manage(QuittingFlag::default())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
-                window.state::<Arc<plugin_spa::PanelRegistry>>().release(window.label());
+                let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                for label in registry.labels_for_window(window.label()) {
+                    registry.release(&label);
+                }
                 window
                     .state::<event_stream::EventSubscriptionRegistry>()
                     .unsubscribe_window(window.label());
@@ -428,6 +438,8 @@ pub fn run() {
             commands::get_plugin_logs,
             commands::get_plugin_icon_theme_asset,
             plugin_spa::open_plugin_panel,
+            plugin_spa::update_plugin_panel_bounds,
+            plugin_spa::close_plugin_panel,
             commands::start_search,
             commands::cancel_search,
             commands::start_comparison,
@@ -882,6 +894,12 @@ mod tests {
             fm_transport_dto::LocationDto {
                 provider_id: "local".into(),
                 uri: "file:///selection.svg".into(),
+            },
+            plugin_spa::PanelBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
             },
         ))
         .expect_err("WKWebView cannot deny browser clipboard access");
