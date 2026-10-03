@@ -50,6 +50,8 @@ pub struct PluginPanel {
     pub can_read_selected: bool,
     /// Whether the originally opened entry may be saved.
     pub can_write_selected: bool,
+    /// Whether this panel may persist plugin-scoped preferences.
+    pub can_store_settings: bool,
 }
 
 fn panel_native_clipboard_granted(manifest: &PluginManifest) -> bool {
@@ -58,6 +60,44 @@ fn panel_native_clipboard_granted(manifest: &PluginManifest) -> bool {
 }
 
 impl PluginManager {
+    pub(crate) fn panel_settings(&self, plugin_id: &str) -> Option<serde_json::Value> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .plugin_settings
+            .get(plugin_id)
+            .cloned()
+    }
+
+    pub(crate) fn owns_panel_settings(&self, plugin_id: &str) -> bool {
+        self.plugins.discover().into_iter().any(|plugin| {
+            plugin.is_valid()
+                && plugin.id() == plugin_id
+                && plugin.manifest.as_ref().is_some_and(|manifest| {
+                    manifest.contributions.spa_panel.is_some()
+                        && manifest.permissions.settings_storage
+                })
+        })
+    }
+
+    pub(crate) fn save_panel_settings(
+        &self,
+        plugin_id: &str,
+        value: serde_json::Value,
+    ) -> Result<(), ApplicationError> {
+        let mut current = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut next = current.clone();
+        next.plugin_settings.insert(plugin_id.to_owned(), value);
+        self.settings_store
+            .save(&next)
+            .map_err(|_| ApplicationError::Internal)?;
+        *current = next;
+        Ok(())
+    }
+
     pub(crate) fn new(
         plugins: PluginDiscovery,
         plugin_runtime: PluginRuntime,
@@ -150,6 +190,7 @@ impl PluginManager {
             entrypoint: panel.entrypoint.clone(),
             can_read_selected: true,
             can_write_selected: manifest.permissions.selected_entry_content_write,
+            can_store_settings: manifest.permissions.settings_storage,
         })
     }
 
@@ -617,6 +658,27 @@ mod tests {
     }
 
     #[test]
+    fn panel_preferences_survive_a_new_settings_store() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let (_, manager) = manager(&directory);
+        let preferences = serde_json::json!({"precision": 2, "removeTspan": false});
+        manager
+            .save_panel_settings("procyon.svgo", preferences.clone())
+            .expect("persist preferences");
+        assert_eq!(
+            manager.panel_settings("procyon.svgo"),
+            Some(preferences.clone())
+        );
+        let loaded = fm_settings::SettingsStore::new(directory.path().join("settings"))
+            .load()
+            .expect("reload settings");
+        assert_eq!(
+            loaded.settings.plugin_settings.get("procyon.svgo"),
+            Some(&preferences)
+        );
+    }
+
+    #[test]
     fn plugin_logs_reports_not_found_for_undiscovered_plugin() {
         let (_plugins_dir, manager) = manager(&tempfile::tempdir().expect("temp dir"));
         let error = manager
@@ -767,6 +829,7 @@ mod tests {
             .plugin_panel("procyon.svgo", "procyon.svgo.open", "image.svg")
             .expect("bundled SVG editor");
         assert!(panel.can_read_selected && panel.can_write_selected);
+        assert!(panel.can_store_settings);
         let svgo = manager
             .list_plugins()
             .into_iter()

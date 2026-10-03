@@ -1143,8 +1143,11 @@ export class TauriFileManagerClient implements FileManagerClient {
     actionId: string,
     location: Location,
     bounds: import('./file-manager-client').PluginPanelBounds,
+    theme: 'light' | 'dark',
   ): Promise<string> {
-    return invoke<string>('open_plugin_panel', { pluginId, actionId, location, bounds });
+    return invoke<string>('open_plugin_panel', {
+      request: { pluginId, actionId, location, bounds, theme },
+    });
   }
 
   updatePluginPanelBounds(
@@ -1152,6 +1155,14 @@ export class TauriFileManagerClient implements FileManagerClient {
     bounds: import('./file-manager-client').PluginPanelBounds,
   ): Promise<void> {
     return invoke<void>('update_plugin_panel_bounds', { label, bounds });
+  }
+
+  setPluginPanelVisible(label: string, visible: boolean): Promise<void> {
+    return invoke<void>('set_plugin_panel_visible', { label, visible });
+  }
+
+  setPluginPanelTheme(label: string, theme: 'light' | 'dark'): Promise<void> {
+    return invoke<void>('set_plugin_panel_theme', { label, theme });
   }
 
   closePluginPanel(label: string): Promise<void> {

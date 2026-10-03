@@ -92,11 +92,17 @@ other failures.
 
 `plugins/sample-js-svg-uri/` is a bundled action example: it uses only the selected-entry
 metadata and clipboard-write calls. `plugins/svgo/` bundles a separate, panel-only editor,
-which requires selected-entry content read/write and clipboard read/write but no general
-filesystem or network grant.
+which requires selected-entry content read/write, clipboard read/write, and plugin-scoped
+settings storage, but no general filesystem or network grant.
 Both are disabled until enabled in Settings. The SVG panel opens the file under the **cursor**
-(not a marked selection) in the opposite pane, in a separate child WebView rather than
-in the trusted application's WebView. Closing its pane host releases that WebView.
+(not a marked selection) as a transient tab in the opposite pane, in a separate child WebView
+rather than in the trusted application's WebView. Switching tabs hides the child without
+discarding its in-memory edits; closing its tab (including Cmd+W on macOS), disabling the
+plugin, or closing the host releases that WebView. Only a bounded, explicitly validated
+optimizer-settings snapshot persists through Procyon's settings store across private
+WebView sessions. Closing a tab requests a final snapshot and waits briefly for it before
+teardown; a failed or timed-out flush is logged, not treated as success. The source SVG is
+not restored, and Procyon's theme controls the panel.
 Save writes the original file with revision checking and preserves the source cursor
 across an atomic file replacement. In the
 browser/server host, the panel action is explicitly unavailable. On macOS, WKWebView exposes

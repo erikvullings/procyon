@@ -1233,8 +1233,14 @@ describe('AppShell', () => {
     expect(directoryRowNamed(pane, original.name)?.classList.contains('fm-cursor-row')).toBe(false);
   });
 
-  it('opens a plugin editor in the opposite pane rather than a separate window', async () => {
+  it('opens SVGO as a switchable opposite-pane tab and closes it with Cmd+W', async () => {
     const client = new MockFileManagerClient();
+    const capabilities = client.getRuntimeCapabilities.bind(client);
+    vi.spyOn(client, 'getRuntimeCapabilities').mockImplementation(async () => ({
+      ...(await capabilities()),
+      platform: 'macos',
+      runtime: 'tauri',
+    }));
     const originalActions = client.listActions.bind(client);
     const originalPlugins = client.listPlugins.bind(client);
     vi.spyOn(client, 'listActions').mockImplementation(async (...args) => [
@@ -1243,7 +1249,7 @@ describe('AppShell', () => {
         id: 'example.txt-editor.open',
         title: 'Edit in plugin',
         category: 'plugin',
-        defaultShortcuts: [{ key: 'F4', ctrl: true, shift: true }],
+        defaultShortcuts: [{ key: 'F4', meta: true, shift: true }],
         contextRequirements: { featureAvailable: true },
         source: { kind: 'plugin', pluginId: 'example.txt-editor' },
       },
@@ -1252,14 +1258,17 @@ describe('AppShell', () => {
       ...(await originalPlugins(...args)),
       {
         id: 'example.txt-editor',
-        name: 'Text plugin',
+        name: 'SVGO',
         version: '1',
         description: '',
         enabled: true,
         spaPanel: { actionId: 'example.txt-editor.open', extensions: ['txt'] },
       },
     ]);
-    vi.spyOn(client, 'openPluginPanel').mockResolvedValue('plugin-spa-test');
+    const open = vi.spyOn(client, 'openPluginPanel').mockResolvedValue('plugin-spa-test');
+    vi.spyOn(client, 'updatePluginPanelBounds').mockResolvedValue();
+    const visible = vi.spyOn(client, 'setPluginPanelVisible').mockResolvedValue();
+    const close = vi.spyOn(client, 'closePluginPanel').mockResolvedValue();
     m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
     await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
     const source = directoryRowNamed(root, '日本語.txt')?.closest('.fm-workspace-pane');
@@ -1270,11 +1279,72 @@ describe('AppShell', () => {
     m.redraw.sync();
 
     document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'F4', ctrlKey: true, shiftKey: true, bubbles: true }),
+      new KeyboardEvent('keydown', { key: 'F4', metaKey: true, shiftKey: true, bubbles: true }),
     );
     await vi.waitFor(() => expect(opposite?.querySelector('.fm-plugin-panel-host')).not.toBeNull());
+    const tabs = opposite?.querySelectorAll<HTMLElement>('.fm-pane-tab');
+    expect(tabs).toHaveLength(2);
+    const pluginTab = [...(tabs ?? [])].find((tab) =>
+      tab.textContent?.includes('SVGO: 日本語.txt'),
+    );
+    const listingTab = [...(tabs ?? [])].find((tab) => tab !== pluginTab);
+    expect(pluginTab).toBeDefined();
+    expect(pluginTab?.getAttribute('aria-selected')).toBe('true');
+    expect(opposite?.getAttribute('data-active')).toBe('true');
     expect(source?.querySelector('.fm-plugin-panel-host')).toBeNull();
     expect(directoryRowNamed(source, '日本語.txt')).toBeDefined();
+
+    const surface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
+    if (surface === undefined || surface === null) throw new Error('plugin surface missing');
+    surface.getBoundingClientRect = () =>
+      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+
+    listingTab?.click();
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-pane-tab[aria-selected="true"]')?.textContent).toContain(
+        'Documents',
+      ),
+    );
+    expect(close).not.toHaveBeenCalled();
+    expect(opposite?.querySelector('.fm-plugin-panel-host')?.getAttribute('data-visible')).toBe(
+      'false',
+    );
+    await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', false));
+    expect(close).not.toHaveBeenCalled();
+    expect(opposite?.querySelector('.fm-plugin-panel-host')).not.toBeNull();
+    pluginTab?.click();
+    await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', true));
+    expect(open).toHaveBeenCalledOnce();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(close).toHaveBeenCalledWith('plugin-spa-test'));
+    await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
+    expect(opposite?.querySelector('.fm-plugin-panel-host')).toBeNull();
+
+    directoryRowNamed(source, '日本語.txt')?.click();
+    await vi.waitFor(() => expect(source?.getAttribute('data-active')).toBe('true'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F4', metaKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-plugin-panel-surface')).not.toBeNull(),
+    );
+    const reopenedSurface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
+    if (reopenedSurface === undefined || reopenedSurface === null)
+      throw new Error('reopened plugin surface missing');
+    reopenedSurface.getBoundingClientRect = () =>
+      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    opposite
+      ?.querySelector<HTMLElement>('.fm-pane-tab[aria-selected="true"] .fm-pane-tab-close')
+      ?.click();
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
   });
 
   it('shows a parent row outside the root and opens it with Enter', async () => {

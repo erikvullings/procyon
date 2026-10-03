@@ -439,6 +439,8 @@ pub fn run() {
             commands::get_plugin_icon_theme_asset,
             plugin_spa::open_plugin_panel,
             plugin_spa::update_plugin_panel_bounds,
+            plugin_spa::set_plugin_panel_visible,
+            plugin_spa::set_plugin_panel_theme,
             plugin_spa::close_plugin_panel,
             commands::start_search,
             commands::cancel_search,
@@ -889,17 +891,20 @@ mod tests {
             app.handle().clone(),
             webview.as_ref().window(),
             app.state::<AppState>(),
-            "example.plugin".into(),
-            "example.plugin.edit".into(),
-            fm_transport_dto::LocationDto {
-                provider_id: "local".into(),
-                uri: "file:///selection.svg".into(),
-            },
-            plugin_spa::PanelBounds {
-                x: 0.0,
-                y: 0.0,
-                width: 100.0,
-                height: 100.0,
+            plugin_spa::OpenPanelRequest {
+                plugin_id: "example.plugin".into(),
+                action_id: "example.plugin.edit".into(),
+                location: fm_transport_dto::LocationDto {
+                    provider_id: "local".into(),
+                    uri: "file:///selection.svg".into(),
+                },
+                bounds: plugin_spa::PanelBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                theme: plugin_spa::PanelTheme::Light,
             },
         ))
         .expect_err("WKWebView cannot deny browser clipboard access");

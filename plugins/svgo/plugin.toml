@@ -9,6 +9,7 @@ selected_entry_content_read = true
 selected_entry_content_write = true
 clipboard_read = true
 clipboard_write = true
+settings_storage = true
 
 [contributions.spa_panel]
 entrypoint = "dist/index.html"

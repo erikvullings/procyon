@@ -3613,11 +3613,25 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('listActions', signal, () => structuredClone(actions));
   }
 
-  openPluginPanel(_pluginId: PluginId, _actionId: string, _location: Location): Promise<string> {
+  openPluginPanel(
+    _pluginId: PluginId,
+    _actionId: string,
+    _location: Location,
+    _bounds: import('./file-manager-client').PluginPanelBounds,
+    _theme: 'light' | 'dark',
+  ): Promise<string> {
     return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
   }
 
   updatePluginPanelBounds(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  setPluginPanelVisible(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  setPluginPanelTheme(): Promise<void> {
     return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
   }
 

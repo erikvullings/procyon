@@ -10,13 +10,15 @@ describe('PluginPanelHost', () => {
     root.remove();
   });
 
-  it('places, resizes and closes the isolated child WebView with the pane surface', async () => {
+  it('resizes and hides the child WebView across tab switches without closing it', async () => {
     const client = new MockFileManagerClient();
     const open = vi.spyOn(client, 'openPluginPanel').mockResolvedValue('plugin-spa-test');
     const update = vi.spyOn(client, 'updatePluginPanelBounds').mockResolvedValue();
+    const setVisible = vi.spyOn(client, 'setPluginPanelVisible').mockResolvedValue();
+    const setTheme = vi.spyOn(client, 'setPluginPanelTheme').mockResolvedValue();
     const close = vi.spyOn(client, 'closePluginPanel').mockResolvedValue();
-    const onClose = vi.fn(() => m.mount(root, null));
     const onError = vi.fn();
+    let active = true;
     document.body.appendChild(root);
     m.mount(root, {
       view: () =>
@@ -27,8 +29,8 @@ describe('PluginPanelHost', () => {
           pluginId: 'example.svgo',
           actionId: 'example.svgo.open',
           location: { providerId: 'local', uri: 'file:///drawing.svg' },
-          title: 'SVGO — drawing.svg',
-          onClose,
+          title: 'SVGO: drawing.svg',
+          active,
           onError,
         }),
     });
@@ -43,6 +45,7 @@ describe('PluginPanelHost', () => {
         'example.svgo.open',
         { providerId: 'local', uri: 'file:///drawing.svg' },
         { x: 260, y: 80, width: 320, height: 400 },
+        expect.any(String),
       ),
     );
     width = 280;
@@ -55,9 +58,26 @@ describe('PluginPanelHost', () => {
         height: 400,
       }),
     );
-    root.querySelector<HTMLButtonElement>('.fm-plugin-panel-close')?.click();
+    active = false;
+    m.redraw.sync();
+    await vi.waitFor(() => expect(setVisible).toHaveBeenCalledWith('plugin-spa-test', false));
+    expect(close).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-plugin-panel-host')?.getAttribute('data-visible')).toBe('false');
+    active = true;
+    m.redraw.sync();
+    await vi.waitFor(() => expect(setVisible).toHaveBeenCalledWith('plugin-spa-test', true));
+    expect(open).toHaveBeenCalledOnce();
+    const initialTheme = open.mock.calls[0]?.[4];
+    document.documentElement.dataset.theme = initialTheme === 'dark' ? 'light' : 'dark';
+    await vi.waitFor(() =>
+      expect(setTheme).toHaveBeenCalledWith(
+        'plugin-spa-test',
+        initialTheme === 'dark' ? 'light' : 'dark',
+      ),
+    );
+    document.documentElement.removeAttribute('data-theme');
+    m.mount(root, null);
     await vi.waitFor(() => expect(close).toHaveBeenCalledWith('plugin-spa-test'));
-    expect(onClose).toHaveBeenCalledOnce();
     expect(onError).not.toHaveBeenCalled();
   });
 });

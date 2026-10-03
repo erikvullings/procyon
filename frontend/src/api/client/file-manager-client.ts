@@ -696,8 +696,11 @@ export interface FileManagerClient {
     actionId: string,
     location: Location,
     bounds: PluginPanelBounds,
+    theme: 'light' | 'dark',
   ): Promise<string>;
   updatePluginPanelBounds(label: string, bounds: PluginPanelBounds): Promise<void>;
+  setPluginPanelVisible(label: string, visible: boolean): Promise<void>;
+  setPluginPanelTheme(label: string, theme: 'light' | 'dark'): Promise<void>;
   closePluginPanel(label: string): Promise<void>;
 
   /** Diagnostics view for troubleshooting and bug reports (spec §30). */

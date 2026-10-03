@@ -245,6 +245,7 @@ export function createPaneContentBuilder(
     const pane = workspace?.panesById[paneId];
     const tab = pane?.tabsById[pane.activeTabId];
     const key = tab === undefined ? undefined : context.tabKey(paneId, tab.id);
+    const pluginPanel = context.getPluginByPane().get(paneId);
     const directories = context.getDirectories();
     const selections = context.getSelections();
     const directory: PaneDirectoryView = (key === undefined ? undefined : directories.get(key)) ?? {
@@ -358,6 +359,7 @@ export function createPaneContentBuilder(
         viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
       }
     }
+    if (pluginPanel !== undefined) viewerTitles.set(pluginPanel.tabId, pluginPanel.title);
     const defaultFavouriteLabel =
       tab === undefined ? undefined : context.searchFavouriteNameForLocationUri(tab.location.uri);
     const currentSearchQuery =
@@ -371,6 +373,15 @@ export function createPaneContentBuilder(
       ) ??
         false);
     return {
+      ...(pluginPanel === undefined
+        ? {}
+        : {
+            pluginPanel: m(PluginPanelHost, {
+              ...pluginPanel,
+              active: pluginPanel.tabId === tab?.id,
+            }),
+            pluginTabId: pluginPanel.tabId,
+          }),
       ...directory,
       viewerTitles,
       ...(tab === undefined ? {} : { location: tab.location }),
@@ -869,11 +880,10 @@ export function createPaneContentBuilder(
           ),
         );
       },
-      ...(context.getEditorByPane().has(paneId) || context.getPluginByPane().has(paneId)
+      ...(pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)
         ? {
             viewerContent: (() => {
-              const panel = context.getPluginByPane().get(paneId);
-              if (panel !== undefined) return m(PluginPanelHost, panel);
+              if (pluginPanel?.tabId === tab?.id) return m('.fm-plugin-panel-placeholder');
               const editor = context.getEditorByPane().get(paneId);
               return editor === undefined
                 ? undefined

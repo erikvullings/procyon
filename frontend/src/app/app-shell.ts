@@ -869,6 +869,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     { readonly controller: FileEditorController; state: FileEditorState }
   >();
   const pluginByPane = new Map<PaneId, PluginPaneState>();
+  const openingPluginPanes = new Set<PaneId>();
   let nextPluginPanelId = 0;
   const sortedEntries = new Map<
     string,
@@ -1471,36 +1472,87 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (runtimeKind !== 'tauri') return 'unavailable';
     const target = workspace?.paneOrder.find((paneId) => paneId !== sourcePaneId);
     if (target === undefined) return 'unavailable';
-    const tabId = workspace?.panesById[target]?.activeTabId;
-    if (tabId === undefined) return 'unavailable';
+    if (openingPluginPanes.has(target)) return 'blocked';
+    const existing = pluginByPane.get(target);
+    if (
+      existing?.pluginId === plugin.id &&
+      existing.actionId === actionId &&
+      existing.location.providerId === entry.location.providerId &&
+      existing.location.uri === entry.location.uri
+    ) {
+      if (workspace?.panesById[target]?.activeTabId === existing.tabId) {
+        void activatePane(attrsClient, target).catch((error: unknown) => {
+          toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
+        });
+      } else {
+        tabController.activateTab(target, existing.tabId);
+      }
+      return 'opened';
+    }
     if (editorByPane.has(target)) {
       requestCloseEditor(target);
       if (editorByPane.has(target)) return 'blocked';
     }
-    const panel: PluginPaneState = {
-      panelId: ++nextPluginPanelId,
-      tabId,
-      client: attrsClient,
-      pluginId: plugin.id,
-      actionId,
-      location: entry.location,
-      title: `${plugin.name} — ${entry.name}`,
-      onClose: () => {
-        if (pluginByPane.get(target) !== panel) return;
-        pluginByPane.delete(target);
-        m.redraw();
-      },
-      onError: (error) => {
-        if (pluginByPane.get(target) !== panel) return;
-        pluginByPane.delete(target);
-        const text = document.createElement('span');
-        text.textContent = workspaceErrorMessage(error, t('action', 'unableToRun'));
-        toast({ html: text.innerHTML });
-        m.redraw();
-      },
+    const current = workspace;
+    const activeTab = current?.panesById[target]?.tabsById[current.panesById[target].activeTabId];
+    if (current === undefined || activeTab === undefined) return 'unavailable';
+    const showPanel = (tabId: TabId) => {
+      const panel: PluginPaneState = {
+        panelId: ++nextPluginPanelId,
+        tabId,
+        client: attrsClient,
+        pluginId: plugin.id,
+        actionId,
+        location: entry.location,
+        title: `${plugin.name}: ${entry.name}`,
+        active: true,
+        onError: (error) => {
+          if (pluginByPane.get(target) !== panel) return;
+          const text = document.createElement('span');
+          text.textContent = workspaceErrorMessage(error, t('action', 'unableToRun'));
+          toast({ html: text.innerHTML });
+          tabController.performCloseTab(target, tabId);
+        },
+      };
+      pluginByPane.set(target, panel);
+      m.redraw();
     };
-    pluginByPane.set(target, panel);
-    m.redraw();
+    if (existing !== undefined) {
+      showPanel(existing.tabId);
+      if (current.panesById[target]?.activeTabId === existing.tabId) {
+        void activatePane(attrsClient, target).catch((error: unknown) => {
+          toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
+        });
+      } else {
+        tabController.activateTab(target, existing.tabId);
+      }
+      return 'opened';
+    }
+    openingPluginPanes.add(target);
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'addTransientTab',
+        workspaceId: current.id,
+        paneId: target,
+        location: activeTab.location,
+        expectedRevision: current.revision,
+      },
+      (next) => {
+        replaceWorkspace(next);
+        const tabId = next.panesById[target]?.activeTabId;
+        if (tabId !== undefined) {
+          showPanel(tabId);
+          void activatePane(attrsClient, target).catch((error: unknown) => {
+            toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
+          });
+        }
+      },
+    )
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
+      })
+      .finally(() => openingPluginPanes.delete(target));
     return 'opened';
   }
 
@@ -2597,7 +2649,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       plugins = next;
       for (const [paneId, panel] of pluginByPane) {
         if (!next.some((plugin) => plugin.id === panel.pluginId && plugin.enabled)) {
-          pluginByPane.delete(paneId);
+          tabController.performCloseTab(paneId, panel.tabId);
         }
       }
       void attrsClient
@@ -3964,6 +4016,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     targetPaneId: PaneId,
     targetIndex: number,
   ): void {
+    if (pluginByPane.get(sourcePaneId)?.tabId === tabId) return;
     const current = workspace;
     if (current === undefined) return;
     void dispatchWorkspaceCommand(

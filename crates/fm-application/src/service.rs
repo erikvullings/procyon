@@ -2793,16 +2793,37 @@ impl FileManagerService {
         settings_to_dto(settings)
     }
 
+    /// Returns the preferences retained for an enabled SPA panel.
+    pub fn plugin_panel_settings(&self, plugin_id: &str) -> Option<serde_json::Value> {
+        self.plugin_manager.panel_settings(plugin_id)
+    }
+
+    /// Persists only host-validated, plugin-scoped panel preferences.
+    pub fn save_plugin_panel_settings(
+        &self,
+        plugin_id: &str,
+        value: serde_json::Value,
+    ) -> Result<(), ApplicationError> {
+        self.plugin_manager.save_panel_settings(plugin_id, value)
+    }
+
     /// Atomically persists and returns a complete settings replacement.
     pub fn update_settings(&self, settings: SettingsDto) -> Result<SettingsDto, ApplicationError> {
-        let settings = settings_from_dto(settings);
-        self.settings_store
-            .save(&settings)
-            .map_err(|_| ApplicationError::Internal)?;
+        let mut settings = settings_from_dto(settings);
         let mut current = self
             .settings
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        for (plugin_id, value) in &current.plugin_settings {
+            if self.plugin_manager.owns_panel_settings(plugin_id) {
+                settings
+                    .plugin_settings
+                    .insert(plugin_id.clone(), value.clone());
+            }
+        }
+        self.settings_store
+            .save(&settings)
+            .map_err(|_| ApplicationError::Internal)?;
         *current = settings;
         Ok(settings_to_dto(current.clone()))
     }
@@ -3882,6 +3903,23 @@ mod tests {
             dir.path().join("settings"),
         );
         (dir, service)
+    }
+
+    #[test]
+    fn stale_appearance_update_does_not_erase_panel_preferences() {
+        let (_root, service) = service();
+        let stale = service.get_settings();
+        let preferences = serde_json::json!({"precision": 3});
+        service
+            .save_plugin_panel_settings("procyon.svgo", preferences.clone())
+            .expect("save preferences");
+        service
+            .update_settings(stale)
+            .expect("apply stale appearance form");
+        assert_eq!(
+            service.plugin_panel_settings("procyon.svgo"),
+            Some(preferences)
+        );
     }
 
     #[test]

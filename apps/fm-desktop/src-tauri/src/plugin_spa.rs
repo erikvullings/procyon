@@ -16,7 +16,7 @@ use tauri::{
     http::{Method, Response, StatusCode},
     webview::{NewWindowResponse, PageLoadEvent},
 };
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, oneshot};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -27,6 +27,7 @@ const PANEL_SLOTS: usize = 16;
 const MAX_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const SVGO_PLUGIN_ID: &str = "procyon.svgo";
 fn panel_csp(origin: &str) -> String {
     format!(
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; manifest-src 'self'; connect-src {origin}/bridge; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'self'; base-uri 'none'"
@@ -81,7 +82,26 @@ struct PanelSession {
     token: String,
     revision: AsyncMutex<String>,
     save_lock: Arc<AsyncMutex<()>>,
+    settings_sequence: Mutex<u64>,
+    flush_sender: Mutex<Option<oneshot::Sender<bool>>>,
     shutdown: CancellationToken,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum PanelTheme {
+    Light,
+    Dark,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct OpenPanelRequest {
+    pub(crate) plugin_id: String,
+    pub(crate) action_id: String,
+    pub(crate) location: LocationDto,
+    pub(crate) bounds: PanelBounds,
+    pub(crate) theme: PanelTheme,
 }
 
 enum Slot {
@@ -261,14 +281,74 @@ impl PanelBounds {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SaveSvgRequest {
-    version: u8,
-    #[serde(rename = "type")]
-    kind: String,
-    svg: String,
-    load_token: String,
+struct SvgoSettings {
+    precision: u8,
+    path_precision: u8,
+    remove_tspan: bool,
+    remove_styling: bool,
+    trim_text: bool,
+    auto_autocrop: bool,
+    custom_width: u32,
+    custom_height: u32,
+    use_custom_dimensions: bool,
+    remove_default_values: bool,
+    remove_font_family: bool,
+    remove_font_size: bool,
+    convert_sodipodi_arcs: bool,
+    group_similar_elements: bool,
+    group_text_elements_at_end: bool,
+}
+
+impl SvgoSettings {
+    fn validate(&self) -> Result<(), PanelError> {
+        if self.precision > 5
+            || self.path_precision > 5
+            || !(1..=100_000).contains(&self.custom_width)
+            || !(1..=100_000).contains(&self.custom_height)
+        {
+            return Err(PanelError::Invalid);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
+enum BridgeRequest {
+    SaveSvg {
+        version: u8,
+        svg: String,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
+    SettingsChange {
+        version: u8,
+        settings: SvgoSettings,
+        sequence: u64,
+        #[serde(default)]
+        flush: bool,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
+}
+
+impl BridgeRequest {
+    fn credentials(&self) -> (u8, &str) {
+        match self {
+            Self::SaveSvg {
+                version,
+                load_token,
+                ..
+            }
+            | Self::SettingsChange {
+                version,
+                load_token,
+                ..
+            } => (*version, load_token),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -280,6 +360,8 @@ struct SaveResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<BridgeError>,
     load_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sequence: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -308,13 +390,23 @@ impl From<PanelError> for BridgeError {
     }
 }
 
-fn parse_bridge(bytes: &[u8], token: &str) -> Result<SaveSvgRequest, PanelError> {
+fn parse_bridge(bytes: &[u8], token: &str) -> Result<BridgeRequest, PanelError> {
     if bytes.len() > MAX_BRIDGE_BYTES {
         return Err(PanelError::TooLarge);
     }
-    let message: SaveSvgRequest = serde_json::from_slice(bytes).map_err(|_| PanelError::Invalid)?;
-    if message.version != 1 || message.kind != "save-svg" || message.load_token != token {
+    let message: BridgeRequest = serde_json::from_slice(bytes).map_err(|_| PanelError::Invalid)?;
+    let (version, received_token) = message.credentials();
+    if version != 1 || received_token != token {
         return Err(PanelError::Denied);
+    }
+    if let BridgeRequest::SettingsChange {
+        settings, sequence, ..
+    } = &message
+    {
+        settings.validate()?;
+        if *sequence == 0 {
+            return Err(PanelError::Invalid);
+        }
     }
     Ok(message)
 }
@@ -496,7 +588,7 @@ fn serve_asset(
 async fn save_svg(
     service: Arc<FileManagerService>,
     session: Arc<PanelSession>,
-    request: SaveSvgRequest,
+    svg: String,
 ) -> Result<(), PanelError> {
     let panel = checked_panel(&service, &session)?;
     if !panel.can_write_selected {
@@ -507,7 +599,7 @@ async fn save_svg(
     let future = service.save_editable_file(SaveEditableFileRequestDto {
         location: session.location.clone(),
         destination: None,
-        content: request.svg,
+        content: svg,
         expected_revision: revision.clone(),
         overwrite_conflict: false,
     });
@@ -523,20 +615,84 @@ async fn save_svg(
     Ok(())
 }
 
+fn save_settings(
+    service: &FileManagerService,
+    session: &PanelSession,
+    settings: SvgoSettings,
+    sequence: u64,
+) -> Result<(), PanelError> {
+    let panel = checked_panel(service, session)?;
+    if !panel.can_store_settings || session.plugin_id != SVGO_PLUGIN_ID {
+        return Err(PanelError::Denied);
+    }
+    if session.shutdown.is_cancelled() {
+        return Err(PanelError::Unavailable);
+    }
+    let mut accepted = session
+        .settings_sequence
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if sequence <= *accepted {
+        return Ok(());
+    }
+    service
+        .save_plugin_panel_settings(
+            &session.plugin_id,
+            serde_json::to_value(settings).expect("validated settings are serializable"),
+        )
+        .map_err(|error| {
+            tracing::warn!(%error, "could not persist plugin panel settings");
+            PanelError::Unavailable
+        })?;
+    *accepted = sequence;
+    Ok(())
+}
+
 async fn bridge(
     service: Arc<FileManagerService>,
     session: Arc<PanelSession>,
     body: Vec<u8>,
     origin: String,
 ) -> Response<Vec<u8>> {
-    let result = match parse_bridge(&body, &session.token) {
-        Ok(request) => save_svg(service, Arc::clone(&session), request).await,
-        Err(error) => return bridge_result(Err(error), "", &origin),
+    let request = match parse_bridge(&body, &session.token) {
+        Ok(request) => request,
+        Err(error) => return bridge_result(Err(error), "save-result", "", None, &origin),
     };
-    bridge_result(result, &session.token, &origin)
+    let (kind, sequence, result) = match request {
+        BridgeRequest::SaveSvg { svg, .. } => (
+            "save-result",
+            None,
+            save_svg(service, Arc::clone(&session), svg).await,
+        ),
+        BridgeRequest::SettingsChange {
+            settings,
+            sequence,
+            flush,
+            ..
+        } => {
+            let result = save_settings(&service, &session, settings, sequence);
+            if flush
+                && let Some(sender) = session
+                    .flush_sender
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .take()
+            {
+                let _ = sender.send(result.is_ok());
+            }
+            ("settings-result", Some(sequence), result)
+        }
+    };
+    bridge_result(result, kind, &session.token, sequence, &origin)
 }
 
-fn bridge_result(result: Result<(), PanelError>, token: &str, origin: &str) -> Response<Vec<u8>> {
+fn bridge_result(
+    result: Result<(), PanelError>,
+    kind: &'static str,
+    token: &str,
+    sequence: Option<u64>,
+    origin: &str,
+) -> Response<Vec<u8>> {
     let status = match &result {
         Ok(()) => StatusCode::OK,
         Err(PanelError::Invalid) => StatusCode::BAD_REQUEST,
@@ -548,10 +704,11 @@ fn bridge_result(result: Result<(), PanelError>, token: &str, origin: &str) -> R
         Err(PanelError::Unavailable) => StatusCode::SERVICE_UNAVAILABLE,
     };
     let response_body = SaveResult {
-        kind: "save-result",
+        kind,
         success: result.is_ok(),
         error: result.err().map(BridgeError::from),
         load_token: token.to_owned(),
+        sequence,
     };
     response(
         status,
@@ -561,14 +718,18 @@ fn bridge_result(result: Result<(), PanelError>, token: &str, origin: &str) -> R
     )
 }
 
-fn bootstrap(token: &str) -> String {
+fn bootstrap(token: &str, theme: PanelTheme, settings: Option<&SvgoSettings>) -> String {
     let token = serde_json::to_string(token).expect("hex token is serializable");
+    let theme = serde_json::to_string(&theme).expect("panel theme is serializable");
+    let settings = serde_json::to_string(&settings).expect("panel settings are serializable");
     format!(
         r#"(() => {{
           const loadToken = {token};
           Object.defineProperty(window, 'procyonPlugin', {{
             value: Object.freeze({{
               loadToken,
+              theme: {theme},
+              settings: {settings},
               postMessage: async (message) => {{
                 let result;
                 try {{
@@ -639,7 +800,13 @@ pub(crate) fn register_schemes<R: Runtime>(
                 let service = Arc::clone(&app.state::<AppState>().service);
                 if request.method() == Method::POST && url.path() == "/bridge" {
                     if request.body().len() > MAX_BRIDGE_BYTES {
-                        responder.respond(bridge_result(Err(PanelError::TooLarge), "", &origin));
+                        responder.respond(bridge_result(
+                            Err(PanelError::TooLarge),
+                            "save-result",
+                            "",
+                            None,
+                            &origin,
+                        ));
                         return;
                     }
                     let body = request.into_body();
@@ -666,14 +833,18 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     app: AppHandle<R>,
     source: Window<R>,
     state: State<'_, AppState>,
-    plugin_id: String,
-    action_id: String,
-    location: LocationDto,
-    bounds: PanelBounds,
+    request: OpenPanelRequest,
 ) -> Result<String, PanelError> {
     if !trusted_invoke_label(source.label()) {
         return Err(PanelError::Denied);
     }
+    let OpenPanelRequest {
+        plugin_id,
+        action_id,
+        location,
+        bounds,
+        theme,
+    } = request;
     let panel = state
         .service
         .plugin_panel(&plugin_id, &action_id, &location)
@@ -682,6 +853,20 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     if !panel.can_read_selected {
         return Err(PanelError::Denied);
     }
+    let settings = if panel.can_store_settings && plugin_id == SVGO_PLUGIN_ID {
+        state
+            .service
+            .plugin_panel_settings(&plugin_id)
+            .map(|value| {
+                let settings: SvgoSettings =
+                    serde_json::from_value(value).map_err(|_| PanelError::Invalid)?;
+                settings.validate()?;
+                Ok(settings)
+            })
+            .transpose()?
+    } else {
+        None
+    };
     let loaded = state
         .service
         .load_editable_file(LoadEditableFileRequestDto {
@@ -726,6 +911,8 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         token: token.clone(),
         revision: AsyncMutex::new(loaded.revision),
         save_lock,
+        settings_sequence: Mutex::new(0),
+        flush_sender: Mutex::new(None),
         shutdown: CancellationToken::new(),
     });
     registry
@@ -737,7 +924,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .incognito(true)
         .use_https_scheme(cfg!(target_os = "windows"))
-        .initialization_script(bootstrap(&token))
+        .initialization_script(bootstrap(&token, theme, settings.as_ref()))
         .on_navigation({
             let origin = origin.clone();
             move |url| allows_navigation(url, &origin)
@@ -796,7 +983,56 @@ pub(crate) fn update_plugin_panel_bounds<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn close_plugin_panel<R: Runtime>(
+pub(crate) fn set_plugin_panel_visible<R: Runtime>(
+    source: Window<R>,
+    registry: State<'_, Arc<PanelRegistry>>,
+    label: String,
+    visible: bool,
+) -> Result<(), PanelError> {
+    if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
+        return Err(PanelError::Denied);
+    }
+    let webview = source.get_webview(&label).ok_or(PanelError::Unavailable)?;
+    if visible {
+        webview.show()
+    } else {
+        webview.hide()
+    }
+    .map_err(|_| PanelError::Unavailable)
+}
+
+#[tauri::command]
+pub(crate) fn set_plugin_panel_theme<R: Runtime>(
+    source: Window<R>,
+    registry: State<'_, Arc<PanelRegistry>>,
+    label: String,
+    theme: PanelTheme,
+) -> Result<(), PanelError> {
+    if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
+        return Err(PanelError::Denied);
+    }
+    let session = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+        .ok_or(PanelError::Unavailable)?;
+    let message = serde_json::json!({
+        "type": "theme-change",
+        "theme": theme,
+        "loadToken": &session.token,
+    });
+    source
+        .get_webview(&label)
+        .ok_or(PanelError::Unavailable)?
+        .eval(format!(
+            "window.postMessage({}, window.location.origin);",
+            message
+        ))
+        .map_err(|_| PanelError::Unavailable)
+}
+
+#[tauri::command]
+pub(crate) async fn close_plugin_panel<R: Runtime>(
     source: Window<R>,
     registry: State<'_, Arc<PanelRegistry>>,
     label: String,
@@ -804,12 +1040,70 @@ pub(crate) fn close_plugin_panel<R: Runtime>(
     if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
         return Err(PanelError::Denied);
     }
+    let session = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+        .ok_or(PanelError::Unavailable)?;
+    let webview = match source.get_webview(&label) {
+        Some(webview) => webview,
+        None => {
+            registry.release(&label);
+            return Err(PanelError::Unavailable);
+        }
+    };
+    if let Err(error) = webview.hide() {
+        tracing::warn!(%error, "could not hide closing plugin panel");
+    }
+    let flush_result = if session.plugin_id == SVGO_PLUGIN_ID {
+        let (sender, receiver) = oneshot::channel();
+        {
+            let mut pending = session
+                .flush_sender
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if pending.is_some() {
+                return Err(PanelError::Unavailable);
+            }
+            *pending = Some(sender);
+        }
+        let event = serde_json::json!({
+            "type": "flush-settings",
+            "loadToken": &session.token,
+        });
+        let requested = webview
+            .eval(format!(
+                "window.postMessage({}, window.location.origin);",
+                event
+            ))
+            .is_ok();
+        let result = if requested {
+            matches!(
+                tokio::time::timeout(std::time::Duration::from_secs(2), receiver).await,
+                Ok(Ok(true))
+            )
+        } else {
+            false
+        };
+        session
+            .flush_sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        if !result {
+            tracing::warn!("could not flush SVGO settings before closing plugin panel");
+        }
+        result
+    } else {
+        true
+    };
     registry.release(&label);
-    source
-        .get_webview(&label)
-        .ok_or(PanelError::Unavailable)?
-        .close()
-        .map_err(|_| PanelError::Unavailable)
+    webview.close().map_err(|_| PanelError::Unavailable)?;
+    if flush_result {
+        Ok(())
+    } else {
+        Err(PanelError::Unavailable)
+    }
 }
 
 pub(crate) fn close_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
@@ -936,11 +1230,152 @@ mod tests {
             serde_json::to_string(&BridgeError::from(PanelError::Denied)).unwrap(),
             "\"permission-denied\""
         );
-        let denied = bridge_result(Err(PanelError::Denied), "abc", &panel_origin(0));
+        let denied = bridge_result(
+            Err(PanelError::Denied),
+            "save-result",
+            "abc",
+            None,
+            &panel_origin(0),
+        );
         assert_eq!(denied.status(), StatusCode::FORBIDDEN);
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(denied.body()).unwrap()["error"],
             "permission-denied"
+        );
+    }
+
+    #[test]
+    fn settings_bridge_accepts_only_bounded_optimizer_preferences() {
+        let settings = serde_json::json!({
+            "precision": 1,
+            "pathPrecision": 2,
+            "removeTspan": true,
+            "removeStyling": true,
+            "trimText": true,
+            "autoAutocrop": false,
+            "customWidth": 100,
+            "customHeight": 100,
+            "useCustomDimensions": false,
+            "removeDefaultValues": true,
+            "removeFontFamily": false,
+            "removeFontSize": false,
+            "convertSodipodiArcs": true,
+            "groupSimilarElements": true,
+            "groupTextElementsAtEnd": false
+        });
+        let request = |settings: serde_json::Value, sequence| {
+            serde_json::to_vec(&serde_json::json!({
+                "type": "settings-change",
+                "version": 1,
+                "loadToken": "abc",
+                "settings": settings,
+                "sequence": sequence,
+                "flush": true
+            }))
+            .unwrap()
+        };
+        assert!(matches!(
+            parse_bridge(&request(settings.clone(), 1), "abc"),
+            Ok(BridgeRequest::SettingsChange { flush: true, .. })
+        ));
+        let persisted: SvgoSettings = serde_json::from_value(settings).unwrap();
+        let script = bootstrap("abc", PanelTheme::Dark, Some(&persisted));
+        assert!(script.contains("theme: \"dark\""));
+        assert!(script.contains("\"pathPrecision\":2"));
+        assert!(!script.contains("sourceSvg"));
+        let receipt = bridge_result(Ok(()), "settings-result", "abc", Some(7), &panel_origin(0));
+        let response: serde_json::Value = serde_json::from_slice(receipt.body()).unwrap();
+        assert_eq!(response["type"], "settings-result");
+        assert_eq!(response["sequence"], 7);
+        assert_eq!(response["success"], true);
+        let settings = serde_json::to_value(persisted).unwrap();
+        assert!(parse_bridge(&request(settings.clone(), 1), "wrong").is_err());
+        assert!(parse_bridge(&request(settings.clone(), 0), "abc").is_err());
+        for (key, value) in [
+            ("sourceSvg", serde_json::json!("<svg/>")),
+            ("viewMode", serde_json::json!("tree")),
+            ("theme", serde_json::json!("dark")),
+            ("customWidth", serde_json::json!(0)),
+            ("precision", serde_json::json!(6)),
+            ("pathPrecision", serde_json::json!(1.5)),
+        ] {
+            let mut invalid = settings.clone();
+            invalid[key] = value;
+            assert!(parse_bridge(&request(invalid, 1), "abc").is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn settings_bridge_persists_latest_sequence_and_acknowledges_close_flush() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(FileManagerService::new(
+            fm_transport_dto::RuntimeKindDto::Tauri,
+            root.path(),
+            root.path().join("settings"),
+        ));
+        service
+            .set_plugin_enabled(SVGO_PLUGIN_ID.to_owned(), true)
+            .unwrap();
+        let location = LocationDto {
+            provider_id: "local".to_owned(),
+            uri: "file:///drawing.svg".to_owned(),
+        };
+        let panel = service
+            .plugin_panel(SVGO_PLUGIN_ID, "procyon.svgo.open", &location)
+            .unwrap();
+        let session = Arc::new(PanelSession {
+            label: "plugin-spa-test".to_owned(),
+            owner_window: "main".to_owned(),
+            plugin_id: SVGO_PLUGIN_ID.to_owned(),
+            action_id: "procyon.svgo.open".to_owned(),
+            directory: panel.directory,
+            entrypoint: panel.entrypoint,
+            location,
+            token: "test-token".to_owned(),
+            revision: AsyncMutex::new("rev".to_owned()),
+            save_lock: Arc::new(AsyncMutex::new(())),
+            settings_sequence: Mutex::new(0),
+            flush_sender: Mutex::new(None),
+            shutdown: CancellationToken::new(),
+        });
+        let mut settings = serde_json::json!({
+            "precision": 2, "pathPrecision": 2,
+            "removeTspan": true, "removeStyling": true, "trimText": true,
+            "autoAutocrop": false, "customWidth": 100, "customHeight": 100,
+            "useCustomDimensions": false, "removeDefaultValues": true,
+            "removeFontFamily": false, "removeFontSize": false,
+            "convertSodipodiArcs": true, "groupSimilarElements": true,
+            "groupTextElementsAtEnd": false
+        });
+        let send = |settings: &serde_json::Value, sequence, flush| {
+            let body = serde_json::to_vec(&serde_json::json!({
+                "type": "settings-change", "version": 1,
+                "loadToken": "test-token", "settings": settings,
+                "sequence": sequence, "flush": flush,
+            }))
+            .unwrap();
+            tauri::async_runtime::block_on(bridge(
+                Arc::clone(&service),
+                Arc::clone(&session),
+                body,
+                panel_origin(0),
+            ))
+        };
+        assert_eq!(send(&settings, 2, false).status(), StatusCode::OK);
+        settings["precision"] = serde_json::json!(1);
+        assert_eq!(send(&settings, 1, false).status(), StatusCode::OK);
+        assert_eq!(
+            service.plugin_panel_settings(SVGO_PLUGIN_ID).unwrap()["precision"],
+            2
+        );
+        let (sender, receiver) = oneshot::channel();
+        *session.flush_sender.lock().unwrap() = Some(sender);
+        settings["precision"] = serde_json::json!(3);
+        assert_eq!(send(&settings, 3, true).status(), StatusCode::OK);
+        assert!(tauri::async_runtime::block_on(receiver).unwrap());
+        assert_eq!(
+            service.plugin_panel_settings(SVGO_PLUGIN_ID),
+            Some(settings)
         );
     }
 
@@ -1013,6 +1448,8 @@ mod tests {
                     token: "token".into(),
                     revision: AsyncMutex::new("rev".into()),
                     save_lock: Arc::clone(&save_lock),
+                    settings_sequence: Mutex::new(0),
+                    flush_sender: Mutex::new(None),
                     shutdown: shutdown.clone(),
                 }),
             )
@@ -1099,10 +1536,16 @@ mod tests {
     #[test]
     fn bundled_monaco_editor_and_worker_are_within_asset_budget() {
         let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../plugins/svgo");
+        let entrypoint = std::fs::read_to_string(package.join("dist/index.html")).unwrap();
+        let bundle = std::fs::read_dir(package.join("dist/assets"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .find(|name| name.starts_with("index-") && name.ends_with(".js"))
+            .expect("packaged SPA entrypoint missing");
+        assert!(entrypoint.contains(&bundle));
         for asset in [
             "/dist/monaco/vs/editor/editor.main.js",
             "/dist/monaco/vs/language/typescript/tsWorker.js",
-            "/dist/assets/index-DkGjWShk.js",
             "/dist/monaco/vs/editor/editor.main.css",
             "/dist/monaco/vs/base/browser/ui/codicons/codicon/codicon.ttf",
             "/dist/favicon.ico",
@@ -1112,6 +1555,8 @@ mod tests {
             assert!(!bytes.is_empty(), "{asset}");
             assert!(bytes.len() as u64 <= MAX_ASSET_BYTES);
         }
+        let (script, _) = read_package_asset(&package, &format!("/dist/assets/{bundle}")).unwrap();
+        assert!(!script.is_empty());
         let mut pending = vec![package.join("dist")];
         let mut count = 0;
         while let Some(directory) = pending.pop() {
