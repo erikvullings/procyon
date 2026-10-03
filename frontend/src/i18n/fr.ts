@@ -965,6 +965,8 @@ export const fr = {
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
     ask: 'Demander',
+    question: 'Question sur ces résultats',
+    questionPlaceholder: 'Posez une question précise sur les sources trouvées…',
     resultRelevanceHigh: 'Pertinence élevée',
     resultRelevanceMedium: 'Pertinence moyenne',
     resultRelevanceLow: 'Pertinence faible',

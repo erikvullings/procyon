@@ -119,14 +119,14 @@ release-qualified repository variables absent or `false` until the final approva
   Windows/Linux rows, known limitations, and rollback instructions.
 - [x] Run the alpha-aware semantic precondition validator and obtain explicit dated release-owner
   approval for the named revision and artifacts.
-- [ ] Qualify one independent `semantic-v*` component candidate, commit its generated fingerprint
+- [x] Qualify one independent `semantic-v*` component candidate, commit its generated fingerprint
   lock, then publish the exact retained run with `SEMANTIC_COMPONENTS_RELEASE_QUALIFIED=true`.
-- [ ] Set `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require desktop
+- [x] Set `SEMANTIC_RELEASE_QUALIFIED=true`, tag the matching numeric alpha, and require desktop
   installers to fetch the already-published locked catalogs without rebuilding components.
 - [ ] Verify the public macOS installer from the test account downloads only the published signed
   payloads and reproduces the qualified Search/Ask smoke. Verify the Windows/Linux installer
   digests and automated smoke reports.
-- [ ] State prominently in release notes that semantic functionality is experimental and opt-in,
+- [x] State prominently in release notes that semantic functionality is experimental and opt-in,
   Windows/Linux manual accessibility testing is pending, Windows artifacts are unsigned, and
   macOS x86-64 semantic runtime is unsupported.
 - [ ] On a component failure, do not publish its component tag. On desktop integration failure,
@@ -669,3 +669,20 @@ qualification; a private qualification run must never publish assets.
   reuses those exact retained bytes and verifies every payload against the reviewed lock. Desktop
   releases only fetch a previously published locked catalog, allowing component and Procyon
   releases to advance independently.
+- 2026-10-03 Copilot: Reconciled the stale publication checklist with live releases. The checked-in
+  `experimental-alpha` production-measurement report records GO, four-target evidence, macOS
+  manual PASS, and explicit task-0225 deferrals. The independent `semantic-v2` component release
+  was published from successful workflow `35410920371` using qualification run `35406753698`.
+  `SEMANTIC_RELEASE_QUALIFIED=true`; the v0.3.1 desktop workflow `37066879755` fetched and
+  verified the locked signed catalogs on macOS, Windows, and Linux. Its release notes now call out
+  the opt-in experimental status and platform limitations. Running Semantic Search locally is
+  expected; it does not by itself record the remaining public-installer activation/Search/Ask
+  smoke or Windows/Linux installer-digest checks in Part E. Keep this task `in_progress` until
+  those checks are recorded. Stable-release evidence remains separately tracked by 0225.
+- 2026-10-03 release owner: Confirmed Semantic Search and Ask are present in the installed v0.3.1
+  release, but initially reported no indexed files despite an existing nearly 1 GB Zvec index.
+  Inspecting Semantic settings and restarting the app (the background service kept running)
+  restored results. This is not a clean first-launch public-installer smoke; reproduce and resolve
+  the profile/reconciliation discrepancy before checking the remaining Part E row. The owner also
+  reports a literal JSON answer and a cumbersome shared Search/Ask query UI; task 0235 tracks the
+  answer contract and single-tab interaction separately.

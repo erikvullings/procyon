@@ -963,6 +963,8 @@ export const es = {
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     ask: 'Preguntar',
+    question: 'Pregunta sobre estos resultados',
+    questionPlaceholder: 'Haz una pregunta específica sobre las fuentes encontradas…',
     resultRelevanceHigh: 'Relevancia alta',
     resultRelevanceMedium: 'Relevancia media',
     resultRelevanceLow: 'Relevancia baja',

@@ -965,6 +965,8 @@ export const en = {
     reasonRelatedTerm: 'Related term',
     search: 'Search',
     ask: 'Ask',
+    question: 'Question about these results',
+    questionPlaceholder: 'Ask something specific about the sources you found…',
     searching: 'Searching…',
     cancel: 'Cancel search',
     cancelled: 'The search was cancelled.',
@@ -1032,17 +1034,17 @@ export const en = {
     answerRegion: 'Optional knowledge answer',
     answerHeading: 'Optional answer',
     answerHint:
-      'An answer is generated only from the evidence above. It never runs a new search; use Search to retrieve again.',
+      'Ask about the results you inspected. Answering does not search again; switch to Search to review or refresh the sources.',
     answerProfile: 'Generation profile',
     answerProfilePlaceholder: 'Select a generation profile…',
     answerNoProfiles:
-      'No generation profile is configured, so no answer can be generated. The search above is complete.',
+      'No generation profile is configured, so no answer can be generated. Your search results remain available.',
     answerProfilesFailed:
-      'Generation profiles could not be loaded. The search above is complete without an answer.',
+      'Generation profiles could not be loaded. Your search results remain available.',
     answerLocalEndpoint:
-      '{profile} runs on a local endpoint, so the evidence above stays on this device.',
+      '{profile} runs on a local endpoint, so the inspected evidence stays on this device.',
     answerCloudEndpoint:
-      '{profile} is a cloud endpoint: generating sends the evidence above to it. Your host enforces this consent.',
+      '{profile} is a cloud endpoint: generating sends the inspected evidence to it. Your host enforces this consent.',
     allowModelKnowledge: 'Allow general model knowledge, clearly labelled',
     modelKnowledgeNotice:
       'Statements from general model knowledge are not supported by the citations below.',
@@ -1055,7 +1057,8 @@ export const en = {
     answerFailed: 'The answer could not be generated.',
     answerRefreshRequired:
       'The inspected evidence is no longer available. Run Search again, then generate the answer.',
-    answerPlaceholder: 'Select a profile and generate an answer from the evidence above.',
+    answerPlaceholder:
+      'Choose a profile, ask a question, and generate an answer from the inspected results.',
     answerProfileUsed: 'Answered by {profile} · {locality}',
     answerLocalityLoopback: 'local endpoint',
     answerLocalityCloud: 'cloud endpoint',

@@ -38,10 +38,10 @@ use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
     normalize_endpoint_locality,
 };
-use crate::rag::grounded_system_prompt;
+use crate::rag::{grounded_system_prompt, parse_generated_answer};
 
 /// Answer contract identity retained in prompts for reproducibility.
-pub(crate) const KNOWLEDGE_ANSWER_PROMPT_VERSION: &str = "structured-knowledge-answer/1";
+pub(crate) const KNOWLEDGE_ANSWER_PROMPT_VERSION: &str = "structured-knowledge-answer/2";
 /// Maximum generated answer tokens, further bounded by the saved profile.
 const MAX_ANSWER_TOKENS: u32 = 2_048;
 /// Sampling temperature used for evidence-grounded answers.
@@ -299,7 +299,7 @@ impl KnowledgeAnswerCoordinator {
         let (system_prompt, user_prompt) =
             build_prompts(plan, &retained.rows, intent, profile.redact_filenames)
                 .map_err(|_| KnowledgeAnswerError::GenerationFailed)?;
-        let text = profiles
+        let generated = profiles
             .generate(
                 intent.profile_id,
                 LlmChatGeneration {
@@ -313,6 +313,8 @@ impl KnowledgeAnswerCoordinator {
             )
             .await
             .map_err(map_profile_error)?;
+        let text = parse_generated_answer(&generated)
+            .map_err(|_| KnowledgeAnswerError::GenerationFailed)?;
         let citations = retained
             .rows
             .iter()
@@ -425,7 +427,8 @@ fn build_prompts(
     let mut system = grounded_system_prompt(intent.allow_model_knowledge);
     system.push_str(&format!(
         " You are answering from an evidence set the user already inspected; never claim to have \
-         searched again, and never ask for another search. Goal: {}. Depth: {}. Presentation: {}. \
+         searched again, and never ask for another search. Answer the question field when present, \
+         using only the inspected evidence; otherwise address the subjects. Goal: {}. Depth: {}. Presentation: {}. \
          Knowledge answer version: {KNOWLEDGE_ANSWER_PROMPT_VERSION}.",
         action_instruction(intent.request.action),
         depth_instruction(intent.request.depth),
@@ -450,6 +453,7 @@ fn build_prompts(
             .iter()
             .map(|subject| subject.text.as_str())
             .collect::<Vec<_>>(),
+        "question": intent.request.question,
         "applicationContext": intent.request.context,
         "constraints": intent.request.constraints,
         "evidence": prompt_evidence,
@@ -675,6 +679,7 @@ mod tests {
         KnowledgeAnswerIntent {
             request: KnowledgeAnswerRequest {
                 evidence_fingerprint: fingerprint.to_owned(),
+                question: None,
                 action: Some(KnowledgeAction::Explain),
                 context: None,
                 constraints: Vec::new(),
@@ -684,6 +689,60 @@ mod tests {
             profile_id,
             allow_model_knowledge: false,
         }
+    }
+
+    #[tokio::test]
+    async fn structured_answer_is_decoded_before_citations_are_resolved() {
+        let transport = Arc::new(RecordingTransport::new(
+            r#"{"answer":"De rotor zet wind om in kracht [E1]."}"#,
+        ));
+        let fixture = fixture(transport).await;
+        let mut request = intent(fixture.profile_id, "sha256:set");
+        request.request.question = Some("Hoe werkt de rotor?".to_owned());
+        let answer = KnowledgeAnswerCoordinator::default()
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:set",
+                    plan: &plan(),
+                    evidence: vec![evidence(0, "source-a")],
+                },
+                &request,
+                &StaticKnowledgeAuthorizationRefresh(snapshot(&["source-a"])),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("structured answer");
+        assert_eq!(answer.text, "De rotor zet wind om in kracht [E1].");
+        assert_eq!(answer.citations.len(), 1);
+        assert_eq!(answer.citations[0].source_id, "source-a");
+        let prompt: serde_json::Value =
+            serde_json::from_str(&fixture.transport.generations()[0].user_prompt)
+                .expect("prompt JSON");
+        assert_eq!(prompt["question"], "Hoe werkt de rotor?");
+    }
+
+    #[tokio::test]
+    async fn malformed_structured_answer_fails_instead_of_displaying_json() {
+        let transport = Arc::new(RecordingTransport::new(r#"{"answer":42}"#));
+        let fixture = fixture(transport).await;
+        let error = KnowledgeAnswerCoordinator::default()
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:set",
+                    plan: &plan(),
+                    evidence: vec![evidence(0, "source-a")],
+                },
+                &intent(fixture.profile_id, "sha256:set"),
+                &StaticKnowledgeAuthorizationRefresh(snapshot(&["source-a"])),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect_err("malformed JSON must not be shown");
+        assert_eq!(error, KnowledgeAnswerError::GenerationFailed);
     }
 
     #[tokio::test]

@@ -964,6 +964,8 @@ export const pt = {
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     ask: 'Perguntar',
+    question: 'Pergunta sobre estes resultados',
+    questionPlaceholder: 'Faça uma pergunta específica sobre as fontes encontradas…',
     resultRelevanceHigh: 'Relevância alta',
     resultRelevanceMedium: 'Relevância média',
     resultRelevanceLow: 'Relevância baixa',

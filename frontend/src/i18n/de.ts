@@ -971,6 +971,8 @@ export const de = {
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     ask: 'Fragen',
+    question: 'Frage zu diesen Ergebnissen',
+    questionPlaceholder: 'Stellen Sie eine konkrete Frage zu den gefundenen Quellen…',
     resultRelevanceHigh: 'Hohe Relevanz',
     resultRelevanceMedium: 'Mittlere Relevanz',
     resultRelevanceLow: 'Geringe Relevanz',

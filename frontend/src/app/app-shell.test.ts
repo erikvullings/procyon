@@ -4626,7 +4626,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('opens Ask immediately and offers to include an unenrolled active folder', async () => {
+  it('opens Knowledge in Search first and offers to include an unenrolled folder', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await client.createLlmProfile({
       name: 'Local profile',
@@ -4670,7 +4670,7 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull(),
+      expect(root.querySelector('.fm-knowledge-workspace.is-search')).not.toBeNull(),
     );
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
@@ -4694,6 +4694,58 @@ describe('AppShell', () => {
     includeButton?.click();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
+  });
+
+  it('focuses the existing Knowledge tab instead of creating another Ask tab', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'ask-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    (await toolbarButton('Ask your files')).click();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-workspace.is-search')).not.toBeNull(),
+    );
+    const tabs = (): number =>
+      [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
+        tab.textContent?.includes('Semantic Search'),
+      ).length;
+    expect(tabs()).toBe(1);
+
+    const otherPane = [...root.querySelectorAll<HTMLElement>('.fm-workspace-pane')].find(
+      (pane) => pane.querySelector('.fm-knowledge-search') === null,
+    );
+    otherPane?.click();
+    await vi.waitFor(() => expect(otherPane?.dataset.active).toBe('true'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(tabs()).toBe(1));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLElement>('.fm-workspace-pane:has(.fm-knowledge-search)')?.dataset
+          .active,
+      ).toBe('true'),
+    );
   });
 
   it('renders settings content when the native disclosure state opens', async () => {

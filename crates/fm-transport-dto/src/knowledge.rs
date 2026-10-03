@@ -707,6 +707,9 @@ pub struct GenerateKnowledgeAnswerRequestDto {
     pub workspace_id: Uuid,
     /// Fingerprint of the exact evidence set returned by the search.
     pub evidence_fingerprint: String,
+    /// Answer-only question about that evidence; never used for retrieval.
+    #[serde(default)]
+    pub question: Option<String>,
     /// Explicitly selected saved generation profile.
     pub profile_id: Uuid,
     /// Explicit opt-in to distinguishable model-only knowledge.

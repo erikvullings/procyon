@@ -20,7 +20,6 @@ interface MountOptions {
   readonly currentFolder?: { providerId: string; uri: string };
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
-  readonly initialMode?: 'search' | 'ask';
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
@@ -36,7 +35,6 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         currentFolder: options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
-        initialMode: options.initialMode,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
       }),
@@ -89,6 +87,7 @@ async function ready(): Promise<void> {
 
 async function search(): Promise<void> {
   submitSearch();
+  await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search-spinner')).toBeNull());
   await vi.waitFor(() =>
     expect(root.querySelector('.fm-knowledge-results-heading[role="status"]')).not.toBeNull(),
   );
@@ -115,16 +114,21 @@ afterEach(() => {
 });
 
 describe('KnowledgeSearchDialog (task 0206)', () => {
-  it('opens Ask as an aligned answer and evidence workspace', async () => {
-    mount({ initialMode: 'ask' });
+  it('opens Search first and offers Ask only after results are inspected', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
 
     await ready();
 
-    expect(button('Ask').getAttribute('aria-pressed')).toBe('true');
-    expect(button('Search').getAttribute('aria-pressed')).toBe('false');
+    expect(button('Search').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Ask').disabled).toBe(true);
+    await search();
+    openAsk();
     expect(root.querySelector('.fm-knowledge-workspace.is-ask')).not.toBeNull();
     expect(root.querySelector('.fm-knowledge-answer-panel')).not.toBeNull();
     expect(root.querySelector('.fm-knowledge-evidence-panel')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-search-summary')?.textContent).toContain('retrieval');
   });
 
   it('uses a fixed filter-style toolbar and moves search settings into a modal', async () => {
@@ -1257,8 +1261,8 @@ describe('KnowledgeSearchDialog DSL scopes (task 0206)', () => {
     type(dsl(), 'about: retrieval');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-scope-issues')).toBeNull());
-    submitSearch();
-    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    await search();
+    expect(execute).toHaveBeenCalledOnce();
     expect(root.querySelector('.fm-knowledge-scope-issues')).toBeNull();
   });
 });
@@ -1627,7 +1631,21 @@ function profileSelect(): HTMLSelectElement {
   return element;
 }
 
+function question(): HTMLTextAreaElement {
+  const field = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-question');
+  if (field === null) throw new Error('separate answer question not rendered');
+  return field;
+}
+
+function openAsk(askedQuestion = 'How does this work?'): void {
+  button('Ask').click();
+  m.redraw.sync();
+  const field = question();
+  if (field.value === '') type(field, askedQuestion);
+}
+
 function selectProfile(profileId: string): void {
+  openAsk();
   const select = profileSelect();
   select.value = profileId;
   select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1684,21 +1702,28 @@ async function answersReady(): Promise<void> {
 }
 
 describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
-  it('retrieves once and answers automatically in Ask mode', async () => {
+  it('retrieves once and answers only after an explicit question', async () => {
     const client = new MockFileManagerClient();
-    await configureProfile(client);
+    const profile = await configureProfile(client);
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');
     const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
-    mount({ client, initialSubject: 'retrieval', initialMode: 'ask' });
+    mount({ client, initialSubject: 'retrieval' });
     await answersReady();
 
-    submitSearch();
-
-    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    await search();
     expect(execute).toHaveBeenCalledOnce();
+    expect(generate).not.toHaveBeenCalled();
+    openAsk('What do these sources say?');
+    selectProfile(profile.id);
+    await generateAnswer();
+    expect(generate).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(generate.mock.calls[0]?.[0]?.question).toBe('What do these sources say?');
     expect(root.querySelector('.fm-knowledge-answer-markdown')?.textContent).toContain(
       'Answered from',
     );
+    button('Search').click();
+    m.redraw.sync();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
@@ -1742,6 +1767,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     await search();
 
+    openAsk();
     expect(answerSection()).not.toBeNull();
     expect(root.querySelector('#fm-knowledge-answer-profile')).toBeNull();
     expect(root.textContent).toContain('No generation profile is configured');
@@ -1760,6 +1786,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     await search();
 
+    openAsk();
     expect(answerSection()).not.toBeNull();
     expect(root.textContent).not.toContain('Search never generates an answer');
   });
@@ -1770,6 +1797,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     mount({ client, initialSubject: 'retrieval' });
     await answersReady();
     await search();
+    openAsk();
 
     expect(profileSelect().value).toBe('');
     expect(button('Generate answer').disabled).toBe(true);
@@ -1806,6 +1834,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(generate).toHaveBeenCalledOnce();
     const request = generate.mock.calls[0]?.[0];
     expect(request?.evidenceFingerprint).toBe(displayedFingerprint);
+    expect(request?.question).toBe('How does this work?');
     expect(request?.workspaceId).toBe(workspaceId);
     expect(request?.profileId).toBe(profile.id);
     expect(request?.allowModelKnowledge).toBe(false);
@@ -1816,6 +1845,32 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(root.querySelector('.fm-knowledge-answer-markdown')?.textContent).toContain(
       'Answered from',
     );
+  });
+
+  it('preserves results across view switches and invalidates the answer when the question changes', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    await generateAnswer();
+
+    button('Search').click();
+    m.redraw.sync();
+    expect(subjects().value).toBe('retrieval');
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+    openAsk();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).not.toBeNull();
+    type(question(), 'What changed?');
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+    await generateAnswer();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1]?.[0]?.question).toBe('What changed?');
   });
 
   it('carries answer-only constraints without adding them to retrieval', async () => {
@@ -1891,7 +1946,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     selectProfile(cloud.id);
     expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
-      'sends the evidence above',
+      'sends the inspected evidence',
     );
   });
 
@@ -1915,6 +1970,8 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
       ),
     );
     expect(execute).not.toHaveBeenCalled();
+    button('Search').click();
+    m.redraw.sync();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
@@ -1959,6 +2016,8 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
         'The answer could not be generated.',
       ),
     );
+    button('Search').click();
+    m.redraw.sync();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
@@ -1972,9 +2031,12 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     await search();
 
+    openAsk();
     expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
       'Generation profiles could not be loaded.',
     );
+    button('Search').click();
+    m.redraw.sync();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
     expect(root.querySelector('#fm-knowledge-answer-profile')).toBeNull();
   });
@@ -1989,6 +2051,8 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     await generateAnswer();
     expect(root.querySelector('.fm-knowledge-answer-markdown')).not.toBeNull();
 
+    button('Search').click();
+    m.redraw.sync();
     type(subjects(), 'fusion');
 
     expect(answerSection()).toBeNull();
@@ -2004,8 +2068,11 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     selectProfile(profile.id);
     await generateAnswer();
 
+    button('Search').click();
+    m.redraw.sync();
     await search();
 
+    openAsk();
     await vi.waitFor(() =>
       expect(root.querySelector('#fm-knowledge-answer-profile')).not.toBeNull(),
     );
@@ -2024,6 +2091,8 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     button('Generate answer').click();
     m.redraw.sync();
+    button('Search').click();
+    m.redraw.sync();
     type(subjects(), 'fusion');
     pending.resolve(answerFixture('stale-fingerprint'));
     await Promise.resolve();
@@ -2031,6 +2100,30 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
     expect(root.textContent).not.toContain('Grounded answer');
+  });
+
+  it('cancels an in-flight answer when only the question changes', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await configureProfile(client);
+    const pending = deferred<KnowledgeAnswer>();
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    selectProfile(profile.id);
+    let signal: AbortSignal | undefined;
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation((_request, current) => {
+      signal = current;
+      return pending.promise;
+    });
+    button('Generate answer').click();
+    m.redraw.sync();
+    type(question(), 'Another question?');
+    expect(signal?.aborted).toBe(true);
+    pending.resolve(answerFixture('stale-fingerprint'));
+    await Promise.resolve();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
   it('discards an answer that lands after the dialog was closed and reopened', async () => {
@@ -2219,7 +2312,11 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     await answersReady();
     await search();
 
+    openAsk();
     expect(answerSection()?.getAttribute('aria-label')).toBe('Optional knowledge answer');
+    expect(root.querySelector('label[for="fm-knowledge-question"]')?.textContent).toBe(
+      'Question about these results',
+    );
     expect(root.querySelector('label[for="fm-knowledge-answer-profile"]')?.textContent).toContain(
       'Generation profile',
     );

@@ -959,6 +959,8 @@ export const nl = {
     reasonRelatedTerm: 'Verwante term',
     search: 'Zoeken',
     ask: 'Vragen',
+    question: 'Vraag over deze resultaten',
+    questionPlaceholder: 'Stel een specifieke vraag over de gevonden bronnen…',
     searching: 'Bezig met zoeken…',
     cancel: 'Zoeken annuleren',
     cancelled: 'De zoekopdracht is geannuleerd.',
@@ -1028,17 +1030,17 @@ export const nl = {
     answerRegion: 'Optioneel kennisantwoord',
     answerHeading: 'Optioneel antwoord',
     answerHint:
-      'Een antwoord wordt alleen uit het bewijs hierboven gegenereerd. Het start nooit een nieuwe zoekopdracht; gebruik Zoeken om opnieuw op te halen.',
+      'Stel een vraag over de bekeken resultaten. Antwoorden start geen nieuwe zoekopdracht; ga naar Zoeken om de bronnen te bekijken of te vernieuwen.',
     answerProfile: 'Generatieprofiel',
     answerProfilePlaceholder: 'Kies een generatieprofiel…',
     answerNoProfiles:
-      'Er is geen generatieprofiel ingesteld, dus er kan geen antwoord worden gegenereerd. De zoekopdracht hierboven is compleet.',
+      'Er is geen generatieprofiel ingesteld, dus er kan geen antwoord worden gegenereerd. Je zoekresultaten blijven beschikbaar.',
     answerProfilesFailed:
-      'Generatieprofielen konden niet worden geladen. De zoekopdracht hierboven is compleet zonder antwoord.',
+      'Generatieprofielen konden niet worden geladen. Je zoekresultaten blijven beschikbaar.',
     answerLocalEndpoint:
-      '{profile} draait op een lokaal eindpunt, dus het bewijs hierboven blijft op dit apparaat.',
+      '{profile} draait op een lokaal eindpunt, dus het bekeken bewijs blijft op dit apparaat.',
     answerCloudEndpoint:
-      '{profile} is een cloud-eindpunt: genereren stuurt het bewijs hierboven daarheen. Je host handhaaft deze toestemming.',
+      '{profile} is een cloud-eindpunt: genereren stuurt het bekeken bewijs daarheen. Je host handhaaft deze toestemming.',
     allowModelKnowledge: 'Algemene modelkennis toestaan, duidelijk gelabeld',
     modelKnowledgeNotice:
       'Uitspraken uit algemene modelkennis worden niet ondersteund door de citaten hieronder.',
@@ -1051,7 +1053,8 @@ export const nl = {
     answerFailed: 'Het antwoord kon niet worden gegenereerd.',
     answerRefreshRequired:
       'Het geïnspecteerde bewijs is niet meer beschikbaar. Voer opnieuw Zoeken uit en genereer daarna het antwoord.',
-    answerPlaceholder: 'Kies een profiel en genereer een antwoord uit het bewijs hierboven.',
+    answerPlaceholder:
+      'Kies een profiel, stel een vraag en genereer een antwoord uit de bekeken resultaten.',
     answerProfileUsed: 'Beantwoord door {profile} · {locality}',
     answerLocalityLoopback: 'lokaal eindpunt',
     answerLocalityCloud: 'cloud-eindpunt',

@@ -10574,6 +10574,13 @@
             "format": "uuid",
             "description": "Explicitly selected saved generation profile."
           },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Answer-only question about that evidence; never used for retrieval."
+          },
           "requestId": {
             "type": "string",
             "format": "uuid",

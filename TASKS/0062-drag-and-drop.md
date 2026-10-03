@@ -116,6 +116,15 @@ from Finder/Explorer) and §33 step 10.
   appear in a compact, dismissible overlay instead of adding an undismissable row below the
   workspace. Escape cancels an in-app pointer drag before native handoff; after handoff the OS
   owns the native drag session.
+- 2026-10-03 Copilot: The user reports using drag and drop extensively. This confirms the feature
+  is available in ordinary use, but does not specify the acceptance criterion's bidirectional
+  Finder/Explorer native tests on each platform. The macOS native drag-out scrolling retest was
+  recorded above; the earlier Inkscape drag-out failure remains unconfirmed. Record the native
+  Finder and Explorer checks explicitly before marking this task done.
+- 2026-10-03 release owner: Confirmed macOS Finder drag-in and drag-out. On a drop into Finder,
+  the pointer displayed the "no operation" icon even though the file was copied. This incorrect
+  native feedback must be resolved before macOS drag-out is considered verified; Windows Explorer
+  bidirectional verification remains outstanding.
 - 2026-10-04 Copilot: Wired the directory-tree sidebar into the existing in-app drop validation,
   operation controller, platform modifier mapping, and desktop pointer target registry. Tree
   folders can move/copy to other tree folders, table directories and tabs; table selections can

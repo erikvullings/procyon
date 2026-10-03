@@ -1199,7 +1199,7 @@ struct GeneratedRagResponse {
     answer: String,
 }
 
-fn parse_generated_answer(value: &str) -> Result<String, RagError> {
+pub(crate) fn parse_generated_answer(value: &str) -> Result<String, RagError> {
     if !value.trim_start().starts_with('{') {
         return Ok(value.to_owned());
     }
