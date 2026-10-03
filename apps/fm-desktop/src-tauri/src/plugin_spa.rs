@@ -1534,8 +1534,9 @@ mod tests {
     }
 
     #[test]
-    fn bundled_monaco_editor_and_worker_are_within_asset_budget() {
+    fn bundled_tree_editor_has_no_monaco_and_is_within_asset_budget() {
         let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../plugins/svgo");
+        assert!(!package.join("dist/monaco").exists());
         let entrypoint = std::fs::read_to_string(package.join("dist/index.html")).unwrap();
         let bundle = std::fs::read_dir(package.join("dist/assets"))
             .unwrap()
@@ -1543,22 +1544,17 @@ mod tests {
             .find(|name| name.starts_with("index-") && name.ends_with(".js"))
             .expect("packaged SPA entrypoint missing");
         assert!(entrypoint.contains(&bundle));
-        for asset in [
-            "/dist/monaco/vs/editor/editor.main.js",
-            "/dist/monaco/vs/language/typescript/tsWorker.js",
-            "/dist/monaco/vs/editor/editor.main.css",
-            "/dist/monaco/vs/base/browser/ui/codicons/codicon/codicon.ttf",
-            "/dist/favicon.ico",
-            "/dist/site.webmanifest",
-        ] {
+        for asset in ["/dist/favicon.ico", "/dist/site.webmanifest"] {
             let (bytes, _) = read_package_asset(&package, asset).unwrap();
             assert!(!bytes.is_empty(), "{asset}");
             assert!(bytes.len() as u64 <= MAX_ASSET_BYTES);
         }
         let (script, _) = read_package_asset(&package, &format!("/dist/assets/{bundle}")).unwrap();
         assert!(!script.is_empty());
+        assert!(!String::from_utf8(script).unwrap().contains("/monaco/"));
         let mut pending = vec![package.join("dist")];
         let mut count = 0;
+        let mut total_bytes = 0;
         while let Some(directory) = pending.pop() {
             for entry in std::fs::read_dir(directory).unwrap() {
                 let entry = entry.unwrap();
@@ -1573,13 +1569,16 @@ mod tests {
                     .to_string_lossy()
                     .replace('\\', "/");
                 let requested = format!("/{relative}");
-                assert!(
-                    read_package_asset(&package, &requested).is_ok(),
-                    "packaged asset unavailable: {requested}"
-                );
+                let (bytes, _) = read_package_asset(&package, &requested)
+                    .unwrap_or_else(|_| panic!("packaged asset unavailable: {requested}"));
+                total_bytes += bytes.len();
                 count += 1;
             }
         }
-        assert!(count >= 100, "Monaco worker assets were not bundled");
+        assert!(count >= 5, "packaged SPA assets missing");
+        assert!(
+            total_bytes < 2 * 1024 * 1024,
+            "Tree-only package grew beyond 2 MiB"
+        );
     }
 }

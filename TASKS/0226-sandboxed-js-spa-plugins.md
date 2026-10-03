@@ -112,3 +112,7 @@ second plugin system.
   disables that transition and defers Monaco creation until Code is shown. WebKit resize,
   selection, and typing checks pass, but the reported persistent native WKWebView caret and
   glyph-painting fault still requires confirmation in the Tauri child WebView.
+- 2026-10-03 Copilot: At the user's request, the Procyon-specific SVGO panel now offers
+  Tree editing and SVG preview only; Code and all packaged Monaco assets are removed.
+  Standalone SVGO retains Code. Tree edits still update the preview and require an explicit
+  Save. The native Monaco failure is bypassed rather than diagnosed or fixed.

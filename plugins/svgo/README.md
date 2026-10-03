@@ -1,9 +1,9 @@
 # SVGO panel
 
 The packaged `dist/` is built from the `svgo-procyon-save` branch of
-`erikvullings/svgo` at commit `5f18c7440d50a0f7362dfe7200a5451a0c893244`
-with `pnpm build:procyon`. It includes local Monaco resources; no network or
-general filesystem capability is granted.
+`erikvullings/svgo` at commit `f31e11146bd27b82d8ac465bb2898e5def8506a2`
+with `pnpm build:procyon`. The Procyon build is Tree-only and omits Monaco;
+no network or general filesystem capability is granted.
 
 Enable **SVGO** in plugin settings, position the active pane's cursor on an SVG
 file, and use **Cmd+Shift+F4** on macOS (**Ctrl+Shift+F4** elsewhere) or the
@@ -13,15 +13,13 @@ live editor tab cannot be dragged to another pane. Close it with its tab-strip
 close button or **Cmd+W** (Ctrl+W elsewhere).
 It starts in Tree view with a closed menu and an even vertical stack: the tree
 occupies the top half and the SVG preview the bottom half. The Properties panel
-starts collapsed and can be expanded from the side rail; Tree and Code are
-selected from the menu. Save is the primary button, and Copy is in the menu;
-File → Open, the Source SVG row, and the in-app title are absent in the
-Procyon build. The toolbar and preview work area match Procyon's status-bar
-surface; the SVG canvas uses a neutral contrasting surface without a persistent
-border. The split handle keeps its full draggable area.
-Code and Tree have a small vertical inset. The Code editor uses a narrower
-gutter and starts Monaco only when Code is first shown, so it can measure a
-visible editor rather than the hidden Tree-first container.
+starts collapsed and can be expanded from the side rail. Save is the primary
+button, and Copy is in the menu; File → Open, the Source SVG row, and the
+in-app title are absent in the Procyon build. The toolbar and preview work
+area match Procyon's status-bar surface; the SVG canvas uses a neutral
+contrasting surface without a persistent border. The split handle keeps its
+full draggable area.
+Tree has a small vertical inset. The standalone SVGO app retains its Code view.
 Save writes only the originally opened file and rejects revisions that changed
 outside the panel. A successful atomic Save keeps the source pane's cursor on
 the SVG when its filesystem entry identity changes. Download remains available
