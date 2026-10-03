@@ -40,7 +40,8 @@ sanitization.
 - **macOS native behavior is not smoke-tested.** Source-level checks and unit tests do not
   prove child WKWebView positioning, custom-scheme, CSP, clipboard or Save-path behavior.
   A native denial check must also confirm a child cannot invoke updater or other Tauri plugin
-  commands; the WebView-scoped ACL fix currently has only a configuration regression test.
+  commands; the WebView-scoped ACL fix has configuration and resolved-command regression
+  tests, but not a native child-WebView invocation test.
 - **Windows and Linux are not smoke-tested.** Source-level checks and desktop unit tests do
   not prove WebView2/WebKitGTK custom-scheme, CSP, bridge, or worker behavior. A Windows
   cross-build was blocked by the local `aws-lc-sys` toolchain.
