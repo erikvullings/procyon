@@ -848,6 +848,34 @@ mod tests {
         url.parse().expect("valid url")
     }
 
+    #[test]
+    fn native_permissions_deny_plugin_child_in_trusted_window() {
+        let mut context = build_context::<tauri::test::MockRuntime>();
+        let authority = context.runtime_authority_mut();
+        let origin = tauri::ipc::Origin::Local;
+        for command in [
+            "plugin:updater|check",
+            "plugin:updater|download_and_install",
+            "plugin:process|restart",
+            "plugin:opener|open_url",
+        ] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &origin)
+                    .is_some(),
+                "{command} should remain available to the trusted main WebView"
+            );
+            for window in ["main", "workspace-test"] {
+                assert!(
+                    authority
+                        .resolve_access(command, window, "plugin-spa-test", &origin)
+                        .is_none(),
+                    "{command} should be denied to a child in {window}"
+                );
+            }
+        }
+    }
+
     /// Smoke test (task 0015's acceptance criteria): the app starts, on a
     /// headless `MockRuntime` (no real window), and `getRuntimeCapabilities`
     /// reports `runtime: "tauri"`.
