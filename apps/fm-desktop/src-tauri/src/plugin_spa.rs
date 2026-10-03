@@ -945,14 +945,23 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                 if let Err(error) = window.close() {
                     tracing::warn!(%error, "could not close reloaded plugin panel");
                 }
-            } else if let Err(error) = window.eval(&load_script) {
-                tracing::warn!(%error, "could not deliver selected SVG to plugin panel");
-                window
-                    .app_handle()
-                    .state::<Arc<PanelRegistry>>()
-                    .release(window.label());
-                if let Err(error) = window.close() {
-                    tracing::warn!(%error, "could not close failed plugin panel");
+            } else {
+                if let Err(error) = window.eval(&load_script) {
+                    tracing::warn!(%error, "could not deliver selected SVG to plugin panel");
+                    window
+                        .app_handle()
+                        .state::<Arc<PanelRegistry>>()
+                        .release(window.label());
+                    if let Err(error) = window.close() {
+                        tracing::warn!(%error, "could not close failed plugin panel");
+                    }
+                } else {
+                    #[cfg(feature = "native-spa-smoke")]
+                    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
+                        && let Err(error) = window.eval(include_str!("native_spa_smoke.js"))
+                    {
+                        tracing::error!(%error, "native SPA smoke script injection failed");
+                    }
                 }
             }
         });

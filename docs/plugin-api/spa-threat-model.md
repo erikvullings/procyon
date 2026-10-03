@@ -37,14 +37,13 @@ sanitization.
   independently of the selected-file bridge. The user authorized both grants for SVGO; other
   panels without either grant remain unavailable on macOS. This is not a confined clipboard
   bridge, and the host cannot apply per-operation limits or audit individual clipboard accesses.
-- **macOS native behavior is not smoke-tested.** Source-level checks and unit tests do not
-  prove child WKWebView positioning, custom-scheme, CSP, clipboard or Save-path behavior.
-  A native denial check must also confirm a child cannot invoke updater or other Tauri plugin
-  commands; the WebView-scoped ACL fix has configuration and resolved-command regression
-  tests, but not a native child-WebView invocation test.
-- **Windows and Linux are not smoke-tested.** Source-level checks and desktop unit tests do
-  not prove WebView2/WebKitGTK custom-scheme, CSP, bridge, or worker behavior. A Windows
-  cross-build was blocked by the local `aws-lc-sys` toolchain.
+- **Native smoke coverage is partial.** The feature-gated `native-spa-smoke` build opens the
+  bundled SVGO panel in a real child WebView, waits for its UI, invokes the updater command
+  and requires an ACL denial, then saves a disposable SVG through the revision-checked bridge.
+  This passed locally on macOS; CI runs the same check on macOS, Windows, and Linux, but
+  Windows/Linux results are not yet available. It exercises a test build, not the installed
+  package or cursor/shortcut path, and does not establish clipboard, CSP/navigation, crash,
+  or worker isolation. The existing packaged-app check only verifies launch.
 - **Crash cleanup is not immediate.** Tauri has no child-WebView crash callback here; the
   parent-window close event and periodic reconciliation are available, but a crashed child
   whose parent remains open may retain an origin slot. Do not claim the crash teardown

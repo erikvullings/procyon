@@ -69,6 +69,9 @@ fn build_context<R: tauri::Runtime>() -> tauri::Context<R> {
     tauri::generate_context!()
 }
 
+#[cfg(feature = "native-spa-smoke")]
+mod native_spa_smoke;
+
 /// Builds and runs the desktop application.
 ///
 /// No Axum server is started in-process to reuse HTTP (spec §11) — the
@@ -83,6 +86,8 @@ pub fn run() {
                 && plugin_spa::trusted_invoke_label(webview.label())
             {
                 plugin_spa::close_panels_for_window(webview.app_handle(), webview.window().label());
+                #[cfg(feature = "native-spa-smoke")]
+                native_spa_smoke::start_once(webview.app_handle().clone());
             }
         })
         .setup(|app| {
@@ -175,6 +180,15 @@ pub fn run() {
             }
             if let Some(resource_dir) = resource_directory {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
+            }
+            #[cfg(feature = "native-spa-smoke")]
+            if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                let plugins = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS")
+                    .ok_or_else(|| std::io::Error::other("smoke plugin directory is missing"))?;
+                service.set_bundled_plugins_directory(plugins.into());
+                service
+                    .set_plugin_enabled("procyon.svgo".to_owned(), true)
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
             }
             let service = Arc::new(service);
             let semantic_ocr_shutdown = CancellationToken::new();
@@ -521,7 +535,17 @@ pub fn run() {
                 }
             }
         })
-        .build(build_context())
+        .build({
+            let context = build_context();
+            #[cfg(feature = "native-spa-smoke")]
+            let mut context = context;
+            #[cfg(feature = "native-spa-smoke")]
+            if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                context.config_mut().identifier =
+                    "nl.erikvullings.procyon.native-spa-smoke".to_owned();
+            }
+            context
+        })
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
             if matches!(

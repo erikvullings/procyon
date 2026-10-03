@@ -133,3 +133,6 @@ second plugin system.
   plugin permissions also applied to child SPA WebViews, bypassing the app-command
   label guard. The desktop capability is now scoped to trusted WebView labels
   instead. Native denial and platform smoke tests remain release gates.
+  A feature-gated Tauri smoke harness now exercises a real child WebView's bundled SVGO load,
+  updater-command denial and bridge Save on CI's three desktop platforms; the macOS developer
+  run passed, but Windows/Linux CI and the remaining native/release gates are outstanding.
