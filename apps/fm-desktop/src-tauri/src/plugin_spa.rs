@@ -505,6 +505,11 @@ enum BridgeRequest {
         #[serde(rename = "loadToken")]
         load_token: String,
     },
+    ClosePanel {
+        version: u8,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
 }
 
 impl BridgeRequest {
@@ -524,6 +529,10 @@ impl BridgeRequest {
                 version,
                 load_token,
                 ..
+            }
+            | Self::ClosePanel {
+                version,
+                load_token,
             } => (*version, load_token),
         }
     }
@@ -856,6 +865,7 @@ async fn bridge(
     session: Arc<PanelSession>,
     body: Vec<u8>,
     origin: String,
+    notify_close: impl FnOnce(&PanelSession) -> Result<(), PanelError>,
 ) -> Response<Vec<u8>> {
     let request = match parse_bridge(&body, &session.token) {
         Ok(request) => request,
@@ -897,6 +907,7 @@ async fn bridge(
             None,
             session.acknowledge_heartbeat(&challenge),
         ),
+        BridgeRequest::ClosePanel { .. } => ("close-result", None, notify_close(&session)),
     };
     bridge_result(result, kind, &session.token, sequence, &origin)
 }
@@ -955,7 +966,8 @@ fn bootstrap(token: &str, theme: PanelTheme, settings: Option<&SvgoSettings>) ->
                   }});
                   result = await response.json();
                 }} catch (_) {{
-                  result = {{ type: 'save-result', success: false, error: 'bridge unavailable', loadToken }};
+                  const type = message.type === 'close-panel' ? 'close-result' : 'save-result';
+                  result = {{ type, success: false, error: 'bridge unavailable', loadToken }};
                 }}
                 window.postMessage(result, '*');
               }}
@@ -1071,7 +1083,24 @@ pub(crate) fn register_schemes<R: Runtime>(
                     }
                     let body = request.into_body();
                     tauri::async_runtime::spawn(async move {
-                        responder.respond(bridge(service, session, body, origin).await);
+                        responder.respond(bridge(service, session, body, origin, |session| {
+                            if session.shutdown.is_cancelled() {
+                                return Err(PanelError::Unavailable);
+                            }
+                            let webview = app
+                                .get_webview(&session.owner_window)
+                                .ok_or(PanelError::Unavailable)?;
+                            let label = serde_json::to_string(&session.label)
+                                .expect("panel label is serializable");
+                            webview
+                                .eval(format!(
+                                    "window.dispatchEvent(new CustomEvent('procyon:plugin-panel-close-requested', {{ detail: {{ label: {label} }} }}));"
+                                ))
+                                .map_err(|error| {
+                                    tracing::warn!(%error, "could not deliver plugin panel close request");
+                                    PanelError::Unavailable
+                                })
+                        }).await);
                     });
                 } else if request.method() == Method::GET {
                     let result = serve_asset(&service, &session, url.path(), &origin)
@@ -1590,6 +1619,7 @@ mod tests {
             forged,
             br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"test-token"}"#.to_vec(),
             panel_origin(0),
+            |_| Err(PanelError::Unavailable),
         )
         .await;
         assert_eq!(result.status(), StatusCode::FORBIDDEN);
@@ -1615,6 +1645,7 @@ mod tests {
             session,
             br#"{"version":1,"type":"save-svg","svg":"<svg id=\"saved\"/>","loadToken":"test-token"}"#.to_vec(),
             panel_origin(0),
+            |_| Err(PanelError::Unavailable),
         ).await;
         assert_eq!(result.status(), StatusCode::OK);
         assert_eq!(
@@ -1956,6 +1987,19 @@ mod tests {
     fn bridge_rejects_spoofed_or_malformed_requests() {
         let valid = br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"abc"}"#;
         assert!(parse_bridge(valid, "abc").is_ok());
+        let close = br#"{"version":1,"type":"close-panel","loadToken":"abc"}"#;
+        assert!(matches!(
+            parse_bridge(close, "abc"),
+            Ok(BridgeRequest::ClosePanel { .. })
+        ));
+        assert!(parse_bridge(close, "other").is_err());
+        assert!(
+            parse_bridge(
+                br#"{"version":1,"type":"close-panel","loadToken":"abc","label":"main"}"#,
+                "abc",
+            )
+            .is_err()
+        );
         assert!(parse_bridge(valid, "other").is_err());
         assert!(
             parse_bridge(
@@ -2113,6 +2157,7 @@ mod tests {
                 Arc::clone(&session),
                 body,
                 panel_origin(0),
+                |_| Err(PanelError::Unavailable),
             ))
         };
         assert_eq!(send(&settings, 2, false).status(), StatusCode::OK);
@@ -2131,7 +2176,6 @@ mod tests {
             service.plugin_panel_settings(SVGO_PLUGIN_ID),
             Some(settings)
         );
-
         let now = Instant::now();
         let first = session.next_heartbeat(now).unwrap().unwrap();
         assert_eq!(
@@ -2162,6 +2206,7 @@ mod tests {
                 }))
                 .unwrap(),
                 panel_origin(0),
+                |_| Err(PanelError::Unavailable),
             ))
         };
         assert_eq!(heartbeat(&first).status(), StatusCode::BAD_REQUEST);
@@ -2199,6 +2244,27 @@ mod tests {
             session
                 .next_heartbeat(session.created + VISIBLE_HEARTBEAT_TIMEOUT)
                 .is_err()
+        );
+        let close = |token| {
+            tauri::async_runtime::block_on(bridge(
+                Arc::clone(&service),
+                Arc::clone(&session),
+                format!(r#"{{"type":"close-panel","version":1,"loadToken":"{token}"}}"#)
+                    .into_bytes(),
+                panel_origin(0),
+                |authenticated| {
+                    assert_eq!(authenticated.label, "plugin-spa-test");
+                    assert_eq!(authenticated.owner_window, "main");
+                    Ok(())
+                },
+            ))
+        };
+        assert_eq!(close("wrong").status(), StatusCode::FORBIDDEN);
+        let accepted = close("test-token");
+        assert_eq!(accepted.status(), StatusCode::OK);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(accepted.body()).unwrap()["type"],
+            "close-result"
         );
     }
 

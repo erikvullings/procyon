@@ -599,6 +599,12 @@ export function initializeGlobalHandlers() {
             : "Failed to save editor settings.";
         }
         m.redraw();
+      } else if (message.type === "close-result") {
+        if (!message.success) setSaveStatus({
+          kind: "error",
+          message: "error" in message && message.error
+            ? `Close failed: ${message.error}` : "Close failed.",
+        });
       } else {
         setSaveStatus(message.success
           ? { kind: "success", message: "SVG saved." }
@@ -611,6 +617,18 @@ export function initializeGlobalHandlers() {
       }
     });
     window.addEventListener("keydown", (e) => {
+      const isMac = navigator.platform.toUpperCase().includes("MAC");
+      if (
+        (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "w"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        procyonPlugin.postMessage({ type: "close-panel" });
+        return;
+      }
       if (
         (e.metaKey || e.ctrlKey) &&
         !e.altKey &&

@@ -198,3 +198,20 @@ second plugin system.
   acknowledged by the host if the whole app crashes. No synchronous crash-durable settings
   write is required. The bounded final settings flush on normal tab close, plugin disable,
   trusted-app reload and parent-window close remains required; see the threat model.
+- 2026-10-04 Copilot: Fixed SVGO Cmd+W / Ctrl+W while focus is in its child WebView.
+  `plugin-sources/svgo/src/ui.ts` sends a close request through the existing
+  authenticated bridge in `apps/fm-desktop/src-tauri/src/plugin_spa.rs`; the bridge
+  delivers only that session's host-allocated label to its owning trusted WebView.
+  `frontend/src/features/plugins/plugin-panel-host.ts` accepts the event only for
+  the active matching child, and `frontend/src/app/app-shell.ts` uses the normal
+  tab controller so close requests retain tab state, settings flush and existing
+  unsaved-work behavior. Child, bridge, and parent regressions cover the separate
+  event seams, including spoofed tokens/fields and hidden or stale labels. Native
+  macOS shortcut confirmation remains outstanding: the feature-gated smoke opens
+  a child outside the tab controller and cannot check tab closure. Task stays open.
+- 2026-10-05: Rebased the child-close fix onto main after #93, #95, #97, #99
+  and #103. The close request coexists with #97's heartbeat and bounded
+  host-driven teardown, and retains #93's local Save lock. #103 now regenerates
+  SVGO assets from source during packaging, so the generated dist changes were
+  removed from this PR. Focused child, bridge, and trusted-tab tests pass;
+  installed native focus/shortcut closure still needs manual confirmation.

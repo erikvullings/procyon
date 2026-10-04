@@ -11,6 +11,7 @@ export interface PluginPanelHostAttrs {
   readonly title: string;
   readonly active: boolean;
   readonly onError: (error: unknown) => void;
+  readonly onCloseRequest: () => void;
 }
 
 export interface PluginPaneState extends PluginPanelHostAttrs {
@@ -39,6 +40,20 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
   let generation = 0;
   let lastBounds: PluginPanelBounds | undefined;
   let attrs: PluginPaneState;
+
+  const closeRequested = (event: Event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (
+      label !== undefined &&
+      attrs.active &&
+      typeof detail === 'object' &&
+      detail !== null &&
+      'label' in detail &&
+      detail.label === label
+    ) {
+      attrs.onCloseRequest();
+    }
+  };
 
   const syncTheme = () => {
     const theme = resolvedTheme();
@@ -141,6 +156,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             }
             window.addEventListener('resize', reposition);
             window.addEventListener('scroll', reposition, true);
+            window.addEventListener('procyon:plugin-panel-close-requested', closeRequested);
             reposition();
           },
           onupdate: () => {
@@ -156,6 +172,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             colorScheme?.removeEventListener('change', syncTheme);
             window.removeEventListener('resize', reposition);
             window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('procyon:plugin-panel-close-requested', closeRequested);
             if (label !== undefined) {
               void attrs.client.closePluginPanel(label).catch((error: unknown) => {
                 console.warn('Could not close plugin panel', error);

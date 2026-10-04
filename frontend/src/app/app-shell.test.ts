@@ -1324,12 +1324,40 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', true));
     expect(open).toHaveBeenCalledOnce();
 
-    document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }),
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-another-window' },
+      }),
+    );
+    expect(close).not.toHaveBeenCalled();
+    listingTab?.click();
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-plugin-panel-host')?.getAttribute('data-visible')).toBe(
+        'false',
+      ),
+    );
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
+    );
+    expect(close).not.toHaveBeenCalled();
+    pluginTab?.click();
+    await vi.waitFor(() => expect(visible).toHaveBeenLastCalledWith('plugin-spa-test', true));
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
     );
     await vi.waitFor(() => expect(close).toHaveBeenCalledWith('plugin-spa-test'));
     await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
     expect(opposite?.querySelector('.fm-plugin-panel-host')).toBeNull();
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
+    );
+    expect(close).toHaveBeenCalledOnce();
 
     directoryRowNamed(source, '日本語.txt')?.click();
     await vi.waitFor(() => expect(source?.getAttribute('data-active')).toBe('true'));
@@ -1346,10 +1374,32 @@ describe('AppShell', () => {
       ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
     window.dispatchEvent(new Event('resize'));
     await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
+    expect(opposite?.querySelector('.fm-plugin-panel-host')).toBeNull();
+
+    directoryRowNamed(source, '日本語.txt')?.click();
+    await vi.waitFor(() => expect(source?.getAttribute('data-active')).toBe('true'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F4', metaKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-plugin-panel-surface')).not.toBeNull(),
+    );
+    const lastSurface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
+    if (lastSurface === undefined || lastSurface === null)
+      throw new Error('reopened plugin surface missing');
+    lastSurface.getBoundingClientRect = () =>
+      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(3));
     opposite
       ?.querySelector<HTMLElement>('.fm-pane-tab[aria-selected="true"] .fm-pane-tab-close')
       ?.click();
-    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(3));
     await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
   });
 

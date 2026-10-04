@@ -1515,6 +1515,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         location: entry.location,
         title: `${plugin.name}: ${entry.name}`,
         active: true,
+        onCloseRequest: () => {
+          if (
+            pluginByPane.get(target) === panel &&
+            workspace?.panesById[target]?.activeTabId === tabId
+          )
+            tabController.requestCloseTab(target, tabId);
+        },
         onError: (error) => {
           if (pluginByPane.get(target) !== panel) return;
           const text = document.createElement('span');
