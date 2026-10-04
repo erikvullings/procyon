@@ -57,6 +57,26 @@ describe('ContextMenu', () => {
     });
   });
 
+  it('uses the usual viewport edge placement when no native child exists', () => {
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: window.innerWidth - 10,
+          y: window.innerHeight - 10,
+          actions,
+          onClose: vi.fn(),
+          onInvoke: vi.fn(),
+        }),
+    });
+    const menu = root.querySelector<HTMLElement>('.fm-context-menu');
+    if (menu === null) throw new Error('menu missing');
+    menu.getBoundingClientRect = () => ({ width: 180, height: 120 }) as DOMRect;
+    m.redraw.sync();
+    expect(menu.style.left).toBe(`${window.innerWidth - 188}px`);
+    expect(menu.style.top).toBe(`${window.innerHeight - 128}px`);
+  });
+
   it('invokes available actions with Enter, disables unavailable ones, and returns focus', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
@@ -193,5 +213,60 @@ describe('ContextMenu', () => {
       .querySelector<HTMLElement>('[role="menu"]')
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     expect(document.activeElement?.textContent).toContain('Preview');
+  });
+
+  it('reports both measured menu surfaces and clears them on keyboard dismissal', async () => {
+    const onBoundsChange = vi.fn();
+    let open = true;
+    const openWith: AvailableAction = {
+      action: {
+        id: 'core.openWith',
+        title: 'Open With',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open,
+          x: 530,
+          y: 150,
+          actions: [openWith],
+          openWithSubmenu: {
+            load: async () => [{ name: 'Preview', path: '/Applications/Preview.app' }],
+            iconFor: async () => undefined,
+            onChoose: vi.fn(),
+            onOther: vi.fn(),
+          },
+          onBoundsChange,
+          onClose: () => {
+            open = false;
+          },
+          onInvoke: vi.fn(),
+        }),
+    });
+    const menu = root.querySelector<HTMLElement>(
+      '.fm-context-menu:not(.fm-context-menu-open-with)',
+    );
+    if (menu === null) throw new Error('menu missing');
+    const mainRect = { left: 530, top: 150, right: 620, bottom: 300, width: 90, height: 150 };
+    menu.getBoundingClientRect = () => mainRect as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    expect(onBoundsChange).toHaveBeenLastCalledWith([mainRect]);
+    root.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll('[role="menu"]')).toHaveLength(2));
+    const submenu = root.querySelector<HTMLElement>('.fm-context-menu-open-with');
+    if (submenu === null) throw new Error('submenu missing');
+    const submenuRect = { left: 620, top: 150, right: 820, bottom: 300, width: 200, height: 150 };
+    submenu.getBoundingClientRect = () => submenuRect as DOMRect;
+    m.redraw.sync();
+    expect(onBoundsChange).toHaveBeenLastCalledWith([mainRect, submenuRect]);
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    expect(onBoundsChange).toHaveBeenLastCalledWith([]);
   });
 });

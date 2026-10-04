@@ -1303,9 +1303,25 @@ describe('AppShell', () => {
     const surface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
     if (surface === undefined || surface === null) throw new Error('plugin surface missing');
     surface.getBoundingClientRect = () =>
-      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+      ({ left: 640, right: 960, top: 80, bottom: 480, width: 320, height: 400 }) as DOMRect;
     window.dispatchEvent(new Event('resize'));
     await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+
+    directoryRowNamed(source, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 530, clientY: 150 }),
+    );
+    m.redraw.sync();
+    const contextMenu = root.querySelector<HTMLElement>('.fm-context-menu');
+    if (contextMenu === null) throw new Error('directory context menu missing');
+    contextMenu.getBoundingClientRect = () =>
+      ({ left: 530, right: 720, top: 150, bottom: 300, width: 190, height: 150 }) as DOMRect;
+    m.redraw.sync();
+    await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', false));
+    expect(contextMenu.querySelector<HTMLButtonElement>('.fm-context-menu-item')).not.toBeNull();
+    contextMenu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() => expect(visible).toHaveBeenLastCalledWith('plugin-spa-test', true));
+    expect(close).not.toHaveBeenCalled();
 
     listingTab?.click();
     await vi.waitFor(() =>
@@ -1320,8 +1336,12 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', false));
     expect(close).not.toHaveBeenCalled();
     expect(opposite?.querySelector('.fm-plugin-panel-host')).not.toBeNull();
-    pluginTab?.click();
+    [...(opposite?.querySelectorAll<HTMLButtonElement>('.fm-pane-tab') ?? [])]
+      .find((tab) => tab.textContent?.includes('SVGO: 日本語.txt'))
+      ?.click();
     await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', true));
+    if (opposite instanceof HTMLElement) opposite.focus();
+    await vi.waitFor(() => expect(opposite?.getAttribute('data-active')).toBe('true'));
     expect(open).toHaveBeenCalledOnce();
 
     window.dispatchEvent(

@@ -215,3 +215,11 @@ second plugin system.
   SVGO assets from source during packaging, so the generated dist changes were
   removed from this PR. Focused child, bridge, and trusted-tab tests pass;
   installed native focus/shortcut closure still needs manual confirmation.
+- 2026-10-04 Copilot: A native child WebView composited above the trusted HTML context menu
+  when a menu from the opposite pane crossed the divider. The menu now reports its measured
+  menu and Open With submenu bounds; an intersecting active child is temporarily hidden with
+  the existing owning-window visibility command and shown again on dismissal or resize.
+  Ordinary viewport menu placement is unchanged, and the child stays mounted with its
+  unsaved state. Mounted menu/host and shell tests cover overlap, click and keyboard paths,
+  both pane directions, narrow/resize, and tab switching. A real native menu hit-test remains
+  to be verified on macOS/Windows/Linux; this task remains open.
