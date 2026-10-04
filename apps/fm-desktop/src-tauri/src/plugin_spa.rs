@@ -790,7 +790,17 @@ pub(crate) fn register_schemes<R: Runtime>(
                 let label = ctx.webview_label().to_owned();
                 let app = ctx.app_handle().clone();
                 let origin = panel_origin(index);
+                #[cfg(feature = "native-spa-smoke")]
+                if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                    crate::native_spa_smoke::stage(&format!(
+                        "scheme-request: {} {}",
+                        request.method(),
+                        request.uri().path()
+                    ));
+                }
                 let Some(session) = registry.session_for(index, &label) else {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage("scheme-session-rejected");
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -799,6 +809,13 @@ pub(crate) fn register_schemes<R: Runtime>(
                     .get("Origin")
                     .is_some_and(|value| value.to_str().ok() != Some(origin.as_str()))
                 {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage(&format!(
+                        "scheme-origin-rejected: {} {} {:?}",
+                        request.method(),
+                        request.uri().path(),
+                        request.headers().get("Origin")
+                    ));
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 }
