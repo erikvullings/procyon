@@ -74,3 +74,65 @@ second plugin system.
   the Tauri host. The central constraint is that rendering a WebView is easy but securely binding
   dynamic third-party code to Procyon's capability model is the actual feature. No implementation
   has started.
+- 2026-10-03 Copilot: Implemented the API-v1 Lua/JavaScript runtime selection, bounded QuickJS
+  actions, declarative SPA manifests, isolated Tauri scheme/bridge prototype, cursor-only panel
+  action, a JavaScript sample, and a packaged SVGO editor with explicit revision-checked Save.
+  `Cmd+F4` already sorts by extension, so SVGO uses `Cmd+Shift+F4`. The focused review and
+  [threat model](../docs/plugin-api/spa-threat-model.md) leave this task **open**: WKWebView
+  cannot deny clipboard reads on macOS, and the user declined that grant, so macOS panels fail
+  closed; Windows/Linux native smoke paths are unverified. Immediate WebView-crash cleanup,
+  cancellation-safe temporary-file cleanup, and atomic cross-process save conflicts are still
+  release gates. At that point bundled SVGO was unavailable on macOS.
+- 2026-10-03 Copilot: The user authorized clipboard read as well as write for SVGO. Its manifest
+  now declares both, and macOS panel activation is allowed only for plugins with both grants;
+  other panels remain unavailable. The task remains open pending native platform smoke tests,
+  a fresh macOS security review, and the other release gates in the threat model.
+- 2026-10-03 Copilot: The bundled editor now occupies the opposite pane in its own native child
+  WebView rather than a separate window. Placement and close commands are restricted to the
+  owning trusted window. The source pane restores its cursor by file URI after atomic Save
+  replaces an entry ID, unless the user has moved the cursor. Native platform smoke tests and
+  the other release gates remain outstanding.
+- 2026-10-03 Copilot: The editor now owns a transient, switchable opposite-pane tab. Tab
+  switches hide but retain its child WebView and unsaved work; closing the tab tears it down.
+  Its Procyon-specific build starts in Tree view with a closed menu, the tree above
+  the preview in equal-height halves, and puts
+  Save in the primary button and Copy in the menu, and retains optimizer settings but
+  never the SVG or separate theme. Native interaction and remaining security release gates
+  are still unverified. Since private child WebViews cannot guarantee localStorage persistence,
+  optimizer preferences use a validated, permission-checked host settings bridge; normal tab
+  close waits for a bounded final flush. Abrupt teardown can still lose the latest preference.
+- 2026-10-03 Copilot: The Procyon-only SVGO build now uses Procyon's raised surface for the
+  toolbar and preview work area, removes the permanent SVG canvas border, and softens the
+  divider without reducing its drag target. It also removes the Source SVG row, moves Tree/Code
+  into the menu, starts with Properties collapsed in a side rail, and relayouts Monaco when
+  opening Code. Native WKWebView Code rendering still needs verification.
+- 2026-10-03 Copilot: Reduced the embedded Code gutter, removed its focus border, and restored
+  small Code/Tree insets. A WebKit timing repro exposed a moving editor during the sidebar
+  transition and a zero-size Monaco startup while Tree was visible; the Procyon build now
+  disables that transition and defers Monaco creation until Code is shown. WebKit resize,
+  selection, and typing checks pass, but the reported persistent native WKWebView caret and
+  glyph-painting fault still requires confirmation in the Tauri child WebView.
+- 2026-10-03 Copilot: At the user's request, the Procyon-specific SVGO panel now offers
+  Tree editing and SVG preview only; Code and all packaged Monaco assets are removed.
+  Standalone SVGO retains Code. Tree edits still update the preview and require an explicit
+  Save. The native Monaco failure is bypassed rather than diagnosed or fixed.
+- 2026-10-03 Copilot: Mouse-wheel zoom in the SVGO preview now anchors the SVG point beneath
+  the pointer. It compensates after layout changes such as scrollbars appearing or
+  disappearing, while toolbar zoom and Reset retain their previous behavior.
+- 2026-10-03 Copilot: The Procyon preview hides zoom-induced scrollbars without disabling
+  drag panning. Its viewport background remains fixed as artwork zooms and pans, with
+  a presentation-only Light, Dark, or Checkerboard selector; Light and Dark use the
+  matching Procyon status-bar colors. The default follows the current theme unless
+  explicitly overridden, and Save does not include the background.
+- 2026-10-03 Copilot: Procyon's SVGO panel source, tests, static assets, locked
+  dependencies, and build configuration now live in `plugin-sources/svgo/`. Its
+  reproducible `build:procyon` output is copied into the checked-in
+  `plugins/svgo/dist/` package. The source stays outside Tauri's bundled
+  `plugins/` resource directory to avoid shipping build dependencies.
+- 2026-10-03 Copilot: Release security review found that Tauri's window-scoped native
+  plugin permissions also applied to child SPA WebViews, bypassing the app-command
+  label guard. The desktop capability is now scoped to trusted WebView labels
+  instead. Native denial and platform smoke tests remain release gates.
+  A feature-gated Tauri smoke harness now exercises a real child WebView's bundled SVGO load,
+  updater-command denial and bridge Save on CI's three desktop platforms; the macOS developer
+  run passed, but Windows/Linux CI and the remaining native/release gates are outstanding.

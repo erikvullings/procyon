@@ -25,6 +25,10 @@ function permissionLabels(): ReadonlyArray<{ key: keyof PluginPermissions; label
       key: 'selectedEntryContentRead',
       label: t('pluginManagement', 'permissionSelectedEntryContentRead'),
     },
+    {
+      key: 'selectedEntryContentWrite',
+      label: t('pluginManagement', 'permissionSelectedEntryContentWrite'),
+    },
     { key: 'filesystemRead', label: t('pluginManagement', 'permissionFilesystemRead') },
     { key: 'filesystemWrite', label: t('pluginManagement', 'permissionFilesystemWrite') },
     { key: 'clipboardRead', label: t('pluginManagement', 'permissionClipboardRead') },

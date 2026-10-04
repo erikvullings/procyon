@@ -15,6 +15,16 @@ pub struct PluginColumnDto {
     pub title: String,
 }
 
+/// A packaged SPA panel that is available only in the isolated desktop host.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSpaPanelDto {
+    /// The plugin-owned action that opens the panel.
+    pub action_id: String,
+    /// Extensions on which the panel may be activated.
+    pub extensions: Vec<String>,
+}
+
 /// A discovered plugin, including disabled plugins with safe diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +47,8 @@ pub struct PluginDescriptorDto {
     pub permissions: PluginPermissionsDto,
     /// The distributable icon theme this plugin contributes, when enabled and valid (task 0095).
     pub icon_theme: Option<PluginIconThemeDto>,
+    /// Interactive panel metadata; browser hosts report the action as unavailable.
+    pub spa_panel: Option<PluginSpaPanelDto>,
 }
 
 /// One icon asset a theme can reference, resolved by `GET
@@ -82,6 +94,8 @@ pub struct PluginPermissionsDto {
     pub selected_entry_metadata: bool,
     /// Allows bounded content reads for the current selection.
     pub selected_entry_content_read: bool,
+    /// Allows saving only the selected entry originally opened in a panel.
+    pub selected_entry_content_write: bool,
     /// Roots the plugin may read from; denied when empty.
     pub filesystem_read: Vec<String>,
     /// Roots the plugin may write to; denied when empty.

@@ -1,0 +1,14 @@
+id = "sample.js-svg-uri"
+name = "Copy SVG URI (JavaScript)"
+version = "0.1.0"
+api_version = "1"
+description = "Copies the selected SVG file URI using sandboxed JavaScript."
+runtime = "javascript"
+entrypoint = "plugin.js"
+
+[permissions]
+selected_entry_metadata = true
+clipboard_write = true
+
+[contributions]
+actions = true

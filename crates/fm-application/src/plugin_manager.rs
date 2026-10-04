@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use std::path::PathBuf;
 
-use fm_domain::{ActionContextRequirements, ActionDescriptor, ActionId, ActionSource, PluginId};
+use fm_domain::{
+    ActionContextRequirements, ActionDescriptor, ActionId, ActionSource, KeyChord, PluginId,
+};
 use fm_events::{
     BackendEventPayload, EventAudience, EventBus, NotificationLevelPayload, NotificationPayload,
     PluginPayload,
@@ -19,6 +21,7 @@ use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
 use fm_settings::Settings;
 use fm_transport_dto::{
     ActionResultDto, PluginDescriptorDto, PluginLogEntryDto, PluginPermissionsDto,
+    PluginSpaPanelDto,
 };
 use uuid::Uuid;
 
@@ -32,7 +35,69 @@ pub(crate) struct PluginManager {
     events: EventBus,
 }
 
+/// A validated, enabled SPA contribution. The desktop host owns WebView creation
+/// and must re-check this descriptor before serving assets or handling messages.
+pub struct PluginPanel {
+    /// Owning installed plugin.
+    pub plugin_id: String,
+    /// Label shown on the host-owned window.
+    pub title: String,
+    /// Canonical package root used to resolve assets.
+    pub directory: PathBuf,
+    /// HTML entrypoint relative to that package root.
+    pub entrypoint: PathBuf,
+    /// Whether the originally opened entry may be read.
+    pub can_read_selected: bool,
+    /// Whether the originally opened entry may be saved.
+    pub can_write_selected: bool,
+    /// Whether this panel may persist plugin-scoped preferences.
+    pub can_store_settings: bool,
+}
+
+fn panel_native_clipboard_granted(manifest: &PluginManifest) -> bool {
+    !cfg!(target_os = "macos")
+        || (manifest.permissions.clipboard_read && manifest.permissions.clipboard_write)
+}
+
 impl PluginManager {
+    pub(crate) fn panel_settings(&self, plugin_id: &str) -> Option<serde_json::Value> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .plugin_settings
+            .get(plugin_id)
+            .cloned()
+    }
+
+    pub(crate) fn owns_panel_settings(&self, plugin_id: &str) -> bool {
+        self.plugins.discover().into_iter().any(|plugin| {
+            plugin.is_valid()
+                && plugin.id() == plugin_id
+                && plugin.manifest.as_ref().is_some_and(|manifest| {
+                    manifest.contributions.spa_panel.is_some()
+                        && manifest.permissions.settings_storage
+                })
+        })
+    }
+
+    pub(crate) fn save_panel_settings(
+        &self,
+        plugin_id: &str,
+        value: serde_json::Value,
+    ) -> Result<(), ApplicationError> {
+        let mut current = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut next = current.clone();
+        next.plugin_settings.insert(plugin_id.to_owned(), value);
+        self.settings_store
+            .save(&next)
+            .map_err(|_| ApplicationError::Internal)?;
+        *current = next;
+        Ok(())
+    }
+
     pub(crate) fn new(
         plugins: PluginDiscovery,
         plugin_runtime: PluginRuntime,
@@ -74,6 +139,100 @@ impl PluginManager {
                 enabled
                     .contains(&manifest.id)
                     .then_some((manifest, plugin.directory))
+            })
+            .collect()
+    }
+
+    pub(crate) fn plugin_panel(
+        &self,
+        plugin_id: &str,
+        action_id: &str,
+        file_name: &str,
+    ) -> Result<PluginPanel, ApplicationError> {
+        let (manifest, directory) = self
+            .enabled_plugin_manifests()
+            .into_iter()
+            .find(|(manifest, _)| manifest.id == plugin_id)
+            .ok_or(ApplicationError::NotFound)?;
+        if self.plugin_runtime.disabled_reason(plugin_id).is_some() {
+            return Err(ApplicationError::NotFound);
+        }
+        let panel = manifest
+            .contributions
+            .spa_panel
+            .as_ref()
+            .filter(|panel| panel.action_id == action_id)
+            .ok_or(ApplicationError::NotFound)?;
+        let extension = std::path::Path::new(file_name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !panel.extensions.is_empty() && !panel.extensions.contains(&extension) {
+            return Err(ApplicationError::ActionUnavailable(ActionId::new(
+                action_id.to_owned(),
+            )));
+        }
+        if !manifest.permissions.selected_entry_content_read {
+            return Err(ApplicationError::InvalidRequest(
+                "plugin permission denied: selected_entry_content_read".to_owned(),
+            ));
+        }
+        if !panel_native_clipboard_granted(&manifest) {
+            return Err(ApplicationError::ActionUnavailable(ActionId::new(
+                action_id.to_owned(),
+            )));
+        }
+        Ok(PluginPanel {
+            plugin_id: manifest.id,
+            title: panel.title.clone(),
+            directory,
+            entrypoint: panel.entrypoint.clone(),
+            can_read_selected: true,
+            can_write_selected: manifest.permissions.selected_entry_content_write,
+            can_store_settings: manifest.permissions.settings_storage,
+        })
+    }
+
+    pub(crate) fn list_plugin_panels(&self, available: bool) -> Vec<ActionDescriptor> {
+        self.enabled_plugin_manifests()
+            .into_iter()
+            .filter(|(manifest, _)| self.plugin_runtime.disabled_reason(&manifest.id).is_none())
+            .filter_map(|(manifest, _)| {
+                let panel_available = available && panel_native_clipboard_granted(&manifest);
+                let panel = manifest.contributions.spa_panel?;
+                let shortcut = panel.shortcut.as_deref().and_then(|shortcut| {
+                    let parts = shortcut.split('+').collect::<Vec<_>>();
+                    let key = parts.last()?.to_string();
+                    Some(KeyChord {
+                        key,
+                        ctrl: parts[..parts.len() - 1].iter().any(|part| {
+                            part.eq_ignore_ascii_case("cmd") || part.eq_ignore_ascii_case("ctrl")
+                        }),
+                        alt: parts[..parts.len() - 1]
+                            .iter()
+                            .any(|part| part.eq_ignore_ascii_case("alt")),
+                        shift: parts[..parts.len() - 1]
+                            .iter()
+                            .any(|part| part.eq_ignore_ascii_case("shift")),
+                        meta: false,
+                    })
+                });
+                Some(ActionDescriptor {
+                    id: ActionId::new(panel.action_id),
+                    title: panel.title,
+                    description: Some(manifest.description),
+                    category: "plugin".to_owned(),
+                    default_shortcuts: shortcut.into_iter().collect(),
+                    context_requirements: ActionContextRequirements {
+                        feature_available: panel_available,
+                        ..ActionContextRequirements::none()
+                    },
+                    parameter_schema: None,
+                    source: ActionSource::Plugin {
+                        plugin_id: PluginId::new(manifest.id),
+                    },
+                })
             })
             .collect()
     }
@@ -251,6 +410,16 @@ impl PluginManager {
                     columns,
                     permissions,
                     icon_theme,
+                    spa_panel: plugin.manifest.as_ref().and_then(|manifest| {
+                        manifest
+                            .contributions
+                            .spa_panel
+                            .as_ref()
+                            .map(|panel| PluginSpaPanelDto {
+                                action_id: panel.action_id.clone(),
+                                extensions: panel.extensions.clone(),
+                            })
+                    }),
                 }
             })
             .collect()
@@ -370,6 +539,7 @@ fn plugin_permissions_dto(permissions: &PluginPermissions) -> PluginPermissionsD
     PluginPermissionsDto {
         selected_entry_metadata: permissions.selected_entry_metadata,
         selected_entry_content_read: permissions.selected_entry_content_read,
+        selected_entry_content_write: permissions.selected_entry_content_write,
         filesystem_read: permissions
             .filesystem_read
             .iter()
@@ -488,6 +658,27 @@ mod tests {
     }
 
     #[test]
+    fn panel_preferences_survive_a_new_settings_store() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let (_, manager) = manager(&directory);
+        let preferences = serde_json::json!({"precision": 2, "removeTspan": false});
+        manager
+            .save_panel_settings("procyon.svgo", preferences.clone())
+            .expect("persist preferences");
+        assert_eq!(
+            manager.panel_settings("procyon.svgo"),
+            Some(preferences.clone())
+        );
+        let loaded = fm_settings::SettingsStore::new(directory.path().join("settings"))
+            .load()
+            .expect("reload settings");
+        assert_eq!(
+            loaded.settings.plugin_settings.get("procyon.svgo"),
+            Some(&preferences)
+        );
+    }
+
+    #[test]
     fn plugin_logs_reports_not_found_for_undiscovered_plugin() {
         let (_plugins_dir, manager) = manager(&tempfile::tempdir().expect("temp dir"));
         let error = manager
@@ -503,5 +694,172 @@ mod tests {
             .plugin_icon_theme_asset("unknown.plugin", "icons/test.svg")
             .expect_err("unknown plugin must be reported as not found");
         assert!(matches!(error, ApplicationError::NotFound));
+    }
+
+    #[test]
+    fn panel_requires_enabled_plugin_matching_action_svg_and_content_grants() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let (plugins_dir, manager) = manager(&root);
+        let plugin = plugins_dir.join("svg-editor");
+        std::fs::create_dir_all(plugin.join("dist")).expect("plugin directory");
+        std::fs::write(plugin.join("dist/index.html"), "<html></html>").expect("panel asset");
+        std::fs::write(
+            plugin.join("plugin.toml"),
+            "id='example.svg'\nname='SVG'\nversion='1'\napi_version='1'\ndescription='SVG editor'\n\
+             [permissions]\nselected_entry_content_read=true\nselected_entry_content_write=true\n\
+             clipboard_read=true\nclipboard_write=true\n\
+             [contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.svg.edit'\n\
+             title='Edit SVG'\nshortcut='Cmd+F4'\nextensions=['svg']",
+        )
+        .expect("manifest");
+        assert!(matches!(
+            manager.plugin_panel("example.svg", "example.svg.edit", "logo.svg"),
+            Err(ApplicationError::NotFound)
+        ));
+        manager
+            .set_plugin_enabled("example.svg".to_owned(), true)
+            .expect("enable");
+
+        let panel = manager
+            .plugin_panel("example.svg", "example.svg.edit", "logo.svg")
+            .expect("matching SVG editor");
+        assert_eq!(panel.entrypoint, std::path::Path::new("dist/index.html"));
+        assert!(panel.can_read_selected && panel.can_write_selected);
+        assert!(matches!(
+            manager.plugin_panel("example.svg", "example.svg.edit", "logo.png"),
+            Err(ApplicationError::ActionUnavailable(_))
+        ));
+        assert!(matches!(
+            manager.plugin_panel("example.svg", "example.svg.other", "logo.svg"),
+            Err(ApplicationError::NotFound)
+        ));
+        assert!(
+            manager
+                .list_plugin_panels(true)
+                .iter()
+                .any(|action| action.id.as_str() == "example.svg.edit"
+                    && action.context_requirements.feature_available)
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_panels_require_both_native_clipboard_grants() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let (plugins_dir, manager) = manager(&root);
+        for (id, grants) in [
+            ("no-clipboard", ""),
+            ("read-only", "clipboard_read=true\n"),
+            ("write-only", "clipboard_write=true\n"),
+        ] {
+            let plugin = plugins_dir.join(id);
+            std::fs::create_dir_all(plugin.join("dist")).expect("plugin directory");
+            std::fs::write(plugin.join("dist/index.html"), "<html></html>").expect("panel asset");
+            std::fs::write(
+                plugin.join("plugin.toml"),
+                format!(
+                    "id='example.{id}'\nname='{id}'\nversion='1'\napi_version='1'\n\
+                     description='SVG editor'\n[permissions]\nselected_entry_content_read=true\n\
+                     selected_entry_content_write=true\n{grants}\
+                     [contributions.spa_panel]\nentrypoint='dist/index.html'\n\
+                     action_id='example.{id}.edit'\ntitle='Edit SVG'\nextensions=['svg']"
+                ),
+            )
+            .expect("manifest");
+            manager
+                .set_plugin_enabled(format!("example.{id}"), true)
+                .expect("enable");
+            assert!(matches!(
+                manager.plugin_panel(
+                    &format!("example.{id}"),
+                    &format!("example.{id}.edit"),
+                    "logo.svg"
+                ),
+                Err(ApplicationError::ActionUnavailable(_))
+            ));
+            assert!(manager.list_plugin_panels(true).iter().any(|action| {
+                action.id.as_str() == format!("example.{id}.edit")
+                    && !action.context_requirements.feature_available
+            }));
+        }
+    }
+
+    #[test]
+    fn panel_denies_selected_file_content_without_read_grant() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let (plugins_dir, manager) = manager(&root);
+        let plugin = plugins_dir.join("svg-editor");
+        std::fs::create_dir_all(plugin.join("dist")).expect("plugin directory");
+        std::fs::write(plugin.join("dist/index.html"), "<html></html>").expect("panel asset");
+        std::fs::write(
+            plugin.join("plugin.toml"),
+            "id='example.svg'\nname='SVG'\nversion='1'\napi_version='1'\ndescription='SVG editor'\n\
+             [contributions.spa_panel]\nentrypoint='dist/index.html'\naction_id='example.svg.edit'\n\
+             title='Edit SVG'\nextensions=['svg']",
+        )
+        .expect("manifest");
+        manager
+            .set_plugin_enabled("example.svg".to_owned(), true)
+            .expect("enable");
+        assert!(matches!(
+            manager.plugin_panel("example.svg", "example.svg.edit", "logo.svg"),
+            Err(ApplicationError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn bundled_svgo_panel_and_javascript_sample_are_discoverable() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let (_plugins_dir, mut manager) = manager(&root);
+        manager.set_bundled_plugins_directory(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins"),
+        );
+        for id in ["procyon.svgo", "sample.js-svg-uri"] {
+            let plugin = manager
+                .list_plugins()
+                .into_iter()
+                .find(|plugin| plugin.id == id)
+                .expect("bundled plugin");
+            assert!(plugin.diagnostic.is_none(), "{id}: {:?}", plugin.diagnostic);
+            manager
+                .set_plugin_enabled(id.to_owned(), true)
+                .expect("enable");
+        }
+        let panel = manager
+            .plugin_panel("procyon.svgo", "procyon.svgo.open", "image.svg")
+            .expect("bundled SVG editor");
+        assert!(panel.can_read_selected && panel.can_write_selected);
+        assert!(panel.can_store_settings);
+        let svgo = manager
+            .list_plugins()
+            .into_iter()
+            .find(|plugin| plugin.id == "procyon.svgo")
+            .expect("SVGO descriptor");
+        assert!(svgo.permissions.clipboard_read && svgo.permissions.clipboard_write);
+        assert!(panel.directory.join(&panel.entrypoint).is_file());
+        assert!(
+            manager
+                .list_plugin_actions()
+                .iter()
+                .any(|(action, _, _)| action.id.as_str() == "sample.js-svg-uri.copy")
+        );
+        let action_id = ActionId::new("sample.js-svg-uri.copy");
+        let (manifest, directory, _) = manager
+            .find_plugin_action(&action_id)
+            .expect("bundled JavaScript action");
+        let outcome = manager
+            .invoke_plugin_action(
+                &action_id,
+                &manifest,
+                &directory,
+                Some(serde_json::json!({
+                    "selectedEntries": [{"name": "drawing.svg", "uri": "file:///drawing.svg"}]
+                })),
+            )
+            .expect("sandboxed action invocation");
+        assert_eq!(
+            outcome.clipboard_text.as_deref(),
+            Some("file:///drawing.svg")
+        );
     }
 }

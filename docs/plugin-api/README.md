@@ -1,8 +1,11 @@
 # Plugin API reference
 
-Plugins declare a versioned `plugin.toml`. API version `1` supports only action contributions
-(which also supply context-menu and command-palette entries), custom columns, and metadata
-extraction. Plugins cannot inject JavaScript or arbitrary WebView UI.
+Plugins declare a versioned `plugin.toml`. API version `1` supports action contributions
+(which also supply context-menu and command-palette entries), custom columns, metadata
+extraction, icon themes, and isolated SPA panels. Runtime language and contribution type are
+independent: existing manifests default to Lua; `runtime = "javascript"` explicitly selects
+the embedded sandboxed JavaScript executor for actions/columns. The SPA's JavaScript runs in
+an isolated WebView, not in the action executor.
 
 ```toml
 id = "example.copy-path"
@@ -21,15 +24,121 @@ actions = true
 ```
 
 Every permission defaults to denied. The explicit keys are `selected_entry_metadata`,
-`selected_entry_content_read`, `filesystem_read` (root list), `filesystem_write` (root list),
+`selected_entry_content_read`, `selected_entry_content_write`, `filesystem_read` (root list), `filesystem_write` (root list),
 `clipboard_read`, `clipboard_write`, `network` (host allow-list), `process_spawn`,
 `notifications`, and `settings_storage`. Unknown keys and unsupported `api_version` values reject
 the manifest. Discovery leaves invalid manifests disabled and returns their diagnostic through the
 plugin listing rather than preventing startup.
+`selected_entry_content_write` grants only a reviewed, selected-entry-specific host write call;
+it does not grant `filesystem_write` roots or authority to write arbitrary paths. The host must
+bind a write to the opened selection and validate its revision independently of the plugin.
 
-The initial runtime is restricted Lua. Wasmtime plus the WebAssembly Component Model remains the
+The default runtime is restricted Lua. Wasmtime plus the WebAssembly Component Model remains the
 distributable target; no native Rust dynamic-library ABI is exposed. See ADR
 [0006](../decisions/0006-plugin-runtime-selection.md).
+
+## JavaScript action and SPA panel manifest
+
+```toml
+id = "example.svg-tool"
+name = "SVG Tool"
+version = "1.0.0"
+api_version = "1"
+description = "An SVG action and optional panel"
+runtime = "javascript"
+entrypoint = "actions.js"
+
+[permissions]
+selected_entry_metadata = true
+clipboard_write = true
+
+[contributions]
+actions = true
+
+[contributions.spa_panel]
+entrypoint = "dist/index.html"
+action_id = "example.svg-tool.open"
+title = "Optimize SVG"
+shortcut = "Cmd+Shift+F4"
+extensions = ["svg"]
+```
+
+The action/column `entrypoint` is independent of `contributions.spa_panel.entrypoint`. A
+panel-only plugin can omit the action entrypoint. `action_id` must be namespaced by the plugin
+id (e.g. `example.svg-tool.open`); `title` is the host action label, and optional `shortcut`
+is a bounded ASCII key-combination hint whose actual binding the host controls. Opening the
+panel is declarative and does not require a second JavaScript action declaration. The panel
+entrypoint must be a package-relative `.html` path without traversal; extensions are optional
+lowercase, dotless, unique ASCII alphanumeric file extensions. An empty list allows any
+file extension. `Cmd+F4` is already used by Sort by Extension, so the bundled SVGO panel
+uses `Cmd+Shift+F4` (`Ctrl+Shift+F4` outside macOS).
+Panel assets must stay inside the installed package, including after symlink resolution.
+Declaring a panel does **not** grant filesystem, network, Tauri, clipboard, or host-process
+authority; an enabled panel requires a separately isolated host implementation and a
+permission-checked message bridge. A host unable to provide that boundary must report the panel
+unavailable, not render it in the main app.
+
+JavaScript entrypoints evaluate to an object (for example
+`({ actions() { return [...] }, invoke(actionId) { ... } })`) with `actions()` and/or `columns()`
+returning the same data shapes as Lua. `invoke(actionId)` may call
+`host.selected_entry_metadata()` and `host.clipboard_write(text)` only with the corresponding
+permissions. There is no Node.js, DOM, Tauri, filesystem, process, credentials, or ambient
+network API in the embedded executor. Each call runs in a fresh bounded context with a 100 ms
+deadline, 4 MiB VM memory cap, instruction interrupt budget, 1 MiB source cap, and 256 KiB
+serialized-output/clipboard cap. Clipboard requests are staged for the caller rather than
+written directly by the backend. Callers can pass a `PluginCancellation` to interrupt
+long-running calls; cancelled calls retain the same diagnostics and failure accounting as
+other failures.
+
+`plugins/sample-js-svg-uri/` is a bundled action example: it uses only the selected-entry
+metadata and clipboard-write calls. `plugins/svgo/` bundles a separate, panel-only editor,
+which requires selected-entry content read/write, clipboard read/write, and plugin-scoped
+settings storage, but no general filesystem or network grant.
+Both are disabled until enabled in Settings. The SVG panel opens the file under the **cursor**
+(not a marked selection) as a transient tab in the opposite pane, in a separate child WebView
+rather than in the trusted application's WebView. Switching tabs hides the child without
+discarding its in-memory edits; closing its tab (including Cmd+W on macOS), disabling the
+plugin, or closing the host releases that WebView. Only a bounded, explicitly validated
+optimizer-settings snapshot persists through Procyon's settings store across private
+WebView sessions. Closing a tab requests a final snapshot and waits briefly for it before
+teardown; a failed or timed-out flush is logged, not treated as success. The source SVG is
+not restored, and Procyon's theme controls the panel.
+Save writes the original file with revision checking and preserves the source cursor
+across an atomic file replacement. In the
+browser/server host, the panel action is explicitly unavailable. On macOS, WKWebView exposes
+clipboard read and write directly to panel JavaScript; only panels declaring both grants can
+open. See the [threat model and remaining release gates](spa-threat-model.md).
+
+### Installing your own JavaScript plugin
+
+Put a folder containing `plugin.toml` and its referenced files under the user plugin directory:
+`<config directory>/procyon/plugins/<your-plugin>/`. The config directory is the platform's
+standard user config location (for example, `~/Library/Application Support` on macOS,
+`~/.config` on many Linux installations, or `%APPDATA%` on Windows). Procyon discovers
+immediate child folders; putting the manifest directly in `plugins/` does not work. User
+plugins take precedence over bundled plugins with the same ID. Restart Procyon after adding
+the folder, then enable the plugin in **Settings → Plugins**; invalid manifests appear there
+with a diagnostic. Only install code you trust and grant only the permissions it needs.
+
+For a JavaScript **action**, start with
+[`plugins/sample-js-svg-uri/plugin.toml`](../../plugins/sample-js-svg-uri/plugin.toml) and
+[`plugin.js`](../../plugins/sample-js-svg-uri/plugin.js). Copy both into a new folder, change
+the manifest `id` and action ID to your own matching namespace, and set
+`runtime = "javascript"` and `entrypoint = "plugin.js"`. The action can implement `actions()`
+and `invoke(actionId)` using only the host calls permitted by its manifest. It runs in the
+bounded embedded executor, not Node.js or a browser, and can appear in the command palette
+and context menu in both desktop and server hosts.
+
+For a JavaScript **SPA panel**, include the complete built site (HTML and all local assets)
+inside the same folder, declare `[contributions.spa_panel]` as above, and enable it in the
+desktop app. [`plugins/svgo/plugin.toml`](../../plugins/svgo/plugin.toml) and its
+[`README.md`](../../plugins/svgo/README.md) show the bundled panel. The SPA runs in a
+separate, isolated desktop WebView; browser/server mode does not open SPA panels. Merely
+declaring a panel does not provide generic file read/write or a general-purpose Save API:
+the selected-SVG Save and settings bridge used by SVGO are narrow, host-validated
+capabilities. Other panels cannot assume those endpoints are available for arbitrary file
+types or preferences. Review the [remaining platform and security gates](spa-threat-model.md)
+before distributing an untrusted panel.
 
 ## Lua entrypoint contract and isolation
 

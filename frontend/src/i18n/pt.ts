@@ -691,6 +691,7 @@ export const pt = {
     permissionsAriaLabel: 'Permissões de {name}',
     permissionSelectedEntryMetadata: 'Metadados da entrada selecionada',
     permissionSelectedEntryContentRead: 'Conteúdo da entrada selecionada',
+    permissionSelectedEntryContentWrite: 'Salvar conteúdo da entrada selecionada',
     permissionFilesystemRead: 'Leitura do sistema de ficheiros',
     permissionFilesystemWrite: 'Escrita do sistema de ficheiros',
     permissionClipboardRead: 'Leitura da área de transferência',

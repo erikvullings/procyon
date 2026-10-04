@@ -108,6 +108,8 @@ export interface PaneTab {
   /** User-chosen saved connection name, shown before the remote folder name. */
   readonly connectionName?: string;
   readonly searchKind?: 'filename' | 'content' | 'semantic';
+  /** Native child WebViews cannot be reparented by tab drag without losing in-memory edits. */
+  readonly movable?: boolean;
 }
 
 const MAX_FULL_CONNECTION_NAME_LENGTH = 12;
@@ -230,7 +232,7 @@ export const TabStrip: FactoryComponent<TabStripAttrs> = () => {
                   }
                 },
                 onpointerdown: (event: PointerEvent) => {
-                  if (event.button !== 0) return;
+                  if (event.button !== 0 || tab.movable === false) return;
                   if ((event.target as HTMLElement).closest('.fm-pane-tab-close') !== null) return;
                   stopTabDrag?.();
                   activeTabDrag = {

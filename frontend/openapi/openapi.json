@@ -14539,6 +14539,17 @@
             "$ref": "#/components/schemas/PluginPermissionsDto",
             "description": "Capabilities the manifest requests; ungranted capabilities are denied (spec §19)."
           },
+          "spaPanel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginSpaPanelDto",
+                "description": "Interactive panel metadata; browser hosts report the action as unavailable."
+              }
+            ]
+          },
           "version": {
             "type": "string",
             "description": "Package version when available."
@@ -14672,6 +14683,7 @@
         "required": [
           "selectedEntryMetadata",
           "selectedEntryContentRead",
+          "selectedEntryContentWrite",
           "filesystemRead",
           "filesystemWrite",
           "clipboardRead",
@@ -14723,6 +14735,10 @@
             "type": "boolean",
             "description": "Allows bounded content reads for the current selection."
           },
+          "selectedEntryContentWrite": {
+            "type": "boolean",
+            "description": "Allows saving only the selected entry originally opened in a panel."
+          },
           "selectedEntryMetadata": {
             "type": "boolean",
             "description": "Allows metadata for the current selection."
@@ -14730,6 +14746,27 @@
           "settingsStorage": {
             "type": "boolean",
             "description": "Allows non-secret settings storage under the plugin's identifier."
+          }
+        }
+      },
+      "PluginSpaPanelDto": {
+        "type": "object",
+        "description": "A packaged SPA panel that is available only in the isolated desktop host.",
+        "required": [
+          "actionId",
+          "extensions"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string",
+            "description": "The plugin-owned action that opens the panel."
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extensions on which the panel may be activated."
           }
         }
       },

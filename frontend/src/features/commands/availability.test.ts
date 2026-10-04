@@ -69,6 +69,64 @@ function context(overrides: Partial<CommandAvailabilityContext> = {}): CommandAv
 }
 
 describe('command availability', () => {
+  it('gates SPA actions by the cursor extension rather than marked selections', () => {
+    const descriptor = action('procyon.svgo.open', { requiresSingleSelection: true });
+    const plugins = [
+      {
+        id: 'procyon.svgo',
+        name: 'SVGO',
+        version: '1',
+        description: '',
+        enabled: true,
+        spaPanel: { actionId: descriptor.id, extensions: ['svg'] },
+      },
+    ];
+    const svg = { ...archiveEntry('diagram.SVG'), name: 'diagram.SVG' };
+    expect(
+      evaluateActionAvailability(
+        descriptor,
+        context({
+          selectedEntries: [entry('directory'), entry('file')],
+          cursorEntry: svg,
+          plugins,
+        }),
+      ).available,
+    ).toBe(true);
+    expect(
+      evaluateActionAvailability(
+        descriptor,
+        context({ selectedEntries: [svg], cursorEntry: archiveEntry('notes.txt'), plugins }),
+      ).available,
+    ).toBe(false);
+    expect(
+      evaluateActionAvailability(
+        descriptor,
+        context({
+          cursorEntry: svg,
+          plugins: plugins.map((plugin) => ({ ...plugin, enabled: false })),
+        }),
+      ).available,
+    ).toBe(false);
+    expect(
+      evaluateActionAvailability(
+        descriptor,
+        context({
+          cursorEntry: archiveEntry('notes.txt'),
+          plugins: plugins.map((plugin) => ({
+            ...plugin,
+            spaPanel: { actionId: descriptor.id, extensions: [] },
+          })),
+        }),
+      ).available,
+    ).toBe(true);
+    expect(
+      evaluateActionAvailability(
+        { ...descriptor, contextRequirements: { featureAvailable: false } },
+        context({ cursorEntry: svg, plugins }),
+      ).available,
+    ).toBe(false);
+  });
+
   it('evaluates registry requirements without mutating the action or context', () => {
     const descriptor = action('core.rename', { requiresSingleSelection: true });
     const input = context();

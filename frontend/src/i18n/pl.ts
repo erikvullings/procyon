@@ -688,6 +688,7 @@ export const pl = {
     permissionsAriaLabel: 'Uprawnienia {name}',
     permissionSelectedEntryMetadata: 'Metadane zaznaczonego wpisu',
     permissionSelectedEntryContentRead: 'Zawartość zaznaczonego wpisu',
+    permissionSelectedEntryContentWrite: 'Zapis zawartości zaznaczonego wpisu',
     permissionFilesystemRead: 'Odczyt systemu plików',
     permissionFilesystemWrite: 'Zapis do systemu plików',
     permissionClipboardRead: 'Odczyt schowka',

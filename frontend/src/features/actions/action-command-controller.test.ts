@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-
 import type { ActionDescriptor, EntryId, EntrySummary, PaneId } from '../../models';
 import type { PaneDirectoryView } from '../navigation/navigation';
 import {
@@ -59,7 +58,9 @@ function fakeContext(
     getClient: () => {
       throw new Error('not needed for this test');
     },
+    openPluginPane: () => 'opened',
     getRegisteredActions: () => [],
+    getPlugins: () => [],
     getWorkspace: () => undefined,
     getNavigation: () => {
       throw new Error('not needed for this test');
@@ -89,6 +90,88 @@ function fakeContext(
     ...overrides,
   };
 }
+
+describe('SPA panel cursor activation', () => {
+  it('opens only the SVG under the cursor even when another file is marked', async () => {
+    const paneId = 'pane-1';
+    const marked = bundleEntry();
+    const svg: EntrySummary = {
+      ...marked,
+      id: 'drawing' as EntryId,
+      name: 'drawing.SVG',
+      location: { providerId: 'local', uri: 'file:///drawing.SVG' },
+    };
+    const openPluginPane = vi.fn().mockReturnValue('opened');
+    const toast = vi.fn();
+    const context = fakeContext({
+      getActiveDirectory: () => ({ paneId, location: { providerId: 'local', uri: 'file:///' } }),
+      getSelections: () =>
+        new Map([[paneId, { selectedEntryIds: [marked.id], cursorEntryId: svg.id }]]),
+      getDirectories: () =>
+        new Map([[paneId, { state: { type: 'loaded' }, entries: [marked, svg], hasMore: false }]]),
+      getPlugins: () => [
+        {
+          id: 'example.svgo',
+          name: 'SVGO',
+          version: '1',
+          description: '',
+          enabled: true,
+          spaPanel: { actionId: 'example.svgo.open', extensions: ['svg'] },
+        },
+      ],
+      openPluginPane,
+      toast,
+    });
+    const controller = createActionCommandController(context);
+    const invocation = {
+      paneId,
+      cursorEntryId: svg.id,
+      selectedEntryIds: [marked.id],
+    };
+    controller.invokeActionById('example.svgo.open', undefined, invocation);
+    expect(openPluginPane).toHaveBeenCalledWith(
+      paneId,
+      expect.objectContaining({ id: 'example.svgo' }),
+      'example.svgo.open',
+      svg,
+    );
+    expect(toast).not.toHaveBeenCalled();
+
+    openPluginPane.mockReturnValueOnce('unavailable');
+    controller.invokeActionById('example.svgo.open', undefined, invocation);
+    expect(toast).toHaveBeenCalledWith({ html: 'Unable to run command.' });
+  });
+
+  it('does not open a panel for a non-SVG cursor', () => {
+    const entry = bundleEntry();
+    const openPluginPane = vi.fn();
+    const context = fakeContext({
+      getActiveDirectory: () => ({
+        paneId: 'pane-1',
+        location: { providerId: 'local', uri: 'file:///' },
+      }),
+      getSelections: () => new Map([['pane-1', { selectedEntryIds: [], cursorEntryId: entry.id }]]),
+      getDirectories: () =>
+        new Map([['pane-1', { state: { type: 'loaded' }, entries: [entry], hasMore: false }]]),
+      getPlugins: () => [
+        {
+          id: 'example.svgo',
+          name: 'SVGO',
+          version: '1',
+          description: '',
+          enabled: true,
+          spaPanel: { actionId: 'example.svgo.open', extensions: ['svg'] },
+        },
+      ],
+      openPluginPane,
+    });
+    createActionCommandController(context).invokeActionById('example.svgo.open', undefined, {
+      paneId: 'pane-1',
+      cursorEntryId: entry.id,
+    });
+    expect(openPluginPane).not.toHaveBeenCalled();
+  });
+});
 
 describe('action-command-controller uninstallApplication wiring', () => {
   it('opens the document-summary flow without invoking the synchronous backend action', () => {

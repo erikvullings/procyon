@@ -12,6 +12,7 @@ import type {
   EntrySummary,
   Location,
   PaneId,
+  PluginDescriptor,
   Settings,
   SortDescriptor,
   WorkspaceProjection,
@@ -69,6 +70,7 @@ export interface GlobalKeydownContext {
   getSelections(): Map<string, SelectionState>;
   getDirectories(): Map<string, PaneDirectoryView>;
   getRegisteredActions(): readonly ActionDescriptor[];
+  getPlugins(): readonly PluginDescriptor[];
   clipboard(): ClipboardState;
   getFindFilesOpen(): boolean;
   getViewer(
@@ -1633,6 +1635,29 @@ const ACTION_KEYDOWN_ROUTES = [
         }
       }
       return false;
+    },
+  },
+  {
+    id: 'plugin-panel',
+    tryHandle: (context, event, state) => {
+      const actionId = state.dispatchedAction;
+      if (
+        actionId === undefined ||
+        !context
+          .getPlugins()
+          .some((plugin) => plugin.enabled && plugin.spaPanel?.actionId === actionId)
+      )
+        return false;
+      event.preventDefault();
+      if (
+        context.getRegisteredActions().find((action) => action.id === actionId)?.contextRequirements
+          .featureAvailable === false
+      ) {
+        toast({ html: t('availability', 'notAvailableYet') });
+        return;
+      }
+      context.invokeActionById(actionId, undefined, context.actionContext());
+      return;
     },
   },
   {

@@ -9,6 +9,7 @@ mod credentials;
 mod event_stream;
 mod native_menu;
 mod platform;
+mod plugin_spa;
 #[cfg(debug_assertions)]
 mod semantic_developer;
 mod semantic_production;
@@ -68,13 +69,27 @@ fn build_context<R: tauri::Runtime>() -> tauri::Context<R> {
     tauri::generate_context!()
 }
 
+#[cfg(feature = "native-spa-smoke")]
+mod native_spa_smoke;
+
 /// Builds and runs the desktop application.
 ///
 /// No Axum server is started in-process to reuse HTTP (spec §11) — the
 /// Tauri commands in [`commands`] call `FileManagerService` directly.
 pub fn run() {
     init_tracing();
-    tauri::Builder::default()
+    let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
+    plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
+        .manage(panel_registry)
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished
+                && plugin_spa::trusted_invoke_label(webview.label())
+            {
+                plugin_spa::close_panels_for_window(webview.app_handle(), webview.window().label());
+                #[cfg(feature = "native-spa-smoke")]
+                native_spa_smoke::start_once(webview.app_handle().clone());
+            }
+        })
         .setup(|app| {
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
             // needs `app.path().resource_dir()`, which only resolves once the app has finished
@@ -166,6 +181,15 @@ pub fn run() {
             if let Some(resource_dir) = resource_directory {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
+            #[cfg(feature = "native-spa-smoke")]
+            if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                let plugins = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS")
+                    .ok_or_else(|| std::io::Error::other("smoke plugin directory is missing"))?;
+                service.set_bundled_plugins_directory(plugins.into());
+                service
+                    .set_plugin_enabled("procyon.svgo".to_owned(), true)
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            }
             let service = Arc::new(service);
             let semantic_ocr_shutdown = CancellationToken::new();
             app.manage(AppState {
@@ -175,6 +199,18 @@ pub fn run() {
                 semantic_managed_components,
                 semantic_reindex_pending_marker: semantic_reindex_pending_marker.clone(),
                 semantic_ocr_shutdown: semantic_ocr_shutdown.clone(),
+            });
+            let panel_app = app.handle().clone();
+            let panel_shutdown = semantic_ocr_shutdown.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::select! {
+                        () = panel_shutdown.cancelled() => break,
+                        () = tokio::time::sleep(std::time::Duration::from_secs(2)) => {
+                            plugin_spa::reconcile_panels(&panel_app);
+                        }
+                    }
+                }
             });
             if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
                 tracing::error!(%error, "OCR remediation recovery failed");
@@ -257,7 +293,13 @@ pub fn run() {
         // scope here).
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .map_label(commands::canonical_workspace_window_label)
+                .map_label(|label| {
+                    if label.starts_with("plugin-spa-") {
+                        "plugin-spa"
+                    } else {
+                        commands::canonical_workspace_window_label(label)
+                    }
+                })
                 .build(),
         )
         .manage(event_stream::EventSubscriptionRegistry::default())
@@ -266,6 +308,10 @@ pub fn run() {
         .manage(QuittingFlag::default())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
+                let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                for label in registry.labels_for_window(window.label()) {
+                    registry.release(&label);
+                }
                 window
                     .state::<event_stream::EventSubscriptionRegistry>()
                     .unsubscribe_window(window.label());
@@ -288,7 +334,8 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler({
+            let app_commands: fn(tauri::ipc::Invoke) -> bool = tauri::generate_handler![
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
@@ -404,6 +451,11 @@ pub fn run() {
             commands::disable_plugin,
             commands::get_plugin_logs,
             commands::get_plugin_icon_theme_asset,
+            plugin_spa::open_plugin_panel,
+            plugin_spa::update_plugin_panel_bounds,
+            plugin_spa::set_plugin_panel_visible,
+            plugin_spa::set_plugin_panel_theme,
+            plugin_spa::close_plugin_panel,
             commands::start_search,
             commands::cancel_search,
             commands::start_comparison,
@@ -473,8 +525,27 @@ pub fn run() {
             commands::subscribe_native_menu_actions,
             commands::initialize_window_handle,
             commands::set_native_menu,
-        ])
-        .build(build_context())
+            ];
+            move |invoke| {
+                if !plugin_spa::trusted_invoke_label(invoke.message.webview_ref().label()) {
+                    invoke.resolver.reject("plugin SPA windows cannot invoke app commands");
+                    true
+                } else {
+                    app_commands(invoke)
+                }
+            }
+        })
+        .build({
+            let context = build_context();
+            #[cfg(feature = "native-spa-smoke")]
+            let mut context = context;
+            #[cfg(feature = "native-spa-smoke")]
+            if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                context.config_mut().identifier =
+                    "nl.erikvullings.procyon.native-spa-smoke".to_owned();
+            }
+            context
+        })
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
             if matches!(
@@ -801,6 +872,34 @@ mod tests {
         url.parse().expect("valid url")
     }
 
+    #[test]
+    fn native_permissions_deny_plugin_child_in_trusted_window() {
+        let mut context = build_context::<tauri::test::MockRuntime>();
+        let authority = context.runtime_authority_mut();
+        let origin = tauri::ipc::Origin::Local;
+        for command in [
+            "plugin:updater|check",
+            "plugin:updater|download_and_install",
+            "plugin:process|restart",
+            "plugin:opener|open_url",
+        ] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &origin)
+                    .is_some(),
+                "{command} should remain available to the trusted main WebView"
+            );
+            for window in ["main", "workspace-test"] {
+                assert!(
+                    authority
+                        .resolve_access(command, window, "plugin-spa-test", &origin)
+                        .is_none(),
+                    "{command} should be denied to a child in {window}"
+                );
+            }
+        }
+    }
+
     /// Smoke test (task 0015's acceptance criteria): the app starts, on a
     /// headless `MockRuntime` (no real window), and `getRuntimeCapabilities`
     /// reports `runtime: "tauri"`.
@@ -831,6 +930,37 @@ mod tests {
 
         assert_eq!(response.runtime, RuntimeKindDto::Tauri);
         app.state::<AppState>();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_panel_fails_closed_without_clipboard_isolation() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+        let error = tauri::async_runtime::block_on(plugin_spa::open_plugin_panel(
+            app.handle().clone(),
+            webview.as_ref().window(),
+            app.state::<AppState>(),
+            plugin_spa::OpenPanelRequest {
+                plugin_id: "example.plugin".into(),
+                action_id: "example.plugin.edit".into(),
+                location: fm_transport_dto::LocationDto {
+                    provider_id: "local".into(),
+                    uri: "file:///selection.svg".into(),
+                },
+                bounds: plugin_spa::PanelBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                theme: plugin_spa::PanelTheme::Light,
+            },
+        ))
+        .expect_err("WKWebView cannot deny browser clipboard access");
+        assert!(matches!(error, plugin_spa::PanelError::Unavailable));
     }
 
     #[test]

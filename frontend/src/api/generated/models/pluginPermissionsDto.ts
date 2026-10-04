@@ -24,6 +24,8 @@ export interface PluginPermissionsDto {
   processSpawn: boolean;
   /** Allows bounded content reads for the current selection. */
   selectedEntryContentRead: boolean;
+  /** Allows saving only the selected entry originally opened in a panel. */
+  selectedEntryContentWrite: boolean;
   /** Allows metadata for the current selection. */
   selectedEntryMetadata: boolean;
   /** Allows non-secret settings storage under the plugin's identifier. */

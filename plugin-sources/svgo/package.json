@@ -1,0 +1,50 @@
+{
+  "name": "svgo",
+  "version": "1.0.0",
+  "description": "A single-page webapp to reduce the size of SVG files.",
+  "keywords": [
+    "svg",
+    "optimize",
+    "compress",
+    "svgo"
+  ],
+  "homepage": "https://github.com/erikvullings/svgo#readme",
+  "bugs": {
+    "url": "https://github.com/erikvullings/svgo/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erikvullings/svgo.git"
+  },
+  "license": "MIT",
+  "author": "Erik Vullings <erik.vullings@gmail.com>",
+  "type": "module",
+  "main": "docs/index.html",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:procyon": "vite build --mode procyon",
+    "preview": "vite preview",
+    "start": "vite",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "css-tree": "^3.2.1",
+    "dompurify": "^3.4.16",
+    "mithril": "2.3.8",
+    "svgo": "4.1.0"
+  },
+  "devDependencies": {
+    "@types/css-tree": "^2.3.11",
+    "@types/mithril": "2.2.9",
+    "@types/node": "26.4.0",
+    "jsdom": "30.0.1",
+    "monaco-editor": "0.52.2",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  }
+}

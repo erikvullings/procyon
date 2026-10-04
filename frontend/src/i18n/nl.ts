@@ -693,6 +693,7 @@ export const nl = {
     permissionsAriaLabel: 'Machtigingen van {name}',
     permissionSelectedEntryMetadata: 'Metadata van geselecteerd item',
     permissionSelectedEntryContentRead: 'Inhoud van geselecteerd item',
+    permissionSelectedEntryContentWrite: 'Inhoud van geselecteerd item opslaan',
     permissionFilesystemRead: 'Bestandssysteem lezen',
     permissionFilesystemWrite: 'Bestandssysteem schrijven',
     permissionClipboardRead: 'Klembord lezen',

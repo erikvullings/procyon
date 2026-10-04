@@ -1,0 +1,21 @@
+.fm-plugin-panel-host {
+  display: flex;
+  position: absolute;
+  top: var(--fm-header-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--fm-surface);
+}
+
+.fm-plugin-panel-host[data-visible="false"] {
+  display: none;
+}
+
+.fm-plugin-panel-surface {
+  flex: 1;
+  min-height: 0;
+}

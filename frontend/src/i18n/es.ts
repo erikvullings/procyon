@@ -690,6 +690,7 @@ export const es = {
     permissionsAriaLabel: 'Permisos de {name}',
     permissionSelectedEntryMetadata: 'Metadatos de la entrada seleccionada',
     permissionSelectedEntryContentRead: 'Contenido de la entrada seleccionada',
+    permissionSelectedEntryContentWrite: 'Guardar contenido de la entrada seleccionada',
     permissionFilesystemRead: 'Lectura del sistema de archivos',
     permissionFilesystemWrite: 'Escritura del sistema de archivos',
     permissionClipboardRead: 'Lectura del portapapeles',

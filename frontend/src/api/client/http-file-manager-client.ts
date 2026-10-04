@@ -1973,6 +1973,32 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
   }
 
+  openPluginPanel(
+    _pluginId: PluginId,
+    _actionId: string,
+    _location: FileLocation,
+    _bounds: import('./file-manager-client').PluginPanelBounds,
+    _theme: 'light' | 'dark',
+  ): Promise<string> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  updatePluginPanelBounds(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  setPluginPanelVisible(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  setPluginPanelTheme(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
+  closePluginPanel(): Promise<void> {
+    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+  }
+
   async invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult> {
     const response = await requestActionInvocation(
       request.actionId,
@@ -2005,9 +2031,11 @@ export class HttpFileManagerClient implements FileManagerClient {
       ...(plugin.diagnostic == null ? {} : { diagnostic: plugin.diagnostic }),
       ...(plugin.columns === undefined ? {} : { columns: plugin.columns }),
       ...(plugin.iconTheme == null ? {} : { iconTheme: pluginIconThemeFromDto(plugin.iconTheme) }),
+      ...(plugin.spaPanel == null ? {} : { spaPanel: plugin.spaPanel }),
       permissions: {
         selectedEntryMetadata: plugin.permissions.selectedEntryMetadata,
         selectedEntryContentRead: plugin.permissions.selectedEntryContentRead,
+        selectedEntryContentWrite: plugin.permissions.selectedEntryContentWrite,
         filesystemRead: plugin.permissions.filesystemRead,
         filesystemWrite: plugin.permissions.filesystemWrite,
         clipboardRead: plugin.permissions.clipboardRead,

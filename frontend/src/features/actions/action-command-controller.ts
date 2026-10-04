@@ -7,6 +7,7 @@ import type {
   EntrySummary,
   Location,
   PaneId,
+  PluginDescriptor,
   Settings,
   WorkspaceProjection,
 } from '../../models';
@@ -59,7 +60,14 @@ export interface ActionCommandControllerContext {
   getDirectories(): Map<string, PaneDirectoryView>;
   getCurrentSettings(): Settings | undefined;
   getClient(): FileManagerClient;
+  openPluginPane(
+    paneId: PaneId,
+    plugin: PluginDescriptor,
+    actionId: string,
+    entry: EntrySummary,
+  ): 'opened' | 'blocked' | 'unavailable';
   getRegisteredActions(): readonly ActionDescriptor[];
+  getPlugins(): readonly PluginDescriptor[];
   getWorkspace(): WorkspaceProjection | undefined;
   getNavigation(): NavigationController;
   getOpsController(): OperationsController;
@@ -169,6 +177,19 @@ const FILE_OPERATION_ACTION_IDS: ReadonlySet<string> = new Set([
 export function createActionCommandController(
   context: ActionCommandControllerContext,
 ): ActionCommandController {
+  function reportActionError(error: unknown): void {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : t('action', 'unableToRun');
+    const text = document.createElement('span');
+    text.textContent = message;
+    context.toast({ html: text.innerHTML });
+    context.redraw();
+  }
+
   function actionContext(): ActionInvocationContext {
     const active = context.getActiveDirectory();
     const selection =
@@ -203,8 +224,15 @@ export function createActionCommandController(
           ));
     const directory =
       effectiveKey === undefined ? undefined : context.getDirectories().get(effectiveKey);
+    const cursorId =
+      effectiveKey === undefined
+        ? undefined
+        : context.getSelections().get(effectiveKey)?.cursorEntryId;
+    const cursorEntry = directory?.entries.find((entry) => entry.id === cursorId);
     return {
       selectedEntries: effectiveEntries,
+      ...(cursorEntry === undefined ? {} : { cursorEntry }),
+      plugins: context.getPlugins(),
       locationWritable: directory?.writable === true,
       clipboardHasEntries: context.getClipboard().locations.length > 0,
       openTerminalSupported: context.getOpenTerminalSupported(),
@@ -238,6 +266,43 @@ export function createActionCommandController(
     parameters: unknown,
     actionContext: ActionInvocationContext,
   ): void {
+    const panelPlugin = context
+      .getPlugins()
+      .find((plugin) => plugin.spaPanel?.actionId === actionId);
+    if (panelPlugin?.spaPanel !== undefined) {
+      const panel = panelPlugin.spaPanel;
+      const paneId = actionContext.paneId;
+      const key = paneId === undefined ? undefined : context.getActiveTabKey(paneId);
+      const cursorId =
+        key === undefined ? undefined : context.getSelections().get(key)?.cursorEntryId;
+      const entry =
+        key === undefined
+          ? undefined
+          : context
+              .getDirectories()
+              .get(key)
+              ?.entries.find((candidate) => candidate.id === cursorId);
+      const extension = entry?.name.split('.').at(-1)?.toLowerCase();
+      if (
+        paneId === undefined ||
+        !panelPlugin.enabled ||
+        entry?.kind !== 'file' ||
+        isParentEntry(entry.id) ||
+        extension === undefined ||
+        (panel.extensions.length > 0 && !panel.extensions.includes(extension))
+      ) {
+        context.toast({ html: t('availability', 'selectFiles') });
+        return;
+      }
+      const placement = context.openPluginPane(paneId, panelPlugin, actionId, entry);
+      if (placement === 'unavailable') {
+        context.toast({ html: t('action', 'unableToRun') });
+      } else if (placement === 'opened') {
+        context.getCommandPaletteRecency().set(actionId, Date.now());
+        context.redraw();
+      }
+      return;
+    }
     void context
       .getClient()
       .invokeAction({
@@ -249,12 +314,7 @@ export function createActionCommandController(
         context.getCommandPaletteRecency().set(actionId, Date.now());
         context.redraw();
       })
-      .catch((error: unknown) => {
-        context.toast({
-          html: error instanceof Error ? error.message : t('action', 'unableToRun'),
-        });
-        context.redraw();
-      });
+      .catch(reportActionError);
   }
 
   /** Handles `core.editFinderTags`/`core.editSpotlightComment` (task 0136), shared by the context

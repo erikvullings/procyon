@@ -178,6 +178,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     getSelections: () => new Map<string, SelectionState>(),
     getDirectories: () => new Map<string, PaneDirectoryView>(),
     getRegisteredActions: () => ACTIONS,
+    getPlugins: () => [],
     clipboard: () => ({ locations: [] }),
     getFindFilesOpen: () => false,
     getViewer: () => undefined,
@@ -348,6 +349,38 @@ describe('dispatchGlobalKeydown precedence', () => {
     expect(route).toBe('directory-tree-toggle');
     expect(toggleDirectoryTree).toHaveBeenCalledOnce();
     expect(setActiveTabQuickFilter).not.toHaveBeenCalled();
+  });
+
+  it('dispatches a packaged SPA shortcut without colliding with Ctrl+F4 sort', () => {
+    const panelAction: ActionDescriptor = {
+      id: 'procyon.svgo.open',
+      title: 'Edit SVG with SVGO',
+      category: 'plugin',
+      defaultShortcuts: [{ key: 'F4', ctrl: true, shift: true }],
+      contextRequirements: { featureAvailable: true, requiresSingleSelection: true },
+      source: { kind: 'plugin', pluginId: 'procyon.svgo' },
+    };
+    const invokeActionById = vi.fn();
+    const context = makeContext({
+      getKeybindingRuntime: () => 'desktop',
+      getRegisteredActions: () => [...ACTIONS, panelAction],
+      actionsWithFavourites: () => [...ACTIONS, panelAction],
+      getPlugins: () => [
+        {
+          id: 'procyon.svgo',
+          name: 'SVGO',
+          version: '1',
+          description: '',
+          enabled: true,
+          spaPanel: { actionId: panelAction.id, extensions: ['svg'] },
+        },
+      ],
+      invokeActionById,
+    });
+    const event = keydown('F4', { ctrlKey: true, shiftKey: true });
+    expect(dispatchGlobalKeydown(context, event)).toBe('plugin-panel');
+    expect(event.defaultPrevented).toBe(true);
+    expect(invokeActionById).toHaveBeenCalledWith(panelAction.id, undefined, expect.any(Object));
   });
 
   it('routes a terminal shortcut before the open command palette blocker', () => {

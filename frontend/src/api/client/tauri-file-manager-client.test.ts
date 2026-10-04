@@ -78,6 +78,36 @@ afterEach(() => {
 });
 
 describe('TauriFileManagerClient', () => {
+  it('passes panel placement, theme, and visibility only through trusted host commands', async () => {
+    invoke.mockResolvedValue(undefined);
+    const client = new TauriFileManagerClient();
+    const location = { providerId: 'local', uri: 'file:///drawing.svg' };
+    const bounds = { x: 20, y: 40, width: 400, height: 300 };
+
+    await client.openPluginPanel('procyon.svgo', 'procyon.svgo.open', location, bounds, 'dark');
+    await client.setPluginPanelVisible('plugin-spa-1', false);
+    await client.setPluginPanelTheme('plugin-spa-1', 'light');
+    await client.closePluginPanel('plugin-spa-1');
+
+    expect(invoke.mock.calls).toEqual([
+      [
+        'open_plugin_panel',
+        {
+          request: {
+            pluginId: 'procyon.svgo',
+            actionId: 'procyon.svgo.open',
+            location,
+            bounds,
+            theme: 'dark',
+          },
+        },
+      ],
+      ['set_plugin_panel_visible', { label: 'plugin-spa-1', visible: false }],
+      ['set_plugin_panel_theme', { label: 'plugin-spa-1', theme: 'light' }],
+      ['close_plugin_panel', { label: 'plugin-spa-1' }],
+    ]);
+  });
+
   it('opens external URLs with the host opener', async () => {
     openUrl.mockResolvedValue(undefined);
     const client = new TauriFileManagerClient();

@@ -143,6 +143,9 @@ export interface WorkspacePaneContent {
   readonly onTabDrop?: (tabId: TabId, event: DropModifiers) => void;
   /** When set, replaces the pane's directory-listing surface with this content (task 0088). */
   readonly viewerContent?: m.Children;
+  /** Mounted beside the pane even when another tab is active, to retain its native WebView. */
+  readonly pluginPanel?: m.Children;
+  readonly pluginTabId?: TabId;
   /** Filenames displayed for Lister-owned tabs. */
   readonly viewerTitles?: ReadonlyMap<TabId, string>;
 }
@@ -546,169 +549,173 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           }
         },
       },
-      m(Pane, {
-        paneId,
-        path: pathFromUri(tab.location.uri),
-        locationUri: tab.location.uri,
-        tabTitle:
-          content.viewerTitles?.get(tab.id) ??
-          displayTabTitle(
-            tab.location.uri,
-            connectionRootTitle(tab.location, tabTitle, content.connections),
-            attrs.searchPresentationForLocationUri?.(tab.location.uri),
-          ),
-        ...(tab.location.uri.startsWith('search://')
-          ? (() => {
-              const presentation = attrs.searchPresentationForLocationUri?.(tab.location.uri);
-              return presentation === undefined ? {} : { searchPresentation: presentation };
-            })()
-          : {}),
-        ...(tab.location.uri.startsWith('search://') && attrs.onRefreshSearch !== undefined
-          ? { onRefreshSearch: () => attrs.onRefreshSearch?.(tab.location.uri, paneId) }
-          : {}),
-        tabs: pane.tabOrder.map((tabId) => {
-          const paneTab = pane.tabsById[tabId];
-          const uri = paneTab?.location.uri;
-          const connection =
-            paneTab === undefined
-              ? undefined
-              : connectionForLocation(paneTab.location, content.connections);
-          const presentation =
-            uri === undefined ? undefined : attrs.searchPresentationForLocationUri?.(uri);
-          return {
-            id: tabId,
-            title:
-              content.viewerTitles?.get(tabId) !== undefined
-                ? (content.viewerTitles.get(tabId) ?? '')
-                : paneTab === undefined
-                  ? ''
-                  : bareTabTitle(
-                      uri ?? '',
-                      connectionRootTitle(paneTab.location, paneTab.title, content.connections),
-                      presentation,
-                    ),
-            path:
-              paneTab === undefined ? '' : displayPathFromUri(paneTab.location.uri, presentation),
-            ...(uri === undefined ? {} : { locationUri: uri }),
-            isSearchTab: uri?.startsWith('search://') ?? false,
-            isConnectionTab: connection !== undefined,
-            ...(connection === undefined ? {} : { connectionName: connection.name }),
-            ...(presentation === undefined ? {} : { searchKind: presentation.kind }),
-          };
+      [
+        m(Pane, {
+          paneId,
+          path: pathFromUri(tab.location.uri),
+          locationUri: tab.location.uri,
+          tabTitle:
+            content.viewerTitles?.get(tab.id) ??
+            displayTabTitle(
+              tab.location.uri,
+              connectionRootTitle(tab.location, tabTitle, content.connections),
+              attrs.searchPresentationForLocationUri?.(tab.location.uri),
+            ),
+          ...(tab.location.uri.startsWith('search://')
+            ? (() => {
+                const presentation = attrs.searchPresentationForLocationUri?.(tab.location.uri);
+                return presentation === undefined ? {} : { searchPresentation: presentation };
+              })()
+            : {}),
+          ...(tab.location.uri.startsWith('search://') && attrs.onRefreshSearch !== undefined
+            ? { onRefreshSearch: () => attrs.onRefreshSearch?.(tab.location.uri, paneId) }
+            : {}),
+          tabs: pane.tabOrder.map((tabId) => {
+            const paneTab = pane.tabsById[tabId];
+            const uri = paneTab?.location.uri;
+            const connection =
+              paneTab === undefined
+                ? undefined
+                : connectionForLocation(paneTab.location, content.connections);
+            const presentation =
+              uri === undefined ? undefined : attrs.searchPresentationForLocationUri?.(uri);
+            return {
+              id: tabId,
+              movable: tabId !== content.pluginTabId,
+              title:
+                content.viewerTitles?.get(tabId) !== undefined
+                  ? (content.viewerTitles.get(tabId) ?? '')
+                  : paneTab === undefined
+                    ? ''
+                    : bareTabTitle(
+                        uri ?? '',
+                        connectionRootTitle(paneTab.location, paneTab.title, content.connections),
+                        presentation,
+                      ),
+              path:
+                paneTab === undefined ? '' : displayPathFromUri(paneTab.location.uri, presentation),
+              ...(uri === undefined ? {} : { locationUri: uri }),
+              isSearchTab: uri?.startsWith('search://') ?? false,
+              isConnectionTab: connection !== undefined,
+              ...(connection === undefined ? {} : { connectionName: connection.name }),
+              ...(presentation === undefined ? {} : { searchKind: presentation.kind }),
+            };
+          }),
+          activeTabId: pane.activeTabId,
+          onSelectTab: (tabId) => attrs.onSelectTab(paneId, tabId),
+          onCloseTab: (tabId) => attrs.onCloseTab(paneId, tabId),
+          onNewTab: () => attrs.onNewTab(paneId),
+          onMoveTab: attrs.onMoveTab,
+          ...(content.onTabDragOver === undefined ? {} : { onTabDragOver: content.onTabDragOver }),
+          ...(content.onTabDrop === undefined ? {} : { onTabDrop: content.onTabDrop }),
+          favourites: {
+            location: content.location,
+            defaultLabel: content.defaultFavouriteLabel,
+            currentLocationIsSavedSearch: content.currentLocationIsSavedSearch,
+            favouriteLocations: content.favouriteLocations,
+            recentLocations: content.recentLocations,
+            savedSearches: content.savedSearches,
+            systemLocations: content.systemLocations,
+            systemLocationsError: content.systemLocationsError,
+            onRetrySystemLocations: content.onRetrySystemLocations,
+            volumes: content.volumes,
+            volumesError: content.volumesError,
+            onRetryVolumes: content.onRetryVolumes,
+            connections: content.connections,
+            onManageConnections: content.onManageConnections,
+            onOpenSavedSearch: content.onOpenSavedSearch,
+            onRefreshConnections: content.onRefreshConnections,
+            unavailableLocations: content.unavailableLocations,
+            onNavigateLocation: content.onNavigateLocation,
+            onAddFavourite: content.onAddFavourite,
+            onDeleteFavourite: content.onDeleteFavourite,
+            onReorderFavourites: content.onReorderFavourites,
+          } satisfies FavouritesAttrs,
+          tableConfig: {
+            sortLabel: content.sortLabel,
+            sort: content.sort,
+            formatSettings: content.formatSettings,
+            pluginColumns: content.pluginColumns,
+            visibleColumnIds: content.visibleColumnIds,
+            showGitStatusColumn: content.showGitStatusColumn,
+            nativeIconLoader: content.nativeIconLoader,
+            thumbnailLoader: content.thumbnailLoader,
+            finderTagsLoader: content.finderTagsLoader,
+            viewMode: content.viewMode,
+            iconSize: content.iconSize,
+            onViewModeChange: content.onViewModeChange,
+            columnWidths: content.columnWidths,
+            onColumnWidthChange: content.onColumnWidthChange,
+          } satisfies TableConfigAttrs,
+          directorySummary: {
+            hasMore: content.hasMore,
+            totalEntryCount: content.totalEntryCount,
+            totalKnownEntries: content.totalKnownEntries,
+            totalKnownSize: content.totalKnownSize,
+            totalKnownFileCount: content.totalKnownFileCount,
+            volumeCapacity: content.volumeCapacity,
+            hiddenSelectedCount: content.hiddenSelectedCount,
+          } satisfies DirectorySummaryAttrs,
+          filter: {
+            filterOpen: content.filterOpen,
+            filterQuery: content.filterQuery,
+            onFilterQueryChange: content.onFilterQueryChange,
+            onFilterCommit: content.onFilterCommit,
+            onFilterClose: content.onFilterClose,
+          } satisfies FilterAttrs,
+          navigation: {
+            onNavigate: content.onNavigate,
+            onBack: content.onBack,
+            onForward: content.onForward,
+            onParent: content.onParent,
+            canNavigateBack: tab.canNavigateBack,
+            canNavigateForward: tab.canNavigateForward,
+          } satisfies PaneNavigationAttrs,
+          state: content.state,
+          entries: content.entries,
+          selectedEntryIds: content.selectedEntryIds,
+          cutEntryIds: content.cutEntryIds,
+          active,
+          platform: content.platform,
+          ...(content.keybindingRuntime === undefined
+            ? {}
+            : { keybindingRuntime: content.keybindingRuntime }),
+          ...(content.actions === undefined ? {} : { actions: content.actions }),
+          ...(content.keybindingOverrides === undefined
+            ? {}
+            : { keybindingOverrides: content.keybindingOverrides }),
+          ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
+          onOpenEntry: content.onOpenEntry,
+          ...(content.onDocumentSummary === undefined
+            ? {}
+            : { onDocumentSummary: content.onDocumentSummary }),
+          ...(content.onSearchKnowledge === undefined
+            ? {}
+            : { onSearchKnowledge: content.onSearchKnowledge }),
+          onSelectionAction: content.onSelectionAction,
+          onRetry: content.onRetry,
+          onLoadNextPage: content.onLoadNextPage,
+          onSortChange: content.onSortChange,
+          onRename: content.onRename,
+          ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
+          ...(content.renameRequest === undefined ? {} : { renameRequest: content.renameRequest }),
+          onContextMenu: content.onContextMenu ?? (() => undefined),
+          ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
+          ...(content.onPointerDragStart === undefined
+            ? {}
+            : { onPointerDragStart: content.onPointerDragStart }),
+          ...(content.onPointerDragOut === undefined
+            ? {}
+            : { onPointerDragOut: content.onPointerDragOut }),
+          ...(content.pointerDragEffect === undefined
+            ? {}
+            : { pointerDragEffect: content.pointerDragEffect }),
+          ...(content.onDragOver === undefined ? {} : { onDragOver: content.onDragOver }),
+          ...(content.onDrop === undefined ? {} : { onDrop: content.onDrop }),
+          ...(content.viewerContent === undefined ? {} : { viewerContent: content.viewerContent }),
         }),
-        activeTabId: pane.activeTabId,
-        onSelectTab: (tabId) => attrs.onSelectTab(paneId, tabId),
-        onCloseTab: (tabId) => attrs.onCloseTab(paneId, tabId),
-        onNewTab: () => attrs.onNewTab(paneId),
-        onMoveTab: attrs.onMoveTab,
-        ...(content.onTabDragOver === undefined ? {} : { onTabDragOver: content.onTabDragOver }),
-        ...(content.onTabDrop === undefined ? {} : { onTabDrop: content.onTabDrop }),
-        favourites: {
-          location: content.location,
-          defaultLabel: content.defaultFavouriteLabel,
-          currentLocationIsSavedSearch: content.currentLocationIsSavedSearch,
-          favouriteLocations: content.favouriteLocations,
-          recentLocations: content.recentLocations,
-          savedSearches: content.savedSearches,
-          systemLocations: content.systemLocations,
-          systemLocationsError: content.systemLocationsError,
-          onRetrySystemLocations: content.onRetrySystemLocations,
-          volumes: content.volumes,
-          volumesError: content.volumesError,
-          onRetryVolumes: content.onRetryVolumes,
-          connections: content.connections,
-          onManageConnections: content.onManageConnections,
-          onOpenSavedSearch: content.onOpenSavedSearch,
-          onRefreshConnections: content.onRefreshConnections,
-          unavailableLocations: content.unavailableLocations,
-          onNavigateLocation: content.onNavigateLocation,
-          onAddFavourite: content.onAddFavourite,
-          onDeleteFavourite: content.onDeleteFavourite,
-          onReorderFavourites: content.onReorderFavourites,
-        } satisfies FavouritesAttrs,
-        tableConfig: {
-          sortLabel: content.sortLabel,
-          sort: content.sort,
-          formatSettings: content.formatSettings,
-          pluginColumns: content.pluginColumns,
-          visibleColumnIds: content.visibleColumnIds,
-          showGitStatusColumn: content.showGitStatusColumn,
-          nativeIconLoader: content.nativeIconLoader,
-          thumbnailLoader: content.thumbnailLoader,
-          finderTagsLoader: content.finderTagsLoader,
-          viewMode: content.viewMode,
-          iconSize: content.iconSize,
-          onViewModeChange: content.onViewModeChange,
-          columnWidths: content.columnWidths,
-          onColumnWidthChange: content.onColumnWidthChange,
-        } satisfies TableConfigAttrs,
-        directorySummary: {
-          hasMore: content.hasMore,
-          totalEntryCount: content.totalEntryCount,
-          totalKnownEntries: content.totalKnownEntries,
-          totalKnownSize: content.totalKnownSize,
-          totalKnownFileCount: content.totalKnownFileCount,
-          volumeCapacity: content.volumeCapacity,
-          hiddenSelectedCount: content.hiddenSelectedCount,
-        } satisfies DirectorySummaryAttrs,
-        filter: {
-          filterOpen: content.filterOpen,
-          filterQuery: content.filterQuery,
-          onFilterQueryChange: content.onFilterQueryChange,
-          onFilterCommit: content.onFilterCommit,
-          onFilterClose: content.onFilterClose,
-        } satisfies FilterAttrs,
-        navigation: {
-          onNavigate: content.onNavigate,
-          onBack: content.onBack,
-          onForward: content.onForward,
-          onParent: content.onParent,
-          canNavigateBack: tab.canNavigateBack,
-          canNavigateForward: tab.canNavigateForward,
-        } satisfies PaneNavigationAttrs,
-        state: content.state,
-        entries: content.entries,
-        selectedEntryIds: content.selectedEntryIds,
-        cutEntryIds: content.cutEntryIds,
-        active,
-        platform: content.platform,
-        ...(content.keybindingRuntime === undefined
-          ? {}
-          : { keybindingRuntime: content.keybindingRuntime }),
-        ...(content.actions === undefined ? {} : { actions: content.actions }),
-        ...(content.keybindingOverrides === undefined
-          ? {}
-          : { keybindingOverrides: content.keybindingOverrides }),
-        ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
-        onOpenEntry: content.onOpenEntry,
-        ...(content.onDocumentSummary === undefined
-          ? {}
-          : { onDocumentSummary: content.onDocumentSummary }),
-        ...(content.onSearchKnowledge === undefined
-          ? {}
-          : { onSearchKnowledge: content.onSearchKnowledge }),
-        onSelectionAction: content.onSelectionAction,
-        onRetry: content.onRetry,
-        onLoadNextPage: content.onLoadNextPage,
-        onSortChange: content.onSortChange,
-        onRename: content.onRename,
-        ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
-        ...(content.renameRequest === undefined ? {} : { renameRequest: content.renameRequest }),
-        onContextMenu: content.onContextMenu ?? (() => undefined),
-        ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
-        ...(content.onPointerDragStart === undefined
-          ? {}
-          : { onPointerDragStart: content.onPointerDragStart }),
-        ...(content.onPointerDragOut === undefined
-          ? {}
-          : { onPointerDragOut: content.onPointerDragOut }),
-        ...(content.pointerDragEffect === undefined
-          ? {}
-          : { pointerDragEffect: content.pointerDragEffect }),
-        ...(content.onDragOver === undefined ? {} : { onDragOver: content.onDragOver }),
-        ...(content.onDrop === undefined ? {} : { onDrop: content.onDrop }),
-        ...(content.viewerContent === undefined ? {} : { viewerContent: content.viewerContent }),
-      }),
+        content.pluginPanel,
+      ],
     );
   }
 

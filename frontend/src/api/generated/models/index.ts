@@ -262,6 +262,7 @@ export * from './pluginIconThemeDtoIconDefinitions.ts';
 export * from './pluginIconThemeDtoMimePrefixes.ts';
 export * from './pluginLogEntryDto.ts';
 export * from './pluginPermissionsDto.ts';
+export * from './pluginSpaPanelDto.ts';
 export * from './pluginStatusDto.ts';
 export * from './pptxPreviewSessionRequestDto.ts';
 export * from './previewDocumentSummaryRequestDto.ts';

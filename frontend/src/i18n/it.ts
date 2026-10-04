@@ -688,6 +688,7 @@ export const it = {
     permissionsAriaLabel: 'Autorizzazioni di {name}',
     permissionSelectedEntryMetadata: 'Metadati della voce selezionata',
     permissionSelectedEntryContentRead: 'Contenuto della voce selezionata',
+    permissionSelectedEntryContentWrite: 'Salva il contenuto della voce selezionata',
     permissionFilesystemRead: 'Lettura del file system',
     permissionFilesystemWrite: 'Scrittura del file system',
     permissionClipboardRead: 'Lettura degli appunti',

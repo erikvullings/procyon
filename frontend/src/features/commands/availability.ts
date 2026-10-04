@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import type { ActionDescriptor, EntrySummary } from '../../models';
+import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../models';
 import { archiveRootForEntry } from '../navigation/archive-location';
 import { isParentEntry } from '../panes/parent-entry';
 
@@ -17,6 +17,8 @@ export interface CommandAvailabilityContext {
   readonly checksumSupported?: boolean;
   /** Whether the active pane has a directory to scan for duplicates. */
   readonly hasActiveLocation?: boolean;
+  readonly cursorEntry?: EntrySummary;
+  readonly plugins?: readonly PluginDescriptor[];
 }
 
 export interface AvailableAction {
@@ -122,6 +124,20 @@ export function evaluateActionAvailability(
   const requirements = action.contextRequirements;
   if (requirements.featureAvailable === false)
     return unavailable(action, t('availability', 'notAvailableYet'));
+  const panelPlugin = context.plugins?.find((plugin) => plugin.spaPanel?.actionId === action.id);
+  if (panelPlugin?.spaPanel !== undefined) {
+    const panel = panelPlugin.spaPanel;
+    const entry = context.cursorEntry;
+    const extension = entry?.name.split('.').at(-1)?.toLowerCase();
+    if (
+      !panelPlugin.enabled ||
+      entry?.kind !== 'file' ||
+      extension === undefined ||
+      (panel.extensions.length > 0 && !panel.extensions.includes(extension))
+    )
+      return unavailable(action, t('availability', 'selectFiles'));
+    return { action, available: true };
+  }
   if (requirements.requiresSingleSelection && context.selectedEntries.length !== 1) {
     return unavailable(action, t('availability', 'selectExactlyOne'));
   }

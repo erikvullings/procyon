@@ -26,6 +26,7 @@ function fixturePlugin(overrides: Partial<PluginDescriptor> = {}): PluginDescrip
     permissions: {
       selectedEntryMetadata: true,
       selectedEntryContentRead: false,
+      selectedEntryContentWrite: false,
       filesystemRead: [],
       filesystemWrite: [],
       clipboardRead: false,

@@ -18,6 +18,18 @@ Sample plugins
 published `fm-plugin-api` surface, so the ABI's real usability is exercised by first-party
 examples before third parties depend on it.
 
+Task 0226 adds a separately selected, embedded QuickJS executor through `rquickjs` for
+JavaScript code contributions. QuickJS is packaged in-process across desktop platforms and
+supports memory limits and an interrupt handler for deterministic time/instruction budgets,
+without Node.js or the browser DOM. A fresh context exposes only typed, permission-checked host
+calls; it has no Tauri command, filesystem, process, credentials, or ambient network binding.
+The manifest defaults to Lua for backward compatibility. An independent `spa_panel` contribution
+identifies packaged HTML for a separately isolated child WebView; choosing JavaScript as an
+action runtime neither requires nor grants a panel. A WebView is not itself a security boundary:
+trusted host identity binding, CSP, navigation denial and a narrow capability-checked bridge
+must be supplied by the desktop host before panels can be enabled. Browser hosts without an
+equivalent isolation boundary report the capability unavailable.
+
 ## Alternatives
 - **Native dynamic libraries (`.so`/`.dylib`/`.dll`) loaded directly**: rejected — spec §35
   explicitly forbids exposing native dynamic libraries as the plugin ABI; also unsafe across
@@ -25,6 +37,11 @@ examples before third parties depend on it.
 - **Full scripting language with unrestricted host bindings** (e.g. arbitrary Lua/JS with
   filesystem access): rejected — same rationale, violates the "no arbitrary filesystem methods to
   plugins" rule and removes any capability boundary.
+- **Node.js sidecar**: rejected — Node's filesystem, process and network APIs create a larger
+  authority and packaging surface than an embedded engine with explicitly installed host calls.
+- **Boa for embedded JavaScript**: deferred — it is pure Rust, but QuickJS exposes direct VM
+  memory limits and an interrupt callback that can bound even tight loops in the chosen binding.
+  Both require an explicit host-call allow-list; neither makes an SPA WebView safe by itself.
 - **No plugin system, only first-party features**: rejected — extensibility (custom columns,
   actions) is a stated goal of the spec.
 
