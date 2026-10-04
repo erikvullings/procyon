@@ -49,6 +49,15 @@ sanitization.
   This exercises a test build, not the installed
   package or cursor/shortcut path, and does not establish clipboard, CSP/navigation, crash,
   or worker isolation. The existing packaged-app check only verifies launch.
+
+  On a disposable macOS test environment, reproduce the release-mode check from the repository
+  root without running Vite:
+
+  ```bash
+  pnpm exec cross-env VITE_RUNTIME=tauri pnpm run build:frontend
+  cargo build -p fm-desktop --release --features native-spa-smoke
+  CI=true node scripts/smoke-native-spa.mjs target/release/fm-desktop
+  ```
 - **Crash cleanup is not immediate.** Tauri has no child-WebView crash callback here; the
   parent-window close event and periodic reconciliation are available, but a crashed child
   whose parent remains open may retain an origin slot. Do not claim the crash teardown
