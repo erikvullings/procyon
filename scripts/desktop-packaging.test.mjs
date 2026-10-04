@@ -803,7 +803,10 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
     /<licenseUrl>https:\/\/github\.com\/example\/fm\/blob\/main\/LICENSE<\/licenseUrl>/,
   );
   assert.doesNotMatch(nuspec, /<license(?:\s|>)/);
-  assert.match(nuspec, /<iconUrl>.*icons\/icon\.png<\/iconUrl>/);
+  assert.match(
+    nuspec,
+    /<iconUrl>https:\/\/cdn\.jsdelivr\.net\/gh\/example\/fm@v1\.2\.3\/apps\/fm-desktop\/src-tauri\/icons\/icon\.png<\/iconUrl>/,
+  );
   assert.match(nuspec, /releases\/tag\/v1\.2\.3/);
   assert.match(install, /Install-ChocolateyPackage @packageArgs/);
   assert.match(install, /silentArgs\s*= '\/S'/);
