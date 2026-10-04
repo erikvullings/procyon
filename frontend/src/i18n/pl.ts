@@ -361,6 +361,7 @@ export const pl = {
     clipboardEmpty: 'Najpierw skopiuj lub przenieś element',
     selectionReadOnly: 'Zaznaczony element jest tylko do odczytu',
     quickLookLocalFilesOnly: 'Quick Look jest dostępny tylko dla plików lokalnych',
+    svgoLocalFilesOnly: 'SVGO może edytować tylko lokalne pliki SVG',
     browserUnavailable: '{action} jest niedostępne w przeglądarce.',
   },
   operation: {

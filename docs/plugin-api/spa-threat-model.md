@@ -24,7 +24,7 @@ same-user process capable of modifying installed plugin files is outside the cur
 | WebView identity | Sixteen pre-registered scheme origins are leased one per live panel. A host-generated child WebView label is bound to that origin, plugin ID, action ID, selected file and owning trusted window; requests from a different label/slot fail. Native plugin commands are granted only to trusted `main`/`workspace-*` WebView labels, not their parent window labels; Tauri checks plugin commands before the app invoke handler, which separately denies app commands to non-app WebViews. Only the owning trusted window can position, hide/show, theme or close its child. The separate WebView occupies a transient tab in the opposite pane, never an iframe in the trusted app WebView. |
 | Browser authority | Panels are incognito. CSP defaults to none, allows only packaged scripts/styles/fonts, local/data images and blob workers, and restricts connections to the window's own bridge. Popups, downloads, foreign navigation, frames and objects are blocked. WKWebView clipboard read/write on macOS bypasses the bridge, so a panel without both declared grants cannot open there. |
 | Host bridge | The package calls version-1, token-bound, size-limited `save-svg` and SVGO-only `settings-change` requests. The custom-scheme handler checks the calling WebView label and origin, rejects unknown fields and revalidates enablement, package identity, `.svg` extension and relevant permissions on each request. Settings changes admit only 15 typed, range-checked optimizer fields (never an SVG, URI, layout or theme), ignore stale per-window sequence numbers, and require `settings_storage`. A typed response exposes no file contents or paths on error. |
-| Selected file | The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. The editor tracks its sibling temporary copy and attempts to discard it on write/commit errors and dropped save futures, cancelling the associated provider operation before cleanup. Same-URI panels serialize saves; a reload closes the panel instead of replaying an outdated snapshot. |
+| Selected file | SVGO opens only a local `file:` location, checked at trusted host open and again on every bridge request, including Save. The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. The editor tracks its sibling temporary copy and attempts to discard it on write/commit errors and dropped save futures, cancelling the associated provider operation before cleanup. SVGO saves hold a process-wide mutex and an advisory cross-process lock (in the per-user Procyon cache, keyed by canonical parent and filename) through the revision recheck and commit; symlinked directory aliases share the lock. Stable cache lock files are retained to avoid an unlink/recreate split-lock race. A reload closes the panel instead of replaying an outdated snapshot. The generic editor and other providers retain their existing behavior. |
 | Lifecycle | Tab switches hide the child without discarding edits. Closing the tab requests a final settings snapshot and waits up to two seconds before releasing the origin slot and cancelling pending requests; failure is logged. Parent-window close, trusted-app reload, or plugin disable releases the slot immediately. Periodic reconciliation closes child WebViews whose plugin package/permission is no longer valid. JS calls use fresh runtimes. |
 
 The bundled SVGO preview also sanitizes imported SVG before inserting it into its DOM,
@@ -94,10 +94,14 @@ sanitization.
   proof of remote publication. Cancellation during commit can also return an error after a
   provider has already published the destination. Do not claim guaranteed teardown or atomic
   rollback across providers.
-- **Cross-process writes remain optimistic.** Same-URI panels in one host serialize saves;
-  another process or a different URI alias to the same file can race the editor's read/check/
-  commit sequence. No forced overwrite is requested, but the provider operation is not an
-  atomic compare-and-swap. An atomic provider revision check is needed for a stronger guarantee.
+- **Uncooperative external writes remain optimistic (accepted for 0.4.0).** Independent
+  Procyon SVGO processes and symlinked directory aliases serialize through the same advisory
+  cache lock, and each Save checks the revision while holding it. External editors that do not
+  take this lock can still write between the revision check and rename: local filesystem
+  operations here offer no atomic compare-and-swap against them. The user explicitly accepted
+  this residual for 0.4.0; do not describe the lock as universal protection or atomic CAS.
+  SVGO remote SFTP/FTP/WebDAV/etc. files cannot be opened or saved through the panel; remote
+  whole-file editing remains available through the generic editor, with its existing limits.
 
 The earlier focused security review covered the previously enabled paths, before macOS panel
 activation. Do not change task 0226 to `done` until the release gates are resolved and

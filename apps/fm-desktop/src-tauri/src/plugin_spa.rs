@@ -8,8 +8,10 @@ use std::{
 };
 
 use fm_application::FileManagerService;
+use fm_domain::{Location, ProviderId};
 use fm_transport_dto::{LoadEditableFileRequestDto, LocationDto, SaveEditableFileRequestDto};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, Rect, Runtime, State, Url,
     WebviewBuilder, WebviewUrl, Window,
@@ -28,6 +30,59 @@ const MAX_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const SVGO_PLUGIN_ID: &str = "procyon.svgo";
+static SVGO_PROCESS_SAVE_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
+
+fn require_local_svgo(plugin_id: &str, location: &LocationDto) -> Result<(), PanelError> {
+    if plugin_id != SVGO_PLUGIN_ID {
+        return Ok(());
+    }
+    if location.provider_id != "local"
+        || Location::try_new(ProviderId::new("local"), location.uri.clone())
+            .and_then(|location| location.to_native_path())
+            .is_err()
+    {
+        return Err(PanelError::Denied);
+    }
+    Ok(())
+}
+
+async fn svgo_file_lock(location: &LocationDto) -> Result<std::fs::File, PanelError> {
+    let path = Location::try_new(ProviderId::new("local"), location.uri.clone())
+        .and_then(|location| location.to_native_path())
+        .map_err(|_| PanelError::Denied)?;
+    let parent = path.parent().ok_or(PanelError::Invalid)?.to_path_buf();
+    let name = path.file_name().ok_or(PanelError::Invalid)?.to_os_string();
+    tokio::task::spawn_blocking(move || {
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        let target = canonical_parent
+            .join(name)
+            .canonicalize()
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        let key = Sha256::digest(target.to_string_lossy().as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let cache = dirs::cache_dir()
+            .ok_or(PanelError::Unavailable)?
+            .join("procyon")
+            .join("svgo-locks");
+        std::fs::create_dir_all(&cache).map_err(|error| PanelError::File(error.to_string()))?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(cache.join(format!("{key}.lock")))
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        fs2::FileExt::lock_exclusive(&file).map_err(|error| PanelError::File(error.to_string()))?;
+        Ok(file)
+    })
+    .await
+    .map_err(|error| PanelError::File(error.to_string()))?
+}
+
 fn panel_csp(origin: &str) -> String {
     #[cfg(feature = "native-spa-smoke")]
     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
@@ -556,6 +611,7 @@ fn checked_panel(
     service: &FileManagerService,
     session: &PanelSession,
 ) -> Result<fm_application::PluginPanel, PanelError> {
+    require_local_svgo(&session.plugin_id, &session.location)?;
     let panel = service
         .plugin_panel(&session.plugin_id, &session.action_id, &session.location)
         .map_err(|_| PanelError::Unavailable)?;
@@ -616,11 +672,30 @@ async fn save_svg(
     session: Arc<PanelSession>,
     svg: String,
 ) -> Result<(), PanelError> {
+    require_local_svgo(&session.plugin_id, &session.location)?;
     let panel = checked_panel(&service, &session)?;
     if !panel.can_write_selected {
         return Err(PanelError::Denied);
     }
     let _save_guard = session.save_lock.lock().await;
+    let _process_guard = if session.plugin_id == SVGO_PLUGIN_ID {
+        Some(
+            tokio::time::timeout(BRIDGE_TIMEOUT, SVGO_PROCESS_SAVE_LOCK.lock())
+                .await
+                .map_err(|_| PanelError::Timeout)?,
+        )
+    } else {
+        None
+    };
+    let _file_guard = if session.plugin_id == SVGO_PLUGIN_ID {
+        Some(
+            tokio::time::timeout(BRIDGE_TIMEOUT, svgo_file_lock(&session.location))
+                .await
+                .map_err(|_| PanelError::Timeout)??,
+        )
+    } else {
+        None
+    };
     let mut revision = session.revision.lock().await;
     let future = service.save_editable_file(SaveEditableFileRequestDto {
         location: session.location.clone(),
@@ -923,6 +998,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         bounds,
         theme,
     } = request;
+    require_local_svgo(&plugin_id, &location)?;
     let panel = state
         .service
         .plugin_panel(&plugin_id, &action_id, &location)
@@ -1253,6 +1329,227 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn svgo_service(root: &Path) -> Arc<FileManagerService> {
+        let service = Arc::new(FileManagerService::new(
+            fm_transport_dto::RuntimeKindDto::Tauri,
+            root,
+            root.join("settings"),
+        ));
+        service
+            .set_plugin_enabled(SVGO_PLUGIN_ID.to_owned(), true)
+            .unwrap();
+        service
+    }
+
+    fn svgo_session(
+        service: &FileManagerService,
+        location: LocationDto,
+        revision: String,
+    ) -> Arc<PanelSession> {
+        let panel = service
+            .plugin_panel(SVGO_PLUGIN_ID, "procyon.svgo.open", &location)
+            .unwrap();
+        Arc::new(PanelSession {
+            label: "plugin-spa-test".into(),
+            owner_window: "main".into(),
+            plugin_id: SVGO_PLUGIN_ID.into(),
+            action_id: "procyon.svgo.open".into(),
+            directory: panel.directory,
+            entrypoint: panel.entrypoint,
+            location,
+            token: "test-token".into(),
+            revision: AsyncMutex::new(revision),
+            save_lock: Arc::new(AsyncMutex::new(())),
+            settings_sequence: Mutex::new(0),
+            flush_sender: Mutex::new(None),
+            shutdown: CancellationToken::new(),
+        })
+    }
+
+    #[tokio::test]
+    async fn svgo_denies_remote_open_and_forged_bridge_save_but_local_save_works() {
+        let root = tempfile::tempdir().unwrap();
+        let service = svgo_service(root.path());
+        let path = root.path().join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        for (provider_id, uri) in [
+            ("sftp", "sftp://host/drawing.svg"),
+            ("ftp", "ftp://host/drawing.svg"),
+            ("webdav", "webdav://host/drawing.svg"),
+        ] {
+            assert!(matches!(
+                require_local_svgo(
+                    SVGO_PLUGIN_ID,
+                    &LocationDto {
+                        provider_id: provider_id.into(),
+                        uri: uri.into(),
+                    }
+                ),
+                Err(PanelError::Denied)
+            ));
+        }
+        let remote = LocationDto {
+            provider_id: "sftp".into(),
+            uri: "sftp://host/drawing.svg".into(),
+        };
+        assert!(matches!(
+            require_local_svgo(SVGO_PLUGIN_ID, &remote),
+            Err(PanelError::Denied)
+        ));
+        let mut forged = svgo_session(&service, location.clone(), "revision".into());
+        Arc::get_mut(&mut forged).unwrap().location = remote;
+        let result = bridge(
+            Arc::clone(&service),
+            forged,
+            br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"test-token"}"#.to_vec(),
+            panel_origin(0),
+        )
+        .await;
+        assert_eq!(result.status(), StatusCode::FORBIDDEN);
+        let mismatched = LocationDto {
+            provider_id: "local".into(),
+            uri: "sftp://host/drawing.svg".into(),
+        };
+        assert!(matches!(
+            require_local_svgo(SVGO_PLUGIN_ID, &mismatched),
+            Err(PanelError::Denied)
+        ));
+
+        assert!(require_local_svgo(SVGO_PLUGIN_ID, &location).is_ok());
+        let loaded = service
+            .load_editable_file(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        let result = bridge(
+            service,
+            session,
+            br#"{"version":1,"type":"save-svg","svg":"<svg id=\"saved\"/>","loadToken":"test-token"}"#.to_vec(),
+            panel_origin(0),
+        ).await;
+        assert_eq!(result.status(), StatusCode::OK);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "<svg id=\"saved\"/>"
+        );
+    }
+
+    #[test]
+    fn svgo_cross_process_worker() {
+        let Ok(root) = std::env::var("PROCYON_SVGO_LOCK_TEST_ROOT") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        let service = svgo_service(&root);
+        let target = std::env::var("PROCYON_SVGO_LOCK_TEST_TARGET").unwrap();
+        let location: LocationDto = Location::from_native_path(Path::new(&target))
+            .unwrap()
+            .into();
+        let loaded = tauri::async_runtime::block_on(service.load_editable_file(
+            LoadEditableFileRequestDto {
+                location: location.clone(),
+            },
+        ))
+        .unwrap();
+        std::fs::write(root.join("worker-ready"), b"ready").unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        let result = tauri::async_runtime::block_on(save_svg(
+            service,
+            session,
+            "<svg id=\"worker\"/>".into(),
+        ));
+        assert!(matches!(result, Err(PanelError::File(_))), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn svgo_cross_process_alias_saves_serialize_and_conflict() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let path = real.join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        #[cfg(unix)]
+        let alias = {
+            let alias = root.path().join("alias");
+            std::os::unix::fs::symlink(&real, &alias).unwrap();
+            alias.join("drawing.svg")
+        };
+        #[cfg(not(unix))]
+        let alias = path.clone();
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        let aliased: LocationDto = Location::from_native_path(&alias).unwrap().into();
+        let held = svgo_file_lock(&location).await.unwrap();
+        let executable = std::env::current_exe().unwrap();
+        let mut worker = std::process::Command::new(executable)
+            .arg("--exact")
+            .arg("plugin_spa::tests::svgo_cross_process_worker")
+            .arg("--nocapture")
+            .env("PROCYON_SVGO_LOCK_TEST_ROOT", root.path())
+            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias)
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while !root.path().join("worker-ready").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            worker.try_wait().unwrap().is_none(),
+            "worker must wait on the file lock"
+        );
+        let service = svgo_service(root.path());
+        let loaded = service
+            .load_editable_file(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        // The parent holds the lock as the first writer; the child loaded the old revision.
+        let saved = service
+            .save_editable_file(SaveEditableFileRequestDto {
+                location: session.location.clone(),
+                destination: None,
+                content: "<svg id=\"parent\"/>".into(),
+                expected_revision: session.revision.lock().await.clone(),
+                overwrite_conflict: false,
+            })
+            .await
+            .unwrap();
+        assert!(!saved.overwrote_conflict);
+        drop(held);
+        assert!(worker.wait().unwrap().success());
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "<svg id=\"parent\"/>"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&alias).unwrap(),
+            "<svg id=\"parent\"/>"
+        );
+        assert!(!real.read_dir().unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("lock")
+        }));
+        assert_eq!(
+            svgo_file_lock(&aliased)
+                .await
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .len(),
+            0
+        );
+    }
 
     #[test]
     fn child_bounds_must_fit_the_owning_window() {

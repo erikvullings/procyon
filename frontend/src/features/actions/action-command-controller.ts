@@ -18,7 +18,7 @@ import {
   isCopySelectionAction,
 } from '../clipboard/copy-selection-actions';
 import type { CommandAvailabilityContext } from '../commands/availability';
-import { evaluateActionAvailability } from '../commands/availability';
+import { evaluateActionAvailability, svgoRequiresLocalFile } from '../commands/availability';
 import type { ArchiveCreateRequest } from '../dialogs/dialog-ui-controller';
 import type { NavigationController, PaneDirectoryView } from '../navigation/navigation';
 import type { OperationsController } from '../operations/operations-controller';
@@ -283,6 +283,10 @@ export function createActionCommandController(
               .get(key)
               ?.entries.find((candidate) => candidate.id === cursorId);
       const extension = entry?.name.split('.').at(-1)?.toLowerCase();
+      if (svgoRequiresLocalFile(panelPlugin.id, entry)) {
+        context.toast({ html: t('availability', 'svgoLocalFilesOnly') });
+        return;
+      }
       if (
         paneId === undefined ||
         !panelPlugin.enabled ||
