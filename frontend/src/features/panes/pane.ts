@@ -255,6 +255,7 @@ export interface PaneAttrs {
   readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
   readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** When set, replaces the entire directory-listing surface (task 0088). */
   readonly viewerContent?: m.Children;
@@ -1819,6 +1820,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       return attrs.onPointerDragOut?.(selection);
                     },
                   }),
+              ...(attrs.onPointerDragCancel === undefined
+                ? {}
+                : { onPointerDragCancel: attrs.onPointerDragCancel }),
               ...(attrs.pointerDragEffect === undefined
                 ? {}
                 : { pointerDragEffect: attrs.pointerDragEffect }),

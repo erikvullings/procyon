@@ -3,6 +3,12 @@ import { chevronDownIcon, chevronRightIcon } from '../../components/tabler-icons
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import { calculateVisibleWindow, scrollOffsetForIndex } from '../directory-table/windowing';
+import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
+import {
+  beginPointerFileDrag,
+  consumePointerFileDragClick,
+  registerPointerFileDropTarget,
+} from '../drag-drop/pointer-file-drag';
 import {
   type FlatTreeNode,
   flattenVisibleTree,
@@ -26,6 +32,14 @@ export interface DirectoryTreeAttrs {
   readonly onToggleExpand: (location: Location) => void;
   /** Navigates the active pane to `location`. */
   readonly onActivate: (location: Location) => void;
+  readonly onDragStart?: (location: Location, event: DragEvent) => void;
+  readonly onDragEnd?: () => void;
+  readonly onDragOver?: (location: Location, event: DropEventState) => boolean;
+  readonly onDrop?: (location: Location, event: DropModifiers) => void;
+  readonly onPointerDragStart?: (location: Location) => void;
+  readonly onPointerDragOut?: (location: Location) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
+  readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** Tab (`direction: 1`) or Shift+Tab (`direction: -1`) pressed while the tree has focus - lets
    * the caller move focus elsewhere (e.g. the next/previous pane) to complete a pane-tree cycle. */
   readonly onTabOut?: (direction: -1 | 1) => void;
@@ -51,6 +65,10 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
   let scrollTop = 0;
   let focusedUri: string | undefined;
   let resizeObserver: ResizeObserver | undefined;
+  let unregisterPointerDropTarget: (() => void) | undefined;
+  let currentAttrs: DirectoryTreeAttrs;
+  let currentRows: readonly FlatTreeNode[] = [];
+  let dragTargetUri: string | undefined;
 
   function clampIndex(index: number, length: number): number {
     return Math.max(0, Math.min(length - 1, index));
@@ -84,7 +102,9 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
       });
     },
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       const rows = flattenVisibleTree(attrs.root, attrs.state);
+      currentRows = rows;
       const rowsByUri = new Map(rows.map((row, index) => [row.location.uri, index]));
       if (focusedUri === undefined || !rowsByUri.has(focusedUri)) {
         focusedUri =
@@ -117,10 +137,63 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
               key: row.location.uri,
               id: rowId(row.location.uri),
               role: 'treeitem',
+              'data-entry-index': index,
+              draggable:
+                row.depth > 0 &&
+                attrs.onDragStart !== undefined &&
+                attrs.onPointerDragStart === undefined,
+              ondragstart: (event: DragEvent) => {
+                if (
+                  row.depth === 0 ||
+                  (event.target as Element).closest('.fm-tree-expand-toggle') !== null
+                ) {
+                  event.preventDefault();
+                  return;
+                }
+                attrs.onDragStart?.(row.location, event);
+              },
+              ondragend: () => {
+                dragTargetUri = undefined;
+                attrs.onDragEnd?.();
+              },
+              onpointerdown: (event: PointerEvent) => {
+                if (
+                  row.depth === 0 ||
+                  attrs.onPointerDragStart === undefined ||
+                  (event.target as Element).closest('.fm-tree-expand-toggle') !== null
+                )
+                  return;
+                beginPointerFileDrag(event, {
+                  index,
+                  onStart: () => currentAttrs.onPointerDragStart?.(row.location),
+                  onNativeDragOut: () => currentAttrs.onPointerDragOut?.(row.location),
+                  onCancel: () => currentAttrs.onPointerDragCancel?.(),
+                  ...(attrs.pointerDragEffect === undefined
+                    ? {}
+                    : { effectForModifiers: attrs.pointerDragEffect }),
+                });
+              },
+              ondragover: (event: DragEvent) => {
+                if (attrs.onDragOver?.(row.location, event) !== true) return;
+                event.preventDefault();
+                dragTargetUri = row.location.uri;
+              },
+              ondragleave: () => {
+                if (dragTargetUri === row.location.uri) dragTargetUri = undefined;
+              },
+              ondrop: (event: DragEvent) => {
+                event.preventDefault();
+                dragTargetUri = undefined;
+                attrs.onDrop?.(row.location, event);
+              },
               'aria-level': row.depth + 1,
               'aria-expanded': expandable ? (row.expanded ? 'true' : 'false') : undefined,
               'aria-selected': selected ? 'true' : 'false',
-              class: [selected ? 'fm-tree-row-selected' : '', focused ? 'fm-tree-row-focused' : '']
+              class: [
+                selected ? 'fm-tree-row-selected' : '',
+                focused ? 'fm-tree-row-focused' : '',
+                dragTargetUri === row.location.uri ? 'fm-drop-target' : '',
+              ]
                 .filter(Boolean)
                 .join(' '),
               style: {
@@ -128,6 +201,7 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
                 paddingLeft: `${row.depth * 16 + 8}px`,
               },
               onclick: () => {
+                if (consumePointerFileDragClick()) return;
                 focusedUri = row.location.uri;
                 attrs.onActivate(row.location);
               },
@@ -175,6 +249,18 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
           style: { height: attrs.viewportHeight === undefined ? '100%' : `${viewportHeight}px` },
           oncreate: (vnode: VnodeDOM) => {
             element = vnode.dom as HTMLElement;
+            unregisterPointerDropTarget = registerPointerFileDropTarget(element, {
+              onDragOver: (index, event) => {
+                const row = index === undefined ? undefined : currentRows[index];
+                return row === undefined
+                  ? false
+                  : (currentAttrs.onDragOver?.(row.location, event) ?? false);
+              },
+              onDrop: (index, event) => {
+                const row = index === undefined ? undefined : currentRows[index];
+                if (row !== undefined) currentAttrs.onDrop?.(row.location, event);
+              },
+            });
             if (attrs.viewportHeight === undefined && typeof ResizeObserver !== 'undefined') {
               resizeObserver = new ResizeObserver(() => m.redraw());
               resizeObserver.observe(element);
@@ -185,6 +271,7 @@ export const DirectoryTree: FactoryComponent<DirectoryTreeAttrs> = () => {
             element = vnode.dom as HTMLElement;
           },
           onremove: () => {
+            unregisterPointerDropTarget?.();
             resizeObserver?.disconnect();
           },
           onscroll: (event: Event) => {

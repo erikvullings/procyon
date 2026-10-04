@@ -168,6 +168,12 @@ Procyon uses **Cmd** as the primary modifier on macOS and **Ctrl** on Windows an
 | Embedded terminal | `Ctrl+Backtick` or `F12` |
 | Shortcut reference | `F1` |
 
+Directory-tree folders can be dragged onto another tree folder, a pane directory, or a tab;
+table entries can also be dropped onto tree folders. A valid target is outlined. Drops move by
+default; hold Command or Option on macOS, or Control on Windows/Linux, to copy instead. The
+ordinary operation confirmation and conflict handling still apply. Use Cut/Copy and Paste for
+the keyboard equivalent.
+
 The in-app `F1` reference is the authoritative list. Browser-reserved shortcuts may only be
 available in the desktop app. The
 [Total Commander parity audit](TASKS/0128-total-commander-shortcuts-quick-wins.md) records design
