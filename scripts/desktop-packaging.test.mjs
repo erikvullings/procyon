@@ -848,6 +848,34 @@ test('desktop CI runs platform packaging smoke tests after building', () => {
   assert.ok(commands.some((command) => /smoke-desktop-package\.mjs/.test(command)));
 });
 
+test('native SPA CI checks smoke-enabled installed bundles on all desktop platforms', () => {
+  const native = workflow('ci.yml').jobs['native-spa-smoke'];
+  assert.deepEqual([...native.strategy.matrix.os].sort(), [
+    'macos-latest',
+    'ubuntu-latest',
+    'windows-latest',
+  ]);
+  const commands = native.steps.map((step) => step.run).filter((run) => typeof run === 'string');
+  assert.ok(
+    commands.some((run) =>
+      /build-tauri\.mjs --features native-spa-smoke --config tauri\.native-spa-smoke\.conf\.json --bundles/.test(
+        run,
+      ),
+    ),
+  );
+  assert.ok(commands.some((run) => /smoke-desktop-package\.mjs --native-spa/.test(run)));
+  const smokeConfig = JSON.parse(
+    read('apps', 'fm-desktop', 'src-tauri', 'tauri.native-spa-smoke.conf.json'),
+  );
+  assert.equal(smokeConfig.identifier, 'nl.erikvullings.procyon.native-spa-smoke');
+  const packageSmoke = read('scripts', 'smoke-desktop-package.mjs');
+  assert.match(packageSmoke, /assertBundledSvgo\(root\)/);
+  assert.match(packageSmoke, /realpathSync\(tmpdir\(\)\)/);
+  assert.match(packageSmoke, /smoke-native-spa\.mjs/);
+  assert.match(packageSmoke, /'--bundled'/);
+  assert.match(read('scripts', 'smoke-native-spa.mjs'), /bundledAssetsSelected/);
+});
+
 test('desktop package smoke crosses native installer boundaries and retains isolated logs', () => {
   const smoke = read('scripts', 'smoke-desktop-package.mjs');
   assert.match(smoke, /hdiutil.*attach/s);

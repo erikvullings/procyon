@@ -188,14 +188,27 @@ pub fn run() {
                     fm_application::semantic_components::FakeSemanticComponentCapability::new(),
                 ));
             }
-            if let Some(resource_dir) = resource_directory {
+            if let Some(resource_dir) = resource_directory.as_deref() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
             #[cfg(feature = "native-spa-smoke")]
             if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
-                let plugins = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS")
-                    .ok_or_else(|| std::io::Error::other("smoke plugin directory is missing"))?;
-                service.set_bundled_plugins_directory(plugins.into());
+                if let Some(plugins) = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS") {
+                    service.set_bundled_plugins_directory(plugins.into());
+                } else {
+                    let entrypoint = resource_directory
+                        .as_deref()
+                        .ok_or_else(|| std::io::Error::other("bundled resources are unavailable"))?
+                        .join("plugins/svgo/dist/index.html");
+                    if !entrypoint.is_file() {
+                        return Err(std::io::Error::other(format!(
+                            "bundled SVGO entrypoint is missing: {}",
+                            entrypoint.display()
+                        ))
+                        .into());
+                    }
+                    native_spa_smoke::stage("bundled-plugin-assets-selected");
+                }
                 service
                     .set_plugin_enabled("procyon.svgo".to_owned(), true)
                     .map_err(|error| std::io::Error::other(error.to_string()))?;

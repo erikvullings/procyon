@@ -45,10 +45,16 @@ sanitization.
   URL instead of the embedded frontend. The smoke feature now enables that protocol, and the
   harness reports startup, trusted-page, child, UI, ACL, and bridge stages plus the daily-suffixed
   app log. An unbundled macOS release build passed twice without Vite, including an actual
-  updater ACL rejection and Save. Windows and Linux release results still require CI confirmation.
-  This exercises a test build, not the installed
-  package or cursor/shortcut path, and does not establish clipboard, CSP/navigation, crash,
-  or worker isolation. The existing packaged-app check only verifies launch.
+  updater ACL rejection and Save. A separate feature-gated installer smoke now builds unsigned
+  DMG/MSI/DEB artifacts with a unique smoke app identity, installs or extracts each artifact,
+  verifies that the SVGO manifest and entrypoint are present in its resources, and repeats the
+  same child/UI/ACL/Save assertions **without** the repository plugin-directory override.
+  The copied macOS DMG app passed this test locally. Its temporary install path must be
+  canonicalized (`/private/var`, not macOS's `/var` symlink), or Tauri rejects the symlinked
+  starting binary and cannot resolve bundled resources. Windows MSI and Linux DEB release
+  results still require CI confirmation. These feature-gated checks do not exercise the
+  production installer without the smoke feature, the Linux AppImage, or the cursor/shortcut
+  path; they do not establish clipboard, CSP/navigation, crash, or worker isolation.
 
   On a disposable macOS test environment, reproduce the release-mode check from the repository
   root without running Vite:
@@ -58,6 +64,19 @@ sanitization.
   cargo build -p fm-desktop --release --features native-spa-smoke
   CI=true node scripts/smoke-native-spa.mjs target/release/fm-desktop
   ```
+
+  To qualify an installed artifact on a disposable desktop runner with the CI system
+  dependencies available, use `dmg` on macOS, `msi` on Windows, or `deb` on Linux:
+
+  ```bash
+  node scripts/build-tauri.mjs --features native-spa-smoke --config tauri.native-spa-smoke.conf.json --bundles dmg
+  CI=true node scripts/smoke-desktop-package.mjs --native-spa
+  ```
+
+  For the normal production app's still-unverified cursor path, use a disposable SVG in a
+  separately installed package, activate the bundled SVGO action through the UI, change a Tree
+  property, Save, and reopen the file to confirm the persisted edit; repeat on each platform.
+  Do not treat this manual check as an ACL test: that requires the feature-gated native smoke.
 - **Crash cleanup is not immediate.** Tauri has no child-WebView crash callback here; the
   parent-window close event and periodic reconciliation are available, but a crashed child
   whose parent remains open may retain an origin slot. Do not claim the crash teardown

@@ -194,6 +194,10 @@ jobs:
       - name: Exercise child WebView (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: xvfb-run --auto-servernum node scripts/smoke-native-spa.mjs target/release/fm-desktop
+      - name: Build native SPA installer
+        run: node scripts/build-tauri.mjs --features native-spa-smoke --config tauri.native-spa-smoke.conf.json --bundles ${{ matrix.os == 'macos-latest' && 'dmg' || matrix.os == 'windows-latest' && 'msi' || 'deb' }}
+      - name: Exercise installed native SPA
+        run: node scripts/smoke-desktop-package.mjs --native-spa
 
   audit:
     name: Dependency audit
