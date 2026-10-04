@@ -78,11 +78,12 @@ export function createSettingsController(context: SettingsControllerContext): Se
 
   return {
     applyAppearance(settings: Settings): void {
+      const locale = entryFormatLocale(navigator.language, settings.language);
       context.setTheme(settings.theme);
       context.setLoadedEntryFormatSettings({
         dateFormat: settings.dateFormat,
         sizeFormat: settings.sizeFormat,
-        locale: entryFormatLocale(navigator.language, settings.language),
+        locale,
       });
       setLocale(settings.language);
       document.documentElement.style.setProperty('--fm-font-size', `${settings.fontSize}px`);

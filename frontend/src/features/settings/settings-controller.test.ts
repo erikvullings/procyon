@@ -66,10 +66,23 @@ describe('settings appearance entry formatting', () => {
       throw new TypeError('unexpected Intl failure');
     });
     const client = new MockFileManagerClient();
-    const controller = createSettingsController(context(client, vi.fn()));
-    const settings = await client.getSettings();
+    const setLoadedEntryFormatSettings = vi.fn();
+    const controllerContext = context(client, setLoadedEntryFormatSettings);
+    const controller = createSettingsController(controllerContext);
+    const settings = { ...(await client.getSettings()), language: 'nl' as const };
+    const previousFontSize = document.documentElement.style.getPropertyValue('--fm-font-size');
+    const previousRowHeight = document.documentElement.style.getPropertyValue('--fm-row-height');
 
     expect(() => controller.applyAppearance(settings)).toThrow('unexpected Intl failure');
+    expect(controllerContext.setTheme).not.toHaveBeenCalled();
+    expect(setLoadedEntryFormatSettings).not.toHaveBeenCalled();
+    expect(getLocale()).toBe('en');
+    expect(document.documentElement.style.getPropertyValue('--fm-font-size')).toBe(
+      previousFontSize,
+    );
+    expect(document.documentElement.style.getPropertyValue('--fm-row-height')).toBe(
+      previousRowHeight,
+    );
   });
 });
 
