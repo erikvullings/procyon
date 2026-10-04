@@ -35,19 +35,26 @@ pub(crate) struct FileEditorService {
 struct TemporaryCopy {
     provider: Arc<dyn FileSystemProvider>,
     location: Location,
+    cancellation: CancellationToken,
     pending: bool,
 }
 
 impl TemporaryCopy {
-    fn new(provider: Arc<dyn FileSystemProvider>, location: Location) -> Self {
+    fn new(
+        provider: Arc<dyn FileSystemProvider>,
+        location: Location,
+        cancellation: CancellationToken,
+    ) -> Self {
         Self {
             provider,
             location,
+            cancellation,
             pending: true,
         }
     }
 
     async fn discard(&mut self) {
+        self.cancellation.cancel();
         match self
             .provider
             .discard_copy(&self.location, CancellationToken::new())
@@ -66,6 +73,7 @@ impl Drop for TemporaryCopy {
         if !self.pending {
             return;
         }
+        self.cancellation.cancel();
         let provider = Arc::clone(&self.provider);
         let location = self.location.clone();
         match tokio::runtime::Handle::try_current() {
@@ -233,7 +241,11 @@ impl FileEditorService {
         let temporary = parent
             .join(&format!(".fm-edit-{}.tmp", Uuid::new_v4()))
             .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
-        let mut temporary_copy = TemporaryCopy::new(Arc::clone(&provider), temporary.clone());
+        let mut temporary_copy = TemporaryCopy::new(
+            Arc::clone(&provider),
+            temporary.clone(),
+            cancellation.clone(),
+        );
         let mut writer = match provider
             .open_write(
                 &temporary,
@@ -550,7 +562,9 @@ mod tests {
         std::fs::write(&path, b"partial edit").expect("write temporary");
         let provider: Arc<dyn FileSystemProvider> = Arc::new(LocalFileSystemProvider);
         let location = Location::from_native_path(&path).expect("temporary location");
-        drop(TemporaryCopy::new(provider, location));
+        let cancellation = CancellationToken::new();
+        drop(TemporaryCopy::new(provider, location, cancellation.clone()));
+        assert!(cancellation.is_cancelled());
 
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
             while path.exists() {

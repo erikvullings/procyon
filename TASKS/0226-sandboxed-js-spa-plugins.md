@@ -136,3 +136,9 @@ second plugin system.
   A feature-gated Tauri smoke harness now exercises a real child WebView's bundled SVGO load,
   updater-command denial and bridge Save on CI's three desktop platforms; the macOS developer
   run passed, but Windows/Linux CI and the remaining native/release gates are outstanding.
+- 2026-10-04 Copilot: The file editor now tracks sibling temporary copies through Save and
+  attempts cleanup on write/commit errors and dropped save futures; it cancels the provider
+  operation before discarding with a fresh token. This narrows the timed-out Save leak, but
+  process crashes, runtime shutdown, provider deletion/upload races, and ambiguous commits
+  remain. Atomic cross-process revision checks, immediate child-WebView crash cleanup, and
+  native platform smoke/review gates are still outstanding; the task remains open.

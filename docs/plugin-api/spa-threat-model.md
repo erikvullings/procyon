@@ -24,7 +24,7 @@ same-user process capable of modifying installed plugin files is outside the cur
 | WebView identity | Sixteen pre-registered scheme origins are leased one per live panel. A host-generated child WebView label is bound to that origin, plugin ID, action ID, selected file and owning trusted window; requests from a different label/slot fail. Native plugin commands are granted only to trusted `main`/`workspace-*` WebView labels, not their parent window labels; Tauri checks plugin commands before the app invoke handler, which separately denies app commands to non-app WebViews. Only the owning trusted window can position, hide/show, theme or close its child. The separate WebView occupies a transient tab in the opposite pane, never an iframe in the trusted app WebView. |
 | Browser authority | Panels are incognito. CSP defaults to none, allows only packaged scripts/styles/fonts, local/data images and blob workers, and restricts connections to the window's own bridge. Popups, downloads, foreign navigation, frames and objects are blocked. WKWebView clipboard read/write on macOS bypasses the bridge, so a panel without both declared grants cannot open there. |
 | Host bridge | The package calls version-1, token-bound, size-limited `save-svg` and SVGO-only `settings-change` requests. The custom-scheme handler checks the calling WebView label and origin, rejects unknown fields and revalidates enablement, package identity, `.svg` extension and relevant permissions on each request. Settings changes admit only 15 typed, range-checked optimizer fields (never an SVG, URI, layout or theme), ignore stale per-window sequence numbers, and require `settings_storage`. A typed response exposes no file contents or paths on error. |
-| Selected file | The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. Same-URI panels serialize saves; a reload closes the panel instead of replaying an outdated snapshot. |
+| Selected file | The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. The editor tracks its sibling temporary copy and attempts to discard it on write/commit errors and dropped save futures, cancelling the associated provider operation before cleanup. Same-URI panels serialize saves; a reload closes the panel instead of replaying an outdated snapshot. |
 | Lifecycle | Tab switches hide the child without discarding edits. Closing the tab requests a final settings snapshot and waits up to two seconds before releasing the origin slot and cancelling pending requests; failure is logged. Parent-window close, trusted-app reload, or plugin disable releases the slot immediately. Periodic reconciliation closes child WebViews whose plugin package/permission is no longer valid. JS calls use fresh runtimes. |
 
 The bundled SVGO preview also sanitizes imported SVG before inserting it into its DOM,
@@ -52,10 +52,14 @@ sanitization.
   acknowledged settings write, but process crashes, plugin disablement, parent-window close,
   and a timed-out flush may lose the most recent optimizer preference change. No SVG content
   is persisted through this channel.
-- **Timed-out saves can leave temporary files.** The existing file editor creates a sibling
-  `.fm-edit-*.tmp` before commit; dropping a save future on panel shutdown/timeout does not
-  guarantee that temporary copy is discarded. A cancellation-safe file-editor transaction is
-  required before claiming complete temporary-data teardown.
+- **Temporary cleanup is best-effort.** Failed or cancelled saves now attempt to discard their
+  sibling `.fm-edit-*.tmp` with a fresh cancellation token; dropped futures schedule cleanup on
+  the active Tokio runtime. A process crash, runtime shutdown, provider deletion error, or remote
+  upload that completes after cleanup can still leave a temporary copy. Some providers return a
+  streaming writer before the remote upload is durable, so a successful write/shutdown is not
+  proof of remote publication. Cancellation during commit can also return an error after a
+  provider has already published the destination. Do not claim guaranteed teardown or atomic
+  rollback across providers.
 - **Cross-process writes remain optimistic.** Same-URI panels in one host serialize saves;
   another process or a different URI alias to the same file can race the editor's read/check/
   commit sequence. No forced overwrite is requested, but the provider operation is not an
