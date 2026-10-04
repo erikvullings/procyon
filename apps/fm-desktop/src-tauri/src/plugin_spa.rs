@@ -29,6 +29,12 @@ const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const SVGO_PLUGIN_ID: &str = "procyon.svgo";
 fn panel_csp(origin: &str) -> String {
+    #[cfg(feature = "native-spa-smoke")]
+    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+        return format!(
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; manifest-src 'self'; connect-src {origin}/bridge {origin}/smoke; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'self'; base-uri 'none'"
+        );
+    }
     format!(
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; manifest-src 'self'; connect-src {origin}/bridge; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'self'; base-uri 'none'"
     )
@@ -659,11 +665,18 @@ async fn bridge(
         Err(error) => return bridge_result(Err(error), "save-result", "", None, &origin),
     };
     let (kind, sequence, result) = match request {
-        BridgeRequest::SaveSvg { svg, .. } => (
-            "save-result",
-            None,
-            save_svg(service, Arc::clone(&session), svg).await,
-        ),
+        BridgeRequest::SaveSvg { svg, .. } => {
+            #[cfg(feature = "native-spa-smoke")]
+            crate::native_spa_smoke::stage("bridge-save-received");
+            let result = save_svg(service, Arc::clone(&session), svg).await;
+            #[cfg(feature = "native-spa-smoke")]
+            crate::native_spa_smoke::stage(if result.is_ok() {
+                "bridge-save-succeeded"
+            } else {
+                "bridge-save-failed"
+            });
+            ("save-result", None, result)
+        }
         BridgeRequest::SettingsChange {
             settings,
             sequence,
@@ -787,6 +800,54 @@ pub(crate) fn register_schemes<R: Runtime>(
                     .is_some_and(|value| value.to_str().ok() != Some(origin.as_str()))
                 {
                     responder.respond(error_response(PanelError::Denied, &origin));
+                    return;
+                }
+                #[cfg(feature = "native-spa-smoke")]
+                if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
+                    && request.method() == Method::GET
+                    && request.uri().path() == "/smoke"
+                {
+                    let valid = (request.uri().to_string().len() <= 1024)
+                        .then(|| Url::parse(&request.uri().to_string()).ok())
+                        .flatten()
+                        .filter(|url| allows_navigation(url, &origin))
+                        .and_then(|url| {
+                            let mut pairs = url.query_pairs();
+                            let token = pairs.next()?;
+                            let stage = pairs.next()?;
+                            let detail = pairs.next();
+                            if pairs.next().is_some()
+                                || token.0 != "token"
+                                || token.1 != session.token
+                                || stage.0 != "stage"
+                                || detail.as_ref().is_some_and(|(key, value)| {
+                                    key != "error"
+                                        || value.len() > 256
+                                        || stage.1 != "script-failed"
+                                })
+                                || !matches!(
+                                    stage.1.as_ref(),
+                                    "plugin-ui-ready"
+                                        | "acl-denied"
+                                        | "save-requested"
+                                        | "script-failed"
+                                )
+                            {
+                                return None;
+                            }
+                            Some(match detail {
+                                Some((_, detail)) => {
+                                    format!("script-failed: {}", detail.replace(['\r', '\n'], " "))
+                                }
+                                None => stage.1.into_owned(),
+                            })
+                        });
+                    responder.respond(if let Some(stage) = valid {
+                        crate::native_spa_smoke::stage(&stage);
+                        response(StatusCode::OK, Vec::new(), "text/plain", &origin)
+                    } else {
+                        error_response(PanelError::Denied, &origin)
+                    });
                     return;
                 }
                 let Some(url) = Url::parse(&request.uri().to_string()).ok().filter(|url| {
@@ -946,7 +1007,11 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     tracing::warn!(%error, "could not close reloaded plugin panel");
                 }
             } else {
+                #[cfg(feature = "native-spa-smoke")]
+                crate::native_spa_smoke::stage("child-page-loaded");
                 if let Err(error) = window.eval(&load_script) {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage(&format!("child-load-failed: {error}"));
                     tracing::warn!(%error, "could not deliver selected SVG to plugin panel");
                     window
                         .app_handle()
@@ -960,7 +1025,9 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
                         && let Err(error) = window.eval(include_str!("native_spa_smoke.js"))
                     {
-                        tracing::error!(%error, "native SPA smoke script injection failed");
+                        crate::native_spa_smoke::stage(&format!(
+                            "script-injection-failed: {error}"
+                        ));
                     }
                 }
             }

@@ -59,13 +59,16 @@ jobs:
               - '**/*.rs'
               - '**/Cargo.toml'
               - 'Cargo.lock'
-              - 'frontend/package.json'
+              - 'frontend/**'
+              - 'plugins/**'
+              - 'plugin-sources/svgo/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'rust-toolchain.toml'
               - 'scripts/build-tauri.mjs'
               - 'scripts/smoke-desktop-package.mjs'
+              - 'scripts/smoke-native-spa.mjs'
 
   rust:
     name: Rust (${{ matrix.os }})
@@ -157,7 +160,7 @@ jobs:
   native-spa-smoke:
     name: Native SPA (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.desktop == 'true'
+    if: github.event_name == 'push' || needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

@@ -40,10 +40,24 @@ sanitization.
 - **Native smoke coverage is partial.** The feature-gated `native-spa-smoke` build opens the
   bundled SVGO panel in a real child WebView, waits for its UI, invokes the updater command
   and requires an ACL denial, then saves a disposable SVG through the revision-checked bridge.
-  This passed locally on macOS; CI runs the same check on macOS, Windows, and Linux, but
-  Windows/Linux results are not yet available. It exercises a test build, not the installed
+  PR #87's CI run 37194939233 timed out on all three platforms before opening a child: a plain
+  release `cargo build` omitted Tauri's `custom-protocol` feature and tried the Vite development
+  URL instead of the embedded frontend. The smoke feature now enables that protocol, and the
+  harness reports startup, trusted-page, child, UI, ACL, and bridge stages plus the daily-suffixed
+  app log. An unbundled macOS release build passed twice without Vite, including an actual
+  updater ACL rejection and Save. Windows and Linux release results still require CI confirmation.
+  This exercises a test build, not the installed
   package or cursor/shortcut path, and does not establish clipboard, CSP/navigation, crash,
   or worker isolation. The existing packaged-app check only verifies launch.
+
+  On a disposable macOS test environment, reproduce the release-mode check from the repository
+  root without running Vite:
+
+  ```bash
+  pnpm exec cross-env VITE_RUNTIME=tauri pnpm run build:frontend
+  cargo build -p fm-desktop --release --features native-spa-smoke
+  CI=true node scripts/smoke-native-spa.mjs target/release/fm-desktop
+  ```
 - **Crash cleanup is not immediate.** Tauri has no child-WebView crash callback here; the
   parent-window close event and periodic reconciliation are available, but a crashed child
   whose parent remains open may retain an origin slot. Do not claim the crash teardown

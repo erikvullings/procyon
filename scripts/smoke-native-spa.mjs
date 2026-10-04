@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -58,22 +59,54 @@ try {
     spawnError = error;
   });
   const deadline = Date.now() + 90_000;
+  let lastStage = 'process not started';
+  let saveSucceeded = false;
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
-    if (readFileSync(file, 'utf8').includes(marker)) break;
+    const stages = readFileSync(join(root, 'stderr.log'), 'utf8').matchAll(
+      /native-spa-stage: ([^\r\n]+)/g,
+    );
+    for (const match of stages) {
+      lastStage = match[1];
+      if (lastStage.startsWith('trusted-page-started: http://127.0.0.1:5181')) {
+        throw new Error(
+          'native SPA smoke loaded the Vite dev URL instead of embedded release assets',
+        );
+      }
+      if (
+        lastStage.startsWith('child-open-failed:') ||
+        lastStage.startsWith('child-load-failed:') ||
+        lastStage.startsWith('script-injection-failed:') ||
+        lastStage.startsWith('script-failed') ||
+        lastStage === 'bridge-save-failed'
+      ) {
+        throw new Error(`native SPA smoke failed at ${lastStage}`);
+      }
+      if (lastStage === 'bridge-save-succeeded') saveSucceeded = true;
+    }
+    if (readFileSync(file, 'utf8').includes(marker) && saveSucceeded) break;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`native SPA app exited early (${child.exitCode ?? child.signalCode})`);
     }
     await new Promise((done) => setTimeout(done, 250));
   }
   if (!readFileSync(file, 'utf8').includes(marker)) {
-    throw new Error('native child did not deny updater and save the SVG within 90 seconds');
+    throw new Error(`native SPA smoke timed out after ${lastStage} (90 seconds)`);
+  }
+  if (!saveSucceeded) {
+    throw new Error(
+      `native SPA saved the SVG but did not confirm bridge success after ${lastStage}`,
+    );
   }
   console.log(
     `Native SPA activation, updater denial, and revision-checked Save passed on ${process.platform}`,
   );
 } catch (error) {
-  for (const name of ['app.log', 'stdout.log', 'stderr.log']) {
+  for (const name of [
+    ...readdirSync(root).filter((entry) => entry.startsWith('app.log')),
+    'stdout.log',
+    'stderr.log',
+  ]) {
     try {
       console.error(`${name}:\n${readFileSync(join(root, name), 'utf8').slice(-6000)}`);
     } catch {
