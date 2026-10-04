@@ -7,7 +7,7 @@
     "devUrl": "http://127.0.0.1:5181",
     "frontendDist": "../../../frontend/dist",
     "beforeDevCommand": "pnpm exec cross-env VITE_RUNTIME=tauri pnpm --dir ../../frontend exec vite --port 5181",
-    "beforeBuildCommand": "pnpm exec cross-env VITE_RUNTIME=tauri pnpm --dir ../../frontend build"
+    "beforeBuildCommand": "node ../../scripts/build-svgo-plugin.mjs && pnpm exec cross-env VITE_RUNTIME=tauri pnpm --dir ../../frontend build"
   },
   "app": {
     "windows": [

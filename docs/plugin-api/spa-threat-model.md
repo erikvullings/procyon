@@ -60,6 +60,7 @@ sanitization.
   root without running Vite:
 
   ```bash
+  node scripts/build-svgo-plugin.mjs
   pnpm exec cross-env VITE_RUNTIME=tauri pnpm run build:frontend
   cargo build -p fm-desktop --release --features native-spa-smoke
   CI=true node scripts/smoke-native-spa.mjs target/release/fm-desktop
