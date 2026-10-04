@@ -58,6 +58,7 @@ export interface DirectoryGridAttrs {
   readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
   readonly onPointerDragOut?: (index: number) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
 }
 
@@ -151,6 +152,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
             onStart: (sourceIndex, eventModifiers) =>
               attrs.onPointerDragStart?.(sourceIndex, eventModifiers),
             onNativeDragOut: (sourceIndex) => attrs.onPointerDragOut?.(sourceIndex),
+            onCancel: () => attrs.onPointerDragCancel?.(),
             ...(attrs.pointerDragEffect === undefined
               ? {}
               : { effectForModifiers: attrs.pointerDragEffect }),

@@ -138,6 +138,7 @@ export interface WorkspacePaneContent {
   readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
   readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   readonly onTabDragOver?: (tabId: TabId, event: DropEventState) => boolean;
   readonly onTabDrop?: (tabId: TabId, event: DropModifiers) => void;
@@ -707,6 +708,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           ...(content.onPointerDragOut === undefined
             ? {}
             : { onPointerDragOut: content.onPointerDragOut }),
+          ...(content.onPointerDragCancel === undefined
+            ? {}
+            : { onPointerDragCancel: content.onPointerDragCancel }),
           ...(content.pointerDragEffect === undefined
             ? {}
             : { pointerDragEffect: content.pointerDragEffect }),

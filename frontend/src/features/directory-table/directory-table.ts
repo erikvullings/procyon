@@ -150,6 +150,7 @@ export interface DirectoryTableAttrs {
   readonly onDrop?: (index: number | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (index: number, event: DropModifiers) => void;
   readonly onPointerDragOut?: (index: number) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** Persisted per-column widths; a column with no entry falls back to its default track. */
   readonly columnWidths?: readonly ColumnWidthEntry[];
@@ -933,6 +934,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                     onStart: (sourceIndex, eventModifiers) =>
                       attrs.onPointerDragStart?.(sourceIndex, eventModifiers),
                     onNativeDragOut: (sourceIndex) => attrs.onPointerDragOut?.(sourceIndex),
+                    onCancel: () => attrs.onPointerDragCancel?.(),
                     ...(attrs.pointerDragEffect === undefined
                       ? {}
                       : { effectForModifiers: attrs.pointerDragEffect }),

@@ -9,6 +9,7 @@ export interface PointerFileDragSource {
   readonly index: number;
   readonly onStart: (index: number, modifiers: DropModifiers) => void;
   readonly onNativeDragOut: (index: number) => void | Promise<void>;
+  readonly onCancel?: () => void;
   readonly effectForModifiers?: (modifiers: DropModifiers) => 'copy' | 'move';
 }
 
@@ -166,6 +167,7 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
       current.stopImmediatePropagation();
       suppressNextClick(true);
       cleanup();
+      source.onCancel?.();
       return;
     }
     lastModifiers = keyboardModifiers(current);
@@ -177,13 +179,18 @@ export function beginPointerFileDrag(event: PointerEvent, source: PointerFileDra
       const resolved = targetAt(current.clientX, current.clientY);
       if (resolved?.target.onDragOver(resolved.index, modifiers(current)) === true) {
         resolved.target.onDrop(resolved.index, modifiers(current));
+      } else {
+        source.onCancel?.();
       }
       suppressNextClick(true);
     }
     cleanup();
   };
   const cancel = (current: PointerEvent): void => {
-    if (current.pointerId === pointerId) cleanup();
+    if (current.pointerId === pointerId) {
+      cleanup();
+      if (started) source.onCancel?.();
+    }
   };
   const handOffToNative = (): void => {
     if (!started) return;

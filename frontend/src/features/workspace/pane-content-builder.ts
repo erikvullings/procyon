@@ -788,6 +788,7 @@ export function createPaneContentBuilder(
             onPointerDragStart: (draggedEntries) => {
               context.setDraggedLocations(draggedEntries.map((entry) => entry.location));
             },
+            onPointerDragCancel: () => context.setDraggedLocations([]),
             pointerDragEffect: (event) => operationForDrop(context.getPlatform(), event),
             onPointerDragOut: (draggedEntries) => {
               const locations = draggedEntries.map((entry) => entry.location);
