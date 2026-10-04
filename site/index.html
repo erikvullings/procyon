@@ -267,6 +267,9 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   letter-spacing:0.01em;
 }
 .hero-note .dot{color:var(--muted-2)}
+.hero-install{margin-top:14px;font-size:13px;color:var(--muted-2)}
+.hero-install code,.cta-install code{font-size:12.5px;overflow-wrap:anywhere}
+.hero-install code{color:var(--accent-deep)}
 
 /* ---------- app mock ---------- */
 .mock{
@@ -464,6 +467,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .plat{
   background:var(--surface);border:1px solid var(--border);border-radius:12px;
   padding:26px;display:flex;flex-direction:column;gap:16px;
+  scroll-margin-top:84px;
 }
 .plat h3{display:flex;align-items:center;justify-content:space-between;font-size:16.5px}
 .plat .tag{
@@ -526,6 +530,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   background:transparent;border-color:oklch(45% 0.02 250);color:#fff;
 }
 .final-cta .btn.secondary:hover{background:oklch(30% 0.02 250);border-color:oklch(50% 0.02 250)}
+.cta-install{color:oklch(85% 0.01 250);font-size:13px;text-align:center}
 .cta-right{display:flex;flex-direction:column;align-items:center;gap:26px;flex:none}
 .cta-mascot{
   width:min(300px,36vw);
@@ -659,7 +664,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           Rust operation engine and a virtualized table that holds its own at a million entries.
         </p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.3.1/Procyon_0.3.1_x64_en-US.msi" data-od-id="hero-cta-primary">Download for Windows</a>
+          <a class="btn btn-primary" href="#platforms" id="hero-download" data-od-id="hero-cta-primary">Choose your download</a>
           <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/erikvullings/procyon" data-od-id="hero-cta-github">
             View source
             <svg aria-hidden="true" focusable="false" class="icon"><use href="#i-arrow-up-right"/></svg>
@@ -668,6 +673,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <p class="hero-note" data-od-id="hero-credit">
           <span class="dot">●</span> Desktop builds for Windows, macOS &amp; Linux
         </p>
+        <p class="hero-install" id="hero-install" hidden>Run in Terminal: <code>brew install --cask erikvullings/tap/procyon</code></p>
       </div>
 
       <div class="mock" data-od-id="hero-screenshot">
@@ -997,7 +1003,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <p class="sub">Windows and macOS have native desktop integration. Linux ships as both a Debian package and portable AppImage, with the same file-management core and fewer platform-specific integrations.</p>
       </div>
       <div class="plat-grid">
-        <article class="plat" data-od-id="platform-macos">
+        <article class="plat" id="platform-macos" data-od-id="platform-macos">
           <h3>macOS <span class="tag full">Full</span></h3>
           <div class="cap"><span>Native file icons</span><span class="st">on</span></div>
           <div class="cap"><span>Trash / Recycle Bin</span><span class="st">on</span></div>
@@ -1026,19 +1032,19 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
             <span class="alt">Unsigned installers. Chocolatey availability can trail the latest release.</span>
           </div>
         </article>
-        <article class="plat" data-od-id="platform-linux">
+        <article class="plat" id="platform-linux" data-od-id="platform-linux">
           <h3>Linux <span class="tag full">Available</span></h3>
           <div class="cap"><span>Tauri desktop + browser core</span><span class="st">on</span></div>
           <div class="cap"><span>Archive + SFTP providers</span><span class="st">on</span></div>
           <div class="cap"><span>Native desktop integration</span><span class="st">partial</span></div>
           <div class="cap"><span>In-memory credential fallback</span><span class="st">partial</span></div>
           <div class="install">
-            <div class="code"><span class="pm">$</span><code>sudo apt install ./Procyon_0.3.1_amd64.deb</code></div>
+            <div class="code"><span class="pm">$</span><code>brew install --cask erikvullings/tap/procyon</code></div>
             <div class="install-actions">
               <a class="btn btn-primary" href="https://github.com/erikvullings/procyon/releases/download/v0.3.1/Procyon_0.3.1_amd64.deb">Download .deb</a>
               <a class="btn btn-ghost" href="https://github.com/erikvullings/procyon/releases/download/v0.3.1/Procyon_0.3.1_amd64.AppImage">Download AppImage</a>
             </div>
-            <span class="alt">x86-64 builds.</span>
+            <span class="alt">x86-64 builds. For a downloaded Debian package: <code>sudo apt install ./Procyon_0.3.1_amd64.deb</code></span>
           </div>
         </article>
       </div>
@@ -1097,9 +1103,10 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
       <div class="cta-right">
         <img class="cta-mascot" data-od-id="install-mascot" src="raccoon---body.png" alt="Procyon, the raccoon mascot — a gatherer of files" width="512" height="512">
         <div class="hero-actions" data-od-id="install-commands">
-          <a class="btn" href="https://github.com/erikvullings/procyon/releases/download/v0.3.1/Procyon_0.3.1_x64_en-US.msi">Download for Windows</a>
-          <a class="btn secondary" href="#platforms">macOS &amp; Linux downloads</a>
+          <a class="btn" href="#platforms" id="footer-download">Choose your download</a>
+          <a class="btn secondary" href="#platforms" id="footer-alternatives">All install options</a>
         </div>
+        <p class="cta-install" id="footer-install" hidden>Run in Terminal: <code>brew install --cask erikvullings/tap/procyon</code></p>
       </div>
     </div>
   </section>
@@ -1151,6 +1158,29 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
     }
   });
   reflect();
+})();
+(function(){
+  var platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
+  var mac = /Mac/i.test(platform) && !/Mobile|iPad|iPhone/i.test(navigator.userAgent);
+  var linux = /Linux/i.test(platform) && !/Android|arm|aarch/i.test(navigator.platform + ' ' + navigator.userAgent);
+  var hero = document.getElementById('hero-download');
+  var footer = document.getElementById('footer-download');
+  var alternatives = document.getElementById('footer-alternatives');
+
+  if (mac || linux) {
+    for (var link of [hero, footer]) {
+      link.textContent = 'Install with Homebrew';
+      link.href = mac ? '#platform-macos' : '#platform-linux';
+    }
+    alternatives.textContent = 'Other downloads';
+    document.getElementById('hero-install').hidden = false;
+    document.getElementById('footer-install').hidden = false;
+  } else if (/Win/i.test(platform)) {
+    for (var link of [hero, footer]) {
+      link.textContent = 'Download for Windows';
+      link.href = 'https://github.com/erikvullings/procyon/releases/download/v0.3.1/Procyon_0.3.1_x64_en-US.msi';
+    }
+  }
 })();
 </script>
 </body>
