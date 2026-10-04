@@ -127,6 +127,7 @@ export const de = {
     remove: 'Entfernen',
     path: 'Pfad',
     currentPath: 'Aktueller Pfad',
+    showPathBeginning: 'Pfadanfang anzeigen',
     newTab: 'Neuer Tab',
     emptyDirectory: 'Dieses Verzeichnis ist leer.',
     confirmCloseTab: 'Tab schließen?',

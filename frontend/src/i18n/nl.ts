@@ -125,6 +125,7 @@ export const nl = {
     remove: 'Verwijderen',
     path: 'Pad',
     currentPath: 'Huidig pad',
+    showPathBeginning: 'Begin van pad tonen',
     newTab: 'Nieuw tabblad',
     emptyDirectory: 'Deze map is leeg.',
     confirmCloseTab: 'Tabblad sluiten?',

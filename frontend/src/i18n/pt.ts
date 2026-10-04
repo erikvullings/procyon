@@ -126,6 +126,7 @@ export const pt = {
     remove: 'Remover',
     path: 'Caminho',
     currentPath: 'Caminho atual',
+    showPathBeginning: 'Mostrar início do caminho',
     newTab: 'Novo separador',
     emptyDirectory: 'Esta pasta está vazia.',
     confirmCloseTab: 'Fechar o separador?',

@@ -126,6 +126,7 @@ export const fr = {
     remove: 'Retirer',
     path: 'Chemin',
     currentPath: 'Chemin actuel',
+    showPathBeginning: 'Afficher le début du chemin',
     newTab: 'Nouvel onglet',
     emptyDirectory: 'Ce répertoire est vide.',
     confirmCloseTab: "Fermer l'onglet ?",

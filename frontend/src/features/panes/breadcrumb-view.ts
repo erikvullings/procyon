@@ -1,5 +1,85 @@
+import m, { type VnodeDOM } from 'mithril';
 import { t } from '../../i18n';
 import type { SearchPresentation } from '../search/search-presentation';
+
+interface BreadcrumbTrailAttrs {
+  readonly pathKey: string;
+}
+
+/** Keeps the current segment in view without removing navigable ancestors from the DOM. */
+export const BreadcrumbTrail: m.ClosureComponent<BreadcrumbTrailAttrs> = () => {
+  let trail: HTMLElement | undefined;
+  let observer: ResizeObserver | undefined;
+  let displayedPath: string | undefined;
+  let overflowed = false;
+  let clipped = false;
+
+  function updateClipping(): void {
+    if (trail === undefined) return;
+    const nextOverflowed = trail.scrollWidth > trail.clientWidth + 1;
+    const nextClipped = nextOverflowed && trail.scrollLeft > 1;
+    if (nextClipped !== clipped || nextOverflowed !== overflowed) {
+      clipped = nextClipped;
+      overflowed = nextOverflowed;
+      m.redraw();
+    }
+  }
+
+  function showEnd(): void {
+    if (trail === undefined) return;
+    trail.scrollLeft = Math.max(0, trail.scrollWidth - trail.clientWidth);
+    updateClipping();
+  }
+
+  return {
+    view: ({ attrs, children }) =>
+      m('.fm-breadcrumb-trail', [
+        m(
+          'button.fm-breadcrumb-overflow',
+          {
+            type: 'button',
+            hidden: !clipped,
+            'aria-label': t('pane', 'showPathBeginning'),
+            onclick: () => {
+              if (trail === undefined) return;
+              trail.scrollLeft = 0;
+              updateClipping();
+              trail.focus();
+            },
+          },
+          '…',
+        ),
+        m(
+          '.fm-breadcrumb-segments',
+          {
+            tabindex: overflowed ? 0 : undefined,
+            oncreate: ({ dom }: VnodeDOM) => {
+              trail = dom as HTMLElement;
+              displayedPath = attrs.pathKey;
+              if (typeof ResizeObserver !== 'undefined') {
+                observer = new ResizeObserver(showEnd);
+                observer.observe(trail);
+              }
+              showEnd();
+            },
+            onupdate: () => {
+              if (displayedPath !== attrs.pathKey) {
+                displayedPath = attrs.pathKey;
+                showEnd();
+              }
+            },
+            onscroll: updateClipping,
+            onremove: () => {
+              observer?.disconnect();
+              observer = undefined;
+              trail = undefined;
+            },
+          },
+          children,
+        ),
+      ]),
+  };
+};
 
 /** A cumulative, clickable part of a filesystem path. */
 export interface BreadcrumbSegment {
