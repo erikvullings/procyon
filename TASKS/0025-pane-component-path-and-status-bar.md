@@ -43,3 +43,7 @@ bar, a breadcrumb/path input, the directory table and a status bar.
   The complete repository test command reached an unrelated Rust property-test failure because its
   generator produced the reserved Windows name `AuX.`; all affected-package tests pass and no
   regression seed file was retained.
+- 2026-10-04 Copilot: Right-anchored the breadcrumb segment strip in narrow panes so the current
+  segment stays visible. A leading ellipsis appears only while ancestors are clipped and reveals
+  them through horizontal scrolling; segment navigation and path editing remain unchanged. Added
+  measured overflow, path-change, resize, root, drive/UNC, remote and search coverage.

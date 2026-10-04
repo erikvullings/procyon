@@ -141,6 +141,7 @@ export const en = {
     remove: 'Remove',
     path: 'Path',
     currentPath: 'Current path',
+    showPathBeginning: 'Show beginning of path',
     newTab: 'New tab',
     emptyDirectory: 'This directory is empty.',
     confirmCloseTab: 'Close tab?',

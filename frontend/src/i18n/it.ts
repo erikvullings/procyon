@@ -125,6 +125,7 @@ export const it = {
     remove: 'Rimuovi',
     path: 'Percorso',
     currentPath: 'Percorso corrente',
+    showPathBeginning: 'Mostra l’inizio del percorso',
     newTab: 'Nuova scheda',
     emptyDirectory: 'Questa cartella è vuota.',
     confirmCloseTab: 'Chiudere la scheda?',

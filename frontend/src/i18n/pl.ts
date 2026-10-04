@@ -125,6 +125,7 @@ export const pl = {
     remove: 'Usuń',
     path: 'Ścieżka',
     currentPath: 'Bieżąca ścieżka',
+    showPathBeginning: 'Pokaż początek ścieżki',
     newTab: 'Nowa karta',
     emptyDirectory: 'Ten katalog jest pusty.',
     confirmCloseTab: 'Zamknąć kartę?',

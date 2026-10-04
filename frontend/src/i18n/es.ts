@@ -125,6 +125,7 @@ export const es = {
     remove: 'Quitar',
     path: 'Ruta',
     currentPath: 'Ruta actual',
+    showPathBeginning: 'Mostrar el principio de la ruta',
     newTab: 'Nueva pestaña',
     emptyDirectory: 'Este directorio está vacío.',
     confirmCloseTab: '¿Cerrar pestaña?',
