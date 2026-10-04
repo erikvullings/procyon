@@ -827,7 +827,8 @@ pub(crate) fn register_schemes<R: Runtime>(
                                 })
                                 || !matches!(
                                     stage.1.as_ref(),
-                                    "plugin-ui-ready"
+                                    "script-entered"
+                                        | "plugin-ui-ready"
                                         | "acl-denied"
                                         | "save-requested"
                                         | "script-failed"
@@ -877,6 +878,14 @@ pub(crate) fn register_schemes<R: Runtime>(
                 } else if request.method() == Method::GET {
                     let result = serve_asset(&service, &session, url.path(), &origin)
                         .unwrap_or_else(|error| error_response(error, &origin));
+                    #[cfg(feature = "native-spa-smoke")]
+                    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+                        crate::native_spa_smoke::stage(&format!(
+                            "asset-response: {} {}",
+                            result.status(),
+                            url.path()
+                        ));
+                    }
                     responder.respond(result);
                 } else {
                     responder.respond(error_response(PanelError::Denied, &origin));
@@ -1023,7 +1032,10 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                 } else {
                     #[cfg(feature = "native-spa-smoke")]
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
-                        && let Err(error) = window.eval(include_str!("native_spa_smoke.js"))
+                        && let Err(error) = window.eval(
+                            &include_str!("native_spa_smoke.js")
+                                .replace("__PROCYON_SMOKE_TOKEN__", &token),
+                        )
                     {
                         crate::native_spa_smoke::stage(&format!(
                             "script-injection-failed: {error}"

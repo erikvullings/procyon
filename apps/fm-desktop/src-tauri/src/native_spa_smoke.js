@@ -1,11 +1,13 @@
 (async () => {
+  const smokeToken = '__PROCYON_SMOKE_TOKEN__';
   const stage = async (name, error) => {
-    const params = new URLSearchParams({ token: window.procyonPlugin.loadToken, stage: name });
+    const params = new URLSearchParams({ token: smokeToken, stage: name });
     if (error) params.set('error', String(error).slice(0, 256));
     const response = await fetch(`/smoke?${params}`);
     if (!response.ok) throw new Error(`smoke stage ${name} rejected: ${response.status}`);
   };
   try {
+    await stage('script-entered');
     for (let attempt = 0; attempt < 100; attempt++) {
       if (document.querySelector('#app')?.children.length && window.procyonPlugin?.loadToken) {
         break;
@@ -14,6 +16,9 @@
     }
     if (!document.querySelector('#app')?.children.length || !window.procyonPlugin?.loadToken) {
       throw new Error('plugin UI or bridge bootstrap did not load within 10 seconds');
+    }
+    if (window.procyonPlugin.loadToken !== smokeToken) {
+      throw new Error('plugin bridge bootstrap token does not match smoke session');
     }
     await stage('plugin-ui-ready');
     const invoke = window.__TAURI_INTERNALS__?.invoke;
@@ -40,6 +45,6 @@
     });
   } catch (error) {
     console.error('native SPA smoke failed:', error);
-    if (window.procyonPlugin?.loadToken) await stage('script-failed', error);
+    await stage('script-failed', error);
   }
 })();
