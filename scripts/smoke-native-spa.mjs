@@ -36,6 +36,42 @@ for (const directory of [home, appData, localAppData, config, data]) {
 writeFileSync(file, '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>');
 
 let child;
+let smokeError;
+let cleanupError;
+async function stopChild() {
+  if (!child?.pid) return;
+  const group = process.platform !== 'win32';
+  const signal = (name) => {
+    try {
+      if (group) process.kill(-child.pid, name);
+      else child.kill(name);
+    } catch (error) {
+      if (
+        name === 'SIGKILL' &&
+        error.code === 'EPERM' &&
+        (child.exitCode !== null || child.signalCode !== null)
+      )
+        return;
+      if (error.code !== 'ESRCH') throw error;
+    }
+  };
+  const exitOrTimeout = () =>
+    Promise.race([
+      new Promise((done) => child.once('exit', done)),
+      new Promise((done) => setTimeout(done, 3_000).unref()),
+    ]);
+  signal('SIGTERM');
+  if (child.exitCode === null && child.signalCode === null) {
+    await exitOrTimeout();
+  }
+  signal('SIGKILL');
+  if (child.exitCode === null && child.signalCode === null) {
+    await exitOrTimeout();
+    if (child.exitCode === null && child.signalCode === null) {
+      throw new Error('native SPA app did not exit after SIGKILL');
+    }
+  }
+}
 try {
   const env = {
     ...process.env,
@@ -56,6 +92,7 @@ try {
   child = spawn(executable, [], {
     env,
     stdio: ['ignore', stdout, stderr],
+    detached: process.platform !== 'win32',
   });
   let spawnError;
   child.once('error', (error) => {
@@ -106,10 +143,8 @@ try {
   if (bundled && !bundledAssetsSelected) {
     throw new Error('native SPA saved without selecting installed SVGO assets');
   }
-  console.log(
-    `Native SPA ${bundled ? 'installed-package' : 'release-binary'} activation, updater denial, and revision-checked Save passed on ${process.platform}`,
-  );
 } catch (error) {
+  smokeError = error;
   for (const name of [
     ...readdirSync(root).filter((entry) => entry.startsWith('app.log')),
     'stdout.log',
@@ -121,13 +156,26 @@ try {
       // A failing app may not have created its log.
     }
   }
-  throw error;
 } finally {
-  if (child && child.exitCode === null && child.signalCode === null) {
-    child.kill();
-    await new Promise((done) => child.once('exit', done));
+  try {
+    await stopChild();
+  } catch (error) {
+    cleanupError = error;
   }
   closeSync(stdout);
   closeSync(stderr);
-  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  try {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (error) {
+    cleanupError = cleanupError
+      ? new AggregateError([cleanupError, error], 'native SPA teardown and removal failed')
+      : error;
+  }
 }
+if (smokeError && cleanupError)
+  throw new AggregateError([smokeError, cleanupError], 'native SPA smoke and cleanup failed');
+if (smokeError) throw smokeError;
+if (cleanupError) throw cleanupError;
+console.log(
+  `Native SPA ${bundled ? 'installed-package' : 'release-binary'} activation, updater denial, and revision-checked Save passed on ${process.platform}`,
+);
