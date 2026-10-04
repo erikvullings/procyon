@@ -142,3 +142,9 @@ second plugin system.
   process crashes, runtime shutdown, provider deletion/upload races, and ambiguous commits
   remain. Atomic cross-process revision checks, immediate child-WebView crash cleanup, and
   native platform smoke/review gates are still outstanding; the task remains open.
+- 2026-10-04 Copilot: PR #87's native SPA CI smoke timed out on all three hosts because its
+  unbundled release build retained Tauri's Vite `devUrl` without `custom-protocol`. The smoke
+  feature now enables embedded release assets; a no-Vite macOS release run passed twice through
+  real child UI, updater ACL denial, and revision-checked Save. Stage diagnostics and daily log
+  capture replace the opaque timeout. Windows/Linux release smoke results and the other release
+  gates remain pending; the task stays open.

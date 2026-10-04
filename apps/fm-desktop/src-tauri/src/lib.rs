@@ -77,11 +77,19 @@ mod native_spa_smoke;
 /// No Axum server is started in-process to reuse HTTP (spec §11) — the
 /// Tauri commands in [`commands`] call `FileManagerService` directly.
 pub fn run() {
+    #[cfg(feature = "native-spa-smoke")]
+    native_spa_smoke::stage("process-started");
     init_tracing();
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
     plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
         .manage(panel_registry)
         .on_page_load(|webview, payload| {
+            #[cfg(feature = "native-spa-smoke")]
+            if payload.event() == tauri::webview::PageLoadEvent::Started
+                && plugin_spa::trusted_invoke_label(webview.label())
+            {
+                native_spa_smoke::stage(&format!("trusted-page-started: {}", payload.url()));
+            }
             if payload.event() == tauri::webview::PageLoadEvent::Finished
                 && plugin_spa::trusted_invoke_label(webview.label())
             {
@@ -91,6 +99,8 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            #[cfg(feature = "native-spa-smoke")]
+            native_spa_smoke::stage("setup-started");
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
             // needs `app.path().resource_dir()`, which only resolves once the app has finished
             // initializing - not from a plain expression evaluated while assembling the
@@ -260,6 +270,8 @@ pub fn run() {
             // synchronously, before the event loop starts - there is no running async task for
             // this to deadlock against, unlike building a window from inside a Tauri command.
             tauri::async_runtime::block_on(commands::open_startup_windows(app.handle()))?;
+            #[cfg(feature = "native-spa-smoke")]
+            native_spa_smoke::stage("trusted-window-created");
 
             Ok(())
         })

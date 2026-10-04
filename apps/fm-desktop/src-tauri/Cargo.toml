@@ -31,7 +31,7 @@ name = "fm_desktop"
 crate-type = ["rlib"]
 
 [features]
-native-spa-smoke = []
+native-spa-smoke = ["tauri/custom-protocol"]
 
 [build-dependencies]
 tauri-build = { workspace = true, features = [] }

@@ -10,6 +10,12 @@ use crate::{AppState, plugin_spa};
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+pub(crate) fn stage(message: &str) {
+    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+        eprintln!("native-spa-stage: {message}");
+    }
+}
+
 pub(crate) fn start_once<R: Runtime>(app: AppHandle<R>) {
     let Some(file) = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE") else {
         return;
@@ -17,9 +23,10 @@ pub(crate) fn start_once<R: Runtime>(app: AppHandle<R>) {
     if STARTED.swap(true, Ordering::SeqCst) {
         return;
     }
+    stage("trusted-page-loaded");
     tauri::async_runtime::spawn(async move {
         if let Err(error) = open(&app, Path::new(&file)).await {
-            tracing::error!(%error, "native SPA smoke failed to open the plugin panel");
+            stage(&format!("child-open-failed: {error}"));
         }
     });
 }
@@ -54,5 +61,6 @@ async fn open<R: Runtime>(app: &AppHandle<R>, file: &Path) -> Result<(), String>
     )
     .await
     .map_err(|error| error.to_string())?;
+    stage("child-created");
     Ok(())
 }
