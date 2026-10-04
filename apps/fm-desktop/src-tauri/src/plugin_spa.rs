@@ -91,6 +91,8 @@ struct PanelSession {
     settings_sequence: Mutex<u64>,
     flush_sender: Mutex<Option<oneshot::Sender<bool>>>,
     shutdown: CancellationToken,
+    #[cfg(target_os = "linux")]
+    _context_directory: tempfile::TempDir,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -440,6 +442,24 @@ fn allows_navigation(url: &Url, origin: &str) -> bool {
             && url.username().is_empty()
             && url.password().is_none()
     })
+}
+
+fn panel_request_url(uri: &tauri::http::Uri, origin: &str, slot: usize) -> Option<Url> {
+    let url = Url::parse(&uri.to_string()).ok()?;
+    #[cfg(target_os = "windows")]
+    let url = if url.scheme() == scheme(slot)
+        && url.host_str() == Some("localhost")
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+    {
+        Url::parse(&format!("{origin}{}", uri.path_and_query()?.as_str())).ok()?
+    } else {
+        url
+    };
+    #[cfg(not(target_os = "windows"))]
+    let _ = slot;
+    allows_navigation(&url, origin).then_some(url)
 }
 
 fn safe_asset_path(path: &str) -> Option<PathBuf> {
@@ -808,9 +828,8 @@ pub(crate) fn register_schemes<R: Runtime>(
                     && request.uri().path() == "/smoke"
                 {
                     let valid = (request.uri().to_string().len() <= 1024)
-                        .then(|| Url::parse(&request.uri().to_string()).ok())
+                        .then(|| panel_request_url(request.uri(), &origin, index))
                         .flatten()
-                        .filter(|url| allows_navigation(url, &origin))
                         .and_then(|url| {
                             let mut pairs = url.query_pairs();
                             let token = pairs.next()?;
@@ -850,11 +869,9 @@ pub(crate) fn register_schemes<R: Runtime>(
                     });
                     return;
                 }
-                let Some(url) = Url::parse(&request.uri().to_string()).ok().filter(|url| {
-                    allows_navigation(url, &origin)
-                        && url.query().is_none()
-                        && url.fragment().is_none()
-                }) else {
+                let Some(url) = panel_request_url(request.uri(), &origin, index)
+                    .filter(|url| url.query().is_none() && url.fragment().is_none())
+                else {
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -961,6 +978,12 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let (slot, save_lock) = registry.reserve(label.clone(), &location)?;
     let (origin, url) = slot_url(slot).inspect_err(|_| registry.release(&label))?;
     let token = Uuid::new_v4().simple().to_string();
+    #[cfg(target_os = "linux")]
+    let context_directory = tempfile::tempdir()
+        .map_err(|_| PanelError::Unavailable)
+        .inspect_err(|_| registry.release(&label))?;
+    #[cfg(target_os = "linux")]
+    let context_path = context_directory.path().to_path_buf();
     let session = Arc::new(PanelSession {
         label: label.clone(),
         owner_window: source.label().to_owned(),
@@ -975,6 +998,8 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         settings_sequence: Mutex::new(0),
         flush_sender: Mutex::new(None),
         shutdown: CancellationToken::new(),
+        #[cfg(target_os = "linux")]
+        _context_directory: context_directory,
     });
     registry
         .activate(slot, session)
@@ -982,7 +1007,12 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let load_script = deliver_load(&loaded.content, &location.uri, &token);
     let loaded_once = AtomicBool::new(false);
     let expected_url = url.clone();
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
+    #[cfg(target_os = "linux")]
+    let builder = builder.data_directory(context_path);
+    // Linux must give each incognito child a distinct Tauri context key: Wry replaces
+    // the context with an ephemeral one, which otherwise misses the shared schemes.
+    let builder = builder
         .incognito(true)
         .use_https_scheme(cfg!(target_os = "windows"))
         .initialization_script(bootstrap(&token, theme, settings.as_ref()))
@@ -1023,7 +1053,10 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                 } else {
                     #[cfg(feature = "native-spa-smoke")]
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
-                        && let Err(error) = window.eval(include_str!("native_spa_smoke.js"))
+                        && let Err(error) = window.eval(
+                            include_str!("native_spa_smoke.js")
+                                .replace("__PROCYON_SMOKE_TOKEN__", &token),
+                        )
                     {
                         crate::native_spa_smoke::stage(&format!(
                             "script-injection-failed: {error}"
@@ -1271,6 +1304,39 @@ mod tests {
     }
 
     #[test]
+    fn panel_request_urls_accept_only_the_allocated_origin() {
+        let origin = panel_origin(0);
+        let expected: tauri::http::Uri = format!("{origin}/dist/index.html").parse().unwrap();
+        assert_eq!(
+            panel_request_url(&expected, &origin, 0).unwrap().as_str(),
+            expected.to_string()
+        );
+        let other: tauri::http::Uri = "https://example.com/dist/index.html".parse().unwrap();
+        assert!(panel_request_url(&other, &origin, 0).is_none());
+        #[cfg(target_os = "windows")]
+        {
+            let synthetic: tauri::http::Uri =
+                "procyonspa0://localhost/dist/index.html".parse().unwrap();
+            assert_eq!(
+                panel_request_url(&synthetic, &origin, 0).unwrap().as_str(),
+                expected.to_string()
+            );
+            let smoke: tauri::http::Uri =
+                "procyonspa0://localhost/smoke?token=abc&stage=plugin-ui-ready"
+                    .parse()
+                    .unwrap();
+            assert_eq!(
+                panel_request_url(&smoke, &origin, 0).unwrap().as_str(),
+                format!("{origin}/smoke?token=abc&stage=plugin-ui-ready")
+            );
+            assert!(panel_request_url(&synthetic, &panel_origin(1), 1).is_none());
+            let foreign: tauri::http::Uri =
+                "procyonspa0://example.com/dist/index.html".parse().unwrap();
+            assert!(panel_request_url(&foreign, &origin, 0).is_none());
+        }
+    }
+
+    #[test]
     fn plugin_labels_never_receive_tauri_commands() {
         assert!(trusted_invoke_label("main"));
         assert!(trusted_invoke_label(&format!(
@@ -1428,6 +1494,8 @@ mod tests {
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
             shutdown: CancellationToken::new(),
+            #[cfg(target_os = "linux")]
+            _context_directory: tempfile::tempdir().unwrap(),
         });
         let mut settings = serde_json::json!({
             "precision": 2, "pathPrecision": 2,
@@ -1542,6 +1610,8 @@ mod tests {
                     settings_sequence: Mutex::new(0),
                     flush_sender: Mutex::new(None),
                     shutdown: shutdown.clone(),
+                    #[cfg(target_os = "linux")]
+                    _context_directory: tempfile::tempdir().unwrap(),
                 }),
             )
             .unwrap();

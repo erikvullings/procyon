@@ -68,6 +68,9 @@ thiserror.workspace = true
 semver.workspace = true
 portable-pty = "0.9.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+tempfile.workspace = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 drag.workspace = true
 fm-credentials-macos.workspace = true

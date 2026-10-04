@@ -53,6 +53,15 @@ export interface SettingsController {
   loadSettings(client: FileManagerClient): Promise<void>;
 }
 
+function entryFormatLocale(osLanguage: string, fallback: Settings['language']): string {
+  try {
+    return Intl.NumberFormat.supportedLocalesOf(osLanguage).length > 0 ? osLanguage : fallback;
+  } catch (error) {
+    if (error instanceof RangeError) return fallback;
+    throw error;
+  }
+}
+
 export function createSettingsController(context: SettingsControllerContext): SettingsController {
   function replaceWorkspace(next: WorkspaceProjection): void {
     context.setWorkspace(next);
@@ -69,11 +78,12 @@ export function createSettingsController(context: SettingsControllerContext): Se
 
   return {
     applyAppearance(settings: Settings): void {
+      const locale = entryFormatLocale(navigator.language, settings.language);
       context.setTheme(settings.theme);
       context.setLoadedEntryFormatSettings({
         dateFormat: settings.dateFormat,
         sizeFormat: settings.sizeFormat,
-        locale: navigator.language,
+        locale,
       });
       setLocale(settings.language);
       document.documentElement.style.setProperty('--fm-font-size', `${settings.fontSize}px`);
