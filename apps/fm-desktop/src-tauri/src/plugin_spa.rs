@@ -1346,6 +1346,8 @@ mod tests {
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
             shutdown: CancellationToken::new(),
+            #[cfg(target_os = "linux")]
+            _context_directory: tempfile::tempdir().unwrap(),
         })
     }
 
