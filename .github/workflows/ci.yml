@@ -67,6 +67,7 @@ jobs:
               - 'pnpm-workspace.yaml'
               - 'rust-toolchain.toml'
               - 'scripts/build-tauri.mjs'
+              - 'scripts/build-svgo-plugin.mjs'
               - 'scripts/smoke-desktop-package.mjs'
               - 'scripts/smoke-native-spa.mjs'
 
@@ -184,6 +185,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build bundled SVGO from source
+        run: node scripts/build-svgo-plugin.mjs
       - name: Build native smoke app
         run: |
           pnpm exec cross-env VITE_RUNTIME=tauri pnpm run build:frontend

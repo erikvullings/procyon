@@ -7,23 +7,24 @@ changes here, not in the generated `plugins/svgo/dist/` assets. This directory
 is outside `plugins/` so Tauri bundles only the built panel, not the source or
 its development dependencies.
 
-From the Procyon repository root, with Node.js and pnpm installed:
+Desktop packaging (`pnpm run build:tauri`, including CI and release builds)
+automatically installs this directory's separately locked dependencies, builds
+the Procyon panel, and replaces `plugins/svgo/dist/` before Tauri bundles
+`plugins/`. Direct Tauri builds use the same pre-build hook. From the Procyon
+repository root, with Node.js and pnpm installed, the equivalent standalone
+preparation is:
 
 ```sh
-pnpm --dir plugin-sources/svgo install --frozen-lockfile
-pnpm --dir plugin-sources/svgo exec tsc --noEmit
-pnpm --dir plugin-sources/svgo test
-pnpm --dir plugin-sources/svgo build:procyon
-rsync -a --delete plugin-sources/svgo/dist/procyon/ plugins/svgo/dist/
+node scripts/build-svgo-plugin.mjs
 ```
 
-`build:procyon` runs `vite build --mode procyon` and produces the complete
-package in `plugin-sources/svgo/dist/procyon/`; the last command replaces only
-the checked-in bundled assets at `plugins/svgo/dist/`, including obsolete
-hashed assets. On systems without `rsync`, replace the contents of
-`plugins/svgo/dist/` with the complete contents of that generated directory.
-Commit changes to both the source and bundled assets together. Procyon's
-`plugin.toml` remains at `plugins/svgo/plugin.toml` and is not generated.
+Run this preparation before direct `cargo build -p fm-desktop` commands when
+testing bundled SVGO. The script runs `build:procyon` (`vite build --mode
+procyon`) and replaces obsolete hashed assets while preserving
+`plugins/svgo/plugin.toml`. The checked-in dist is only a baseline for direct
+workflows; do not commit generated changes for source updates. To check the
+source independently, run `pnpm --dir plugin-sources/svgo exec tsc --noEmit`
+and `pnpm --dir plugin-sources/svgo test` after installation.
 
 Do not run the default `build` script to update the plugin: it produces the
 standalone GitHub Pages site in this source directory's `docs/`, not the

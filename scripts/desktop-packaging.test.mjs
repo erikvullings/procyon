@@ -138,6 +138,43 @@ test('the root Tauri build command uses the metadata-derived build wrapper', () 
   assert.equal(rootPackage.scripts['build:tauri'], 'node scripts/build-tauri.mjs');
 });
 
+test('desktop packaging rebuilds the SVGO resource from its independent lockfile', () => {
+  const config = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
+  const ci = workflow('ci.yml');
+  const release = workflow('release-desktop.yml');
+  assert.equal(config.bundle.resources['../../../plugins'], 'plugins');
+  assert.match(
+    config.build.beforeBuildCommand,
+    /^node \.\.\/\.\.\/scripts\/build-svgo-plugin\.mjs && pnpm exec cross-env VITE_RUNTIME=tauri /,
+  );
+  assert.equal(
+    statSync(
+      join(repoRoot, 'apps', 'fm-desktop', '..', '..', 'scripts', 'build-svgo-plugin.mjs'),
+    ).isFile(),
+    true,
+  );
+  assert.match(read('scripts', 'build-svgo-plugin.mjs'), /--frozen-lockfile/);
+  assert.match(read('scripts', 'build-svgo-plugin.mjs'), /build:procyon/);
+  const nativeSteps = ci.jobs['native-spa-smoke'].steps;
+  const prepare = nativeSteps.findIndex(
+    (step) => step.run === 'node scripts/build-svgo-plugin.mjs',
+  );
+  const compile = nativeSteps.findIndex((step) => /cargo build -p fm-desktop/.test(step.run ?? ''));
+  assert.ok(
+    prepare >= 0 && compile > prepare,
+    'the direct cargo build must prepare the plugin first',
+  );
+  assert.match(workflowText('ci.yml'), /'scripts\/build-svgo-plugin\.mjs'/);
+  for (const job of [
+    ci.jobs.desktop,
+    release.jobs.macos,
+    release.jobs.linux,
+    release.jobs.windows,
+  ]) {
+    assert.ok(job.steps.some((step) => /build:tauri/.test(step.run ?? '')));
+  }
+});
+
 test('Tauri targets installable macOS, Windows, and Linux bundle formats', () => {
   const config = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.deepEqual(config.bundle.targets, ['app', 'dmg', 'msi', 'nsis', 'deb', 'appimage']);

@@ -1,6 +1,6 @@
 # SVGO panel
 
-The packaged `dist/` is built from the
+The checked-in `dist/` is a baseline; desktop packaging regenerates it from the
 [source and build instructions](../../plugin-sources/svgo/README.md) in this
 repository, initially copied from `erikvullings/svgo` at commit
 `ee29ff2c46912dc9318fbaf8f5d408e898a71f7b`. The Procyon build is
