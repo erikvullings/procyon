@@ -810,17 +810,7 @@ pub(crate) fn register_schemes<R: Runtime>(
                 let label = ctx.webview_label().to_owned();
                 let app = ctx.app_handle().clone();
                 let origin = panel_origin(index);
-                #[cfg(feature = "native-spa-smoke")]
-                if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
-                    crate::native_spa_smoke::stage(&format!(
-                        "scheme-request: {} {}",
-                        request.method(),
-                        request.uri().path()
-                    ));
-                }
                 let Some(session) = registry.session_for(index, &label) else {
-                    #[cfg(feature = "native-spa-smoke")]
-                    crate::native_spa_smoke::stage("scheme-session-rejected");
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -829,13 +819,6 @@ pub(crate) fn register_schemes<R: Runtime>(
                     .get("Origin")
                     .is_some_and(|value| value.to_str().ok() != Some(origin.as_str()))
                 {
-                    #[cfg(feature = "native-spa-smoke")]
-                    crate::native_spa_smoke::stage(&format!(
-                        "scheme-origin-rejected: {} {} {:?}",
-                        request.method(),
-                        request.uri().path(),
-                        request.headers().get("Origin")
-                    ));
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 }
@@ -863,8 +846,7 @@ pub(crate) fn register_schemes<R: Runtime>(
                                 })
                                 || !matches!(
                                     stage.1.as_ref(),
-                                    "script-entered"
-                                        | "plugin-ui-ready"
+                                    "plugin-ui-ready"
                                         | "acl-denied"
                                         | "save-requested"
                                         | "script-failed"
@@ -890,12 +872,6 @@ pub(crate) fn register_schemes<R: Runtime>(
                 let Some(url) = panel_request_url(request.uri(), &origin, index)
                     .filter(|url| url.query().is_none() && url.fragment().is_none())
                 else {
-                    #[cfg(feature = "native-spa-smoke")]
-                    crate::native_spa_smoke::stage(&format!(
-                        "scheme-url-rejected: {} {:?} expected {origin}",
-                        request.uri().scheme_str().unwrap_or("none"),
-                        request.uri().authority()
-                    ));
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -916,18 +892,8 @@ pub(crate) fn register_schemes<R: Runtime>(
                         responder.respond(bridge(service, session, body, origin).await);
                     });
                 } else if request.method() == Method::GET {
-                    #[cfg(feature = "native-spa-smoke")]
-                    crate::native_spa_smoke::stage(&format!("asset-start: {}", url.path()));
                     let result = serve_asset(&service, &session, url.path(), &origin)
                         .unwrap_or_else(|error| error_response(error, &origin));
-                    #[cfg(feature = "native-spa-smoke")]
-                    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
-                        crate::native_spa_smoke::stage(&format!(
-                            "asset-response: {} {}",
-                            result.status(),
-                            url.path()
-                        ));
-                    }
                     responder.respond(result);
                 } else {
                     responder.respond(error_response(PanelError::Denied, &origin));
@@ -1528,6 +1494,8 @@ mod tests {
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
             shutdown: CancellationToken::new(),
+            #[cfg(target_os = "linux")]
+            _context_directory: tempfile::tempdir().unwrap(),
         });
         let mut settings = serde_json::json!({
             "precision": 2, "pathPrecision": 2,
@@ -1642,6 +1610,8 @@ mod tests {
                     settings_sequence: Mutex::new(0),
                     flush_sender: Mutex::new(None),
                     shutdown: shutdown.clone(),
+                    #[cfg(target_os = "linux")]
+                    _context_directory: tempfile::tempdir().unwrap(),
                 }),
             )
             .unwrap();

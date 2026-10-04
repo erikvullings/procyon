@@ -7,7 +7,6 @@
     if (!response.ok) throw new Error(`smoke stage ${name} rejected: ${response.status}`);
   };
   try {
-    await stage('script-entered');
     for (let attempt = 0; attempt < 100; attempt++) {
       if (document.querySelector('#app')?.children.length && window.procyonPlugin?.loadToken) {
         break;
