@@ -444,6 +444,24 @@ fn allows_navigation(url: &Url, origin: &str) -> bool {
     })
 }
 
+fn panel_request_url(uri: &tauri::http::Uri, origin: &str, slot: usize) -> Option<Url> {
+    let url = Url::parse(&uri.to_string()).ok()?;
+    #[cfg(target_os = "windows")]
+    let url = if url.scheme() == scheme(slot)
+        && url.host_str() == Some("localhost")
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+    {
+        Url::parse(&format!("{origin}{}", uri.path_and_query()?.as_str())).ok()?
+    } else {
+        url
+    };
+    #[cfg(not(target_os = "windows"))]
+    let _ = slot;
+    allows_navigation(&url, origin).then_some(url)
+}
+
 fn safe_asset_path(path: &str) -> Option<PathBuf> {
     if !path.starts_with('/') || path.starts_with("//") || path.contains('%') || path.contains('\\')
     {
@@ -827,9 +845,8 @@ pub(crate) fn register_schemes<R: Runtime>(
                     && request.uri().path() == "/smoke"
                 {
                     let valid = (request.uri().to_string().len() <= 1024)
-                        .then(|| Url::parse(&request.uri().to_string()).ok())
+                        .then(|| panel_request_url(request.uri(), &origin, index))
                         .flatten()
-                        .filter(|url| allows_navigation(url, &origin))
                         .and_then(|url| {
                             let mut pairs = url.query_pairs();
                             let token = pairs.next()?;
@@ -870,11 +887,9 @@ pub(crate) fn register_schemes<R: Runtime>(
                     });
                     return;
                 }
-                let Some(url) = Url::parse(&request.uri().to_string()).ok().filter(|url| {
-                    allows_navigation(url, &origin)
-                        && url.query().is_none()
-                        && url.fragment().is_none()
-                }) else {
+                let Some(url) = panel_request_url(request.uri(), &origin, index)
+                    .filter(|url| url.query().is_none() && url.fragment().is_none())
+                else {
                     #[cfg(feature = "native-spa-smoke")]
                     crate::native_spa_smoke::stage(&format!(
                         "scheme-url-rejected: {} {:?} expected {origin}",
@@ -1073,7 +1088,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     #[cfg(feature = "native-spa-smoke")]
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
                         && let Err(error) = window.eval(
-                            &include_str!("native_spa_smoke.js")
+                            include_str!("native_spa_smoke.js")
                                 .replace("__PROCYON_SMOKE_TOKEN__", &token),
                         )
                     {
@@ -1320,6 +1335,39 @@ mod tests {
         assert!(!csp.contains("example.com"));
         let html = response(StatusCode::OK, b"<html/>".to_vec(), "text/html", &origin);
         assert_eq!(html.headers()["Content-Security-Policy"], csp);
+    }
+
+    #[test]
+    fn panel_request_urls_accept_only_the_allocated_origin() {
+        let origin = panel_origin(0);
+        let expected: tauri::http::Uri = format!("{origin}/dist/index.html").parse().unwrap();
+        assert_eq!(
+            panel_request_url(&expected, &origin, 0).unwrap().as_str(),
+            expected.to_string()
+        );
+        let other: tauri::http::Uri = "https://example.com/dist/index.html".parse().unwrap();
+        assert!(panel_request_url(&other, &origin, 0).is_none());
+        #[cfg(target_os = "windows")]
+        {
+            let synthetic: tauri::http::Uri =
+                "procyonspa0://localhost/dist/index.html".parse().unwrap();
+            assert_eq!(
+                panel_request_url(&synthetic, &origin, 0).unwrap().as_str(),
+                expected.to_string()
+            );
+            let smoke: tauri::http::Uri =
+                "procyonspa0://localhost/smoke?token=abc&stage=plugin-ui-ready"
+                    .parse()
+                    .unwrap();
+            assert_eq!(
+                panel_request_url(&smoke, &origin, 0).unwrap().as_str(),
+                format!("{origin}/smoke?token=abc&stage=plugin-ui-ready")
+            );
+            assert!(panel_request_url(&synthetic, &panel_origin(1), 1).is_none());
+            let foreign: tauri::http::Uri =
+                "procyonspa0://example.com/dist/index.html".parse().unwrap();
+            assert!(panel_request_url(&foreign, &origin, 0).is_none());
+        }
     }
 
     #[test]
