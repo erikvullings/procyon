@@ -267,6 +267,7 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   );
   assert.equal(chocolateyPush?.['continue-on-error'], undefined);
   assert.match(chocolateyPush?.run ?? '', /403 \\\(Forbidden\\\)/);
+  assert.match(chocolateyPush?.run ?? '', /pending package version with no approved versions/i);
   assert.match(chocolateyPush?.run ?? '', /GITHUB_STEP_SUMMARY/);
   assert.doesNotMatch(chocolateyPush?.run ?? '', /exit 1/);
 });
