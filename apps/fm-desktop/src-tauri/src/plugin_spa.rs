@@ -91,6 +91,8 @@ struct PanelSession {
     settings_sequence: Mutex<u64>,
     flush_sender: Mutex<Option<oneshot::Sender<bool>>>,
     shutdown: CancellationToken,
+    #[cfg(target_os = "linux")]
+    _context_directory: tempfile::TempDir,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -873,6 +875,12 @@ pub(crate) fn register_schemes<R: Runtime>(
                         && url.query().is_none()
                         && url.fragment().is_none()
                 }) else {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage(&format!(
+                        "scheme-url-rejected: {} {:?} expected {origin}",
+                        request.uri().scheme_str().unwrap_or("none"),
+                        request.uri().authority()
+                    ));
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -893,6 +901,8 @@ pub(crate) fn register_schemes<R: Runtime>(
                         responder.respond(bridge(service, session, body, origin).await);
                     });
                 } else if request.method() == Method::GET {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage(&format!("asset-start: {}", url.path()));
                     let result = serve_asset(&service, &session, url.path(), &origin)
                         .unwrap_or_else(|error| error_response(error, &origin));
                     #[cfg(feature = "native-spa-smoke")]
@@ -987,6 +997,12 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let (slot, save_lock) = registry.reserve(label.clone(), &location)?;
     let (origin, url) = slot_url(slot).inspect_err(|_| registry.release(&label))?;
     let token = Uuid::new_v4().simple().to_string();
+    #[cfg(target_os = "linux")]
+    let context_directory = tempfile::tempdir()
+        .map_err(|_| PanelError::Unavailable)
+        .inspect_err(|_| registry.release(&label))?;
+    #[cfg(target_os = "linux")]
+    let context_path = context_directory.path().to_path_buf();
     let session = Arc::new(PanelSession {
         label: label.clone(),
         owner_window: source.label().to_owned(),
@@ -1001,6 +1017,8 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         settings_sequence: Mutex::new(0),
         flush_sender: Mutex::new(None),
         shutdown: CancellationToken::new(),
+        #[cfg(target_os = "linux")]
+        _context_directory: context_directory,
     });
     registry
         .activate(slot, session)
@@ -1008,7 +1026,12 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let load_script = deliver_load(&loaded.content, &location.uri, &token);
     let loaded_once = AtomicBool::new(false);
     let expected_url = url.clone();
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
+    #[cfg(target_os = "linux")]
+    let builder = builder.data_directory(context_path);
+    // Linux must give each incognito child a distinct Tauri context key: Wry replaces
+    // the context with an ephemeral one, which otherwise misses the shared schemes.
+    let builder = builder
         .incognito(true)
         .use_https_scheme(cfg!(target_os = "windows"))
         .initialization_script(bootstrap(&token, theme, settings.as_ref()))
