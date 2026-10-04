@@ -2829,6 +2829,7 @@ dependencies = [
  "fm-vfs-s3",
  "fm-vfs-sftp",
  "fm-vfs-webdav",
+ "fs2",
  "futures",
  "git2",
  "image",

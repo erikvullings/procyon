@@ -169,3 +169,9 @@ second plugin system.
   residual race against external writers that ignore the advisory lock for 0.4.0; this is
   **not atomic CAS**. This release-gate PR does not close task 0226: immediate crash cleanup,
   remaining temporary-file risks, native smoke/review and other acceptance criteria remain.
+- 2026-10-04 Copilot: Follow-up review identified a gap: the original lock protected only
+  SVGO bridge saves, so the generic editor in another Procyon process could still bypass it.
+  The advisory cache lock and per-target process mutex now wrap the common local whole-file editor
+  save path through its revision check and commit, covering generic-editor/SPA aliases
+  without changing remote provider saves. The user-approved uncooperative external-writer
+  race remains; this is still not atomic CAS. Rebasing onto main includes PRs #91 and #92.

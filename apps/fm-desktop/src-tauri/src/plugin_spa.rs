@@ -11,7 +11,6 @@ use fm_application::FileManagerService;
 use fm_domain::{Location, ProviderId};
 use fm_transport_dto::{LoadEditableFileRequestDto, LocationDto, SaveEditableFileRequestDto};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, Rect, Runtime, State, Url,
     WebviewBuilder, WebviewUrl, Window,
@@ -30,7 +29,6 @@ const MAX_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const SVGO_PLUGIN_ID: &str = "procyon.svgo";
-static SVGO_PROCESS_SAVE_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
 fn require_local_svgo(plugin_id: &str, location: &LocationDto) -> Result<(), PanelError> {
     if plugin_id != SVGO_PLUGIN_ID {
@@ -46,7 +44,9 @@ fn require_local_svgo(plugin_id: &str, location: &LocationDto) -> Result<(), Pan
     Ok(())
 }
 
+#[cfg(test)]
 async fn svgo_file_lock(location: &LocationDto) -> Result<std::fs::File, PanelError> {
+    use sha2::{Digest, Sha256};
     let path = Location::try_new(ProviderId::new("local"), location.uri.clone())
         .and_then(|location| location.to_native_path())
         .map_err(|_| PanelError::Denied)?;
@@ -67,7 +67,7 @@ async fn svgo_file_lock(location: &LocationDto) -> Result<std::fs::File, PanelEr
         let cache = dirs::cache_dir()
             .ok_or(PanelError::Unavailable)?
             .join("procyon")
-            .join("svgo-locks");
+            .join("editor-locks");
         std::fs::create_dir_all(&cache).map_err(|error| PanelError::File(error.to_string()))?;
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -678,24 +678,6 @@ async fn save_svg(
         return Err(PanelError::Denied);
     }
     let _save_guard = session.save_lock.lock().await;
-    let _process_guard = if session.plugin_id == SVGO_PLUGIN_ID {
-        Some(
-            tokio::time::timeout(BRIDGE_TIMEOUT, SVGO_PROCESS_SAVE_LOCK.lock())
-                .await
-                .map_err(|_| PanelError::Timeout)?,
-        )
-    } else {
-        None
-    };
-    let _file_guard = if session.plugin_id == SVGO_PLUGIN_ID {
-        Some(
-            tokio::time::timeout(BRIDGE_TIMEOUT, svgo_file_lock(&session.location))
-                .await
-                .map_err(|_| PanelError::Timeout)??,
-        )
-    } else {
-        None
-    };
     let mut revision = session.revision.lock().await;
     let future = service.save_editable_file(SaveEditableFileRequestDto {
         location: session.location.clone(),
@@ -1456,17 +1438,137 @@ mod tests {
         ))
         .unwrap();
         std::fs::write(root.join("worker-ready"), b"ready").unwrap();
-        let session = svgo_session(&service, location, loaded.revision);
-        let result = tauri::async_runtime::block_on(save_svg(
-            service,
-            session,
-            "<svg id=\"worker\"/>".into(),
-        ));
-        assert!(matches!(result, Err(PanelError::File(_))), "{result:?}");
+        let session = svgo_session(&service, location, loaded.revision.clone());
+        if std::env::var_os("PROCYON_SVGO_LOCK_TEST_GENERIC").is_some() {
+            let result = tauri::async_runtime::block_on(service.save_editable_file(
+                SaveEditableFileRequestDto {
+                    location: session.location.clone(),
+                    destination: None,
+                    content: "<svg id=\"worker\"/>".into(),
+                    expected_revision: loaded.revision,
+                    overwrite_conflict: false,
+                },
+            ));
+            if std::env::var_os("PROCYON_SVGO_LOCK_TEST_RACE").is_some() {
+                let outcome = match result {
+                    Ok(_) => "saved",
+                    Err(fm_application::ApplicationError::FileRevisionConflict { .. }) => {
+                        "conflict"
+                    }
+                    Err(error) => panic!("unexpected generic editor error: {error}"),
+                };
+                std::fs::write(root.join("worker-outcome"), outcome).unwrap();
+                return;
+            }
+            assert!(
+                matches!(
+                    result,
+                    Err(fm_application::ApplicationError::FileRevisionConflict { .. })
+                ),
+                "{result:?}"
+            );
+        } else {
+            let result = tauri::async_runtime::block_on(save_svg(
+                service,
+                session,
+                "<svg id=\"worker\"/>".into(),
+            ));
+            assert!(matches!(result, Err(PanelError::File(_))), "{result:?}");
+        }
     }
 
     #[tokio::test]
     async fn svgo_cross_process_alias_saves_serialize_and_conflict() {
+        cross_process_alias_save(false).await;
+    }
+
+    #[tokio::test]
+    async fn generic_editor_and_svgo_alias_saves_serialize_and_conflict() {
+        cross_process_alias_save(true).await;
+    }
+
+    async fn wait_for_worker(worker: &mut std::process::Child) {
+        let finished = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            loop {
+                if let Some(status) = worker.try_wait().unwrap() {
+                    return status;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        match finished {
+            Ok(status) => assert!(status.success(), "worker failed: {status}"),
+            Err(_) => {
+                worker.kill().unwrap();
+                worker.wait().unwrap();
+                panic!("worker did not finish after the lock was released");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn generic_editor_and_svgo_processes_compete_without_losing_an_edit() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let path = real.join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        #[cfg(unix)]
+        let alias = {
+            let alias = root.path().join("alias");
+            std::os::unix::fs::symlink(&real, &alias).unwrap();
+            alias.join("drawing.svg")
+        };
+        #[cfg(not(unix))]
+        let alias = path.clone();
+        let service = svgo_service(root.path());
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        let loaded = service
+            .load_editable_file(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        let mut worker = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("plugin_spa::tests::svgo_cross_process_worker")
+            .arg("--nocapture")
+            .env("PROCYON_SVGO_LOCK_TEST_ROOT", root.path())
+            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias)
+            .env("PROCYON_SVGO_LOCK_TEST_GENERIC", "1")
+            .env("PROCYON_SVGO_LOCK_TEST_RACE", "1")
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while !root.path().join("worker-ready").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let parent = save_svg(service, session, "<svg id=\"parent\"/>".into()).await;
+        wait_for_worker(&mut worker).await;
+        let child = std::fs::read_to_string(root.path().join("worker-outcome")).unwrap();
+        match (parent, child.as_str()) {
+            (Ok(()), "conflict") => {
+                assert_eq!(
+                    std::fs::read_to_string(&path).unwrap(),
+                    "<svg id=\"parent\"/>"
+                );
+            }
+            (Err(PanelError::File(_)), "saved") => {
+                assert_eq!(
+                    std::fs::read_to_string(&path).unwrap(),
+                    "<svg id=\"worker\"/>"
+                );
+            }
+            (parent, child) => panic!("exactly one save should succeed: {parent:?}, {child}"),
+        }
+    }
+
+    async fn cross_process_alias_save(generic_worker: bool) {
         let root = tempfile::tempdir().unwrap();
         let real = root.path().join("real");
         std::fs::create_dir(&real).unwrap();
@@ -1484,14 +1586,17 @@ mod tests {
         let aliased: LocationDto = Location::from_native_path(&alias).unwrap().into();
         let held = svgo_file_lock(&location).await.unwrap();
         let executable = std::env::current_exe().unwrap();
-        let mut worker = std::process::Command::new(executable)
+        let mut command = std::process::Command::new(executable);
+        command
             .arg("--exact")
             .arg("plugin_spa::tests::svgo_cross_process_worker")
             .arg("--nocapture")
             .env("PROCYON_SVGO_LOCK_TEST_ROOT", root.path())
-            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias)
-            .spawn()
-            .unwrap();
+            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias);
+        if generic_worker {
+            command.env("PROCYON_SVGO_LOCK_TEST_GENERIC", "1");
+        }
+        let mut worker = command.spawn().unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
             while !root.path().join("worker-ready").exists() {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -1499,32 +1604,16 @@ mod tests {
         })
         .await
         .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         assert!(
             worker.try_wait().unwrap().is_none(),
             "worker must wait on the file lock"
         );
-        let service = svgo_service(root.path());
-        let loaded = service
-            .load_editable_file(LoadEditableFileRequestDto {
-                location: location.clone(),
-            })
-            .await
-            .unwrap();
-        let session = svgo_session(&service, location, loaded.revision);
-        // The parent holds the lock as the first writer; the child loaded the old revision.
-        let saved = service
-            .save_editable_file(SaveEditableFileRequestDto {
-                location: session.location.clone(),
-                destination: None,
-                content: "<svg id=\"parent\"/>".into(),
-                expected_revision: session.revision.lock().await.clone(),
-                overwrite_conflict: false,
-            })
-            .await
-            .unwrap();
-        assert!(!saved.overwrote_conflict);
+        // The child loaded the old revision, but cannot recheck or commit until this lock
+        // is released. Change the fixture while the lock is held to force a conflict.
+        std::fs::write(&path, "<svg id=\"parent\"/>").unwrap();
         drop(held);
-        assert!(worker.wait().unwrap().success());
+        wait_for_worker(&mut worker).await;
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
             "<svg id=\"parent\"/>"

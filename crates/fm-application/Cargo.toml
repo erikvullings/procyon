@@ -54,6 +54,7 @@ fm-vfs-onedrive.workspace = true
 fm-vfs-s3.workspace = true
 fm-vfs-sftp.workspace = true
 fm-vfs-webdav.workspace = true
+fs2.workspace = true
 futures.workspace = true
 image.workspace = true
 parallel-disk-usage.workspace = true
