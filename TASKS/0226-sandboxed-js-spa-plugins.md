@@ -148,3 +148,10 @@ second plugin system.
   real child UI, updater ACL denial, and revision-checked Save. Stage diagnostics and daily log
   capture replace the opaque timeout. Windows/Linux release smoke results and the other release
   gates remain pending; the task stays open.
+- 2026-10-04 Copilot: Extended the feature-gated native smoke through a real installed package.
+  A smoke-identity DMG was mounted, copied to a canonical macOS temporary path, and passed
+  bundled SVGO asset discovery, child UI, updater ACL denial, and revision-checked Save without
+  using repository plugins. Canonicalizing the install path matters because Tauri rejects the
+  `/var` symlink ancestor on macOS. CI is configured to perform the same check with MSI and DEB
+  packages; those platforms, the normal package's cursor/shortcut path, and the remaining
+  security gates still require qualification. The task remains open.
