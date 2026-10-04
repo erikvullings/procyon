@@ -155,3 +155,8 @@ second plugin system.
   `/var` symlink ancestor on macOS. CI is configured to perform the same check with MSI and DEB
   packages; those platforms, the normal package's cursor/shortcut path, and the remaining
   security gates still require qualification. The task remains open.
+- 2026-10-04 Copilot: Fixed the SVGO source optimizer's `xml:space="preserve"` handling so
+  edge-only whitespace can be trimmed while internal whitespace and multi-tspan text remain
+  protected, including inherited XML-space and namespaced tspan attributes. Full-pipeline
+  regression tests cover these cases. This source-only fix does not update the checked-in
+  `plugins/svgo/dist/` bundle; rebuild and copy it before shipping the panel change.
