@@ -7,13 +7,17 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_transport_dto::{
     LoadEditableFileRequestDto, LoadEditableFileResponseDto, SaveEditableFileRequestDto,
     SaveEditableFileResponseDto,
 };
-use fm_vfs::{CopyCommitOptions, EntryRef, ProviderCapabilities, ProviderRegistry, WriteOptions};
+use fm_vfs::{
+    CopyCommitOptions, EntryRef, FileSystemProvider, ProviderCapabilities, ProviderRegistry,
+    WriteOptions,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -26,6 +30,60 @@ pub(crate) const MAX_EDITABLE_FILE_BYTES: u64 = 3 * 1024 * 1024;
 pub(crate) struct FileEditorService {
     providers: ProviderRegistry,
     audit_log_path: PathBuf,
+}
+
+struct TemporaryCopy {
+    provider: Arc<dyn FileSystemProvider>,
+    location: Location,
+    pending: bool,
+}
+
+impl TemporaryCopy {
+    fn new(provider: Arc<dyn FileSystemProvider>, location: Location) -> Self {
+        Self {
+            provider,
+            location,
+            pending: true,
+        }
+    }
+
+    async fn discard(&mut self) {
+        match self
+            .provider
+            .discard_copy(&self.location, CancellationToken::new())
+            .await
+        {
+            Ok(()) => self.pending = false,
+            Err(error) => {
+                tracing::warn!(%error, uri = %self.location.uri, "could not discard editor temporary file")
+            }
+        }
+    }
+}
+
+impl Drop for TemporaryCopy {
+    fn drop(&mut self) {
+        if !self.pending {
+            return;
+        }
+        let provider = Arc::clone(&self.provider);
+        let location = self.location.clone();
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                runtime.spawn(async move {
+                    if let Err(error) = provider
+                        .discard_copy(&location, CancellationToken::new())
+                        .await
+                    {
+                        tracing::warn!(%error, uri = %location.uri, "could not discard cancelled editor temporary file");
+                    }
+                });
+            }
+            Err(error) => {
+                tracing::error!(%error, uri = %location.uri, "no runtime to discard editor temporary file");
+            }
+        }
+    }
 }
 
 impl FileEditorService {
@@ -175,30 +233,37 @@ impl FileEditorService {
         let temporary = parent
             .join(&format!(".fm-edit-{}.tmp", Uuid::new_v4()))
             .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
-        let mut writer = provider
+        let mut temporary_copy = TemporaryCopy::new(Arc::clone(&provider), temporary.clone());
+        let mut writer = match provider
             .open_write(
                 &temporary,
                 WriteOptions { overwrite: false },
                 cancellation.clone(),
             )
             .await
-            .map_err(ApplicationError::from)?;
+        {
+            Ok(writer) => writer,
+            Err(error) => {
+                if matches!(error, fm_vfs::VfsError::AlreadyExists { .. }) {
+                    temporary_copy.pending = false;
+                } else {
+                    temporary_copy.discard().await;
+                }
+                return Err(ApplicationError::from(error));
+            }
+        };
         if let Err(error) = writer.write_all(&bytes).await {
             drop(writer);
-            let _ = provider
-                .discard_copy(&temporary, cancellation.clone())
-                .await;
+            temporary_copy.discard().await;
             return Err(read_stream_error(error));
         }
         if let Err(error) = writer.shutdown().await {
             drop(writer);
-            let _ = provider
-                .discard_copy(&temporary, cancellation.clone())
-                .await;
+            temporary_copy.discard().await;
             return Err(read_stream_error(error));
         }
         drop(writer);
-        provider
+        if let Err(error) = provider
             .commit_copy(
                 &entry,
                 &temporary,
@@ -210,7 +275,11 @@ impl FileEditorService {
                 cancellation,
             )
             .await
-            .map_err(ApplicationError::from)?;
+        {
+            temporary_copy.discard().await;
+            return Err(ApplicationError::from(error));
+        }
+        temporary_copy.pending = false;
         if conflicted {
             if let Some(parent) = self.audit_log_path.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -429,5 +498,66 @@ mod tests {
             std::fs::read_to_string(&destination).expect("destination"),
             "copy content"
         );
+    }
+
+    #[tokio::test]
+    async fn failed_save_as_discards_temporary_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let source = dir.path().join("source.txt");
+        let destination = dir.path().join("existing.txt");
+        std::fs::write(&source, b"source").expect("write source");
+        std::fs::write(&destination, b"keep").expect("write destination");
+        let editor = editor(&dir);
+        let location = location_dto_for(&source);
+        let loaded = editor
+            .load(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .expect("load");
+
+        editor
+            .save(SaveEditableFileRequestDto {
+                location,
+                destination: Some(location_dto_for(&destination)),
+                content: "replacement".to_owned(),
+                expected_revision: loaded.revision,
+                overwrite_conflict: false,
+            })
+            .await
+            .expect_err("save as cannot replace existing destination");
+
+        assert_eq!(
+            std::fs::read_to_string(&destination).expect("destination"),
+            "keep"
+        );
+        assert!(
+            !dir.path()
+                .read_dir()
+                .expect("list directory")
+                .any(|entry| entry
+                    .expect("directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".fm-edit-"))
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_temporary_copy_discards_file_after_cancellation() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join(".fm-edit-test.tmp");
+        std::fs::write(&path, b"partial edit").expect("write temporary");
+        let provider: Arc<dyn FileSystemProvider> = Arc::new(LocalFileSystemProvider);
+        let location = Location::from_native_path(&path).expect("temporary location");
+        drop(TemporaryCopy::new(provider, location));
+
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while path.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("temporary file must be discarded");
     }
 }
