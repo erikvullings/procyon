@@ -959,8 +959,9 @@ export const nl = {
     reasonRelatedTerm: 'Verwante term',
     search: 'Zoeken',
     ask: 'Vragen',
+    askWith: 'Vraag {profile}',
     question: 'Vraag over deze resultaten',
-    questionPlaceholder: 'Stel een specifieke vraag over de gevonden bronnen…',
+    questionPlaceholder: 'Stel een vraag over je documenten…',
     searching: 'Bezig met zoeken…',
     cancel: 'Zoeken annuleren',
     cancelled: 'De zoekopdracht is geannuleerd.',
@@ -1028,25 +1029,16 @@ export const nl = {
     answerNotGenerated:
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',
     answerRegion: 'Optioneel kennisantwoord',
-    answerHeading: 'Optioneel antwoord',
-    answerHint:
-      'Stel een vraag over de bekeken resultaten. Antwoorden start geen nieuwe zoekopdracht; ga naar Zoeken om de bronnen te bekijken of te vernieuwen.',
-    answerProfile: 'Generatieprofiel',
-    answerProfilePlaceholder: 'Kies een generatieprofiel…',
-    answerNoProfiles:
-      'Er is geen generatieprofiel ingesteld, dus er kan geen antwoord worden gegenereerd. Je zoekresultaten blijven beschikbaar.',
-    answerProfilesFailed:
-      'Generatieprofielen konden niet worden geladen. Je zoekresultaten blijven beschikbaar.',
-    answerLocalEndpoint:
-      '{profile} draait op een lokaal eindpunt, dus het bekeken bewijs blijft op dit apparaat.',
+    answerHeading: 'Antwoord',
+    showAnswer: 'Antwoord tonen',
+    hideAnswer: 'Antwoord verbergen',
     answerCloudEndpoint:
       '{profile} is een cloud-eindpunt: genereren stuurt het bekeken bewijs daarheen. Je host handhaaft deze toestemming.',
     allowModelKnowledge: 'Algemene modelkennis toestaan, duidelijk gelabeld',
-    modelKnowledgeNotice:
-      'Uitspraken uit algemene modelkennis worden niet ondersteund door de citaten hieronder.',
+    allowModelKnowledgeHint:
+      'Algemene modelkennis toestaan. Uitspraken die niet door je documenten worden ondersteund, worden duidelijk gemarkeerd.',
     modelKnowledgeUsed:
       'Dit antwoord mocht algemene modelkennis gebruiken, die de citaten niet ondersteunen.',
-    generateAnswer: 'Antwoord genereren',
     generatingAnswer: 'Antwoord genereren…',
     cancelAnswer: 'Antwoord annuleren',
     answerCancelled: 'Het antwoord is geannuleerd.',

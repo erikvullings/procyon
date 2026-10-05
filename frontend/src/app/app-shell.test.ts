@@ -4669,9 +4669,7 @@ describe('AppShell', () => {
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-workspace.is-search')).not.toBeNull(),
-    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
@@ -4722,9 +4720,7 @@ describe('AppShell', () => {
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-workspace.is-search')).not.toBeNull(),
-    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     const tabs = (): number =>
       [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
         tab.textContent?.includes('Semantic Search'),

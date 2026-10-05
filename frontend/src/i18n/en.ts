@@ -965,8 +965,9 @@ export const en = {
     reasonRelatedTerm: 'Related term',
     search: 'Search',
     ask: 'Ask',
+    askWith: 'Ask {profile}',
     question: 'Question about these results',
-    questionPlaceholder: 'Ask something specific about the sources you found…',
+    questionPlaceholder: 'Ask a question about your documents…',
     searching: 'Searching…',
     cancel: 'Cancel search',
     cancelled: 'The search was cancelled.',
@@ -1032,25 +1033,16 @@ export const en = {
     answerNotGenerated:
       'Search never generates an answer. Answer generation is unavailable and not required.',
     answerRegion: 'Optional knowledge answer',
-    answerHeading: 'Optional answer',
-    answerHint:
-      'Ask about the results you inspected. Answering does not search again; switch to Search to review or refresh the sources.',
-    answerProfile: 'Generation profile',
-    answerProfilePlaceholder: 'Select a generation profile…',
-    answerNoProfiles:
-      'No generation profile is configured, so no answer can be generated. Your search results remain available.',
-    answerProfilesFailed:
-      'Generation profiles could not be loaded. Your search results remain available.',
-    answerLocalEndpoint:
-      '{profile} runs on a local endpoint, so the inspected evidence stays on this device.',
+    answerHeading: 'Answer',
+    showAnswer: 'Show answer',
+    hideAnswer: 'Hide answer',
     answerCloudEndpoint:
       '{profile} is a cloud endpoint: generating sends the inspected evidence to it. Your host enforces this consent.',
     allowModelKnowledge: 'Allow general model knowledge, clearly labelled',
-    modelKnowledgeNotice:
-      'Statements from general model knowledge are not supported by the citations below.',
+    allowModelKnowledgeHint:
+      'Allow general model knowledge. Statements not supported by your documents are clearly labelled.',
     modelKnowledgeUsed:
       'This answer was permitted to use general model knowledge, which the citations do not support.',
-    generateAnswer: 'Generate answer',
     generatingAnswer: 'Generating answer…',
     cancelAnswer: 'Cancel answer',
     answerCancelled: 'The answer was cancelled.',

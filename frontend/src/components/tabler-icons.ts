@@ -271,6 +271,29 @@ export const eyeOffIcon = trustedStrokeIcon(
   'fm-icon-eye-off',
 );
 
+/** "brain" — knowledge search: allow general model knowledge in answers. */
+export const brainIcon = trustedStrokeIcon(
+  '<path d="M15.5 13a3.5 3.5 0 0 0 -3.5 3.5v1a3.5 3.5 0 0 0 7 0v-1.8" />' +
+    '<path d="M8.5 13a3.5 3.5 0 0 1 3.5 3.5v1a3.5 3.5 0 0 1 -7 0v-1.8" />' +
+    '<path d="M17.5 16a3.5 3.5 0 0 0 0 -7h-.5" />' +
+    '<path d="M19 9.3v-2.8a3.5 3.5 0 0 0 -7 0" />' +
+    '<path d="M6.5 16a3.5 3.5 0 0 1 0 -7h.5" />' +
+    '<path d="M5 9.3v-2.8a3.5 3.5 0 0 1 7 0v10" />',
+  'fm-icon-brain',
+);
+
+/** "sparkles" — knowledge search: the ask bar for generated answers. */
+export const sparklesIcon = trustedStrokeIcon(
+  '<path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />',
+  'fm-icon-sparkles',
+);
+
+/** "cloud" — knowledge search: the answer profile is a cloud endpoint. */
+export const cloudIcon = trustedStrokeIcon(
+  '<path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" />',
+  'fm-icon-cloud',
+);
+
 /** "filter" — the pane's inline quick-filter box. */
 export const filterIcon = trustedStrokeIcon(
   '<path d="M4 4h16v2.172a2 2 0 0 1 -.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.414 -4.414a2 2 0 0 1 -.586 -1.414v-2.172z" />',

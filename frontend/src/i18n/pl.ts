@@ -961,7 +961,7 @@ export const pl = {
     openTitle: 'Wyszukiwanie semantyczne…',
     ask: 'Zapytaj',
     question: 'Pytanie o te wyniki',
-    questionPlaceholder: 'Zadaj konkretne pytanie o znalezione źródła…',
+    questionPlaceholder: 'Zadaj pytanie o swoje dokumenty…',
     resultRelevanceHigh: 'Wysoka trafność',
     resultRelevanceMedium: 'Średnia trafność',
     resultRelevanceLow: 'Niska trafność',

@@ -960,7 +960,7 @@ export const it = {
     openTitle: 'Ricerca semantica…',
     ask: 'Chiedi',
     question: 'Domanda su questi risultati',
-    questionPlaceholder: 'Fai una domanda specifica sulle fonti trovate…',
+    questionPlaceholder: 'Fai una domanda sui tuoi documenti…',
     resultRelevanceHigh: 'Pertinenza alta',
     resultRelevanceMedium: 'Pertinenza media',
     resultRelevanceLow: 'Pertinenza bassa',

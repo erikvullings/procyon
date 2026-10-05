@@ -3,11 +3,14 @@ import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
+  brainIcon,
   closeIcon,
+  cloudIcon,
   cornerDownLeftIcon,
   dotsIcon,
   externalLinkIcon,
   filterIcon,
+  sparklesIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -39,8 +42,6 @@ import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
-
-type KnowledgeSurfaceMode = 'search' | 'ask';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -617,7 +618,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   let answerProfiles: readonly LlmProfile[] = [];
   let answerProfilesFailed = false;
-  let selectedAnswerProfileId = '';
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
   let answer: KnowledgeAnswer | undefined;
@@ -641,7 +641,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let searchAfterLoad = false;
   let settingsOpen = false;
   let enrolmentOpen = false;
-  let surfaceMode: KnowledgeSurfaceMode = 'search';
+  let answerCollapsed = false;
   let questionText = '';
 
   /** Bounded options sent with both the plan preview and the search itself. */
@@ -877,11 +877,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     searchAfterLoad = false;
     answerProfiles = [];
     answerProfilesFailed = false;
-    selectedAnswerProfileId = '';
     allowModelKnowledge = false;
     settingsOpen = false;
     enrolmentOpen = false;
-    surfaceMode = 'search';
+    answerCollapsed = false;
     try {
       // Every lookup runs concurrently: each one is a separate host round-trip
       // and the dialog stays in its loading state until all have settled.
@@ -1016,7 +1015,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     error = undefined;
     notice = undefined;
     result = undefined;
-    surfaceMode = 'search';
+    answerCollapsed = false;
     questionText = '';
     // A new search replaces the evidence set entirely, so any answer over the
     // previous one is dropped before the first byte of the new one arrives.
@@ -1070,22 +1069,67 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     abortController?.abort();
   }
 
-  /** Whether an optional answer may be offered at all for what is on screen. */
+  /**
+   * Whether an LLM can answer at all: the host supports generation and at
+   * least one generation profile is configured. Without one the ask bar is
+   * not shown and search stays complete on its own.
+   */
   function answerAvailable(): boolean {
-    return result?.capabilities.answerGeneration === true;
+    return (
+      (result?.capabilities ?? capabilities)?.answerGeneration === true &&
+      !answerProfilesFailed &&
+      answerProfiles.length > 0
+    );
   }
 
   /** Whether the Generate control can run right now. */
-  function canGenerateAnswer(): boolean {
+  function canGenerateAnswer(attrs: KnowledgeSearchDialogAttrs): boolean {
     return (
       answerAvailable() &&
       questionText.trim().length > 0 &&
       new TextEncoder().encode(questionText).length <= 8 * 1024 &&
       !generatingAnswer &&
       busy === undefined &&
-      selectedAnswerProfileId !== '' &&
-      answerProfiles.some((profile) => profile.id === selectedAnswerProfileId)
+      (result !== undefined || canSearchForQuestion(attrs)) &&
+      answerProfile() !== undefined
     );
+  }
+
+  /**
+   * The default generation profile: hosts list the profile activated in
+   * Settings first, and activation is where cloud consent is given.
+   */
+  function answerProfile(): LlmProfile | undefined {
+    return answerProfiles[0];
+  }
+
+  /** Whether asking without inspected results can first search for the question. */
+  function canSearchForQuestion(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return hasSearchableSources(attrs) && scopeIssues.length === 0;
+  }
+
+  /**
+   * Asks the question. With results on screen it answers over exactly that
+   * evidence; without them it first searches, as regular RAG would, using the
+   * subjects already entered or else the question itself as the subject.
+   */
+  async function ask(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    if (!canGenerateAnswer(attrs)) return;
+    if (result === undefined) {
+      const asked = questionText;
+      if (!hasSubject()) {
+        draft = { ...draft, about: [asked.trim()] };
+        subjectsText = joinSubjects(draft.about ?? []);
+        edited();
+        void reinterpret(attrs);
+      }
+      // search() clears the question synchronously; keep it on screen.
+      const searching = search(attrs);
+      questionText = asked;
+      await searching;
+      if (result === undefined) return;
+    }
+    await generateAnswer(attrs);
   }
 
   /**
@@ -1101,13 +1145,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   async function generateAnswer(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     const inspected = result;
-    if (inspected === undefined || !canGenerateAnswer()) return;
+    if (inspected === undefined || !canGenerateAnswer(attrs)) return;
     const startGeneration = generation;
     const answerRevision = revision;
     const fingerprint = inspected.evidenceFingerprint;
-    const profileId = selectedAnswerProfileId;
+    const profileId = answerProfile()?.id ?? '';
     const modelKnowledge = allowModelKnowledge;
     resetAnswer();
+    answerCollapsed = false;
     const sequence = answerSequence;
     const controller = new AbortController();
     answerAbortController = controller;
@@ -1582,27 +1627,73 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   }
 
   /**
-   * The optional answer section: strictly downstream of a completed search.
+   * The optional ask bar, docked below the results it is about.
    *
    * It exists only while a successful result whose own capabilities report
    * `answerGeneration` is on screen, so a search-only host renders nothing here
-   * and search stays complete without it.
+   * and search stays complete without it. The answer opens in a collapsible
+   * panel directly above the bar.
    */
   function answerView(attrs: KnowledgeSearchDialogAttrs): m.Children {
     if (!answerAvailable()) return undefined;
     const displayed = displayedEvidence();
-    const profile = answerProfiles.find((candidate) => candidate.id === selectedAnswerProfileId);
+    const profile = answerProfile();
+    const hasOutput =
+      generatingAnswer ||
+      answer !== undefined ||
+      answerError !== undefined ||
+      answerNotice !== undefined;
     return m(
       'section.fm-knowledge-answer',
       { 'aria-label': t('knowledgeSearch', 'answerRegion'), 'aria-busy': generatingAnswer },
       [
-        m('h3', t('knowledgeSearch', 'answerHeading')),
-        m('p.fm-knowledge-hint', t('knowledgeSearch', 'answerHint')),
-        m('.fm-knowledge-field', [
-          m('label', { for: 'fm-knowledge-question' }, t('knowledgeSearch', 'question')),
+        m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
+          m('.fm-knowledge-answer-output-heading', [
+            m('h3', t('knowledgeSearch', 'answerHeading')),
+            m(
+              'button.fm-knowledge-answer-collapse',
+              {
+                type: 'button',
+                'aria-expanded': answerCollapsed ? 'false' : 'true',
+                'aria-controls': 'fm-knowledge-answer-body',
+                onclick: () => {
+                  answerCollapsed = !answerCollapsed;
+                },
+              },
+              answerCollapsed
+                ? t('knowledgeSearch', 'showAnswer')
+                : t('knowledgeSearch', 'hideAnswer'),
+            ),
+          ]),
+          answerError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
+          m(
+            '.fm-knowledge-answer-body#fm-knowledge-answer-body',
+            {
+              tabindex: '-1',
+              'aria-live': 'polite',
+              hidden: answerCollapsed,
+              onupdate: ({ dom }: m.VnodeDOM) => {
+                if (focusAnswerOnReady && answer !== undefined) {
+                  focusAnswerOnReady = false;
+                  (dom as HTMLElement).focus();
+                }
+              },
+            },
+            hasOutput ? answerBody(attrs, displayed) : undefined,
+          ),
+        ]),
+        m('.fm-knowledge-ask-bar', [
+          sparklesIcon({ className: 'fm-knowledge-ask-icon', size: 15 }),
+          m(
+            'label.fm-visually-hidden',
+            { for: 'fm-knowledge-question' },
+            t('knowledgeSearch', 'question'),
+          ),
           m('textarea#fm-knowledge-question', {
             name: 'knowledge-answer-question',
-            rows: 3,
+            rows: 1,
             maxlength: 8192,
             value: questionText,
             placeholder: t('knowledgeSearch', 'questionPlaceholder'),
@@ -1612,125 +1703,77 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             },
             onkeydown: (event: KeyboardEvent) => {
               event.stopPropagation();
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing) {
+              if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                 event.preventDefault();
-                void generateAnswer(attrs);
+                void ask(attrs);
               }
             },
           }),
-        ]),
-        answerProfilesFailed
-          ? m(
-              'p.fm-knowledge-error',
-              { role: 'alert' },
-              t('knowledgeSearch', 'answerProfilesFailed'),
-            )
-          : answerProfiles.length === 0
-            ? m('p.fm-knowledge-hint', { role: 'status' }, t('knowledgeSearch', 'answerNoProfiles'))
-            : m('.fm-knowledge-answer-controls', [
-                m('.fm-knowledge-field', [
-                  m(
-                    'label',
-                    { for: 'fm-knowledge-answer-profile' },
-                    t('knowledgeSearch', 'answerProfile'),
-                  ),
-                  m(
-                    'select#fm-knowledge-answer-profile.browser-default',
-                    {
-                      name: 'knowledge-answer-profile',
-                      value: selectedAnswerProfileId,
-                      disabled: generatingAnswer,
-                      onchange: (event: Event) => {
-                        selectedAnswerProfileId = (event.currentTarget as HTMLSelectElement).value;
-                        // A different endpoint is a different disclosure, so
-                        // the previous answer cannot stand.
-                        resetAnswer();
-                      },
-                    },
-                    [
-                      m('option', { value: '' }, t('knowledgeSearch', 'answerProfilePlaceholder')),
-                      // Unkeyed on purpose: Mithril refuses a sibling list
-                      // that mixes keyed and unkeyed vnodes, and the
-                      // placeholder option cannot carry a profile key.
-                      ...answerProfiles.map((candidate) =>
-                        m(
-                          'option',
-                          { value: candidate.id },
-                          `${candidate.name} · ${localityLabel(candidate.locality)}`,
-                        ),
-                      ),
-                    ],
-                  ),
-                ]),
-                m('.fm-knowledge-answer-option', [
-                  m('input#fm-knowledge-model-knowledge', {
-                    type: 'checkbox',
-                    checked: allowModelKnowledge,
-                    disabled: generatingAnswer,
-                    onchange: (event: Event) => {
-                      allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
-                      resetAnswer();
-                    },
-                  }),
-                  m(
-                    'label',
-                    { for: 'fm-knowledge-model-knowledge' },
-                    t('knowledgeSearch', 'allowModelKnowledge'),
-                  ),
-                ]),
-              ]),
-        allowModelKnowledge
-          ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'modelKnowledgeNotice'))
-          : undefined,
-        profile === undefined
-          ? undefined
-          : m(
-              profile.locality === 'cloud' ? 'p.fm-knowledge-warning' : 'p.fm-knowledge-hint',
-              { role: 'status' },
-              profile.locality === 'cloud'
-                ? t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name })
-                : t('knowledgeSearch', 'answerLocalEndpoint', { profile: profile.name }),
-            ),
-        answerProfiles.length === 0
-          ? undefined
-          : m('.fm-knowledge-answer-actions', [
-              m(
-                FlatButton,
+          profile?.locality === 'cloud'
+            ? tooltip(
+                t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name }),
+                cloudIcon({ className: 'fm-knowledge-ask-cloud', size: 15 }),
                 {
-                  type: 'button',
-                  className: 'fm-knowledge-generate',
-                  disabled: !canGenerateAnswer(),
-                  onclick: () => void generateAnswer(attrs),
+                  tabindex: 0,
+                  role: 'img',
+                  'aria-label': t('knowledgeSearch', 'answerCloudEndpoint', {
+                    profile: profile.name,
+                  }),
                 },
-                generatingAnswer
-                  ? t('knowledgeSearch', 'generatingAnswer')
-                  : t('knowledgeSearch', 'generateAnswer'),
+              )
+            : undefined,
+          tooltip(
+            t('knowledgeSearch', 'allowModelKnowledgeHint'),
+            m(
+              'label.fm-knowledge-model-knowledge',
+              {
+                for: 'fm-knowledge-model-knowledge',
+                class: allowModelKnowledge ? 'is-active' : undefined,
+              },
+              [
+                m('input#fm-knowledge-model-knowledge.fm-visually-hidden', {
+                  type: 'checkbox',
+                  checked: allowModelKnowledge,
+                  disabled: generatingAnswer,
+                  onchange: (event: Event) => {
+                    allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
+                    resetAnswer();
+                  },
+                }),
+                brainIcon({ size: 15 }),
+                m('span.fm-visually-hidden', t('knowledgeSearch', 'allowModelKnowledge')),
+              ],
+            ),
+          ),
+          generatingAnswer
+            ? tooltip(
+                t('knowledgeSearch', 'cancelAnswer'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-ask-cancel',
+                    'aria-label': t('knowledgeSearch', 'cancelAnswer'),
+                    onclick: cancelAnswer,
+                  },
+                  closeIcon({ size: 13 }),
+                ),
+              )
+            : tooltip(
+                t('knowledgeSearch', 'askWith', { profile: profile?.name ?? '' }),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-generate',
+                    'aria-label': t('knowledgeSearch', 'ask'),
+                    disabled: !canGenerateAnswer(attrs),
+                    onclick: () => void ask(attrs),
+                  },
+                  cornerDownLeftIcon({ size: 16 }),
+                ),
               ),
-              generatingAnswer
-                ? m(
-                    FlatButton,
-                    { type: 'button', onclick: cancelAnswer },
-                    t('knowledgeSearch', 'cancelAnswer'),
-                  )
-                : undefined,
-            ]),
-        answerError === undefined
-          ? undefined
-          : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
-        m(
-          '.fm-knowledge-answer-body',
-          {
-            tabindex: '-1',
-            'aria-live': 'polite',
-            onupdate: ({ dom }: m.VnodeDOM) => {
-              if (focusAnswerOnReady && answer !== undefined) {
-                focusAnswerOnReady = false;
-                (dom as HTMLElement).focus();
-              }
-            },
-          },
-          answerBody(attrs, displayed),
-        ),
+        ]),
       ],
     );
   }
@@ -1765,44 +1808,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         'section#fm-knowledge-search-pane.fm-knowledge-search',
         {
           'aria-label': t('knowledgeSearch', 'title'),
-          class: surfaceMode === 'ask' ? 'is-ask' : undefined,
         },
         [
           m('.fm-knowledge-composer', [
             m('.fm-knowledge-search-toolbar', [
-              m('.fm-knowledge-surface-modes', { 'aria-label': t('knowledgeSearch', 'title') }, [
-                m(
-                  'button.fm-knowledge-surface-mode',
-                  {
-                    type: 'button',
-                    class: surfaceMode === 'search' ? 'is-active' : undefined,
-                    'aria-pressed': surfaceMode === 'search' ? 'true' : 'false',
-                    onclick: () => {
-                      surfaceMode = 'search';
-                    },
-                  },
-                  t('knowledgeSearch', 'search'),
-                ),
-                m(
-                  'button.fm-knowledge-surface-mode',
-                  {
-                    type: 'button',
-                    class: surfaceMode === 'ask' ? 'is-active' : undefined,
-                    'aria-pressed': surfaceMode === 'ask' ? 'true' : 'false',
-                    disabled: !answerAvailable(),
-                    onclick: () => {
-                      surfaceMode = 'ask';
-                    },
-                  },
-                  t('knowledgeSearch', 'ask'),
-                ),
-              ]),
-              surfaceMode === 'ask'
-                ? m('span.fm-knowledge-search-summary', [
-                    `${t('knowledgeSearch', 'search')}: `,
-                    subjectsText,
-                  ])
-                : undefined,
               filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),
               m('textarea#fm-knowledge-subjects', {
                 name: 'knowledge-subjects',
@@ -2298,14 +2307,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           busy === 'loading'
             ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
             : undefined,
-          m('.fm-knowledge-workspace', { class: surfaceMode === 'ask' ? 'is-ask' : 'is-search' }, [
-            surfaceMode === 'ask'
-              ? m(
-                  'section.fm-knowledge-answer-panel',
-                  { 'aria-label': t('knowledgeSearch', 'answerRegion') },
-                  answerView(attrs),
-                )
-              : undefined,
+          m('.fm-knowledge-workspace', [
             m(
               'section.fm-knowledge-results-section.fm-knowledge-evidence-panel',
               {
@@ -2329,6 +2331,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [resultsView(attrs)]),
               ],
             ),
+            answerView(attrs),
           ]),
         ],
       );
