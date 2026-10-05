@@ -160,6 +160,11 @@ second plugin system.
   protected, including inherited XML-space and namespaced tspan attributes. Full-pipeline
   regression tests cover these cases. This source-only fix does not update the checked-in
   `plugins/svgo/dist/` bundle; rebuild and copy it before shipping the panel change.
+- 2026-10-04 Copilot: A loaded Ubuntu CI runner failed a trivial QuickJS action because the
+  100 ms default script timeout also counted cold engine/context and trusted host setup. Keep
+  the 100 ms execution deadline, but allow at most one second for setup before starting it;
+  an interrupt deadline and post-call checks bound both phases. Deterministic delayed-setup
+  regression tests cover actions, invocation, stalled setup, execution timeout, and cancellation.
 - 2026-10-04 Copilot: For the 0.4.0 release gate, SVGO is restricted to local SVG locations
   at trusted panel open and every bridge request; remote providers remain available to the
   generic editor. SVGO Saves use a process mutex plus an app-cache advisory lock keyed by
