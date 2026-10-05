@@ -64,6 +64,7 @@ interface Window {
     postMessage(message:
       | { type: "save-svg"; svg: string }
       | { type: "settings-change"; settings: import('../optimizer').ProcyonOptimizerSettings; sequence: number; flush?: true }
+      | { type: "close-panel" }
     ): void;
   };
   showSaveFilePicker?: (options?: {

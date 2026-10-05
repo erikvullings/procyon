@@ -143,6 +143,27 @@ describe("Procyon host adapter", () => {
     expect(postMessage).toHaveBeenCalledTimes(2);
   });
 
+  it("requests close from a focused child input only for the platform close shortcut", async () => {
+    const { initializeGlobalHandlers } = await import("../src/ui");
+    initializeGlobalHandlers();
+    const input = document.createElement("input");
+    document.body.append(input);
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+    const shortcut = (options: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", {
+        key: "w", bubbles: true, cancelable: true, ...options,
+      });
+      input.dispatchEvent(event);
+      return event;
+    };
+    expect(shortcut({ metaKey: !isMac, ctrlKey: isMac }).defaultPrevented).toBe(false);
+    expect(shortcut({ metaKey: isMac, ctrlKey: !isMac, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(shortcut({ metaKey: isMac, ctrlKey: !isMac }).defaultPrevented).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith({ type: "close-panel" });
+    expect(postMessage.mock.calls.every(([message]) => message.type === "close-panel")).toBe(true);
+  });
+
   it("preserves automatic VS Code updates without the Procyon bridge", async () => {
     delete window.procyonPlugin;
     const vscodePostMessage = vi.fn();
@@ -181,6 +202,11 @@ describe("Procyon host adapter", () => {
     });
     expect(result({ type: "save-result", success: true, loadToken: "test-window-token" })).toEqual({
       type: "save-result", success: true,
+    });
+    expect(result({ type: "close-result", success: false, loadToken: "wrong" })).toBeNull();
+    expect(result({ type: "close-result", success: "false", loadToken: "test-window-token" })).toBeNull();
+    expect(result({ type: "close-result", success: false, error: "unavailable", loadToken: "test-window-token" })).toEqual({
+      type: "close-result", success: false, error: "unavailable",
     });
     expect(result({ type: "theme-change", theme: "light", loadToken: "test-window-token" }, null)).toBeNull();
     expect(result({ type: "theme-change", theme: "light", loadToken: "wrong" })).toBeNull();
