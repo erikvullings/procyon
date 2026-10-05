@@ -92,6 +92,22 @@ describe('command availability', () => {
         }),
       ).available,
     ).toBe(true);
+    const remote = {
+      ...svg,
+      location: { providerId: 'sftp', uri: 'sftp://host/diagram.SVG' },
+    };
+    expect(
+      evaluateActionAvailability(descriptor, context({ cursorEntry: remote, plugins })),
+    ).toMatchObject({ available: false, reason: 'SVGO can edit only local SVG files' });
+    expect(
+      evaluateActionAvailability(
+        descriptor,
+        context({
+          cursorEntry: remote,
+          plugins: plugins.map((plugin) => ({ ...plugin, id: 'other.panel' })),
+        }),
+      ).available,
+    ).toBe(true);
     expect(
       evaluateActionAvailability(
         descriptor,

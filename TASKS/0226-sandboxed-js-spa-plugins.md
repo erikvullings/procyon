@@ -160,3 +160,18 @@ second plugin system.
   protected, including inherited XML-space and namespaced tspan attributes. Full-pipeline
   regression tests cover these cases. This source-only fix does not update the checked-in
   `plugins/svgo/dist/` bundle; rebuild and copy it before shipping the panel change.
+- 2026-10-04 Copilot: For the 0.4.0 release gate, SVGO is restricted to local SVG locations
+  at trusted panel open and every bridge request; remote providers remain available to the
+  generic editor. SVGO Saves use a process mutex plus an app-cache advisory lock keyed by
+  canonical local path, and recheck revision under that lock, including across independent
+  Procyon processes and symlinked directory aliases. Stable cache lock files are intentionally
+  retained so an unlink/recreate cannot split the lock. The user explicitly accepted the
+  residual race against external writers that ignore the advisory lock for 0.4.0; this is
+  **not atomic CAS**. This release-gate PR does not close task 0226: immediate crash cleanup,
+  remaining temporary-file risks, native smoke/review and other acceptance criteria remain.
+- 2026-10-04 Copilot: Follow-up review identified a gap: the original lock protected only
+  SVGO bridge saves, so the generic editor in another Procyon process could still bypass it.
+  The advisory cache lock and per-target process mutex now wrap the common local whole-file editor
+  save path through its revision check and commit, covering generic-editor/SPA aliases
+  without changing remote provider saves. The user-approved uncooperative external-writer
+  race remains; this is still not atomic CAS. Rebasing onto main includes PRs #91 and #92.

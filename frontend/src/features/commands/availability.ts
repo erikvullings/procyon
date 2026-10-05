@@ -113,6 +113,14 @@ function unavailable(action: ActionDescriptor, reason: string): AvailableAction 
   return { action, available: false, reason };
 }
 
+export function svgoRequiresLocalFile(pluginId: string, entry: EntrySummary | undefined): boolean {
+  return (
+    pluginId === 'procyon.svgo' &&
+    entry !== undefined &&
+    (entry.location.providerId !== 'local' || !entry.location.uri.startsWith('file://'))
+  );
+}
+
 /**
  * Evaluates the registry requirements plus client-only context that the
  * backend re-validates when a command reaches its operation endpoint.
@@ -128,6 +136,8 @@ export function evaluateActionAvailability(
   if (panelPlugin?.spaPanel !== undefined) {
     const panel = panelPlugin.spaPanel;
     const entry = context.cursorEntry;
+    if (svgoRequiresLocalFile(panelPlugin.id, entry))
+      return unavailable(action, t('availability', 'svgoLocalFilesOnly'));
     const extension = entry?.name.split('.').at(-1)?.toLowerCase();
     if (
       !panelPlugin.enabled ||

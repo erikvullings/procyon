@@ -989,6 +989,36 @@ mod tests {
     }
 
     #[test]
+    fn svgo_panel_rejects_remote_location_before_loading() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+        let error = tauri::async_runtime::block_on(plugin_spa::open_plugin_panel(
+            app.handle().clone(),
+            webview.as_ref().window(),
+            app.state::<AppState>(),
+            plugin_spa::OpenPanelRequest {
+                plugin_id: "procyon.svgo".into(),
+                action_id: "procyon.svgo.open".into(),
+                location: fm_transport_dto::LocationDto {
+                    provider_id: "sftp".into(),
+                    uri: "sftp://host/drawing.svg".into(),
+                },
+                bounds: plugin_spa::PanelBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                theme: plugin_spa::PanelTheme::Light,
+            },
+        ))
+        .expect_err("remote SVG must not load into SVGO");
+        assert!(matches!(error, plugin_spa::PanelError::Denied));
+    }
+
+    #[test]
     fn frontend_diagnostics_survive_in_the_tauri_host_buffer() {
         let app = create_app(mock_builder());
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())

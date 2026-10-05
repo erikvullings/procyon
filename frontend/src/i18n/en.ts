@@ -380,6 +380,7 @@ export const en = {
     clipboardEmpty: 'Copy or move an item first',
     selectionReadOnly: 'Selected item is read-only',
     quickLookLocalFilesOnly: 'Quick Look is available only for local files',
+    svgoLocalFilesOnly: 'SVGO can edit only local SVG files',
     browserUnavailable: "{action} isn't available in the browser.",
   },
   operation: {
