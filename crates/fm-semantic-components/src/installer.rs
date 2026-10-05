@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -389,6 +390,44 @@ impl ComponentCleanupIssue {
 pub struct ComponentManager {
     store: SemanticStateStore,
     app_data: PathBuf,
+    verified_stamps: Arc<Mutex<HashMap<(PathBuf, Sha256Digest), FileStamp>>>,
+}
+
+/// File identity observed around a successful full payload hash.
+///
+/// On Unix the inode change time cannot be set from user space, so any write,
+/// replacement, or permission change after the hash invalidates the stamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileStamp {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(unix)]
+    changed: (i64, i64),
+}
+
+impl FileStamp {
+    fn of(path: &Path) -> Option<Self> {
+        let metadata = fs::symlink_metadata(path).ok()?;
+        if !metadata.is_file() {
+            return None;
+        }
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        Some(Self {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            #[cfg(unix)]
+            device: metadata.dev(),
+            #[cfg(unix)]
+            inode: metadata.ino(),
+            #[cfg(unix)]
+            changed: (metadata.ctime(), metadata.ctime_nsec()),
+        })
+    }
 }
 
 struct InstallActivation<'a> {
@@ -403,6 +442,7 @@ impl ComponentManager {
         Self {
             store,
             app_data: app_data.into(),
+            verified_stamps: Arc::default(),
         }
     }
 
@@ -473,6 +513,60 @@ impl ComponentManager {
         }
         verify_installed_artifact(artifact, installed.installed_path())?;
         Ok(Some(installed.installed_path().to_owned()))
+    }
+
+    /// Like [`Self::verified_installed_payload`], but skips the full SHA-256
+    /// when this manager already hashed the same unchanged file.
+    ///
+    /// Intended for frequent status reporting only: a payload is re-hashed as
+    /// soon as its length, modification time, or (on Unix) inode or change
+    /// time differs. Worker launch must keep using the unmemoized method.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::verified_installed_payload`].
+    pub fn verified_installed_payload_memoized(
+        &self,
+        artifact: &CatalogArtifact,
+    ) -> Result<Option<PathBuf>, InstallError> {
+        let state = self.state()?;
+        let Some(installed) = state.installed_component(artifact.component_id()) else {
+            return Ok(None);
+        };
+        if installed.artifact_id() != artifact.id()
+            || installed.version() != artifact.version()
+            || installed.checksum() != artifact.checksum()
+        {
+            return Ok(None);
+        }
+        let path = installed.installed_path();
+        let key = (path.to_owned(), artifact.checksum());
+        let before = FileStamp::of(path);
+        if let Some(stamp) = before
+            && self
+                .verified_stamps
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(&key)
+                == Some(&stamp)
+        {
+            return Ok(Some(path.to_owned()));
+        }
+        verify_installed_artifact(artifact, path)?;
+        let mut stamps = self
+            .verified_stamps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match before {
+            // Only remember a stamp the file kept for the whole hash.
+            Some(stamp) if FileStamp::of(path) == Some(stamp) => {
+                stamps.insert(key, stamp);
+            }
+            _ => {
+                stamps.remove(&key);
+            }
+        }
+        Ok(Some(path.to_owned()))
     }
 
     /// Loads one state snapshot and its corresponding filesystem report.

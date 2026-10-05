@@ -883,10 +883,39 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     enrolmentOpen = false;
     surfaceMode = 'search';
     try {
-      const [reportedCapabilities, availableRoots] = await Promise.all([
-        attrs.client.getKnowledgeCapabilities(),
-        attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
-      ]);
+      // Every lookup runs concurrently: each one is a separate host round-trip
+      // and the dialog stays in its loading state until all have settled.
+      const capabilitiesRequest = attrs.client.getKnowledgeCapabilities();
+      // Generation profiles are only fetched when the host actually offers
+      // answers, so a search-only host is never asked about a capability it
+      // does not have, and a failure here never blocks search (task 0207).
+      const profilesRequest = capabilitiesRequest.then((reported) =>
+        reported.answerGeneration
+          ? attrs.client.listLlmProfiles().then(
+              (profiles) => ({ profiles, failed: false }),
+              () => ({ profiles: [], failed: true }),
+            )
+          : { profiles: [], failed: false },
+      );
+      const currentFolder = attrs.currentFolder;
+      const folderIndexedRequest =
+        currentFolder === undefined
+          ? Promise.resolve(false)
+          : attrs.client
+              .getSemanticFolderStatus({ workspaceId: attrs.workspaceId, location: currentFolder })
+              .then(
+                (folder) =>
+                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
+                  folder.workspaceReferenced,
+                () => false,
+              );
+      const [reportedCapabilities, availableRoots, profileResult, folderIndexed] =
+        await Promise.all([
+          capabilitiesRequest,
+          attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
+          profilesRequest,
+          folderIndexedRequest,
+        ]);
       if (loadGeneration !== generation) return;
       capabilities = reportedCapabilities;
       roots = availableRoots;
@@ -898,33 +927,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
-      // Generation profiles are only fetched when the host actually offers
-      // answers, so a search-only host is never asked about a capability it
-      // does not have, and a failure here never blocks search (task 0207).
-      if (reportedCapabilities.answerGeneration) {
-        try {
-          const profiles = await attrs.client.listLlmProfiles();
-          if (loadGeneration !== generation) return;
-          answerProfiles = profiles;
-        } catch {
-          if (loadGeneration !== generation) return;
-          answerProfilesFailed = true;
-        }
-      }
-      if (attrs.currentFolder !== undefined) {
-        try {
-          const folder = await attrs.client.getSemanticFolderStatus({
-            workspaceId: attrs.workspaceId,
-            location: attrs.currentFolder,
-          });
-          if (loadGeneration !== generation) return;
-          currentFolderIndexed =
-            (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
-            folder.workspaceReferenced;
-        } catch {
-          currentFolderIndexed = false;
-        }
-      }
+      answerProfiles = profileResult.profiles;
+      answerProfilesFailed = profileResult.failed;
+      if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
       scopeKind = scopeAvailable(attrs, 'currentFolder')
         ? 'currentFolder'
         : scopeAvailable(attrs, 'semanticResults')
