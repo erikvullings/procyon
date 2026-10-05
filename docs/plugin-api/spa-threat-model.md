@@ -27,12 +27,13 @@ same-user process capable of modifying installed plugin files is outside the cur
 | Selected file | SVGO opens only a local `file:` location, checked at trusted host open and again on every bridge request, including Save. The host loads a bounded regular UTF-8 file and binds the panel to its original `LocationDto`. Save has no destination override and uses the file editor's revision check without forced overwrite. The editor tracks its sibling temporary copy and attempts to discard it on write/commit errors and dropped save futures, cancelling the associated provider operation before cleanup. **All local whole-file editor saves**, including SVGO and the generic editor, hold a per-target process mutex and an advisory cross-process lock (in the per-user Procyon editor cache, keyed by canonical target path) through the revision recheck and commit; symlinked directory aliases share the lock, while unrelated files can save independently. Stable cache lock files are retained to avoid an unlink/recreate split-lock race. A reload closes the panel instead of replaying an outdated snapshot. Remote providers retain their existing behavior. |
 | Lifecycle | Tab switches hide the child without discarding edits. Tab close, plugin disable, trusted-app reload, and parent-window close request a final settings snapshot and wait up to two seconds per panel before releasing its origin slot and cancelling pending requests; failure is logged. Disablement flushes before revoking the grant. Periodic reconciliation closes invalid children and probes the renderer through a challenge-bound authenticated bridge request. A visible child receives one retry after 20 seconds; a hidden child gets two 120-second intervals to account for background throttling. Panels that never finish loading expire after 20 seconds. JS actions use fresh runtimes. |
 
-The child WebView composites above the trusted HTML menu on desktop even when the menu
-has a higher CSS z-index. The trusted host measures the context menu and its submenu and
-temporarily hides an intersecting active child through the existing owner-restricted
-visibility command. This does not unload or reauthorize the panel; it restores visibility
-when the overlay leaves its bounds or closes. Native interaction across the divider still
-needs platform smoke verification.
+The child WebView composites above trusted HTML on desktop even when HTML has a higher
+CSS z-index. While a child is active opposite the file pane, the trusted context menu
+and its submenu stay within the file pane instead of hiding the child. The WebView
+remains visible, interactive, and mounted with its editor state. The menu backdrop
+lets right-clicks reach other file rows and suppresses the main WebView's native
+Reload/Inspect menu while the trusted menu is open. Native interaction near the
+divider still needs macOS/Windows/Linux smoke verification.
 
 The bundled SVGO preview also sanitizes imported SVG before inserting it into its DOM,
 including when calculating crop bounds. CSP is defense in depth, not a substitute for SVG

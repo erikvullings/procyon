@@ -837,7 +837,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         readonly y: number;
       }
     | undefined;
-  let contextMenuBounds: readonly DOMRect[] = [];
   const commandPaletteRecency = new Map<string, number>();
   /**
    * Every per-tab runtime cache below is keyed by a composite `${paneId}:${tabId}`
@@ -3885,7 +3884,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getViewerByTab: () => viewerByTab,
     getEditorByPane: () => editorByPane,
     getPluginByPane: () => pluginByPane,
-    getContextMenuBounds: () => contextMenuBounds,
     getDiskUsageByTab: () => diskUsageByTab,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
     setConnections: (conns) => {
@@ -5406,12 +5404,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   ),
             onClose: () => {
               contextMenu = undefined;
-              contextMenuBounds = [];
             },
-            onBoundsChange: (bounds) => {
-              contextMenuBounds = bounds;
-              m.redraw();
-            },
+            ...(contextMenu !== undefined &&
+            [...pluginByPane].some(
+              ([paneId, panel]) =>
+                paneId !== contextMenu?.paneId &&
+                workspace?.panesById[paneId]?.activeTabId === panel.tabId,
+            )
+              ? {
+                  placementBounds: () =>
+                    document
+                      .querySelector<HTMLElement>(`[data-pane-id="${contextMenu?.paneId}"]`)
+                      ?.getBoundingClientRect(),
+                }
+              : {}),
             onInvoke: actionCommandController.invokeContextMenuAction,
             platform,
             ...(platform === 'macos' &&
