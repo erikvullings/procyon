@@ -1,10 +1,12 @@
 //! Isolated, package-only desktop WebViews for enabled plugin SPA panels.
 
 use std::{
+    collections::HashSet,
     io::Read,
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use fm_application::FileManagerService;
@@ -13,7 +15,7 @@ use fm_transport_dto::{LoadEditableFileRequestDto, LocationDto, SaveEditableFile
 use serde::{Deserialize, Serialize};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, Rect, Runtime, State, Url,
-    WebviewBuilder, WebviewUrl, Window,
+    Webview, WebviewBuilder, WebviewUrl, Window,
     http::{Method, Response, StatusCode},
     webview::{NewWindowResponse, PageLoadEvent},
 };
@@ -28,6 +30,8 @@ const PANEL_SLOTS: usize = 16;
 const MAX_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const VISIBLE_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(20);
+const HIDDEN_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(120);
 const SVGO_PLUGIN_ID: &str = "procyon.svgo";
 
 fn require_local_svgo(plugin_id: &str, location: &LocationDto) -> Result<(), PanelError> {
@@ -143,11 +147,77 @@ struct PanelSession {
     token: String,
     revision: AsyncMutex<String>,
     save_lock: Arc<AsyncMutex<()>>,
+    close_lock: AsyncMutex<()>,
     settings_sequence: Mutex<u64>,
     flush_sender: Mutex<Option<oneshot::Sender<bool>>>,
+    heartbeat: Mutex<Option<HeartbeatProbe>>,
+    heartbeat_responded: AtomicBool,
+    created: Instant,
+    loaded: AtomicBool,
+    visible: AtomicBool,
     shutdown: CancellationToken,
     #[cfg(target_os = "linux")]
     _context_directory: tempfile::TempDir,
+}
+
+struct HeartbeatProbe {
+    challenge: String,
+    sent: Instant,
+    retried: bool,
+}
+
+impl PanelSession {
+    fn next_heartbeat(&self, now: Instant) -> Result<Option<String>, ()> {
+        if !self.loaded.load(Ordering::SeqCst) {
+            return if now.duration_since(self.created) >= VISIBLE_HEARTBEAT_TIMEOUT {
+                Err(())
+            } else {
+                Ok(None)
+            };
+        }
+        let mut pending = self
+            .heartbeat
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut retried = false;
+        if let Some(probe) = pending.as_ref() {
+            let timeout = if self.visible.load(Ordering::SeqCst) {
+                VISIBLE_HEARTBEAT_TIMEOUT
+            } else {
+                HIDDEN_HEARTBEAT_TIMEOUT
+            };
+            if now.duration_since(probe.sent) < timeout {
+                return Ok(None);
+            }
+            if probe.retried {
+                return Err(());
+            }
+            retried = true;
+        }
+        let challenge = Uuid::new_v4().simple().to_string();
+        *pending = Some(HeartbeatProbe {
+            challenge: challenge.clone(),
+            sent: now,
+            retried,
+        });
+        Ok(Some(challenge))
+    }
+
+    fn acknowledge_heartbeat(&self, challenge: &str) -> Result<(), PanelError> {
+        let mut pending = self
+            .heartbeat
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if pending
+            .as_ref()
+            .is_none_or(|probe| probe.challenge != challenge)
+        {
+            return Err(PanelError::Invalid);
+        }
+        *pending = None;
+        self.heartbeat_responded.store(true, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -177,15 +247,25 @@ enum Slot {
 }
 
 #[derive(Default)]
-pub(crate) struct PanelRegistry(Mutex<Vec<Option<Slot>>>);
+pub(crate) struct PanelRegistry {
+    slots: Mutex<Vec<Option<Slot>>>,
+    closing_windows: Mutex<HashSet<String>>,
+}
 
 impl PanelRegistry {
+    #[cfg(feature = "native-spa-smoke")]
+    pub(crate) fn heartbeat_responded(&self, label: &str) -> bool {
+        self.sessions().into_iter().any(|session| {
+            session.label == label && session.heartbeat_responded.load(Ordering::SeqCst)
+        })
+    }
+
     fn reserve(
         &self,
         label: String,
         location: &LocationDto,
     ) -> Result<(usize, Arc<AsyncMutex<()>>), PanelError> {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         if slots.len() < PANEL_SLOTS {
             slots.resize_with(PANEL_SLOTS, || None);
         }
@@ -217,7 +297,7 @@ impl PanelRegistry {
     }
 
     fn activate(&self, index: usize, session: Arc<PanelSession>) -> Result<(), PanelError> {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         let valid = matches!(
             slots.get(index),
             Some(Some(Slot::Reserved { label, location, save_lock }))
@@ -233,7 +313,7 @@ impl PanelRegistry {
     }
 
     fn session_for(&self, index: usize, label: &str) -> Option<Arc<PanelSession>> {
-        let slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         match slots.get(index)? {
             Some(Slot::Active(session))
                 if session.label == label && !session.shutdown.is_cancelled() =>
@@ -245,7 +325,7 @@ impl PanelRegistry {
     }
 
     pub(crate) fn release(&self, label: &str) {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         for slot in slots.iter_mut() {
             let matches = match slot {
                 Some(Slot::Reserved {
@@ -266,7 +346,7 @@ impl PanelRegistry {
     }
 
     pub(crate) fn labels_for_plugin(&self, plugin_id: &str) -> Vec<String> {
-        self.0
+        self.slots
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .iter()
@@ -294,7 +374,7 @@ impl PanelRegistry {
     }
 
     fn sessions(&self) -> Vec<Arc<PanelSession>> {
-        self.0
+        self.slots
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .iter()
@@ -303,6 +383,30 @@ impl PanelRegistry {
                 _ => None,
             })
             .collect()
+    }
+
+    pub(crate) fn begin_window_close(&self, owner: &str) -> bool {
+        if self.labels_for_window(owner).is_empty() {
+            return false;
+        }
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(owner.to_owned())
+    }
+
+    pub(crate) fn end_window_close(&self, owner: &str) {
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(owner);
+    }
+
+    pub(crate) fn window_close_pending(&self, owner: &str) -> bool {
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .contains(owner)
     }
 }
 
@@ -395,6 +499,12 @@ enum BridgeRequest {
         #[serde(rename = "loadToken")]
         load_token: String,
     },
+    Heartbeat {
+        version: u8,
+        challenge: String,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
 }
 
 impl BridgeRequest {
@@ -406,6 +516,11 @@ impl BridgeRequest {
                 ..
             }
             | Self::SettingsChange {
+                version,
+                load_token,
+                ..
+            }
+            | Self::Heartbeat {
                 version,
                 load_token,
                 ..
@@ -470,6 +585,11 @@ fn parse_bridge(bytes: &[u8], token: &str) -> Result<BridgeRequest, PanelError> 
         if *sequence == 0 {
             return Err(PanelError::Invalid);
         }
+    }
+    if let BridgeRequest::Heartbeat { challenge, .. } = &message
+        && (challenge.len() != 32 || !challenge.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return Err(PanelError::Invalid);
     }
     Ok(message)
 }
@@ -772,6 +892,11 @@ async fn bridge(
             }
             ("settings-result", Some(sequence), result)
         }
+        BridgeRequest::Heartbeat { challenge, .. } => (
+            "heartbeat-result",
+            None,
+            session.acknowledge_heartbeat(&challenge),
+        ),
     };
     bridge_result(result, kind, &session.token, sequence, &origin)
 }
@@ -1053,14 +1178,20 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         token: token.clone(),
         revision: AsyncMutex::new(loaded.revision),
         save_lock,
+        close_lock: AsyncMutex::new(()),
         settings_sequence: Mutex::new(0),
         flush_sender: Mutex::new(None),
+        heartbeat: Mutex::new(None),
+        heartbeat_responded: AtomicBool::new(false),
+        created: Instant::now(),
+        loaded: AtomicBool::new(false),
+        visible: AtomicBool::new(true),
         shutdown: CancellationToken::new(),
         #[cfg(target_os = "linux")]
         _context_directory: context_directory,
     });
     registry
-        .activate(slot, session)
+        .activate(slot, Arc::clone(&session))
         .inspect_err(|_| registry.release(&label))?;
     let load_script = deliver_load(&loaded.content, &location.uri, &token);
     let loaded_once = AtomicBool::new(false);
@@ -1109,6 +1240,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                         tracing::warn!(%error, "could not close failed plugin panel");
                     }
                 } else {
+                    session.loaded.store(true, Ordering::SeqCst);
                     #[cfg(feature = "native-spa-smoke")]
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
                         && let Err(error) = window.eval(
@@ -1165,7 +1297,15 @@ pub(crate) fn set_plugin_panel_visible<R: Runtime>(
     } else {
         webview.hide()
     }
-    .map_err(|_| PanelError::Unavailable)
+    .map_err(|_| PanelError::Unavailable)?;
+    if let Some(session) = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+    {
+        session.visible.store(visible, Ordering::SeqCst);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1198,6 +1338,82 @@ pub(crate) fn set_plugin_panel_theme<R: Runtime>(
         .map_err(|_| PanelError::Unavailable)
 }
 
+async fn flush_panel_settings<R: Runtime>(webview: &Webview<R>, session: &PanelSession) -> bool {
+    if session.plugin_id != SVGO_PLUGIN_ID || !session.loaded.load(Ordering::SeqCst) {
+        return true;
+    }
+    let (sender, receiver) = oneshot::channel();
+    {
+        let mut pending = session
+            .flush_sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if pending.is_some() {
+            return false;
+        }
+        *pending = Some(sender);
+    }
+    let event = serde_json::json!({
+        "type": "flush-settings",
+        "loadToken": &session.token,
+    });
+    let requested = webview
+        .eval(format!(
+            "window.postMessage({}, window.location.origin);",
+            event
+        ))
+        .is_ok();
+    let result = if requested {
+        matches!(
+            tokio::time::timeout(Duration::from_secs(2), receiver).await,
+            Ok(Ok(true))
+        )
+    } else {
+        false
+    };
+    session
+        .flush_sender
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take();
+    if !result {
+        tracing::warn!(label = %session.label, "could not flush SVGO settings before closing plugin panel");
+    }
+    result
+}
+
+async fn close_panel<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<(), PanelError> {
+    let registry = app.state::<Arc<PanelRegistry>>();
+    let session = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+        .ok_or(PanelError::Unavailable)?;
+    let _closing = session.close_lock.lock().await;
+    if session.shutdown.is_cancelled() {
+        return Err(PanelError::Unavailable);
+    }
+    let webview = match app.get_webview(label) {
+        Some(webview) => webview,
+        None => {
+            registry.release(label);
+            return Err(PanelError::Unavailable);
+        }
+    };
+    if let Err(error) = webview.hide() {
+        tracing::warn!(%error, "could not hide closing plugin panel");
+    }
+    let flush_result = flush_panel_settings(&webview, &session).await;
+    // A cancelled flush must never retain the slot or a pending Save.
+    registry.release(label);
+    webview.close().map_err(|_| PanelError::Unavailable)?;
+    if flush_result {
+        Ok(())
+    } else {
+        Err(PanelError::Unavailable)
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn close_plugin_panel<R: Runtime>(
     source: Window<R>,
@@ -1207,69 +1423,20 @@ pub(crate) async fn close_plugin_panel<R: Runtime>(
     if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
         return Err(PanelError::Denied);
     }
-    let session = registry
-        .sessions()
-        .into_iter()
-        .find(|session| session.label == label)
-        .ok_or(PanelError::Unavailable)?;
-    let webview = match source.get_webview(&label) {
-        Some(webview) => webview,
-        None => {
-            registry.release(&label);
-            return Err(PanelError::Unavailable);
-        }
-    };
-    if let Err(error) = webview.hide() {
-        tracing::warn!(%error, "could not hide closing plugin panel");
-    }
-    let flush_result = if session.plugin_id == SVGO_PLUGIN_ID {
-        let (sender, receiver) = oneshot::channel();
+    close_panel(source.app_handle(), &label).await
+}
+
+pub(crate) async fn flush_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
+    let registry = app.state::<Arc<PanelRegistry>>();
+    for label in registry.labels_for_plugin(plugin_id) {
+        if let Some(webview) = app.get_webview(&label)
+            && let Some(session) = registry.sessions().into_iter().find(|s| s.label == label)
         {
-            let mut pending = session
-                .flush_sender
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            if pending.is_some() {
-                return Err(PanelError::Unavailable);
+            let _closing = session.close_lock.lock().await;
+            if !session.shutdown.is_cancelled() {
+                flush_panel_settings(&webview, &session).await;
             }
-            *pending = Some(sender);
         }
-        let event = serde_json::json!({
-            "type": "flush-settings",
-            "loadToken": &session.token,
-        });
-        let requested = webview
-            .eval(format!(
-                "window.postMessage({}, window.location.origin);",
-                event
-            ))
-            .is_ok();
-        let result = if requested {
-            matches!(
-                tokio::time::timeout(std::time::Duration::from_secs(2), receiver).await,
-                Ok(Ok(true))
-            )
-        } else {
-            false
-        };
-        session
-            .flush_sender
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take();
-        if !result {
-            tracing::warn!("could not flush SVGO settings before closing plugin panel");
-        }
-        result
-    } else {
-        true
-    };
-    registry.release(&label);
-    webview.close().map_err(|_| PanelError::Unavailable)?;
-    if flush_result {
-        Ok(())
-    } else {
-        Err(PanelError::Unavailable)
     }
 }
 
@@ -1277,20 +1444,18 @@ pub(crate) fn close_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &st
     let registry = app.state::<Arc<PanelRegistry>>();
     for label in registry.labels_for_plugin(plugin_id) {
         registry.release(&label);
-        if let Some(webview) = app.get_webview(&label) {
-            let _ = webview.close();
+        if let Some(webview) = app.get_webview(&label)
+            && let Err(error) = webview.close()
+        {
+            tracing::warn!(%error, %label, "could not close disabled plugin panel");
         }
     }
 }
 
-pub(crate) fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, owner: &str) {
-    let registry = app.state::<Arc<PanelRegistry>>();
-    for label in registry.labels_for_window(owner) {
-        registry.release(&label);
-        if let Some(webview) = app.get_webview(&label)
-            && let Err(error) = webview.close()
-        {
-            tracing::warn!(%error, "could not close plugin panel after host reload");
+pub(crate) async fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, labels: Vec<String>) {
+    for label in labels {
+        if let Err(error) = close_panel(app, &label).await {
+            tracing::warn!(%error, %label, "could not cleanly close plugin panel for host window");
         }
     }
 }
@@ -1299,10 +1464,40 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
     let registry = app.state::<Arc<PanelRegistry>>();
     let service = &app.state::<AppState>().service;
     for session in registry.sessions() {
-        if checked_panel(service, &session).is_err() {
+        if session
+            .flush_sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_some()
+        {
+            continue;
+        }
+        let invalid = checked_panel(service, &session).is_err();
+        let challenge = if invalid {
+            Ok(None)
+        } else {
+            session.next_heartbeat(Instant::now())
+        };
+        let responsive = match challenge {
+            Ok(Some(challenge)) => app.get_webview(&session.label).is_some_and(|webview| {
+                let event = serde_json::json!({
+                    "type": "heartbeat",
+                    "challenge": challenge,
+                });
+                webview
+                    .eval(format!("window.procyonPlugin.postMessage({});", event))
+                    .is_ok()
+            }),
+            Ok(None) => app.get_webview(&session.label).is_some(),
+            Err(()) => false,
+        };
+        if invalid || !responsive {
+            tracing::warn!(label = %session.label, "plugin panel unavailable or renderer heartbeat timed out");
             registry.release(&session.label);
-            if let Some(webview) = app.get_webview(&session.label) {
-                let _ = webview.close();
+            if let Some(webview) = app.get_webview(&session.label)
+                && let Err(error) = webview.close()
+            {
+                tracing::warn!(%error, "could not close unresponsive plugin panel");
             }
         }
     }
@@ -1343,8 +1538,14 @@ mod tests {
             token: "test-token".into(),
             revision: AsyncMutex::new(revision),
             save_lock: Arc::new(AsyncMutex::new(())),
+            close_lock: AsyncMutex::new(()),
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
+            heartbeat: Mutex::new(None),
+            heartbeat_responded: AtomicBool::new(false),
+            created: Instant::now(),
+            loaded: AtomicBool::new(true),
+            visible: AtomicBool::new(true),
             shutdown: CancellationToken::new(),
             #[cfg(target_os = "linux")]
             _context_directory: tempfile::tempdir().unwrap(),
@@ -1879,8 +2080,14 @@ mod tests {
             token: "test-token".to_owned(),
             revision: AsyncMutex::new("rev".to_owned()),
             save_lock: Arc::new(AsyncMutex::new(())),
+            close_lock: AsyncMutex::new(()),
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
+            heartbeat: Mutex::new(None),
+            heartbeat_responded: AtomicBool::new(false),
+            created: Instant::now(),
+            loaded: AtomicBool::new(true),
+            visible: AtomicBool::new(true),
             shutdown: CancellationToken::new(),
             #[cfg(target_os = "linux")]
             _context_directory: tempfile::tempdir().unwrap(),
@@ -1923,6 +2130,75 @@ mod tests {
         assert_eq!(
             service.plugin_panel_settings(SVGO_PLUGIN_ID),
             Some(settings)
+        );
+
+        let now = Instant::now();
+        let first = session.next_heartbeat(now).unwrap().unwrap();
+        assert_eq!(
+            session
+                .next_heartbeat(now + Duration::from_secs(19))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            session
+                .acknowledge_heartbeat("incorrect-challenge")
+                .unwrap_err()
+                .to_string(),
+            PanelError::Invalid.to_string()
+        );
+        let retry = session
+            .next_heartbeat(now + VISIBLE_HEARTBEAT_TIMEOUT)
+            .unwrap()
+            .unwrap();
+        assert_ne!(first, retry);
+        let heartbeat = |challenge: &str| {
+            tauri::async_runtime::block_on(bridge(
+                Arc::clone(&service),
+                Arc::clone(&session),
+                serde_json::to_vec(&serde_json::json!({
+                    "type": "heartbeat", "version": 1,
+                    "loadToken": "test-token", "challenge": challenge
+                }))
+                .unwrap(),
+                panel_origin(0),
+            ))
+        };
+        assert_eq!(heartbeat(&first).status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            heartbeat("not-a-hex-challenge").status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(heartbeat(&retry).status(), StatusCode::OK);
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(21))
+                .unwrap()
+                .is_some()
+        );
+        session.visible.store(false, Ordering::SeqCst);
+        assert_eq!(
+            session
+                .next_heartbeat(now + Duration::from_secs(41))
+                .unwrap(),
+            None
+        );
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(141))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(262))
+                .is_err()
+        );
+        session.loaded.store(false, Ordering::SeqCst);
+        assert!(
+            session
+                .next_heartbeat(session.created + VISIBLE_HEARTBEAT_TIMEOUT)
+                .is_err()
         );
     }
 
@@ -1995,8 +2271,14 @@ mod tests {
                     token: "token".into(),
                     revision: AsyncMutex::new("rev".into()),
                     save_lock: Arc::clone(&save_lock),
+                    close_lock: AsyncMutex::new(()),
                     settings_sequence: Mutex::new(0),
                     flush_sender: Mutex::new(None),
+                    heartbeat: Mutex::new(None),
+                    heartbeat_responded: AtomicBool::new(false),
+                    created: Instant::now(),
+                    loaded: AtomicBool::new(true),
+                    visible: AtomicBool::new(true),
                     shutdown: shutdown.clone(),
                     #[cfg(target_os = "linux")]
                     _context_directory: tempfile::tempdir().unwrap(),
@@ -2007,6 +2289,11 @@ mod tests {
         assert!(registry.owned_by(&label, "main"));
         assert!(!registry.owned_by(&label, "another-window"));
         assert_eq!(registry.labels_for_window("main"), vec![label.clone()]);
+        assert!(registry.begin_window_close("main"));
+        assert!(!registry.begin_window_close("main"));
+        assert!(registry.window_close_pending("main"));
+        registry.end_window_close("main");
+        assert!(!registry.window_close_pending("main"));
         assert!(registry.session_for(slot, "plugin-spa-other").is_none());
         assert!(registry.session_for(slot, &label).is_some());
         registry.release(&label);

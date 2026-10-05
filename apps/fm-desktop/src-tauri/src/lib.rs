@@ -93,7 +93,13 @@ pub fn run() {
             if payload.event() == tauri::webview::PageLoadEvent::Finished
                 && plugin_spa::trusted_invoke_label(webview.label())
             {
-                plugin_spa::close_panels_for_window(webview.app_handle(), webview.window().label());
+                let app = webview.app_handle().clone();
+                let labels = app
+                    .state::<Arc<plugin_spa::PanelRegistry>>()
+                    .labels_for_window(webview.window().label());
+                tauri::async_runtime::spawn(async move {
+                    plugin_spa::close_panels_for_window(&app, labels).await;
+                });
                 #[cfg(feature = "native-spa-smoke")]
                 native_spa_smoke::start_once(webview.app_handle().clone());
             }
@@ -332,8 +338,29 @@ pub fn run() {
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(QuittingFlag::default())
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                if registry.begin_window_close(window.label()) {
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    let owner = window.label().to_owned();
+                    let labels = registry.labels_for_window(&owner);
+                    let closing_window = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        plugin_spa::close_panels_for_window(&app, labels).await;
+                        app.state::<Arc<plugin_spa::PanelRegistry>>()
+                            .end_window_close(&owner);
+                        if let Err(error) = closing_window.close() {
+                            tracing::warn!(%error, %owner, "could not close host window after plugin teardown");
+                        }
+                    });
+                } else if registry.window_close_pending(window.label()) {
+                    api.prevent_close();
+                }
+            }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                registry.end_window_close(window.label());
                 for label in registry.labels_for_window(window.label()) {
                     registry.release(&label);
                 }

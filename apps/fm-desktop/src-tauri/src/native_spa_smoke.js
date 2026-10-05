@@ -42,6 +42,17 @@
       type: 'save-svg',
       svg: '<svg xmlns="http://www.w3.org/2000/svg" data-native-spa-smoke="acl-denied-and-saved"/>',
     });
+    window.procyonPlugin.postMessage({
+      type: 'settings-change',
+      sequence: 1,
+      settings: {
+        precision: 4, pathPrecision: 2, removeTspan: true, removeStyling: true,
+        trimText: true, autoAutocrop: false, customWidth: 100, customHeight: 100,
+        useCustomDimensions: false, removeDefaultValues: true, removeFontFamily: false,
+        removeFontSize: false, convertSodipodiArcs: true,
+        groupSimilarElements: true, groupTextElementsAtEnd: false,
+      },
+    });
   } catch (error) {
     console.error('native SPA smoke failed:', error);
     await stage('script-failed', error);

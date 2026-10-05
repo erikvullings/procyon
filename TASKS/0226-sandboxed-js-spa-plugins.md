@@ -180,3 +180,21 @@ second plugin system.
   save path through its revision check and commit, covering generic-editor/SPA aliases
   without changing remote provider saves. The user-approved uncooperative external-writer
   race remains; this is still not atomic CAS. Rebasing onto main includes PRs #91 and #92.
+- 2026-10-04 Copilot: The desktop host now probes loaded plugin children through an
+  authenticated challenge on reconciliation, with a retry and extended hidden-tab grace
+  period before closing an unresponsive WebView and releasing its slot. Host-driven disable,
+  reload and parent-window close request a bounded settings flush before teardown; the
+  native smoke harness now checks heartbeat and settings across disablement. Tauri still has
+  no immediate renderer-crash event, abrupt process loss cannot flush in-memory settings,
+  and an unowned startup sweep of `.fm-edit-*.tmp` could delete another process's active
+  write. See the threat model for remaining native verification and release gates.
+- 2026-10-04 Copilot: For 0.4.0, the user accepts rare orphan `.fm-edit-*.tmp` files after
+  a whole-app crash. Local Save stages a sibling copy, so the original SVG stays intact
+  until replacement; unsaved edits must be redone and an orphan is residual housekeeping,
+  not a recoverable draft. Ordinary failures and dropped futures still attempt cleanup.
+  No startup age sweep or durable ownership journal is required for this release; deleting
+  an unowned temporary file could disrupt another active writer.
+- 2026-10-04 Copilot: For 0.4.0, the user also accepts losing optimizer preferences not yet
+  acknowledged by the host if the whole app crashes. No synchronous crash-durable settings
+  write is required. The bounded final settings flush on normal tab close, plugin disable,
+  trusted-app reload and parent-window close remains required; see the threat model.
