@@ -5952,40 +5952,131 @@ describe('tabs per pane (task 0069)', () => {
     expect(next?.physicalBytes).toBe(20);
   });
 
-  it('opens disk usage in a new tab and navigates a clicked folder in the opposite pane', async () => {
+  it.each([
+    ['left', 'right'],
+    ['right', 'left'],
+  ] as const)(
+    'opens disk usage from %s in %s and drills into the source pane',
+    async (sourcePaneId, treemapPaneId) => {
+      const client = new MockFileManagerClient();
+      const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
+      const scanDiskUsage = vi.spyOn(client, 'scanDiskUsage');
+      const navigatePane = vi.spyOn(client, 'navigatePane');
+      const sourceUri = sourcePaneId === 'left' ? 'mock:///' : 'mock:///Documents';
+      const childName = sourcePaneId === 'left' ? 'Documents' : 'Projects';
+      const childUri = sourcePaneId === 'left' ? 'mock:///Documents' : 'mock:///Documents/Projects';
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+      if (sourcePaneId === 'right') {
+        root.querySelector<HTMLElement>('[data-pane-id="right"] .fm-pane')?.click();
+        await vi.waitFor(() =>
+          expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+            'true',
+          ),
+        );
+      }
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
+      );
+
+      await vi.waitFor(() =>
+        expect(scanDiskUsage).toHaveBeenCalledWith(
+          {
+            workspaceId: expect.any(String),
+            scanId: expect.any(String),
+            location: { providerId: 'file', uri: sourceUri },
+            expandRoot: false,
+          },
+          expect.any(AbortSignal),
+        ),
+      );
+      expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'addTransientTab',
+          paneId: treemapPaneId,
+          location: { providerId: 'file', uri: sourceUri },
+        }),
+        undefined,
+      );
+      await vi.waitFor(() =>
+        expect(
+          root.querySelector(`[data-pane-id="${treemapPaneId}"] .fm-disk-usage-body`),
+        ).not.toBeNull(),
+      );
+      await vi.waitFor(() =>
+        expect(
+          root.querySelector(`[data-pane-id="${treemapPaneId}"]`)?.getAttribute('data-active'),
+        ).toBe('true'),
+      );
+      expect(root.querySelectorAll(`[data-pane-id="${treemapPaneId}"] [role="tab"]`)).toHaveLength(
+        2,
+      );
+      expect(root.querySelectorAll(`[data-pane-id="${sourcePaneId}"] [role="tab"]`)).toHaveLength(
+        1,
+      );
+      expect(
+        directoryRowNamed(root.querySelector(`[data-pane-id="${sourcePaneId}"]`), childName),
+      ).toBeDefined();
+      const treemapTab = root.querySelector(
+        `[data-pane-id="${treemapPaneId}"] [role="tab"][aria-selected="true"]`,
+      );
+
+      root
+        .querySelector(`[data-pane-id="${treemapPaneId}"]`)
+        ?.querySelector<HTMLButtonElement>(`.fm-disk-usage-item-open[aria-label$=": ${childName}"]`)
+        ?.click();
+
+      await vi.waitFor(() =>
+        expect(navigatePane).toHaveBeenCalledWith(
+          expect.objectContaining({
+            paneId: sourcePaneId,
+            location: { providerId: 'file', uri: childUri },
+          }),
+          expect.any(AbortSignal),
+        ),
+      );
+      await vi.waitFor(async () =>
+        expect(
+          (await client.getWorkspace('mock-workspace-1')).panesById[sourcePaneId]?.tabsById[
+            sourcePaneId === 'left' ? 'left-tab' : 'right-tab'
+          ]?.location.uri,
+        ).toBe(childUri),
+      );
+      expect(
+        root.querySelector(`[data-pane-id="${treemapPaneId}"] [role="tab"][aria-selected="true"]`),
+      ).toBe(treemapTab);
+      expect(
+        root.querySelector(`[data-pane-id="${treemapPaneId}"] .fm-disk-usage-body`),
+      ).not.toBeNull();
+    },
+  );
+
+  it('selects a treemap file in the original pane without closing the treemap', async () => {
     const client = new MockFileManagerClient();
-    const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
-    const scanDiskUsage = vi.spyOn(client, 'scanDiskUsage');
     const navigatePane = vi.spyOn(client, 'navigatePane');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
+    root.querySelector<HTMLElement>('[data-pane-id="right"] .fm-pane')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+        'true',
+      ),
+    );
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
-
     await vi.waitFor(() =>
-      expect(scanDiskUsage).toHaveBeenCalledWith(
-        {
-          workspaceId: expect.any(String),
-          scanId: expect.any(String),
-          location: { providerId: 'file', uri: 'mock:///' },
-          expandRoot: false,
-        },
-        expect.any(AbortSignal),
-      ),
+      expect(root.querySelector('[data-pane-id="left"] .fm-disk-usage-body')).not.toBeNull(),
     );
-    expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'addTransientTab' }),
-      undefined,
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace('mock-workspace-1')).activePaneId).toBe('left'),
     );
-    await vi.waitFor(() =>
-      expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull(),
-    );
-    expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(2);
-
-    activePane()
-      ?.querySelector<HTMLButtonElement>('.fm-disk-usage-item-open[aria-label$=": Documents"]')
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-pane-id="left"] .fm-disk-usage-item-activate[aria-label^="report.pdf,"]',
+      )
       ?.click();
 
     await vi.waitFor(() =>
@@ -5997,6 +6088,63 @@ describe('tabs per pane (task 0069)', () => {
         expect.any(AbortSignal),
       ),
     );
+    await vi.waitFor(() =>
+      expect(
+        directoryRowNamed(
+          root.querySelector('[data-pane-id="right"]'),
+          'report.pdf',
+        )?.classList.contains('fm-cursor-row'),
+      ).toBe(true),
+    );
+    expect(root.querySelector('[data-pane-id="left"] .fm-disk-usage-body')).not.toBeNull();
+    expect(
+      root.querySelector('[data-pane-id="left"] [role="tab"][aria-selected="true"]')?.textContent,
+    ).toContain('Disk usage');
+  });
+
+  it('does not scan or replace either directory when the transient-tab revision is stale', async () => {
+    const client = new MockFileManagerClient();
+    const realDispatch = client.dispatchWorkspaceCommand.bind(client);
+    const dispatch = vi.spyOn(client, 'dispatchWorkspaceCommand');
+    const scan = vi.spyOn(client, 'scanDiskUsage');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const getWorkspace = vi.spyOn(client, 'getWorkspace');
+    dispatch.mockImplementation((command, signal) =>
+      command.type === 'addTransientTab'
+        ? Promise.reject(
+            new ApiError(409, {
+              code: 'workspaceRevisionConflict',
+              message: 'stale workspace revision',
+            }),
+          )
+        : realDispatch(command, signal),
+    );
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'addTransientTab', paneId: 'right' }),
+        undefined,
+      ),
+    );
+    const tabCommandCall = dispatch.mock.calls.findIndex(
+      ([command]) => command.type === 'addTransientTab',
+    );
+    await expect(dispatch.mock.results[tabCommandCall]?.value).rejects.toMatchObject({
+      code: 'workspaceRevisionConflict',
+    });
+    await vi.waitFor(() =>
+      expect(getWorkspace).toHaveBeenCalledWith('mock-workspace-1', undefined),
+    );
+    expect(
+      dispatch.mock.calls.filter(([command]) => command.type === 'addTransientTab'),
+    ).toHaveLength(1);
+    expect(scan).not.toHaveBeenCalled();
+    expect(root.querySelectorAll('[data-pane-id="right"] [role="tab"]')).toHaveLength(1);
+    expect(root.querySelectorAll('[data-pane-id="left"] [role="tab"]')).toHaveLength(1);
   });
 
   it('cancels backend work when a disk-usage scan is stopped', async () => {
@@ -6039,6 +6187,11 @@ describe('tabs per pane (task 0069)', () => {
 
     await vi.waitFor(() => expect(cancelDiskUsage).toHaveBeenCalledWith(scanId));
     await vi.waitFor(() => expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(1));
+    expect(
+      activePane()?.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+    ).toContain('Documents');
+    expect(activePane()?.querySelector('.fm-disk-usage-view')).toBeNull();
+    expect(root.querySelectorAll('[data-pane-id="left"] [role="tab"]')).toHaveLength(1);
   });
 
   it('keeps partial disk-usage results visible when the scan later fails', async () => {

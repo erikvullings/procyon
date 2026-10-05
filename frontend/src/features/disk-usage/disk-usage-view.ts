@@ -39,7 +39,7 @@ export type DiskUsageViewState =
 
 export interface DiskUsageViewAttrs {
   readonly state: DiskUsageViewState;
-  readonly onOpenFolder: (location: Location) => void;
+  readonly onOpenFolder: (location: Location, preferredCursorName?: string) => void;
   readonly onExpandFolder: (location: Location) => void;
   readonly onRetry: () => void;
   readonly onStop: () => void;
@@ -310,8 +310,10 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
     clearHover();
   }
 
-  /** Drills into a directory, rescans a collapsed one, or opens a file's folder elsewhere. */
+  /** Keeps the treemap zoom in sync while revealing the selected item in the other pane. */
   function activate(node: DiskUsageNode, parent: DiskUsageNode, attrs: DiskUsageViewAttrs): void {
+    if (node.kind === 'file') attrs.onOpenFolder(parent.location, node.name);
+    else attrs.onOpenFolder(node.location);
     if (node.kind === 'directory' && node.collapsed) {
       if (attrs.state.type === 'loaded' && attrs.state.scanning !== true) {
         zoomTo(node);
@@ -323,7 +325,6 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
       zoomTo(node);
       return;
     }
-    attrs.onOpenFolder(node.kind === 'directory' ? node.location : parent.location);
   }
 
   function canTrash(location: Location): boolean {
@@ -632,10 +633,6 @@ export const DiskUsageView: FactoryComponent<DiskUsageViewAttrs> = () => {
             const tile = tileAt(event);
             const target = tile?.trail[0];
             if (target === undefined) return;
-            if (target.kind !== 'directory') {
-              hovered = tile?.node;
-              return;
-            }
             activate(target, current, attrs);
           },
         }),
