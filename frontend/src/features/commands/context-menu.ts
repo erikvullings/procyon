@@ -28,6 +28,7 @@ export interface ContextMenuAttrs {
   };
   readonly onClose: () => void;
   readonly onInvoke: (actionId: string) => void;
+  readonly onBoundsChange?: (bounds: readonly DOMRect[]) => void;
 }
 
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
@@ -59,6 +60,30 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let loadGeneration = 0;
   let openWithItem: HTMLElement | undefined;
   let focusApplication = false;
+  let menuElement: HTMLElement | undefined;
+  let submenuElement: HTMLElement | undefined;
+  let lastBounds = '';
+  let currentAttrs: ContextMenuAttrs;
+
+  function repositionOnResize(): void {
+    if (menuElement === undefined) return;
+    positionMenu(menuElement, currentAttrs);
+    if (submenuElement !== undefined) positionSubmenu(submenuElement, openWithItem);
+    reportBounds(currentAttrs);
+  }
+
+  function reportBounds(attrs: ContextMenuAttrs): void {
+    if (attrs.onBoundsChange === undefined) return;
+    const bounds = [menuElement, submenuElement]
+      .filter((element): element is HTMLElement => element?.isConnected === true)
+      .map((element) => element.getBoundingClientRect());
+    const key = bounds
+      .map(({ left, top, right, bottom }) => `${left},${top},${right},${bottom}`)
+      .join(';');
+    if (lastBounds === key) return;
+    lastBounds = key;
+    attrs.onBoundsChange(bounds);
+  }
 
   function iconDataUri(bytes: Uint8Array): string {
     let binary = '';
@@ -116,6 +141,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     icons.clear();
     submenu = 'closed';
     focusApplication = false;
+    submenuElement = undefined;
   }
 
   function close(attrs: ContextMenuAttrs): void {
@@ -147,6 +173,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
         previousFocus = document.activeElement as HTMLElement;
     },
     view: ({ attrs }) => {
+      currentAttrs = attrs;
       if (!attrs.open) {
         dismissSubmenu();
         return undefined;
@@ -250,12 +277,24 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
             'aria-label': t('contextMenu', 'directoryActions'),
             style: { left: `${attrs.x}px`, top: `${attrs.y}px` },
             oncreate: ({ dom }) => {
+              menuElement = dom as HTMLElement;
+              window.addEventListener('resize', repositionOnResize);
               positionMenu(dom as HTMLElement, attrs);
+              reportBounds(attrs);
               if (previousFocus === undefined)
                 previousFocus = document.activeElement as HTMLElement;
               (dom as HTMLElement).focus();
             },
-            onupdate: ({ dom }) => positionMenu(dom as HTMLElement, attrs),
+            onupdate: ({ dom }) => {
+              positionMenu(dom as HTMLElement, attrs);
+              reportBounds(attrs);
+            },
+            onremove: () => {
+              window.removeEventListener('resize', repositionOnResize);
+              menuElement = undefined;
+              submenuElement = undefined;
+              reportBounds(attrs);
+            },
             onclick: (event: MouseEvent) => event.stopPropagation(),
             onkeydown: (event: KeyboardEvent) => {
               if (event.key === 'Escape') {
@@ -292,13 +331,22 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 role: 'menu',
                 'aria-label': attrs.actions.find((item) => item.action.id === 'core.openWith')
                   ?.action.title,
-                oncreate: ({ dom }) => positionSubmenu(dom as HTMLElement, openWithItem),
+                oncreate: ({ dom }) => {
+                  submenuElement = dom as HTMLElement;
+                  positionSubmenu(dom as HTMLElement, openWithItem);
+                  reportBounds(attrs);
+                },
                 onupdate: ({ dom }) => {
                   positionSubmenu(dom as HTMLElement, openWithItem);
+                  reportBounds(attrs);
                   if (focusApplication && submenu !== 'loading') {
                     (dom as HTMLElement).querySelector<HTMLButtonElement>('button')?.focus();
                     focusApplication = false;
                   }
+                },
+                onremove: () => {
+                  submenuElement = undefined;
+                  reportBounds(attrs);
                 },
                 onclick: (event: MouseEvent) => event.stopPropagation(),
                 onkeydown: (event: KeyboardEvent) => {
