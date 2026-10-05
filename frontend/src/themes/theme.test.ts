@@ -543,6 +543,8 @@ describe('theme stylesheet', () => {
     expect(themeCss).toMatch(
       /\.fm-knowledge-ask-bar\s*\{[^}]*min-height:\s*var\(--fm-row-height\)/s,
     );
+    expect(themeCss).toMatch(/\.fm-knowledge-results-section\s*\{[^}]*flex:\s*1 1 0/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-answer\s*\{[^}]*flex:\s*0 0 auto/s);
   });
 
   it('lets semantic enrolment consent wrap without covering its action', () => {

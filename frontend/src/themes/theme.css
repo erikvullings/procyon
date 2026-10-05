@@ -2890,7 +2890,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-results-section {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 0.5rem;
   min-width: 0;
@@ -3149,7 +3149,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * when a default LLM profile is available. */
 .fm-knowledge-answer {
   display: flex;
-  flex: 0 1 auto;
+  /* Never shrinks below its content: results above scroll instead of squeezing the ask bar away. */
+  flex: 0 0 auto;
   flex-direction: column;
   max-height: 60%;
   min-height: 0;
