@@ -1503,6 +1503,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_per_window_fork_sees_the_roots_enrolled_by_its_named_workspace() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            directory.path(),
+            directory.path().join("settings"),
+        )
+        .with_semantic_library_service(SemanticLibraryService::deterministic_mock())
+        .with_knowledge_retrieval_capability(Arc::new(RecordingCapability::new(Vec::new())));
+        let named = service
+            .create_workspace(Some("Library".to_owned()))
+            .await
+            .expect("named workspace");
+        let library = service.semantic_library().await;
+        let folder = SemanticFolderContext::new(
+            named.id.into(),
+            fm_domain::Location::parse("file:///indexed-library").expect("location"),
+        );
+        let preview = library
+            .preview_enrolment(&SemanticAccessContext::Host, folder.clone(), true)
+            .expect("preview enrolment");
+        library
+            .confirm_enrolment(
+                &SemanticAccessContext::Host,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &folder,
+            )
+            .expect("confirm enrolment");
+
+        let fork = service
+            .fork_workspace(Some(named.id))
+            .await
+            .expect("fork workspace");
+        assert_ne!(fork.id, named.id);
+
+        let roots = service
+            .list_knowledge_roots(
+                &SemanticAccessContext::Host,
+                ListKnowledgeRootsRequestDto {
+                    workspace_id: fork.id,
+                },
+            )
+            .await
+            .expect("roots");
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].label, "indexed-library");
+    }
+
+    #[tokio::test]
     async fn roots_parsing_and_source_navigation_stay_available_without_an_llm() {
         let fixture = fixture(Arc::new(RecordingCapability::new(Vec::new())));
 
