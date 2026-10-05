@@ -6004,6 +6004,11 @@ describe('tabs per pane (task 0069)', () => {
           root.querySelector(`[data-pane-id="${treemapPaneId}"] .fm-disk-usage-body`),
         ).not.toBeNull(),
       );
+      await vi.waitFor(() =>
+        expect(
+          root.querySelector(`[data-pane-id="${treemapPaneId}"]`)?.getAttribute('data-active'),
+        ).toBe('true'),
+      );
       expect(root.querySelectorAll(`[data-pane-id="${treemapPaneId}"] [role="tab"]`)).toHaveLength(
         2,
       );
@@ -6182,6 +6187,11 @@ describe('tabs per pane (task 0069)', () => {
 
     await vi.waitFor(() => expect(cancelDiskUsage).toHaveBeenCalledWith(scanId));
     await vi.waitFor(() => expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(1));
+    expect(
+      activePane()?.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+    ).toContain('Documents');
+    expect(activePane()?.querySelector('.fm-disk-usage-view')).toBeNull();
+    expect(root.querySelectorAll('[data-pane-id="left"] [role="tab"]')).toHaveLength(1);
   });
 
   it('keeps partial disk-usage results visible when the scan later fails', async () => {
