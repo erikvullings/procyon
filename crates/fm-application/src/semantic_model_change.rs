@@ -45,6 +45,11 @@ pub struct SemanticModelChangeReindexReport {
     pub ingested_occurrences: u64,
     /// Total occurrences whose worker ingestion job failed.
     pub failed_occurrences: u64,
+    /// Files that could not be read; their previous index was retained.
+    pub unreadable_files: u64,
+    /// Subdirectories that could not be listed; their previous index was
+    /// retained.
+    pub unreadable_directories: u64,
 }
 
 impl SemanticModelChangeReindexReport {
@@ -158,6 +163,8 @@ pub(crate) async fn reconcile_enrolled_roots(
             Ok(pass) => {
                 report.ingested_occurrences += pass.ingested_occurrences;
                 report.failed_occurrences += pass.failed_occurrences;
+                report.unreadable_files += pass.unreadable_files;
+                report.unreadable_directories += pass.unreadable_directories;
                 report.reindexed_roots.push(root.id);
             }
             Err(error) => report.failures.push(SemanticReindexFailure {

@@ -1800,13 +1800,35 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
     ) -> Result<u64, SemanticLibraryError> {
+        self.complete_reconciliation_preserving(access, root_id, observed_occurrences, &[])
+    }
+
+    /// Commits an enumeration that could not read some entries, retaining
+    /// every occurrence at or below a `preserved` location.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::complete_reconciliation`].
+    pub fn complete_reconciliation_preserving(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: core::RootId,
+        observed_occurrences: &BTreeSet<core::OccurrenceId>,
+        preserved: &[Location],
+    ) -> Result<u64, SemanticLibraryError> {
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
         let generation = next
             .catalog
-            .complete_reconciliation(&next.policy, &next.state, root_id, observed_occurrences)
+            .complete_reconciliation_preserving(
+                &next.policy,
+                &next.state,
+                root_id,
+                observed_occurrences,
+                preserved,
+            )
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
         next.state
             .record_indexed_generation(root_id, generation)

@@ -931,6 +931,26 @@ impl SemanticCatalog {
         root_id: RootId,
         observed_occurrences: &BTreeSet<OccurrenceId>,
     ) -> Result<u64, CatalogError> {
+        self.complete_reconciliation_preserving(policy, state, root_id, observed_occurrences, &[])
+    }
+
+    /// Commits an enumeration that could not read some entries.
+    ///
+    /// Behaves like [`Self::complete_reconciliation`], except that occurrences
+    /// at or below a `preserved` location are retained as if observed: a file
+    /// or directory that failed to read is unknown, not absent.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::complete_reconciliation`], plus invalid stored locations.
+    pub fn complete_reconciliation_preserving(
+        &mut self,
+        policy: &SemanticLibraryPolicy,
+        state: &SemanticLibraryState,
+        root_id: RootId,
+        observed_occurrences: &BTreeSet<OccurrenceId>,
+        preserved: &[Location],
+    ) -> Result<u64, CatalogError> {
         self.ensure_library(policy, state)?;
         if state.is_paused() {
             return Err(CatalogError::IngestionPaused);
@@ -941,18 +961,27 @@ impl SemanticCatalog {
         if self.root_availability(root_id) != RootAvailability::Available {
             return Err(CatalogError::RootUnavailable(root_id));
         }
-        let missing: BTreeSet<_> = self
-            .occurrences
-            .iter()
-            .filter(|(id, occurrence)| {
-                !observed_occurrences.contains(id)
-                    && occurrence
-                        .scopes
-                        .iter()
-                        .any(|scope| scope.root_id == root_id)
-            })
-            .map(|(id, _)| *id)
-            .collect();
+        let mut missing = BTreeSet::new();
+        for (id, occurrence) in &self.occurrences {
+            if observed_occurrences.contains(id)
+                || !occurrence
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.root_id == root_id)
+            {
+                continue;
+            }
+            let mut retained = false;
+            for location in preserved {
+                if is_same_or_descendant(location, &occurrence.location)? {
+                    retained = true;
+                    break;
+                }
+            }
+            if !retained {
+                missing.insert(*id);
+            }
+        }
         for occurrence_id in &missing {
             if let Some(occurrence) = self.occurrences.get_mut(occurrence_id) {
                 occurrence.scopes.retain(|scope| scope.root_id != root_id);

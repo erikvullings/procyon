@@ -993,6 +993,8 @@ pub(crate) async fn reconcile_semantic_library_on_startup(
             roots = report.reindexed_roots.len(),
             occurrences = report.ingested_occurrences,
             failed_occurrences = report.failed_occurrences,
+            unreadable_files = report.unreadable_files,
+            unreadable_directories = report.unreadable_directories,
             "semantic startup reconciliation completed"
         );
     }
