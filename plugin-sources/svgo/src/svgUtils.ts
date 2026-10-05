@@ -1005,3 +1005,36 @@ export function collapseTransforms(svg: string) {
 
   return new XMLSerializer().serializeToString(doc);
 }
+
+const ARROW_ENTERABLE_GROUPS = new Set(["g", "a"]);
+
+/**
+ * Moves an element one step up (-1) or down (1) in tree order. A neighbouring
+ * group is entered (as its last child going up, first child going down), and
+ * stepping past either end of a nested group leaves it, so arrow keys alone can
+ * restructure the tree. Returns false when the element cannot move further.
+ */
+export function stepElement(element: Element, direction: -1 | 1): boolean {
+  const parent = element.parentElement;
+  if (!parent) return false;
+  const neighbour =
+    direction < 0 ? element.previousElementSibling : element.nextElementSibling;
+  if (neighbour) {
+    if (ARROW_ENTERABLE_GROUPS.has(neighbour.localName)) {
+      if (direction < 0) neighbour.appendChild(element);
+      else neighbour.insertBefore(element, neighbour.firstChild);
+    } else {
+      parent.insertBefore(
+        element,
+        direction < 0 ? neighbour : neighbour.nextSibling,
+      );
+    }
+    return true;
+  }
+  const grandparent = parent.parentElement;
+  if (!grandparent || !ARROW_ENTERABLE_GROUPS.has(parent.localName)) {
+    return false;
+  }
+  grandparent.insertBefore(element, direction < 0 ? parent : parent.nextSibling);
+  return true;
+}

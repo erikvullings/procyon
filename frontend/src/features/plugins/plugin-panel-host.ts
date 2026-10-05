@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient, PluginPanelBounds } from '../../api/client/file-manager-client';
+import { t } from '../../i18n';
 import type { Location, PluginId, TabId } from '../../models';
 import './plugin-panel-host.css';
 
@@ -53,6 +54,20 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
     ) {
       attrs.onCloseRequest();
     }
+  };
+
+  const panelClosed = (event: Event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (
+      label === undefined ||
+      typeof detail !== 'object' ||
+      detail === null ||
+      !('label' in detail) ||
+      detail.label !== label
+    )
+      return;
+    label = undefined;
+    attrs.onError(new Error(t('action', 'pluginPanelUnresponsive')));
   };
 
   const syncTheme = () => {
@@ -159,6 +174,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             window.addEventListener('resize', reposition);
             window.addEventListener('scroll', reposition, true);
             window.addEventListener('procyon:plugin-panel-close-requested', closeRequested);
+            window.addEventListener('procyon:plugin-panel-closed', panelClosed);
             reposition();
           },
           onupdate: () => {
@@ -175,6 +191,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             window.removeEventListener('resize', reposition);
             window.removeEventListener('scroll', reposition, true);
             window.removeEventListener('procyon:plugin-panel-close-requested', closeRequested);
+            window.removeEventListener('procyon:plugin-panel-closed', panelClosed);
             if (label !== undefined) {
               void attrs.client.closePluginPanel(label).catch((error: unknown) => {
                 console.warn('Could not close plugin panel', error);

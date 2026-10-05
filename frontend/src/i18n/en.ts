@@ -266,6 +266,7 @@ export const en = {
     selectAll: 'Select all',
     clearSelection: 'Clear selection',
     unableToRun: 'Unable to run command.',
+    pluginPanelUnresponsive: 'The plugin panel stopped responding and was closed.',
   },
   settings: {
     language: 'Language',

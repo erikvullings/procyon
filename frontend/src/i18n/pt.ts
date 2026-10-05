@@ -252,6 +252,7 @@ export const pt = {
     selectAll: 'Selecionar tudo',
     clearSelection: 'Limpar seleção',
     unableToRun: 'Não é possível executar o comando.',
+    pluginPanelUnresponsive: 'O painel do plugin deixou de responder e foi fechado.',
   },
   settings: {
     ...en.settings,

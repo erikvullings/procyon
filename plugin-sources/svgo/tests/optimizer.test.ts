@@ -131,6 +131,27 @@ describe("text and namespace cleanup", () => {
     expect(output).not.toContain("xml:space");
   });
 
+  it("hoists xml:space=preserve from sibling texts onto their group", () => {
+    const optimizer = new SVGOptimizer();
+    const output = optimizer.removeDefaultValues(
+      '<svg xmlns="http://www.w3.org/2000/svg"><g font-size="4">' +
+        '<text xml:space="preserve" y="20">40 000</text>' +
+        '<text xml:space="preserve" x="75" y="20">45 000</text></g></svg>',
+    );
+    expect(output).toContain('<g font-size="4" xml:space="preserve">');
+    expect(output.match(/xml:space/g)).toHaveLength(1);
+  });
+
+  it("does not hoist xml:space=preserve when a sibling lacks it", () => {
+    const optimizer = new SVGOptimizer();
+    const output = optimizer.removeDefaultValues(
+      '<svg xmlns="http://www.w3.org/2000/svg"><g>' +
+        '<text xml:space="preserve">40 000</text><path d="M0 0h1"/></g></svg>',
+    );
+    expect(output).toContain('<text xml:space="preserve">');
+    expect(output).toContain("<g>");
+  });
+
   it("keeps xml:space=preserve on text with meaningful whitespace", () => {
     const optimizer = new SVGOptimizer();
     const input =

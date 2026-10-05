@@ -250,6 +250,7 @@ export const it = {
     selectAll: 'Seleziona tutto',
     clearSelection: 'Cancella selezione',
     unableToRun: 'Impossibile eseguire il comando.',
+    pluginPanelUnresponsive: 'Il pannello del plugin non rispondeva più ed è stato chiuso.',
   },
   settings: {
     ...en.settings,

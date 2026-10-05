@@ -250,6 +250,7 @@ export const pl = {
     selectAll: 'Zaznacz wszystko',
     clearSelection: 'Wyczyść zaznaczenie',
     unableToRun: 'Nie można wykonać polecenia.',
+    pluginPanelUnresponsive: 'Panel wtyczki przestał odpowiadać i został zamknięty.',
   },
   settings: {
     ...en.settings,

@@ -253,6 +253,7 @@ export const de = {
     selectAll: 'Alles auswählen',
     clearSelection: 'Auswahl aufheben',
     unableToRun: 'Befehl kann nicht ausgeführt werden.',
+    pluginPanelUnresponsive: 'Das Plugin-Panel reagierte nicht mehr und wurde geschlossen.',
   },
   settings: {
     ...en.settings,

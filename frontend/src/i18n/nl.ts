@@ -250,6 +250,7 @@ export const nl = {
     selectAll: 'Alles selecteren',
     clearSelection: 'Selectie wissen',
     unableToRun: 'Kan opdracht niet uitvoeren.',
+    pluginPanelUnresponsive: 'Het pluginpaneel reageerde niet meer en is gesloten.',
   },
   settings: {
     language: 'Taal',
