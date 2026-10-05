@@ -223,7 +223,7 @@ export interface PaneContentContext {
   openContextMenu(paneId: PaneId, entries: readonly EntrySummary[], x: number, y: number): void;
   refetchAffectedPanes(paneId?: PaneId): void;
   replaceWorkspace(next: WorkspaceProjection): void;
-  openDiskUsageFolder(paneId: PaneId, location: Location): void;
+  openDiskUsageFolder(paneId: PaneId, location: Location, preferredCursorName?: string): void;
   expandDiskUsageFolder(key: string, location: Location): void;
   scanDiskUsageFolder(key: string, location: Location): void;
   retryDiskUsage(key: string): void;
@@ -906,7 +906,8 @@ export function createPaneContentBuilder(
                   ? undefined
                   : m(DiskUsageView, {
                       state: diskUsage.state,
-                      onOpenFolder: (location) => context.openDiskUsageFolder(paneId, location),
+                      onOpenFolder: (location, preferredCursorName) =>
+                        context.openDiskUsageFolder(paneId, location, preferredCursorName),
                       onExpandFolder: (location) => context.expandDiskUsageFolder(key, location),
                       onScanFolder: (location) => context.scanDiskUsageFolder(key, location),
                       onRetry: () => context.retryDiskUsage(key),

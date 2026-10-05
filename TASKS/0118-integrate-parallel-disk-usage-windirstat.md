@@ -107,3 +107,7 @@ The application needs a disk space analysis feature that calculates filesystem n
   relative to the new `DELETE` route and DTO fields; a follow-up frontend session must run
   `pnpm api:export`/`pnpm api:generate` and wire up the new cancel affordance and unreadable-details
   UI before this reaches parity end-to-end.
+- 2026-10-05: The shortcut now opens its transient treemap tab in the pane opposite the
+  originating directory. The source pane stays visible; selecting a folder navigates it there
+  while zooming the treemap, and selecting a file reveals it with the cursor in its parent.
+  The existing scan cancellation, tab cleanup and revision-conflict handling still apply.

@@ -1782,30 +1782,47 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   function openDiskUsage(): void {
     const active = activeDirectory();
     const currentWorkspace = workspace;
-    const pane = active === undefined ? undefined : currentWorkspace?.panesById[active.paneId];
-    if (active === undefined || currentWorkspace === undefined || pane === undefined) return;
+    const targetPaneId = currentWorkspace?.paneOrder.find(
+      (candidate) => candidate !== active?.paneId,
+    );
+    if (
+      active === undefined ||
+      currentWorkspace === undefined ||
+      targetPaneId === undefined ||
+      currentWorkspace.panesById[targetPaneId] === undefined
+    )
+      return;
     void dispatchWorkspaceCommand(
       attrsClient,
       {
         type: 'addTransientTab',
         workspaceId: currentWorkspace.id,
-        paneId: active.paneId,
+        paneId: targetPaneId,
         location: active.location,
         expectedRevision: currentWorkspace.revision,
       },
-      (next) => {
-        workspace = next;
-        const tabId = next.panesById[active.paneId]?.activeTabId;
-        if (tabId !== undefined) startDiskUsageScan(active.paneId, tabId, active.location);
-      },
-    ).catch((error: unknown) => {
-      toast({ html: workspaceErrorMessage(error, t('diskUsage', 'scanFailed')) });
-    });
+      replaceWorkspace,
+    )
+      .then((next) => {
+        const tabId = next.panesById[targetPaneId]?.activeTabId;
+        if (tabId !== undefined) {
+          startDiskUsageScan(targetPaneId, tabId, active.location);
+          focusPane?.(targetPaneId);
+        }
+      })
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('diskUsage', 'scanFailed')) });
+      });
   }
 
-  function openDiskUsageFolder(paneId: PaneId, location: Location): void {
+  function openDiskUsageFolder(
+    paneId: PaneId,
+    location: Location,
+    preferredCursorName?: string,
+  ): void {
     const oppositePaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-    if (oppositePaneId !== undefined) void navigation.navigate(oppositePaneId, location);
+    if (oppositePaneId !== undefined)
+      void navigation.navigate(oppositePaneId, location, preferredCursorName);
   }
 
   let navigation: NavigationController;
@@ -4312,6 +4329,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     pendingCursorRestorations.set(key, { ...pending, fallbackCursorId: undefined });
                   }
                 } else if (
+                  preferredCursorName !== undefined ||
                   selections.get(key)?.cursorEntryId === undefined ||
                   previous?.location?.uri !== view.location?.uri
                 ) {
