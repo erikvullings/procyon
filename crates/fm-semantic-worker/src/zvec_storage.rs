@@ -771,9 +771,18 @@ impl FullTextCandidateIndex for ZvecStorage {
     }
 }
 
+/// Soft cap for Zvec's own buffers. Zvec otherwise sizes itself from total
+/// system memory, which is far more than a background file-manager worker
+/// should claim; the warm working set of a large library is about 750 MiB.
+const ZVEC_MEMORY_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
+
 fn ensure_initialized() -> Result<(), ZvecStorageError> {
-    let result =
-        INITIALIZED.get_or_init(|| zvec_rust::initialize(None).map_err(|error| error.to_string()));
+    let result = INITIALIZED.get_or_init(|| {
+        let config = zvec_rust::ConfigBuilder::new()
+            .memory_limit(ZVEC_MEMORY_LIMIT_BYTES)
+            .build();
+        zvec_rust::initialize(Some(&config)).map_err(|error| error.to_string())
+    });
     result.clone().map_err(ZvecStorageError::Initialization)
 }
 

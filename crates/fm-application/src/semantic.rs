@@ -897,13 +897,33 @@ fn connection_is_unusable(error: &fm_semantic_worker::ClientError) -> bool {
 #[derive(Clone)]
 pub struct SemanticService {
     capability: Arc<dyn SemanticCapability>,
+    last_search: Arc<Mutex<Option<tokio::time::Instant>>>,
 }
 
 impl SemanticService {
     /// Creates a service over one semantic capability implementation.
     #[must_use]
     pub fn new(capability: Arc<dyn SemanticCapability>) -> Self {
-        Self { capability }
+        Self {
+            capability,
+            last_search: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Marks user-facing search activity that should keep the worker resident.
+    pub(crate) fn record_search_activity(&self) {
+        *self
+            .last_search
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tokio::time::Instant::now());
+    }
+
+    /// When user-facing search activity was last recorded.
+    pub(crate) fn last_search_activity(&self) -> Option<tokio::time::Instant> {
+        *self
+            .last_search
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub(crate) fn unavailable() -> Self {
@@ -925,6 +945,7 @@ impl SemanticService {
         &self,
         query: SemanticQuery,
     ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.record_search_activity();
         self.capability.query(query).await
     }
 
@@ -933,12 +954,14 @@ impl SemanticService {
         request_id: SemanticOperationId,
         request: fm_semantic_worker::knowledge_retrieval::KnowledgeRetrievalRequest,
     ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeRetrieval, SemanticError> {
+        self.record_search_activity();
         self.capability.knowledge_search(request_id, request).await
     }
 
     pub(crate) async fn knowledge_capabilities(
         &self,
     ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeCapabilities, SemanticError> {
+        self.record_search_activity();
         self.capability.knowledge_capabilities().await
     }
 

@@ -1620,6 +1620,28 @@ impl FileManagerService {
             .await
     }
 
+    /// Warms the semantic worker in the background and keeps it resident while
+    /// semantic search is enabled and was used recently, until `shutdown`.
+    ///
+    /// Trusted desktop hosts spawn this once at startup; it never blocks the
+    /// caller's startup path and only logs worker failures.
+    pub async fn keep_semantic_worker_resident(
+        &self,
+        shutdown: tokio_util::sync::CancellationToken,
+    ) {
+        crate::semantic_residency::keep_resident(
+            &self.semantic,
+            crate::semantic_residency::SemanticResidencyPolicy::default(),
+            || async {
+                self.semantic_library_status(&SemanticAccessContext::Host)
+                    .await
+                    .is_ok_and(|status| status.available && !status.roots.is_empty())
+            },
+            shutdown,
+        )
+        .await;
+    }
+
     /// Reconciles every available enrolled root into the active semantic worker.
     ///
     /// Trusted hosts invoke this at startup so interrupted or previously failed

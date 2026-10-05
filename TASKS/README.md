@@ -174,6 +174,8 @@ layers and never prerequisites for retrieval.
 - [x] 0228 Unified Knowledge Ask pane *(needs 0186, 0207, 0209)*
 - [x] 0235 Search then Ask in one Knowledge tab *(needs 0207, 0228; separate question, full-width
   answer, decoded JSON, selectable prose)*
+- [x] 0236 Keep the semantic worker warm while semantic search is enabled *(needs 0235)*
+- [ ] 0237 Tolerate per-file failures during semantic reconciliation *(OneDrive timeouts)*
 
 ## File operations
 

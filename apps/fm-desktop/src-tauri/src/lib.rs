@@ -244,6 +244,15 @@ pub fn run() {
             if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
+            if semantic_managed_components {
+                let residency_service = Arc::clone(&service);
+                let residency_shutdown = semantic_ocr_shutdown.clone();
+                tauri::async_runtime::spawn(async move {
+                    residency_service
+                        .keep_semantic_worker_resident(residency_shutdown)
+                        .await;
+                });
+            }
             tauri::async_runtime::spawn(
                 Arc::clone(&service)
                     .run_semantic_ocr_remediation_jobs(semantic_ocr_shutdown),
