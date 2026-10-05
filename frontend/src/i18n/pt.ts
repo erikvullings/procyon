@@ -126,6 +126,7 @@ export const pt = {
     remove: 'Remover',
     path: 'Caminho',
     currentPath: 'Caminho atual',
+    showPathBeginning: 'Mostrar início do caminho',
     newTab: 'Novo separador',
     emptyDirectory: 'Esta pasta está vazia.',
     confirmCloseTab: 'Fechar o separador?',
@@ -364,6 +365,7 @@ export const pt = {
     clipboardEmpty: 'Copie ou mova primeiro um item',
     selectionReadOnly: 'O item selecionado é só de leitura',
     quickLookLocalFilesOnly: 'O Quick Look só está disponível para ficheiros locais',
+    svgoLocalFilesOnly: 'O SVGO só pode editar ficheiros SVG locais',
     browserUnavailable: '{action} não está disponível no navegador.',
   },
   operation: {

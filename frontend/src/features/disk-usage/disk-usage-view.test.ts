@@ -131,6 +131,25 @@ describe('DiskUsageView', () => {
     expect(onOpenFolder).toHaveBeenCalledWith(child.location);
   });
 
+  it('reveals a file in its parent from both the list and the canvas', () => {
+    const onOpenFolder = vi.fn();
+    const parent = directory('tmp', 80);
+    const file = {
+      ...directory('photo.jpg', 80),
+      kind: 'file' as const,
+    };
+    mountLoaded({ ...parent, children: [file] }, { onOpenFolder });
+
+    itemButton('photo.jpg')?.click();
+    root
+      .querySelector('.fm-disk-usage-canvas')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 300 }));
+
+    expect(onOpenFolder).toHaveBeenCalledTimes(2);
+    expect(onOpenFolder).toHaveBeenNthCalledWith(1, parent.location, 'photo.jpg');
+    expect(onOpenFolder).toHaveBeenNthCalledWith(2, parent.location, 'photo.jpg');
+  });
+
   it('shows the list left of the treemap and lets the user hide it', () => {
     mountLoaded({ ...directory('tmp', 80), children: [directory('projects', 80)] });
     const body = root.querySelector('.fm-disk-usage-body');
@@ -201,6 +220,7 @@ describe('DiskUsageView', () => {
   });
 
   it('zooms into a folder from the canvas, the list and back out via breadcrumbs and keys', () => {
+    const onOpenFolder = vi.fn();
     const file = (name: string, bytes: number, parent: string) => ({
       ...directory(name, bytes),
       kind: 'file' as const,
@@ -216,17 +236,19 @@ describe('DiskUsageView', () => {
       location: { providerId: 'local', uri: 'file:///tmp/projects/' },
       children: [inner, file('notes.txt', 40, 'projects')],
     };
-    mountLoaded({ ...directory('tmp', 100), children: [projects] });
+    mountLoaded({ ...directory('tmp', 100), children: [projects] }, { onOpenFolder });
 
     root
       .querySelector('.fm-disk-usage-canvas')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 300 }));
     m.redraw.sync();
     expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('projects');
+    expect(onOpenFolder).toHaveBeenCalledWith(projects.location);
 
     itemButton('inner')?.click();
     m.redraw.sync();
     expect(root.querySelector('[aria-current="location"]')?.textContent).toBe('inner');
+    expect(onOpenFolder).toHaveBeenCalledWith(inner.location);
     expect(itemButton('a.bin')).not.toBeNull();
 
     root

@@ -47,3 +47,6 @@ rectangles, zooms into folders, and colours files by a richer set of type groups
   and Escape reach the view.
 - Visually checked in `pnpm dev:mock` (light and dark). jsdom has no 2D context: the view guards a
   null context, and the tests stub `getContext`/`ImageData`.
+- 2026-10-05: Folder selection now both zooms the treemap and opens the folder in the
+  originating pane; file selection opens its parent there with the cursor on the file.
+  The treemap remains in the opposite pane during both actions.

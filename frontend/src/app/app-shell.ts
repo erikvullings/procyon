@@ -85,6 +85,7 @@ import { DirectoryTree, type DirectoryTreeAttrs } from '../features/directory-tr
 import {
   ancestorChain,
   createTreeChildrenState,
+  flattenVisibleTree,
   type TreeChildrenState,
   withChildren,
   withError,
@@ -93,6 +94,11 @@ import {
 } from '../features/directory-tree/directory-tree-state';
 import { mergeCleanupCandidates } from '../features/disk-usage/cleanup-candidates';
 import type { DiskUsageViewState } from '../features/disk-usage/disk-usage-view';
+import {
+  type DropModifiers,
+  operationForDrop,
+  validateDropTarget,
+} from '../features/drag-drop/drag-drop';
 import {
   createFileEditorController,
   type FileEditorController,
@@ -122,6 +128,7 @@ import {
   createNavigationController,
   type NavigationController,
   type PaneDirectoryView,
+  parentLocation,
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
 import {
@@ -812,6 +819,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * history, tab switch, or pane switch). */
   let treeSidebarOpen = false;
   let treeState: TreeChildrenState = createTreeChildrenState();
+  let treeLoadGeneration = 0;
+  let treeNeedsRefresh = false;
   let treeRootLocation: Location | undefined;
   let treeSyncedLocationUri: string | undefined;
   let openTerminalSupported = false;
@@ -1506,6 +1515,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         location: entry.location,
         title: `${plugin.name}: ${entry.name}`,
         active: true,
+        onCloseRequest: () => {
+          if (
+            pluginByPane.get(target) === panel &&
+            workspace?.panesById[target]?.activeTabId === tabId
+          )
+            tabController.requestCloseTab(target, tabId);
+        },
         onError: (error) => {
           if (pluginByPane.get(target) !== panel) return;
           const text = document.createElement('span');
@@ -1765,30 +1781,47 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   function openDiskUsage(): void {
     const active = activeDirectory();
     const currentWorkspace = workspace;
-    const pane = active === undefined ? undefined : currentWorkspace?.panesById[active.paneId];
-    if (active === undefined || currentWorkspace === undefined || pane === undefined) return;
+    const targetPaneId = currentWorkspace?.paneOrder.find(
+      (candidate) => candidate !== active?.paneId,
+    );
+    if (
+      active === undefined ||
+      currentWorkspace === undefined ||
+      targetPaneId === undefined ||
+      currentWorkspace.panesById[targetPaneId] === undefined
+    )
+      return;
     void dispatchWorkspaceCommand(
       attrsClient,
       {
         type: 'addTransientTab',
         workspaceId: currentWorkspace.id,
-        paneId: active.paneId,
+        paneId: targetPaneId,
         location: active.location,
         expectedRevision: currentWorkspace.revision,
       },
-      (next) => {
-        workspace = next;
-        const tabId = next.panesById[active.paneId]?.activeTabId;
-        if (tabId !== undefined) startDiskUsageScan(active.paneId, tabId, active.location);
-      },
-    ).catch((error: unknown) => {
-      toast({ html: workspaceErrorMessage(error, t('diskUsage', 'scanFailed')) });
-    });
+      replaceWorkspace,
+    )
+      .then((next) => {
+        const tabId = next.panesById[targetPaneId]?.activeTabId;
+        if (tabId !== undefined) {
+          startDiskUsageScan(targetPaneId, tabId, active.location);
+          focusPane?.(targetPaneId);
+        }
+      })
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('diskUsage', 'scanFailed')) });
+      });
   }
 
-  function openDiskUsageFolder(paneId: PaneId, location: Location): void {
+  function openDiskUsageFolder(
+    paneId: PaneId,
+    location: Location,
+    preferredCursorName?: string,
+  ): void {
     const oppositePaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-    if (oppositePaneId !== undefined) void navigation.navigate(oppositePaneId, location);
+    if (oppositePaneId !== undefined)
+      void navigation.navigate(oppositePaneId, location, preferredCursorName);
   }
 
   let navigation: NavigationController;
@@ -1918,6 +1951,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     paneId?: PaneId,
     options?: { readonly background?: boolean },
   ): void {
+    refreshDirectoryTree();
     if (workspace === undefined) return;
     const background = options?.background ?? true;
     for (const candidate of workspace.paneOrder) {
@@ -2315,14 +2349,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * already cached or already in flight. */
   function ensureTreeChildrenLoaded(location: Location): void {
     if (location.uri in treeState.childrenByUri || treeState.loadingUris.has(location.uri)) return;
+    const generation = treeLoadGeneration;
     treeState = withLoading(treeState, location.uri, true);
     attrsClient
       .listDirectoryChildren(location, false)
       .then((children) => {
+        if (generation !== treeLoadGeneration) return;
         treeState = withChildren(treeState, location.uri, children);
         m.redraw();
       })
       .catch((error: unknown) => {
+        if (generation !== treeLoadGeneration) return;
         treeState = withError(
           treeState,
           location.uri,
@@ -2330,6 +2367,65 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         );
         m.redraw();
       });
+  }
+
+  function refreshDirectoryTree(): void {
+    if (!treeSidebarOpen) {
+      treeNeedsRefresh = true;
+      return;
+    }
+    if (treeRootLocation === undefined) return;
+    treeNeedsRefresh = false;
+    const visible = flattenVisibleTree(
+      { location: treeRootLocation, name: treeRootName(treeRootLocation) },
+      treeState,
+    );
+    treeLoadGeneration += 1;
+    treeState = { ...treeState, childrenByUri: {}, loadingUris: new Set(), errorByUri: {} };
+    for (const row of visible) {
+      if (row.expanded) ensureTreeChildrenLoaded(row.location);
+    }
+  }
+
+  function treeDropWritable(location: Location): boolean {
+    if (
+      location.providerId === 'archive' ||
+      unavailableLocations.has(`${location.providerId}:${location.uri}`) ||
+      systemLocations.some(
+        (system) =>
+          system.readOnly === true &&
+          system.location.providerId === location.providerId &&
+          (location.uri === system.location.uri ||
+            location.uri.startsWith(
+              system.location.uri.endsWith('/') ? system.location.uri : `${system.location.uri}/`,
+            )),
+      )
+    )
+      return false;
+    const entry = treeState.childrenByUri[parentLocation(location).uri]?.find(
+      (child) =>
+        child.location.uri === location.uri && child.location.providerId === location.providerId,
+    );
+    if (entry?.readOnly === true) return false;
+    const loaded = [...directories.values()].find(
+      (directory) =>
+        directory.location?.uri === location.uri &&
+        directory.location.providerId === location.providerId,
+    );
+    return loaded?.writable !== false;
+  }
+
+  function dropOnTree(location: Location, modifiers: DropModifiers): void {
+    const validation = validateDropTarget(draggedLocations, location, treeDropWritable(location));
+    if (!validation.ok) {
+      if (!validation.noOp) clipboardMessage = validation.message;
+      return;
+    }
+    const sources = draggedLocations;
+    draggedLocations = [];
+    void (nativeDropInProgress || operationForDrop(platform, modifiers) === 'copy'
+      ? opsController.copy(sources, location)
+      : opsController.move(sources, location));
   }
 
   /** Expands (fetching children if not cached) or collapses a tree node. */
@@ -2356,6 +2452,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     treeSyncedLocationUri = active.location.uri;
     const root = rootLocationFor(active.location);
     if (treeRootLocation === undefined || treeRootLocation.uri !== root.uri) {
+      treeLoadGeneration += 1;
+      treeNeedsRefresh = false;
       treeRootLocation = root;
       treeState = createTreeChildrenState();
     }
@@ -2379,6 +2477,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     treeSidebarOpen = !treeSidebarOpen;
     if (treeSidebarOpen) {
       syncDirectoryTreeToActiveLocation();
+      if (treeNeedsRefresh) refreshDirectoryTree();
       requestAnimationFrame(() => focusDirectoryTree?.());
     } else {
       requestAnimationFrame(() => {
@@ -4228,6 +4327,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     pendingCursorRestorations.set(key, { ...pending, fallbackCursorId: undefined });
                   }
                 } else if (
+                  preferredCursorName !== undefined ||
                   selections.get(key)?.cursorEntryId === undefined ||
                   previous?.location?.uri !== view.location?.uri
                 ) {
@@ -4980,6 +5080,53 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       if (active === undefined) return;
                       void navigation?.navigate(active.paneId, location);
                     },
+                    onDragStart: (location, event) => {
+                      draggedLocations = [location];
+                      event.dataTransfer?.setData('application/x-fm-locations', 'internal');
+                      if (event.dataTransfer != null) event.dataTransfer.effectAllowed = 'copyMove';
+                    },
+                    onDragEnd: () => {
+                      draggedLocations = [];
+                    },
+                    ...(nativeDragOutSupported
+                      ? {
+                          onPointerDragStart: (location: Location) => {
+                            draggedLocations = [location];
+                          },
+                          onPointerDragCancel: () => {
+                            draggedLocations = [];
+                          },
+                          pointerDragEffect: (event: DropModifiers) =>
+                            operationForDrop(platform, event),
+                          onPointerDragOut: (location: Location) => {
+                            draggedLocations = [location];
+                            nativeDragSourceInternal = true;
+                            return attrsClient
+                              .startNativeDrag([location])
+                              .catch((error: unknown) => {
+                                draggedLocations = [];
+                                nativeDragSourceInternal = false;
+                                clipboardMessage = workspaceErrorMessage(
+                                  error,
+                                  'Unable to start native drag',
+                                );
+                                m.redraw();
+                              });
+                          },
+                        }
+                      : {}),
+                    onDragOver: (location, event) => {
+                      const validation = validateDropTarget(
+                        draggedLocations,
+                        location,
+                        treeDropWritable(location),
+                      );
+                      if (!validation.ok) return false;
+                      if (event.dataTransfer != null)
+                        event.dataTransfer.dropEffect = operationForDrop(platform, event);
+                      return true;
+                    },
+                    onDrop: dropOnTree,
                     onTabOut: (direction) => {
                       const paneOrder = workspace?.paneOrder;
                       if (paneOrder === undefined || paneOrder.length === 0) return;
@@ -5258,6 +5405,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             onClose: () => {
               contextMenu = undefined;
             },
+            ...(contextMenu !== undefined &&
+            [...pluginByPane].some(
+              ([paneId, panel]) =>
+                paneId !== contextMenu?.paneId &&
+                workspace?.panesById[paneId]?.activeTabId === panel.tabId,
+            )
+              ? {
+                  placementBounds: () =>
+                    document
+                      .querySelector<HTMLElement>(`[data-pane-id="${contextMenu?.paneId}"]`)
+                      ?.getBoundingClientRect(),
+                }
+              : {}),
             onInvoke: actionCommandController.invokeContextMenuAction,
             platform,
             ...(platform === 'macos' &&

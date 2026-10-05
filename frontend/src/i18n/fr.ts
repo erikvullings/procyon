@@ -126,6 +126,7 @@ export const fr = {
     remove: 'Retirer',
     path: 'Chemin',
     currentPath: 'Chemin actuel',
+    showPathBeginning: 'Afficher le début du chemin',
     newTab: 'Nouvel onglet',
     emptyDirectory: 'Ce répertoire est vide.',
     confirmCloseTab: "Fermer l'onglet ?",
@@ -364,6 +365,7 @@ export const fr = {
     clipboardEmpty: "Copiez ou déplacez d'abord un élément",
     selectionReadOnly: "L'élément sélectionné est en lecture seule",
     quickLookLocalFilesOnly: "Quick Look n'est disponible que pour les fichiers locaux",
+    svgoLocalFilesOnly: 'SVGO ne peut modifier que les fichiers SVG locaux',
     browserUnavailable: "{action} n'est pas disponible dans le navigateur.",
   },
   operation: {

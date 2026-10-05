@@ -1,6 +1,6 @@
 # SVGO panel
 
-The packaged `dist/` is built from the
+The checked-in `dist/` is a baseline; desktop packaging regenerates it from the
 [source and build instructions](../../plugin-sources/svgo/README.md) in this
 repository, initially copied from `erikvullings/svgo` at commit
 `ee29ff2c46912dc9318fbaf8f5d408e898a71f7b`. The Procyon build is
@@ -12,7 +12,9 @@ file, and use **Cmd+Shift+F4** on macOS (**Ctrl+Shift+F4** elsewhere) or the
 command palette. The editor opens as a tab in the opposite pane, titled
 **SVGO: filename**. Switch to other tabs without losing unsaved changes; the
 live editor tab cannot be dragged to another pane. Close it with its tab-strip
-close button or **Cmd+W** (Ctrl+W elsewhere).
+close button or **Cmd+W** (Ctrl+W elsewhere), including when keyboard focus is
+inside the isolated editor. That shortcut requests the owning tab's normal close
+path; it does not close the child WebView independently of its tab.
 It starts in Tree view with a closed menu and an even vertical stack: the tree
 occupies the top half and the SVG preview the bottom half. The Properties panel
 starts collapsed and can be expanded from the side rail. Save is the primary

@@ -23,6 +23,10 @@ JavaScript code contributions. QuickJS is packaged in-process across desktop pla
 supports memory limits and an interrupt handler for deterministic time/instruction budgets,
 without Node.js or the browser DOM. A fresh context exposes only typed, permission-checked host
 calls; it has no Tauri command, filesystem, process, credentials, or ambient network binding.
+QuickJS engine/context and trusted host setup have a separate one-second wall-time cap; untrusted
+script evaluation and invocation retain the 100 ms default execution budget. The interrupt handler
+enforces the active deadline, while elapsed-time checks cover setup and host calls that do not
+execute JS instructions. Cancellation, instruction, and memory limits apply across the call.
 The manifest defaults to Lua for backward compatibility. An independent `spa_panel` contribution
 identifies packaged HTML for a separately isolated child WebView; choosing JavaScript as an
 action runtime neither requires nor grants a panel. A WebView is not itself a security boundary:

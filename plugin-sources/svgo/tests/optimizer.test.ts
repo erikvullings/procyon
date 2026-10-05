@@ -345,6 +345,126 @@ describe("autocropSvg", () => {
 });
 
 describe("optimizeSvg", () => {
+  it("removes xml:space and trims text with only edge whitespace", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text xml:space="preserve">  Hello  </text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const text = doc.querySelector("text");
+    expect(text).not.toBeNull();
+    expect(text?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBeNull();
+    expect(text?.textContent).toBe("Hello");
+  });
+
+  it("keeps xml:space and meaningful internal whitespace through optimization", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text xml:space="preserve">  Hello World  </text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const text = doc.querySelector("text");
+    expect(text?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(text?.textContent).toBe("  Hello World  ");
+  });
+
+  it("keeps whitespace between a text node and a tspan", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.options.removeTspan = false;
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text xml:space="preserve">Hello <tspan>World</tspan></text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const text = doc.querySelector("text");
+    expect(text?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(text?.textContent).toBe("Hello World");
+    expect(text?.querySelector("tspan")?.textContent).toBe("World");
+  });
+
+  it("trims edge-only whitespace in a single tspan", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.options.removeTspan = false;
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text xml:space="preserve"><tspan>  Hello  </tspan></text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const text = doc.querySelector("text");
+    expect(text?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBeNull();
+    expect(text?.textContent).toBe("Hello");
+  });
+
+  it("retains meaningful whitespace on a tspan with its own xml:space", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.options.removeTspan = false;
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text><tspan xml:space="preserve">  Hello World  </tspan></text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const tspan = doc.querySelector("tspan");
+    expect(tspan?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(tspan?.textContent).toBe("  Hello World  ");
+  });
+
+  it("removes inherited xml:space for edge-only whitespace before trimming", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve"><text>  Hello  </text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(doc.documentElement.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBeNull();
+    expect(doc.querySelector("text")?.textContent).toBe("Hello");
+  });
+
+  it("respects inherited xml:space when internal whitespace is meaningful", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve"><text>  Hello World  </text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(doc.documentElement.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(doc.querySelector("text")?.textContent).toBe("  Hello World  ");
+  });
+
+  it("keeps xml:space on complex text with multiple tspans", async () => {
+    const optimizer = new SVGOptimizer();
+    optimizer.options.removeTspan = false;
+    optimizer.originalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><text xml:space="preserve">' +
+      '<tspan>  Hi  </tspan><tspan>  There  </tspan></text></svg>';
+
+    await optimizer.optimizeSvg();
+
+    const doc = new DOMParser().parseFromString(optimizer.optimizedSvg, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    const text = doc.querySelector("text");
+    expect(text?.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(Array.from(text?.querySelectorAll("tspan") ?? [], (el) => el.textContent)).toEqual([
+      "  Hi  ",
+      "  There  ",
+    ]);
+  });
+
   it("treats zero precision as an enabled optimization", async () => {
     const input =
       '<svg xmlns="http://www.w3.org/2000/svg"><path d="M10.4 20.6l2.2 3.3"/></svg>';

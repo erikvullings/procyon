@@ -125,6 +125,7 @@ export const it = {
     remove: 'Rimuovi',
     path: 'Percorso',
     currentPath: 'Percorso corrente',
+    showPathBeginning: 'Mostra l’inizio del percorso',
     newTab: 'Nuova scheda',
     emptyDirectory: 'Questa cartella è vuota.',
     confirmCloseTab: 'Chiudere la scheda?',
@@ -361,6 +362,7 @@ export const it = {
     clipboardEmpty: 'Copia o sposta prima un elemento',
     selectionReadOnly: "L'elemento selezionato è di sola lettura",
     quickLookLocalFilesOnly: 'Quick Look è disponibile solo per i file locali',
+    svgoLocalFilesOnly: 'SVGO può modificare solo file SVG locali',
     browserUnavailable: '{action} non è disponibile nel browser.',
   },
   operation: {

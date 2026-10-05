@@ -2214,11 +2214,12 @@ pub(crate) fn enable_plugin(
 
 /// Persists plugin disablement through the shared service.
 #[tauri::command]
-pub(crate) fn disable_plugin<R: Runtime>(
+pub(crate) async fn disable_plugin<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
     plugin_id: String,
 ) -> Result<(), ApplicationErrorDto> {
+    crate::plugin_spa::flush_plugin_panels(&app, &plugin_id).await;
     state
         .service
         .set_plugin_enabled(plugin_id.clone(), false)

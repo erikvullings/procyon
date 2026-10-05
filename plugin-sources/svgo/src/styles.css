@@ -802,9 +802,11 @@ body.theme-procyon .dragbar {
 }
 
 body.theme-procyon .tree-view {
-  top: 6px;
-  bottom: 6px;
   padding: 0;
+}
+
+body.theme-procyon .tree-content {
+  padding-block: 6px;
 }
 
 .tree-layout {

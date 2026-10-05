@@ -3,11 +3,11 @@
 //! Provides load/save through a sibling temporary file and optimistic
 //! revision-based conflict detection.
 
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_transport_dto::{
@@ -18,7 +18,9 @@ use fm_vfs::{
     CopyCommitOptions, EntryRef, FileSystemProvider, ProviderCapabilities, ProviderRegistry,
     WriteOptions,
 };
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -26,6 +28,79 @@ use crate::error::ApplicationError;
 
 /// Whole-file editor ceiling. Large files remain on the ranged-viewer path.
 pub(crate) const MAX_EDITABLE_FILE_BYTES: u64 = 3 * 1024 * 1024;
+
+async fn local_save_target(location: &Location) -> Result<PathBuf, ApplicationError> {
+    let path = location
+        .to_native_path()
+        .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| ApplicationError::InvalidRequest("cannot edit a filesystem root".into()))?
+        .to_path_buf();
+    let name = path
+        .file_name()
+        .ok_or_else(|| ApplicationError::InvalidRequest("cannot edit a filesystem root".into()))?
+        .to_os_string();
+    tokio::task::spawn_blocking(move || {
+        let canonical_parent = parent.canonicalize().map_err(local_lock_error)?;
+        let target = canonical_parent.join(name);
+        match target.canonicalize() {
+            Ok(path) => Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(target),
+            Err(error) => Err(local_lock_error(error)),
+        }
+    })
+    .await
+    .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?
+}
+
+fn process_lock_for(target: &Path) -> Arc<AsyncMutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Weak<AsyncMutex<()>>>>> = OnceLock::new();
+    let mut locks = LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(lock) = locks.get(target).and_then(Weak::upgrade) {
+        return lock;
+    }
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    let lock = Arc::new(AsyncMutex::new(()));
+    locks.insert(target.to_path_buf(), Arc::downgrade(&lock));
+    lock
+}
+
+async fn lock_local_save(target: PathBuf) -> Result<std::fs::File, ApplicationError> {
+    tokio::task::spawn_blocking(move || {
+        let key = Sha256::digest(target.to_string_lossy().as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let cache = dirs::cache_dir()
+            .ok_or_else(|| {
+                ApplicationError::PlatformOperationFailed(
+                    "local editor lock cache unavailable".into(),
+                )
+            })?
+            .join("procyon")
+            .join("editor-locks");
+        std::fs::create_dir_all(&cache).map_err(local_lock_error)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(cache.join(format!("{key}.lock")))
+            .map_err(local_lock_error)?;
+        fs2::FileExt::lock_exclusive(&file).map_err(local_lock_error)?;
+        Ok(file)
+    })
+    .await
+    .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?
+}
+
+fn local_lock_error(error: std::io::Error) -> ApplicationError {
+    ApplicationError::PlatformOperationFailed(format!("local editor lock: {error}"))
+}
 
 pub(crate) struct FileEditorService {
     providers: ProviderRegistry,
@@ -185,6 +260,22 @@ impl FileEditorService {
         capabilities
             .require(ProviderCapabilities::READ | ProviderCapabilities::WRITE)
             .map_err(ApplicationError::from)?;
+        let local_target = if location.provider_id.as_str() == "local" {
+            Some(local_save_target(&location).await?)
+        } else {
+            None
+        };
+        let process_lock = local_target.as_deref().map(process_lock_for);
+        let _process_guard = if let Some(lock) = &process_lock {
+            Some(lock.lock().await)
+        } else {
+            None
+        };
+        let _file_guard = if let Some(target) = local_target {
+            Some(lock_local_save(target).await?)
+        } else {
+            None
+        };
         let entry = EntryRef {
             id: EntryId::new(),
             location: location.clone(),
@@ -509,6 +600,51 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&destination).expect("destination"),
             "copy content"
+        );
+    }
+
+    #[tokio::test]
+    async fn local_save_of_another_file_does_not_wait_on_unrelated_editor_lock() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let first = dir.path().join("first.svg");
+        let second = dir.path().join("second.svg");
+        std::fs::write(&first, "<svg/>").expect("first fixture");
+        std::fs::write(&second, "<svg/>").expect("second fixture");
+        let first_location = Location::from_native_path(&first).expect("first location");
+        let first_target = local_save_target(&first_location)
+            .await
+            .expect("canonical target");
+        let held_lock = process_lock_for(&first_target);
+        let _guard = held_lock.lock().await;
+
+        let location = location_dto_for(&second);
+        let editor = editor(&dir);
+        let loaded = editor
+            .load(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .expect("load second file");
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            editor.save(SaveEditableFileRequestDto {
+                location,
+                destination: None,
+                content: "<svg id=\"second\"/>".into(),
+                expected_revision: loaded.revision,
+                overwrite_conflict: false,
+            }),
+        )
+        .await
+        .expect("unrelated save must not wait")
+        .expect("save second file");
+        assert_eq!(
+            std::fs::read_to_string(&first).expect("first unchanged"),
+            "<svg/>"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&second).expect("second updated"),
+            "<svg id=\"second\"/>"
         );
     }
 

@@ -125,6 +125,7 @@ export const es = {
     remove: 'Quitar',
     path: 'Ruta',
     currentPath: 'Ruta actual',
+    showPathBeginning: 'Mostrar el principio de la ruta',
     newTab: 'Nueva pestaña',
     emptyDirectory: 'Este directorio está vacío.',
     confirmCloseTab: '¿Cerrar pestaña?',
@@ -361,6 +362,7 @@ export const es = {
     clipboardEmpty: 'Copie o mueva primero un elemento',
     selectionReadOnly: 'El elemento seleccionado es de solo lectura',
     quickLookLocalFilesOnly: 'Quick Look solo está disponible para archivos locales',
+    svgoLocalFilesOnly: 'SVGO solo puede editar archivos SVG locales',
     browserUnavailable: '{action} no está disponible en el navegador.',
   },
   operation: {

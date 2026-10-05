@@ -32,6 +32,7 @@ describe('PluginPanelHost', () => {
           title: 'SVGO: drawing.svg',
           active,
           onError,
+          onCloseRequest: vi.fn(),
         }),
     });
     const surface = root.querySelector<HTMLElement>('.fm-plugin-panel-surface');

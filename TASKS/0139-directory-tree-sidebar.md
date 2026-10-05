@@ -210,3 +210,10 @@ Meaningfully sized (a new component, not a shortcut binding), and a commonly-exp
   killing another session's process. Relied on the DOM-level integration tests above (real
   keyboard dispatch, `document.activeElement` assertions, full `AppShell` mount) instead of
   eyes-on-screen confirmation - flagged here honestly, as before.
+
+- 2026-10-04 Copilot: Added directory-tree drag sources and drop targets without changing lazy
+  expansion or virtualization. Tree folders now participate in the same HTML drag and desktop
+  pointer-drag flows as the pane table and tabs. The provider root accepts drops but is never a
+  drag source; valid targets get the existing outline and pointer copy/move badge. The sidebar
+  invalidates cached children on operation-driven directory refresh and refetches expanded
+  branches; an operation completed while the sidebar is closed refreshes it on reopening.

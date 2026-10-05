@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -18,6 +19,7 @@ if (process.env.CI !== 'true') {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const executable = resolve(process.argv[2] ?? '');
+const bundled = process.argv.includes('--bundled');
 const root = mkdtempSync(join(tmpdir(), 'procyon-native-spa-'));
 const home = join(root, 'home');
 const appData = join(root, 'appdata');
@@ -34,59 +36,151 @@ for (const directory of [home, appData, localAppData, config, data]) {
 writeFileSync(file, '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>');
 
 let child;
+let smokeError;
+let cleanupError;
+async function stopChild() {
+  if (!child?.pid) return;
+  const group = process.platform !== 'win32';
+  const signal = (name) => {
+    try {
+      if (group) process.kill(-child.pid, name);
+      else child.kill(name);
+    } catch (error) {
+      if (
+        name === 'SIGKILL' &&
+        error.code === 'EPERM' &&
+        (child.exitCode !== null || child.signalCode !== null)
+      )
+        return;
+      if (error.code !== 'ESRCH') throw error;
+    }
+  };
+  const exitOrTimeout = () =>
+    Promise.race([
+      new Promise((done) => child.once('exit', done)),
+      new Promise((done) => setTimeout(done, 3_000).unref()),
+    ]);
+  signal('SIGTERM');
+  if (child.exitCode === null && child.signalCode === null) {
+    await exitOrTimeout();
+  }
+  signal('SIGKILL');
+  if (child.exitCode === null && child.signalCode === null) {
+    await exitOrTimeout();
+    if (child.exitCode === null && child.signalCode === null) {
+      throw new Error('native SPA app did not exit after SIGKILL');
+    }
+  }
+}
 try {
+  const env = {
+    ...process.env,
+    HOME: home,
+    APPDATA: appData,
+    LOCALAPPDATA: localAppData,
+    XDG_CONFIG_HOME: config,
+    XDG_DATA_HOME: data,
+    FM_LOG_FILE: join(root, 'app.log'),
+    PROCYON_NATIVE_SPA_SMOKE_FILE: file,
+    HTTP_PROXY: 'http://127.0.0.1:9',
+    HTTPS_PROXY: 'http://127.0.0.1:9',
+    ALL_PROXY: 'http://127.0.0.1:9',
+    NO_PROXY: '127.0.0.1,localhost',
+  };
+  if (bundled) delete env.PROCYON_NATIVE_SPA_SMOKE_PLUGINS;
+  else env.PROCYON_NATIVE_SPA_SMOKE_PLUGINS = join(repoRoot, 'plugins');
   child = spawn(executable, [], {
-    env: {
-      ...process.env,
-      HOME: home,
-      APPDATA: appData,
-      LOCALAPPDATA: localAppData,
-      XDG_CONFIG_HOME: config,
-      XDG_DATA_HOME: data,
-      FM_LOG_FILE: join(root, 'app.log'),
-      PROCYON_NATIVE_SPA_SMOKE_FILE: file,
-      PROCYON_NATIVE_SPA_SMOKE_PLUGINS: join(repoRoot, 'plugins'),
-      HTTP_PROXY: 'http://127.0.0.1:9',
-      HTTPS_PROXY: 'http://127.0.0.1:9',
-      ALL_PROXY: 'http://127.0.0.1:9',
-      NO_PROXY: '127.0.0.1,localhost',
-    },
+    env,
     stdio: ['ignore', stdout, stderr],
+    detached: process.platform !== 'win32',
   });
   let spawnError;
   child.once('error', (error) => {
     spawnError = error;
   });
   const deadline = Date.now() + 90_000;
+  let lastStage = 'process not started';
+  let saveSucceeded = false;
+  let bundledAssetsSelected = false;
+  let lifecyclePassed = false;
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
-    if (readFileSync(file, 'utf8').includes(marker)) break;
+    const stages = readFileSync(join(root, 'stderr.log'), 'utf8').matchAll(
+      /native-spa-stage: ([^\r\n]+)/g,
+    );
+    for (const match of stages) {
+      lastStage = match[1];
+      if (lastStage.startsWith('trusted-page-started: http://127.0.0.1:5181')) {
+        throw new Error(
+          'native SPA smoke loaded the Vite dev URL instead of embedded release assets',
+        );
+      }
+      if (
+        lastStage.startsWith('child-open-failed:') ||
+        lastStage.startsWith('child-load-failed:') ||
+        lastStage.startsWith('script-injection-failed:') ||
+        lastStage.startsWith('script-failed') ||
+        lastStage === 'bridge-save-failed'
+      ) {
+        throw new Error(`native SPA smoke failed at ${lastStage}`);
+      }
+      if (lastStage === 'bridge-save-succeeded') saveSucceeded = true;
+      if (lastStage === 'bundled-plugin-assets-selected') bundledAssetsSelected = true;
+      if (lastStage === 'heartbeat-and-disable-teardown-succeeded') lifecyclePassed = true;
+    }
+    if (readFileSync(file, 'utf8').includes(marker) && saveSucceeded && lifecyclePassed) break;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`native SPA app exited early (${child.exitCode ?? child.signalCode})`);
     }
     await new Promise((done) => setTimeout(done, 250));
   }
   if (!readFileSync(file, 'utf8').includes(marker)) {
-    throw new Error('native child did not deny updater and save the SVG within 90 seconds');
+    throw new Error(`native SPA smoke timed out after ${lastStage} (90 seconds)`);
   }
-  console.log(
-    `Native SPA activation, updater denial, and revision-checked Save passed on ${process.platform}`,
-  );
+  if (!saveSucceeded) {
+    throw new Error(
+      `native SPA saved the SVG but did not confirm bridge success after ${lastStage}`,
+    );
+  }
+  if (!lifecyclePassed) {
+    throw new Error(`native SPA heartbeat or disable teardown did not complete after ${lastStage}`);
+  }
+  if (bundled && !bundledAssetsSelected) {
+    throw new Error('native SPA saved without selecting installed SVGO assets');
+  }
 } catch (error) {
-  for (const name of ['app.log', 'stdout.log', 'stderr.log']) {
+  smokeError = error;
+  for (const name of [
+    ...readdirSync(root).filter((entry) => entry.startsWith('app.log')),
+    'stdout.log',
+    'stderr.log',
+  ]) {
     try {
       console.error(`${name}:\n${readFileSync(join(root, name), 'utf8').slice(-6000)}`);
     } catch {
       // A failing app may not have created its log.
     }
   }
-  throw error;
 } finally {
-  if (child && child.exitCode === null && child.signalCode === null) {
-    child.kill();
-    await new Promise((done) => child.once('exit', done));
+  try {
+    await stopChild();
+  } catch (error) {
+    cleanupError = error;
   }
   closeSync(stdout);
   closeSync(stderr);
-  rmSync(root, { recursive: true, force: true });
+  try {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (error) {
+    cleanupError = cleanupError
+      ? new AggregateError([cleanupError, error], 'native SPA teardown and removal failed')
+      : error;
+  }
 }
+if (smokeError && cleanupError)
+  throw new AggregateError([smokeError, cleanupError], 'native SPA smoke and cleanup failed');
+if (smokeError) throw smokeError;
+if (cleanupError) throw cleanupError;
+console.log(
+  `Native SPA ${bundled ? 'installed-package' : 'release-binary'} activation, updater denial, Save, heartbeat, and disable teardown passed on ${process.platform}`,
+);

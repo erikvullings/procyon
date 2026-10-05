@@ -11,6 +11,7 @@ export interface PluginPanelHostAttrs {
   readonly title: string;
   readonly active: boolean;
   readonly onError: (error: unknown) => void;
+  readonly onCloseRequest: () => void;
 }
 
 export interface PluginPaneState extends PluginPanelHostAttrs {
@@ -40,6 +41,20 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
   let lastBounds: PluginPanelBounds | undefined;
   let attrs: PluginPaneState;
 
+  const closeRequested = (event: Event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (
+      label !== undefined &&
+      attrs.active &&
+      typeof detail === 'object' &&
+      detail !== null &&
+      'label' in detail &&
+      detail.label === label
+    ) {
+      attrs.onCloseRequest();
+    }
+  };
+
   const syncTheme = () => {
     const theme = resolvedTheme();
     if (label === undefined || lastTheme === theme) return;
@@ -53,8 +68,9 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
   };
 
   const syncVisibility = () => {
-    if (label === undefined || shown === attrs.active) return;
-    shown = attrs.active;
+    const shouldShow = attrs.active;
+    if (label === undefined || shown === shouldShow) return;
+    shown = shouldShow;
     const currentLabel = label;
     const visible = shown;
     visibility = visibility
@@ -66,6 +82,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
 
   const reposition = () => {
     if (surface === undefined || disposed || !attrs.active) return;
+    syncVisibility();
     const rect = surface.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
     const bounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
@@ -141,6 +158,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             }
             window.addEventListener('resize', reposition);
             window.addEventListener('scroll', reposition, true);
+            window.addEventListener('procyon:plugin-panel-close-requested', closeRequested);
             reposition();
           },
           onupdate: () => {
@@ -156,6 +174,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
             colorScheme?.removeEventListener('change', syncTheme);
             window.removeEventListener('resize', reposition);
             window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('procyon:plugin-panel-close-requested', closeRequested);
             if (label !== undefined) {
               void attrs.client.closePluginPanel(label).catch((error: unknown) => {
                 console.warn('Could not close plugin panel', error);

@@ -77,20 +77,36 @@ mod native_spa_smoke;
 /// No Axum server is started in-process to reuse HTTP (spec §11) — the
 /// Tauri commands in [`commands`] call `FileManagerService` directly.
 pub fn run() {
+    #[cfg(feature = "native-spa-smoke")]
+    native_spa_smoke::stage("process-started");
     init_tracing();
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
     plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
         .manage(panel_registry)
         .on_page_load(|webview, payload| {
+            #[cfg(feature = "native-spa-smoke")]
+            if payload.event() == tauri::webview::PageLoadEvent::Started
+                && plugin_spa::trusted_invoke_label(webview.label())
+            {
+                native_spa_smoke::stage(&format!("trusted-page-started: {}", payload.url()));
+            }
             if payload.event() == tauri::webview::PageLoadEvent::Finished
                 && plugin_spa::trusted_invoke_label(webview.label())
             {
-                plugin_spa::close_panels_for_window(webview.app_handle(), webview.window().label());
+                let app = webview.app_handle().clone();
+                let labels = app
+                    .state::<Arc<plugin_spa::PanelRegistry>>()
+                    .labels_for_window(webview.window().label());
+                tauri::async_runtime::spawn(async move {
+                    plugin_spa::close_panels_for_window(&app, labels).await;
+                });
                 #[cfg(feature = "native-spa-smoke")]
                 native_spa_smoke::start_once(webview.app_handle().clone());
             }
         })
         .setup(|app| {
+            #[cfg(feature = "native-spa-smoke")]
+            native_spa_smoke::stage("setup-started");
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
             // needs `app.path().resource_dir()`, which only resolves once the app has finished
             // initializing - not from a plain expression evaluated while assembling the
@@ -178,14 +194,27 @@ pub fn run() {
                     fm_application::semantic_components::FakeSemanticComponentCapability::new(),
                 ));
             }
-            if let Some(resource_dir) = resource_directory {
+            if let Some(resource_dir) = resource_directory.as_deref() {
                 service.set_bundled_plugins_directory(resource_dir.join("plugins"));
             }
             #[cfg(feature = "native-spa-smoke")]
             if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
-                let plugins = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS")
-                    .ok_or_else(|| std::io::Error::other("smoke plugin directory is missing"))?;
-                service.set_bundled_plugins_directory(plugins.into());
+                if let Some(plugins) = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_PLUGINS") {
+                    service.set_bundled_plugins_directory(plugins.into());
+                } else {
+                    let entrypoint = resource_directory
+                        .as_deref()
+                        .ok_or_else(|| std::io::Error::other("bundled resources are unavailable"))?
+                        .join("plugins/svgo/dist/index.html");
+                    if !entrypoint.is_file() {
+                        return Err(std::io::Error::other(format!(
+                            "bundled SVGO entrypoint is missing: {}",
+                            entrypoint.display()
+                        ))
+                        .into());
+                    }
+                    native_spa_smoke::stage("bundled-plugin-assets-selected");
+                }
                 service
                     .set_plugin_enabled("procyon.svgo".to_owned(), true)
                     .map_err(|error| std::io::Error::other(error.to_string()))?;
@@ -260,6 +289,8 @@ pub fn run() {
             // synchronously, before the event loop starts - there is no running async task for
             // this to deadlock against, unlike building a window from inside a Tauri command.
             tauri::async_runtime::block_on(commands::open_startup_windows(app.handle()))?;
+            #[cfg(feature = "native-spa-smoke")]
+            native_spa_smoke::stage("trusted-window-created");
 
             Ok(())
         })
@@ -307,8 +338,29 @@ pub fn run() {
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(QuittingFlag::default())
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                if registry.begin_window_close(window.label()) {
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    let owner = window.label().to_owned();
+                    let labels = registry.labels_for_window(&owner);
+                    let closing_window = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        plugin_spa::close_panels_for_window(&app, labels).await;
+                        app.state::<Arc<plugin_spa::PanelRegistry>>()
+                            .end_window_close(&owner);
+                        if let Err(error) = closing_window.close() {
+                            tracing::warn!(%error, %owner, "could not close host window after plugin teardown");
+                        }
+                    });
+                } else if registry.window_close_pending(window.label()) {
+                    api.prevent_close();
+                }
+            }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
+                registry.end_window_close(window.label());
                 for label in registry.labels_for_window(window.label()) {
                     registry.release(&label);
                 }
@@ -961,6 +1013,36 @@ mod tests {
         ))
         .expect_err("WKWebView cannot deny browser clipboard access");
         assert!(matches!(error, plugin_spa::PanelError::Unavailable));
+    }
+
+    #[test]
+    fn svgo_panel_rejects_remote_location_before_loading() {
+        let app = create_app(mock_builder());
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+        let error = tauri::async_runtime::block_on(plugin_spa::open_plugin_panel(
+            app.handle().clone(),
+            webview.as_ref().window(),
+            app.state::<AppState>(),
+            plugin_spa::OpenPanelRequest {
+                plugin_id: "procyon.svgo".into(),
+                action_id: "procyon.svgo.open".into(),
+                location: fm_transport_dto::LocationDto {
+                    provider_id: "sftp".into(),
+                    uri: "sftp://host/drawing.svg".into(),
+                },
+                bounds: plugin_spa::PanelBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                theme: plugin_spa::PanelTheme::Light,
+            },
+        ))
+        .expect_err("remote SVG must not load into SVGO");
+        assert!(matches!(error, plugin_spa::PanelError::Denied));
     }
 
     #[test]

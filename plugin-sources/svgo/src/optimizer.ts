@@ -1343,9 +1343,9 @@ class SVGOptimizer {
     // fragile to reason about which whitespace matters).
     const elementRequiresXmlSpacePreserve = (el: Element): boolean => {
       const tagName = (el.localName || el.tagName).toLowerCase();
-      if (tagName === "text") {
-        if (el.querySelectorAll("tspan").length > 1) return true;
-        return /\s/.test(el.textContent ?? "");
+      if (tagName === "text" || tagName === "tspan") {
+        if (tagName === "text" && el.querySelectorAll("tspan").length > 1) return true;
+        return /\S\s+\S/.test(el.textContent ?? "");
       }
       return Array.from(el.querySelectorAll("text")).some((textEl) =>
         elementRequiresXmlSpacePreserve(textEl),
@@ -1512,8 +1512,14 @@ class SVGOptimizer {
     if (doc.querySelector("parsererror")) return svg;
 
     const XML_NS = "http://www.w3.org/XML/1998/namespace";
-    const getXmlSpace = (el: Element): string | null =>
-      el.getAttribute("xml:space") ?? el.getAttributeNS(XML_NS, "space");
+    const getXmlSpace = (el: Element): string | null => {
+      for (let current: Element | null = el; current; current = current.parentElement) {
+        const value =
+          current.getAttribute("xml:space") ?? current.getAttributeNS(XML_NS, "space");
+        if (value !== null) return value;
+      }
+      return null;
+    };
 
     doc.querySelectorAll("text").forEach((textEl) => {
       // Multiple tspans are too fragile to reason about — leave untouched.
@@ -1522,6 +1528,7 @@ class SVGOptimizer {
       if (getXmlSpace(textEl) === "preserve") return;
 
       const trimChildText = (el: Element): void => {
+        if (getXmlSpace(el) === "preserve") return;
         Array.from(el.childNodes).forEach((node) => {
           if (node.nodeType === 3) {
             node.textContent = (node.textContent ?? "").trim();

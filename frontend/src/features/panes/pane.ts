@@ -91,7 +91,7 @@ import type { SearchPresentation } from '../search/search-presentation';
 import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search/semantic-feedback';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
-import { breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
 import { createRenameEditingController } from './rename-edit-controller';
@@ -255,6 +255,7 @@ export interface PaneAttrs {
   readonly onDrop?: (entry: EntrySummary | undefined, event: DropModifiers) => void;
   readonly onPointerDragStart?: (entries: readonly EntrySummary[], event: DropModifiers) => void;
   readonly onPointerDragOut?: (entries: readonly EntrySummary[]) => void | Promise<void>;
+  readonly onPointerDragCancel?: () => void;
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** When set, replaces the entire directory-listing surface (task 0088). */
   readonly viewerContent?: m.Children;
@@ -1481,8 +1482,10 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                               `${remoteScheme}://`,
                             ),
                       m(
-                        '.fm-breadcrumb-segments',
-                        {},
+                        BreadcrumbTrail,
+                        {
+                          pathKey: `${activeLocationUri}\0${attrs.path}\0${attrs.searchPresentation?.kind ?? ''}\0${attrs.searchPresentation?.label ?? attrs.searchPresentation?.term ?? ''}`,
+                        },
                         isSearchLocation
                           ? searchBreadcrumbSegments(
                               activeLocationUri,
@@ -1817,6 +1820,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       return attrs.onPointerDragOut?.(selection);
                     },
                   }),
+              ...(attrs.onPointerDragCancel === undefined
+                ? {}
+                : { onPointerDragCancel: attrs.onPointerDragCancel }),
               ...(attrs.pointerDragEffect === undefined
                 ? {}
                 : { pointerDragEffect: attrs.pointerDragEffect }),

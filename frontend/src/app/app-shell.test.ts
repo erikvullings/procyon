@@ -140,6 +140,12 @@ function directoryRowNamed(
   );
 }
 
+function treeRowNamed(name: string): HTMLElement | undefined {
+  return [...root.querySelectorAll<HTMLElement>('.fm-tree-row')].find(
+    (row) => row.querySelector('.fm-tree-row-name')?.textContent === name,
+  );
+}
+
 /**
  * Selects a theme button by its `title` prefix rather than its text: the Auto
  * button renders a ligature icon, so its `textContent` is `brightness_autoAuto`.
@@ -1296,10 +1302,37 @@ describe('AppShell', () => {
 
     const surface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
     if (surface === undefined || surface === null) throw new Error('plugin surface missing');
+    if (source instanceof HTMLElement)
+      source.getBoundingClientRect = () =>
+        ({ left: 0, right: 640, top: 0, bottom: 480, width: 640, height: 480 }) as DOMRect;
     surface.getBoundingClientRect = () =>
-      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+      ({ left: 640, right: 960, top: 80, bottom: 480, width: 320, height: 400 }) as DOMRect;
     window.dispatchEvent(new Event('resize'));
     await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+
+    directoryRowNamed(source, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 530, clientY: 150 }),
+    );
+    m.redraw.sync();
+    const contextMenu = root.querySelector<HTMLElement>('.fm-context-menu');
+    if (contextMenu === null) throw new Error('directory context menu missing');
+    contextMenu.getBoundingClientRect = () =>
+      ({
+        left: Number.parseFloat(contextMenu.style.left),
+        right: Number.parseFloat(contextMenu.style.left) + 190,
+        top: 150,
+        bottom: 300,
+        width: 190,
+        height: 150,
+      }) as DOMRect;
+    m.redraw.sync();
+    expect(contextMenu.style.left).toBe('442px');
+    expect(visible).not.toHaveBeenCalledWith('plugin-spa-test', false);
+    expect(contextMenu.querySelector<HTMLButtonElement>('.fm-context-menu-item')).not.toBeNull();
+    contextMenu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    expect(visible).not.toHaveBeenCalledWith('plugin-spa-test', false);
+    expect(close).not.toHaveBeenCalled();
 
     listingTab?.click();
     await vi.waitFor(() =>
@@ -1314,16 +1347,48 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', false));
     expect(close).not.toHaveBeenCalled();
     expect(opposite?.querySelector('.fm-plugin-panel-host')).not.toBeNull();
-    pluginTab?.click();
+    [...(opposite?.querySelectorAll<HTMLButtonElement>('.fm-pane-tab') ?? [])]
+      .find((tab) => tab.textContent?.includes('SVGO: 日本語.txt'))
+      ?.click();
     await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', true));
+    if (opposite instanceof HTMLElement) opposite.focus();
+    await vi.waitFor(() => expect(opposite?.getAttribute('data-active')).toBe('true'));
     expect(open).toHaveBeenCalledOnce();
 
-    document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }),
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-another-window' },
+      }),
+    );
+    expect(close).not.toHaveBeenCalled();
+    listingTab?.click();
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-plugin-panel-host')?.getAttribute('data-visible')).toBe(
+        'false',
+      ),
+    );
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
+    );
+    expect(close).not.toHaveBeenCalled();
+    pluginTab?.click();
+    await vi.waitFor(() => expect(visible).toHaveBeenLastCalledWith('plugin-spa-test', true));
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
     );
     await vi.waitFor(() => expect(close).toHaveBeenCalledWith('plugin-spa-test'));
     await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
     expect(opposite?.querySelector('.fm-plugin-panel-host')).toBeNull();
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-close-requested', {
+        detail: { label: 'plugin-spa-test' },
+      }),
+    );
+    expect(close).toHaveBeenCalledOnce();
 
     directoryRowNamed(source, '日本語.txt')?.click();
     await vi.waitFor(() => expect(source?.getAttribute('data-active')).toBe('true'));
@@ -1340,10 +1405,32 @@ describe('AppShell', () => {
       ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
     window.dispatchEvent(new Event('resize'));
     await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
+    expect(opposite?.querySelector('.fm-plugin-panel-host')).toBeNull();
+
+    directoryRowNamed(source, '日本語.txt')?.click();
+    await vi.waitFor(() => expect(source?.getAttribute('data-active')).toBe('true'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F4', metaKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(opposite?.querySelector('.fm-plugin-panel-surface')).not.toBeNull(),
+    );
+    const lastSurface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
+    if (lastSurface === undefined || lastSurface === null)
+      throw new Error('reopened plugin surface missing');
+    lastSurface.getBoundingClientRect = () =>
+      ({ left: 260, top: 80, width: 320, height: 400 }) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(3));
     opposite
       ?.querySelector<HTMLElement>('.fm-pane-tab[aria-selected="true"] .fm-pane-tab-close')
       ?.click();
-    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(3));
     await vi.waitFor(() => expect(opposite?.querySelectorAll('.fm-pane-tab')).toHaveLength(1));
   });
 
@@ -3115,6 +3202,376 @@ describe('AppShell', () => {
       sources: [{ uri: 'mock:///.env' }],
       destination: { uri: 'mock:///Documents' },
       conflictPolicy: 'ask',
+    });
+  });
+
+  it('moves a directory between tree nodes through the operation engine and refreshes the sidebar', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    const originalListChildren = client.listDirectoryChildren.bind(client);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Applications')).not.toBeUndefined());
+    treeRowNamed('Documents')?.querySelector<HTMLButtonElement>('.fm-tree-expand-toggle')?.click();
+    await vi.waitFor(() => expect(treeRowNamed('Projects')).not.toBeUndefined());
+    const source = treeRowNamed('Applications');
+    const target = treeRowNamed('Documents');
+    expect(source?.draggable).toBe(true);
+    source?.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const over = new Event('dragover', { bubbles: true, cancelable: true });
+    target?.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(true);
+    m.redraw.sync();
+    expect(treeRowNamed('Documents')?.classList.contains('fm-drop-target')).toBe(true);
+    treeRowNamed('Documents')?.dispatchEvent(
+      new Event('drop', { bubbles: true, cancelable: true }),
+    );
+    await confirmRoutineOperation('Move');
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'move',
+      sources: [{ uri: 'mock:///Applications' }],
+      destination: { uri: 'mock:///Documents' },
+      conflictPolicy: 'ask',
+    });
+    const operation = await startOperation.mock.results[0]?.value;
+    const listChildren = vi.spyOn(client, 'listDirectoryChildren');
+    listChildren.mockImplementation(async (location, showHidden, signal) => {
+      const children = await originalListChildren(location, showHidden, signal);
+      if (location.uri === 'mock:///') {
+        return children.filter((child) => child.name !== 'Applications');
+      }
+      if (location.uri === 'mock:///Documents') {
+        const rootChildren = await originalListChildren(
+          { providerId: 'file', uri: 'mock:///' },
+          showHidden,
+          signal,
+        );
+        const moved = rootChildren.find((child) => child.name === 'Applications');
+        if (moved === undefined) throw new Error('missing fixture directory');
+        return [
+          ...children,
+          {
+            ...moved,
+            id: 'mock:///Documents/Applications',
+            location: { ...moved.location, uri: 'mock:///Documents/Applications' },
+          },
+        ];
+      }
+      return children;
+    });
+    client.emit({
+      eventId: 413,
+      timestamp: '2026-08-30T12:01:01.000Z',
+      payload: {
+        type: 'operation.completed',
+        operation: { ...operation, state: 'completed', completedAt: '2026-08-30T12:01:01.000Z' },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector(`[id="fm-tree-row-${encodeURIComponent('mock:///Applications')}"]`),
+      ).toBeNull(),
+    );
+    expect(listChildren.mock.calls.some(([location]) => location.uri === 'mock:///')).toBe(true);
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector(
+          `[id="fm-tree-row-${encodeURIComponent('mock:///Documents/Applications')}"]`,
+        ),
+      ).not.toBeNull(),
+    );
+  });
+
+  it('refreshes expanded tree folders after an operation finishes while the sidebar is closed', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.listDirectoryChildren.bind(client);
+    let moved = false;
+    const listChildren = vi
+      .spyOn(client, 'listDirectoryChildren')
+      .mockImplementation(async (location, hidden, signal) => {
+        const entries = await original(location, hidden, signal);
+        return moved && location.uri === 'mock:///'
+          ? entries.filter((entry) => entry.name !== 'Applications')
+          : entries;
+      });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Applications')).not.toBeUndefined());
+    root.querySelector<HTMLButtonElement>('.fm-directory-tree-close')?.click();
+    m.redraw.sync();
+    const operation = await client.startOperation({
+      type: 'move',
+      sources: [{ providerId: 'file', uri: 'mock:///Applications' }],
+      destination: { providerId: 'file', uri: 'mock:///Documents' },
+      conflictPolicy: 'ask',
+    });
+    moved = true;
+    client.emit({
+      eventId: 414,
+      timestamp: '2026-08-30T12:01:01.000Z',
+      payload: {
+        type: 'operation.completed',
+        operation: { ...operation, state: 'completed', completedAt: '2026-08-30T12:01:01.000Z' },
+      },
+    });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(listChildren).toHaveBeenCalledTimes(1);
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() => {
+      expect(
+        listChildren.mock.calls.filter(([location]) => location.uri === 'mock:///'),
+      ).toHaveLength(2);
+      expect(treeRowNamed('Applications')).toBeUndefined();
+    });
+  });
+
+  it('copies a table entry onto a tree directory with Control and rejects a read-only destination', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    const original = client.listDirectoryChildren.bind(client);
+    vi.spyOn(client, 'listDirectoryChildren').mockImplementation(async (location, hidden, signal) =>
+      (await original(location, hidden, signal)).map((entry) =>
+        entry.name === 'Applications' ? { ...entry, readOnly: true } : entry,
+      ),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Documents')).not.toBeUndefined());
+    const source = directoryRowNamed(root, '.env');
+    source?.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const invalid = new Event('dragover', { bubbles: true, cancelable: true });
+    treeRowNamed('Applications')?.dispatchEvent(invalid);
+    expect(invalid.defaultPrevented).toBe(false);
+    const valid = new MouseEvent('dragover', { bubbles: true, cancelable: true, ctrlKey: true });
+    treeRowNamed('Documents')?.dispatchEvent(valid);
+    expect(valid.defaultPrevented).toBe(true);
+    treeRowNamed('Documents')?.dispatchEvent(
+      new MouseEvent('drop', { bubbles: true, cancelable: true, ctrlKey: true }),
+    );
+    await confirmRoutineOperation('Copy');
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'copy',
+      sources: [{ uri: 'mock:///.env' }],
+      destination: { uri: 'mock:///Documents' },
+      conflictPolicy: 'ask',
+    });
+  });
+
+  it('rejects a tree directory dropped into its descendant, but accepts the provider root as a destination', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Documents')).not.toBeUndefined());
+    treeRowNamed('Documents')?.querySelector<HTMLButtonElement>('.fm-tree-expand-toggle')?.click();
+    await vi.waitFor(() => expect(treeRowNamed('Projects')).not.toBeUndefined());
+    expect(treeRowNamed('mock:///')?.draggable).not.toBe(true);
+    treeRowNamed('Documents')?.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const invalid = new Event('dragover', { bubbles: true, cancelable: true });
+    treeRowNamed('Projects')?.dispatchEvent(invalid);
+    expect(invalid.defaultPrevented).toBe(false);
+    treeRowNamed('Projects')?.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
+    expect(startOperation).not.toHaveBeenCalled();
+    treeRowNamed('Projects')?.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const providerRoot = root.querySelector<HTMLElement>('.fm-tree-row');
+    expect(providerRoot?.draggable).toBe(false);
+    const overRoot = new Event('dragover', { bubbles: true, cancelable: true });
+    providerRoot?.dispatchEvent(overRoot);
+    expect(overRoot.defaultPrevented).toBe(true);
+    providerRoot?.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
+    await confirmRoutineOperation('Move');
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      sources: [{ uri: 'mock:///Documents/Projects' }],
+      destination: { uri: 'mock:///' },
+    });
+  });
+
+  it('routes a desktop pointer drag from the tree to a table directory with move feedback', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag');
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Applications')).not.toBeUndefined());
+    const source = treeRowNamed('Applications');
+    const target = directoryRowNamed(root, 'Documents');
+    expect(source?.draggable).toBe(false);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => target ?? null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 57,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 57 }),
+    );
+    expect(document.documentElement.dataset.fileDragEffect).toBe('move');
+    expect(target?.classList.contains('fm-drop-target')).toBe(true);
+    window.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 57 }),
+    );
+    expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
+    await confirmRoutineOperation('Move');
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'move',
+      sources: [{ uri: 'mock:///Applications' }],
+      destination: { uri: 'mock:///Documents' },
+    });
+    expect(startNativeDrag).not.toHaveBeenCalled();
+  });
+
+  it('hands a tree drag to the native host only after leaving the app window', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    const startNativeDrag = vi.spyOn(client, 'startNativeDrag').mockResolvedValue(undefined);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Applications')).not.toBeUndefined());
+    const source = treeRowNamed('Applications');
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 60,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 60 }),
+    );
+    expect(startNativeDrag).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new PointerEvent('pointerout', { clientX: -1, clientY: 10, pointerId: 60 }),
+    );
+    expect(startNativeDrag).toHaveBeenCalledWith([
+      { providerId: 'file', uri: 'mock:///Applications' },
+    ]);
+  });
+
+  it('routes a desktop table pointer drag to a tree directory, including copy modifiers and Escape', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...(await client.getRuntimeCapabilities()),
+      nativeDragOut: true,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).not.toBeUndefined());
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLElement>('.fm-directory-tree')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(treeRowNamed('Documents')).not.toBeUndefined());
+    const source = directoryRowNamed(root, '.env');
+    const target = treeRowNamed('Documents');
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => target ?? null),
+    });
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 58,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 58 }),
+    );
+    expect(document.documentElement.dataset.fileDragEffect).toBe('move');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(document.querySelector('.fm-file-drag-effect')).toBeNull();
+    expect(startOperation).not.toHaveBeenCalled();
+    const cancelledOver = new Event('dragover', { bubbles: true, cancelable: true });
+    treeRowNamed('Documents')?.dispatchEvent(cancelledOver);
+    expect(cancelledOver.defaultPrevented).toBe(false);
+    source?.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 59,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 10, pointerId: 59, metaKey: true }),
+    );
+    expect(document.documentElement.dataset.fileDragEffect).toBe('copy');
+    expect(target?.classList.contains('fm-drop-target')).toBe(true);
+    window.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 30, clientY: 10, pointerId: 59, metaKey: true }),
+    );
+    await confirmRoutineOperation('Copy');
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'copy',
+      sources: [{ uri: 'mock:///.env' }],
+      destination: { uri: 'mock:///Documents' },
     });
   });
 
@@ -5060,6 +5517,46 @@ describe('AppShell', () => {
     );
   });
 
+  it('reopens the menu for a different row on right-click without exposing the WebView menu', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+
+    directoryRowNamed(root, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    const backdrop = root.querySelector<HTMLElement>('.fm-context-menu-backdrop');
+    expect(backdrop?.style.pointerEvents).toBe('none');
+    const second = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 30,
+      clientY: 40,
+    });
+    directoryRowNamed(root, 'report.pdf')?.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    directoryRowNamed(root, 'report.pdf')?.closest<HTMLElement>('[role="grid"]')?.focus();
+    m.redraw.sync();
+    expect(document.activeElement?.getAttribute('role')).toBe('menu');
+    const reveal = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
+      (button) =>
+        button.querySelector('.fm-context-menu-label')?.textContent === 'Reveal in File Manager',
+    );
+    reveal?.click();
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(invokeAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'core.revealInSystemFileManager',
+          parameters: { uri: 'mock:///Documents/report.pdf' },
+        }),
+      ),
+    );
+  });
+
   it('opens the macOS Services submenu from the existing selection context menu', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
@@ -5506,40 +6003,131 @@ describe('tabs per pane (task 0069)', () => {
     expect(next?.physicalBytes).toBe(20);
   });
 
-  it('opens disk usage in a new tab and navigates a clicked folder in the opposite pane', async () => {
+  it.each([
+    ['left', 'right'],
+    ['right', 'left'],
+  ] as const)(
+    'opens disk usage from %s in %s and drills into the source pane',
+    async (sourcePaneId, treemapPaneId) => {
+      const client = new MockFileManagerClient();
+      const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
+      const scanDiskUsage = vi.spyOn(client, 'scanDiskUsage');
+      const navigatePane = vi.spyOn(client, 'navigatePane');
+      const sourceUri = sourcePaneId === 'left' ? 'mock:///' : 'mock:///Documents';
+      const childName = sourcePaneId === 'left' ? 'Documents' : 'Projects';
+      const childUri = sourcePaneId === 'left' ? 'mock:///Documents' : 'mock:///Documents/Projects';
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+      if (sourcePaneId === 'right') {
+        root.querySelector<HTMLElement>('[data-pane-id="right"] .fm-pane')?.click();
+        await vi.waitFor(() =>
+          expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+            'true',
+          ),
+        );
+      }
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
+      );
+
+      await vi.waitFor(() =>
+        expect(scanDiskUsage).toHaveBeenCalledWith(
+          {
+            workspaceId: expect.any(String),
+            scanId: expect.any(String),
+            location: { providerId: 'file', uri: sourceUri },
+            expandRoot: false,
+          },
+          expect.any(AbortSignal),
+        ),
+      );
+      expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'addTransientTab',
+          paneId: treemapPaneId,
+          location: { providerId: 'file', uri: sourceUri },
+        }),
+        undefined,
+      );
+      await vi.waitFor(() =>
+        expect(
+          root.querySelector(`[data-pane-id="${treemapPaneId}"] .fm-disk-usage-body`),
+        ).not.toBeNull(),
+      );
+      await vi.waitFor(() =>
+        expect(
+          root.querySelector(`[data-pane-id="${treemapPaneId}"]`)?.getAttribute('data-active'),
+        ).toBe('true'),
+      );
+      expect(root.querySelectorAll(`[data-pane-id="${treemapPaneId}"] [role="tab"]`)).toHaveLength(
+        2,
+      );
+      expect(root.querySelectorAll(`[data-pane-id="${sourcePaneId}"] [role="tab"]`)).toHaveLength(
+        1,
+      );
+      expect(
+        directoryRowNamed(root.querySelector(`[data-pane-id="${sourcePaneId}"]`), childName),
+      ).toBeDefined();
+      const treemapTab = root.querySelector(
+        `[data-pane-id="${treemapPaneId}"] [role="tab"][aria-selected="true"]`,
+      );
+
+      root
+        .querySelector(`[data-pane-id="${treemapPaneId}"]`)
+        ?.querySelector<HTMLButtonElement>(`.fm-disk-usage-item-open[aria-label$=": ${childName}"]`)
+        ?.click();
+
+      await vi.waitFor(() =>
+        expect(navigatePane).toHaveBeenCalledWith(
+          expect.objectContaining({
+            paneId: sourcePaneId,
+            location: { providerId: 'file', uri: childUri },
+          }),
+          expect.any(AbortSignal),
+        ),
+      );
+      await vi.waitFor(async () =>
+        expect(
+          (await client.getWorkspace('mock-workspace-1')).panesById[sourcePaneId]?.tabsById[
+            sourcePaneId === 'left' ? 'left-tab' : 'right-tab'
+          ]?.location.uri,
+        ).toBe(childUri),
+      );
+      expect(
+        root.querySelector(`[data-pane-id="${treemapPaneId}"] [role="tab"][aria-selected="true"]`),
+      ).toBe(treemapTab);
+      expect(
+        root.querySelector(`[data-pane-id="${treemapPaneId}"] .fm-disk-usage-body`),
+      ).not.toBeNull();
+    },
+  );
+
+  it('selects a treemap file in the original pane without closing the treemap', async () => {
     const client = new MockFileManagerClient();
-    const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
-    const scanDiskUsage = vi.spyOn(client, 'scanDiskUsage');
     const navigatePane = vi.spyOn(client, 'navigatePane');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
+    root.querySelector<HTMLElement>('[data-pane-id="right"] .fm-pane')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+        'true',
+      ),
+    );
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
     );
-
     await vi.waitFor(() =>
-      expect(scanDiskUsage).toHaveBeenCalledWith(
-        {
-          workspaceId: expect.any(String),
-          scanId: expect.any(String),
-          location: { providerId: 'file', uri: 'mock:///' },
-          expandRoot: false,
-        },
-        expect.any(AbortSignal),
-      ),
+      expect(root.querySelector('[data-pane-id="left"] .fm-disk-usage-body')).not.toBeNull(),
     );
-    expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'addTransientTab' }),
-      undefined,
+    await vi.waitFor(async () =>
+      expect((await client.getWorkspace('mock-workspace-1')).activePaneId).toBe('left'),
     );
-    await vi.waitFor(() =>
-      expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull(),
-    );
-    expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(2);
-
-    activePane()
-      ?.querySelector<HTMLButtonElement>('.fm-disk-usage-item-open[aria-label$=": Documents"]')
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-pane-id="left"] .fm-disk-usage-item-activate[aria-label^="report.pdf,"]',
+      )
       ?.click();
 
     await vi.waitFor(() =>
@@ -5551,6 +6139,63 @@ describe('tabs per pane (task 0069)', () => {
         expect.any(AbortSignal),
       ),
     );
+    await vi.waitFor(() =>
+      expect(
+        directoryRowNamed(
+          root.querySelector('[data-pane-id="right"]'),
+          'report.pdf',
+        )?.classList.contains('fm-cursor-row'),
+      ).toBe(true),
+    );
+    expect(root.querySelector('[data-pane-id="left"] .fm-disk-usage-body')).not.toBeNull();
+    expect(
+      root.querySelector('[data-pane-id="left"] [role="tab"][aria-selected="true"]')?.textContent,
+    ).toContain('Disk usage');
+  });
+
+  it('does not scan or replace either directory when the transient-tab revision is stale', async () => {
+    const client = new MockFileManagerClient();
+    const realDispatch = client.dispatchWorkspaceCommand.bind(client);
+    const dispatch = vi.spyOn(client, 'dispatchWorkspaceCommand');
+    const scan = vi.spyOn(client, 'scanDiskUsage');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const getWorkspace = vi.spyOn(client, 'getWorkspace');
+    dispatch.mockImplementation((command, signal) =>
+      command.type === 'addTransientTab'
+        ? Promise.reject(
+            new ApiError(409, {
+              code: 'workspaceRevisionConflict',
+              message: 'stale workspace revision',
+            }),
+          )
+        : realDispatch(command, signal),
+    );
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'addTransientTab', paneId: 'right' }),
+        undefined,
+      ),
+    );
+    const tabCommandCall = dispatch.mock.calls.findIndex(
+      ([command]) => command.type === 'addTransientTab',
+    );
+    await expect(dispatch.mock.results[tabCommandCall]?.value).rejects.toMatchObject({
+      code: 'workspaceRevisionConflict',
+    });
+    await vi.waitFor(() =>
+      expect(getWorkspace).toHaveBeenCalledWith('mock-workspace-1', undefined),
+    );
+    expect(
+      dispatch.mock.calls.filter(([command]) => command.type === 'addTransientTab'),
+    ).toHaveLength(1);
+    expect(scan).not.toHaveBeenCalled();
+    expect(root.querySelectorAll('[data-pane-id="right"] [role="tab"]')).toHaveLength(1);
+    expect(root.querySelectorAll('[data-pane-id="left"] [role="tab"]')).toHaveLength(1);
   });
 
   it('cancels backend work when a disk-usage scan is stopped', async () => {
@@ -5593,6 +6238,11 @@ describe('tabs per pane (task 0069)', () => {
 
     await vi.waitFor(() => expect(cancelDiskUsage).toHaveBeenCalledWith(scanId));
     await vi.waitFor(() => expect(activePane()?.querySelectorAll('[role="tab"]')).toHaveLength(1));
+    expect(
+      activePane()?.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+    ).toContain('Documents');
+    expect(activePane()?.querySelector('.fm-disk-usage-view')).toBeNull();
+    expect(root.querySelectorAll('[data-pane-id="left"] [role="tab"]')).toHaveLength(1);
   });
 
   it('keeps partial disk-usage results visible when the scan later fails', async () => {

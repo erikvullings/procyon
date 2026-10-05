@@ -141,6 +141,7 @@ export const en = {
     remove: 'Remove',
     path: 'Path',
     currentPath: 'Current path',
+    showPathBeginning: 'Show beginning of path',
     newTab: 'New tab',
     emptyDirectory: 'This directory is empty.',
     confirmCloseTab: 'Close tab?',
@@ -379,6 +380,7 @@ export const en = {
     clipboardEmpty: 'Copy or move an item first',
     selectionReadOnly: 'Selected item is read-only',
     quickLookLocalFilesOnly: 'Quick Look is available only for local files',
+    svgoLocalFilesOnly: 'SVGO can edit only local SVG files',
     browserUnavailable: "{action} isn't available in the browser.",
   },
   operation: {

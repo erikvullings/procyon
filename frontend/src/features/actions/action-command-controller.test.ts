@@ -171,6 +171,44 @@ describe('SPA panel cursor activation', () => {
     });
     expect(openPluginPane).not.toHaveBeenCalled();
   });
+
+  it('does not open SVGO for a remote SVG even through direct action invocation', () => {
+    const svg = {
+      ...bundleEntry(),
+      id: 'remote-svg' as EntryId,
+      name: 'drawing.svg',
+      location: { providerId: 'sftp', uri: 'sftp://host/drawing.svg' },
+    };
+    const openPluginPane = vi.fn();
+    const toast = vi.fn();
+    const context = fakeContext({
+      getActiveDirectory: () => ({
+        paneId: 'pane-1',
+        location: { providerId: 'sftp', uri: 'sftp://host/' },
+      }),
+      getSelections: () => new Map([['pane-1', { selectedEntryIds: [], cursorEntryId: svg.id }]]),
+      getDirectories: () =>
+        new Map([['pane-1', { state: { type: 'loaded' }, entries: [svg], hasMore: false }]]),
+      getPlugins: () => [
+        {
+          id: 'procyon.svgo',
+          name: 'SVGO',
+          version: '1',
+          description: '',
+          enabled: true,
+          spaPanel: { actionId: 'procyon.svgo.open', extensions: ['svg'] },
+        },
+      ],
+      openPluginPane,
+      toast,
+    });
+    createActionCommandController(context).invokeActionById('procyon.svgo.open', undefined, {
+      paneId: 'pane-1',
+      cursorEntryId: svg.id,
+    });
+    expect(openPluginPane).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith({ html: 'SVGO can edit only local SVG files' });
+  });
 });
 
 describe('action-command-controller uninstallApplication wiring', () => {

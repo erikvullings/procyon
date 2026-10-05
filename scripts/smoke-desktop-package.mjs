@@ -9,6 +9,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -22,6 +23,7 @@ if (process.env.CI !== 'true') {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const bundleRoot = join(repoRoot, 'target', 'release', 'bundle');
+const nativeSpa = process.argv.includes('--native-spa');
 const evidenceRoot = resolve(
   process.env.PROCYON_QUALIFICATION_EVIDENCE_ROOT ??
     mkdtempSync(join(tmpdir(), 'procyon-package-evidence-')),
@@ -70,6 +72,18 @@ function assertEmbeddedCatalog(root) {
     if (!readFileSync(matches[0]).equals(readFileSync(join(expectedCatalogDirectory, name)))) {
       throw new Error(`installed semantic/${name} differs from the signed qualification input`);
     }
+  }
+}
+
+function assertBundledSvgo(root) {
+  const packages = filesBelow(root).filter(
+    (candidate) =>
+      basename(candidate) === 'plugin.toml' &&
+      basename(dirname(candidate)) === 'svgo' &&
+      basename(dirname(dirname(candidate))) === 'plugins',
+  );
+  if (packages.length !== 1 || !existsSync(join(dirname(packages[0]), 'dist', 'index.html'))) {
+    throw new Error('installed package must contain the bundled SVGO manifest and entrypoint');
   }
 }
 
@@ -137,10 +151,27 @@ async function assertLaunches(command, args, root, label) {
   }
 }
 
+function assertInstalledSpa(command, args, root) {
+  assertBundledSvgo(root);
+  const smokeScript = join(repoRoot, 'scripts', 'smoke-native-spa.mjs');
+  const executable = command === 'xvfb-run' ? args.at(-1) : command;
+  const smokeArgs = [smokeScript, executable, '--bundled'];
+  const result =
+    command === 'xvfb-run'
+      ? run('xvfb-run', ['--auto-servernum', process.execPath, ...smokeArgs], {
+          env: isolatedEnvironment(root),
+        })
+      : run(process.execPath, smokeArgs, { env: isolatedEnvironment(root) });
+  process.stdout.write(result.stdout);
+  if (filesBelow(root).some((candidate) => basename(candidate) === 'worker.pid')) {
+    throw new Error('first launch started an uninstalled semantic worker');
+  }
+}
+
 async function smokeMacos() {
   const dmg = requiredFile('.dmg');
   const mount = mkdtempSync(join(tmpdir(), 'procyon-dmg-'));
-  const installRoot = mkdtempSync(join(tmpdir(), 'procyon-install-'));
+  const installRoot = mkdtempSync(join(realpathSync(tmpdir()), 'procyon-install-'));
   try {
     run('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', mount, dmg]);
     const sourceApp = filesBelow(mount).find((candidate) => candidate.endsWith('.app'));
@@ -148,12 +179,9 @@ async function smokeMacos() {
     const installedApp = join(installRoot, basename(sourceApp));
     cpSync(sourceApp, installedApp, { recursive: true });
     assertEmbeddedCatalog(installedApp);
-    await assertLaunches(
-      join(installedApp, 'Contents', 'MacOS', 'Procyon'),
-      [],
-      installRoot,
-      'macos-installed',
-    );
+    const executable = join(installedApp, 'Contents', 'MacOS', 'Procyon');
+    if (nativeSpa) assertInstalledSpa(executable, [], installRoot);
+    else await assertLaunches(executable, [], installRoot, 'macos-installed');
   } finally {
     spawnSync('hdiutil', ['detach', mount], { encoding: 'utf8' });
     rmSync(mount, { recursive: true, force: true });
@@ -163,7 +191,7 @@ async function smokeMacos() {
 
 async function smokeWindows() {
   const msi = requiredFile('.msi');
-  requiredFile('-setup.exe');
+  if (!nativeSpa) requiredFile('-setup.exe');
   const installRoot = mkdtempSync(join(tmpdir(), 'procyon-install-'));
   try {
     run('msiexec.exe', [
@@ -179,7 +207,8 @@ async function smokeWindows() {
     );
     if (!executable) throw new Error('MSI did not install Procyon.exe');
     assertEmbeddedCatalog(installRoot);
-    await assertLaunches(executable, [], installRoot, 'windows-installed');
+    if (nativeSpa) assertInstalledSpa(executable, [], installRoot);
+    else await assertLaunches(executable, [], installRoot, 'windows-installed');
     run('msiexec.exe', ['/x', msi, '/qn', '/L*v', join(evidenceRoot, 'windows-msi-uninstall.log')]);
   } finally {
     rmSync(installRoot, { recursive: true, force: true });
@@ -188,7 +217,7 @@ async function smokeWindows() {
 
 async function smokeLinux() {
   const deb = requiredFile('.deb');
-  const appImage = requiredFile('.appimage');
+  const appImage = nativeSpa ? undefined : requiredFile('.appimage');
   const installRoot = mkdtempSync(join(tmpdir(), 'procyon-deb-install-'));
   const appImageRoot = mkdtempSync(join(tmpdir(), 'procyon-appimage-install-'));
   try {
@@ -206,23 +235,27 @@ async function smokeLinux() {
       .sort((left, right) => lstatSync(right).size - lstatSync(left).size)[0];
     if (!executable) throw new Error('DEB did not install a Procyon executable');
     assertEmbeddedCatalog(installRoot);
-    await assertLaunches(
-      'xvfb-run',
-      ['--auto-servernum', executable],
-      installRoot,
-      'linux-deb-installed',
-    );
+    if (nativeSpa) assertInstalledSpa('xvfb-run', ['--auto-servernum', executable], installRoot);
+    else
+      await assertLaunches(
+        'xvfb-run',
+        ['--auto-servernum', executable],
+        installRoot,
+        'linux-deb-installed',
+      );
 
-    run(appImage, ['--appimage-extract'], { cwd: appImageRoot });
-    const appRun = join(appImageRoot, 'squashfs-root', 'AppRun');
-    if (!existsSync(appRun)) throw new Error('AppImage did not extract AppRun');
-    assertEmbeddedCatalog(join(appImageRoot, 'squashfs-root'));
-    await assertLaunches(
-      'xvfb-run',
-      ['--auto-servernum', appRun],
-      appImageRoot,
-      'linux-appimage-installed',
-    );
+    if (appImage) {
+      run(appImage, ['--appimage-extract'], { cwd: appImageRoot });
+      const appRun = join(appImageRoot, 'squashfs-root', 'AppRun');
+      if (!existsSync(appRun)) throw new Error('AppImage did not extract AppRun');
+      assertEmbeddedCatalog(join(appImageRoot, 'squashfs-root'));
+      await assertLaunches(
+        'xvfb-run',
+        ['--auto-servernum', appRun],
+        appImageRoot,
+        'linux-appimage-installed',
+      );
+    }
   } finally {
     rmSync(installRoot, { recursive: true, force: true });
     rmSync(appImageRoot, { recursive: true, force: true });

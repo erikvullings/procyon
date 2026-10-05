@@ -10,6 +10,12 @@ use crate::{AppState, plugin_spa};
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+pub(crate) fn stage(message: &str) {
+    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+        eprintln!("native-spa-stage: {message}");
+    }
+}
+
 pub(crate) fn start_once<R: Runtime>(app: AppHandle<R>) {
     let Some(file) = std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE") else {
         return;
@@ -17,9 +23,10 @@ pub(crate) fn start_once<R: Runtime>(app: AppHandle<R>) {
     if STARTED.swap(true, Ordering::SeqCst) {
         return;
     }
+    stage("trusted-page-loaded");
     tauri::async_runtime::spawn(async move {
         if let Err(error) = open(&app, Path::new(&file)).await {
-            tracing::error!(%error, "native SPA smoke failed to open the plugin panel");
+            stage(&format!("child-open-failed: {error}"));
         }
     });
 }
@@ -35,7 +42,7 @@ async fn open<R: Runtime>(app: &AppHandle<R>, file: &Path) -> Result<(), String>
     let location = Location::from_native_path(file)
         .map_err(|error| error.to_string())?
         .into();
-    plugin_spa::open_plugin_panel(
+    let label = plugin_spa::open_plugin_panel(
         app.clone(),
         source,
         app.state::<AppState>(),
@@ -54,5 +61,38 @@ async fn open<R: Runtime>(app: &AppHandle<R>, file: &Path) -> Result<(), String>
     )
     .await
     .map_err(|error| error.to_string())?;
-    Ok(())
+    stage("child-created");
+    let service = &app.state::<AppState>().service;
+    let registry = app.state::<std::sync::Arc<plugin_spa::PanelRegistry>>();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        let saved = std::fs::read_to_string(file)
+            .is_ok_and(|svg| svg.contains("data-native-spa-smoke=\"acl-denied-and-saved\""));
+        let settings_saved = service
+            .plugin_panel_settings("procyon.svgo")
+            .is_some_and(|settings| settings["precision"] == 4);
+        if saved && settings_saved && registry.heartbeat_responded(&label) {
+            plugin_spa::flush_plugin_panels(app, "procyon.svgo").await;
+            service
+                .set_plugin_enabled("procyon.svgo".to_owned(), false)
+                .map_err(|error| error.to_string())?;
+            plugin_spa::close_plugin_panels(app, "procyon.svgo");
+            if !registry.labels_for_plugin("procyon.svgo").is_empty() {
+                return Err("disabled panel retained an origin slot".to_owned());
+            }
+            if service
+                .plugin_panel_settings("procyon.svgo")
+                .is_none_or(|settings| settings["precision"] != 4)
+            {
+                return Err("host-driven teardown lost persisted settings".to_owned());
+            }
+            stage("heartbeat-and-disable-teardown-succeeded");
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    Err(
+        "native SPA Save, settings persistence, or heartbeat did not complete in 30 seconds"
+            .to_owned(),
+    )
 }

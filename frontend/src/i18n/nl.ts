@@ -125,6 +125,7 @@ export const nl = {
     remove: 'Verwijderen',
     path: 'Pad',
     currentPath: 'Huidig pad',
+    showPathBeginning: 'Begin van pad tonen',
     newTab: 'Nieuw tabblad',
     emptyDirectory: 'Deze map is leeg.',
     confirmCloseTab: 'Tabblad sluiten?',
@@ -365,6 +366,7 @@ export const nl = {
     clipboardEmpty: 'Kopieer of verplaats eerst een item',
     selectionReadOnly: 'Het geselecteerde item is alleen-lezen',
     quickLookLocalFilesOnly: 'Quick Look is alleen beschikbaar voor lokale bestanden',
+    svgoLocalFilesOnly: 'SVGO kan alleen lokale SVG-bestanden bewerken',
     browserUnavailable: '{action} is niet beschikbaar in de browser.',
   },
   operation: {

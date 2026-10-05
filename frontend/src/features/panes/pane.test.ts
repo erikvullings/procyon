@@ -1143,6 +1143,142 @@ describe('Pane breadcrumb editing', () => {
     expect(root.querySelectorAll('.fm-breadcrumb-segment')).toHaveLength(3);
   });
 
+  describe('Pane breadcrumb overflow', () => {
+    let paneWidth = 140;
+    const resizeCallbacks = new Map<Element, () => void>();
+
+    beforeEach(() => {
+      paneWidth = 140;
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          private readonly notify: () => void;
+          private target: Element | undefined;
+          constructor(callback: ResizeObserverCallback) {
+            this.notify = () => callback([], this);
+          }
+          observe(target: Element) {
+            this.target = target;
+            resizeCallbacks.set(target, this.notify);
+          }
+          unobserve(target: Element) {
+            resizeCallbacks.delete(target);
+          }
+          disconnect() {
+            if (this.target !== undefined) resizeCallbacks.delete(this.target);
+          }
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        return this.classList.contains('fm-breadcrumb-segments') ? paneWidth : 0;
+      });
+      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (!this.classList.contains('fm-breadcrumb-segments')) return 0;
+        return [...this.querySelectorAll('.fm-breadcrumb-segment')].reduce(
+          (width, segment) => width + (segment.textContent?.length ?? 0) * 8 + 24,
+          0,
+        );
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+      resizeCallbacks.clear();
+    });
+
+    function expectEndVisible(): void {
+      const trail = root.querySelector<HTMLElement>('.fm-breadcrumb-segments');
+      if (trail === null) throw new Error('breadcrumb trail missing');
+      expect(trail.scrollLeft).toBe(Math.max(0, trail.scrollWidth - trail.clientWidth));
+      expect(trail.scrollWidth - trail.scrollLeft).toBeLessThanOrEqual(trail.clientWidth);
+    }
+
+    it('anchors the current segment after path changes and pane resizes, exposing clipped ancestors', () => {
+      const onNavigate = vi.fn();
+      const initial = attrs({ path: '/home/erik/Documents/Projects', onNavigate });
+      const rerender = mountUpdating(initial);
+      m.redraw.sync();
+      const overflow = root.querySelector<HTMLButtonElement>('.fm-breadcrumb-overflow');
+      expect(overflow?.hidden).toBe(false);
+      expectEndVisible();
+
+      overflow?.click();
+      m.redraw.sync();
+      expect(root.querySelector<HTMLElement>('.fm-breadcrumb-segments')?.scrollLeft).toBe(0);
+      expect(overflow?.hidden).toBe(true);
+      root.querySelector<HTMLButtonElement>('.fm-breadcrumb-segment')?.click();
+      expect(onNavigate).toHaveBeenCalledWith('/');
+
+      rerender({ ...initial, path: '/home/erik/Documents/Projects/Final' });
+      m.redraw.sync();
+      expectEndVisible();
+      expect(overflow?.hidden).toBe(false);
+
+      paneWidth = 500;
+      const trail = root.querySelector('.fm-breadcrumb-segments');
+      if (trail === null) throw new Error('breadcrumb trail missing');
+      expect(resizeCallbacks.has(trail)).toBe(true);
+      resizeCallbacks.get(trail)?.();
+      m.redraw.sync();
+      expectEndVisible();
+      expect(overflow?.hidden).toBe(true);
+
+      paneWidth = 110;
+      resizeCallbacks.get(trail)?.();
+      m.redraw.sync();
+      expectEndVisible();
+      expect(overflow?.hidden).toBe(false);
+
+      rerender({ ...initial, path: '/' });
+      m.redraw.sync();
+      expectEndVisible();
+      expect(overflow?.hidden).toBe(true);
+    });
+
+    it.each([
+      { path: '/', locationUri: undefined, last: '/' },
+      { path: 'C:\\Users\\Erik\\Projects', locationUri: undefined, last: 'Projects' },
+      { path: '\\\\server\\share\\Users\\Erik', locationUri: undefined, last: 'Erik' },
+      {
+        path: '/home/erik/Projects',
+        locationUri: 'sftp://11111111-1111-4111-8111-111111111111/home/erik/Projects',
+        last: 'Projects',
+      },
+      {
+        path: 'search://local/abc-123',
+        locationUri: 'search://local/abc-123',
+        last: 'file: long-query-for-a-narrow-pane',
+      },
+    ])('preserves the final $last segment of $path', ({ path, locationUri, last }) => {
+      mount(
+        attrs({
+          path,
+          ...(locationUri === undefined ? {} : { locationUri }),
+          ...(path.startsWith('search://')
+            ? {
+                searchPresentation: {
+                  kind: 'filename',
+                  term: 'long-query-for-a-narrow-pane',
+                  executionMode: 'liveRecursive',
+                },
+              }
+            : {}),
+        }),
+      );
+      m.redraw.sync();
+      expect(root.querySelector('.fm-breadcrumb-segment:last-child')?.textContent).toBe(last);
+      expectEndVisible();
+      expect(root.querySelector<HTMLButtonElement>('.fm-breadcrumb-overflow')?.hidden).toBe(
+        path === '/',
+      );
+    });
+  });
+
   it('enters edit mode with Ctrl+L and submits paths containing spaces', async () => {
     const onNavigate = vi.fn();
     mount(attrs({ onNavigate }));

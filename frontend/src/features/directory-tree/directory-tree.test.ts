@@ -84,6 +84,40 @@ describe('DirectoryTree', () => {
     expect(root.querySelector('.fm-tree-expand-toggle')).toBeNull();
   });
 
+  it('keeps expansion controls and the provider root out of drag sources', () => {
+    const onDragStart = vi.fn();
+    const onDragEnd = vi.fn();
+    mount({
+      root: TREE_ROOT,
+      state: withChildren(createTreeChildrenState(), 'file:///', [
+        directoryEntry('file:///alpha', 'alpha'),
+      ]),
+      onToggleExpand: vi.fn(),
+      onActivate: vi.fn(),
+      onDragStart,
+      onDragEnd,
+      onDragOver: () => true,
+      viewportHeight: 200,
+    });
+    const rows = root.querySelectorAll<HTMLElement>('.fm-tree-row');
+    expect(rows[0]?.draggable).toBe(false);
+    expect(rows[1]?.draggable).toBe(true);
+    const toggle = rows[1]?.querySelector<HTMLButtonElement>('.fm-tree-expand-toggle');
+    const fromToggle = new Event('dragstart', { bubbles: true, cancelable: true });
+    toggle?.dispatchEvent(fromToggle);
+    expect(fromToggle.defaultPrevented).toBe(true);
+    expect(onDragStart).not.toHaveBeenCalled();
+    rows[1]?.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
+    expect(onDragStart).toHaveBeenCalledWith(location('file:///alpha'), expect.any(Event));
+    rows[0]?.dispatchEvent(new Event('dragover', { bubbles: true, cancelable: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-tree-row')?.classList.contains('fm-drop-target')).toBe(true);
+    rows[1]?.dispatchEvent(new Event('dragend', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-tree-row')?.classList.contains('fm-drop-target')).toBe(false);
+    expect(onDragEnd).toHaveBeenCalledOnce();
+  });
+
   it('shows cached children once expanded, indented one level deeper', () => {
     const state = withChildren(createTreeChildrenState(), 'file:///', [
       directoryEntry('file:///alpha', 'alpha'),

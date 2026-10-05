@@ -142,3 +142,86 @@ second plugin system.
   process crashes, runtime shutdown, provider deletion/upload races, and ambiguous commits
   remain. Atomic cross-process revision checks, immediate child-WebView crash cleanup, and
   native platform smoke/review gates are still outstanding; the task remains open.
+- 2026-10-04 Copilot: PR #87's native SPA CI smoke timed out on all three hosts because its
+  unbundled release build retained Tauri's Vite `devUrl` without `custom-protocol`. The smoke
+  feature now enables embedded release assets; a no-Vite macOS release run passed twice through
+  real child UI, updater ACL denial, and revision-checked Save. Stage diagnostics and daily log
+  capture replace the opaque timeout. Windows/Linux release smoke results and the other release
+  gates remain pending; the task stays open.
+- 2026-10-04 Copilot: Extended the feature-gated native smoke through a real installed package.
+  A smoke-identity DMG was mounted, copied to a canonical macOS temporary path, and passed
+  bundled SVGO asset discovery, child UI, updater ACL denial, and revision-checked Save without
+  using repository plugins. Canonicalizing the install path matters because Tauri rejects the
+  `/var` symlink ancestor on macOS. CI is configured to perform the same check with MSI and DEB
+  packages; those platforms, the normal package's cursor/shortcut path, and the remaining
+  security gates still require qualification. The task remains open.
+- 2026-10-04 Copilot: Fixed the SVGO source optimizer's `xml:space="preserve"` handling so
+  edge-only whitespace can be trimmed while internal whitespace and multi-tspan text remain
+  protected, including inherited XML-space and namespaced tspan attributes. Full-pipeline
+  regression tests cover these cases. This source-only fix does not update the checked-in
+  `plugins/svgo/dist/` bundle; rebuild and copy it before shipping the panel change.
+- 2026-10-04 Copilot: A loaded Ubuntu CI runner failed a trivial QuickJS action because the
+  100 ms default script timeout also counted cold engine/context and trusted host setup. Keep
+  the 100 ms execution deadline, but allow at most one second for setup before starting it;
+  an interrupt deadline and post-call checks bound both phases. Deterministic delayed-setup
+  regression tests cover actions, invocation, stalled setup, execution timeout, and cancellation.
+- 2026-10-04 Copilot: For the 0.4.0 release gate, SVGO is restricted to local SVG locations
+  at trusted panel open and every bridge request; remote providers remain available to the
+  generic editor. SVGO Saves use a process mutex plus an app-cache advisory lock keyed by
+  canonical local path, and recheck revision under that lock, including across independent
+  Procyon processes and symlinked directory aliases. Stable cache lock files are intentionally
+  retained so an unlink/recreate cannot split the lock. The user explicitly accepted the
+  residual race against external writers that ignore the advisory lock for 0.4.0; this is
+  **not atomic CAS**. This release-gate PR does not close task 0226: immediate crash cleanup,
+  remaining temporary-file risks, native smoke/review and other acceptance criteria remain.
+- 2026-10-04 Copilot: Follow-up review identified a gap: the original lock protected only
+  SVGO bridge saves, so the generic editor in another Procyon process could still bypass it.
+  The advisory cache lock and per-target process mutex now wrap the common local whole-file editor
+  save path through its revision check and commit, covering generic-editor/SPA aliases
+  without changing remote provider saves. The user-approved uncooperative external-writer
+  race remains; this is still not atomic CAS. Rebasing onto main includes PRs #91 and #92.
+- 2026-10-04 Copilot: The desktop host now probes loaded plugin children through an
+  authenticated challenge on reconciliation, with a retry and extended hidden-tab grace
+  period before closing an unresponsive WebView and releasing its slot. Host-driven disable,
+  reload and parent-window close request a bounded settings flush before teardown; the
+  native smoke harness now checks heartbeat and settings across disablement. Tauri still has
+  no immediate renderer-crash event, abrupt process loss cannot flush in-memory settings,
+  and an unowned startup sweep of `.fm-edit-*.tmp` could delete another process's active
+  write. See the threat model for remaining native verification and release gates.
+- 2026-10-04 Copilot: For 0.4.0, the user accepts rare orphan `.fm-edit-*.tmp` files after
+  a whole-app crash. Local Save stages a sibling copy, so the original SVG stays intact
+  until replacement; unsaved edits must be redone and an orphan is residual housekeeping,
+  not a recoverable draft. Ordinary failures and dropped futures still attempt cleanup.
+  No startup age sweep or durable ownership journal is required for this release; deleting
+  an unowned temporary file could disrupt another active writer.
+- 2026-10-04 Copilot: For 0.4.0, the user also accepts losing optimizer preferences not yet
+  acknowledged by the host if the whole app crashes. No synchronous crash-durable settings
+  write is required. The bounded final settings flush on normal tab close, plugin disable,
+  trusted-app reload and parent-window close remains required; see the threat model.
+- 2026-10-04 Copilot: Fixed SVGO Cmd+W / Ctrl+W while focus is in its child WebView.
+  `plugin-sources/svgo/src/ui.ts` sends a close request through the existing
+  authenticated bridge in `apps/fm-desktop/src-tauri/src/plugin_spa.rs`; the bridge
+  delivers only that session's host-allocated label to its owning trusted WebView.
+  `frontend/src/features/plugins/plugin-panel-host.ts` accepts the event only for
+  the active matching child, and `frontend/src/app/app-shell.ts` uses the normal
+  tab controller so close requests retain tab state, settings flush and existing
+  unsaved-work behavior. Child, bridge, and parent regressions cover the separate
+  event seams, including spoofed tokens/fields and hidden or stale labels. Native
+  macOS shortcut confirmation remains outstanding: the feature-gated smoke opens
+  a child outside the tab controller and cannot check tab closure. Task stays open.
+- 2026-10-05: Rebased the child-close fix onto main after #93, #95, #97, #99
+  and #103. The close request coexists with #97's heartbeat and bounded
+  host-driven teardown, and retains #93's local Save lock. #103 now regenerates
+  SVGO assets from source during packaging, so the generated dist changes were
+  removed from this PR. Focused child, bridge, and trusted-tab tests pass;
+  installed native focus/shortcut closure still needs manual confirmation.
+- 2026-10-04 Copilot: A native child WebView composited above the trusted HTML context menu
+  when a menu from the opposite pane crossed the divider. The initial fix hid the whole
+  child WebView on intersection, obscuring all SVGO content until dismissal.
+- 2026-10-05: Keep the active child visible and constrain the main menu and Open With
+  submenu to the file pane instead. Menu clicks outside the menu reach the underlying
+  row; reentrant right-clicks update the selected file without exposing the trusted
+  WebView's Reload/Inspect fallback menu. Normal viewport placement without a child
+  remains unchanged. Focused component and shell tests cover placement, second
+  right-click, visibility, and tab switching; native menu hit-testing still needs
+  macOS/Windows/Linux smoke verification. This task remains open.

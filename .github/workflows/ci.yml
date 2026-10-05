@@ -59,13 +59,17 @@ jobs:
               - '**/*.rs'
               - '**/Cargo.toml'
               - 'Cargo.lock'
-              - 'frontend/package.json'
+              - 'frontend/**'
+              - 'plugins/**'
+              - 'plugin-sources/svgo/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'rust-toolchain.toml'
               - 'scripts/build-tauri.mjs'
+              - 'scripts/build-svgo-plugin.mjs'
               - 'scripts/smoke-desktop-package.mjs'
+              - 'scripts/smoke-native-spa.mjs'
 
   rust:
     name: Rust (${{ matrix.os }})
@@ -157,7 +161,7 @@ jobs:
   native-spa-smoke:
     name: Native SPA (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.desktop == 'true'
+    if: github.event_name == 'push' || needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -181,6 +185,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build bundled SVGO from source
+        run: node scripts/build-svgo-plugin.mjs
       - name: Build native smoke app
         run: |
           pnpm exec cross-env VITE_RUNTIME=tauri pnpm run build:frontend
@@ -191,6 +197,10 @@ jobs:
       - name: Exercise child WebView (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: xvfb-run --auto-servernum node scripts/smoke-native-spa.mjs target/release/fm-desktop
+      - name: Build native SPA installer
+        run: node scripts/build-tauri.mjs --features native-spa-smoke --config tauri.native-spa-smoke.conf.json --bundles ${{ matrix.os == 'macos-latest' && 'dmg' || matrix.os == 'windows-latest' && 'msi' || 'deb' }}
+      - name: Exercise installed native SPA
+        run: node scripts/smoke-desktop-package.mjs --native-spa
 
   audit:
     name: Dependency audit

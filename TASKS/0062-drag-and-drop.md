@@ -116,3 +116,9 @@ from Finder/Explorer) and §33 step 10.
   appear in a compact, dismissible overlay instead of adding an undismissable row below the
   workspace. Escape cancels an in-app pointer drag before native handoff; after handoff the OS
   owns the native drag session.
+- 2026-10-04 Copilot: Wired the directory-tree sidebar into the existing in-app drop validation,
+  operation controller, platform modifier mapping, and desktop pointer target registry. Tree
+  folders can move/copy to other tree folders, table directories and tabs; table selections can
+  drop onto tree folders. Read-only/unavailable targets and recursive drops are rejected before
+  acceptance. Pointer cancellation clears the pending in-app selection. No change to native
+  Finder/Explorer verification status.

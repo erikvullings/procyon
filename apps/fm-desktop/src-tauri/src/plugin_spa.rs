@@ -1,18 +1,21 @@
 //! Isolated, package-only desktop WebViews for enabled plugin SPA panels.
 
 use std::{
+    collections::HashSet,
     io::Read,
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use fm_application::FileManagerService;
+use fm_domain::{Location, ProviderId};
 use fm_transport_dto::{LoadEditableFileRequestDto, LocationDto, SaveEditableFileRequestDto};
 use serde::{Deserialize, Serialize};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, Rect, Runtime, State, Url,
-    WebviewBuilder, WebviewUrl, Window,
+    Webview, WebviewBuilder, WebviewUrl, Window,
     http::{Method, Response, StatusCode},
     webview::{NewWindowResponse, PageLoadEvent},
 };
@@ -27,8 +30,70 @@ const PANEL_SLOTS: usize = 16;
 const MAX_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_BRIDGE_BYTES: usize = 1024 * 1024;
 const BRIDGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const VISIBLE_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(20);
+const HIDDEN_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(120);
 const SVGO_PLUGIN_ID: &str = "procyon.svgo";
+
+fn require_local_svgo(plugin_id: &str, location: &LocationDto) -> Result<(), PanelError> {
+    if plugin_id != SVGO_PLUGIN_ID {
+        return Ok(());
+    }
+    if location.provider_id != "local"
+        || Location::try_new(ProviderId::new("local"), location.uri.clone())
+            .and_then(|location| location.to_native_path())
+            .is_err()
+    {
+        return Err(PanelError::Denied);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+async fn svgo_file_lock(location: &LocationDto) -> Result<std::fs::File, PanelError> {
+    use sha2::{Digest, Sha256};
+    let path = Location::try_new(ProviderId::new("local"), location.uri.clone())
+        .and_then(|location| location.to_native_path())
+        .map_err(|_| PanelError::Denied)?;
+    let parent = path.parent().ok_or(PanelError::Invalid)?.to_path_buf();
+    let name = path.file_name().ok_or(PanelError::Invalid)?.to_os_string();
+    tokio::task::spawn_blocking(move || {
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        let target = canonical_parent
+            .join(name)
+            .canonicalize()
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        let key = Sha256::digest(target.to_string_lossy().as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let cache = dirs::cache_dir()
+            .ok_or(PanelError::Unavailable)?
+            .join("procyon")
+            .join("editor-locks");
+        std::fs::create_dir_all(&cache).map_err(|error| PanelError::File(error.to_string()))?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(cache.join(format!("{key}.lock")))
+            .map_err(|error| PanelError::File(error.to_string()))?;
+        fs2::FileExt::lock_exclusive(&file).map_err(|error| PanelError::File(error.to_string()))?;
+        Ok(file)
+    })
+    .await
+    .map_err(|error| PanelError::File(error.to_string()))?
+}
+
 fn panel_csp(origin: &str) -> String {
+    #[cfg(feature = "native-spa-smoke")]
+    if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some() {
+        return format!(
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; manifest-src 'self'; connect-src {origin}/bridge {origin}/smoke; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'self'; base-uri 'none'"
+        );
+    }
     format!(
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; manifest-src 'self'; connect-src {origin}/bridge; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'self'; base-uri 'none'"
     )
@@ -82,9 +147,77 @@ struct PanelSession {
     token: String,
     revision: AsyncMutex<String>,
     save_lock: Arc<AsyncMutex<()>>,
+    close_lock: AsyncMutex<()>,
     settings_sequence: Mutex<u64>,
     flush_sender: Mutex<Option<oneshot::Sender<bool>>>,
+    heartbeat: Mutex<Option<HeartbeatProbe>>,
+    heartbeat_responded: AtomicBool,
+    created: Instant,
+    loaded: AtomicBool,
+    visible: AtomicBool,
     shutdown: CancellationToken,
+    #[cfg(target_os = "linux")]
+    _context_directory: tempfile::TempDir,
+}
+
+struct HeartbeatProbe {
+    challenge: String,
+    sent: Instant,
+    retried: bool,
+}
+
+impl PanelSession {
+    fn next_heartbeat(&self, now: Instant) -> Result<Option<String>, ()> {
+        if !self.loaded.load(Ordering::SeqCst) {
+            return if now.duration_since(self.created) >= VISIBLE_HEARTBEAT_TIMEOUT {
+                Err(())
+            } else {
+                Ok(None)
+            };
+        }
+        let mut pending = self
+            .heartbeat
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut retried = false;
+        if let Some(probe) = pending.as_ref() {
+            let timeout = if self.visible.load(Ordering::SeqCst) {
+                VISIBLE_HEARTBEAT_TIMEOUT
+            } else {
+                HIDDEN_HEARTBEAT_TIMEOUT
+            };
+            if now.duration_since(probe.sent) < timeout {
+                return Ok(None);
+            }
+            if probe.retried {
+                return Err(());
+            }
+            retried = true;
+        }
+        let challenge = Uuid::new_v4().simple().to_string();
+        *pending = Some(HeartbeatProbe {
+            challenge: challenge.clone(),
+            sent: now,
+            retried,
+        });
+        Ok(Some(challenge))
+    }
+
+    fn acknowledge_heartbeat(&self, challenge: &str) -> Result<(), PanelError> {
+        let mut pending = self
+            .heartbeat
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if pending
+            .as_ref()
+            .is_none_or(|probe| probe.challenge != challenge)
+        {
+            return Err(PanelError::Invalid);
+        }
+        *pending = None;
+        self.heartbeat_responded.store(true, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -114,15 +247,25 @@ enum Slot {
 }
 
 #[derive(Default)]
-pub(crate) struct PanelRegistry(Mutex<Vec<Option<Slot>>>);
+pub(crate) struct PanelRegistry {
+    slots: Mutex<Vec<Option<Slot>>>,
+    closing_windows: Mutex<HashSet<String>>,
+}
 
 impl PanelRegistry {
+    #[cfg(feature = "native-spa-smoke")]
+    pub(crate) fn heartbeat_responded(&self, label: &str) -> bool {
+        self.sessions().into_iter().any(|session| {
+            session.label == label && session.heartbeat_responded.load(Ordering::SeqCst)
+        })
+    }
+
     fn reserve(
         &self,
         label: String,
         location: &LocationDto,
     ) -> Result<(usize, Arc<AsyncMutex<()>>), PanelError> {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         if slots.len() < PANEL_SLOTS {
             slots.resize_with(PANEL_SLOTS, || None);
         }
@@ -154,7 +297,7 @@ impl PanelRegistry {
     }
 
     fn activate(&self, index: usize, session: Arc<PanelSession>) -> Result<(), PanelError> {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         let valid = matches!(
             slots.get(index),
             Some(Some(Slot::Reserved { label, location, save_lock }))
@@ -170,7 +313,7 @@ impl PanelRegistry {
     }
 
     fn session_for(&self, index: usize, label: &str) -> Option<Arc<PanelSession>> {
-        let slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         match slots.get(index)? {
             Some(Slot::Active(session))
                 if session.label == label && !session.shutdown.is_cancelled() =>
@@ -182,7 +325,7 @@ impl PanelRegistry {
     }
 
     pub(crate) fn release(&self, label: &str) {
-        let mut slots = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut slots = self.slots.lock().unwrap_or_else(|error| error.into_inner());
         for slot in slots.iter_mut() {
             let matches = match slot {
                 Some(Slot::Reserved {
@@ -203,7 +346,7 @@ impl PanelRegistry {
     }
 
     pub(crate) fn labels_for_plugin(&self, plugin_id: &str) -> Vec<String> {
-        self.0
+        self.slots
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .iter()
@@ -231,7 +374,7 @@ impl PanelRegistry {
     }
 
     fn sessions(&self) -> Vec<Arc<PanelSession>> {
-        self.0
+        self.slots
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .iter()
@@ -240,6 +383,30 @@ impl PanelRegistry {
                 _ => None,
             })
             .collect()
+    }
+
+    pub(crate) fn begin_window_close(&self, owner: &str) -> bool {
+        if self.labels_for_window(owner).is_empty() {
+            return false;
+        }
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(owner.to_owned())
+    }
+
+    pub(crate) fn end_window_close(&self, owner: &str) {
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(owner);
+    }
+
+    pub(crate) fn window_close_pending(&self, owner: &str) -> bool {
+        self.closing_windows
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .contains(owner)
     }
 }
 
@@ -332,6 +499,17 @@ enum BridgeRequest {
         #[serde(rename = "loadToken")]
         load_token: String,
     },
+    Heartbeat {
+        version: u8,
+        challenge: String,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
+    ClosePanel {
+        version: u8,
+        #[serde(rename = "loadToken")]
+        load_token: String,
+    },
 }
 
 impl BridgeRequest {
@@ -346,6 +524,15 @@ impl BridgeRequest {
                 version,
                 load_token,
                 ..
+            }
+            | Self::Heartbeat {
+                version,
+                load_token,
+                ..
+            }
+            | Self::ClosePanel {
+                version,
+                load_token,
             } => (*version, load_token),
         }
     }
@@ -408,6 +595,11 @@ fn parse_bridge(bytes: &[u8], token: &str) -> Result<BridgeRequest, PanelError> 
             return Err(PanelError::Invalid);
         }
     }
+    if let BridgeRequest::Heartbeat { challenge, .. } = &message
+        && (challenge.len() != 32 || !challenge.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return Err(PanelError::Invalid);
+    }
     Ok(message)
 }
 
@@ -434,6 +626,24 @@ fn allows_navigation(url: &Url, origin: &str) -> bool {
             && url.username().is_empty()
             && url.password().is_none()
     })
+}
+
+fn panel_request_url(uri: &tauri::http::Uri, origin: &str, slot: usize) -> Option<Url> {
+    let url = Url::parse(&uri.to_string()).ok()?;
+    #[cfg(target_os = "windows")]
+    let url = if url.scheme() == scheme(slot)
+        && url.host_str() == Some("localhost")
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+    {
+        Url::parse(&format!("{origin}{}", uri.path_and_query()?.as_str())).ok()?
+    } else {
+        url
+    };
+    #[cfg(not(target_os = "windows"))]
+    let _ = slot;
+    allows_navigation(&url, origin).then_some(url)
 }
 
 fn safe_asset_path(path: &str) -> Option<PathBuf> {
@@ -530,6 +740,7 @@ fn checked_panel(
     service: &FileManagerService,
     session: &PanelSession,
 ) -> Result<fm_application::PluginPanel, PanelError> {
+    require_local_svgo(&session.plugin_id, &session.location)?;
     let panel = service
         .plugin_panel(&session.plugin_id, &session.action_id, &session.location)
         .map_err(|_| PanelError::Unavailable)?;
@@ -590,6 +801,7 @@ async fn save_svg(
     session: Arc<PanelSession>,
     svg: String,
 ) -> Result<(), PanelError> {
+    require_local_svgo(&session.plugin_id, &session.location)?;
     let panel = checked_panel(&service, &session)?;
     if !panel.can_write_selected {
         return Err(PanelError::Denied);
@@ -653,17 +865,25 @@ async fn bridge(
     session: Arc<PanelSession>,
     body: Vec<u8>,
     origin: String,
+    notify_close: impl FnOnce(&PanelSession) -> Result<(), PanelError>,
 ) -> Response<Vec<u8>> {
     let request = match parse_bridge(&body, &session.token) {
         Ok(request) => request,
         Err(error) => return bridge_result(Err(error), "save-result", "", None, &origin),
     };
     let (kind, sequence, result) = match request {
-        BridgeRequest::SaveSvg { svg, .. } => (
-            "save-result",
-            None,
-            save_svg(service, Arc::clone(&session), svg).await,
-        ),
+        BridgeRequest::SaveSvg { svg, .. } => {
+            #[cfg(feature = "native-spa-smoke")]
+            crate::native_spa_smoke::stage("bridge-save-received");
+            let result = save_svg(service, Arc::clone(&session), svg).await;
+            #[cfg(feature = "native-spa-smoke")]
+            crate::native_spa_smoke::stage(if result.is_ok() {
+                "bridge-save-succeeded"
+            } else {
+                "bridge-save-failed"
+            });
+            ("save-result", None, result)
+        }
         BridgeRequest::SettingsChange {
             settings,
             sequence,
@@ -682,6 +902,12 @@ async fn bridge(
             }
             ("settings-result", Some(sequence), result)
         }
+        BridgeRequest::Heartbeat { challenge, .. } => (
+            "heartbeat-result",
+            None,
+            session.acknowledge_heartbeat(&challenge),
+        ),
+        BridgeRequest::ClosePanel { .. } => ("close-result", None, notify_close(&session)),
     };
     bridge_result(result, kind, &session.token, sequence, &origin)
 }
@@ -740,7 +966,8 @@ fn bootstrap(token: &str, theme: PanelTheme, settings: Option<&SvgoSettings>) ->
                   }});
                   result = await response.json();
                 }} catch (_) {{
-                  result = {{ type: 'save-result', success: false, error: 'bridge unavailable', loadToken }};
+                  const type = message.type === 'close-panel' ? 'close-result' : 'save-result';
+                  result = {{ type, success: false, error: 'bridge unavailable', loadToken }};
                 }}
                 window.postMessage(result, '*');
               }}
@@ -789,11 +1016,56 @@ pub(crate) fn register_schemes<R: Runtime>(
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 }
-                let Some(url) = Url::parse(&request.uri().to_string()).ok().filter(|url| {
-                    allows_navigation(url, &origin)
-                        && url.query().is_none()
-                        && url.fragment().is_none()
-                }) else {
+                #[cfg(feature = "native-spa-smoke")]
+                if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
+                    && request.method() == Method::GET
+                    && request.uri().path() == "/smoke"
+                {
+                    let valid = (request.uri().to_string().len() <= 1024)
+                        .then(|| panel_request_url(request.uri(), &origin, index))
+                        .flatten()
+                        .and_then(|url| {
+                            let mut pairs = url.query_pairs();
+                            let token = pairs.next()?;
+                            let stage = pairs.next()?;
+                            let detail = pairs.next();
+                            if pairs.next().is_some()
+                                || token.0 != "token"
+                                || token.1 != session.token
+                                || stage.0 != "stage"
+                                || detail.as_ref().is_some_and(|(key, value)| {
+                                    key != "error"
+                                        || value.len() > 256
+                                        || stage.1 != "script-failed"
+                                })
+                                || !matches!(
+                                    stage.1.as_ref(),
+                                    "plugin-ui-ready"
+                                        | "acl-denied"
+                                        | "save-requested"
+                                        | "script-failed"
+                                )
+                            {
+                                return None;
+                            }
+                            Some(match detail {
+                                Some((_, detail)) => {
+                                    format!("script-failed: {}", detail.replace(['\r', '\n'], " "))
+                                }
+                                None => stage.1.into_owned(),
+                            })
+                        });
+                    responder.respond(if let Some(stage) = valid {
+                        crate::native_spa_smoke::stage(&stage);
+                        response(StatusCode::OK, Vec::new(), "text/plain", &origin)
+                    } else {
+                        error_response(PanelError::Denied, &origin)
+                    });
+                    return;
+                }
+                let Some(url) = panel_request_url(request.uri(), &origin, index)
+                    .filter(|url| url.query().is_none() && url.fragment().is_none())
+                else {
                     responder.respond(error_response(PanelError::Denied, &origin));
                     return;
                 };
@@ -811,7 +1083,24 @@ pub(crate) fn register_schemes<R: Runtime>(
                     }
                     let body = request.into_body();
                     tauri::async_runtime::spawn(async move {
-                        responder.respond(bridge(service, session, body, origin).await);
+                        responder.respond(bridge(service, session, body, origin, |session| {
+                            if session.shutdown.is_cancelled() {
+                                return Err(PanelError::Unavailable);
+                            }
+                            let webview = app
+                                .get_webview(&session.owner_window)
+                                .ok_or(PanelError::Unavailable)?;
+                            let label = serde_json::to_string(&session.label)
+                                .expect("panel label is serializable");
+                            webview
+                                .eval(format!(
+                                    "window.dispatchEvent(new CustomEvent('procyon:plugin-panel-close-requested', {{ detail: {{ label: {label} }} }}));"
+                                ))
+                                .map_err(|error| {
+                                    tracing::warn!(%error, "could not deliver plugin panel close request");
+                                    PanelError::Unavailable
+                                })
+                        }).await);
                     });
                 } else if request.method() == Method::GET {
                     let result = serve_asset(&service, &session, url.path(), &origin)
@@ -845,6 +1134,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         bounds,
         theme,
     } = request;
+    require_local_svgo(&plugin_id, &location)?;
     let panel = state
         .service
         .plugin_panel(&plugin_id, &action_id, &location)
@@ -900,6 +1190,12 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
     let (slot, save_lock) = registry.reserve(label.clone(), &location)?;
     let (origin, url) = slot_url(slot).inspect_err(|_| registry.release(&label))?;
     let token = Uuid::new_v4().simple().to_string();
+    #[cfg(target_os = "linux")]
+    let context_directory = tempfile::tempdir()
+        .map_err(|_| PanelError::Unavailable)
+        .inspect_err(|_| registry.release(&label))?;
+    #[cfg(target_os = "linux")]
+    let context_path = context_directory.path().to_path_buf();
     let session = Arc::new(PanelSession {
         label: label.clone(),
         owner_window: source.label().to_owned(),
@@ -911,17 +1207,30 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
         token: token.clone(),
         revision: AsyncMutex::new(loaded.revision),
         save_lock,
+        close_lock: AsyncMutex::new(()),
         settings_sequence: Mutex::new(0),
         flush_sender: Mutex::new(None),
+        heartbeat: Mutex::new(None),
+        heartbeat_responded: AtomicBool::new(false),
+        created: Instant::now(),
+        loaded: AtomicBool::new(false),
+        visible: AtomicBool::new(true),
         shutdown: CancellationToken::new(),
+        #[cfg(target_os = "linux")]
+        _context_directory: context_directory,
     });
     registry
-        .activate(slot, session)
+        .activate(slot, Arc::clone(&session))
         .inspect_err(|_| registry.release(&label))?;
     let load_script = deliver_load(&loaded.content, &location.uri, &token);
     let loaded_once = AtomicBool::new(false);
     let expected_url = url.clone();
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
+    #[cfg(target_os = "linux")]
+    let builder = builder.data_directory(context_path);
+    // Linux must give each incognito child a distinct Tauri context key: Wry replaces
+    // the context with an ephemeral one, which otherwise misses the shared schemes.
+    let builder = builder
         .incognito(true)
         .use_https_scheme(cfg!(target_os = "windows"))
         .initialization_script(bootstrap(&token, theme, settings.as_ref()))
@@ -946,7 +1255,11 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     tracing::warn!(%error, "could not close reloaded plugin panel");
                 }
             } else {
+                #[cfg(feature = "native-spa-smoke")]
+                crate::native_spa_smoke::stage("child-page-loaded");
                 if let Err(error) = window.eval(&load_script) {
+                    #[cfg(feature = "native-spa-smoke")]
+                    crate::native_spa_smoke::stage(&format!("child-load-failed: {error}"));
                     tracing::warn!(%error, "could not deliver selected SVG to plugin panel");
                     window
                         .app_handle()
@@ -956,11 +1269,17 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                         tracing::warn!(%error, "could not close failed plugin panel");
                     }
                 } else {
+                    session.loaded.store(true, Ordering::SeqCst);
                     #[cfg(feature = "native-spa-smoke")]
                     if std::env::var_os("PROCYON_NATIVE_SPA_SMOKE_FILE").is_some()
-                        && let Err(error) = window.eval(include_str!("native_spa_smoke.js"))
+                        && let Err(error) = window.eval(
+                            include_str!("native_spa_smoke.js")
+                                .replace("__PROCYON_SMOKE_TOKEN__", &token),
+                        )
                     {
-                        tracing::error!(%error, "native SPA smoke script injection failed");
+                        crate::native_spa_smoke::stage(&format!(
+                            "script-injection-failed: {error}"
+                        ));
                     }
                 }
             }
@@ -1007,7 +1326,15 @@ pub(crate) fn set_plugin_panel_visible<R: Runtime>(
     } else {
         webview.hide()
     }
-    .map_err(|_| PanelError::Unavailable)
+    .map_err(|_| PanelError::Unavailable)?;
+    if let Some(session) = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+    {
+        session.visible.store(visible, Ordering::SeqCst);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1040,6 +1367,82 @@ pub(crate) fn set_plugin_panel_theme<R: Runtime>(
         .map_err(|_| PanelError::Unavailable)
 }
 
+async fn flush_panel_settings<R: Runtime>(webview: &Webview<R>, session: &PanelSession) -> bool {
+    if session.plugin_id != SVGO_PLUGIN_ID || !session.loaded.load(Ordering::SeqCst) {
+        return true;
+    }
+    let (sender, receiver) = oneshot::channel();
+    {
+        let mut pending = session
+            .flush_sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if pending.is_some() {
+            return false;
+        }
+        *pending = Some(sender);
+    }
+    let event = serde_json::json!({
+        "type": "flush-settings",
+        "loadToken": &session.token,
+    });
+    let requested = webview
+        .eval(format!(
+            "window.postMessage({}, window.location.origin);",
+            event
+        ))
+        .is_ok();
+    let result = if requested {
+        matches!(
+            tokio::time::timeout(Duration::from_secs(2), receiver).await,
+            Ok(Ok(true))
+        )
+    } else {
+        false
+    };
+    session
+        .flush_sender
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take();
+    if !result {
+        tracing::warn!(label = %session.label, "could not flush SVGO settings before closing plugin panel");
+    }
+    result
+}
+
+async fn close_panel<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<(), PanelError> {
+    let registry = app.state::<Arc<PanelRegistry>>();
+    let session = registry
+        .sessions()
+        .into_iter()
+        .find(|session| session.label == label)
+        .ok_or(PanelError::Unavailable)?;
+    let _closing = session.close_lock.lock().await;
+    if session.shutdown.is_cancelled() {
+        return Err(PanelError::Unavailable);
+    }
+    let webview = match app.get_webview(label) {
+        Some(webview) => webview,
+        None => {
+            registry.release(label);
+            return Err(PanelError::Unavailable);
+        }
+    };
+    if let Err(error) = webview.hide() {
+        tracing::warn!(%error, "could not hide closing plugin panel");
+    }
+    let flush_result = flush_panel_settings(&webview, &session).await;
+    // A cancelled flush must never retain the slot or a pending Save.
+    registry.release(label);
+    webview.close().map_err(|_| PanelError::Unavailable)?;
+    if flush_result {
+        Ok(())
+    } else {
+        Err(PanelError::Unavailable)
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn close_plugin_panel<R: Runtime>(
     source: Window<R>,
@@ -1049,69 +1452,20 @@ pub(crate) async fn close_plugin_panel<R: Runtime>(
     if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
         return Err(PanelError::Denied);
     }
-    let session = registry
-        .sessions()
-        .into_iter()
-        .find(|session| session.label == label)
-        .ok_or(PanelError::Unavailable)?;
-    let webview = match source.get_webview(&label) {
-        Some(webview) => webview,
-        None => {
-            registry.release(&label);
-            return Err(PanelError::Unavailable);
-        }
-    };
-    if let Err(error) = webview.hide() {
-        tracing::warn!(%error, "could not hide closing plugin panel");
-    }
-    let flush_result = if session.plugin_id == SVGO_PLUGIN_ID {
-        let (sender, receiver) = oneshot::channel();
+    close_panel(source.app_handle(), &label).await
+}
+
+pub(crate) async fn flush_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
+    let registry = app.state::<Arc<PanelRegistry>>();
+    for label in registry.labels_for_plugin(plugin_id) {
+        if let Some(webview) = app.get_webview(&label)
+            && let Some(session) = registry.sessions().into_iter().find(|s| s.label == label)
         {
-            let mut pending = session
-                .flush_sender
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            if pending.is_some() {
-                return Err(PanelError::Unavailable);
+            let _closing = session.close_lock.lock().await;
+            if !session.shutdown.is_cancelled() {
+                flush_panel_settings(&webview, &session).await;
             }
-            *pending = Some(sender);
         }
-        let event = serde_json::json!({
-            "type": "flush-settings",
-            "loadToken": &session.token,
-        });
-        let requested = webview
-            .eval(format!(
-                "window.postMessage({}, window.location.origin);",
-                event
-            ))
-            .is_ok();
-        let result = if requested {
-            matches!(
-                tokio::time::timeout(std::time::Duration::from_secs(2), receiver).await,
-                Ok(Ok(true))
-            )
-        } else {
-            false
-        };
-        session
-            .flush_sender
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take();
-        if !result {
-            tracing::warn!("could not flush SVGO settings before closing plugin panel");
-        }
-        result
-    } else {
-        true
-    };
-    registry.release(&label);
-    webview.close().map_err(|_| PanelError::Unavailable)?;
-    if flush_result {
-        Ok(())
-    } else {
-        Err(PanelError::Unavailable)
     }
 }
 
@@ -1119,20 +1473,18 @@ pub(crate) fn close_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &st
     let registry = app.state::<Arc<PanelRegistry>>();
     for label in registry.labels_for_plugin(plugin_id) {
         registry.release(&label);
-        if let Some(webview) = app.get_webview(&label) {
-            let _ = webview.close();
+        if let Some(webview) = app.get_webview(&label)
+            && let Err(error) = webview.close()
+        {
+            tracing::warn!(%error, %label, "could not close disabled plugin panel");
         }
     }
 }
 
-pub(crate) fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, owner: &str) {
-    let registry = app.state::<Arc<PanelRegistry>>();
-    for label in registry.labels_for_window(owner) {
-        registry.release(&label);
-        if let Some(webview) = app.get_webview(&label)
-            && let Err(error) = webview.close()
-        {
-            tracing::warn!(%error, "could not close plugin panel after host reload");
+pub(crate) async fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, labels: Vec<String>) {
+    for label in labels {
+        if let Err(error) = close_panel(app, &label).await {
+            tracing::warn!(%error, %label, "could not cleanly close plugin panel for host window");
         }
     }
 }
@@ -1141,10 +1493,40 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
     let registry = app.state::<Arc<PanelRegistry>>();
     let service = &app.state::<AppState>().service;
     for session in registry.sessions() {
-        if checked_panel(service, &session).is_err() {
+        if session
+            .flush_sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_some()
+        {
+            continue;
+        }
+        let invalid = checked_panel(service, &session).is_err();
+        let challenge = if invalid {
+            Ok(None)
+        } else {
+            session.next_heartbeat(Instant::now())
+        };
+        let responsive = match challenge {
+            Ok(Some(challenge)) => app.get_webview(&session.label).is_some_and(|webview| {
+                let event = serde_json::json!({
+                    "type": "heartbeat",
+                    "challenge": challenge,
+                });
+                webview
+                    .eval(format!("window.procyonPlugin.postMessage({});", event))
+                    .is_ok()
+            }),
+            Ok(None) => app.get_webview(&session.label).is_some(),
+            Err(()) => false,
+        };
+        if invalid || !responsive {
+            tracing::warn!(label = %session.label, "plugin panel unavailable or renderer heartbeat timed out");
             registry.release(&session.label);
-            if let Some(webview) = app.get_webview(&session.label) {
-                let _ = webview.close();
+            if let Some(webview) = app.get_webview(&session.label)
+                && let Err(error) = webview.close()
+            {
+                tracing::warn!(%error, "could not close unresponsive plugin panel");
             }
         }
     }
@@ -1153,6 +1535,344 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn svgo_service(root: &Path) -> Arc<FileManagerService> {
+        let service = Arc::new(FileManagerService::new(
+            fm_transport_dto::RuntimeKindDto::Tauri,
+            root,
+            root.join("settings"),
+        ));
+        service
+            .set_plugin_enabled(SVGO_PLUGIN_ID.to_owned(), true)
+            .unwrap();
+        service
+    }
+
+    fn svgo_session(
+        service: &FileManagerService,
+        location: LocationDto,
+        revision: String,
+    ) -> Arc<PanelSession> {
+        let panel = service
+            .plugin_panel(SVGO_PLUGIN_ID, "procyon.svgo.open", &location)
+            .unwrap();
+        Arc::new(PanelSession {
+            label: "plugin-spa-test".into(),
+            owner_window: "main".into(),
+            plugin_id: SVGO_PLUGIN_ID.into(),
+            action_id: "procyon.svgo.open".into(),
+            directory: panel.directory,
+            entrypoint: panel.entrypoint,
+            location,
+            token: "test-token".into(),
+            revision: AsyncMutex::new(revision),
+            save_lock: Arc::new(AsyncMutex::new(())),
+            close_lock: AsyncMutex::new(()),
+            settings_sequence: Mutex::new(0),
+            flush_sender: Mutex::new(None),
+            heartbeat: Mutex::new(None),
+            heartbeat_responded: AtomicBool::new(false),
+            created: Instant::now(),
+            loaded: AtomicBool::new(true),
+            visible: AtomicBool::new(true),
+            shutdown: CancellationToken::new(),
+            #[cfg(target_os = "linux")]
+            _context_directory: tempfile::tempdir().unwrap(),
+        })
+    }
+
+    #[tokio::test]
+    async fn svgo_denies_remote_open_and_forged_bridge_save_but_local_save_works() {
+        let root = tempfile::tempdir().unwrap();
+        let service = svgo_service(root.path());
+        let path = root.path().join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        for (provider_id, uri) in [
+            ("sftp", "sftp://host/drawing.svg"),
+            ("ftp", "ftp://host/drawing.svg"),
+            ("webdav", "webdav://host/drawing.svg"),
+        ] {
+            assert!(matches!(
+                require_local_svgo(
+                    SVGO_PLUGIN_ID,
+                    &LocationDto {
+                        provider_id: provider_id.into(),
+                        uri: uri.into(),
+                    }
+                ),
+                Err(PanelError::Denied)
+            ));
+        }
+        let remote = LocationDto {
+            provider_id: "sftp".into(),
+            uri: "sftp://host/drawing.svg".into(),
+        };
+        assert!(matches!(
+            require_local_svgo(SVGO_PLUGIN_ID, &remote),
+            Err(PanelError::Denied)
+        ));
+        let mut forged = svgo_session(&service, location.clone(), "revision".into());
+        Arc::get_mut(&mut forged).unwrap().location = remote;
+        let result = bridge(
+            Arc::clone(&service),
+            forged,
+            br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"test-token"}"#.to_vec(),
+            panel_origin(0),
+            |_| Err(PanelError::Unavailable),
+        )
+        .await;
+        assert_eq!(result.status(), StatusCode::FORBIDDEN);
+        let mismatched = LocationDto {
+            provider_id: "local".into(),
+            uri: "sftp://host/drawing.svg".into(),
+        };
+        assert!(matches!(
+            require_local_svgo(SVGO_PLUGIN_ID, &mismatched),
+            Err(PanelError::Denied)
+        ));
+
+        assert!(require_local_svgo(SVGO_PLUGIN_ID, &location).is_ok());
+        let loaded = service
+            .load_editable_file(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        let result = bridge(
+            service,
+            session,
+            br#"{"version":1,"type":"save-svg","svg":"<svg id=\"saved\"/>","loadToken":"test-token"}"#.to_vec(),
+            panel_origin(0),
+            |_| Err(PanelError::Unavailable),
+        ).await;
+        assert_eq!(result.status(), StatusCode::OK);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "<svg id=\"saved\"/>"
+        );
+    }
+
+    #[test]
+    fn svgo_cross_process_worker() {
+        let Ok(root) = std::env::var("PROCYON_SVGO_LOCK_TEST_ROOT") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        let service = svgo_service(&root);
+        let target = std::env::var("PROCYON_SVGO_LOCK_TEST_TARGET").unwrap();
+        let location: LocationDto = Location::from_native_path(Path::new(&target))
+            .unwrap()
+            .into();
+        let loaded = tauri::async_runtime::block_on(service.load_editable_file(
+            LoadEditableFileRequestDto {
+                location: location.clone(),
+            },
+        ))
+        .unwrap();
+        std::fs::write(root.join("worker-ready"), b"ready").unwrap();
+        let session = svgo_session(&service, location, loaded.revision.clone());
+        if std::env::var_os("PROCYON_SVGO_LOCK_TEST_GENERIC").is_some() {
+            let result = tauri::async_runtime::block_on(service.save_editable_file(
+                SaveEditableFileRequestDto {
+                    location: session.location.clone(),
+                    destination: None,
+                    content: "<svg id=\"worker\"/>".into(),
+                    expected_revision: loaded.revision,
+                    overwrite_conflict: false,
+                },
+            ));
+            if std::env::var_os("PROCYON_SVGO_LOCK_TEST_RACE").is_some() {
+                let outcome = match result {
+                    Ok(_) => "saved",
+                    Err(fm_application::ApplicationError::FileRevisionConflict { .. }) => {
+                        "conflict"
+                    }
+                    Err(error) => panic!("unexpected generic editor error: {error}"),
+                };
+                std::fs::write(root.join("worker-outcome"), outcome).unwrap();
+                return;
+            }
+            assert!(
+                matches!(
+                    result,
+                    Err(fm_application::ApplicationError::FileRevisionConflict { .. })
+                ),
+                "{result:?}"
+            );
+        } else {
+            let result = tauri::async_runtime::block_on(save_svg(
+                service,
+                session,
+                "<svg id=\"worker\"/>".into(),
+            ));
+            assert!(matches!(result, Err(PanelError::File(_))), "{result:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn svgo_cross_process_alias_saves_serialize_and_conflict() {
+        cross_process_alias_save(false).await;
+    }
+
+    #[tokio::test]
+    async fn generic_editor_and_svgo_alias_saves_serialize_and_conflict() {
+        cross_process_alias_save(true).await;
+    }
+
+    async fn wait_for_worker(worker: &mut std::process::Child) {
+        let finished = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            loop {
+                if let Some(status) = worker.try_wait().unwrap() {
+                    return status;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        match finished {
+            Ok(status) => assert!(status.success(), "worker failed: {status}"),
+            Err(_) => {
+                worker.kill().unwrap();
+                worker.wait().unwrap();
+                panic!("worker did not finish after the lock was released");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn generic_editor_and_svgo_processes_compete_without_losing_an_edit() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let path = real.join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        #[cfg(unix)]
+        let alias = {
+            let alias = root.path().join("alias");
+            std::os::unix::fs::symlink(&real, &alias).unwrap();
+            alias.join("drawing.svg")
+        };
+        #[cfg(not(unix))]
+        let alias = path.clone();
+        let service = svgo_service(root.path());
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        let loaded = service
+            .load_editable_file(LoadEditableFileRequestDto {
+                location: location.clone(),
+            })
+            .await
+            .unwrap();
+        let session = svgo_session(&service, location, loaded.revision);
+        let mut worker = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("plugin_spa::tests::svgo_cross_process_worker")
+            .arg("--nocapture")
+            .env("PROCYON_SVGO_LOCK_TEST_ROOT", root.path())
+            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias)
+            .env("PROCYON_SVGO_LOCK_TEST_GENERIC", "1")
+            .env("PROCYON_SVGO_LOCK_TEST_RACE", "1")
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while !root.path().join("worker-ready").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let parent = save_svg(service, session, "<svg id=\"parent\"/>".into()).await;
+        wait_for_worker(&mut worker).await;
+        let child = std::fs::read_to_string(root.path().join("worker-outcome")).unwrap();
+        match (parent, child.as_str()) {
+            (Ok(()), "conflict") => {
+                assert_eq!(
+                    std::fs::read_to_string(&path).unwrap(),
+                    "<svg id=\"parent\"/>"
+                );
+            }
+            (Err(PanelError::File(_)), "saved") => {
+                assert_eq!(
+                    std::fs::read_to_string(&path).unwrap(),
+                    "<svg id=\"worker\"/>"
+                );
+            }
+            (parent, child) => panic!("exactly one save should succeed: {parent:?}, {child}"),
+        }
+    }
+
+    async fn cross_process_alias_save(generic_worker: bool) {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let path = real.join("drawing.svg");
+        std::fs::write(&path, "<svg/>").unwrap();
+        #[cfg(unix)]
+        let alias = {
+            let alias = root.path().join("alias");
+            std::os::unix::fs::symlink(&real, &alias).unwrap();
+            alias.join("drawing.svg")
+        };
+        #[cfg(not(unix))]
+        let alias = path.clone();
+        let location: LocationDto = Location::from_native_path(&path).unwrap().into();
+        let aliased: LocationDto = Location::from_native_path(&alias).unwrap().into();
+        let held = svgo_file_lock(&location).await.unwrap();
+        let executable = std::env::current_exe().unwrap();
+        let mut command = std::process::Command::new(executable);
+        command
+            .arg("--exact")
+            .arg("plugin_spa::tests::svgo_cross_process_worker")
+            .arg("--nocapture")
+            .env("PROCYON_SVGO_LOCK_TEST_ROOT", root.path())
+            .env("PROCYON_SVGO_LOCK_TEST_TARGET", &alias);
+        if generic_worker {
+            command.env("PROCYON_SVGO_LOCK_TEST_GENERIC", "1");
+        }
+        let mut worker = command.spawn().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while !root.path().join("worker-ready").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        assert!(
+            worker.try_wait().unwrap().is_none(),
+            "worker must wait on the file lock"
+        );
+        // The child loaded the old revision, but cannot recheck or commit until this lock
+        // is released. Change the fixture while the lock is held to force a conflict.
+        std::fs::write(&path, "<svg id=\"parent\"/>").unwrap();
+        drop(held);
+        wait_for_worker(&mut worker).await;
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "<svg id=\"parent\"/>"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&alias).unwrap(),
+            "<svg id=\"parent\"/>"
+        );
+        assert!(!real.read_dir().unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("lock")
+        }));
+        assert_eq!(
+            svgo_file_lock(&aliased)
+                .await
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .len(),
+            0
+        );
+    }
 
     #[test]
     fn child_bounds_must_fit_the_owning_window() {
@@ -1204,6 +1924,39 @@ mod tests {
     }
 
     #[test]
+    fn panel_request_urls_accept_only_the_allocated_origin() {
+        let origin = panel_origin(0);
+        let expected: tauri::http::Uri = format!("{origin}/dist/index.html").parse().unwrap();
+        assert_eq!(
+            panel_request_url(&expected, &origin, 0).unwrap().as_str(),
+            expected.to_string()
+        );
+        let other: tauri::http::Uri = "https://example.com/dist/index.html".parse().unwrap();
+        assert!(panel_request_url(&other, &origin, 0).is_none());
+        #[cfg(target_os = "windows")]
+        {
+            let synthetic: tauri::http::Uri =
+                "procyonspa0://localhost/dist/index.html".parse().unwrap();
+            assert_eq!(
+                panel_request_url(&synthetic, &origin, 0).unwrap().as_str(),
+                expected.to_string()
+            );
+            let smoke: tauri::http::Uri =
+                "procyonspa0://localhost/smoke?token=abc&stage=plugin-ui-ready"
+                    .parse()
+                    .unwrap();
+            assert_eq!(
+                panel_request_url(&smoke, &origin, 0).unwrap().as_str(),
+                format!("{origin}/smoke?token=abc&stage=plugin-ui-ready")
+            );
+            assert!(panel_request_url(&synthetic, &panel_origin(1), 1).is_none());
+            let foreign: tauri::http::Uri =
+                "procyonspa0://example.com/dist/index.html".parse().unwrap();
+            assert!(panel_request_url(&foreign, &origin, 0).is_none());
+        }
+    }
+
+    #[test]
     fn plugin_labels_never_receive_tauri_commands() {
         assert!(trusted_invoke_label("main"));
         assert!(trusted_invoke_label(&format!(
@@ -1234,6 +1987,19 @@ mod tests {
     fn bridge_rejects_spoofed_or_malformed_requests() {
         let valid = br#"{"version":1,"type":"save-svg","svg":"<svg/>","loadToken":"abc"}"#;
         assert!(parse_bridge(valid, "abc").is_ok());
+        let close = br#"{"version":1,"type":"close-panel","loadToken":"abc"}"#;
+        assert!(matches!(
+            parse_bridge(close, "abc"),
+            Ok(BridgeRequest::ClosePanel { .. })
+        ));
+        assert!(parse_bridge(close, "other").is_err());
+        assert!(
+            parse_bridge(
+                br#"{"version":1,"type":"close-panel","loadToken":"abc","label":"main"}"#,
+                "abc",
+            )
+            .is_err()
+        );
         assert!(parse_bridge(valid, "other").is_err());
         assert!(
             parse_bridge(
@@ -1358,9 +2124,17 @@ mod tests {
             token: "test-token".to_owned(),
             revision: AsyncMutex::new("rev".to_owned()),
             save_lock: Arc::new(AsyncMutex::new(())),
+            close_lock: AsyncMutex::new(()),
             settings_sequence: Mutex::new(0),
             flush_sender: Mutex::new(None),
+            heartbeat: Mutex::new(None),
+            heartbeat_responded: AtomicBool::new(false),
+            created: Instant::now(),
+            loaded: AtomicBool::new(true),
+            visible: AtomicBool::new(true),
             shutdown: CancellationToken::new(),
+            #[cfg(target_os = "linux")]
+            _context_directory: tempfile::tempdir().unwrap(),
         });
         let mut settings = serde_json::json!({
             "precision": 2, "pathPrecision": 2,
@@ -1383,6 +2157,7 @@ mod tests {
                 Arc::clone(&session),
                 body,
                 panel_origin(0),
+                |_| Err(PanelError::Unavailable),
             ))
         };
         assert_eq!(send(&settings, 2, false).status(), StatusCode::OK);
@@ -1400,6 +2175,96 @@ mod tests {
         assert_eq!(
             service.plugin_panel_settings(SVGO_PLUGIN_ID),
             Some(settings)
+        );
+        let now = Instant::now();
+        let first = session.next_heartbeat(now).unwrap().unwrap();
+        assert_eq!(
+            session
+                .next_heartbeat(now + Duration::from_secs(19))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            session
+                .acknowledge_heartbeat("incorrect-challenge")
+                .unwrap_err()
+                .to_string(),
+            PanelError::Invalid.to_string()
+        );
+        let retry = session
+            .next_heartbeat(now + VISIBLE_HEARTBEAT_TIMEOUT)
+            .unwrap()
+            .unwrap();
+        assert_ne!(first, retry);
+        let heartbeat = |challenge: &str| {
+            tauri::async_runtime::block_on(bridge(
+                Arc::clone(&service),
+                Arc::clone(&session),
+                serde_json::to_vec(&serde_json::json!({
+                    "type": "heartbeat", "version": 1,
+                    "loadToken": "test-token", "challenge": challenge
+                }))
+                .unwrap(),
+                panel_origin(0),
+                |_| Err(PanelError::Unavailable),
+            ))
+        };
+        assert_eq!(heartbeat(&first).status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            heartbeat("not-a-hex-challenge").status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(heartbeat(&retry).status(), StatusCode::OK);
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(21))
+                .unwrap()
+                .is_some()
+        );
+        session.visible.store(false, Ordering::SeqCst);
+        assert_eq!(
+            session
+                .next_heartbeat(now + Duration::from_secs(41))
+                .unwrap(),
+            None
+        );
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(141))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            session
+                .next_heartbeat(now + Duration::from_secs(262))
+                .is_err()
+        );
+        session.loaded.store(false, Ordering::SeqCst);
+        assert!(
+            session
+                .next_heartbeat(session.created + VISIBLE_HEARTBEAT_TIMEOUT)
+                .is_err()
+        );
+        let close = |token| {
+            tauri::async_runtime::block_on(bridge(
+                Arc::clone(&service),
+                Arc::clone(&session),
+                format!(r#"{{"type":"close-panel","version":1,"loadToken":"{token}"}}"#)
+                    .into_bytes(),
+                panel_origin(0),
+                |authenticated| {
+                    assert_eq!(authenticated.label, "plugin-spa-test");
+                    assert_eq!(authenticated.owner_window, "main");
+                    Ok(())
+                },
+            ))
+        };
+        assert_eq!(close("wrong").status(), StatusCode::FORBIDDEN);
+        let accepted = close("test-token");
+        assert_eq!(accepted.status(), StatusCode::OK);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(accepted.body()).unwrap()["type"],
+            "close-result"
         );
     }
 
@@ -1472,9 +2337,17 @@ mod tests {
                     token: "token".into(),
                     revision: AsyncMutex::new("rev".into()),
                     save_lock: Arc::clone(&save_lock),
+                    close_lock: AsyncMutex::new(()),
                     settings_sequence: Mutex::new(0),
                     flush_sender: Mutex::new(None),
+                    heartbeat: Mutex::new(None),
+                    heartbeat_responded: AtomicBool::new(false),
+                    created: Instant::now(),
+                    loaded: AtomicBool::new(true),
+                    visible: AtomicBool::new(true),
                     shutdown: shutdown.clone(),
+                    #[cfg(target_os = "linux")]
+                    _context_directory: tempfile::tempdir().unwrap(),
                 }),
             )
             .unwrap();
@@ -1482,6 +2355,11 @@ mod tests {
         assert!(registry.owned_by(&label, "main"));
         assert!(!registry.owned_by(&label, "another-window"));
         assert_eq!(registry.labels_for_window("main"), vec![label.clone()]);
+        assert!(registry.begin_window_close("main"));
+        assert!(!registry.begin_window_close("main"));
+        assert!(registry.window_close_pending("main"));
+        registry.end_window_close("main");
+        assert!(!registry.window_close_pending("main"));
         assert!(registry.session_for(slot, "plugin-spa-other").is_none());
         assert!(registry.session_for(slot, &label).is_some());
         registry.release(&label);
