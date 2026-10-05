@@ -8,6 +8,7 @@ import {
   groupEvidenceByDocument,
   KnowledgeSearchDialog,
   knowledgeProvenanceLabel,
+  numberKnowledgeAnswer,
 } from './knowledge-search-dialog';
 
 let root: HTMLElement;
@@ -111,6 +112,50 @@ afterEach(() => {
   m.mount(root, null);
   root.remove();
   vi.restoreAllMocks();
+});
+
+describe('numberKnowledgeAnswer', () => {
+  const evidence = (recordId: string, documentId: string, title: string): KnowledgeEvidence =>
+    ({
+      recordId,
+      documentId,
+      sourceId: `source-${recordId}`,
+      title,
+      sectionPath: [],
+    }) as unknown as KnowledgeEvidence;
+  const citation = (label: string, row: KnowledgeEvidence) => ({
+    label,
+    recordId: row.recordId,
+    sourceId: row.sourceId,
+    sectionPath: [],
+    provenance: '',
+    finalRank: 1,
+    generated: false,
+    unavailable: false,
+  });
+  const a1 = evidence('r1', 'doc-a', 'a.md');
+  const b = evidence('r2', 'doc-b', 'b.md');
+  const a2 = evidence('r3', 'doc-a', 'a.md');
+  const displayed = new Map([a1, b, a2].map((row) => [row.recordId, row]));
+  const citations = [citation('E1', a1), citation('E2', b), citation('E3', a2)];
+
+  it('numbers files in order of first mention and merges sections of one file', () => {
+    const numbered = numberKnowledgeAnswer(
+      'First E2, E3. Then [E1] and (E2, E1).',
+      citations,
+      displayed,
+    );
+    expect(numbered.text).toBe('First [1, 2]. Then [2] and [1, 2].');
+    expect(numbered.references.map((reference) => [reference.number, reference.title])).toEqual([
+      [1, 'b.md'],
+      [2, 'a.md'],
+    ]);
+    expect(numbered.references[1]?.citations).toHaveLength(2);
+  });
+
+  it('leaves unknown labels untouched', () => {
+    expect(numberKnowledgeAnswer('See E9.', citations, displayed).text).toBe('See E9.');
+  });
 });
 
 describe('KnowledgeSearchDialog (task 0206)', () => {
@@ -1927,7 +1972,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     );
   });
 
-  it('preserves results across view switches and invalidates the answer when the question changes', async () => {
+  it('keeps the previous answer while typing and replaces it once the next question is asked', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');
@@ -1943,7 +1988,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     openAsk();
     expect(root.querySelector('.fm-knowledge-answer-markdown')).not.toBeNull();
     type(question(), 'What changed?');
-    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-answer-markdown')).not.toBeNull();
     await generateAnswer();
 
     expect(execute).toHaveBeenCalledOnce();
@@ -2165,7 +2210,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(root.textContent).not.toContain('Grounded answer');
   });
 
-  it('cancels an in-flight answer when only the question changes', async () => {
+  it('keeps an in-flight answer while the next question is typed', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
     const pending = deferred<KnowledgeAnswer>();
@@ -2181,11 +2226,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     button('Ask').click();
     m.redraw.sync();
     type(question(), 'Another question?');
-    expect(signal?.aborted).toBe(true);
-    pending.resolve(answerFixture('stale-fingerprint'));
-    await Promise.resolve();
-    m.redraw.sync();
-    expect(root.querySelector('.fm-knowledge-answer-markdown')).toBeNull();
+    expect(signal?.aborted).toBe(false);
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
   });
 
@@ -2233,6 +2274,43 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     );
   });
 
+  it('numbers sources by file, collapses their list, and hides, shows, or copies the answer', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    const write = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: write },
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    openAsk();
+    await generateAnswer();
+
+    const markdown = root.querySelector('.fm-knowledge-answer-markdown');
+    expect(markdown?.textContent).not.toMatch(/\bE\d+\b/u);
+    expect(root.textContent).not.toContain('Answered by');
+    const references = root.querySelector<HTMLDetailsElement>(
+      'details.fm-knowledge-answer-references',
+    );
+    expect(references?.open).toBe(false);
+    expect(references?.querySelector('summary')?.textContent).toMatch(/^Sources \(\d+\)$/u);
+    expect(references?.querySelector('.fm-knowledge-reference-number')?.textContent).toBe('[1]');
+
+    const body = root.querySelector<HTMLElement>('.fm-knowledge-answer-body');
+    button('Hide answer').click();
+    m.redraw.sync();
+    expect(body?.hidden).toBe(true);
+    button('Show answer').click();
+    m.redraw.sync();
+    expect(body?.hidden).toBe(false);
+
+    button('Copy answer').click();
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    expect(write.mock.calls[0]?.[0]).toMatch(/\n\nSources \(\d+\)\n\[1\] /u);
+  });
+
   it('opens a citation from the answer text itself', async () => {
     const onOpenSource = vi.fn();
     const client = new MockFileManagerClient();
@@ -2244,7 +2322,8 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     await generateAnswer();
 
     const link = root.querySelector<HTMLAnchorElement>('.fm-knowledge-answer-markdown a');
-    expect(link?.getAttribute('href')).toContain('#fm-knowledge-citation-');
+    expect(link?.getAttribute('href')).toBe('#fm-knowledge-reference-1');
+    expect(link?.closest('.fm-knowledge-reference')?.textContent).toMatch(/^\[1(, \d+)*\]$/u);
     link?.click();
 
     expect(onOpenSource).toHaveBeenCalledWith(

@@ -6,6 +6,7 @@ import {
   brainIcon,
   closeIcon,
   cloudIcon,
+  copyIcon,
   cornerDownLeftIcon,
   dotsIcon,
   externalLinkIcon,
@@ -33,13 +34,13 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchReason,
   KnowledgeSearchResult,
-  LlmEndpointLocality,
   LlmProfile,
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
+import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
 
@@ -517,33 +518,123 @@ export function classifyKnowledgeScopeSelectors(
   return { wholeLibrary, rootIds, issues };
 }
 
-/** Anchor prefix for a citation link inside generated answer markdown. */
-const CITATION_ANCHOR = '#fm-knowledge-citation-';
+/** Anchor prefix for a numbered source reference inside a generated answer. */
+const REFERENCE_ANCHOR = '#fm-knowledge-reference-';
 
 /** Escapes a citation label for use inside a regular expression. */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
+/** One numbered source an answer cites: a file, however many of its sections were cited. */
+export interface KnowledgeAnswerReference {
+  readonly number: number;
+  readonly title: string;
+  readonly citations: readonly KnowledgeAnswerCitation[];
+  /** The first displayed row the answer cited from this file, if any. */
+  readonly row: KnowledgeEvidence | undefined;
+}
+
+/** A generated answer with its opaque `E#` labels resolved to numbered file references. */
+export interface NumberedKnowledgeAnswer {
+  /** Markdown in which every cited group is a `⟦1,4⟧` placeholder. */
+  readonly markdown: string;
+  /** Plain text in which every cited group reads `[1, 4]`. */
+  readonly text: string;
+  readonly references: readonly KnowledgeAnswerReference[];
+}
+
+const REFERENCE_PLACEHOLDER = /⟦(\d+(?:,\d+)*)⟧/gu;
+
 /**
- * Turns the opaque citation labels a model copied - `[E1]`, `(E1, E2)` - into
- * in-document links.
+ * Replaces the opaque evidence labels a model copied - `E1`, `[E1]`,
+ * `(E1, E4)`, `E1, E4, E5` - with per-file reference numbers in order of first
+ * mention, so several cited sections of one file share one number.
  *
- * Only the citations passed in are linked, and the caller passes only those
- * whose identity matches a row the search actually displayed, so a label the
- * model invented stays inert text rather than becoming something clickable.
+ * Only labels the host resolved to a citation are touched; anything else the
+ * model wrote stays as text.
  */
-export function linkKnowledgeCitations(
-  markdown: string,
+export function numberKnowledgeAnswer(
+  text: string,
   citations: readonly KnowledgeAnswerCitation[],
-): string {
-  return citations.reduce((linked, citation) => {
-    const label = escapeRegExp(citation.label);
-    const target = `${CITATION_ANCHOR}${encodeURIComponent(citation.label)}`;
-    return linked
-      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'gu'), `[${citation.label}](${target})`)
-      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'gu'), `([${citation.label}](${target})`);
-  }, markdown);
+  displayed: ReadonlyMap<string, KnowledgeEvidence>,
+): NumberedKnowledgeAnswer {
+  const rowFor = (citation: KnowledgeAnswerCitation): KnowledgeEvidence | undefined => {
+    const row = displayed.get(citation.recordId);
+    return row?.sourceId === citation.sourceId ? row : undefined;
+  };
+  const documentKey = (citation: KnowledgeAnswerCitation): string =>
+    rowFor(citation)?.documentId ?? `source:${citation.sourceId}`;
+  const byLabel = new Map(citations.map((citation) => [citation.label, citation]));
+  const numbers = new Map<string, number>();
+  const numberOf = (citation: KnowledgeAnswerCitation): number => {
+    const key = documentKey(citation);
+    let number = numbers.get(key);
+    if (number === undefined) {
+      number = numbers.size + 1;
+      numbers.set(key, number);
+    }
+    return number;
+  };
+  let markdown = text;
+  if (byLabel.size > 0) {
+    const label = [...byLabel.keys()]
+      .sort((left, right) => right.length - left.length)
+      .map(escapeRegExp)
+      .join('|');
+    const one = `(?<![\\p{L}\\p{N}])(?:${label})(?![\\p{L}\\p{N}])`;
+    const group = `${one}(?:\\s*[,;]?\\s*${one})*`;
+    const cited = new RegExp(`\\[\\s*${group}\\s*\\]|\\(\\s*${group}\\s*\\)|${group}`, 'gu');
+    const labelPattern = new RegExp(one, 'gu');
+    markdown = text.replace(cited, (match) => {
+      const groupNumbers = [
+        ...new Set(
+          [...match.matchAll(labelPattern)].flatMap(([found]) => {
+            const citation = byLabel.get(found);
+            return citation === undefined ? [] : [numberOf(citation)];
+          }),
+        ),
+      ].sort((left, right) => left - right);
+      return groupNumbers.length === 0 ? match : `⟦${groupNumbers.join(',')}⟧`;
+    });
+  }
+  for (const citation of citations) numberOf(citation);
+  const references = [...numbers.entries()].map(([key, number]) => {
+    const cited = citations.filter((citation) => documentKey(citation) === key);
+    const row = cited.map(rowFor).find((candidate) => candidate !== undefined);
+    const title =
+      (row === undefined ? undefined : (decodeEvidenceTitle(row.title) ?? row.title)) ??
+      cited[0]?.sectionPath.join(' / ') ??
+      cited[0]?.label ??
+      '';
+    return { number, title: title === '' ? (cited[0]?.label ?? '') : title, citations: cited, row };
+  });
+  return {
+    markdown,
+    text: markdown.replace(
+      REFERENCE_PLACEHOLDER,
+      (_match, list: string) => `[${list.split(',').join(', ')}]`,
+    ),
+    references,
+  };
+}
+
+/**
+ * Turns the reference placeholders in already-sanitised answer HTML into
+ * `[1, 4]` groups whose numbers link to openable sources. Only digits are
+ * ever inserted, so the sanitised HTML stays safe.
+ */
+export function linkKnowledgeReferences(html: string, openable: ReadonlySet<number>): string {
+  return html.replace(REFERENCE_PLACEHOLDER, (_match, list: string) => {
+    const links = list
+      .split(',')
+      .map((number) =>
+        openable.has(Number(number))
+          ? `<a href="${REFERENCE_ANCHOR}${number}">${number}</a>`
+          : number,
+      );
+    return `<span class="fm-knowledge-reference">[${links.join(', ')}]</span>`;
+  });
 }
 
 /**
@@ -618,6 +709,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   let answerProfiles: readonly LlmProfile[] = [];
   let answerProfilesFailed = false;
+  let answerCopied = false;
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
   let answer: KnowledgeAnswer | undefined;
@@ -1470,13 +1562,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     );
   }
 
-  /** Localised endpoint classification, shown before anything is sent. */
-  function localityLabel(locality: LlmEndpointLocality): string {
-    return locality === 'cloud'
-      ? t('knowledgeSearch', 'answerLocalityCloud')
-      : t('knowledgeSearch', 'answerLocalityLoopback');
-  }
-
   /**
    * The rows the search displayed, keyed by the identity a citation must
    * match. A citation is only ever opened through an identity that is in here,
@@ -1484,15 +1569,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   function displayedEvidence(): ReadonlyMap<string, KnowledgeEvidence> {
     return new Map((result?.evidence ?? []).map((row) => [row.recordId, row]));
-  }
-
-  /** The displayed row one citation names, if it names one at all. */
-  function citedRow(
-    displayed: ReadonlyMap<string, KnowledgeEvidence>,
-    citation: KnowledgeAnswerCitation,
-  ): KnowledgeEvidence | undefined {
-    const row = displayed.get(citation.recordId);
-    return row === undefined || row.sourceId !== citation.sourceId ? undefined : row;
   }
 
   /** The generated answer itself, plus how honest it is about its evidence. */
@@ -1515,42 +1591,32 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         answerNotice ?? t('knowledgeSearch', 'answerPlaceholder'),
       );
     }
-    const openable = (citation: KnowledgeAnswerCitation): boolean =>
-      citedRow(displayed, citation) !== undefined &&
-      !citation.unavailable &&
+    const numbered = numberKnowledgeAnswer(current.text, current.citations, displayed);
+    const openable = (reference: KnowledgeAnswerReference): boolean =>
+      reference.row !== undefined &&
+      reference.citations.some((citation) => !citation.unavailable) &&
       attrs.onOpenSource !== undefined;
+    const openReference = (reference: KnowledgeAnswerReference): void => {
+      if (reference.row !== undefined && openable(reference)) void openSource(attrs, reference.row);
+    };
     return [
-      m(
-        'p.fm-knowledge-hint',
-        t('knowledgeSearch', 'answerProfileUsed', {
-          profile: current.profileName,
-          locality: localityLabel(current.locality),
-        }),
-      ),
       m(
         '.fm-knowledge-answer-markdown',
         {
           onclick: (event: MouseEvent) => {
             if (!(event.target instanceof Element)) return;
-            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${CITATION_ANCHOR}"]`);
+            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${REFERENCE_ANCHOR}"]`);
             if (link === null) return;
-            const target = link.getAttribute('href');
-            const label =
-              target === null
-                ? undefined
-                : decodeURIComponent(target.slice(CITATION_ANCHOR.length));
-            const citation = current.citations.find((item) => item.label === label);
-            if (citation === undefined || !openable(citation)) return;
             event.preventDefault();
-            const row = citedRow(displayed, citation);
-            if (row !== undefined) void openSource(attrs, row);
+            const number = Number(link.getAttribute('href')?.slice(REFERENCE_ANCHOR.length));
+            const reference = numbered.references.find((item) => item.number === number);
+            if (reference !== undefined) openReference(reference);
           },
         },
         m.trust(
-          safeMarkdownHtml(
-            // Only citations that name a displayed row are linked; anything
-            // else stays inert text rather than becoming clickable.
-            linkKnowledgeCitations(current.text, current.citations.filter(openable)),
+          linkKnowledgeReferences(
+            safeMarkdownHtml(numbered.markdown),
+            new Set(numbered.references.filter(openable).map((reference) => reference.number)),
           ),
         ),
       ),
@@ -1582,48 +1648,86 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               count: current.withheldUnauthorized,
             }),
           ),
-      current.citations.length === 0
+      numbered.references.length === 0
         ? undefined
-        : m('.fm-knowledge-answer-citations', [
-            m('h4', t('knowledgeSearch', 'answerCitations')),
-            m(
-              'ul.fm-knowledge-citations',
-              current.citations.map((citation) => {
-                const row = citedRow(displayed, citation);
-                const provenance = knowledgeProvenanceLabel(citation.provenance);
-                const states = [
-                  row?.title,
-                  citation.sectionPath.length === 0 ? undefined : citation.sectionPath.join(' / '),
-                  provenance === '' ? undefined : provenance,
-                  citation.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
-                  citation.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
-                  citation.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
-                  row === undefined
-                    ? t('knowledgeSearch', 'answerCitationNotDisplayed')
-                    : undefined,
-                ].filter((value): value is string => value !== undefined && value !== '');
-                return m('li', { key: `${citation.label}-${citation.recordId}` }, [
-                  m(
-                    'button.fm-knowledge-source-link',
-                    {
-                      type: 'button',
-                      disabled: !openable(citation),
-                      'aria-label': t('knowledgeSearch', 'openCitation', {
-                        label: citation.label,
-                      }),
-                      onclick: () => {
-                        const row = citedRow(displayed, citation);
-                        if (row !== undefined) void openSource(attrs, row);
+        : // Keyed so each new answer starts with its sources collapsed again.
+          [
+            m('details.fm-knowledge-answer-references', { key: current.requestId }, [
+              m(
+                'summary',
+                t('knowledgeSearch', 'answerCitations', { count: numbered.references.length }),
+              ),
+              m(
+                'ol.fm-knowledge-citations',
+                numbered.references.map((reference) => {
+                  const sections = [
+                    ...new Set(
+                      reference.citations
+                        .map((citation) => citation.sectionPath.join(' / '))
+                        .filter((section) => section !== '' && section !== reference.title),
+                    ),
+                  ];
+                  const states = [
+                    ...sections,
+                    reference.citations.some((citation) => citation.generated)
+                      ? t('knowledgeSearch', 'generatedEvidence')
+                      : undefined,
+                    reference.citations.some((citation) => citation.stale === true)
+                      ? t('knowledgeSearch', 'staleEvidence')
+                      : undefined,
+                    reference.citations.every((citation) => citation.unavailable)
+                      ? t('knowledgeSearch', 'unavailableEvidence')
+                      : undefined,
+                    reference.row === undefined
+                      ? t('knowledgeSearch', 'answerCitationNotDisplayed')
+                      : undefined,
+                  ].filter((value): value is string => value !== undefined);
+                  return m('li', { key: `reference-${reference.number}` }, [
+                    m('span.fm-knowledge-reference-number', `[${reference.number}]`),
+                    m(
+                      'button.fm-knowledge-source-link',
+                      {
+                        type: 'button',
+                        title: reference.title,
+                        disabled: !openable(reference),
+                        'aria-label': t('knowledgeSearch', 'openCitation', {
+                          label: reference.title,
+                        }),
+                        onclick: () => openReference(reference),
                       },
-                    },
-                    citation.label,
-                  ),
-                  states.length === 0 ? '' : ` · ${states.join(' · ')}`,
-                ]);
-              }),
-            ),
-          ]),
+                      m('span', reference.title),
+                    ),
+                    states.length === 0
+                      ? undefined
+                      : m('small.fm-knowledge-hint', states.join(' · ')),
+                  ]);
+                }),
+              ),
+            ]),
+          ],
     ];
+  }
+
+  /** Copies the answer as plain text, with its numbered source list appended. */
+  async function copyAnswer(): Promise<void> {
+    const current = answer;
+    if (current === undefined) return;
+    const numbered = numberKnowledgeAnswer(current.text, current.citations, displayedEvidence());
+    const sources = numbered.references.map(
+      (reference) => `[${reference.number}] ${reference.title}`,
+    );
+    const heading = t('knowledgeSearch', 'answerCitations', { count: sources.length });
+    await copyText(
+      sources.length === 0
+        ? numbered.text
+        : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
+    );
+    answerCopied = true;
+    m.redraw();
+    window.setTimeout(() => {
+      answerCopied = false;
+      m.redraw();
+    }, 1500);
   }
 
   /**
@@ -1650,6 +1754,25 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
           m('.fm-knowledge-answer-output-heading', [
             m('h3', t('knowledgeSearch', 'answerHeading')),
+            answer === undefined || generatingAnswer
+              ? undefined
+              : tooltip(
+                  answerCopied
+                    ? t('knowledgeSearch', 'answerCopied')
+                    : t('knowledgeSearch', 'copyAnswer'),
+                  m(
+                    IconButton,
+                    {
+                      type: 'button',
+                      className: 'fm-knowledge-answer-copy',
+                      'aria-label': answerCopied
+                        ? t('knowledgeSearch', 'answerCopied')
+                        : t('knowledgeSearch', 'copyAnswer'),
+                      onclick: () => void copyAnswer(),
+                    },
+                    copyIcon({ size: 14 }),
+                  ),
+                ),
             m(
               'button.fm-knowledge-answer-collapse',
               {
@@ -1698,8 +1821,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             value: questionText,
             placeholder: t('knowledgeSearch', 'questionPlaceholder'),
             oninput: (event: InputEvent) => {
+              // The previous answer stays until the new question is actually asked.
               questionText = (event.currentTarget as HTMLTextAreaElement).value;
-              resetAnswer();
             },
             onkeydown: (event: KeyboardEvent) => {
               event.stopPropagation();
