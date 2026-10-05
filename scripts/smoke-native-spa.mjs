@@ -102,6 +102,7 @@ try {
   let lastStage = 'process not started';
   let saveSucceeded = false;
   let bundledAssetsSelected = false;
+  let lifecyclePassed = false;
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
     const stages = readFileSync(join(root, 'stderr.log'), 'utf8').matchAll(
@@ -125,8 +126,9 @@ try {
       }
       if (lastStage === 'bridge-save-succeeded') saveSucceeded = true;
       if (lastStage === 'bundled-plugin-assets-selected') bundledAssetsSelected = true;
+      if (lastStage === 'heartbeat-and-disable-teardown-succeeded') lifecyclePassed = true;
     }
-    if (readFileSync(file, 'utf8').includes(marker) && saveSucceeded) break;
+    if (readFileSync(file, 'utf8').includes(marker) && saveSucceeded && lifecyclePassed) break;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`native SPA app exited early (${child.exitCode ?? child.signalCode})`);
     }
@@ -139,6 +141,9 @@ try {
     throw new Error(
       `native SPA saved the SVG but did not confirm bridge success after ${lastStage}`,
     );
+  }
+  if (!lifecyclePassed) {
+    throw new Error(`native SPA heartbeat or disable teardown did not complete after ${lastStage}`);
   }
   if (bundled && !bundledAssetsSelected) {
     throw new Error('native SPA saved without selecting installed SVGO assets');
@@ -177,5 +182,5 @@ if (smokeError && cleanupError)
 if (smokeError) throw smokeError;
 if (cleanupError) throw cleanupError;
 console.log(
-  `Native SPA ${bundled ? 'installed-package' : 'release-binary'} activation, updater denial, and revision-checked Save passed on ${process.platform}`,
+  `Native SPA ${bundled ? 'installed-package' : 'release-binary'} activation, updater denial, Save, heartbeat, and disable teardown passed on ${process.platform}`,
 );
