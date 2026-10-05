@@ -151,7 +151,6 @@ export interface PaneContentContext {
     { readonly controller: FileEditorController; state: FileEditorState }
   >;
   getPluginByPane(): Map<PaneId, PluginPaneState>;
-  getContextMenuBounds(): readonly DOMRect[];
   getDiskUsageByTab(): Map<string, { state: DiskUsageViewState }>;
   getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
 
@@ -380,7 +379,6 @@ export function createPaneContentBuilder(
             pluginPanel: m(PluginPanelHost, {
               ...pluginPanel,
               active: pluginPanel.tabId === tab?.id,
-              overlayBounds: context.getContextMenuBounds(),
             }),
             pluginTabId: pluginPanel.tabId,
           }),

@@ -28,7 +28,7 @@ export interface ContextMenuAttrs {
   };
   readonly onClose: () => void;
   readonly onInvoke: (actionId: string) => void;
-  readonly onBoundsChange?: (bounds: readonly DOMRect[]) => void;
+  readonly placementBounds?: () => DOMRect | undefined;
 }
 
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
@@ -62,27 +62,26 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let focusApplication = false;
   let menuElement: HTMLElement | undefined;
   let submenuElement: HTMLElement | undefined;
-  let lastBounds = '';
   let currentAttrs: ContextMenuAttrs;
+
+  function closeOnOutsideClick(event: MouseEvent): void {
+    if (
+      event.target instanceof Node &&
+      (menuElement?.contains(event.target) || submenuElement?.contains(event.target))
+    )
+      return;
+    close(currentAttrs);
+    m.redraw();
+  }
+
+  function preventNativeContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+  }
 
   function repositionOnResize(): void {
     if (menuElement === undefined) return;
     positionMenu(menuElement, currentAttrs);
-    if (submenuElement !== undefined) positionSubmenu(submenuElement, openWithItem);
-    reportBounds(currentAttrs);
-  }
-
-  function reportBounds(attrs: ContextMenuAttrs): void {
-    if (attrs.onBoundsChange === undefined) return;
-    const bounds = [menuElement, submenuElement]
-      .filter((element): element is HTMLElement => element?.isConnected === true)
-      .map((element) => element.getBoundingClientRect());
-    const key = bounds
-      .map(({ left, top, right, bottom }) => `${left},${top},${right},${bottom}`)
-      .join(';');
-    if (lastBounds === key) return;
-    lastBounds = key;
-    attrs.onBoundsChange(bounds);
+    if (submenuElement !== undefined) positionSubmenu(submenuElement, openWithItem, currentAttrs);
   }
 
   function iconDataUri(bytes: Uint8Array): string {
@@ -268,32 +267,36 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
           ),
         );
       }
-      return m('.fm-context-menu-backdrop', { onclick: () => close(attrs) }, [
+      return m('.fm-context-menu-backdrop', { style: { pointerEvents: 'none' } }, [
         m(
           '.fm-context-menu',
           {
             role: 'menu',
             tabindex: -1,
             'aria-label': t('contextMenu', 'directoryActions'),
-            style: { left: `${attrs.x}px`, top: `${attrs.y}px` },
+            style: { left: `${attrs.x}px`, top: `${attrs.y}px`, pointerEvents: 'auto' },
             oncreate: ({ dom }) => {
               menuElement = dom as HTMLElement;
               window.addEventListener('resize', repositionOnResize);
+              document.addEventListener('click', closeOnOutsideClick, true);
+              document.addEventListener('contextmenu', preventNativeContextMenu, true);
               positionMenu(dom as HTMLElement, attrs);
-              reportBounds(attrs);
               if (previousFocus === undefined)
                 previousFocus = document.activeElement as HTMLElement;
               (dom as HTMLElement).focus();
             },
             onupdate: ({ dom }) => {
               positionMenu(dom as HTMLElement, attrs);
-              reportBounds(attrs);
+              const focused = document.activeElement;
+              if (focused !== null && !dom.contains(focused) && !submenuElement?.contains(focused))
+                (dom as HTMLElement).focus();
             },
             onremove: () => {
               window.removeEventListener('resize', repositionOnResize);
+              document.removeEventListener('click', closeOnOutsideClick, true);
+              document.removeEventListener('contextmenu', preventNativeContextMenu, true);
               menuElement = undefined;
               submenuElement = undefined;
-              reportBounds(attrs);
             },
             onclick: (event: MouseEvent) => event.stopPropagation(),
             onkeydown: (event: KeyboardEvent) => {
@@ -329,16 +332,15 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
               {
                 id: 'fm-open-with-submenu',
                 role: 'menu',
+                style: { pointerEvents: 'auto' },
                 'aria-label': attrs.actions.find((item) => item.action.id === 'core.openWith')
                   ?.action.title,
                 oncreate: ({ dom }) => {
                   submenuElement = dom as HTMLElement;
-                  positionSubmenu(dom as HTMLElement, openWithItem);
-                  reportBounds(attrs);
+                  positionSubmenu(dom as HTMLElement, openWithItem, attrs);
                 },
                 onupdate: ({ dom }) => {
-                  positionSubmenu(dom as HTMLElement, openWithItem);
-                  reportBounds(attrs);
+                  positionSubmenu(dom as HTMLElement, openWithItem, attrs);
                   if (focusApplication && submenu !== 'loading') {
                     (dom as HTMLElement).querySelector<HTMLButtonElement>('button')?.focus();
                     focusApplication = false;
@@ -346,7 +348,6 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 },
                 onremove: () => {
                   submenuElement = undefined;
-                  reportBounds(attrs);
                 },
                 onclick: (event: MouseEvent) => event.stopPropagation(),
                 onkeydown: (event: KeyboardEvent) => {
@@ -420,23 +421,47 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
 };
 
 function positionMenu(menu: HTMLElement, attrs: ContextMenuAttrs): void {
+  const bounds = attrs.placementBounds?.();
+  menu.style.minWidth = bounds === undefined ? '' : '0';
+  menu.style.maxWidth = bounds === undefined ? '' : `${Math.max(0, bounds.width - 16)}px`;
+  menu.style.maxHeight = bounds === undefined ? '' : `${Math.max(0, bounds.height - 16)}px`;
+  menu.style.overflowY = bounds === undefined ? '' : 'auto';
   const rect = menu.getBoundingClientRect();
-  const position = clampContextMenuPosition(
-    attrs.x,
-    attrs.y,
-    rect.width,
-    rect.height,
-    window.innerWidth,
-    window.innerHeight,
-  );
+  const position =
+    bounds === undefined
+      ? clampContextMenuPosition(
+          attrs.x,
+          attrs.y,
+          rect.width,
+          rect.height,
+          window.innerWidth,
+          window.innerHeight,
+        )
+      : {
+          x: Math.max(bounds.left + 8, Math.min(attrs.x, bounds.right - rect.width - 8)),
+          y: Math.max(bounds.top + 8, Math.min(attrs.y, bounds.bottom - rect.height - 8)),
+        };
   menu.style.left = `${position.x}px`;
   menu.style.top = `${position.y}px`;
 }
 
-function positionSubmenu(menu: HTMLElement, trigger?: HTMLElement): void {
+function positionSubmenu(
+  menu: HTMLElement,
+  trigger: HTMLElement | undefined,
+  attrs: ContextMenuAttrs,
+): void {
   if (trigger === undefined) return;
+  const bounds = attrs.placementBounds?.();
+  menu.style.minWidth = bounds === undefined ? '' : '0';
+  menu.style.maxWidth = bounds === undefined ? '' : `${Math.max(0, bounds.width - 16)}px`;
+  menu.style.maxHeight = bounds === undefined ? '' : `${Math.max(0, bounds.height - 16)}px`;
   const rect = trigger.getBoundingClientRect();
   const width = menu.getBoundingClientRect().width;
-  menu.style.left = `${rect.right + width + 8 > window.innerWidth ? rect.left - width : rect.right}px`;
-  menu.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - menu.offsetHeight - 8))}px`;
+  const left = bounds?.left ?? 0;
+  const right = bounds?.right ?? window.innerWidth;
+  const top = bounds?.top ?? 0;
+  const bottom = bounds?.bottom ?? window.innerHeight;
+  const x = rect.right + width + 8 <= right ? rect.right : rect.left - width;
+  menu.style.left = `${Math.max(left + 8, Math.min(x, right - width - 8))}px`;
+  menu.style.top = `${Math.max(top + 8, Math.min(rect.top, bottom - menu.offsetHeight - 8))}px`;
 }

@@ -1302,6 +1302,9 @@ describe('AppShell', () => {
 
     const surface = opposite?.querySelector<HTMLElement>('.fm-plugin-panel-surface');
     if (surface === undefined || surface === null) throw new Error('plugin surface missing');
+    if (source instanceof HTMLElement)
+      source.getBoundingClientRect = () =>
+        ({ left: 0, right: 640, top: 0, bottom: 480, width: 640, height: 480 }) as DOMRect;
     surface.getBoundingClientRect = () =>
       ({ left: 640, right: 960, top: 80, bottom: 480, width: 320, height: 400 }) as DOMRect;
     window.dispatchEvent(new Event('resize'));
@@ -1314,13 +1317,21 @@ describe('AppShell', () => {
     const contextMenu = root.querySelector<HTMLElement>('.fm-context-menu');
     if (contextMenu === null) throw new Error('directory context menu missing');
     contextMenu.getBoundingClientRect = () =>
-      ({ left: 530, right: 720, top: 150, bottom: 300, width: 190, height: 150 }) as DOMRect;
+      ({
+        left: Number.parseFloat(contextMenu.style.left),
+        right: Number.parseFloat(contextMenu.style.left) + 190,
+        top: 150,
+        bottom: 300,
+        width: 190,
+        height: 150,
+      }) as DOMRect;
     m.redraw.sync();
-    await vi.waitFor(() => expect(visible).toHaveBeenCalledWith('plugin-spa-test', false));
+    expect(contextMenu.style.left).toBe('442px');
+    expect(visible).not.toHaveBeenCalledWith('plugin-spa-test', false);
     expect(contextMenu.querySelector<HTMLButtonElement>('.fm-context-menu-item')).not.toBeNull();
     contextMenu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
-    await vi.waitFor(() => expect(visible).toHaveBeenLastCalledWith('plugin-spa-test', true));
+    expect(visible).not.toHaveBeenCalledWith('plugin-spa-test', false);
     expect(close).not.toHaveBeenCalled();
 
     listingTab?.click();
@@ -5503,6 +5514,46 @@ describe('AppShell', () => {
         actionId: 'core.revealInSystemFileManager',
         parameters: { uri: `mock:///${encodeURIComponent('日本語.txt')}` },
       }),
+    );
+  });
+
+  it('reopens the menu for a different row on right-click without exposing the WebView menu', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+
+    directoryRowNamed(root, '日本語.txt')?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    const backdrop = root.querySelector<HTMLElement>('.fm-context-menu-backdrop');
+    expect(backdrop?.style.pointerEvents).toBe('none');
+    const second = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 30,
+      clientY: 40,
+    });
+    directoryRowNamed(root, 'report.pdf')?.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    directoryRowNamed(root, 'report.pdf')?.closest<HTMLElement>('[role="grid"]')?.focus();
+    m.redraw.sync();
+    expect(document.activeElement?.getAttribute('role')).toBe('menu');
+    const reveal = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
+      (button) =>
+        button.querySelector('.fm-context-menu-label')?.textContent === 'Reveal in File Manager',
+    );
+    reveal?.click();
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(invokeAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'core.revealInSystemFileManager',
+          parameters: { uri: 'mock:///Documents/report.pdf' },
+        }),
+      ),
     );
   });
 

@@ -10,7 +10,6 @@ export interface PluginPanelHostAttrs {
   readonly location: Location;
   readonly title: string;
   readonly active: boolean;
-  readonly overlayBounds?: readonly DOMRect[];
   readonly onError: (error: unknown) => void;
   readonly onCloseRequest: () => void;
 }
@@ -56,18 +55,6 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
     }
   };
 
-  const overlapsOverlay = () => {
-    if (surface === undefined || attrs.overlayBounds === undefined) return false;
-    const panel = surface.getBoundingClientRect();
-    return attrs.overlayBounds.some(
-      (overlay) =>
-        overlay.left < panel.right &&
-        overlay.right > panel.left &&
-        overlay.top < panel.bottom &&
-        overlay.bottom > panel.top,
-    );
-  };
-
   const syncTheme = () => {
     const theme = resolvedTheme();
     if (label === undefined || lastTheme === theme) return;
@@ -81,7 +68,7 @@ export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {
   };
 
   const syncVisibility = () => {
-    const shouldShow = attrs.active && !overlapsOverlay();
+    const shouldShow = attrs.active;
     if (label === undefined || shown === shouldShow) return;
     shown = shouldShow;
     const currentLabel = label;
