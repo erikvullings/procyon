@@ -304,6 +304,7 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   );
   assert.equal(chocolateyPush?.['continue-on-error'], undefined);
   assert.match(chocolateyPush?.run ?? '', /403 \\\(Forbidden\\\)/);
+  assert.match(chocolateyPush?.run ?? '', /pending package version with no approved versions/i);
   assert.match(chocolateyPush?.run ?? '', /GITHUB_STEP_SUMMARY/);
   assert.doesNotMatch(chocolateyPush?.run ?? '', /exit 1/);
 });
@@ -840,7 +841,10 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
     /<licenseUrl>https:\/\/github\.com\/example\/fm\/blob\/main\/LICENSE<\/licenseUrl>/,
   );
   assert.doesNotMatch(nuspec, /<license(?:\s|>)/);
-  assert.match(nuspec, /<iconUrl>.*icons\/icon\.png<\/iconUrl>/);
+  assert.match(
+    nuspec,
+    /<iconUrl>https:\/\/cdn\.jsdelivr\.net\/gh\/example\/fm@v1\.2\.3\/apps\/fm-desktop\/src-tauri\/icons\/icon\.png<\/iconUrl>/,
+  );
   assert.match(nuspec, /releases\/tag\/v1\.2\.3/);
   assert.match(install, /Install-ChocolateyPackage @packageArgs/);
   assert.match(install, /silentArgs\s*= '\/S'/);

@@ -102,7 +102,7 @@ function generateChocolatey() {
 
     <licenseUrl>https://github.com/${options.repository}/blob/main/LICENSE</licenseUrl>
 
-    <iconUrl>https://raw.githubusercontent.com/${options.repository}/main/apps/fm-desktop/src-tauri/icons/icon.png</iconUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/${options.repository}@v${options.version}/apps/fm-desktop/src-tauri/icons/icon.png</iconUrl>
 
     <summary>
       Dual-pane file manager for Windows and macOS.
