@@ -139,6 +139,16 @@ describe('numberKnowledgeAnswer', () => {
   const displayed = new Map([a1, b, a2].map((row) => [row.recordId, row]));
   const citations = [citation('E1', a1), citation('E2', b), citation('E3', a2)];
 
+  it('drops a trailing sources line and merges adjacent bracketed citations', () => {
+    const numbered = numberKnowledgeAnswer(
+      'Sorteer op getal [E2], [E1].\n\nBronnen: [E1], [E2], [E3]',
+      citations,
+      displayed,
+    );
+    expect(numbered.text).toBe('Sorteer op getal [1, 2].');
+    expect(numbered.references.map((reference) => reference.title)).toEqual(['b.md', 'a.md']);
+  });
+
   it('numbers files in order of first mention and merges sections of one file', () => {
     const numbered = numberKnowledgeAnswer(
       'First E2, E3. Then [E1] and (E2, E1).',

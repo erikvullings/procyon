@@ -547,6 +547,13 @@ export interface NumberedKnowledgeAnswer {
 const REFERENCE_PLACEHOLDER = /⟦(\d+(?:,\d+)*)⟧/gu;
 
 /**
+ * A closing "Sources: ⟦1,4⟧" line, in whatever language the model answered.
+ * The reference list below the answer already shows these sources.
+ */
+const TRAILING_SOURCES_LINE =
+  /\n[ \t]*(?:[*_]{1,2})?[\p{L}][\p{L} ]{0,24}(?:[*_]{1,2})?[ \t]*:[ \t]*(?:[*_]{1,2})?[ \t]*⟦[\d,]+⟧[ \t.]*(?:[*_]{1,2})?\s*$/u;
+
+/**
  * Replaces the opaque evidence labels a model copied - `E1`, `[E1]`,
  * `(E1, E4)`, `E1, E4, E5` - with per-file reference numbers in order of first
  * mention, so several cited sections of one file share one number.
@@ -598,6 +605,13 @@ export function numberKnowledgeAnswer(
       return groupNumbers.length === 0 ? match : `⟦${groupNumbers.join(',')}⟧`;
     });
   }
+  markdown = markdown
+    .replace(/⟦[\d,]+⟧(?:\s*[,;]\s*⟦[\d,]+⟧)+/gu, (run) => {
+      const merged = [...new Set(run.match(/\d+/gu)?.map(Number) ?? [])];
+      return `⟦${merged.sort((left, right) => left - right).join(',')}⟧`;
+    })
+    .replace(TRAILING_SOURCES_LINE, '')
+    .trimEnd();
   for (const citation of citations) numberOf(citation);
   const references = [...numbers.entries()].map(([key, number]) => {
     const cited = citations.filter((citation) => documentKey(citation) === key);

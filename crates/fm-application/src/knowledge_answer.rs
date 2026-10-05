@@ -38,7 +38,7 @@ use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
     normalize_endpoint_locality,
 };
-use crate::rag::{grounded_system_prompt, parse_generated_answer};
+use crate::rag::{grounded_system_prompt, normalize_citation_references, parse_generated_answer};
 
 /// Answer contract identity retained in prompts for reproducibility.
 pub(crate) const KNOWLEDGE_ANSWER_PROMPT_VERSION: &str = "structured-knowledge-answer/2";
@@ -313,8 +313,11 @@ impl KnowledgeAnswerCoordinator {
             )
             .await
             .map_err(map_profile_error)?;
-        let text = parse_generated_answer(&generated)
-            .map_err(|_| KnowledgeAnswerError::GenerationFailed)?;
+        let text = normalize_citation_references(
+            parse_generated_answer(&generated)
+                .map_err(|_| KnowledgeAnswerError::GenerationFailed)?,
+            retained.rows.iter().map(|row| row.label.as_str()),
+        );
         let citations = retained
             .rows
             .iter()
@@ -721,6 +724,31 @@ mod tests {
             serde_json::from_str(&fixture.transport.generations()[0].user_prompt)
                 .expect("prompt JSON");
         assert_eq!(prompt["question"], "Hoe werkt de rotor?");
+    }
+
+    #[tokio::test]
+    async fn bare_trailing_source_labels_are_resolved_as_citations() {
+        let transport = Arc::new(RecordingTransport::new(
+            "Sorteer op getal.\n\nBronnen: E1, E2",
+        ));
+        let fixture = fixture(transport).await;
+        let answer = KnowledgeAnswerCoordinator::default()
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:set",
+                    plan: &plan(),
+                    evidence: vec![evidence(0, "source-a"), evidence(1, "source-b")],
+                },
+                &intent(fixture.profile_id, "sha256:set"),
+                &StaticKnowledgeAuthorizationRefresh(snapshot(&["source-a", "source-b"])),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("answer");
+        assert_eq!(answer.text, "Sorteer op getal.\n\nBronnen: [E1], [E2]");
+        assert_eq!(answer.citations.len(), 2);
     }
 
     #[tokio::test]
