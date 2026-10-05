@@ -215,6 +215,8 @@ pub struct KnowledgeRootDto {
     pub available: bool,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
+    /// Indexed sources already searchable, even before a full pass completes.
+    pub indexed_sources: u64,
 }
 
 /// Requests the indexed roots authorized through one workspace.

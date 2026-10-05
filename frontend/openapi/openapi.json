@@ -11989,7 +11989,8 @@
           "label",
           "recursive",
           "available",
-          "indexedGeneration"
+          "indexedGeneration",
+          "indexedSources"
         ],
         "properties": {
           "available": {
@@ -12000,6 +12001,12 @@
             "type": "integer",
             "format": "int64",
             "description": "Last generation committed to runtime state.",
+            "minimum": 0
+          },
+          "indexedSources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Indexed sources already searchable, even before a full pass completes.",
             "minimum": 0
           },
           "label": {

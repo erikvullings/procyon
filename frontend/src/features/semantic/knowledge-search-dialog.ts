@@ -637,6 +637,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let pendingParse: Promise<void> | undefined;
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
+  // Enter pressed while the pane is still loading; the search runs once it is ready.
+  let searchAfterLoad = false;
   let settingsOpen = false;
   let enrolmentOpen = false;
   let surfaceMode: KnowledgeSurfaceMode = 'search';
@@ -872,6 +874,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     mode = 'hybrid';
     scopeKind = 'entireLibrary';
     focusSubjectOnOpen = true;
+    searchAfterLoad = false;
     answerProfiles = [];
     answerProfilesFailed = false;
     selectedAnswerProfileId = '';
@@ -938,6 +941,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
     if (loadGeneration === generation && (draft.about ?? []).length > 0) {
       await reinterpret(attrs);
+    }
+    if (loadGeneration === generation && searchAfterLoad) {
+      searchAfterLoad = false;
+      await search(attrs);
     }
   }
 
@@ -1378,7 +1385,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           t('knowledgeSearch', 'searchNoSources'),
         );
       }
-      const pendingRoots = roots.filter((root) => root.available && root.indexedGeneration === 0);
+      const pendingRoots = roots.filter(
+        (root) => root.available && root.indexedGeneration === 0 && root.indexedSources === 0,
+      );
       if (
         capabilities !== undefined &&
         attrs.semanticSourceIds.length === 0 &&
@@ -1794,12 +1803,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 name: 'knowledge-subjects',
                 rows: 1,
                 value: subjectsText,
-                disabled: busy === 'loading' || busy === 'searching',
+                disabled: busy === 'searching',
                 autocomplete: 'off',
                 'aria-label': t('knowledgeSearch', 'subjects'),
                 placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
                 onupdate: ({ dom }: m.VnodeDOM) => {
-                  if (!focusSubjectOnOpen || busy === 'loading') return;
+                  if (!focusSubjectOnOpen) return;
                   focusSubjectOnOpen = false;
                   const input = dom as HTMLTextAreaElement;
                   input.focus();
@@ -1820,6 +1829,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   }
                   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                     event.preventDefault();
+                    if (busy === 'loading') {
+                      searchAfterLoad = true;
+                      return;
+                    }
                     void search(attrs);
                   }
                 },

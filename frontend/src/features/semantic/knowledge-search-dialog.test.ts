@@ -281,6 +281,31 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-results')).toBeNull();
   });
 
+  it('accepts a query while loading and runs a queued Enter once ready', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.listKnowledgeRoots.bind(client);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async (request) => {
+      await gate;
+      return original(request);
+    });
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    mount({ client });
+
+    expect(subjects().disabled).toBe(false);
+    type(subjects(), 'retrieval');
+    submitSearch();
+    expect(execute).not.toHaveBeenCalled();
+
+    release();
+    await ready();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+    expect(subjects().value).toBe('retrieval');
+  });
+
   it('shows and enforces the empty-index state before a query is submitted', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([]);
@@ -306,6 +331,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         location: { providerId: 'local', uri: 'file:///Users/me/OneDrive/Basisschool' },
         recursive: true,
         indexedGeneration: 0,
+        indexedSources: 0,
         available: true,
       },
     ]);
@@ -321,6 +347,27 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(searchButton().disabled).toBe(false);
   });
 
+  it('does not call a root pending once it already has searchable documents', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'partial-root',
+        label: '/Users/me/OneDrive/Basisschool',
+        location: { providerId: 'local', uri: 'file:///Users/me/OneDrive/Basisschool' },
+        recursive: true,
+        indexedGeneration: 0,
+        indexedSources: 42,
+        available: true,
+      },
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+
+    await ready();
+
+    expect(root.textContent).not.toContain('still being indexed');
+    expect(searchButton().disabled).toBe(false);
+  });
+
   it('names every enrolled root that is still being indexed', async () => {
     const client = new MockFileManagerClient();
     const pending = (name: string) => ({
@@ -329,6 +376,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       location: { providerId: 'local', uri: `file:///Users/me/${encodeURIComponent(name)}` },
       recursive: true,
       indexedGeneration: 0,
+      indexedSources: 0,
       available: true,
     });
     vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([

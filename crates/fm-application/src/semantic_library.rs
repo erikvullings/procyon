@@ -438,6 +438,9 @@ pub struct SemanticRootStatus {
     pub reconciliation_generation: u64,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
+    /// Indexed occurrences already searchable through this root, including
+    /// those recorded by a still-incomplete enumeration.
+    pub indexed_occurrences: u64,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -3361,6 +3364,8 @@ fn project_root(
         },
         reconciliation_generation: data.catalog.reconciliation_generation(root.id()),
         indexed_generation: data.state.indexed_generation(root.id()),
+        indexed_occurrences: u64::try_from(data.catalog.root_occurrence_count(root.id()))
+            .unwrap_or(u64::MAX),
         exclusions: root
             .exclusions()
             .iter()

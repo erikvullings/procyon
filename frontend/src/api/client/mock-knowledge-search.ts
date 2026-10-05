@@ -150,6 +150,7 @@ const MOCK_KNOWLEDGE_ROOTS: readonly KnowledgeRoot[] = [
     location: { providerId: 'file', uri: 'mock:///Documents/handbook' },
     recursive: true,
     indexedGeneration: 4,
+    indexedSources: 3,
     available: true,
   },
   {
@@ -158,6 +159,7 @@ const MOCK_KNOWLEDGE_ROOTS: readonly KnowledgeRoot[] = [
     location: { providerId: 'file', uri: 'mock:///Documents/archive' },
     recursive: false,
     indexedGeneration: 2,
+    indexedSources: 1,
     available: false,
   },
 ];

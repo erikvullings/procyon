@@ -887,6 +887,23 @@ impl SemanticCatalog {
         )
     }
 
+    /// Returns the number of indexed occurrences authorized through a root.
+    ///
+    /// Unlike [`Self::reconciliation_generation`], this reflects documents that
+    /// are already searchable while a full enumeration is still incomplete.
+    #[must_use]
+    pub fn root_occurrence_count(&self, root_id: RootId) -> usize {
+        self.occurrences
+            .values()
+            .filter(|occurrence| {
+                occurrence
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.root_id == root_id)
+            })
+            .count()
+    }
+
     /// Returns the last successfully completed reconciliation generation.
     #[must_use]
     pub fn reconciliation_generation(&self, root_id: RootId) -> u64 {
