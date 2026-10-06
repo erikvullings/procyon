@@ -910,6 +910,27 @@ impl EvaluationReport {
         Ok(json)
     }
 
+    /// Validates the report and requires it to have been measured against the
+    /// retrieval implementation compiled into this binary.
+    ///
+    /// Only release gating needs this: a go must describe the code being
+    /// shipped. Ordinary tests use [`Self::validate`], so unrelated source or
+    /// lockfile edits do not invalidate the checked-in report.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KnowledgeEvaluationError::InvalidReport`] for a stale or
+    /// inconsistent report.
+    pub fn validate_for_release(&self) -> Result<(), KnowledgeEvaluationError> {
+        self.validate()?;
+        if self.release_candidate_fingerprint != release_candidate_fingerprint() {
+            return Err(KnowledgeEvaluationError::InvalidReport(
+                "the report was not measured against the current retrieval implementation".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Recomputes the decision from the recorded evidence and rejects drift.
     ///
     /// A report cannot claim a go that its own metrics do not support, and it
@@ -928,11 +949,6 @@ impl EvaluationReport {
         if self.measurement_basis.trim().is_empty() || self.maximum_p95_micros == 0 {
             return Err(KnowledgeEvaluationError::InvalidReport(
                 "a report needs a measurement basis and a latency ceiling".into(),
-            ));
-        }
-        if self.release_candidate_fingerprint != release_candidate_fingerprint() {
-            return Err(KnowledgeEvaluationError::InvalidReport(
-                "the report was not measured against the current retrieval implementation".into(),
             ));
         }
         if !self.production_measurement && self.limitations.is_empty() {
@@ -2766,8 +2782,11 @@ mod tests {
 
         let mut stale = report();
         stale.release_candidate_fingerprint = "stale-candidate".into();
+        stale
+            .validate()
+            .expect("staleness is only a release concern");
         assert!(matches!(
-            stale.validate(),
+            stale.validate_for_release(),
             Err(KnowledgeEvaluationError::InvalidReport(_))
         ));
     }

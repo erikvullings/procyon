@@ -1,5 +1,5 @@
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,11 +69,44 @@ if (process.argv.includes('--print-config')) {
   writeFileSync(generatedConfig, `${JSON.stringify(config, null, 2)}\n`);
 
   const extraArgs = process.argv.slice(2);
-  const result = spawnSync(
-    'pnpm',
-    ['exec', 'tauri', 'build', '--config', generatedConfig, ...extraArgs],
-    { cwd: tauriRoot, stdio: 'inherit', shell: process.platform === 'win32' },
-  );
-  if (result.error) throw result.error;
-  process.exitCode = result.status ?? 1;
+  const maxAttempts = process.platform === 'darwin' ? 3 : 1;
+  for (let attempt = 1; ; attempt += 1) {
+    const { status, output } = await tauriBuild(generatedConfig, extraArgs);
+    if (status === 0) break;
+    // hdiutil intermittently reports "Resource busy" on macOS runners; only the
+    // DMG step is retried, so real build failures still fail on the first attempt.
+    if (attempt >= maxAttempts || !output.includes('bundle_dmg.sh')) {
+      process.exitCode = status ?? 1;
+      break;
+    }
+    console.warn(`DMG bundling failed (attempt ${attempt}/${maxAttempts}); retrying`);
+    const volume = join('/Volumes', String(config.productName));
+    if (existsSync(volume))
+      spawnSync('hdiutil', ['detach', '-force', volume], { stdio: 'inherit' });
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+}
+
+/** Runs `tauri build`, streaming its output while keeping a copy for diagnosis. */
+function tauriBuild(generatedConfig, extraArgs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      'pnpm',
+      ['exec', 'tauri', 'build', '--config', generatedConfig, ...extraArgs],
+      {
+        cwd: tauriRoot,
+        stdio: ['inherit', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      },
+    );
+    let output = '';
+    const forward = (target) => (chunk) => {
+      target.write(chunk);
+      output = (output + chunk.toString()).slice(-64_000);
+    };
+    child.stdout.on('data', forward(process.stdout));
+    child.stderr.on('data', forward(process.stderr));
+    child.on('error', reject);
+    child.on('close', (status) => resolve({ status, output }));
+  });
 }

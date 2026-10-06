@@ -255,7 +255,10 @@ The checked-in `docs/evaluations/knowledge-retrieval-v1.json` remains the author
 assessment and may still record `decision: "noGo"`. In that case an exact `true` is an explicit
 release-owner decision to expose the feature as experimental; it does not reclassify or overwrite
 the evidence. The report remains bound to the checked-in corpus and a fingerprint of the
-release-critical planner, retrieval, and index sources.
+release-critical planner, retrieval, and index sources. Only the qualified-release gate
+(`scripts/check-knowledge-search-preconditions.mjs`) requires that fingerprint to match the current
+sources; ordinary tests check the report's internal consistency and that a fresh run reproduces its
+metrics, so unrelated edits and version bumps do not require regenerating it.
 
 An unqualified release build reports `fullText`, `semantic`, and `answerGeneration` as unavailable,
 so the surface is hidden, and the backend refuses knowledge planning, search, and answers with

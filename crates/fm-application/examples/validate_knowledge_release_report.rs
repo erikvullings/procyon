@@ -13,7 +13,7 @@ fn validate() -> Result<(), String> {
     let report = EvaluationReport::parse(&json)
         .map_err(|error| format!("failed to parse evaluation report {path}: {error}"))?;
     report
-        .validate()
+        .validate_for_release()
         .map_err(|error| format!("invalid evaluation report {path}: {error}"))?;
     let corpus_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/knowledge-retrieval-corpus-v1.json");
