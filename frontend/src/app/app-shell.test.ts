@@ -1612,6 +1612,85 @@ describe('AppShell', () => {
     );
   });
 
+  it.each(['empty', 'before-open', 'after-open'])(
+    'moves Tab focus into and out of the opposite basket pane (collection: %s)',
+    async (collection) => {
+      mountShell('mock');
+      await vi.waitFor(() => expect(directoryRowNamed(root, 'Documents')).toBeDefined());
+      async function collectFiles() {
+        directoryRowNamed(root, 'Documents')?.click();
+        (await toolbarButton('Add selection to basket')).click();
+        directoryRowNamed(root, '.env')?.click();
+        (await toolbarButton('Add selection to basket')).click();
+      }
+      if (collection === 'before-open') await collectFiles();
+      const left = root.querySelector<HTMLElement>('[data-pane-id="left"] > .fm-pane');
+      const right = root.querySelector<HTMLElement>('[data-pane-id="right"] > .fm-pane');
+      right?.focus();
+      await vi.waitFor(() =>
+        expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+          'true',
+        ),
+      );
+      (await toolbarButton('Open collection basket')).click();
+      await vi.waitFor(() =>
+        expect(right?.querySelector('.fm-breadcrumb')?.textContent).toBe('Collection basket'),
+      );
+      left?.focus();
+      await vi.waitFor(() =>
+        expect(root.querySelector('[data-pane-id="left"]')?.getAttribute('data-active')).toBe(
+          'true',
+        ),
+      );
+      if (collection === 'after-open') await collectFiles();
+      if (collection !== 'empty') {
+        await vi.waitFor(() =>
+          expect(
+            right?.querySelectorAll('.fm-directory-row:not(.fm-directory-group-row)'),
+          ).toHaveLength(2),
+        );
+      }
+
+      left?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+      m.redraw.sync();
+      expect(document.activeElement).toBe(right);
+      await vi.waitFor(() =>
+        expect(root.querySelector('[data-pane-id="right"]')?.getAttribute('data-active')).toBe(
+          'true',
+        ),
+      );
+      if (collection !== 'empty') {
+        expect(right?.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe(
+          'Documents',
+        );
+        right?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        m.redraw.sync();
+        expect(right?.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe('.env');
+      }
+
+      right?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+      m.redraw.sync();
+      expect(document.activeElement).toBe(left);
+      await vi.waitFor(() =>
+        expect(root.querySelector('[data-pane-id="left"]')?.getAttribute('data-active')).toBe(
+          'true',
+        ),
+      );
+      left?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+      m.redraw.sync();
+      expect(document.activeElement).toBe(right);
+      if (collection !== 'empty') {
+        expect(right?.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe('.env');
+      }
+    },
+  );
+
   it('uses F5 to collect from the directory pane while a basket tab is visible', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');

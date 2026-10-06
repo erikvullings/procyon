@@ -74,3 +74,9 @@ icon bar, and its own selection model. User-reported problems (v0.4.0):
   `pnpm exec biome check frontend/src`, affected Vitest coverage (391 tests), and the full frontend
   suite (151 files / 2322 tests). One full-suite run exposed an unrelated/flaky dispatcher failure;
   rerunning the isolated dispatcher file and then the full suite passed.
+- 2026-10-06: Fixed the missing cursor highlight after Tab into a basket. Transient-tab loading
+  had already initialized a cursor for the borrowed filesystem folder, so basket initialization
+  skipped it. Basket synchronization now repairs absent/stale cursors using visible display
+  order, including when an empty basket receives files; ordinary navigation updates cannot
+  replace basket contents or selection. Coverage exercises focus in both directions, arrow
+  navigation, cursor retention, and collection before/after opening.

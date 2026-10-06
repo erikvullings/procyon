@@ -2942,11 +2942,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       totalKnownSize: summary.knownSize,
       totalKnownFileCount: summary.fileCount,
     });
-    if (!selections.has(key)) {
-      selections.set(key, {
-        selectedEntryIds: basket.selectedKeys,
-        ...(entries[0] === undefined ? {} : { cursorEntryId: entries[0].id }),
-      });
+    const selection = selections.get(key) ?? emptySelection;
+    if (entries.length === 0) {
+      selections.set(key, emptySelection);
+    } else if (!entries.some((entry) => entry.id === selection.cursorEntryId)) {
+      // A transient tab may still have its borrowed folder's cursor, or have opened empty.
+      const tab = workspace?.panesById[paneId]?.tabsById[tabId];
+      const sorted = entriesSortedFor(
+        key,
+        entries,
+        effectiveSort(tab?.view.sort ?? []),
+        tab?.view.foldersFirst ?? false,
+        true,
+      );
+      const first = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab))[0];
+      if (first !== undefined) {
+        selections.set(
+          key,
+          reduceSelection(
+            selection,
+            { type: 'positionCursor', entryId: first.id },
+            entries.map((entry) => entry.id),
+          ),
+        );
+      }
     }
   }
 
@@ -4400,6 +4419,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               getShowGitStatusColumn: () =>
                 currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
               updatePane: (paneId, tabId, view, preferredCursorName) => {
+                if (basketTabIds.has(tabId)) return;
                 const key = tabKey(paneId, tabId);
                 const previous = directories.get(key);
                 if (
