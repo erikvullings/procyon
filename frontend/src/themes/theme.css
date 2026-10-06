@@ -4794,3 +4794,45 @@ input[type="text"].fm-shortcuts-help-capture-input {
   margin: 0.2rem 0 0;
   white-space: pre-wrap;
 }
+
+/* Compact progress for active jobs while the operations centre stays closed. */
+.fm-operation-centre-button.fm-operations-busy {
+  position: relative;
+  color: var(--fm-accent);
+}
+
+.fm-operation-centre-button.fm-operations-busy::after {
+  content: "";
+  position: absolute;
+  left: 15%;
+  bottom: 2px;
+  width: 70%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fm-accent);
+  animation: fm-operation-progress-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.fm-operation-centre-button.fm-operations-busy[style*="--fm-operation-progress"]::after {
+  background: linear-gradient(
+    to right,
+    var(--fm-accent) var(--fm-operation-progress),
+    color-mix(in srgb, var(--fm-accent) 25%, transparent) var(--fm-operation-progress)
+  );
+  animation: none;
+}
+
+@keyframes fm-operation-progress-pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-operation-centre-button.fm-operations-busy::after {
+    animation: none;
+  }
+}

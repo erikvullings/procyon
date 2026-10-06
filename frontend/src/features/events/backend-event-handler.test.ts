@@ -82,8 +82,6 @@ function makeContext(overrides: Partial<BackendEventContext> = {}): BackendEvent
     getDismissedOperationIds: vi.fn(() => new Set<string>()),
     clearDismissedOperation: vi.fn(),
     scheduleAutoDismiss: vi.fn(),
-    scheduleOperationCentreOpen: vi.fn(),
-    cancelOperationCentreOpen: vi.fn(),
     clearOperationSourceSelections: vi.fn(),
     removeOperationSourcesFromSearchResults: vi.fn(),
     removeOperationSourcesFromDiskUsage: vi.fn(),
@@ -1084,41 +1082,7 @@ describe('createBackendEventHandler', () => {
           raf.mockRestore();
         }
 
-        expect(ctx.scheduleOperationCentreOpen).toHaveBeenCalledWith(operation.id, 3_000);
         expect(ctx.clearOperationSourceSelections).toHaveBeenCalledWith(operation);
-      });
-
-      it('cancels automatic opening when an operation finishes within three seconds', () => {
-        const running: Operation = {
-          id: 'copy-1' as never,
-          kind: 'copy',
-          state: 'running',
-          sources: [],
-          progress: { completedItems: 0, completedBytes: 0 },
-          conflictPolicy: 'ask',
-          createdAt: '2026-01-01T00:00:00Z',
-        };
-        const completed = { ...running, state: 'completed' as const };
-        const pending: BackendEvent[] = [];
-        const ctx = makeContext({
-          getOperations: vi.fn(() => createOperationsState([running])),
-          pushPendingOperationEvent: vi.fn((event: BackendEvent) => pending.push(event)),
-          clearPendingOperationEvents: vi.fn(() => pending.splice(0)),
-        });
-        const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-          callback(0);
-          return 1;
-        });
-
-        try {
-          createBackendEventHandler(ctx)(
-            makeEvent({ type: 'operation.completed', operation: completed }, WS_ID),
-          );
-        } finally {
-          raf.mockRestore();
-        }
-
-        expect(ctx.cancelOperationCentreOpen).toHaveBeenCalledWith(completed.id);
       });
     });
   });

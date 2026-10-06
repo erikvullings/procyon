@@ -1699,7 +1699,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('opens the operation centre when a job remains active for three seconds', async () => {
+  it('keeps the operation centre closed for long-running jobs and shows progress on its button', async () => {
     const client = new MockFileManagerClient();
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
@@ -1721,18 +1721,19 @@ describe('AppShell', () => {
             kind: 'copy',
             state: 'running',
             sources: [],
-            progress: { completedItems: 0, completedBytes: 0 },
+            progress: { completedItems: 1, totalItems: 4, completedBytes: 25, totalBytes: 100 },
             conflictPolicy: 'ask',
             createdAt,
           },
         },
       });
 
-      await vi.advanceTimersByTimeAsync(2_999);
-      expect(root.querySelector('.fm-operation-centre')).toBeNull();
-      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(10_000);
       m.redraw.sync();
-      expect(root.querySelector('.fm-operation-centre')).not.toBeNull();
+      expect(root.querySelector('.fm-operation-centre')).toBeNull();
+      const button = root.querySelector<HTMLButtonElement>('.fm-operation-centre-button');
+      expect(button?.classList.contains('fm-operations-busy')).toBe(true);
+      expect(button?.style.getPropertyValue('--fm-operation-progress')).toBe('25%');
     } finally {
       vi.useRealTimers();
       raf.mockRestore();

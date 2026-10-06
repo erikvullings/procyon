@@ -506,6 +506,29 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /** Compact pane containing its single tab, path controls, directory grid, and status. */
+const DEFAULT_SELECTION_MASK = '*.*';
+/** Last mask used by select/deselect-by-mask, shared by both panes and kept across restarts. */
+export const SELECTION_MASK_STORAGE_KEY = 'procyon.selectionMask';
+
+function loadSelectionMask(): string {
+  try {
+    const stored = localStorage.getItem(SELECTION_MASK_STORAGE_KEY)?.trim();
+    return stored === undefined || stored === '' ? DEFAULT_SELECTION_MASK : stored;
+  } catch {
+    return DEFAULT_SELECTION_MASK;
+  }
+}
+
+function saveSelectionMask(mask: string): void {
+  const trimmed = mask.trim();
+  if (trimmed === '') return;
+  try {
+    localStorage.setItem(SELECTION_MASK_STORAGE_KEY, trimmed);
+  } catch {
+    // Storage may be unavailable (private mode, quota); remembering the mask is best-effort.
+  }
+}
+
 export const Pane: FactoryComponent<PaneAttrs> = () => {
   let editing = false;
   let draftPath = '';
@@ -519,7 +542,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let viewMenuOpen = false;
   let sortMenuOpen = false;
   let selectionMaskCommand: 'selectByMask' | 'deselectByMask' | undefined;
-  let selectionMask = '*.*';
+  let selectionMask = DEFAULT_SELECTION_MASK;
   let selectionMaskNeedsFocus = false;
   let photoModeByTab = new Map<TabId, boolean>();
   let typeaheadPath: string | undefined;
@@ -543,6 +566,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
 
   function applySelectionMask(attrs: PaneAttrs): void {
     if (selectionMaskCommand === undefined) return;
+    saveSelectionMask(selectionMask);
     attrs.onSelectionAction({
       type: selectionMaskCommand,
       matchingEntryIds: attrs.entries
@@ -997,7 +1021,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             } else if (command?.type === 'selectByMask' || command?.type === 'deselectByMask') {
               event.preventDefault();
               selectionMaskCommand = command.type;
-              selectionMask = '*.*';
+              selectionMask = loadSelectionMask();
               selectionMaskNeedsFocus = true;
             } else if (event.altKey && event.key === 'ArrowLeft') {
               event.preventDefault();

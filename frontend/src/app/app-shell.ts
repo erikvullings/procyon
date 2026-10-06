@@ -132,6 +132,7 @@ import {
   dismissOperation,
   mergeOperationHistory,
   shouldAutoDismissOperation,
+  summariseActiveOperations,
 } from '../features/operations/operation-state';
 import {
   createOperationsController,
@@ -920,7 +921,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let pendingOperationEvents: BackendEvent[] = [];
   let operationFrame: number | undefined;
   const autoDismissTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
-  const operationCentreOpenTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
   const dismissedOperationIds = loadDismissedOperationIds();
   let removed = false;
 
@@ -957,39 +957,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (existing === undefined) return;
     clearTimeout(existing);
     autoDismissTimers.delete(operationId);
-  }
-
-  function operationIsActive(operation: Operation): boolean {
-    return (
-      operation.state === 'queued' ||
-      operation.state === 'planning' ||
-      operation.state === 'running' ||
-      operation.state === 'paused' ||
-      operation.state === 'waitingForConflictResolution' ||
-      operation.state === 'cancelling'
-    );
-  }
-
-  function scheduleOperationCentreOpen(operationId: OperationId, delayMs: number): void {
-    if (operationCentreOpenTimers.has(operationId)) return;
-    operationCentreOpenTimers.set(
-      operationId,
-      setTimeout(() => {
-        operationCentreOpenTimers.delete(operationId);
-        const operation = operations.byId[operationId];
-        if (operation !== undefined && operationIsActive(operation)) {
-          setOperationCentreVisible(true);
-          m.redraw();
-        }
-      }, delayMs),
-    );
-  }
-
-  function cancelOperationCentreOpen(operationId: OperationId): void {
-    const timer = operationCentreOpenTimers.get(operationId);
-    if (timer === undefined) return;
-    clearTimeout(timer);
-    operationCentreOpenTimers.delete(operationId);
   }
 
   function clearOperationSourceSelections(operation: Operation): void {
@@ -2761,8 +2728,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDismissedOperationIds: () => dismissedOperationIds,
     clearDismissedOperation,
     scheduleAutoDismiss,
-    scheduleOperationCentreOpen,
-    cancelOperationCentreOpen,
     clearOperationSourceSelections,
     removeOperationSourcesFromSearchResults,
     removeOperationSourcesFromDiskUsage,
@@ -4564,11 +4529,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 !shouldAutoDismissOperation(operation) && !dismissedOperationIds.has(operation.id),
             );
             operations = createOperationsState(relevant);
-            for (const operation of relevant) {
-              if (!operationIsActive(operation)) continue;
-              const elapsed = Date.now() - Date.parse(operation.createdAt);
-              scheduleOperationCentreOpen(operation.id, Math.max(0, 3_000 - elapsed));
-            }
             m.redraw();
           }
         })
@@ -4600,8 +4560,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (operationFrame !== undefined) cancelAnimationFrame(operationFrame);
       for (const timer of autoDismissTimers.values()) clearTimeout(timer);
       autoDismissTimers.clear();
-      for (const timer of operationCentreOpenTimers.values()) clearTimeout(timer);
-      operationCentreOpenTimers.clear();
       workspaceRequest?.abort();
       unsubscribeEvents?.();
       unsubscribeNativeFileDrops?.();
@@ -4621,6 +4579,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (operation) =>
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
+      const activeOperationProgress = summariseActiveOperations(operations);
       // macOS's overlay title bar (spec follow-up) keeps the native traffic lights, but
       // draws our own centred title in a reserved CSS row instead of the OS title text
       // (hidden via hiddenTitle) -- this is what makes the frame colour match, since a
@@ -5012,10 +4971,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               m(
                 IconButton,
                 {
-                  className: 'fm-operation-centre-button',
+                  className: [
+                    'fm-operation-centre-button',
+                    activeOperationProgress === undefined ? '' : 'fm-operations-busy',
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
                   disabled: workspace === undefined,
                   'aria-label': t('shell', 'operationCentre'),
                   'aria-pressed': String(workspace?.operationCentre.visible === true),
+                  ...(activeOperationProgress === undefined
+                    ? {}
+                    : {
+                        'aria-busy': 'true',
+                        ...(activeOperationProgress.percent === undefined
+                          ? {}
+                          : {
+                              style: {
+                                '--fm-operation-progress': `${activeOperationProgress.percent}%`,
+                              },
+                            }),
+                      }),
                   onclick: toggleOperationCentre,
                 },
                 listIcon(),
