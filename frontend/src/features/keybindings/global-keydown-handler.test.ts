@@ -223,6 +223,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     replaceClipboard: vi.fn(),
     selectedLocations: () => [],
     collectIntoBasketIfVisible: () => false,
+    removeFromBasketIfActive: () => false,
     invokeActionById: vi.fn(),
     openViewer: vi.fn(),
     openEditor: vi.fn(),
@@ -399,6 +400,17 @@ describe('dispatchGlobalKeydown precedence', () => {
 });
 
 describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
+  it('Backspace removes the active basket selection without invoking file deletion', () => {
+    const removeFromBasketIfActive = vi.fn(() => true);
+    const context = makeContext({ removeFromBasketIfActive });
+    const event = keydown('Backspace');
+
+    createGlobalKeydownHandler(context)(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(removeFromBasketIfActive).toHaveBeenCalledOnce();
+  });
+
   it('Ctrl+Backspace navigates to the root of the active location', () => {
     const navigate = vi.fn().mockResolvedValue(undefined);
     const context = makeContext({

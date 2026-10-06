@@ -864,6 +864,6 @@ button.fm-breadcrumb-scheme:hover {
 
 /* Non-fatal warnings (e.g. an inline rename onto an existing name) - orange, unlike error toasts. */
 .toast.fm-toast-warning {
-  background-color: #b45309;
-  color: #fff;
+  background-color: var(--fm-selected-row-text);
+  color: var(--fm-cursor-row-text);
 }

@@ -569,6 +569,38 @@ describe('DirectoryTable rows', () => {
     expect(root.querySelector<HTMLElement>('.fm-directory-row')?.style.height).toBe('20px');
   });
 
+  it('renders non-interactive home-relative parent group rows without changing entry indices', () => {
+    const onCursorChange = vi.fn();
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([
+        entry({
+          id: 'downloads',
+          name: 'a.txt',
+          location: { providerId: 'local', uri: 'file:///Users/erik/Downloads/a.txt' },
+        }),
+        entry({
+          id: 'documents',
+          name: 'b.txt',
+          location: { providerId: 'local', uri: 'file:///Users/erik/Documents/b.txt' },
+        }),
+      ]),
+      groupByParent: true,
+      cursorIndex: 1,
+      onCursorChange,
+    });
+
+    expect(
+      [...root.querySelectorAll('.fm-directory-group-row')].map((row) => row.textContent),
+    ).toEqual(['~/Downloads', '~/Documents']);
+    expect(root.querySelectorAll('.fm-directory-row')).toHaveLength(4);
+    root
+      .querySelectorAll<HTMLElement>('.fm-directory-row:not(.fm-directory-group-row)')[1]
+      ?.click();
+    expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });
+    expect(root.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe('b');
+  });
+
   it('collapses every parent-path segment already shown by the previous search result', () => {
     mount({
       state: { type: 'loaded' },

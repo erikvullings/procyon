@@ -517,6 +517,7 @@ export function createNavigationController(
       // doesn't drop later entries - which would prune the cursor/selection onto page one.
       if (
         current !== undefined &&
+        current.location !== undefined &&
         current.location.uri === tab.location.uri &&
         current.location.providerId === tab.location.providerId &&
         current.entries.length > snapshot.entries.length &&

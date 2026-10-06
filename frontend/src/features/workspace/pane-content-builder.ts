@@ -258,7 +258,7 @@ export function createPaneContentBuilder(
             directory.entries,
             context.effectiveSort(tab.view.sort),
             tab.view.foldersFirst,
-            tab.location.uri.startsWith('search://'),
+            tab.location.uri.startsWith('search://') || directory.location?.providerId === 'basket',
           );
     const quickFilterQuery = key === undefined ? '' : context.quickFilterQueryFor(key, tab);
     const filtered =
@@ -280,7 +280,9 @@ export function createPaneContentBuilder(
         const freshDirectory = context.getDirectories().get(key);
         if (freshDirectory !== undefined) {
           const sortDescriptors = context.effectiveSort(tab.view.sort);
-          const groupByParentPath = tab.location.uri.startsWith('search://');
+          const groupByParentPath =
+            tab.location.uri.startsWith('search://') ||
+            freshDirectory.location?.providerId === 'basket';
           const cacheKey = JSON.stringify([
             sortDescriptors,
             tab.view.foldersFirst,
@@ -311,7 +313,8 @@ export function createPaneContentBuilder(
               context.getDirectories().get(key)?.entries ?? [],
               context.effectiveSort(tab.view.sort),
               tab.view.foldersFirst,
-              tab.location.uri.startsWith('search://'),
+              tab.location.uri.startsWith('search://') ||
+                context.getDirectories().get(key)?.location?.providerId === 'basket',
             );
       const filteredFresh =
         key === undefined
@@ -768,7 +771,8 @@ export function createPaneContentBuilder(
       onRename: (entry, name) => {
         const active = context.activeDirectory();
         if (active === undefined || active.paneId !== paneId) return;
-        const destinationUri = `${active.location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`;
+        const parent = parentLocation(entry.location);
+        const destinationUri = `${parent.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`;
         void context
           .getOpsController()
           .rename(entry.location, { ...entry.location, uri: destinationUri });
@@ -867,14 +871,33 @@ export function createPaneContentBuilder(
         if (tab === undefined) return;
         context.setMultiRenameOpen(true);
         context.setMultiRenameEntries(selected);
-        context.setMultiRenameLocation(tab.location);
+        context.setMultiRenameLocation(
+          selected.every(
+            (entry) =>
+              parentLocation(entry.location).providerId ===
+                parentLocation(selected[0]?.location ?? entry.location).providerId &&
+              parentLocation(entry.location).uri ===
+                parentLocation(selected[0]?.location ?? entry.location).uri,
+          )
+            ? parentLocation(selected[0]?.location ?? tab.location)
+            : undefined,
+        );
         const selectedIds = new Set(selected.map((entry) => entry.id));
         context.setMultiRenameExistingNames(
-          new Set(
-            directory.entries
-              .filter((entry) => !selectedIds.has(entry.id))
-              .map((entry) => entry.name),
-          ),
+          selected.length > 0 &&
+            selected.every(
+              (entry) =>
+                parentLocation(entry.location).providerId ===
+                  parentLocation(selected[0]?.location ?? entry.location).providerId &&
+                parentLocation(entry.location).uri ===
+                  parentLocation(selected[0]?.location ?? entry.location).uri,
+            )
+            ? new Set(
+                directory.entries
+                  .filter((entry) => !selectedIds.has(entry.id))
+                  .map((entry) => entry.name),
+              )
+            : new Set(),
         );
       },
       ...(pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)

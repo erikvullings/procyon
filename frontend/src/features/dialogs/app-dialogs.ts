@@ -308,17 +308,17 @@ export function renderAppDialogs(
       onApply: (renamed) => {
         const { multiRenameLocation: location, multiRenameEntries: entries } = ds;
         dialogs.cancelMultiRename();
-        if (location === undefined) return;
         const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
         const sources: Location[] = [];
         const destinations: Location[] = [];
         for (const { id, newName } of renamed) {
           const entry = entriesById.get(id);
           if (entry === undefined) continue;
+          const parent = location ?? parentLocation(entry.location);
           sources.push(entry.location);
           destinations.push({
             ...entry.location,
-            uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(newName)}`,
+            uri: `${parent.uri.replace(/\/$/u, '')}/${encodeURIComponent(newName)}`,
           });
         }
         if (sources.length === 0) return;

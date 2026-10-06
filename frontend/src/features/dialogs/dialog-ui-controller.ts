@@ -90,7 +90,7 @@ export interface DialogUIController {
   cancelArchiveCreate(): void;
   openMultiRename(
     entries: readonly EntrySummary[],
-    location: Location,
+    location: Location | undefined,
     existingNames: ReadonlySet<string>,
   ): void;
   cancelMultiRename(): void;

@@ -108,7 +108,10 @@ describe('collection basket', () => {
       entry('a', 'local', 'file:///a'),
       entry('b', 'sftp', 'sftp://server/b'),
     ]);
-    expect(removeFromBasket(basket, basket.items[0]!.key).items).toHaveLength(1);
+    const item = basket.items[0];
+    expect(item).toBeDefined();
+    if (item === undefined) return;
+    expect(removeFromBasket(basket, item.key).items).toHaveLength(1);
   });
 
   it('runs only checked entries and none when no entries are checked', () => {
@@ -116,9 +119,10 @@ describe('collection basket', () => {
       entry('a', 'local', 'file:///a'),
       entry('b', 'sftp', 'sftp://server/b'),
     ]);
-    expect(basketSources(selectBasketItems(basket, [basket.items[1]!.key]))).toEqual([
-      basket.items[1]!.location,
-    ]);
+    const item = basket.items[1];
+    expect(item).toBeDefined();
+    if (item === undefined) return;
+    expect(basketSources(selectBasketItems(basket, [item.key]))).toEqual([item.location]);
     expect(basketSources(basket)).toEqual([]);
   });
 
@@ -213,7 +217,37 @@ describe('collection basket', () => {
       ),
       async (item) => (item.id === 'b' ? 'missing' : item.id === 'c' ? 'stale' : 'ready'),
     );
-    expect(basketSources(checked)).toEqual([basket.items[0]!.location, basket.items[3]!.location]);
+    const first = basket.items[0];
+    const fourth = basket.items[3];
+    expect(first).toBeDefined();
+    expect(fourth).toBeDefined();
+    if (first === undefined || fourth === undefined) return;
+    expect(basketSources(checked)).toEqual([first.location, fourth.location]);
+  });
+
+  it('can refresh a changed collected entry with new metadata while preserving its basket key', async () => {
+    const basket = addToBasket(emptyBasket, [
+      {
+        ...entry('a', 'local', 'file:///a.txt'),
+        size: 10,
+        modifiedAt: '2026-10-01T10:00:00.000Z',
+      },
+    ]);
+    const checked = await refreshBasket(basket, async (item) => ({
+      ...item,
+      size: 42,
+      modifiedAt: '2026-10-06T10:00:00.000Z',
+      metadataRevision: 2,
+      status: 'ready',
+    }));
+
+    expect(checked.items[0]).toMatchObject({
+      key: basket.items[0]?.key,
+      size: 42,
+      modifiedAt: '2026-10-06T10:00:00.000Z',
+      metadataRevision: 2,
+      status: 'ready',
+    });
   });
 
   it('does not inspect unrelated entries when acting on a checked subset', async () => {
@@ -221,7 +255,10 @@ describe('collection basket', () => {
       entry('a', 'local', 'file:///a'),
       entry('b', 'sftp', 'sftp://offline/b'),
     ]);
-    const selected = selectBasketItems(basket, [basket.items[0]!.key]);
+    const item = basket.items[0];
+    expect(item).toBeDefined();
+    if (item === undefined) return;
+    const selected = selectBasketItems(basket, [item.key]);
     const checked = await refreshBasket(
       selected,
       async (item) => {
@@ -230,12 +267,13 @@ describe('collection basket', () => {
       },
       new Set(selected.selectedKeys),
     );
-    expect(basketSources(checked)).toEqual([basket.items[0]!.location]);
+    expect(basketSources(checked)).toEqual([item.location]);
   });
 
   it('reports a moved entry when its stable identity is visible at a new location', () => {
-    const collected = addToBasket(emptyBasket, [entry('same', 'local', 'file:///before')])
-      .items[0]!;
+    const collected = addToBasket(emptyBasket, [entry('same', 'local', 'file:///before')]).items[0];
+    expect(collected).toBeDefined();
+    if (collected === undefined) return;
     expect(
       classifyBasketAbsence(collected, [
         entry('same', 'sftp', 'sftp://server/before'),

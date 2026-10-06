@@ -303,9 +303,7 @@ describe('theme stylesheet', () => {
     expect(materializedCss).toMatch(
       /:is\(\.fm-app-shell, \.fm-session-token-gate\)\s+:is\(button:disabled, \[role="button"\]\[aria-disabled="true"\]\)\s*\{\s*transition:\s*none;/,
     );
-    expect(
-      themeBlock(/\.fm-app-shell \.fm-basket-actions button\.btn-flat\s*\{([^}]*)\}/),
-    ).not.toContain('transition');
+    expect(themeCss).not.toMatch(/\.fm-basket-actions button\.btn-flat\s*\{[^}]*transition:/);
   });
 
   it('meets WCAG AA for text on surfaces and both selection states', () => {

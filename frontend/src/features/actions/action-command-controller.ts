@@ -76,6 +76,10 @@ export interface ActionCommandControllerContext {
     selection: SelectionState | undefined,
     entries: readonly EntrySummary[],
   ) => readonly EntrySummary[];
+  prepareFileOperationEntries?(
+    paneId: PaneId,
+    entries: readonly EntrySummary[],
+  ): Promise<readonly EntrySummary[] | undefined>;
   getClipboard(): ClipboardState;
   replaceClipboard(next?: ClipboardState): void;
   toast(options: { html: string }): void;
@@ -519,9 +523,22 @@ export function createActionCommandController(
     // same path as their F5/F6/F8 keybindings. The generic `invokeActionById` fallthrough sends no
     // operation parameters, which the backend rejects.
     if (FILE_OPERATION_ACTION_IDS.has(action.id)) {
-      const locations = targetEntries.map((entry) => entry.location);
-      if (paneId !== undefined && locations.length > 0)
-        runFileOperation(action.id, paneId, locations);
+      if (paneId !== undefined && targetEntries.length > 0) {
+        const runPrepared = (entries: readonly EntrySummary[]): void =>
+          runFileOperation(
+            action.id,
+            paneId,
+            entries.map((entry) => entry.location),
+          );
+        const prepare = context.prepareFileOperationEntries;
+        if (prepare === undefined) {
+          runPrepared(targetEntries);
+        } else {
+          void prepare(paneId, targetEntries).then((entries) => {
+            if (entries !== undefined && entries.length > 0) runPrepared(entries);
+          });
+        }
+      }
       return;
     }
     if (isCopySelectionAction(action.id)) {

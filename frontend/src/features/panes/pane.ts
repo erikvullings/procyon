@@ -164,6 +164,8 @@ export interface TableConfigAttrs {
   readonly visibleColumnIds?: ReadonlySet<string> | undefined;
   /** Shows the Git-status column; hidden unless enabled and the directory is inside a git repo. */
   readonly showGitStatusColumn?: boolean | undefined;
+  /** Shows non-selectable parent-folder group rows in the table. */
+  readonly groupByParent?: boolean | undefined;
   readonly nativeIconLoader?: NativeIconLoader | undefined;
   readonly thumbnailLoader?: ThumbnailLoader | undefined;
   readonly finderTagsLoader?: FinderTagsLoader | undefined;
@@ -1862,6 +1864,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     : { onColumnWidthChange: attrs.tableConfig.onColumnWidthChange }),
                   showGitStatusColumn: attrs.tableConfig.showGitStatusColumn === true,
                   showFullPath: isSearchLocation,
+                  groupByParent: attrs.tableConfig.groupByParent === true,
                   ...(renameCtrl.entry === undefined
                     ? {}
                     : { renamingEntryId: renameCtrl.entry.id }),
