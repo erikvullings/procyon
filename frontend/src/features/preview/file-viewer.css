@@ -1,4 +1,6 @@
 .fm-file-viewer {
+  /* The viewer header lines up with the breadcrumb row of a directory pane. */
+  --fm-header-height: var(--fm-row-height);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
