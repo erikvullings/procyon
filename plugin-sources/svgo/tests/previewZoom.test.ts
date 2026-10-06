@@ -36,9 +36,14 @@ it("keeps the SVG point under the wheel cursor while zooming, panning and resizi
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
     pendingFrame = null;
   });
+  const renderedWidth = () =>
+    svg.style.width === "" ? 400 * fitScale : Number.parseFloat(svg.style.width);
+  Object.defineProperty(svg, "getBoundingClientRect", {
+    value: () => ({ width: renderedWidth(), height: (renderedWidth() * 240) / 400 }),
+  });
   const matrix = () => {
     const transform = svg.style.transform;
-    const scale = Number(transform.match(/scale\(([^)]+)\)/)?.[1] ?? 1) * fitScale;
+    const scale = renderedWidth() / 400;
     const panX = Number(transform.match(/translate\(([^p]+)px/)?.[1] ?? 0);
     const panY = Number(transform.match(/translate\([^,]+, ([^p]+)px/)?.[1] ?? 0);
     return {
@@ -80,7 +85,8 @@ it("keeps the SVG point under the wheel cursor while zooming, panning and resizi
     expect(event.defaultPrevented).toBe(true);
     expect(after.a * modelX + after.e).toBeCloseTo(x, 4);
     expect(after.d * modelY + after.f).toBeCloseTo(y, 4);
-    return Number(svg.style.transform.match(/scale\(([^)]+)\)/)?.[1] ?? 1);
+    expect(svg.style.transform).not.toContain("scale");
+    return Number(svg.dataset.zoom);
   };
 
   expect(wheel(370, 180, -100, () => {
@@ -101,17 +107,20 @@ it("keeps the SVG point under the wheel cursor while zooming, panning and resizi
   expect(wheel(410, 205, 100)).toBeCloseTo(1.07811);
 
   for (let i = 0; i < 100; i++) wheel(410, 205, -100);
-  expect(svg.style.transform).toContain("scale(10)");
+  expect(svg.dataset.zoom).toBe("10");
   for (let i = 0; i < 150; i++) wheel(410, 205, 100);
-  expect(svg.style.transform).toContain("scale(0.1)");
+  expect(svg.dataset.zoom).toBe("0.1");
 
   const controls = root.querySelectorAll<HTMLButtonElement>(".preview-control-btn");
   controls[3].click();
-  expect(svg.style.transform).toBe("translate(0px, 0px) scale(1)");
+  expect(svg.style.transform).toBe("translate(0px, 0px)");
+  expect(svg.style.width).toBe("");
   controls[1].click();
-  expect(svg.style.transform).toContain("scale(1.2)");
+  expect(svg.dataset.zoom).toBe("1.2");
+  expect(svg.style.width).toBe(`${400 * fitScale * 1.2}px`);
+  expect(svg.style.maxWidth).toBe("none");
   controls[2].click();
-  expect(svg.style.transform).toContain("scale(0.96)");
+  expect(Number(svg.dataset.zoom)).toBeCloseTo(0.96);
 
   svg.remove();
   const emptyWheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });

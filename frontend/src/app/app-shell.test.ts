@@ -1043,6 +1043,59 @@ describe('AppShell', () => {
     );
   });
 
+  it('keeps a later-page cursor when a large directory is reset with only its first page', async () => {
+    const client = new MockFileManagerClient();
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    activePane
+      ?.querySelector<HTMLElement>('.fm-breadcrumb-segments')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const pathInput = activePane?.querySelector<HTMLInputElement>('.fm-path-input');
+    if (pathInput === null || pathInput === undefined) throw new Error('path input missing');
+    pathInput.value = '/large/1000';
+    pathInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    pathInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(activePane?.textContent).toContain('generated-0000000'));
+    activePane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    const cursorName = () =>
+      activePane?.querySelector('.fm-cursor-row .fm-entry-name [title]')?.getAttribute('title');
+    await vi.waitFor(() => expect(cursorName()).toMatch(/^generated-0000999/));
+    const lastName = cursorName();
+    const firstPage = await client.listDirectory({
+      workspaceId: (await client.startWorkspace()).id,
+      requestId: 'large-reset',
+      paneId: 'left',
+      location: { providerId: 'mock', uri: 'mock:///large/1000' },
+    });
+    expect(firstPage.hasMore).toBe(true);
+    listDirectory.mockClear();
+
+    client.emit({
+      eventId: 60,
+      timestamp: '2030-09-06T16:00:00Z',
+      payload: {
+        type: 'directory.delta',
+        paneId: 'left',
+        delta: {
+          type: 'reset',
+          snapshot: { ...firstPage, requestId: 'watched-large-reset', revision: 50 },
+        },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        listDirectory.mock.calls.some(([request]) => request.continuationToken !== undefined),
+      ).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    m.redraw.sync();
+    expect(cursorName()).toBe(lastName);
+  });
+
   it('re-fetches the directory after applying a keyboard sort shortcut', async () => {
     const client = new MockFileManagerClient();
     const originalListActions = client.listActions.bind(client);

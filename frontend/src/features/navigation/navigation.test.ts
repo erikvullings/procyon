@@ -937,6 +937,32 @@ describe('navigation controller', () => {
     ]);
   });
 
+  it('a foreground reload re-fetches every already-loaded page of a large directory', async () => {
+    // Regression test: operation completion (delete, save) forces a foreground reload. Fetching
+    // only page one dropped later entries, so the cursor was pruned onto page one's last entry.
+    const context = setup();
+    const pages = (request: { requestId: string; continuationToken?: string | null }) =>
+      request.continuationToken === 'page-2'
+        ? snapshot(request.requestId, 'file:///home/erik', ['two'])
+        : snapshot(request.requestId, 'file:///home/erik', ['one'], {
+            hasMore: true,
+            continuationToken: 'page-2',
+          });
+    vi.mocked(context.client.listDirectory).mockImplementation(async (request) => pages(request));
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+    await controller.load('left');
+    await controller.loadAllPages('left');
+
+    await controller.load('left');
+
+    expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual(['one', 'two']);
+  });
+
   it('loadAllPages stops instead of retrying forever when a page fails', async () => {
     const context = setup();
     vi.mocked(context.client.listDirectory)

@@ -2041,6 +2041,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     if (delta.type === 'reset') {
+      // Large directories are reset with only their first page. Applying that verbatim would
+      // drop every later page the user already loaded and prune the cursor onto page one, so
+      // re-fetch instead: background reloads re-hydrate all previously loaded pages.
+      if (delta.snapshot.hasMore && delta.snapshot.entries.length < current.entries.length) {
+        refetchAffectedPanes(paneId);
+        return;
+      }
       navigation.applySnapshot(paneId, delta.snapshot);
       m.redraw();
       return;

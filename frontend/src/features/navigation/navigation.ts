@@ -513,9 +513,12 @@ export function createNavigationController(
           request.controller.signal,
         ),
       );
+      // Re-fetch every page that was already loaded, so a refresh of a large paged directory
+      // doesn't drop later entries - which would prune the cursor/selection onto page one.
       if (
-        loadOptions?.background &&
         current !== undefined &&
+        current.location.uri === tab.location.uri &&
+        current.location.providerId === tab.location.providerId &&
         current.entries.length > snapshot.entries.length &&
         snapshot.hasMore
       ) {
