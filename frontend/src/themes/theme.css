@@ -1744,7 +1744,7 @@ main.fm-workspace {
   position: absolute;
   z-index: 20;
   top: calc(100% + 1px);
-  left: 0.5rem;
+  right: 0.5rem;
   width: min(24rem, calc(100vw - 2rem));
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);

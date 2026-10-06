@@ -1535,6 +1535,12 @@ pub(crate) async fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, labe
     }
 }
 
+/// A panel still loading may not be registered yet: WebView2 creates child views
+/// asynchronously, and `next_heartbeat` already bounds how long loading may take.
+fn awaiting_or_present(loaded: bool, view_exists: bool) -> bool {
+    !loaded || view_exists
+}
+
 pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
     let registry = app.state::<Arc<PanelRegistry>>();
     let service = &app.state::<AppState>().service;
@@ -1563,7 +1569,10 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
                     .eval(format!("window.procyonPlugin.postMessage({});", event))
                     .is_ok()
             }),
-            Ok(None) => app.get_webview(&session.label).is_some(),
+            Ok(None) => awaiting_or_present(
+                session.loaded.load(Ordering::SeqCst),
+                app.get_webview(&session.label).is_some(),
+            ),
             Err(()) => false,
         };
         if invalid || !responsive {
@@ -1582,6 +1591,13 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_loading_panel_is_not_discarded_before_its_view_is_registered() {
+        assert!(awaiting_or_present(false, false));
+        assert!(awaiting_or_present(true, true));
+        assert!(!awaiting_or_present(true, false));
+    }
 
     fn svgo_service(root: &Path) -> Arc<FileManagerService> {
         let service = Arc::new(FileManagerService::new(
