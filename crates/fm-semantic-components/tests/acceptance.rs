@@ -1541,6 +1541,46 @@ fn managed_launch_resolution_revalidates_installed_payload_bytes() {
 }
 
 #[test]
+fn memoized_status_verification_still_rejects_a_changed_payload() {
+    let (_directory, manager, _environment) = installed_fixture("memoized-verify-");
+    let catalog = signed_fixture_catalog();
+    let worker = catalog
+        .artifacts()
+        .iter()
+        .find(|artifact| matches!(artifact.kind(), ArtifactKind::Worker))
+        .expect("worker artifact");
+
+    let installed = manager
+        .verified_installed_payload_memoized(worker)
+        .expect("verify installed worker")
+        .expect("installed worker");
+    assert_eq!(
+        manager
+            .verified_installed_payload_memoized(worker)
+            .expect("memoized verification")
+            .as_deref(),
+        Some(installed.as_path())
+    );
+    // Same length, so only the stamp's time/inode fields reveal the change.
+    let original = std::fs::read(&installed).expect("read worker");
+    let mut tampered = original.clone();
+    tampered[0] ^= 0xff;
+    std::fs::write(&installed, &tampered).expect("tamper worker");
+    assert!(matches!(
+        manager.verified_installed_payload_memoized(worker),
+        Err(InstallError::InstalledArtifactInvalid { .. })
+    ));
+    std::fs::write(&installed, &original).expect("restore worker");
+    assert!(
+        manager
+            .clone()
+            .verified_installed_payload_memoized(worker)
+            .expect("restored worker verifies")
+            .is_some()
+    );
+}
+
+#[test]
 fn interrupted_install_resumes_by_artifact_id_and_never_activates_partial_content() {
     let directory = project_temp_dir("resume-");
     let app_data = directory.path().join("app-data");

@@ -15,6 +15,11 @@ export interface KnowledgeRootDto {
      * @minimum 0
      */
   indexedGeneration: number;
+  /**
+     * Indexed sources already searchable, even before a full pass completes.
+     * @minimum 0
+     */
+  indexedSources: number;
   /** User-visible root label. */
   label: string;
   /** Provider-neutral location already visible in the file manager. */

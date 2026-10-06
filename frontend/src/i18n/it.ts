@@ -250,6 +250,7 @@ export const it = {
     selectAll: 'Seleziona tutto',
     clearSelection: 'Cancella selezione',
     unableToRun: 'Impossibile eseguire il comando.',
+    pluginPanelUnresponsive: 'Il pannello del plugin non rispondeva più ed è stato chiuso.',
   },
   settings: {
     ...en.settings,
@@ -959,6 +960,8 @@ export const it = {
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     ask: 'Chiedi',
+    question: 'Domanda su questi risultati',
+    questionPlaceholder: 'Fai una domanda sui tuoi documenti…',
     resultRelevanceHigh: 'Pertinenza alta',
     resultRelevanceMedium: 'Pertinenza media',
     resultRelevanceLow: 'Pertinenza bassa',

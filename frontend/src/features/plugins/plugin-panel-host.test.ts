@@ -81,4 +81,48 @@ describe('PluginPanelHost', () => {
     await vi.waitFor(() => expect(close).toHaveBeenCalledWith('plugin-spa-test'));
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it('reports a host-closed panel without trying to close it again', async () => {
+    const client = new MockFileManagerClient();
+    const open = vi.spyOn(client, 'openPluginPanel').mockResolvedValue('plugin-spa-test');
+    vi.spyOn(client, 'updatePluginPanelBounds').mockResolvedValue();
+    vi.spyOn(client, 'setPluginPanelVisible').mockResolvedValue();
+    vi.spyOn(client, 'setPluginPanelTheme').mockResolvedValue();
+    const close = vi.spyOn(client, 'closePluginPanel').mockResolvedValue();
+    const onError = vi.fn();
+    document.body.appendChild(root);
+    m.mount(root, {
+      view: () =>
+        m(PluginPanelHost, {
+          panelId: 1,
+          tabId: 'tab-1',
+          client,
+          pluginId: 'example.svgo',
+          actionId: 'example.svgo.open',
+          location: { providerId: 'local', uri: 'file:///drawing.svg' },
+          title: 'SVGO: drawing.svg',
+          active: true,
+          onError,
+          onCloseRequest: vi.fn(),
+        }),
+    });
+    const surface = root.querySelector<HTMLElement>('.fm-plugin-panel-surface');
+    if (surface === null) throw new Error('panel surface missing');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 400 }) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-closed', { detail: { label: 'plugin-spa-other' } }),
+    );
+    expect(onError).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new CustomEvent('procyon:plugin-panel-closed', { detail: { label: 'plugin-spa-test' } }),
+    );
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+    m.mount(root, null);
+    await Promise.resolve();
+    expect(close).not.toHaveBeenCalled();
+  });
 });

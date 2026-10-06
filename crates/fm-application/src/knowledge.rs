@@ -299,6 +299,8 @@ impl KnowledgeSearchRequest {
 pub struct KnowledgeAnswerRequest {
     /// Fingerprint of the already-inspected evidence to consume.
     pub evidence_fingerprint: String,
+    /// Optional answer-only question; never used for retrieval.
+    pub question: Option<String>,
     /// Optional typed answer goal.
     pub action: Option<KnowledgeAction>,
     /// Optional application context, never copied into retrieval.
@@ -323,9 +325,13 @@ impl KnowledgeAnswerRequest {
             return Err(KnowledgeRequestError::InvalidEvidenceFingerprint);
         }
         if self
-            .context
+            .question
             .as_ref()
             .is_some_and(|value| !valid_text(value))
+            || self
+                .context
+                .as_ref()
+                .is_some_and(|value| !valid_text(value))
             || self.constraints.len() > MAX_CONSTRAINTS
             || self.constraints.iter().any(|value| !valid_text(value))
         {
@@ -754,6 +760,7 @@ mod tests {
     fn answer(action: Option<KnowledgeAction>, context: Option<&str>) -> KnowledgeAnswerRequest {
         KnowledgeAnswerRequest {
             evidence_fingerprint: "sha256:evidence".into(),
+            question: None,
             action,
             context: context.map(str::to_owned),
             constraints: Vec::new(),
@@ -1006,6 +1013,14 @@ mod tests {
         };
         assert_eq!(
             invalid_answer.validate(),
+            Err(KnowledgeRequestError::InvalidAnswerOptions)
+        );
+        let invalid_question = KnowledgeAnswerRequest {
+            question: Some(" ".repeat(MAX_TEXT_BYTES + 1)),
+            ..answer(None, None)
+        };
+        assert_eq!(
+            invalid_question.validate(),
             Err(KnowledgeRequestError::InvalidAnswerOptions)
         );
     }

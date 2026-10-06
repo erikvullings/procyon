@@ -438,6 +438,9 @@ pub struct SemanticRootStatus {
     pub reconciliation_generation: u64,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
+    /// Indexed occurrences already searchable through this root, including
+    /// those recorded by a still-incomplete enumeration.
+    pub indexed_occurrences: u64,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -1797,13 +1800,35 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
     ) -> Result<u64, SemanticLibraryError> {
+        self.complete_reconciliation_preserving(access, root_id, observed_occurrences, &[])
+    }
+
+    /// Commits an enumeration that could not read some entries, retaining
+    /// every occurrence at or below a `preserved` location.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::complete_reconciliation`].
+    pub fn complete_reconciliation_preserving(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: core::RootId,
+        observed_occurrences: &BTreeSet<core::OccurrenceId>,
+        preserved: &[Location],
+    ) -> Result<u64, SemanticLibraryError> {
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
         let generation = next
             .catalog
-            .complete_reconciliation(&next.policy, &next.state, root_id, observed_occurrences)
+            .complete_reconciliation_preserving(
+                &next.policy,
+                &next.state,
+                root_id,
+                observed_occurrences,
+                preserved,
+            )
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
         next.state
             .record_indexed_generation(root_id, generation)
@@ -3361,6 +3386,8 @@ fn project_root(
         },
         reconciliation_generation: data.catalog.reconciliation_generation(root.id()),
         indexed_generation: data.state.indexed_generation(root.id()),
+        indexed_occurrences: u64::try_from(data.catalog.root_occurrence_count(root.id()))
+            .unwrap_or(u64::MAX),
         exclusions: root
             .exclusions()
             .iter()

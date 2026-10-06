@@ -89,4 +89,5 @@ russh.workspace = true
 sevenz-rust2.workspace = true
 tar.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
 zip.workspace = true

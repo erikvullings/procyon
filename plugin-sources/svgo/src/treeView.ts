@@ -14,6 +14,7 @@ import {
   NUMERIC_ATTRS,
   OPACITY_ATTRS,
   roundAttrsRecursive,
+  stepElement,
 } from "./svgUtils";
 import { getElementByPath, getElementInSvgByPath } from "./treeUtils";
 
@@ -136,9 +137,28 @@ const COMMON_ATTRIBUTE_SUGGESTIONS = [
   "pointer-events",
 ];
 
-const ATTRIBUTE_SUGGESTIONS_BY_TAG = {
+const TEXT_ATTRIBUTE_SUGGESTIONS = [
+  "font-size",
+  "font-family",
+  "font-weight",
+  "font-style",
+  "text-anchor",
+  "dominant-baseline",
+  "letter-spacing",
+  "word-spacing",
+];
+
+/** Attribute names are case-sensitive; stop browsers from "correcting" them. */
+const PLAIN_TEXT_INPUT = {
+  autocomplete: "off",
+  autocorrect: "off",
+  autocapitalize: "off",
+  spellcheck: false,
+} as const;
+
+const ATTRIBUTE_SUGGESTIONS_BY_TAG: Record<string, string[]> = {
   svg: ["width", "height", "viewBox", "preserveAspectRatio"],
-  g: ["transform", "opacity", "text-anchor"],
+  g: ["transform", "opacity", ...TEXT_ATTRIBUTE_SUGGESTIONS, "xml:space"],
   path: ["d", "pathLength"],
   rect: ["x", "y", "width", "height", "rx", "ry"],
   circle: ["cx", "cy", "r"],
@@ -146,34 +166,8 @@ const ATTRIBUTE_SUGGESTIONS_BY_TAG = {
   line: ["x1", "y1", "x2", "y2"],
   polyline: ["points"],
   polygon: ["points"],
-  text: [
-    "x",
-    "y",
-    "dx",
-    "dy",
-    "text-anchor",
-    "dominant-baseline",
-    "font-family",
-    "font-size",
-    "font-weight",
-    "font-style",
-    "letter-spacing",
-    "word-spacing",
-  ],
-  tspan: [
-    "x",
-    "y",
-    "dx",
-    "dy",
-    "text-anchor",
-    "dominant-baseline",
-    "font-family",
-    "font-size",
-    "font-weight",
-    "font-style",
-    "letter-spacing",
-    "word-spacing",
-  ],
+  text: ["x", "y", "dx", "dy", ...TEXT_ATTRIBUTE_SUGGESTIONS],
+  tspan: ["x", "y", "dx", "dy", ...TEXT_ATTRIBUTE_SUGGESTIONS],
   image: ["href", "x", "y", "width", "height", "preserveAspectRatio"],
   use: ["href", "x", "y", "width", "height"],
   stop: ["offset", "stop-color", "stop-opacity"],
@@ -318,6 +312,16 @@ function canDropElement(
   if (!sourcePath || sourcePath === targetPath) return false;
   if (isPathInside(sourcePath, targetPath)) return false;
   return true;
+}
+
+/** Maps a typed name such as `Font-size` onto a known attribute's exact casing. */
+function canonicalAttributeName(element: Element, name: string): string {
+  const lower = name.toLowerCase();
+  const known = [
+    ...getAttributeSuggestionsForElement(element),
+    ...Object.values(ATTRIBUTE_SUGGESTIONS_BY_TAG).flat(),
+  ];
+  return known.find((candidate) => candidate.toLowerCase() === lower) ?? name;
 }
 
 function getAttributeSuggestionsForElement(element: Element) {
@@ -609,8 +613,8 @@ function acceptSelectedInlineSuggestion(): boolean {
 }
 
 function saveEditingAttribute(): void {
-  const name = editingState.nameInput.trim();
-  if (!name || !editingState.path) {
+  const typedName = editingState.nameInput.trim();
+  if (!typedName || !editingState.path) {
     resetEditingState();
     m.redraw();
     return;
@@ -623,6 +627,7 @@ function saveEditingAttribute(): void {
     m.redraw();
     return;
   }
+  const name = canonicalAttributeName(element, typedName);
 
   try {
     if (
@@ -667,12 +672,13 @@ function cancelEditingAttribute(): void {
 }
 
 function applyEditingValueLive(saveHistory = true): void {
-  const name = editingState.nameInput.trim();
-  if (!name || !editingState.path) return;
+  const typedName = editingState.nameInput.trim();
+  if (!typedName || !editingState.path) return;
 
   const doc = optimizer.options.treeDoc;
   const element = getElementByPath(doc, editingState.path);
   if (!element) return;
+  const name = canonicalAttributeName(element, typedName);
 
   try {
     if (
@@ -978,6 +984,7 @@ function renderAttributeEditor(
   return m(".attribute.editing", [
     m(".inline-edit-wrap", [
       m("input.attr-name-input", {
+        ...PLAIN_TEXT_INPUT,
         id: nameId,
         value: editingState.nameInput,
         placeholder: "attribute",
@@ -1012,6 +1019,7 @@ function renderAttributeEditor(
           },
         }),
     m(`input.attr-value-input${NUMERIC_ATTRS.has(editingState.nameInput.toLowerCase()) ? "[type=number]" : ""}`, {
+      ...PLAIN_TEXT_INPUT,
       id: valueId,
       value: editingState.valueInput,
       placeholder: "value",
@@ -1090,6 +1098,7 @@ const UncontrolledInput: m.Component<UncontrolledInputAttrs> = {
   },
   view({ attrs }: Vnode<UncontrolledInputAttrs>) {
     return m("input.attr-value", {
+      ...PLAIN_TEXT_INPUT,
       class: attrs.className,
       type: attrs.type,
       ondblclick: attrs.onDoubleClick,
@@ -1612,7 +1621,8 @@ function renderInspectorAttributeInput(element: Element, attr: Attr): m.Children
   if (isColorAttribute(attr.name)) {
     return m(".property-color-value", [
       m("input[type=color]", { value: getColorInputValue(attr.value), oninput: (e: Event) => save((e.target as HTMLInputElement).value) }),
-      m("input.property-text", { value: attr.value, onchange: (e: Event) => save((e.target as HTMLInputElement).value) }),
+      m("input.property-text", {
+            ...PLAIN_TEXT_INPUT, value: attr.value, onchange: (e: Event) => save((e.target as HTMLInputElement).value) }),
     ]);
   }
   if (values.length > 0) {
@@ -1706,6 +1716,7 @@ function renderPropertiesInspector(
         m(".property-row.text-row", [
           m("label", "Text"),
           m("input.property-text", {
+            ...PLAIN_TEXT_INPUT,
             value: quickTextValue,
             onchange: (e: Event) => {
               const nextValue = (e.target as HTMLInputElement).value;
@@ -1750,6 +1761,7 @@ function renderPropertiesInspector(
             },
           }),
           m("input.property-text", {
+            ...PLAIN_TEXT_INPUT,
             value: element.getAttribute(attrName) ?? "",
             placeholder: "none",
             onchange: (e: Event) => {
@@ -1930,29 +1942,15 @@ function moveElementTo(
   }
 }
 
-function moveElement(path: string, direction: number): void {
+function moveElement(path: string, direction: -1 | 1): void {
   const doc = optimizer.options.treeDoc;
   const element = getElementByPath(doc, path);
+  if (!element || !stepElement(element, direction)) return;
 
-  if (element && element.parentElement) {
-    const parent = element.parentElement;
-    const index = Array.from(parent.children).indexOf(element);
-    const newIndex = index + direction;
-
-    if (newIndex >= 0 && newIndex < parent.children.length) {
-      if (direction === -1) {
-        parent.insertBefore(element, parent.children[newIndex]);
-      } else {
-        parent.insertBefore(element, parent.children[newIndex].nextSibling);
-      }
-
-      const pathParts = path.split(".");
-      pathParts[pathParts.length - 1] = String(newIndex);
-      optimizer.options.selectedElementPath = pathParts.join(".");
-
-      updateFromTree(doc);
-    }
-  }
+  const svg = doc.querySelector("svg");
+  const movedPath = svg ? getElementPath(svg, element) : null;
+  if (movedPath) optimizer.options.selectedElementPath = movedPath;
+  updateFromTree(doc);
 }
 
 function highlightElement(path: string): void {

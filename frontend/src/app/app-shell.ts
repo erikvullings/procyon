@@ -292,7 +292,6 @@ interface KnowledgeSearchTabEntry {
   readonly currentFolder: Location | undefined;
   readonly semanticSourceIds: readonly string[];
   readonly initialSubject: string | undefined;
-  readonly initialMode: 'search' | 'ask';
 }
 
 /** Returns the one-based preview page encoded by structural knowledge provenance. */
@@ -873,6 +872,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   >();
   const diskUsageByTab = new Map<string, DiskUsageTabEntry>();
   const knowledgeSearchByTab = new Map<string, KnowledgeSearchTabEntry>();
+  let knowledgeSearchOpening = false;
   const editorByPane = new Map<
     PaneId,
     { readonly controller: FileEditorController; state: FileEditorState }
@@ -2193,14 +2193,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function openRagAsk(): void {
-    openKnowledgeSearch('ask');
+    openKnowledgeSearch();
   }
 
-  /** Opens Structured Knowledge as a session-only Search or Ask tab (tasks 0209/0228). */
-  function openKnowledgeSearch(initialMode: 'search' | 'ask' = 'search'): void {
+  /** Focuses the existing Knowledge tab or opens a search-first session tab. */
+  function openKnowledgeSearch(): void {
     const active = activeDirectory();
     const currentWorkspace = workspace;
     if (currentWorkspace === undefined) return;
+    const existing = [...knowledgeSearchByTab.values()].find(
+      (entry) => entry.workspaceId === currentWorkspace.id,
+    );
+    if (existing !== undefined) {
+      if (currentWorkspace.panesById[existing.paneId]?.activeTabId !== existing.tabId) {
+        tabController.activateTab(existing.paneId, existing.tabId);
+      } else if (currentWorkspace.activePaneId !== existing.paneId) {
+        void activatePane(attrsClient, existing.paneId).catch((error: unknown) => {
+          toast({
+            html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
+          });
+        });
+      }
+      return;
+    }
+    if (knowledgeSearchOpening) return;
     const presentation =
       active === undefined
         ? undefined
@@ -2217,6 +2233,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const pane = currentWorkspace.panesById[paneId];
     const activeTab = pane?.tabsById[pane.activeTabId];
     if (activeTab === undefined) return;
+    knowledgeSearchOpening = true;
     void dispatchWorkspaceCommand(
       attrsClient,
       {
@@ -2242,15 +2259,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             presentation?.kind === 'semantic' || presentation?.kind === 'content'
               ? presentation.term
               : undefined,
-          initialMode,
         });
         m.redraw();
       },
-    ).catch((error: unknown) => {
-      toast({
-        html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
+    )
+      .catch((error: unknown) => {
+        toast({
+          html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
+        });
+      })
+      .finally(() => {
+        knowledgeSearchOpening = false;
       });
-    });
   }
 
   async function openKnowledgeSource(

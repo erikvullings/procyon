@@ -253,6 +253,7 @@ export const de = {
     selectAll: 'Alles auswählen',
     clearSelection: 'Auswahl aufheben',
     unableToRun: 'Befehl kann nicht ausgeführt werden.',
+    pluginPanelUnresponsive: 'Das Plugin-Panel reagierte nicht mehr und wurde geschlossen.',
   },
   settings: {
     ...en.settings,
@@ -971,6 +972,8 @@ export const de = {
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     ask: 'Fragen',
+    question: 'Frage zu diesen Ergebnissen',
+    questionPlaceholder: 'Stellen Sie eine Frage zu Ihren Dokumenten…',
     resultRelevanceHigh: 'Hohe Relevanz',
     resultRelevanceMedium: 'Mittlere Relevanz',
     resultRelevanceLow: 'Geringe Relevanz',

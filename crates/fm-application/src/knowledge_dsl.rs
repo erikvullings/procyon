@@ -333,6 +333,7 @@ impl KnowledgeQueryDraft {
         }
         let request = KnowledgeAnswerRequest {
             evidence_fingerprint: evidence_fingerprint.to_owned(),
+            question: None,
             action: self.action,
             context: self.context.clone(),
             constraints: self.constraints.clone(),

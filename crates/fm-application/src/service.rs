@@ -933,7 +933,7 @@ impl FileManagerService {
     /// active model, because only then are its roots and immutable embedding
     /// identity known backend-authoritatively. Until then the capability is
     /// explicitly unavailable rather than rooted at an invented path.
-    async fn semantic_library(&self) -> Arc<SemanticLibraryService> {
+    pub(crate) async fn semantic_library(&self) -> Arc<SemanticLibraryService> {
         self.semantic_library
             .resolve(&self.semantic_components)
             .await
@@ -950,10 +950,11 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         context: SemanticFolderContext,
     ) -> Result<SemanticFolderStatus, SemanticLibraryError> {
+        let consent = self.semantic_consent_context(context.clone()).await;
         let status = self
             .semantic_library()
             .await
-            .folder_status(access, &context)?;
+            .folder_status(access, &consent)?;
         self.ensure_active_semantic_folder(&context).await?;
         Ok(status)
     }
@@ -973,6 +974,7 @@ impl FileManagerService {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         self.ensure_active_semantic_folder(&context).await?;
+        let context = self.semantic_consent_context(context).await;
         library.preview_enrolment(access, context, recursive)
     }
 
@@ -992,6 +994,7 @@ impl FileManagerService {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::Enrol)?;
         self.ensure_active_semantic_folder(&context).await?;
+        let context = self.semantic_consent_context(context).await;
         library.confirm_enrolment(access, confirmation_id, expected_revision, &context)
     }
 
@@ -1010,6 +1013,7 @@ impl FileManagerService {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PlanExclusion)?;
         self.ensure_active_semantic_folder(&context).await?;
+        let context = self.semantic_consent_context(context).await;
         library.plan_exclusion(access, context, expected_revision)
     }
 
@@ -1029,6 +1033,7 @@ impl FileManagerService {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::ConfirmExclusion)?;
         self.ensure_active_semantic_folder(&context).await?;
+        let context = self.semantic_consent_context(context).await;
         library.confirm_exclusion(access, confirmation_id, expected_revision, &context)
     }
 
@@ -1107,6 +1112,7 @@ impl FileManagerService {
             .load(workspace_id)
             .await
             .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        let workspace_id = self.semantic_workspace_id(workspace_id).await;
         library.update_eligibility_overrides(
             access,
             root_id,
@@ -1221,6 +1227,34 @@ impl FileManagerService {
             root_id,
             fm_semantic_library::RootUnavailabilityReason::Missing,
         );
+    }
+
+    /// Resolves the workspace whose semantic consent a window acts under.
+    ///
+    /// Semantic roots are referenced by named workspaces. Every window runs in
+    /// an ephemeral per-window fork, so a fork acts on behalf of the named
+    /// workspace it was forked from; a from-scratch fork (no source), a named
+    /// workspace, or an unknown id resolves to itself and is validated by the
+    /// caller as before.
+    async fn semantic_workspace_id(&self, id: fm_domain::WorkspaceId) -> fm_domain::WorkspaceId {
+        match self.workspaces.load(id).await {
+            Ok(workspace) if workspace.ephemeral => workspace.forked_from.unwrap_or(id),
+            _ => id,
+        }
+    }
+
+    /// [`Self::semantic_workspace_id`] for a raw transport workspace id.
+    async fn semantic_workspace_uuid(&self, id: Uuid) -> Uuid {
+        self.semantic_workspace_id(id.into()).await.into()
+    }
+
+    /// Re-targets a verified window folder context at its consent workspace.
+    async fn semantic_consent_context(
+        &self,
+        context: SemanticFolderContext,
+    ) -> SemanticFolderContext {
+        let workspace_id = self.semantic_workspace_id(context.workspace_id).await;
+        SemanticFolderContext::new(workspace_id, context.location)
     }
 
     async fn ensure_active_semantic_folder(
@@ -1584,6 +1618,28 @@ impl FileManagerService {
         self.semantic_indexing
             .reconcile(self.semantic_library().await, access, root_id, cancellation)
             .await
+    }
+
+    /// Warms the semantic worker in the background and keeps it resident while
+    /// semantic search is enabled and was used recently, until `shutdown`.
+    ///
+    /// Trusted desktop hosts spawn this once at startup; it never blocks the
+    /// caller's startup path and only logs worker failures.
+    pub async fn keep_semantic_worker_resident(
+        &self,
+        shutdown: tokio_util::sync::CancellationToken,
+    ) {
+        crate::semantic_residency::keep_resident(
+            &self.semantic,
+            crate::semantic_residency::SemanticResidencyPolicy::default(),
+            || async {
+                self.semantic_library_status(&SemanticAccessContext::Host)
+                    .await
+                    .is_ok_and(|status| status.available && !status.roots.is_empty())
+            },
+            shutdown,
+        )
+        .await;
     }
 
     /// Reconciles every available enrolled root into the active semantic worker.
@@ -2000,10 +2056,11 @@ impl FileManagerService {
             ));
         }
         let library = self.semantic_library().await;
+        let workspace_id = self.semantic_workspace_uuid(target.workspace_id).await;
         let resolved = library
             .resolve_summary_document(
                 access,
-                target.workspace_id.into(),
+                workspace_id.into(),
                 target.entry_id.into(),
                 &target.location.into(),
             )
@@ -2249,10 +2306,11 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: ResolveRagCitationRequestDto,
     ) -> Result<ResolvedRagCitationDto, ApplicationError> {
+        let workspace_id = self.semantic_workspace_uuid(request.workspace_id).await;
         let occurrence = self
             .semantic_library()
             .await
-            .resolve_occurrence(access, request.workspace_id.into(), &request.source_id)
+            .resolve_occurrence(access, workspace_id.into(), &request.source_id)
             .map_err(|error| match error {
                 SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
                 SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,
@@ -2329,12 +2387,13 @@ impl FileManagerService {
                 )
             }
         };
+        let workspace_id = self.semantic_workspace_uuid(scope.workspace_id).await;
         let resolved = self
             .semantic_library()
             .await
             .resolve_rag_scope(
                 access,
-                scope.workspace_id.into(),
+                workspace_id.into(),
                 &selection,
                 question.clone(),
                 fm_semantic_worker::rag_retrieval::RagRetrievalPolicy::default_ask(),
@@ -2384,8 +2443,9 @@ impl FileManagerService {
     pub async fn list_knowledge_roots(
         &self,
         access: &SemanticAccessContext,
-        request: fm_transport_dto::ListKnowledgeRootsRequestDto,
+        mut request: fm_transport_dto::ListKnowledgeRootsRequestDto,
     ) -> Result<Vec<fm_transport_dto::KnowledgeRootDto>, ApplicationError> {
+        request.workspace_id = self.semantic_workspace_uuid(request.workspace_id).await;
         self.knowledge
             .roots(self.semantic_library().await.as_ref(), access, request)
     }
@@ -2405,8 +2465,11 @@ impl FileManagerService {
     pub async fn plan_knowledge_search(
         &self,
         access: &SemanticAccessContext,
-        request: fm_transport_dto::PlanKnowledgeSearchRequestDto,
+        mut request: fm_transport_dto::PlanKnowledgeSearchRequestDto,
     ) -> Result<fm_transport_dto::KnowledgeSearchPlanDto, ApplicationError> {
+        request.scope.workspace_id = self
+            .semantic_workspace_uuid(request.scope.workspace_id)
+            .await;
         self.knowledge
             .plan(self.semantic_library().await.as_ref(), access, request)
     }
@@ -2432,9 +2495,12 @@ impl FileManagerService {
     pub async fn execute_knowledge_search_with_cancellation(
         &self,
         access: &SemanticAccessContext,
-        request: fm_transport_dto::ExecuteKnowledgeSearchRequestDto,
+        mut request: fm_transport_dto::ExecuteKnowledgeSearchRequestDto,
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationError> {
+        request.scope.workspace_id = self
+            .semantic_workspace_uuid(request.scope.workspace_id)
+            .await;
         self.knowledge
             .execute(
                 self.semantic_library().await,
@@ -2480,9 +2546,10 @@ impl FileManagerService {
     pub async fn generate_knowledge_answer_with_cancellation(
         &self,
         access: &SemanticAccessContext,
-        request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
+        mut request: fm_transport_dto::GenerateKnowledgeAnswerRequestDto,
         cancellation: &tokio_util::sync::CancellationToken,
     ) -> Result<fm_transport_dto::KnowledgeAnswerDto, ApplicationError> {
+        request.workspace_id = self.semantic_workspace_uuid(request.workspace_id).await;
         self.knowledge
             .answer(
                 self.semantic_library().await,
@@ -2509,8 +2576,9 @@ impl FileManagerService {
     pub async fn resolve_knowledge_source(
         &self,
         access: &SemanticAccessContext,
-        request: fm_transport_dto::ResolveKnowledgeSourceRequestDto,
+        mut request: fm_transport_dto::ResolveKnowledgeSourceRequestDto,
     ) -> Result<fm_transport_dto::KnowledgeSourceLocationDto, ApplicationError> {
+        request.workspace_id = self.semantic_workspace_uuid(request.workspace_id).await;
         self.knowledge
             .resolve_source(self.semantic_library().await.as_ref(), access, request)
     }

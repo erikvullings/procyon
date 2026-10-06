@@ -509,6 +509,88 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     assert_eq!(report.reconciliation_generation, 1);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn unreadable_entries_keep_their_index_without_aborting_the_root() {
+    use std::os::unix::fs::PermissionsExt;
+
+    fn set_mode(path: &Path, mode: u32) {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    let root = project_temp_dir("unreadable-root-");
+    std::fs::create_dir_all(root.path().join("synced")).unwrap();
+    std::fs::write(root.path().join("good.txt"), "searchable semantic content").unwrap();
+    std::fs::write(root.path().join("placeholder.txt"), "cloud placeholder").unwrap();
+    std::fs::write(root.path().join("synced/inner.txt"), "synced semantic note").unwrap();
+    let state = project_temp_dir("unreadable-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1904));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+    let indexed_occurrences = || async {
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences
+    };
+
+    let first = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(first.observed_files, 3);
+    assert_eq!(indexed_occurrences().await, 3);
+
+    set_mode(&root.path().join("placeholder.txt"), 0o000);
+    set_mode(&root.path().join("synced"), 0o000);
+    let second = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await;
+    set_mode(&root.path().join("placeholder.txt"), 0o644);
+    set_mode(&root.path().join("synced"), 0o755);
+    let second = second.unwrap();
+
+    assert_eq!(second.observed_files, 1);
+    assert_eq!(second.unreadable_files, 1);
+    assert_eq!(second.unreadable_directories, 1);
+    assert_eq!(second.reconciliation_generation, 2);
+    assert_eq!(
+        indexed_occurrences().await,
+        3,
+        "unreadable entries keep their index"
+    );
+
+    std::fs::remove_file(root.path().join("placeholder.txt")).unwrap();
+    let third = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(third.unreadable_files, 0);
+    assert_eq!(
+        indexed_occurrences().await,
+        2,
+        "a readable pass still prunes deletions"
+    );
+
+    set_mode(root.path(), 0o000);
+    let unlisted_root = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await;
+    set_mode(root.path(), 0o755);
+    assert!(matches!(
+        unlisted_root.unwrap_err(),
+        SemanticIndexingError::Provider(_)
+    ));
+}
+
 #[tokio::test]
 async fn one_ocr_required_pdf_is_reported_without_aborting_reconciliation() {
     let root = project_temp_dir("ocr-required-root-");

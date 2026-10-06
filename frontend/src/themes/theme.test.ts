@@ -541,8 +541,10 @@ describe('theme stylesheet', () => {
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.fm-knowledge-search-spinner\s*\{[^}]*animation:\s*none/s,
     );
     expect(themeCss).toMatch(
-      /@container \(max-width: 36rem\)\s*\{[^}]*\.fm-knowledge-workspace\.is-ask\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(12rem,\s*1fr\)\s+minmax\(12rem,\s*1fr\)/s,
+      /\.fm-knowledge-ask-bar\s*\{[^}]*min-height:\s*var\(--fm-row-height\)/s,
     );
+    expect(themeCss).toMatch(/\.fm-knowledge-results-section\s*\{[^}]*flex:\s*1 1 0/s);
+    expect(themeCss).toMatch(/\.fm-knowledge-answer\s*\{[^}]*flex:\s*0 0 auto/s);
   });
 
   it('lets semantic enrolment consent wrap without covering its action', () => {

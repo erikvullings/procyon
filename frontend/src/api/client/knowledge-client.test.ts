@@ -242,6 +242,7 @@ describe('HttpFileManagerClient knowledge search', () => {
         location: { providerId: 'file', uri: 'file:///handbook' },
         recursive: true,
         indexedGeneration: 3,
+        indexedSources: 5,
         available: true,
       },
     ];

@@ -71,6 +71,11 @@ pub struct SemanticIndexingReport {
     pub ocr_required_files: Vec<Location>,
     /// Entries rejected by the curated eligibility policy.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
+    /// Files that could not be read; their previous index is retained.
+    pub unreadable_files: u64,
+    /// Subdirectories that could not be listed; their previous index is
+    /// retained.
+    pub unreadable_directories: u64,
     /// Newly committed complete reconciliation generation.
     pub reconciliation_generation: u64,
 }
@@ -167,6 +172,9 @@ impl SemanticIndexingService {
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
+        let mut preserved = Vec::new();
+        let mut unreadable_files = 0_u64;
+        let mut unreadable_directories = 0_u64;
 
         while let Some((directory, depth)) = pending.pop_front() {
             check_cancelled(&cancellation)?;
@@ -177,7 +185,7 @@ impl SemanticIndexingService {
             let mut continuation_token = None;
             let mut seen_tokens = BTreeSet::new();
             loop {
-                let page = provider
+                let listed = provider
                     .list(
                         &directory,
                         ListOptions {
@@ -186,7 +194,17 @@ impl SemanticIndexingService {
                         },
                         cancellation.child_token(),
                     )
-                    .await?;
+                    .await;
+                let page = match listed {
+                    Ok(page) => page,
+                    Err(error) if depth > 0 && is_entry_local_failure(&error) => {
+                        tracing::debug!(%error, "semantic reconciliation skipped an unreadable directory");
+                        unreadable_directories = unreadable_directories.saturating_add(1);
+                        preserved.push(directory.clone());
+                        break;
+                    }
+                    Err(error) => return Err(error.into()),
+                };
                 if page.entries.len() > PAGE_SIZE {
                     return Err(SemanticIndexingError::InvalidProviderPage);
                 }
@@ -234,6 +252,11 @@ impl SemanticIndexingService {
                                 EntryIngestOutcome::Oversized => {
                                     *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
                                 }
+                                EntryIngestOutcome::Unreadable(error) => {
+                                    tracing::debug!(%error, "semantic reconciliation skipped an unreadable file");
+                                    unreadable_files = unreadable_files.saturating_add(1);
+                                    preserved.push(entry.location.clone());
+                                }
                                 EntryIngestOutcome::Ingested(report) => {
                                     observed.insert(report.occurrence_id);
                                     observed_files = observed_files.saturating_add(1);
@@ -269,7 +292,7 @@ impl SemanticIndexingService {
 
         check_cancelled(&cancellation)?;
         let reconciliation_generation =
-            library.complete_reconciliation(access, root_id, &observed)?;
+            library.complete_reconciliation_preserving(access, root_id, &observed, &preserved)?;
         self.ocr_required_files
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -299,6 +322,8 @@ impl SemanticIndexingService {
                 .into_iter()
                 .map(|(reason, count)| SemanticEligibilityReasonCount { reason, count })
                 .collect(),
+            unreadable_files,
+            unreadable_directories,
             reconciliation_generation,
         })
     }
@@ -394,11 +419,15 @@ impl SemanticIndexingService {
             semantic,
             cancellation,
         } = request;
-        let Some(bytes) =
-            read_bounded(provider, entry, context.max_source_bytes, cancellation).await?
-        else {
-            return Ok(EntryIngestOutcome::Oversized);
-        };
+        let bytes =
+            match read_bounded(provider, entry, context.max_source_bytes, cancellation).await {
+                Ok(Some(bytes)) => bytes,
+                Ok(None) => return Ok(EntryIngestOutcome::Oversized),
+                Err(SemanticIndexingError::Provider(error)) if is_entry_local_failure(&error) => {
+                    return Ok(EntryIngestOutcome::Unreadable(error));
+                }
+                Err(error) => return Err(error),
+            };
         let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
         let occurrence_id = library.record_indexing_observation(
@@ -568,6 +597,7 @@ impl SemanticIndexingService {
             .await?
         {
             EntryIngestOutcome::Oversized => Ok(SingleFileIngestOutcome::Oversized),
+            EntryIngestOutcome::Unreadable(error) => Err(error.into()),
             EntryIngestOutcome::Ingested(report) => Ok(SingleFileIngestOutcome::Ingested(report)),
         }
     }
@@ -606,6 +636,7 @@ pub(crate) struct EntryIngestReport {
 
 enum EntryIngestOutcome {
     Oversized,
+    Unreadable(VfsError),
     Ingested(EntryIngestReport),
 }
 
@@ -694,6 +725,26 @@ fn media_type(entry: &EntrySummary) -> Option<&'static str> {
         }
         _ => None,
     }
+}
+
+/// Whether a provider failure concerns only the entry being read or listed.
+///
+/// Such failures (a cloud placeholder timing out, a locked or vanished file)
+/// leave the entry's existing index untouched instead of aborting the whole
+/// root. Cancellation and provider-wide failures still abort.
+fn is_entry_local_failure(error: &VfsError) -> bool {
+    matches!(
+        error,
+        VfsError::NotFound { .. }
+            | VfsError::PermissionDenied { .. }
+            | VfsError::Locked { .. }
+            | VfsError::NotADirectory { .. }
+            | VfsError::IsADirectory { .. }
+            | VfsError::LinkCycle { .. }
+            | VfsError::UnsafeArchiveEntry
+            | VfsError::ArchiveResourceLimit { .. }
+            | VfsError::Io { .. }
+    )
 }
 
 async fn read_bounded(

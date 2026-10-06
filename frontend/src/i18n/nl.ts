@@ -250,6 +250,7 @@ export const nl = {
     selectAll: 'Alles selecteren',
     clearSelection: 'Selectie wissen',
     unableToRun: 'Kan opdracht niet uitvoeren.',
+    pluginPanelUnresponsive: 'Het pluginpaneel reageerde niet meer en is gesloten.',
   },
   settings: {
     language: 'Taal',
@@ -959,6 +960,9 @@ export const nl = {
     reasonRelatedTerm: 'Verwante term',
     search: 'Zoeken',
     ask: 'Vragen',
+    askWith: 'Vraag {profile}',
+    question: 'Vraag over deze resultaten',
+    questionPlaceholder: 'Stel een vraag over je documenten…',
     searching: 'Bezig met zoeken…',
     cancel: 'Zoeken annuleren',
     cancelled: 'De zoekopdracht is geannuleerd.',
@@ -1026,43 +1030,34 @@ export const nl = {
     answerNotGenerated:
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',
     answerRegion: 'Optioneel kennisantwoord',
-    answerHeading: 'Optioneel antwoord',
-    answerHint:
-      'Een antwoord wordt alleen uit het bewijs hierboven gegenereerd. Het start nooit een nieuwe zoekopdracht; gebruik Zoeken om opnieuw op te halen.',
-    answerProfile: 'Generatieprofiel',
-    answerProfilePlaceholder: 'Kies een generatieprofiel…',
-    answerNoProfiles:
-      'Er is geen generatieprofiel ingesteld, dus er kan geen antwoord worden gegenereerd. De zoekopdracht hierboven is compleet.',
-    answerProfilesFailed:
-      'Generatieprofielen konden niet worden geladen. De zoekopdracht hierboven is compleet zonder antwoord.',
-    answerLocalEndpoint:
-      '{profile} draait op een lokaal eindpunt, dus het bewijs hierboven blijft op dit apparaat.',
+    answerHeading: 'Antwoord',
+    showAnswer: 'Antwoord tonen',
+    hideAnswer: 'Antwoord verbergen',
     answerCloudEndpoint:
-      '{profile} is een cloud-eindpunt: genereren stuurt het bewijs hierboven daarheen. Je host handhaaft deze toestemming.',
+      '{profile} is een cloud-eindpunt: genereren stuurt het bekeken bewijs daarheen. Je host handhaaft deze toestemming.',
     allowModelKnowledge: 'Algemene modelkennis toestaan, duidelijk gelabeld',
-    modelKnowledgeNotice:
-      'Uitspraken uit algemene modelkennis worden niet ondersteund door de citaten hieronder.',
+    allowModelKnowledgeHint:
+      'Algemene modelkennis toestaan. Uitspraken die niet door je documenten worden ondersteund, worden duidelijk gemarkeerd.',
     modelKnowledgeUsed:
       'Dit antwoord mocht algemene modelkennis gebruiken, die de citaten niet ondersteunen.',
-    generateAnswer: 'Antwoord genereren',
     generatingAnswer: 'Antwoord genereren…',
     cancelAnswer: 'Antwoord annuleren',
     answerCancelled: 'Het antwoord is geannuleerd.',
     answerFailed: 'Het antwoord kon niet worden gegenereerd.',
     answerRefreshRequired:
       'Het geïnspecteerde bewijs is niet meer beschikbaar. Voer opnieuw Zoeken uit en genereer daarna het antwoord.',
-    answerPlaceholder: 'Kies een profiel en genereer een antwoord uit het bewijs hierboven.',
-    answerProfileUsed: 'Beantwoord door {profile} · {locality}',
-    answerLocalityLoopback: 'lokaal eindpunt',
-    answerLocalityCloud: 'cloud-eindpunt',
+    answerPlaceholder:
+      'Kies een profiel, stel een vraag en genereer een antwoord uit de bekeken resultaten.',
     answerInsufficient: 'Het bewaarde bewijs kon geen gefundeerd antwoord ondersteunen.',
     answerStaleEvidence: '{count} geciteerde bron(nen) zijn gewijzigd sinds indexering.',
     answerUnavailableEvidence: '{count} geciteerde bron(nen) zijn momenteel niet beschikbaar.',
     answerWithheldUnauthorized:
       '{count} bewijsrij(en) zijn achtergehouden door een nieuwe autorisatiecontrole.',
-    answerCitations: 'Citaten',
+    copyAnswer: 'Antwoord kopiëren',
+    answerCopied: 'Gekopieerd',
+    answerCitations: 'Bronnen ({count})',
     answerCitationNotDisplayed: 'geen onderdeel van het getoonde bewijs',
-    openCitation: 'Citaat {label} openen',
+    openCitation: '{label} openen',
     showAdvanced: 'Geavanceerd',
     trace: 'Ophaalspoor opnemen',
     traceHeading: 'Ophaalspoor',

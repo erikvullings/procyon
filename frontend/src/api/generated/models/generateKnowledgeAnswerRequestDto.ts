@@ -30,6 +30,11 @@ export interface GenerateKnowledgeAnswerRequestDto {
   output?: null | KnowledgeOutputFormatDto;
   /** Explicitly selected saved generation profile. */
   profileId: string;
+  /**
+     * Answer-only question about that evidence; never used for retrieval.
+     * @nullable
+     */
+  question?: string | null;
   /** Caller-owned identity used for cancellation and correlation. */
   requestId: string;
   /** Workspace through which the evidence set was authorized. */

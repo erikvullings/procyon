@@ -220,6 +220,7 @@ impl KnowledgeService {
                 recursive: root.recursive,
                 available: matches!(root.availability, SemanticRootAvailability::Available),
                 indexed_generation: root.indexed_generation,
+                indexed_sources: root.indexed_occurrences,
             })
             .collect())
     }
@@ -1297,6 +1298,7 @@ mod tests {
                     request_id: Uuid::new_v4(),
                     workspace_id: fixture.workspace_id,
                     evidence_fingerprint: "sha256:absent".to_owned(),
+                    question: None,
                     profile_id: Uuid::new_v4(),
                     allow_model_knowledge: false,
                     action: None,
@@ -1502,6 +1504,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_per_window_fork_sees_the_roots_enrolled_by_its_named_workspace() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            directory.path(),
+            directory.path().join("settings"),
+        )
+        .with_semantic_library_service(SemanticLibraryService::deterministic_mock())
+        .with_knowledge_retrieval_capability(Arc::new(RecordingCapability::new(Vec::new())));
+        let named = service
+            .create_workspace(Some("Library".to_owned()))
+            .await
+            .expect("named workspace");
+        let library = service.semantic_library().await;
+        let folder = SemanticFolderContext::new(
+            named.id.into(),
+            fm_domain::Location::parse("file:///indexed-library").expect("location"),
+        );
+        let preview = library
+            .preview_enrolment(&SemanticAccessContext::Host, folder.clone(), true)
+            .expect("preview enrolment");
+        library
+            .confirm_enrolment(
+                &SemanticAccessContext::Host,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &folder,
+            )
+            .expect("confirm enrolment");
+
+        let fork = service
+            .fork_workspace(Some(named.id))
+            .await
+            .expect("fork workspace");
+        assert_ne!(fork.id, named.id);
+
+        let roots = service
+            .list_knowledge_roots(
+                &SemanticAccessContext::Host,
+                ListKnowledgeRootsRequestDto {
+                    workspace_id: fork.id,
+                },
+            )
+            .await
+            .expect("roots");
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].label, "indexed-library");
+    }
+
+    #[tokio::test]
     async fn roots_parsing_and_source_navigation_stay_available_without_an_llm() {
         let fixture = fixture(Arc::new(RecordingCapability::new(Vec::new())));
 
@@ -1518,6 +1570,8 @@ mod tests {
         assert_eq!(roots.len(), 1);
         assert_eq!(roots[0].root_id, fixture.root_id);
         assert_eq!(roots[0].label, "indexed-library");
+        assert_eq!(roots[0].indexed_generation, 0);
+        assert_eq!(roots[0].indexed_sources, 1);
 
         let interpretation = fixture
             .service
@@ -1564,6 +1618,7 @@ mod tests {
             request_id: Uuid::new_v4(),
             workspace_id,
             evidence_fingerprint: evidence_fingerprint.to_owned(),
+            question: None,
             profile_id: Uuid::new_v4(),
             allow_model_knowledge: false,
             action: Some(fm_transport_dto::KnowledgeActionDto::Explain),
@@ -2470,6 +2525,7 @@ mod answer_flow_tests {
             request_id: Uuid::new_v4(),
             workspace_id,
             evidence_fingerprint: evidence_fingerprint.to_owned(),
+            question: None,
             profile_id,
             allow_model_knowledge: false,
             action: Some(KnowledgeActionDto::Explain),

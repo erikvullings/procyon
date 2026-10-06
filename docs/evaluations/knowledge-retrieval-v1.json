@@ -4,7 +4,7 @@
   "corpusFingerprint": "sha256:e8aeb9f6ec0c85073015cd3e6efe3e8a63a7a8e90164eb219a7d698285f3641a",
   "plannerVersion": "structured-knowledge-planner/1",
   "fusionVersion": "reciprocal-rank-fusion/60",
-  "releaseCandidateFingerprint": "sha256:db3ce7f2a969638e8682c9953895d26cea47c8c760b1a66739460f437a59c854",
+  "releaseCandidateFingerprint": "sha256:cadf3e514b98b48702858e8d5e9270901655e2b25f8233f78ea5575ceae8544b",
   "measurementBasis": "Deterministic repository fixture: production planner, coordinator, catalog, fusion, and evidence materialization, with a deterministic lexical surrogate embedding model and the `in-process-surrogate/1` candidate index backend instead of a production multilingual model and the native Zvec collection. Latency is planning plus retrieval, single-run wall clock on one developer machine, not production or cross-platform hardware.",
   "limitations": [
     "The embedding model is a deterministic term-frequency/inverse-document-frequency surrogate. Cross-language matching exists only where the corpus declares an alias, so no conclusion about a production multilingual model can be drawn from the multilingual cases.",
@@ -45,11 +45,11 @@
         "migrationImpact": "No migration: reuses the published vector index and embedding space unchanged."
       },
       "latency": {
-        "p50Micros": 5140,
-        "p95Micros": 14378,
-        "maximumMicros": 14378,
-        "planningP50Micros": 11,
-        "retrievalP50Micros": 5131
+        "p50Micros": 3472,
+        "p95Micros": 4135,
+        "maximumMicros": 4135,
+        "planningP50Micros": 8,
+        "retrievalP50Micros": 3465
       }
     },
     {
@@ -81,11 +81,11 @@
         "migrationImpact": "No migration: reuses the published vector index and embedding space unchanged."
       },
       "latency": {
-        "p50Micros": 4939,
-        "p95Micros": 8392,
-        "maximumMicros": 8392,
-        "planningP50Micros": 7,
-        "retrievalP50Micros": 4931
+        "p50Micros": 3396,
+        "p95Micros": 3749,
+        "maximumMicros": 3749,
+        "planningP50Micros": 3,
+        "retrievalP50Micros": 3390
       }
     },
     {
@@ -117,11 +117,11 @@
         "migrationImpact": "No migration: reuses the published vector index and embedding space unchanged."
       },
       "latency": {
-        "p50Micros": 6016,
-        "p95Micros": 8120,
-        "maximumMicros": 8120,
-        "planningP50Micros": 10,
-        "retrievalP50Micros": 6006
+        "p50Micros": 3856,
+        "p95Micros": 4223,
+        "maximumMicros": 4223,
+        "planningP50Micros": 7,
+        "retrievalP50Micros": 3850
       }
     },
     {
@@ -153,11 +153,11 @@
         "migrationImpact": "Requires the native full-text index introduced with library manifest zvecSchemaVersion 2; every published generation must be re-indexed before the route becomes available."
       },
       "latency": {
-        "p50Micros": 4923,
-        "p95Micros": 12838,
-        "maximumMicros": 12838,
-        "planningP50Micros": 10,
-        "retrievalP50Micros": 4917
+        "p50Micros": 2957,
+        "p95Micros": 4174,
+        "maximumMicros": 4174,
+        "planningP50Micros": 6,
+        "retrievalP50Micros": 2952
       }
     },
     {
@@ -189,11 +189,11 @@
         "migrationImpact": "Requires the native full-text index introduced with library manifest zvecSchemaVersion 2; every published generation must be re-indexed before the route becomes available."
       },
       "latency": {
-        "p50Micros": 7129,
-        "p95Micros": 16505,
-        "maximumMicros": 16505,
-        "planningP50Micros": 11,
-        "retrievalP50Micros": 7118
+        "p50Micros": 4778,
+        "p95Micros": 5457,
+        "maximumMicros": 5457,
+        "planningP50Micros": 6,
+        "retrievalP50Micros": 4772
       }
     }
   ],

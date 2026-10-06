@@ -4,6 +4,7 @@ import {
   collapseTransforms,
   roundPathData,
   roundNumericValueFixed,
+  stepElement,
 } from "../src/svgUtils";
 
 describe("roundPathData", () => {
@@ -93,5 +94,44 @@ describe("collapseTransforms", () => {
       "</svg>";
     const output = collapseTransforms(input);
     expect(output).toContain('transform="translate(5 5)"');
+  });
+});
+
+describe("stepElement", () => {
+  const tree = () =>
+    new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><path id="p"/><g id="g"><text id="a"/><text id="b"/></g><rect id="r"/></svg>',
+      "image/svg+xml",
+    );
+  const order = (doc: Document) =>
+    Array.from(doc.querySelectorAll("[id]"))
+      .map((el) => `${el.parentElement?.id || "svg"}>${el.id}`)
+      .join(" ");
+
+  it("enters a following group as its first child when moving down", () => {
+    const doc = tree();
+    expect(stepElement(doc.getElementById("p")!, 1)).toBe(true);
+    expect(order(doc)).toBe("svg>g g>p g>a g>b svg>r");
+  });
+
+  it("enters a preceding group as its last child when moving up", () => {
+    const doc = tree();
+    expect(stepElement(doc.getElementById("r")!, -1)).toBe(true);
+    expect(order(doc)).toBe("svg>p svg>g g>a g>b g>r");
+  });
+
+  it("leaves a group past its first or last child", () => {
+    const doc = tree();
+    expect(stepElement(doc.getElementById("a")!, -1)).toBe(true);
+    expect(stepElement(doc.getElementById("b")!, 1)).toBe(true);
+    expect(order(doc)).toBe("svg>p svg>a svg>g svg>b svg>r");
+  });
+
+  it("swaps plain siblings and stops at the root edges", () => {
+    const doc = tree();
+    expect(stepElement(doc.getElementById("a")!, 1)).toBe(true);
+    expect(order(doc)).toBe("svg>p svg>g g>b g>a svg>r");
+    expect(stepElement(doc.getElementById("p")!, -1)).toBe(false);
+    expect(stepElement(doc.getElementById("r")!, 1)).toBe(false);
   });
 });

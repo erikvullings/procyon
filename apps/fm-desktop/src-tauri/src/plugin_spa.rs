@@ -359,6 +359,20 @@ impl PanelRegistry {
             .collect()
     }
 
+    fn tracks(&self, label: &str) -> bool {
+        self.slots
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+            .any(|slot| match slot {
+                Some(Slot::Reserved {
+                    label: reserved, ..
+                }) => reserved == label,
+                Some(Slot::Active(session)) => session.label == label,
+                None => false,
+            })
+    }
+
     fn owned_by(&self, label: &str, window: &str) -> bool {
         self.sessions()
             .iter()
@@ -1185,7 +1199,7 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
             .map(|url| (origin, url))
             .map_err(|_| PanelError::Invalid)
     };
-    let label = format!("plugin-spa-{}", Uuid::new_v4().simple());
+    let label = format!("{PANEL_LABEL_PREFIX}{}", Uuid::new_v4().simple());
     let registry = app.state::<Arc<PanelRegistry>>();
     let (slot, save_lock) = registry.reserve(label.clone(), &location)?;
     let (origin, url) = slot_url(slot).inspect_err(|_| registry.release(&label))?;
@@ -1247,13 +1261,11 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
             }
             if !first_panel_load(payload.url(), &expected_url, &loaded_once) {
                 tracing::warn!("plugin panel navigation requires reopening the selected file");
-                window
-                    .app_handle()
-                    .state::<Arc<PanelRegistry>>()
-                    .release(window.label());
-                if let Err(error) = window.close() {
-                    tracing::warn!(%error, "could not close reloaded plugin panel");
-                }
+                discard_panel(
+                    window.app_handle(),
+                    window.label(),
+                    Some(&session.owner_window),
+                );
             } else {
                 #[cfg(feature = "native-spa-smoke")]
                 crate::native_spa_smoke::stage("child-page-loaded");
@@ -1261,13 +1273,11 @@ pub(crate) async fn open_plugin_panel<R: Runtime>(
                     #[cfg(feature = "native-spa-smoke")]
                     crate::native_spa_smoke::stage(&format!("child-load-failed: {error}"));
                     tracing::warn!(%error, "could not deliver selected SVG to plugin panel");
-                    window
-                        .app_handle()
-                        .state::<Arc<PanelRegistry>>()
-                        .release(window.label());
-                    if let Err(error) = window.close() {
-                        tracing::warn!(%error, "could not close failed plugin panel");
-                    }
+                    discard_panel(
+                        window.app_handle(),
+                        window.label(),
+                        Some(&session.owner_window),
+                    );
                 } else {
                     session.loaded.store(true, Ordering::SeqCst);
                     #[cfg(feature = "native-spa-smoke")]
@@ -1420,6 +1430,7 @@ async fn close_panel<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<(), 
         .ok_or(PanelError::Unavailable)?;
     let _closing = session.close_lock.lock().await;
     if session.shutdown.is_cancelled() {
+        discard_panel(app, label, None);
         return Err(PanelError::Unavailable);
     }
     let webview = match app.get_webview(label) {
@@ -1449,10 +1460,50 @@ pub(crate) async fn close_plugin_panel<R: Runtime>(
     registry: State<'_, Arc<PanelRegistry>>,
     label: String,
 ) -> Result<(), PanelError> {
-    if !trusted_invoke_label(source.label()) || !registry.owned_by(&label, source.label()) {
+    if !trusted_invoke_label(source.label()) {
         return Err(PanelError::Denied);
     }
+    if !registry.owned_by(&label, source.label()) {
+        // The host may already have released an unresponsive panel; still remove a
+        // leftover native view that belongs to this window instead of leaking it.
+        let app = source.app_handle();
+        let orphan = label.starts_with(PANEL_LABEL_PREFIX)
+            && !registry.tracks(&label)
+            && app
+                .get_webview(&label)
+                .is_some_and(|webview| webview.window().label() == source.label());
+        if !orphan {
+            return Err(PanelError::Denied);
+        }
+        discard_panel(app, &label, None);
+        return Ok(());
+    }
     close_panel(source.app_handle(), &label).await
+}
+
+const PANEL_LABEL_PREFIX: &str = "plugin-spa-";
+
+/// Releases a panel and removes its native view. Hiding first matters: Tauri forgets
+/// the label as soon as `close` is requested, so a view whose native teardown stalls
+/// would otherwise remain on screen with no way to reach it again.
+fn discard_panel<R: Runtime>(app: &AppHandle<R>, label: &str, notify_owner: Option<&str>) {
+    app.state::<Arc<PanelRegistry>>().release(label);
+    if let Some(webview) = app.get_webview(label) {
+        if let Err(error) = webview.hide() {
+            tracing::warn!(%error, %label, "could not hide discarded plugin panel");
+        }
+        if let Err(error) = webview.close() {
+            tracing::warn!(%error, %label, "could not close discarded plugin panel");
+        }
+    }
+    if let Some(owner) = notify_owner.and_then(|owner| app.get_webview(owner)) {
+        let label = serde_json::to_string(label).expect("panel label is serializable");
+        if let Err(error) = owner.eval(format!(
+            "window.dispatchEvent(new CustomEvent('procyon:plugin-panel-closed', {{ detail: {{ label: {label} }} }}));"
+        )) {
+            tracing::warn!(%error, "could not report closed plugin panel");
+        }
+    }
 }
 
 pub(crate) async fn flush_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
@@ -1472,12 +1523,7 @@ pub(crate) async fn flush_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_i
 pub(crate) fn close_plugin_panels<R: Runtime>(app: &AppHandle<R>, plugin_id: &str) {
     let registry = app.state::<Arc<PanelRegistry>>();
     for label in registry.labels_for_plugin(plugin_id) {
-        registry.release(&label);
-        if let Some(webview) = app.get_webview(&label)
-            && let Err(error) = webview.close()
-        {
-            tracing::warn!(%error, %label, "could not close disabled plugin panel");
-        }
+        discard_panel(app, &label, None);
     }
 }
 
@@ -1487,6 +1533,12 @@ pub(crate) async fn close_panels_for_window<R: Runtime>(app: &AppHandle<R>, labe
             tracing::warn!(%error, %label, "could not cleanly close plugin panel for host window");
         }
     }
+}
+
+/// A panel still loading may not be registered yet: WebView2 creates child views
+/// asynchronously, and `next_heartbeat` already bounds how long loading may take.
+fn awaiting_or_present(loaded: bool, view_exists: bool) -> bool {
+    !loaded || view_exists
 }
 
 pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
@@ -1517,17 +1569,21 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
                     .eval(format!("window.procyonPlugin.postMessage({});", event))
                     .is_ok()
             }),
-            Ok(None) => app.get_webview(&session.label).is_some(),
+            Ok(None) => awaiting_or_present(
+                session.loaded.load(Ordering::SeqCst),
+                app.get_webview(&session.label).is_some(),
+            ),
             Err(()) => false,
         };
         if invalid || !responsive {
             tracing::warn!(label = %session.label, "plugin panel unavailable or renderer heartbeat timed out");
-            registry.release(&session.label);
-            if let Some(webview) = app.get_webview(&session.label)
-                && let Err(error) = webview.close()
-            {
-                tracing::warn!(%error, "could not close unresponsive plugin panel");
-            }
+            discard_panel(app, &session.label, Some(&session.owner_window));
+        }
+    }
+    for label in app.webviews().into_keys() {
+        if label.starts_with(PANEL_LABEL_PREFIX) && !registry.tracks(&label) {
+            tracing::warn!(%label, "closing untracked plugin panel");
+            discard_panel(app, &label, None);
         }
     }
 }
@@ -1535,6 +1591,13 @@ pub(crate) fn reconcile_panels<R: Runtime>(app: &AppHandle<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_loading_panel_is_not_discarded_before_its_view_is_registered() {
+        assert!(awaiting_or_present(false, false));
+        assert!(awaiting_or_present(true, true));
+        assert!(!awaiting_or_present(true, false));
+    }
 
     fn svgo_service(root: &Path) -> Arc<FileManagerService> {
         let service = Arc::new(FileManagerService::new(
@@ -2322,6 +2385,8 @@ mod tests {
         let (slot, save_lock) = registry.reserve(label.clone(), &location).unwrap();
         assert_eq!(slot, 0);
         assert!(registry.session_for(slot, "plugin-spa-other").is_none());
+        assert!(registry.tracks(&label));
+        assert!(!registry.tracks("plugin-spa-other"));
         let shutdown = CancellationToken::new();
         registry
             .activate(
@@ -2364,6 +2429,7 @@ mod tests {
         assert!(registry.session_for(slot, &label).is_some());
         registry.release(&label);
         assert!(shutdown.is_cancelled());
+        assert!(!registry.tracks(&label));
         assert!(registry.session_for(slot, &label).is_none());
         let (reused_slot, reused_lock) =
             registry.reserve("plugin-spa-b".into(), &location).unwrap();

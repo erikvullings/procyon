@@ -1,4 +1,6 @@
 .fm-file-viewer {
+  /* The viewer header lines up with the breadcrumb row of a directory pane. */
+  --fm-header-height: var(--fm-row-height);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -303,13 +305,25 @@
   margin-inline-start: auto;
 }
 
-.fm-file-viewer-zoom-controls button {
+.fm-file-viewer-zoom-controls button,
+.fm-file-viewer-summary {
   height: var(--fm-header-height);
   padding: 0 0.4rem;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.fm-file-viewer-summary {
+  flex: 0 0 auto;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.fm-file-viewer-summary:hover,
+.fm-file-viewer-summary:focus-visible {
+  background: var(--fm-hover);
 }
 
 .fm-file-viewer-page-controls {

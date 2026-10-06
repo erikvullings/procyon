@@ -250,6 +250,7 @@ export const pl = {
     selectAll: 'Zaznacz wszystko',
     clearSelection: 'Wyczyść zaznaczenie',
     unableToRun: 'Nie można wykonać polecenia.',
+    pluginPanelUnresponsive: 'Panel wtyczki przestał odpowiadać i został zamknięty.',
   },
   settings: {
     ...en.settings,
@@ -960,6 +961,8 @@ export const pl = {
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     ask: 'Zapytaj',
+    question: 'Pytanie o te wyniki',
+    questionPlaceholder: 'Zadaj pytanie o swoje dokumenty…',
     resultRelevanceHigh: 'Wysoka trafność',
     resultRelevanceMedium: 'Średnia trafność',
     resultRelevanceLow: 'Niska trafność',

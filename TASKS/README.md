@@ -126,9 +126,9 @@ semantic components are not installed.
 - [x] 0196 Release desktop semantic activation
 - [x] 0197 Production OCRmyPDF discovery and consent *(needs 0193, 0196; optional and does not block
   the first semantic release)*
-- [ ] 0198 Semantic release qualification *(in progress: experimental OSS alpha tooling and checklist require
-  four-platform automation, an isolated-user macOS installer/VoiceOver pass, private provisioning,
-  honest tier-aware evidence, and release-owner approval; publication stays fail-closed)*
+- [ ] 0198 Semantic release qualification *(experimental-alpha GO; signed semantic-v2 components
+  and catalog-enabled installers published; installed v0.3.1 initially missed its existing index
+  until restart, so public-installer smoke and digest evidence remain open; stable gate is 0225)*
 - [x] 0199 Benchmark bounded multi-query RAG retrieval *(needs 0183, 0186, 0188; records a
   measurable go/no-go without gating the 0194–0198 release chain)*
 - [x] 0200 Opt-in multi-query grounded Ask *(needs 0199 and its go decision; single-query remains
@@ -172,6 +172,10 @@ layers and never prerequisites for retrieval.
 - [x] 0216 Knowledge retrieval relevance *(needs 0215)*
 - [x] 0217 Base alpha release 0.1.0-24 *(excludes semantic and Ask modes)*
 - [x] 0228 Unified Knowledge Ask pane *(needs 0186, 0207, 0209)*
+- [x] 0235 Search then Ask in one Knowledge tab *(needs 0207, 0228; separate question, full-width
+  answer, decoded JSON, selectable prose)*
+- [x] 0236 Keep the semantic worker warm while semantic search is enabled *(needs 0235)*
+- [x] 0237 Tolerate per-file failures during semantic reconciliation *(OneDrive timeouts)*
 
 ## File operations
 
@@ -192,8 +196,8 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0046 Operation cancellation, pause and resume
 - [x] 0047 Operation queue and history
 - [x] 0048 In-application clipboard copy / cut / paste
-- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — in-app and native
-  drag-in/out implemented; interactive Finder/Explorer manual verification still outstanding)*
+- [ ] 0062 Drag and drop within the app and with the OS *(in_progress — Finder drag-in/out works,
+  but drag-out shows a false no-operation cursor; Explorer manual checks remain)*
 - [x] 0075 Directory comparison and synchronization
 - [x] 0077 Checksums and duplicate-file detection
 - [x] 0093 Copy filename and path actions

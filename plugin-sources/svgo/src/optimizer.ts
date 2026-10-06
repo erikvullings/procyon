@@ -1457,6 +1457,8 @@ class SVGOptimizer {
       }
     });
 
+    this.hoistXmlSpacePreserve(doc);
+
     const usedPrefixes = new Set<string>();
     elements.forEach((el) => {
       if (el.prefix) {
@@ -1986,8 +1988,37 @@ class SVGOptimizer {
     ];
 
     this.groupTextElementsByAttributes(doc, textGroupableAttributes);
+    this.hoistXmlSpacePreserve(doc);
 
     return new XMLSerializer().serializeToString(doc);
+  }
+
+  /**
+   * Moves `xml:space="preserve"` from text children onto their group when every
+   * element child of that group carries it: xml:space is inherited, so the
+   * rendering is unchanged and the markup is not repeated per text.
+   */
+  hoistXmlSpacePreserve(doc: Document): void {
+    const XML_NS = "http://www.w3.org/XML/1998/namespace";
+    const xmlSpace = (el: Element) =>
+      el.getAttributeNS(XML_NS, "space") ?? el.getAttribute("xml:space");
+    const groups = Array.from(doc.querySelectorAll("g")).reverse();
+    groups.forEach((group) => {
+      if (xmlSpace(group) !== null) return;
+      const children = Array.from(group.children);
+      if (
+        children.length < 2 ||
+        !children.some((child) => child.localName === "text") ||
+        !children.every((child) => xmlSpace(child)?.trim() === "preserve")
+      ) {
+        return;
+      }
+      children.forEach((child) => {
+        child.removeAttributeNS(XML_NS, "space");
+        child.removeAttribute("xml:space");
+      });
+      group.setAttributeNS(XML_NS, "xml:space", "preserve");
+    });
   }
 
   combinePaths(svg: string): string {

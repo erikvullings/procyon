@@ -250,6 +250,7 @@ export const es = {
     selectAll: 'Seleccionar todo',
     clearSelection: 'Borrar selección',
     unableToRun: 'No se puede ejecutar el comando.',
+    pluginPanelUnresponsive: 'El panel del complemento dejó de responder y se cerró.',
   },
   settings: {
     ...en.settings,
@@ -963,6 +964,8 @@ export const es = {
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     ask: 'Preguntar',
+    question: 'Pregunta sobre estos resultados',
+    questionPlaceholder: 'Haz una pregunta sobre tus documentos…',
     resultRelevanceHigh: 'Relevancia alta',
     resultRelevanceMedium: 'Relevancia media',
     resultRelevanceLow: 'Relevancia baja',

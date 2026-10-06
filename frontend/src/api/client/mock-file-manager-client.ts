@@ -1387,6 +1387,8 @@ export class MockFileManagerClient implements FileManagerClient {
   private workspaceSequence = 0;
   private connectionSequence = 0;
   private llmProfileSequence = 0;
+  /** Mirrors the backend: the first profile saved becomes active until another is activated. */
+  private activeLlmProfileId: string | undefined;
   private oneDriveAuthorizationSequence = 0;
   private searchSequence = 0;
   private eventSequence = 0;
@@ -4275,7 +4277,13 @@ export class MockFileManagerClient implements FileManagerClient {
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.perform('listLlmProfiles', signal, () =>
-      [...this.llmProfiles.values()].map((profile) => structuredClone(profile)),
+      [...this.llmProfiles.values()]
+        .sort(
+          (left, right) =>
+            Number(right.id === this.activeLlmProfileId) -
+            Number(left.id === this.activeLlmProfileId),
+        )
+        .map((profile) => structuredClone(profile)),
     );
   }
 
@@ -4292,6 +4300,7 @@ export class MockFileManagerClient implements FileManagerClient {
         consentedHost: null,
       };
       this.llmProfiles.set(profile.id, profile);
+      this.activeLlmProfileId ??= profile.id;
       return structuredClone(profile);
     });
   }
@@ -4326,6 +4335,9 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('deleteLlmProfile', signal, () => {
       this.requireLlmProfile(profileId);
       this.llmProfiles.delete(profileId);
+      if (this.activeLlmProfileId === profileId) {
+        this.activeLlmProfileId = this.llmProfiles.keys().next().value;
+      }
     });
   }
 
@@ -4378,6 +4390,7 @@ export class MockFileManagerClient implements FileManagerClient {
           profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
       };
       this.llmProfiles.set(profileId, activated);
+      this.activeLlmProfileId = profileId;
       return structuredClone(activated);
     });
   }

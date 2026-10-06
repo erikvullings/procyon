@@ -3,11 +3,15 @@ import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
+  brainIcon,
   closeIcon,
+  cloudIcon,
+  copyIcon,
   cornerDownLeftIcon,
   dotsIcon,
   externalLinkIcon,
   filterIcon,
+  sparklesIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -30,17 +34,15 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchReason,
   KnowledgeSearchResult,
-  LlmEndpointLocality,
   LlmProfile,
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
+import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
-
-export type KnowledgeSurfaceMode = 'search' | 'ask';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -53,8 +55,6 @@ export interface KnowledgeSearchDialogAttrs {
   readonly semanticSourceIds: readonly string[];
   /** Initial subject text, e.g. the active quick filter or semantic query. */
   readonly initialSubject?: string | undefined;
-  /** Primary workflow selected when the transient pane opens. */
-  readonly initialMode?: KnowledgeSurfaceMode | undefined;
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
 }
@@ -518,33 +518,137 @@ export function classifyKnowledgeScopeSelectors(
   return { wholeLibrary, rootIds, issues };
 }
 
-/** Anchor prefix for a citation link inside generated answer markdown. */
-const CITATION_ANCHOR = '#fm-knowledge-citation-';
+/** Anchor prefix for a numbered source reference inside a generated answer. */
+const REFERENCE_ANCHOR = '#fm-knowledge-reference-';
 
 /** Escapes a citation label for use inside a regular expression. */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
+/** One numbered source an answer cites: a file, however many of its sections were cited. */
+export interface KnowledgeAnswerReference {
+  readonly number: number;
+  readonly title: string;
+  readonly citations: readonly KnowledgeAnswerCitation[];
+  /** The first displayed row the answer cited from this file, if any. */
+  readonly row: KnowledgeEvidence | undefined;
+}
+
+/** A generated answer with its opaque `E#` labels resolved to numbered file references. */
+export interface NumberedKnowledgeAnswer {
+  /** Markdown in which every cited group is a `⟦1,4⟧` placeholder. */
+  readonly markdown: string;
+  /** Plain text in which every cited group reads `[1, 4]`. */
+  readonly text: string;
+  readonly references: readonly KnowledgeAnswerReference[];
+}
+
+const REFERENCE_PLACEHOLDER = /⟦(\d+(?:,\d+)*)⟧/gu;
+
 /**
- * Turns the opaque citation labels a model copied - `[E1]`, `(E1, E2)` - into
- * in-document links.
- *
- * Only the citations passed in are linked, and the caller passes only those
- * whose identity matches a row the search actually displayed, so a label the
- * model invented stays inert text rather than becoming something clickable.
+ * A closing "Sources: ⟦1,4⟧" line, in whatever language the model answered.
+ * The reference list below the answer already shows these sources.
  */
-export function linkKnowledgeCitations(
-  markdown: string,
+const TRAILING_SOURCES_LINE =
+  /\n[ \t]*(?:[*_]{1,2})?[\p{L}][\p{L} ]{0,24}(?:[*_]{1,2})?[ \t]*:[ \t]*(?:[*_]{1,2})?[ \t]*⟦[\d,]+⟧[ \t.]*(?:[*_]{1,2})?\s*$/u;
+
+/**
+ * Replaces the opaque evidence labels a model copied - `E1`, `[E1]`,
+ * `(E1, E4)`, `E1, E4, E5` - with per-file reference numbers in order of first
+ * mention, so several cited sections of one file share one number.
+ *
+ * Only labels the host resolved to a citation are touched; anything else the
+ * model wrote stays as text.
+ */
+export function numberKnowledgeAnswer(
+  text: string,
   citations: readonly KnowledgeAnswerCitation[],
-): string {
-  return citations.reduce((linked, citation) => {
-    const label = escapeRegExp(citation.label);
-    const target = `${CITATION_ANCHOR}${encodeURIComponent(citation.label)}`;
-    return linked
-      .replace(new RegExp(`\\[${label}\\](?!\\()`, 'gu'), `[${citation.label}](${target})`)
-      .replace(new RegExp(`\\(${label}(?=[,\\s)])`, 'gu'), `([${citation.label}](${target})`);
-  }, markdown);
+  displayed: ReadonlyMap<string, KnowledgeEvidence>,
+): NumberedKnowledgeAnswer {
+  const rowFor = (citation: KnowledgeAnswerCitation): KnowledgeEvidence | undefined => {
+    const row = displayed.get(citation.recordId);
+    return row?.sourceId === citation.sourceId ? row : undefined;
+  };
+  const documentKey = (citation: KnowledgeAnswerCitation): string =>
+    rowFor(citation)?.documentId ?? `source:${citation.sourceId}`;
+  const byLabel = new Map(citations.map((citation) => [citation.label, citation]));
+  const numbers = new Map<string, number>();
+  const numberOf = (citation: KnowledgeAnswerCitation): number => {
+    const key = documentKey(citation);
+    let number = numbers.get(key);
+    if (number === undefined) {
+      number = numbers.size + 1;
+      numbers.set(key, number);
+    }
+    return number;
+  };
+  let markdown = text;
+  if (byLabel.size > 0) {
+    const label = [...byLabel.keys()]
+      .sort((left, right) => right.length - left.length)
+      .map(escapeRegExp)
+      .join('|');
+    const one = `(?<![\\p{L}\\p{N}])(?:${label})(?![\\p{L}\\p{N}])`;
+    const group = `${one}(?:\\s*[,;]?\\s*${one})*`;
+    const cited = new RegExp(`\\[\\s*${group}\\s*\\]|\\(\\s*${group}\\s*\\)|${group}`, 'gu');
+    const labelPattern = new RegExp(one, 'gu');
+    markdown = text.replace(cited, (match) => {
+      const groupNumbers = [
+        ...new Set(
+          [...match.matchAll(labelPattern)].flatMap(([found]) => {
+            const citation = byLabel.get(found);
+            return citation === undefined ? [] : [numberOf(citation)];
+          }),
+        ),
+      ].sort((left, right) => left - right);
+      return groupNumbers.length === 0 ? match : `⟦${groupNumbers.join(',')}⟧`;
+    });
+  }
+  markdown = markdown
+    .replace(/⟦[\d,]+⟧(?:\s*[,;]\s*⟦[\d,]+⟧)+/gu, (run) => {
+      const merged = [...new Set(run.match(/\d+/gu)?.map(Number) ?? [])];
+      return `⟦${merged.sort((left, right) => left - right).join(',')}⟧`;
+    })
+    .replace(TRAILING_SOURCES_LINE, '')
+    .trimEnd();
+  for (const citation of citations) numberOf(citation);
+  const references = [...numbers.entries()].map(([key, number]) => {
+    const cited = citations.filter((citation) => documentKey(citation) === key);
+    const row = cited.map(rowFor).find((candidate) => candidate !== undefined);
+    const title =
+      (row === undefined ? undefined : (decodeEvidenceTitle(row.title) ?? row.title)) ??
+      cited[0]?.sectionPath.join(' / ') ??
+      cited[0]?.label ??
+      '';
+    return { number, title: title === '' ? (cited[0]?.label ?? '') : title, citations: cited, row };
+  });
+  return {
+    markdown,
+    text: markdown.replace(
+      REFERENCE_PLACEHOLDER,
+      (_match, list: string) => `[${list.split(',').join(', ')}]`,
+    ),
+    references,
+  };
+}
+
+/**
+ * Turns the reference placeholders in already-sanitised answer HTML into
+ * `[1, 4]` groups whose numbers link to openable sources. Only digits are
+ * ever inserted, so the sanitised HTML stays safe.
+ */
+export function linkKnowledgeReferences(html: string, openable: ReadonlySet<number>): string {
+  return html.replace(REFERENCE_PLACEHOLDER, (_match, list: string) => {
+    const links = list
+      .split(',')
+      .map((number) =>
+        openable.has(Number(number))
+          ? `<a href="${REFERENCE_ANCHOR}${number}">${number}</a>`
+          : number,
+      );
+    return `<span class="fm-knowledge-reference">[${links.join(', ')}]</span>`;
+  });
 }
 
 /**
@@ -619,7 +723,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   let answerProfiles: readonly LlmProfile[] = [];
   let answerProfilesFailed = false;
-  let selectedAnswerProfileId = '';
+  let answerCopied = false;
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
   let answer: KnowledgeAnswer | undefined;
@@ -639,9 +743,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let pendingParse: Promise<void> | undefined;
   /** Set when the dialog must take focus after its next render. */
   let focusSubjectOnOpen = false;
+  // Enter pressed while the pane is still loading; the search runs once it is ready.
+  let searchAfterLoad = false;
   let settingsOpen = false;
   let enrolmentOpen = false;
-  let surfaceMode: KnowledgeSurfaceMode = 'search';
+  let answerCollapsed = false;
+  let questionText = '';
 
   /** Bounded options sent with both the plan preview and the search itself. */
   function searchOptions(): KnowledgeSearchOptions {
@@ -677,6 +784,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   function edited(): void {
     revision += 1;
     resetResults();
+    questionText = '';
   }
 
   function scope(attrs: KnowledgeSearchDialogAttrs): KnowledgeScope {
@@ -854,6 +962,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     notice = undefined;
     resetResults();
     interpretation = undefined;
+    questionText = '';
     scopeIssues = [];
     wholeLibraryDeclared = false;
     draft = {
@@ -871,18 +980,47 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     mode = 'hybrid';
     scopeKind = 'entireLibrary';
     focusSubjectOnOpen = true;
+    searchAfterLoad = false;
     answerProfiles = [];
     answerProfilesFailed = false;
-    selectedAnswerProfileId = '';
     allowModelKnowledge = false;
     settingsOpen = false;
     enrolmentOpen = false;
-    surfaceMode = attrs.initialMode ?? 'search';
+    answerCollapsed = false;
     try {
-      const [reportedCapabilities, availableRoots] = await Promise.all([
-        attrs.client.getKnowledgeCapabilities(),
-        attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
-      ]);
+      // Every lookup runs concurrently: each one is a separate host round-trip
+      // and the dialog stays in its loading state until all have settled.
+      const capabilitiesRequest = attrs.client.getKnowledgeCapabilities();
+      // Generation profiles are only fetched when the host actually offers
+      // answers, so a search-only host is never asked about a capability it
+      // does not have, and a failure here never blocks search (task 0207).
+      const profilesRequest = capabilitiesRequest.then((reported) =>
+        reported.answerGeneration
+          ? attrs.client.listLlmProfiles().then(
+              (profiles) => ({ profiles, failed: false }),
+              () => ({ profiles: [], failed: true }),
+            )
+          : { profiles: [], failed: false },
+      );
+      const currentFolder = attrs.currentFolder;
+      const folderIndexedRequest =
+        currentFolder === undefined
+          ? Promise.resolve(false)
+          : attrs.client
+              .getSemanticFolderStatus({ workspaceId: attrs.workspaceId, location: currentFolder })
+              .then(
+                (folder) =>
+                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
+                  folder.workspaceReferenced,
+                () => false,
+              );
+      const [reportedCapabilities, availableRoots, profileResult, folderIndexed] =
+        await Promise.all([
+          capabilitiesRequest,
+          attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
+          profilesRequest,
+          folderIndexedRequest,
+        ]);
       if (loadGeneration !== generation) return;
       capabilities = reportedCapabilities;
       roots = availableRoots;
@@ -894,34 +1032,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
-      // Generation profiles are only fetched when the host actually offers
-      // answers, so a search-only host is never asked about a capability it
-      // does not have, and a failure here never blocks search (task 0207).
-      if (reportedCapabilities.answerGeneration) {
-        try {
-          const profiles = await attrs.client.listLlmProfiles();
-          if (loadGeneration !== generation) return;
-          answerProfiles = profiles;
-          if (surfaceMode === 'ask') selectedAnswerProfileId = profiles[0]?.id ?? '';
-        } catch {
-          if (loadGeneration !== generation) return;
-          answerProfilesFailed = true;
-        }
-      }
-      if (attrs.currentFolder !== undefined) {
-        try {
-          const folder = await attrs.client.getSemanticFolderStatus({
-            workspaceId: attrs.workspaceId,
-            location: attrs.currentFolder,
-          });
-          if (loadGeneration !== generation) return;
-          currentFolderIndexed =
-            (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
-            folder.workspaceReferenced;
-        } catch {
-          currentFolderIndexed = false;
-        }
-      }
+      answerProfiles = profileResult.profiles;
+      answerProfilesFailed = profileResult.failed;
+      if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
       scopeKind = scopeAvailable(attrs, 'currentFolder')
         ? 'currentFolder'
         : scopeAvailable(attrs, 'semanticResults')
@@ -938,6 +1051,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
     if (loadGeneration === generation && (draft.about ?? []).length > 0) {
       await reinterpret(attrs);
+    }
+    if (loadGeneration === generation && searchAfterLoad) {
+      searchAfterLoad = false;
+      await search(attrs);
     }
   }
 
@@ -1004,6 +1121,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     error = undefined;
     notice = undefined;
     result = undefined;
+    answerCollapsed = false;
+    questionText = '';
     // A new search replaces the evidence set entirely, so any answer over the
     // previous one is dropped before the first byte of the new one arrives.
     resetAnswer();
@@ -1021,7 +1140,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     const searchRevision = revision;
     traceRequested = includeTrace;
     const requestId = crypto.randomUUID();
-    let generateAfterSearch = false;
     try {
       const executed = await attrs.client.executeKnowledgeSearch(
         {
@@ -1037,7 +1155,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       result = executed;
       plan = executed.plan;
       capabilities = executed.capabilities;
-      generateAfterSearch = surfaceMode === 'ask';
     } catch (cause) {
       if (startGeneration !== generation || searchRevision !== revision) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1052,27 +1169,73 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m.redraw();
       }
     }
-    if (generateAfterSearch) await generateAnswer(attrs);
   }
 
   function cancel(): void {
     abortController?.abort();
   }
 
-  /** Whether an optional answer may be offered at all for what is on screen. */
+  /**
+   * Whether an LLM can answer at all: the host supports generation and at
+   * least one generation profile is configured. Without one the ask bar is
+   * not shown and search stays complete on its own.
+   */
   function answerAvailable(): boolean {
-    return result?.capabilities.answerGeneration === true;
+    return (
+      (result?.capabilities ?? capabilities)?.answerGeneration === true &&
+      !answerProfilesFailed &&
+      answerProfiles.length > 0
+    );
   }
 
   /** Whether the Generate control can run right now. */
-  function canGenerateAnswer(): boolean {
+  function canGenerateAnswer(attrs: KnowledgeSearchDialogAttrs): boolean {
     return (
       answerAvailable() &&
+      questionText.trim().length > 0 &&
+      new TextEncoder().encode(questionText).length <= 8 * 1024 &&
       !generatingAnswer &&
       busy === undefined &&
-      selectedAnswerProfileId !== '' &&
-      answerProfiles.some((profile) => profile.id === selectedAnswerProfileId)
+      (result !== undefined || canSearchForQuestion(attrs)) &&
+      answerProfile() !== undefined
     );
+  }
+
+  /**
+   * The default generation profile: hosts list the profile activated in
+   * Settings first, and activation is where cloud consent is given.
+   */
+  function answerProfile(): LlmProfile | undefined {
+    return answerProfiles[0];
+  }
+
+  /** Whether asking without inspected results can first search for the question. */
+  function canSearchForQuestion(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return hasSearchableSources(attrs) && scopeIssues.length === 0;
+  }
+
+  /**
+   * Asks the question. With results on screen it answers over exactly that
+   * evidence; without them it first searches, as regular RAG would, using the
+   * subjects already entered or else the question itself as the subject.
+   */
+  async function ask(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    if (!canGenerateAnswer(attrs)) return;
+    if (result === undefined) {
+      const asked = questionText;
+      if (!hasSubject()) {
+        draft = { ...draft, about: [asked.trim()] };
+        subjectsText = joinSubjects(draft.about ?? []);
+        edited();
+        void reinterpret(attrs);
+      }
+      // search() clears the question synchronously; keep it on screen.
+      const searching = search(attrs);
+      questionText = asked;
+      await searching;
+      if (result === undefined) return;
+    }
+    await generateAnswer(attrs);
   }
 
   /**
@@ -1080,20 +1243,22 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    *
    * Retrieval is never involved: the request names the exact
    * `evidenceFingerprint` the displayed result reported, and the answer-only
-   * fields come from the canonical draft that produced it. A response that
+   * fields come from the canonical draft that produced it, plus a separate
+   * question that is never fed to search. A response that
    * lands after an edit, a new search, a close, a reopen or a newer generation
    * is discarded, and a host that no longer retains the evidence is reported as
    * "search again" rather than silently retrieved for.
    */
   async function generateAnswer(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     const inspected = result;
-    if (inspected === undefined || !canGenerateAnswer()) return;
+    if (inspected === undefined || !canGenerateAnswer(attrs)) return;
     const startGeneration = generation;
     const answerRevision = revision;
     const fingerprint = inspected.evidenceFingerprint;
-    const profileId = selectedAnswerProfileId;
+    const profileId = answerProfile()?.id ?? '';
     const modelKnowledge = allowModelKnowledge;
     resetAnswer();
+    answerCollapsed = false;
     const sequence = answerSequence;
     const controller = new AbortController();
     answerAbortController = controller;
@@ -1111,6 +1276,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           requestId: crypto.randomUUID(),
           workspaceId: attrs.workspaceId,
           evidenceFingerprint: fingerprint,
+          question: questionText.trim(),
           profileId,
           allowModelKnowledge: modelKnowledge,
           action: draft.action ?? null,
@@ -1375,7 +1541,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           t('knowledgeSearch', 'searchNoSources'),
         );
       }
-      const pendingRoots = roots.filter((root) => root.available && root.indexedGeneration === 0);
+      const pendingRoots = roots.filter(
+        (root) => root.available && root.indexedGeneration === 0 && root.indexedSources === 0,
+      );
       if (
         capabilities !== undefined &&
         attrs.semanticSourceIds.length === 0 &&
@@ -1408,13 +1576,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     );
   }
 
-  /** Localised endpoint classification, shown before anything is sent. */
-  function localityLabel(locality: LlmEndpointLocality): string {
-    return locality === 'cloud'
-      ? t('knowledgeSearch', 'answerLocalityCloud')
-      : t('knowledgeSearch', 'answerLocalityLoopback');
-  }
-
   /**
    * The rows the search displayed, keyed by the identity a citation must
    * match. A citation is only ever opened through an identity that is in here,
@@ -1422,15 +1583,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   function displayedEvidence(): ReadonlyMap<string, KnowledgeEvidence> {
     return new Map((result?.evidence ?? []).map((row) => [row.recordId, row]));
-  }
-
-  /** The displayed row one citation names, if it names one at all. */
-  function citedRow(
-    displayed: ReadonlyMap<string, KnowledgeEvidence>,
-    citation: KnowledgeAnswerCitation,
-  ): KnowledgeEvidence | undefined {
-    const row = displayed.get(citation.recordId);
-    return row === undefined || row.sourceId !== citation.sourceId ? undefined : row;
   }
 
   /** The generated answer itself, plus how honest it is about its evidence. */
@@ -1453,42 +1605,32 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         answerNotice ?? t('knowledgeSearch', 'answerPlaceholder'),
       );
     }
-    const openable = (citation: KnowledgeAnswerCitation): boolean =>
-      citedRow(displayed, citation) !== undefined &&
-      !citation.unavailable &&
+    const numbered = numberKnowledgeAnswer(current.text, current.citations, displayed);
+    const openable = (reference: KnowledgeAnswerReference): boolean =>
+      reference.row !== undefined &&
+      reference.citations.some((citation) => !citation.unavailable) &&
       attrs.onOpenSource !== undefined;
+    const openReference = (reference: KnowledgeAnswerReference): void => {
+      if (reference.row !== undefined && openable(reference)) void openSource(attrs, reference.row);
+    };
     return [
-      m(
-        'p.fm-knowledge-hint',
-        t('knowledgeSearch', 'answerProfileUsed', {
-          profile: current.profileName,
-          locality: localityLabel(current.locality),
-        }),
-      ),
       m(
         '.fm-knowledge-answer-markdown',
         {
           onclick: (event: MouseEvent) => {
             if (!(event.target instanceof Element)) return;
-            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${CITATION_ANCHOR}"]`);
+            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${REFERENCE_ANCHOR}"]`);
             if (link === null) return;
-            const target = link.getAttribute('href');
-            const label =
-              target === null
-                ? undefined
-                : decodeURIComponent(target.slice(CITATION_ANCHOR.length));
-            const citation = current.citations.find((item) => item.label === label);
-            if (citation === undefined || !openable(citation)) return;
             event.preventDefault();
-            const row = citedRow(displayed, citation);
-            if (row !== undefined) void openSource(attrs, row);
+            const number = Number(link.getAttribute('href')?.slice(REFERENCE_ANCHOR.length));
+            const reference = numbered.references.find((item) => item.number === number);
+            if (reference !== undefined) openReference(reference);
           },
         },
         m.trust(
-          safeMarkdownHtml(
-            // Only citations that name a displayed row are linked; anything
-            // else stays inert text rather than becoming clickable.
-            linkKnowledgeCitations(current.text, current.citations.filter(openable)),
+          linkKnowledgeReferences(
+            safeMarkdownHtml(numbered.markdown),
+            new Set(numbered.references.filter(openable).map((reference) => reference.number)),
           ),
         ),
       ),
@@ -1520,179 +1662,255 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               count: current.withheldUnauthorized,
             }),
           ),
-      current.citations.length === 0
+      numbered.references.length === 0
         ? undefined
-        : m('.fm-knowledge-answer-citations', [
-            m('h4', t('knowledgeSearch', 'answerCitations')),
-            m(
-              'ul.fm-knowledge-citations',
-              current.citations.map((citation) => {
-                const row = citedRow(displayed, citation);
-                const provenance = knowledgeProvenanceLabel(citation.provenance);
-                const states = [
-                  row?.title,
-                  citation.sectionPath.length === 0 ? undefined : citation.sectionPath.join(' / '),
-                  provenance === '' ? undefined : provenance,
-                  citation.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
-                  citation.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
-                  citation.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
-                  row === undefined
-                    ? t('knowledgeSearch', 'answerCitationNotDisplayed')
-                    : undefined,
-                ].filter((value): value is string => value !== undefined && value !== '');
-                return m('li', { key: `${citation.label}-${citation.recordId}` }, [
-                  m(
-                    'button.fm-knowledge-source-link',
-                    {
-                      type: 'button',
-                      disabled: !openable(citation),
-                      'aria-label': t('knowledgeSearch', 'openCitation', {
-                        label: citation.label,
-                      }),
-                      onclick: () => {
-                        const row = citedRow(displayed, citation);
-                        if (row !== undefined) void openSource(attrs, row);
+        : // Keyed so each new answer starts with its sources collapsed again.
+          [
+            m('details.fm-knowledge-answer-references', { key: current.requestId }, [
+              m(
+                'summary',
+                t('knowledgeSearch', 'answerCitations', { count: numbered.references.length }),
+              ),
+              m(
+                'ol.fm-knowledge-citations',
+                numbered.references.map((reference) => {
+                  const sections = [
+                    ...new Set(
+                      reference.citations
+                        .map((citation) => citation.sectionPath.join(' / '))
+                        .filter((section) => section !== '' && section !== reference.title),
+                    ),
+                  ];
+                  const states = [
+                    ...sections,
+                    reference.citations.some((citation) => citation.generated)
+                      ? t('knowledgeSearch', 'generatedEvidence')
+                      : undefined,
+                    reference.citations.some((citation) => citation.stale === true)
+                      ? t('knowledgeSearch', 'staleEvidence')
+                      : undefined,
+                    reference.citations.every((citation) => citation.unavailable)
+                      ? t('knowledgeSearch', 'unavailableEvidence')
+                      : undefined,
+                    reference.row === undefined
+                      ? t('knowledgeSearch', 'answerCitationNotDisplayed')
+                      : undefined,
+                  ].filter((value): value is string => value !== undefined);
+                  return m('li', { key: `reference-${reference.number}` }, [
+                    m('span.fm-knowledge-reference-number', `[${reference.number}]`),
+                    m(
+                      'button.fm-knowledge-source-link',
+                      {
+                        type: 'button',
+                        title: reference.title,
+                        disabled: !openable(reference),
+                        'aria-label': t('knowledgeSearch', 'openCitation', {
+                          label: reference.title,
+                        }),
+                        onclick: () => openReference(reference),
                       },
-                    },
-                    citation.label,
-                  ),
-                  states.length === 0 ? '' : ` · ${states.join(' · ')}`,
-                ]);
-              }),
-            ),
-          ]),
+                      m('span', reference.title),
+                    ),
+                    states.length === 0
+                      ? undefined
+                      : m('small.fm-knowledge-hint', states.join(' · ')),
+                  ]);
+                }),
+              ),
+            ]),
+          ],
     ];
   }
 
+  /** Copies the answer as plain text, with its numbered source list appended. */
+  async function copyAnswer(): Promise<void> {
+    const current = answer;
+    if (current === undefined) return;
+    const numbered = numberKnowledgeAnswer(current.text, current.citations, displayedEvidence());
+    const sources = numbered.references.map(
+      (reference) => `[${reference.number}] ${reference.title}`,
+    );
+    const heading = t('knowledgeSearch', 'answerCitations', { count: sources.length });
+    await copyText(
+      sources.length === 0
+        ? numbered.text
+        : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
+    );
+    answerCopied = true;
+    m.redraw();
+    window.setTimeout(() => {
+      answerCopied = false;
+      m.redraw();
+    }, 1500);
+  }
+
   /**
-   * The optional answer section: strictly downstream of a completed search.
+   * The optional ask bar, docked below the results it is about.
    *
    * It exists only while a successful result whose own capabilities report
    * `answerGeneration` is on screen, so a search-only host renders nothing here
-   * and search stays complete without it.
+   * and search stays complete without it. The answer opens in a collapsible
+   * panel directly above the bar.
    */
   function answerView(attrs: KnowledgeSearchDialogAttrs): m.Children {
     if (!answerAvailable()) return undefined;
     const displayed = displayedEvidence();
-    const profile = answerProfiles.find((candidate) => candidate.id === selectedAnswerProfileId);
+    const profile = answerProfile();
+    const hasOutput =
+      generatingAnswer ||
+      answer !== undefined ||
+      answerError !== undefined ||
+      answerNotice !== undefined;
     return m(
       'section.fm-knowledge-answer',
       { 'aria-label': t('knowledgeSearch', 'answerRegion'), 'aria-busy': generatingAnswer },
       [
-        m('h3', t('knowledgeSearch', 'answerHeading')),
-        m('p.fm-knowledge-hint', t('knowledgeSearch', 'answerHint')),
-        answerProfilesFailed
-          ? m(
-              'p.fm-knowledge-error',
-              { role: 'alert' },
-              t('knowledgeSearch', 'answerProfilesFailed'),
-            )
-          : answerProfiles.length === 0
-            ? m('p.fm-knowledge-hint', { role: 'status' }, t('knowledgeSearch', 'answerNoProfiles'))
-            : m('.fm-knowledge-answer-controls', [
-                m('.fm-knowledge-field', [
+        m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
+          m('.fm-knowledge-answer-output-heading', [
+            m('h3', t('knowledgeSearch', 'answerHeading')),
+            answer === undefined || generatingAnswer
+              ? undefined
+              : tooltip(
+                  answerCopied
+                    ? t('knowledgeSearch', 'answerCopied')
+                    : t('knowledgeSearch', 'copyAnswer'),
                   m(
-                    'label',
-                    { for: 'fm-knowledge-answer-profile' },
-                    t('knowledgeSearch', 'answerProfile'),
-                  ),
-                  m(
-                    'select#fm-knowledge-answer-profile.browser-default',
+                    IconButton,
                     {
-                      name: 'knowledge-answer-profile',
-                      value: selectedAnswerProfileId,
-                      disabled: generatingAnswer,
-                      onchange: (event: Event) => {
-                        selectedAnswerProfileId = (event.currentTarget as HTMLSelectElement).value;
-                        // A different endpoint is a different disclosure, so
-                        // the previous answer cannot stand.
-                        resetAnswer();
-                      },
+                      type: 'button',
+                      className: 'fm-knowledge-answer-copy',
+                      'aria-label': answerCopied
+                        ? t('knowledgeSearch', 'answerCopied')
+                        : t('knowledgeSearch', 'copyAnswer'),
+                      onclick: () => void copyAnswer(),
                     },
-                    [
-                      m('option', { value: '' }, t('knowledgeSearch', 'answerProfilePlaceholder')),
-                      // Unkeyed on purpose: Mithril refuses a sibling list
-                      // that mixes keyed and unkeyed vnodes, and the
-                      // placeholder option cannot carry a profile key.
-                      ...answerProfiles.map((candidate) =>
-                        m(
-                          'option',
-                          { value: candidate.id },
-                          `${candidate.name} · ${localityLabel(candidate.locality)}`,
-                        ),
-                      ),
-                    ],
+                    copyIcon({ size: 14 }),
                   ),
-                ]),
-                m('.fm-knowledge-answer-option', [
-                  m('input#fm-knowledge-model-knowledge', {
-                    type: 'checkbox',
-                    checked: allowModelKnowledge,
-                    disabled: generatingAnswer,
-                    onchange: (event: Event) => {
-                      allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
-                      resetAnswer();
-                    },
-                  }),
-                  m(
-                    'label',
-                    { for: 'fm-knowledge-model-knowledge' },
-                    t('knowledgeSearch', 'allowModelKnowledge'),
-                  ),
-                ]),
-              ]),
-        allowModelKnowledge
-          ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'modelKnowledgeNotice'))
-          : undefined,
-        profile === undefined
-          ? undefined
-          : m(
-              profile.locality === 'cloud' ? 'p.fm-knowledge-warning' : 'p.fm-knowledge-hint',
-              { role: 'status' },
-              profile.locality === 'cloud'
-                ? t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name })
-                : t('knowledgeSearch', 'answerLocalEndpoint', { profile: profile.name }),
-            ),
-        answerProfiles.length === 0
-          ? undefined
-          : m('.fm-knowledge-answer-actions', [
-              m(
-                FlatButton,
-                {
-                  type: 'button',
-                  className: 'fm-knowledge-generate',
-                  disabled: !canGenerateAnswer(),
-                  onclick: () => void generateAnswer(attrs),
+                ),
+            m(
+              'button.fm-knowledge-answer-collapse',
+              {
+                type: 'button',
+                'aria-expanded': answerCollapsed ? 'false' : 'true',
+                'aria-controls': 'fm-knowledge-answer-body',
+                onclick: () => {
+                  answerCollapsed = !answerCollapsed;
                 },
-                generatingAnswer
-                  ? t('knowledgeSearch', 'generatingAnswer')
-                  : t('knowledgeSearch', 'generateAnswer'),
-              ),
-              generatingAnswer
-                ? m(
-                    FlatButton,
-                    { type: 'button', onclick: cancelAnswer },
-                    t('knowledgeSearch', 'cancelAnswer'),
-                  )
-                : undefined,
-            ]),
-        answerError === undefined
-          ? undefined
-          : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
-        m(
-          '.fm-knowledge-answer-body',
-          {
-            tabindex: '-1',
-            'aria-live': 'polite',
-            onupdate: ({ dom }: m.VnodeDOM) => {
-              if (focusAnswerOnReady && answer !== undefined) {
-                focusAnswerOnReady = false;
-                (dom as HTMLElement).focus();
+              },
+              answerCollapsed
+                ? t('knowledgeSearch', 'showAnswer')
+                : t('knowledgeSearch', 'hideAnswer'),
+            ),
+          ]),
+          answerError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
+          m(
+            '.fm-knowledge-answer-body#fm-knowledge-answer-body',
+            {
+              tabindex: '-1',
+              'aria-live': 'polite',
+              hidden: answerCollapsed,
+              onupdate: ({ dom }: m.VnodeDOM) => {
+                if (focusAnswerOnReady && answer !== undefined) {
+                  focusAnswerOnReady = false;
+                  (dom as HTMLElement).focus();
+                }
+              },
+            },
+            hasOutput ? answerBody(attrs, displayed) : undefined,
+          ),
+        ]),
+        m('.fm-knowledge-ask-bar', [
+          sparklesIcon({ className: 'fm-knowledge-ask-icon', size: 15 }),
+          m(
+            'label.fm-visually-hidden',
+            { for: 'fm-knowledge-question' },
+            t('knowledgeSearch', 'question'),
+          ),
+          m('textarea#fm-knowledge-question', {
+            name: 'knowledge-answer-question',
+            rows: 1,
+            maxlength: 8192,
+            value: questionText,
+            placeholder: t('knowledgeSearch', 'questionPlaceholder'),
+            oninput: (event: InputEvent) => {
+              // The previous answer stays until the new question is actually asked.
+              questionText = (event.currentTarget as HTMLTextAreaElement).value;
+            },
+            onkeydown: (event: KeyboardEvent) => {
+              event.stopPropagation();
+              if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                void ask(attrs);
               }
             },
-          },
-          answerBody(attrs, displayed),
-        ),
+          }),
+          profile?.locality === 'cloud'
+            ? tooltip(
+                t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name }),
+                cloudIcon({ className: 'fm-knowledge-ask-cloud', size: 15 }),
+                {
+                  tabindex: 0,
+                  role: 'img',
+                  'aria-label': t('knowledgeSearch', 'answerCloudEndpoint', {
+                    profile: profile.name,
+                  }),
+                },
+              )
+            : undefined,
+          tooltip(
+            t('knowledgeSearch', 'allowModelKnowledgeHint'),
+            m(
+              'label.fm-knowledge-model-knowledge',
+              {
+                for: 'fm-knowledge-model-knowledge',
+                class: allowModelKnowledge ? 'is-active' : undefined,
+              },
+              [
+                m('input#fm-knowledge-model-knowledge.fm-visually-hidden', {
+                  type: 'checkbox',
+                  checked: allowModelKnowledge,
+                  disabled: generatingAnswer,
+                  onchange: (event: Event) => {
+                    allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
+                    resetAnswer();
+                  },
+                }),
+                brainIcon({ size: 15 }),
+                m('span.fm-visually-hidden', t('knowledgeSearch', 'allowModelKnowledge')),
+              ],
+            ),
+          ),
+          generatingAnswer
+            ? tooltip(
+                t('knowledgeSearch', 'cancelAnswer'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-ask-cancel',
+                    'aria-label': t('knowledgeSearch', 'cancelAnswer'),
+                    onclick: cancelAnswer,
+                  },
+                  closeIcon({ size: 13 }),
+                ),
+              )
+            : tooltip(
+                t('knowledgeSearch', 'askWith', { profile: profile?.name ?? '' }),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-generate',
+                    'aria-label': t('knowledgeSearch', 'ask'),
+                    disabled: !canGenerateAnswer(attrs),
+                    onclick: () => void ask(attrs),
+                  },
+                  cornerDownLeftIcon({ size: 16 }),
+                ),
+              ),
+        ]),
       ],
     );
   }
@@ -1725,51 +1943,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       if (!attrs.open) return undefined;
       return m(
         'section#fm-knowledge-search-pane.fm-knowledge-search',
-        { 'aria-label': t('knowledgeSearch', 'title') },
+        {
+          'aria-label': t('knowledgeSearch', 'title'),
+        },
         [
           m('.fm-knowledge-composer', [
             m('.fm-knowledge-search-toolbar', [
-              m('.fm-knowledge-surface-modes', { 'aria-label': t('knowledgeSearch', 'title') }, [
-                m(
-                  'button.fm-knowledge-surface-mode',
-                  {
-                    type: 'button',
-                    class: surfaceMode === 'search' ? 'is-active' : undefined,
-                    'aria-pressed': surfaceMode === 'search' ? 'true' : 'false',
-                    onclick: () => {
-                      surfaceMode = 'search';
-                    },
-                  },
-                  t('knowledgeSearch', 'search'),
-                ),
-                m(
-                  'button.fm-knowledge-surface-mode',
-                  {
-                    type: 'button',
-                    class: surfaceMode === 'ask' ? 'is-active' : undefined,
-                    'aria-pressed': surfaceMode === 'ask' ? 'true' : 'false',
-                    disabled: capabilities?.answerGeneration !== true,
-                    onclick: () => {
-                      surfaceMode = 'ask';
-                      if (selectedAnswerProfileId === '') {
-                        selectedAnswerProfileId = answerProfiles[0]?.id ?? '';
-                      }
-                    },
-                  },
-                  t('knowledgeSearch', 'ask'),
-                ),
-              ]),
               filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),
               m('textarea#fm-knowledge-subjects', {
                 name: 'knowledge-subjects',
                 rows: 1,
                 value: subjectsText,
-                disabled: busy === 'loading' || busy === 'searching',
+                disabled: busy === 'searching',
                 autocomplete: 'off',
                 'aria-label': t('knowledgeSearch', 'subjects'),
                 placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
                 onupdate: ({ dom }: m.VnodeDOM) => {
-                  if (!focusSubjectOnOpen || busy === 'loading') return;
+                  if (!focusSubjectOnOpen) return;
                   focusSubjectOnOpen = false;
                   const input = dom as HTMLTextAreaElement;
                   input.focus();
@@ -1790,6 +1980,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   }
                   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                     event.preventDefault();
+                    if (busy === 'loading') {
+                      searchAfterLoad = true;
+                      return;
+                    }
                     void search(attrs);
                   }
                 },
@@ -2250,18 +2444,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           busy === 'loading'
             ? m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'loading'))
             : undefined,
-          m('.fm-knowledge-workspace', { class: surfaceMode === 'ask' ? 'is-ask' : 'is-search' }, [
-            surfaceMode === 'ask'
-              ? m(
-                  'section.fm-knowledge-answer-panel',
-                  { 'aria-label': t('knowledgeSearch', 'answerRegion') },
-                  answerView(attrs) ??
-                    m('.fm-knowledge-answer-empty', [
-                      m('h3', t('knowledgeSearch', 'answerHeading')),
-                      m('p.fm-knowledge-hint', t('ragAsk', 'answerPlaceholder')),
-                    ]),
-                )
-              : undefined,
+          m('.fm-knowledge-workspace', [
             m(
               'section.fm-knowledge-results-section.fm-knowledge-evidence-panel',
               {
@@ -2282,12 +2465,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                         })}`,
                   ]),
                 ),
-                m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [
-                  resultsView(attrs),
-                  surfaceMode === 'search' ? answerView(attrs) : undefined,
-                ]),
+                m('.fm-knowledge-results-body', { 'aria-live': 'polite' }, [resultsView(attrs)]),
               ],
             ),
+            answerView(attrs),
           ]),
         ],
       );

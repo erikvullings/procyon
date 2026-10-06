@@ -596,6 +596,7 @@ pub(crate) fn answer_request_from_dto(
 ) -> KnowledgeAnswerRequest {
     KnowledgeAnswerRequest {
         evidence_fingerprint: request.evidence_fingerprint.clone(),
+        question: request.question.clone(),
         action: request.action.map(action_from_dto),
         context: request.context.clone(),
         constraints: request.constraints.clone(),

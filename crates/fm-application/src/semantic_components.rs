@@ -2671,7 +2671,7 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
                     continue;
                 };
                 manager
-                    .verified_installed_payload(artifact)
+                    .verified_installed_payload_memoized(artifact)
                     .map_err(map_install_error)?
                     .ok_or_else(|| SemanticComponentError::ArtifactVerificationFailed {
                         artifact_id: artifact.id().as_str().to_owned(),
