@@ -3004,12 +3004,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (tabId !== undefined) {
       const key = tabKey(paneId, tabId);
       const directory = directories.get(key);
+      const tab = current.panesById[paneId]?.tabsById[tabId];
+      const sorted = entriesSortedFor(
+        key,
+        directory?.entries ?? [],
+        effectiveSort(tab?.view.sort ?? []),
+        tab?.view.foldersFirst ?? false,
+        true,
+      );
+      const visible = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
       selections.set(
         key,
         reduceSelection(
           selections.get(key) ?? emptySelection,
           { type: 'prune', removedEntryIds: [...removedIds] },
-          directory?.entries.map((entry) => entry.id) ?? [],
+          visible.map((entry) => entry.id),
         ),
       );
     }
@@ -3507,11 +3516,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     removeFromBasketIfActive: () => {
       if (workspace === undefined) return false;
-      if (removeSelectedBasketItems(workspace.activePaneId)) return true;
-      for (const paneId of workspace.paneOrder) {
-        if (paneId !== workspace.activePaneId && removeSelectedBasketItems(paneId)) return true;
-      }
-      return false;
+      return removeSelectedBasketItems(workspace.activePaneId);
     },
     prepareFileOperationEntries,
     clipboard,

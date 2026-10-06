@@ -400,16 +400,19 @@ describe('dispatchGlobalKeydown precedence', () => {
 });
 
 describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
-  it('Backspace removes the active basket selection without invoking file deletion', () => {
-    const removeFromBasketIfActive = vi.fn(() => true);
-    const context = makeContext({ removeFromBasketIfActive });
-    const event = keydown('Backspace');
+  it.each(['Backspace', 'Delete'])(
+    '%s removes the active basket selection without invoking file deletion',
+    (key) => {
+      const removeFromBasketIfActive = vi.fn(() => true);
+      const context = makeContext({ removeFromBasketIfActive });
+      const event = keydown(key);
 
-    createGlobalKeydownHandler(context)(event);
+      expect(dispatchGlobalKeydown(context, event)).toBe('basket.remove');
 
-    expect(event.defaultPrevented).toBe(true);
-    expect(removeFromBasketIfActive).toHaveBeenCalledOnce();
-  });
+      expect(event.defaultPrevented).toBe(true);
+      expect(removeFromBasketIfActive).toHaveBeenCalledOnce();
+    },
+  );
 
   it('Ctrl+Backspace navigates to the root of the active location', () => {
     const navigate = vi.fn().mockResolvedValue(undefined);
@@ -1315,53 +1318,56 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it('keeps bare F8 on Trash and Shift+F8 on permanent delete when Trash is available', () => {
-    const trash = vi.fn().mockResolvedValue({});
-    const deletePermanently = vi.fn().mockResolvedValue({});
-    const cursorFile: EntrySummary = {
-      id: 'file-1' as never,
-      location: { providerId: 'local', uri: 'file:///a/report.txt' },
-      name: 'report.txt',
-      kind: 'file',
-      hidden: false,
-      readOnly: false,
-      metadataRevision: 0,
-    };
-    const actions: readonly ActionDescriptor[] = [
-      {
-        id: 'core.delete',
-        title: 'Delete',
-        category: 'fileOperations',
-        defaultShortcuts: [{ key: 'F8' }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-      {
-        id: 'core.trash',
-        title: 'Trash',
-        category: 'fileOperations',
-        defaultShortcuts: [{ key: 'F8' }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-    ];
-    const context = makeContext({
-      actionsWithFavourites: () => actions,
-      getRegisteredActions: () => actions,
-      getOpsController: () =>
-        ({ trash, delete: deletePermanently }) as unknown as OperationsController,
-      getSelections: () =>
-        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: 'file-1' as never }]]),
-      getDirectories: () =>
-        new Map([['pane-a:tab', { entries: [cursorFile] } as unknown as PaneDirectoryView]]),
-    });
-    const handler = createGlobalKeydownHandler(context);
-    handler(keydown('F8'));
-    handler(keydown('F8', { shiftKey: true }));
+  it.each(['F8', 'Delete'])(
+    'keeps bare %s on Trash and Shift on permanent delete outside the basket',
+    (key) => {
+      const trash = vi.fn().mockResolvedValue({});
+      const deletePermanently = vi.fn().mockResolvedValue({});
+      const cursorFile: EntrySummary = {
+        id: 'file-1' as never,
+        location: { providerId: 'local', uri: 'file:///a/report.txt' },
+        name: 'report.txt',
+        kind: 'file',
+        hidden: false,
+        readOnly: false,
+        metadataRevision: 0,
+      };
+      const actions: readonly ActionDescriptor[] = [
+        {
+          id: 'core.delete',
+          title: 'Delete',
+          category: 'fileOperations',
+          defaultShortcuts: [{ key }],
+          contextRequirements: {},
+          source: { kind: 'core' },
+        },
+        {
+          id: 'core.trash',
+          title: 'Trash',
+          category: 'fileOperations',
+          defaultShortcuts: [{ key }],
+          contextRequirements: {},
+          source: { kind: 'core' },
+        },
+      ];
+      const context = makeContext({
+        actionsWithFavourites: () => actions,
+        getRegisteredActions: () => actions,
+        getOpsController: () =>
+          ({ trash, delete: deletePermanently }) as unknown as OperationsController,
+        getSelections: () =>
+          new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: 'file-1' as never }]]),
+        getDirectories: () =>
+          new Map([['pane-a:tab', { entries: [cursorFile] } as unknown as PaneDirectoryView]]),
+      });
+      const handler = createGlobalKeydownHandler(context);
+      handler(keydown(key));
+      handler(keydown(key, { shiftKey: true }));
 
-    expect(trash).toHaveBeenCalledOnce();
-    expect(deletePermanently).toHaveBeenCalledOnce();
-  });
+      expect(trash).toHaveBeenCalledOnce();
+      expect(deletePermanently).toHaveBeenCalledOnce();
+    },
+  );
 
   // task 0134: "Selected thumbnails can use F3 to see the full screen version" - F3's viewer
   // resolution (resolveViewTarget/openViewer) reads only the cursor entry from

@@ -838,7 +838,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'basket.remove',
     tryHandle: (context, event) => {
       if (
-        event.key !== 'Backspace' ||
+        (event.key !== 'Backspace' && event.key !== 'Delete') ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey ||

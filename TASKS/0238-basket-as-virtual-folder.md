@@ -31,7 +31,8 @@ icon bar, and its own selection model. User-reported problems (v0.4.0):
   each entry's real location and parent folder.
 - [x] The bottom icon bar is removed. A way remains to clear the basket and to remove items from the
   basket without deleting them from disk (e.g. Delete/Backspace or a context-menu entry).
-  Collecting via the toolbar/F5 from the other pane still works.
+  Backspace/Del remove items from the basket only. Collecting via the toolbar/F5 from the other
+  pane still works.
 - [x] Items whose files changed after collection are refreshed automatically (new size/modified
   time, status `ready`). They are only `missing`/`moved` when the identity really is gone.
   Refresh happens when the basket opens, before an action runs, and when an operation or watcher
@@ -60,8 +61,8 @@ icon bar, and its own selection model. User-reported problems (v0.4.0):
 - 2026-10-06: Added opt-in `DirectoryTable` parent-folder group rows. They are display-only rows;
   cursor, selection, scrolling, and typeahead still use entry indices, so Space/Insert/Home/End and
   pane focus behaviour stay shared with normal directories.
-- 2026-10-06: Removed the bespoke basket list/check boxes/icon action bar. Backspace removes the
-  active basket selection from the basket without touching disk; Delete/F8/Shift+F8 still use the
+- 2026-10-06: Removed the bespoke basket list/check boxes/icon action bar. Backspace/Del remove the
+  active basket selection from the basket without touching disk; F8/Shift+F8 still use the
   normal operation engine for delete/trash. The toolbar keeps Add/Open basket controls and the
   pane status bar keeps the summary.
 - 2026-10-06: Basket refresh now verifies stable identity without expected size/mtime, then lists
@@ -80,3 +81,8 @@ icon bar, and its own selection model. User-reported problems (v0.4.0):
   order, including when an empty basket receives files; ordinary navigation updates cannot
   replace basket contents or selection. Coverage exercises focus in both directions, arrow
   navigation, cursor retention, and collection before/after opening.
+- 2026-10-06: Unmodified Del now removes basket references like Backspace. Only the active pane
+  is eligible; a visible basket in the other pane must not intercept ordinary folder shortcuts.
+  F8 and modified deletion shortcuts retain their filesystem-operation behavior.
+- 2026-10-06: Basket removal now chooses the surviving neighbour in displayed sort/filter order,
+  not collection order: the previous row, or the next row if no previous row remains.

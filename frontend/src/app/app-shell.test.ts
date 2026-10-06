@@ -1715,42 +1715,84 @@ describe('AppShell', () => {
     expect(startOperation).not.toHaveBeenCalled();
   });
 
-  it('removes basket entries with Backspace without deleting files from disk', async () => {
-    const client = new MockFileManagerClient();
-    const startOperation = vi.spyOn(client, 'startOperation');
-    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
-    directoryRowNamed(root, '.env')?.click();
-    (await toolbarButton('Add selection to basket')).click();
-    (await toolbarButton('Open collection basket')).click();
-    await vi.waitFor(() =>
-      expect(
-        [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')].some((tab) =>
-          tab.textContent?.includes('Collection basket'),
-        ),
-      ).toBe(true),
-    );
-    [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
-      .find((tab) => tab.textContent?.includes('Collection basket'))
-      ?.click();
-    await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
+  it.each(['Backspace', 'Delete'])(
+    'removes basket entries with %s without deleting files from disk',
+    async (key) => {
+      const client = new MockFileManagerClient();
+      const startOperation = vi.spyOn(client, 'startOperation');
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
+      directoryRowNamed(root, '.env')?.click();
+      (await toolbarButton('Add selection to basket')).click();
+      (await toolbarButton('Open collection basket')).click();
+      await vi.waitFor(() =>
+        expect(
+          [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')].some((tab) =>
+            tab.textContent?.includes('Collection basket'),
+          ),
+        ).toBe(true),
+      );
+      [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')]
+        .find((tab) => tab.textContent?.includes('Collection basket'))
+        ?.click();
+      await vi.waitFor(() => expect(directoryRowNamed(root, '.env')).toBeDefined());
 
-    const grid = root.querySelector<HTMLElement>('[role="grid"]');
-    grid?.focus();
-    grid?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      const basketPane = [...root.querySelectorAll<HTMLElement>('.fm-pane')].find(
+        (pane) => pane.querySelector('.fm-breadcrumb')?.textContent === 'Collection basket',
+      );
+      expect(basketPane).toBeDefined();
+      const otherPane = [...root.querySelectorAll<HTMLElement>('.fm-pane')].find(
+        (pane) => pane !== basketPane,
+      );
+      otherPane?.focus();
+      otherPane?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      m.redraw.sync();
+      expect(directoryRowNamed(basketPane, '.env')).toBeDefined();
+      basketPane?.focus();
+      basketPane?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
 
-    await vi.waitFor(() => {
-      const basketKey = Array.from({ length: localStorage.length }, (_, index) =>
-        localStorage.key(index),
-      ).find((key): key is string => key?.startsWith('procyon.basket.') === true);
-      const persistedItems =
-        basketKey === undefined
-          ? []
-          : (JSON.parse(localStorage.getItem(basketKey) ?? '{}').items ?? []);
-      expect(persistedItems).toHaveLength(0);
-    });
-    expect(startOperation).not.toHaveBeenCalled();
-  });
+      await vi.waitFor(() => {
+        const basketKey = Array.from({ length: localStorage.length }, (_, index) =>
+          localStorage.key(index),
+        ).find((key): key is string => key?.startsWith('procyon.basket.') === true);
+        const persistedItems =
+          basketKey === undefined
+            ? []
+            : (JSON.parse(localStorage.getItem(basketKey) ?? '{}').items ?? []);
+        expect(persistedItems).toHaveLength(0);
+      });
+      expect(startOperation).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['Backspace', 'Delete'])(
+    'keeps the basket cursor on a displayed neighbour after %s',
+    async (key) => {
+      mountShell('mock');
+      await vi.waitFor(() => expect(directoryRowNamed(root, 'Unreadable')).toBeDefined());
+      for (const name of ['Empty', 'Applications', 'Unreadable', 'Documents']) {
+        directoryRowNamed(root, name)?.click();
+        (await toolbarButton('Add selection to basket')).click();
+      }
+      (await toolbarButton('Open collection basket')).click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-breadcrumb')?.textContent).toBe('Collection basket'),
+      );
+      const pane = root.querySelector<HTMLElement>('.fm-pane');
+      const cursorName = () => pane?.querySelector('.fm-cursor-row .fm-entry-name')?.textContent;
+      for (const [removed, expected] of [
+        ['Empty', 'Documents'],
+        ['Unreadable', 'Documents'],
+        ['Applications', 'Documents'],
+      ] as const) {
+        directoryRowNamed(pane, removed)?.click();
+        pane?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        m.redraw.sync();
+        expect(directoryRowNamed(pane, removed)).toBeUndefined();
+        expect(cursorName()).toBe(expected);
+      }
+    },
+  );
 
   it('keeps every function-key action available in the compact command grid', async () => {
     mountShell('mock');
