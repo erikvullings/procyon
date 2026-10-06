@@ -14,6 +14,7 @@ import type {
 import type { ClipboardState } from '../clipboard/clipboard';
 import { clearClipboard } from '../clipboard/clipboard';
 import {
+  type CopySelectionActionId,
   copySelectionToClipboard,
   isCopySelectionAction,
 } from '../clipboard/copy-selection-actions';
@@ -95,6 +96,8 @@ export interface ActionCommandControllerContext {
   openDiskUsage(): void;
   /** Opens the Properties dialog for the active pane's selection (task 0140). */
   openPropertiesForActivePane(): void;
+  /** Opens the Multi-Rename Tool for the active pane's selection. */
+  openMultiRenameForActivePane(): void;
   /** Opens representative key passages and generation controls for one file. */
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens Ask or the active folder's semantic enrolment prompt. */
@@ -378,6 +381,24 @@ export function createActionCommandController(
       : ops.copy(locations, destination));
   }
 
+  function copySelection(
+    actionId: CopySelectionActionId,
+    entries: readonly EntrySummary[],
+    directoryLocation: Location,
+  ): void {
+    void copySelectionToClipboard(actionId, entries, directoryLocation)
+      .then((copied) => {
+        if (copied) context.getCommandPaletteRecency().set(actionId, Date.now());
+        context.redraw();
+      })
+      .catch((error: unknown) => {
+        context.toast({
+          html: error instanceof Error ? error.message : t('clipboard', 'writeFailed'),
+        });
+        context.redraw();
+      });
+  }
+
   function invokePaletteAction(
     action: ActionDescriptor,
     parameters?: unknown,
@@ -415,6 +436,10 @@ export function createActionCommandController(
     }
     if (action.id === 'core.showProperties') {
       context.openPropertiesForActivePane();
+      return;
+    }
+    if (action.id === 'core.openMultiRename') {
+      context.openMultiRenameForActivePane();
       return;
     }
     if (action.id === 'client.toggleDirectoryTree') {
@@ -501,17 +526,7 @@ export function createActionCommandController(
     }
     if (isCopySelectionAction(action.id)) {
       if (directory === undefined || directory.location === undefined) return;
-      void copySelectionToClipboard(action.id, selectedEntries, directory.location)
-        .then((copied) => {
-          if (copied) context.getCommandPaletteRecency().set(action.id, Date.now());
-          context.redraw();
-        })
-        .catch((error: unknown) => {
-          context.toast({
-            html: error instanceof Error ? error.message : t('clipboard', 'writeFailed'),
-          });
-          context.redraw();
-        });
+      copySelection(action.id, selectedEntries, directory.location);
       return;
     }
     const effectiveParameters =
@@ -589,6 +604,12 @@ export function createActionCommandController(
     if (action.id === 'core.uninstallApplication') {
       const bundle = menu.entries[0];
       if (bundle !== undefined) context.uninstallApplication(menu.paneId, bundle);
+      return;
+    }
+    // The menu's own entries, not an id lookup: the synthetic ".." entry isn't in the listing.
+    if (isCopySelectionAction(action.id)) {
+      if (directory.location !== undefined)
+        copySelection(action.id, menu.entries, directory.location);
       return;
     }
     invokePaletteAction(action, undefined, {

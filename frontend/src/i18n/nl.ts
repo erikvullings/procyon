@@ -152,6 +152,7 @@ export const nl = {
     filenameSearchBreadcrumb: 'bestand: {term}',
     contentSearchBreadcrumb: 'inhoud: {term}',
     unableToOpenPath: 'Kan pad niet openen',
+    renameTargetExists: 'Er bestaat al een item met de naam ‘{name}’ in deze map',
     selectFilesMatchingMask: 'Bestanden selecteren die overeenkomen met masker',
     deselectFilesMatchingMask: 'Selectie opheffen voor bestanden die overeenkomen met masker',
     fileMask: 'Bestandsmasker',

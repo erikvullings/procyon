@@ -168,6 +168,7 @@ export const en = {
     filenameSearchBreadcrumb: 'file: {term}',
     contentSearchBreadcrumb: 'content: {term}',
     unableToOpenPath: 'Unable to open path',
+    renameTargetExists: 'An item named “{name}” already exists in this folder',
     selectFilesMatchingMask: 'Select files matching mask',
     deselectFilesMatchingMask: 'Deselect files matching mask',
     fileMask: 'File mask',

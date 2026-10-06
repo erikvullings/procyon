@@ -154,6 +154,7 @@ export const fr = {
     filenameSearchBreadcrumb: 'fichier : {term}',
     contentSearchBreadcrumb: 'contenu : {term}',
     unableToOpenPath: "Impossible d'ouvrir le chemin",
+    renameTargetExists: 'Un élément nommé « {name} » existe déjà dans ce dossier',
     selectFilesMatchingMask: 'Sélectionner les fichiers correspondant au masque',
     deselectFilesMatchingMask: 'Désélectionner les fichiers correspondant au masque',
     fileMask: 'Masque de fichier',

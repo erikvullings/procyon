@@ -94,7 +94,7 @@ import type { SelectionAction } from '../selection/selection';
 import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
-import { createRenameEditingController } from './rename-edit-controller';
+import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
 import type { PaneTab } from './tab-strip';
 import { TabStrip } from './tab-strip';
 import { createTypeaheadController } from './typeahead-controller';
@@ -1875,6 +1875,19 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     m.redraw();
                   },
                   onRenameCommit: () => {
+                    const renaming = renameCtrl.entry;
+                    if (
+                      renaming !== undefined &&
+                      renameCtrl.error === undefined &&
+                      findRenameCollision(renaming, renameCtrl.value, attrs.entries) !== undefined
+                    ) {
+                      const message = document.createElement('span');
+                      message.textContent = t('pane', 'renameTargetExists', {
+                        name: renameCtrl.value,
+                      });
+                      toast({ html: message.outerHTML, className: 'fm-toast-warning' });
+                      return;
+                    }
                     const committed = renameCtrl.commit();
                     if (committed !== undefined) {
                       renameContext = undefined;

@@ -152,6 +152,7 @@ export const pl = {
     filenameSearchBreadcrumb: 'plik: {term}',
     contentSearchBreadcrumb: 'zawartość: {term}',
     unableToOpenPath: 'Nie można otworzyć ścieżki',
+    renameTargetExists: 'Element o nazwie „{name}” już istnieje w tym folderze',
     selectFilesMatchingMask: 'Zaznacz pliki pasujące do maski',
     deselectFilesMatchingMask: 'Odznacz pliki pasujące do maski',
     fileMask: 'Maska pliku',

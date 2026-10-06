@@ -152,6 +152,7 @@ export const it = {
     filenameSearchBreadcrumb: 'file: {term}',
     contentSearchBreadcrumb: 'contenuto: {term}',
     unableToOpenPath: 'Impossibile aprire il percorso',
+    renameTargetExists: 'Esiste già un elemento chiamato «{name}» in questa cartella',
     selectFilesMatchingMask: 'Seleziona i file corrispondenti alla maschera',
     deselectFilesMatchingMask: 'Deseleziona i file corrispondenti alla maschera',
     fileMask: 'Maschera del file',

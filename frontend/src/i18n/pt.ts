@@ -153,6 +153,7 @@ export const pt = {
     filenameSearchBreadcrumb: 'ficheiro: {term}',
     contentSearchBreadcrumb: 'conteúdo: {term}',
     unableToOpenPath: 'Não é possível abrir o caminho',
+    renameTargetExists: 'Já existe um item chamado “{name}” nesta pasta',
     selectFilesMatchingMask: 'Selecionar ficheiros correspondentes à máscara',
     deselectFilesMatchingMask: 'Anular seleção de ficheiros correspondentes à máscara',
     fileMask: 'Máscara de ficheiro',

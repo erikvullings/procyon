@@ -155,6 +155,7 @@ export const de = {
     filenameSearchBreadcrumb: 'Datei: {term}',
     contentSearchBreadcrumb: 'Inhalt: {term}',
     unableToOpenPath: 'Pfad kann nicht geöffnet werden',
+    renameTargetExists: 'Ein Element mit dem Namen „{name}“ existiert bereits in diesem Ordner',
     selectFilesMatchingMask: 'Dateien auswählen, die der Maske entsprechen',
     deselectFilesMatchingMask: 'Auswahl für Dateien aufheben, die der Maske entsprechen',
     fileMask: 'Dateimaske',

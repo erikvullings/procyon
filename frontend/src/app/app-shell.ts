@@ -3853,6 +3853,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
+    openMultiRenameForActivePane: () =>
+      globalKeydownHandlerContext.openMultiRenameForActivePane(),
     openDocumentSummary: (_paneId, entry) => {
       if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
