@@ -1575,6 +1575,62 @@ describe('AppShell', () => {
     ).toBe(true);
   });
 
+  it('rechecks a reopened basket with valid, independent listing IDs for each parent', async () => {
+    const client = new MockFileManagerClient();
+    const listDirectory = client.listDirectory.bind(client);
+    const listingIds = new Map<string, string>();
+    const failures: string[] = [];
+    let refreshed = 0;
+    vi.spyOn(client, 'listDirectory').mockImplementation(async (request, signal) => {
+      if (request.paneId === 'left' || request.paneId === 'right') {
+        return listDirectory(request, signal);
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.paneId)) {
+        failures.push('invalid pane UUID');
+        throw 'invalid args `request` for command `list_directory`: invalid UUID';
+      }
+      const previousParent = listingIds.get(request.paneId);
+      if (request.continuationToken !== undefined && previousParent === undefined) {
+        failures.push('listing ID changed during pagination');
+      }
+      if (previousParent !== undefined && previousParent !== request.location.uri) {
+        failures.push('listing ID shared between parents');
+      }
+      listingIds.set(request.paneId, request.location.uri);
+      const { continuationToken, ...firstPageRequest } = request;
+      const snapshot = await listDirectory(firstPageRequest, signal);
+      if (continuationToken === undefined) {
+        return {
+          ...snapshot,
+          entries: snapshot.entries.slice(0, 1),
+          hasMore: true,
+          continuationToken: 'next',
+        };
+      }
+      refreshed++;
+      return { ...snapshot, entries: snapshot.entries.slice(1), hasMore: false };
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+    for (const name of ['.env', 'report.pdf']) {
+      directoryRowNamed(root, name)?.click();
+      (await toolbarButton('Add selection to basket')).click();
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      (await toolbarButton('Open collection basket')).click();
+      await vi.waitFor(() =>
+        expect(refreshed + failures.length).toBeGreaterThanOrEqual((attempt + 1) * 2),
+      );
+      expect(failures).toEqual([]);
+      expect(document.querySelector('.toast')?.textContent ?? '').not.toContain(
+        'Could not check basket items',
+      );
+      (await toolbarButton('Close collection basket')).click();
+      await toolbarButton('Open collection basket');
+    }
+    expect(new Set(listingIds.values()).size).toBe(2);
+  });
+
   it('opens an empty basket without listing the current folder and closes it on a second click', async () => {
     const client = new MockFileManagerClient();
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });

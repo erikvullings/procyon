@@ -3189,11 +3189,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (cached !== undefined) return cached;
       const request = (async (): Promise<readonly EntrySummary[]> => {
         const entries: EntrySummary[] = [];
+        // Listing sessions are UUID-keyed and cancel older requests sharing their pane ID.
+        const paneId = crypto.randomUUID();
         let continuationToken: string | undefined;
         do {
           const snapshot = await attrsClient.listDirectory({
             workspaceId,
-            paneId: 'basket',
+            paneId,
             requestId: crypto.randomUUID(),
             location: parent,
             ...(continuationToken === undefined ? {} : { continuationToken }),

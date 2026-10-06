@@ -86,3 +86,8 @@ icon bar, and its own selection model. User-reported problems (v0.4.0):
   F8 and modified deletion shortcuts retain their filesystem-operation behavior.
 - 2026-10-06: Basket removal now chooses the surviving neighbour in displayed sort/filter order,
   not collection order: the previous row, or the next row if no previous row remains.
+- 2026-10-06: Fixed basket checking in real hosts: parent listings sent the literal pane ID
+  `basket`, rejected by the backend's UUID DTO. Each parent now uses its own UUID listing session
+  (retained across pagination), so concurrent parents do not cancel each other or a visible pane.
+  Regression coverage applies the desktop UUID constraint while opening, closing and reopening
+  a basket containing files from different parents.
