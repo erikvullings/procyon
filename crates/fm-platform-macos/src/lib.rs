@@ -1480,9 +1480,13 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
         ),
         NativeMenuRole::ShowAll => ("Show All", sel!(unhideAllApplications:), "", 0),
         NativeMenuRole::Quit => ("Quit", sel!(terminate:), "q", MODIFIER_COMMAND_BIT),
-        // No Cmd+M accelerator: Procyon binds Cmd+M to the Multi-Rename Tool
-        // (`core.openMultiRename`), and an AppKit key equivalent would win.
-        NativeMenuRole::Minimize => ("Minimize", sel!(performMiniaturize:), "", 0),
+        // Cmd+M stays the standard Minimize; the Multi-Rename Tool uses literal Control+M.
+        NativeMenuRole::Minimize => (
+            "Minimize",
+            sel!(performMiniaturize:),
+            "m",
+            MODIFIER_COMMAND_BIT,
+        ),
         NativeMenuRole::Zoom => ("Zoom", sel!(performZoom:), "", 0),
         NativeMenuRole::BringAllToFront => ("Bring All to Front", sel!(arrangeInFront:), "", 0),
         NativeMenuRole::Copy => ("Copy", sel!(copy:), "c", MODIFIER_COMMAND_BIT),

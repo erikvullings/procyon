@@ -213,6 +213,7 @@ import {
   getLiveBindings,
   hasPrimaryModifier,
   type KeybindingRuntime,
+  usesLiteralControl,
 } from '../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -2648,10 +2649,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function displayShortcut(shortcut: string): string {
-    return shortcut
-      .split('+')
+    const parts = shortcut.split('+');
+    const literalControl = usesLiteralControl({ key: parts.at(-1) ?? '', ctrl: true });
+    return parts
       .map((part) => {
-        if (part === 'CTRL') return platform === 'macos' ? 'Cmd' : 'Ctrl';
+        if (part === 'CTRL') return platform === 'macos' && !literalControl ? 'Cmd' : 'Ctrl';
         if (part === 'ALT') return platform === 'macos' ? 'Option' : 'Alt';
         if (part === 'SHIFT') return 'Shift';
         return part.length === 1 ? part.toUpperCase() : part;
