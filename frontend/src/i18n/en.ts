@@ -10,6 +10,7 @@ export const en = {
     knownSizesOnly: 'Known available sizes only',
     unavailableCount: { 1: '1 unavailable', n: '{n} unavailable' },
     open: 'Open collection basket',
+    close: 'Close collection basket',
     count: { 1: '1 item', n: '{n} items' },
     selectAll: 'Select all',
     deselectAll: 'Deselect all',

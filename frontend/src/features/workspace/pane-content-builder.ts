@@ -263,8 +263,13 @@ export function createPaneContentBuilder(
     const quickFilterQuery = key === undefined ? '' : context.quickFilterQueryFor(key, tab);
     const filtered =
       key === undefined ? sorted : context.entriesFilteredFor(key, sorted, quickFilterQuery);
+    // The basket is a virtual folder: its tab only borrows a real location to exist, so it
+    // must not get that folder's synthetic ".." row.
+    const isBasket = directory.location?.providerId === 'basket';
     const entries =
-      tab === undefined ? filtered : withParentEntry(pathFromUri(tab.location.uri), filtered);
+      tab === undefined || isBasket
+        ? filtered
+        : withParentEntry(pathFromUri(tab.location.uri), filtered);
     const entryIds = entries.map((entry) => entry.id);
     // Shared by the "moveCursorTo last" and typeahead-no-match background flows below: both need
     // the fully-loaded, correctly sorted/filtered/parent-prefixed entry list once `loadAllPages`
@@ -320,7 +325,7 @@ export function createPaneContentBuilder(
         key === undefined
           ? sortedFresh
           : context.entriesFilteredFor(key, sortedFresh, context.quickFilterQueryFor(key, tab));
-      return tab === undefined
+      return tab === undefined || isBasket
         ? filteredFresh
         : withParentEntry(pathFromUri(tab.location.uri), filteredFresh);
     }

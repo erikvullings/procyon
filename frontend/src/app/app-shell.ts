@@ -10,6 +10,7 @@ import {
   arrowLeftIcon,
   arrowRightIcon,
   basketIcon,
+  basketOpenIcon,
   closeIcon,
   commandIcon,
   compareIcon,
@@ -3085,6 +3086,25 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
+  function basketTabLocation(): { paneId: PaneId; tabId: TabId } | undefined {
+    const current = workspace;
+    if (current === undefined) return undefined;
+    for (const paneId of current.paneOrder) {
+      const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
+      if (tabId !== undefined) return { paneId, tabId };
+    }
+    return undefined;
+  }
+
+  function toggleBasket(): void {
+    const open = basketTabLocation();
+    if (open === undefined) {
+      openBasket();
+      return;
+    }
+    tabController.requestCloseTab(open.paneId, open.tabId);
+  }
+
   function openBasket(): void {
     const current = workspace;
     if (current === undefined) return;
@@ -4814,16 +4834,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             tooltip(
-              t('basket', 'open'),
+              basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
               m(
                 IconButton,
                 {
                   className: 'fm-basket-open-button',
                   disabled: workspace === undefined,
-                  'aria-label': t('basket', 'open'),
-                  onclick: openBasket,
+                  'aria-label':
+                    basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
+                  'aria-pressed': String(basketTabLocation() !== undefined),
+                  onclick: toggleBasket,
                 },
-                basketIcon(),
+                basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
               ),
             ),
             m('.fm-toolbar-separator', {
@@ -5262,7 +5284,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                             ...content,
                             groupByParent: basketTabs.some((id) => id === tabId),
                             ...(isActiveBasketTab
-                              ? { location: basketVirtualLocation(currentWorkspace.id) }
+                              ? {
+                                  location: basketVirtualLocation(currentWorkspace.id),
+                                  breadcrumbLabel: t('basket', 'title'),
+                                }
                               : {}),
                             viewerTitles: new Map([
                               ...(content.viewerTitles ?? []),

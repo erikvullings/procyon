@@ -12,6 +12,7 @@ export const es = {
     knownSizesOnly: 'Solo tamaños disponibles conocidos',
     unavailableCount: { 1: '1 no disponible', n: '{n} no disponibles' },
     open: 'Abrir cesta',
+    close: 'Cerrar cesta',
     selectAll: 'Seleccionar todo',
     deselectAll: 'Deseleccionar todo',
     clear: 'Vaciar la cesta',

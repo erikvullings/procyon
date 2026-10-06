@@ -12,6 +12,7 @@ export const pl = {
     knownSizesOnly: 'Tylko znane rozmiary dostępnych plików',
     unavailableCount: { 1: '1 niedostępny', n: '{n} niedostępnych' },
     open: 'Otwórz koszyk',
+    close: 'Zamknij koszyk',
     selectAll: 'Zaznacz wszystko',
     deselectAll: 'Odznacz wszystko',
     clear: 'Opróżnij koszyk',

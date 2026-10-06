@@ -75,6 +75,8 @@ export interface WorkspacePaneContent {
   /** Shows the Git-status column; hidden unless enabled and the directory is inside a git repo. */
   readonly showGitStatusColumn?: boolean;
   readonly groupByParent?: boolean;
+  /** Fixed, non-navigable breadcrumb text for virtual folders such as the basket. */
+  readonly breadcrumbLabel?: string;
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly finderTagsLoader?: FinderTagsLoader;
@@ -556,6 +558,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           paneId,
           path: pathFromUri(tab.location.uri),
           locationUri: tab.location.uri,
+          ...(content.breadcrumbLabel === undefined
+            ? {}
+            : { breadcrumbLabel: content.breadcrumbLabel }),
           tabTitle:
             content.viewerTitles?.get(tab.id) ??
             displayTabTitle(

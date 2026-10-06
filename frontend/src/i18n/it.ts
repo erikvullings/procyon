@@ -12,6 +12,7 @@ export const it = {
     knownSizesOnly: 'Solo dimensioni disponibili note',
     unavailableCount: { 1: '1 non disponibile', n: '{n} non disponibili' },
     open: 'Apri raccolta',
+    close: 'Chiudi raccolta',
     selectAll: 'Seleziona tutto',
     deselectAll: 'Deseleziona tutto',
     clear: 'Svuota raccolta',

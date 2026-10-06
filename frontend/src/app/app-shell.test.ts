@@ -1575,6 +1575,43 @@ describe('AppShell', () => {
     ).toBe(true);
   });
 
+  it('opens an empty basket without listing the current folder and closes it on a second click', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'report.pdf')).toBeDefined());
+    const basketTabCount = () =>
+      [...root.querySelectorAll<HTMLElement>('.fm-pane-tab')].filter((tab) =>
+        tab.textContent?.includes('Collection basket'),
+      ).length;
+
+    directoryRowNamed(root, 'Documents')?.dispatchEvent(
+      new MouseEvent('dblclick', { bubbles: true }),
+    );
+    await vi.waitFor(() => expect(directoryRowNamed(root, '..')).toBeDefined());
+    directoryRowNamed(root, '..')?.click();
+
+    (await toolbarButton('Open collection basket')).click();
+    await vi.waitFor(() => expect(basketTabCount()).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    m.redraw.sync();
+    const basketPane = [...root.querySelectorAll<HTMLElement>('.fm-pane')].find((pane) =>
+      pane
+        .querySelector('.fm-pane-tab.active, .fm-pane-tab[aria-selected="true"]')
+        ?.textContent?.includes('Collection basket'),
+    );
+    expect(basketPane).toBeDefined();
+    expect(basketPane?.querySelectorAll('.fm-directory-row').length).toBe(0);
+    expect(basketPane?.querySelector('.fm-breadcrumb')?.textContent).toBe('Collection basket');
+
+    const button = await toolbarButton('Close collection basket');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    button.click();
+    await vi.waitFor(() => expect(basketTabCount()).toBe(0));
+    expect((await toolbarButton('Open collection basket')).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
   it('uses F5 to collect from the directory pane while a basket tab is visible', async () => {
     const client = new MockFileManagerClient();
     const startOperation = vi.spyOn(client, 'startOperation');

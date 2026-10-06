@@ -12,6 +12,7 @@ export const fr = {
     knownSizesOnly: 'Tailles disponibles connues uniquement',
     unavailableCount: { 1: '1 indisponible', n: '{n} indisponibles' },
     open: 'Ouvrir le panier',
+    close: 'Fermer le panier',
     selectAll: 'Tout sélectionner',
     deselectAll: 'Tout désélectionner',
     clear: 'Vider le panier',

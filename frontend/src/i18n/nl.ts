@@ -12,6 +12,7 @@ export const nl = {
     knownSizesOnly: 'Alleen bekende beschikbare groottes',
     unavailableCount: { 1: '1 niet beschikbaar', n: '{n} niet beschikbaar' },
     open: 'Verzamelmand openen',
+    close: 'Verzamelmand sluiten',
     selectAll: 'Alles selecteren',
     deselectAll: 'Selectie opheffen',
     clear: 'Mand leegmaken',

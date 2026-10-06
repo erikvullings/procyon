@@ -91,6 +91,12 @@ export const basketIcon = trustedStrokeIcon(
   'fm-icon-basket',
 );
 
+/** Basket with its lid lifted — shown while the collection basket tab is open. */
+export const basketOpenIcon = trustedStrokeIcon(
+  '<path d="M3 12h18l-2 9H5l-2 -9z" /><path d="M9 15v3m6 -3v3" /><path d="M3 10l15.5 -6.5" /><path d="M9.6 7.5l-.8 -1.8l2.8 -1.2l.8 1.8" />',
+  'fm-icon-basket-open',
+);
+
 /** Directory hierarchy — include nested directories in a search. */
 export const directoryTreeIcon = (attrs?: IconAttrs): m.Children => {
   const size = attrs?.size ?? 18;
