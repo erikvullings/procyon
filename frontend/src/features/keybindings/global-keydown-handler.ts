@@ -114,6 +114,12 @@ export interface GlobalKeydownContext {
   selectedLocations(): readonly Location[];
   /** Consumes bare F5 when the collection basket is the visible destination. */
   collectIntoBasketIfVisible(): boolean;
+  /** Removes the active basket selection without deleting files from disk. */
+  removeFromBasketIfActive(): boolean;
+  prepareFileOperationEntries?(
+    paneId: PaneId,
+    entries: readonly EntrySummary[],
+  ): Promise<readonly EntrySummary[] | undefined>;
   invokeActionById(actionId: string, parameters: unknown, ctx: ActionInvocationContext): void;
   openViewer(
     paneId: PaneId,
@@ -221,6 +227,22 @@ function cursorOnlyEntry(
       ? undefined
       : entries.find((entry) => entry.id === selection.cursorEntryId);
   return cursor === undefined ? [] : [cursor];
+}
+
+function prepareFileOperationEntries(
+  context: GlobalKeydownContext,
+  paneId: PaneId,
+  entries: readonly EntrySummary[],
+  run: (entries: readonly EntrySummary[]) => void,
+): void {
+  const prepare = context.prepareFileOperationEntries;
+  if (prepare === undefined) {
+    run(entries);
+    return;
+  }
+  void prepare(paneId, entries).then((prepared) => {
+    if (prepared !== undefined && prepared.length > 0) run(prepared);
+  });
 }
 
 /** Resolves the cursor entry F3 (or Alt+Space, when no viewer is already open) would open: the
@@ -813,6 +835,24 @@ const ACTION_KEYDOWN_ROUTES = [
     },
   },
   {
+    id: 'basket.remove',
+    tryHandle: (context, event) => {
+      if (
+        (event.key !== 'Backspace' && event.key !== 'Delete') ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        isEditableTarget(event.target)
+      ) {
+        return false;
+      }
+      if (!context.removeFromBasketIfActive()) return false;
+      event.preventDefault();
+      return;
+    },
+  },
+  {
     id: 'core.copy',
     tryHandle: (context, event, state) => {
       if (state.dispatchedAction === 'core.copy') {
@@ -844,12 +884,14 @@ const ACTION_KEYDOWN_ROUTES = [
           otherPaneId === undefined
             ? undefined
             : context.getDirectories().get(context.activeTabKey(otherPaneId))?.location;
-        if (selected.length > 0 && destination !== undefined) {
+        if (active !== undefined && selected.length > 0 && destination !== undefined) {
           event.preventDefault();
-          void context.getOpsController().copy(
-            selected.map((entry) => entry.location),
-            destination,
-          );
+          prepareFileOperationEntries(context, active.paneId, selected, (entries) => {
+            void context.getOpsController().copy(
+              entries.map((entry) => entry.location),
+              destination,
+            );
+          });
         }
         return;
       }
@@ -961,12 +1003,14 @@ const ACTION_KEYDOWN_ROUTES = [
           otherPaneId === undefined
             ? undefined
             : context.getDirectories().get(context.activeTabKey(otherPaneId))?.location;
-        if (selected.length > 0 && destination !== undefined) {
+        if (active !== undefined && selected.length > 0 && destination !== undefined) {
           event.preventDefault();
-          void context.getOpsController().move(
-            selected.map((entry) => entry.location),
-            destination,
-          );
+          prepareFileOperationEntries(context, active.paneId, selected, (entries) => {
+            void context.getOpsController().move(
+              entries.map((entry) => entry.location),
+              destination,
+            );
+          });
         }
         return;
       }
@@ -987,20 +1031,22 @@ const ACTION_KEYDOWN_ROUTES = [
             ? undefined
             : context.getDirectories().get(context.activeTabKey(active.paneId));
         const selected = getSelectedEntriesOrCursor(selection, directory?.entries ?? []);
-        if (selected.length > 0) {
+        if (active !== undefined && selected.length > 0) {
           event.preventDefault();
-          const locations = selected.map((entry) => entry.location);
-          if (canUseSystemTrash(locations)) {
-            void context.getOpsController().trash(locations);
-          } else {
-            void context
-              .getOpsController()
-              .delete(
-                locations,
-                context.getCurrentSettings()?.confirmPermanentDelete === false,
-                false,
-              );
-          }
+          prepareFileOperationEntries(context, active.paneId, selected, (entries) => {
+            const locations = entries.map((entry) => entry.location);
+            if (canUseSystemTrash(locations)) {
+              void context.getOpsController().trash(locations);
+            } else {
+              void context
+                .getOpsController()
+                .delete(
+                  locations,
+                  context.getCurrentSettings()?.confirmPermanentDelete === false,
+                  false,
+                );
+            }
+          });
         }
         return;
       }
@@ -1021,13 +1067,15 @@ const ACTION_KEYDOWN_ROUTES = [
             ? undefined
             : context.getDirectories().get(context.activeTabKey(active.paneId));
         const selected = getSelectedEntriesOrCursor(selection, directory?.entries ?? []);
-        if (selected.length > 0) {
+        if (active !== undefined && selected.length > 0) {
           event.preventDefault();
-          void context.getOpsController().delete(
-            selected.map((entry) => entry.location),
-            context.getCurrentSettings()?.confirmPermanentDelete === false,
-            false,
-          );
+          prepareFileOperationEntries(context, active.paneId, selected, (entries) => {
+            void context.getOpsController().delete(
+              entries.map((entry) => entry.location),
+              context.getCurrentSettings()?.confirmPermanentDelete === false,
+              false,
+            );
+          });
         }
         return;
       }

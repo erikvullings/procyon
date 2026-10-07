@@ -13,6 +13,7 @@ let isPanning = false;
 let startX = 0;
 let startY = 0;
 let pendingWheelZoom: number | null = null;
+let fittedSize: { svg: SVGSVGElement; width: number; height: number } | null = null;
 
 const STORAGE_THEME_KEY = "svgo-theme";
 const STORAGE_SIDEBAR_KEY = "svgo-sidebar-open";
@@ -302,11 +303,31 @@ function toggleSplitterOrientation(): void {
 function applyTransform(): void {
   const svg = document.querySelector(
     ".preview-container svg",
-  ) as HTMLElement | null;
-  if (svg) {
-    svg.style.transform = `translate(${panX}px, ${panY}px) scale(${svgScale})`;
-    svg.style.transformOrigin = "0 0";
+  ) as SVGSVGElement | null;
+  if (!svg) return;
+  svg.style.transform = `translate(${panX}px, ${panY}px)`;
+  svg.style.transformOrigin = "0 0";
+  svg.dataset.zoom = String(svgScale);
+  // Zoom by resizing the SVG viewport rather than a CSS scale(), which WebKit rasterizes and
+  // makes zoomed artwork look pixelated; a resized viewport is re-rendered as vectors.
+  if (svgScale === 1 || fittedSize?.svg !== svg) {
+    for (const property of ["width", "height", "max-width", "max-height", "flex"]) {
+      svg.style.removeProperty(property);
+    }
+    fittedSize = null;
   }
+  if (svgScale === 1) return;
+  if (fittedSize === null) {
+    const { width, height } = svg.getBoundingClientRect();
+    if (width <= 0 || height <= 0) return;
+    fittedSize = { svg, width, height };
+  }
+  const fitted = fittedSize;
+  svg.style.maxWidth = "none";
+  svg.style.maxHeight = "none";
+  svg.style.flex = "none";
+  svg.style.width = `${fitted.width * svgScale}px`;
+  svg.style.height = `${fitted.height * svgScale}px`;
 }
 
 function zoomSvg(factor: number): void {

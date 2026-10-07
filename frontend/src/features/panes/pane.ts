@@ -94,7 +94,7 @@ import type { SelectionAction } from '../selection/selection';
 import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
-import { createRenameEditingController } from './rename-edit-controller';
+import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
 import type { PaneTab } from './tab-strip';
 import { TabStrip } from './tab-strip';
 import { createTypeaheadController } from './typeahead-controller';
@@ -164,6 +164,8 @@ export interface TableConfigAttrs {
   readonly visibleColumnIds?: ReadonlySet<string> | undefined;
   /** Shows the Git-status column; hidden unless enabled and the directory is inside a git repo. */
   readonly showGitStatusColumn?: boolean | undefined;
+  /** Shows non-selectable parent-folder group rows in the table. */
+  readonly groupByParent?: boolean | undefined;
   readonly nativeIconLoader?: NativeIconLoader | undefined;
   readonly thumbnailLoader?: ThumbnailLoader | undefined;
   readonly finderTagsLoader?: FinderTagsLoader | undefined;
@@ -198,6 +200,8 @@ export interface PaneAttrs {
   // Location display (4)
   readonly path: string;
   readonly locationUri?: string;
+  /** Replaces the navigable path segments, e.g. "Collection basket" for the virtual basket. */
+  readonly breadcrumbLabel?: string;
   readonly tabTitle: string;
   readonly searchPresentation?: SearchPresentation;
   /** Re-runs the saved request for this search result tab. */
@@ -504,6 +508,29 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /** Compact pane containing its single tab, path controls, directory grid, and status. */
+const DEFAULT_SELECTION_MASK = '*.*';
+/** Last mask used by select/deselect-by-mask, shared by both panes and kept across restarts. */
+export const SELECTION_MASK_STORAGE_KEY = 'procyon.selectionMask';
+
+function loadSelectionMask(): string {
+  try {
+    const stored = localStorage.getItem(SELECTION_MASK_STORAGE_KEY)?.trim();
+    return stored === undefined || stored === '' ? DEFAULT_SELECTION_MASK : stored;
+  } catch {
+    return DEFAULT_SELECTION_MASK;
+  }
+}
+
+function saveSelectionMask(mask: string): void {
+  const trimmed = mask.trim();
+  if (trimmed === '') return;
+  try {
+    localStorage.setItem(SELECTION_MASK_STORAGE_KEY, trimmed);
+  } catch {
+    // Storage may be unavailable (private mode, quota); remembering the mask is best-effort.
+  }
+}
+
 export const Pane: FactoryComponent<PaneAttrs> = () => {
   let editing = false;
   let draftPath = '';
@@ -517,7 +544,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let viewMenuOpen = false;
   let sortMenuOpen = false;
   let selectionMaskCommand: 'selectByMask' | 'deselectByMask' | undefined;
-  let selectionMask = '*.*';
+  let selectionMask = DEFAULT_SELECTION_MASK;
   let selectionMaskNeedsFocus = false;
   let photoModeByTab = new Map<TabId, boolean>();
   let typeaheadPath: string | undefined;
@@ -541,6 +568,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
 
   function applySelectionMask(attrs: PaneAttrs): void {
     if (selectionMaskCommand === undefined) return;
+    saveSelectionMask(selectionMask);
     attrs.onSelectionAction({
       type: selectionMaskCommand,
       matchingEntryIds: attrs.entries
@@ -995,7 +1023,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             } else if (command?.type === 'selectByMask' || command?.type === 'deselectByMask') {
               event.preventDefault();
               selectionMaskCommand = command.type;
-              selectionMask = '*.*';
+              selectionMask = loadSelectionMask();
               selectionMaskNeedsFocus = true;
             } else if (event.altKey && event.key === 'ArrowLeft') {
               event.preventDefault();
@@ -1432,105 +1460,115 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   onCommit: attrs.filter.onFilterCommit,
                   onClose: attrs.filter.onFilterClose,
                 })
-              : editing
-                ? m('.fm-path-editor', [
-                    m('input[type=text].fm-path-input', {
-                      value: draftPath,
-                      'aria-label': t('pane', 'path'),
-                      oncreate: (vnode: VnodeDOM) => {
-                        const input = vnode.dom as HTMLInputElement;
-                        input.focus();
-                        input.select();
-                      },
-                      onblur: cancelEditing,
-                      oninput: (event: InputEvent) => {
-                        draftPath = (event.currentTarget as HTMLInputElement).value;
-                      },
-                      onkeydown: (event: KeyboardEvent) => {
-                        event.stopPropagation();
-                        if (event.key === 'Escape') {
-                          cancelEditing();
-                        } else if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void navigate(draftPath, attrs, true);
-                        }
-                      },
-                    }),
-                  ])
-                : m(
+              : attrs.breadcrumbLabel !== undefined
+                ? m(
                     'nav.fm-breadcrumb',
-                    {
-                      'aria-label': t('pane', 'currentPath'),
-                      ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
-                    },
-                    [
-                      remoteScheme === undefined
-                        ? undefined
-                        : breadcrumbRoot === undefined ||
-                            attrs.favourites.onNavigateLocation === undefined
-                          ? m(
-                              'span.fm-breadcrumb-scheme',
-                              { 'aria-hidden': 'true' },
-                              `${remoteScheme}://`,
-                            )
-                          : m(
-                              'button.fm-breadcrumb-scheme',
-                              {
-                                type: 'button',
-                                onclick: () => void navigateFavourite(breadcrumbRoot, attrs),
-                              },
-                              `${remoteScheme}://`,
-                            ),
-                      m(
-                        BreadcrumbTrail,
-                        {
-                          pathKey: `${activeLocationUri}\0${attrs.path}\0${attrs.searchPresentation?.kind ?? ''}\0${attrs.searchPresentation?.label ?? attrs.searchPresentation?.term ?? ''}`,
+                    { 'aria-label': t('pane', 'currentPath') },
+                    m('span.fm-breadcrumb-segment', attrs.breadcrumbLabel),
+                  )
+                : editing
+                  ? m('.fm-path-editor', [
+                      m('input[type=text].fm-path-input', {
+                        value: draftPath,
+                        'aria-label': t('pane', 'path'),
+                        oncreate: (vnode: VnodeDOM) => {
+                          const input = vnode.dom as HTMLInputElement;
+                          input.focus();
+                          input.select();
                         },
-                        isSearchLocation
-                          ? searchBreadcrumbSegments(
-                              activeLocationUri,
-                              attrs.searchPresentation,
-                            ).map((segment) =>
-                              m('span.fm-breadcrumb-segment', { key: segment.path }, segment.label),
-                            )
-                          : (remoteScheme !== undefined && attrs.path !== '/'
-                              ? breadcrumbSegments(attrs.path).slice(1)
-                              : breadcrumbSegments(attrs.path)
-                            ).map((segment) =>
-                              m(
-                                'button.fm-breadcrumb-segment',
+                        onblur: cancelEditing,
+                        oninput: (event: InputEvent) => {
+                          draftPath = (event.currentTarget as HTMLInputElement).value;
+                        },
+                        onkeydown: (event: KeyboardEvent) => {
+                          event.stopPropagation();
+                          if (event.key === 'Escape') {
+                            cancelEditing();
+                          } else if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void navigate(draftPath, attrs, true);
+                          }
+                        },
+                      }),
+                    ])
+                  : m(
+                      'nav.fm-breadcrumb',
+                      {
+                        'aria-label': t('pane', 'currentPath'),
+                        ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
+                      },
+                      [
+                        remoteScheme === undefined
+                          ? undefined
+                          : breadcrumbRoot === undefined ||
+                              attrs.favourites.onNavigateLocation === undefined
+                            ? m(
+                                'span.fm-breadcrumb-scheme',
+                                { 'aria-hidden': 'true' },
+                                `${remoteScheme}://`,
+                              )
+                            : m(
+                                'button.fm-breadcrumb-scheme',
                                 {
-                                  key: segment.path,
                                   type: 'button',
-                                  onclick: () => void navigate(segment.path, attrs, false),
+                                  onclick: () => void navigateFavourite(breadcrumbRoot, attrs),
                                 },
-                                segment.label,
+                                `${remoteScheme}://`,
                               ),
-                            ),
-                      ),
-                      isSearchLocation && attrs.searchPresentation !== undefined
-                        ? m(
-                            'span.fm-search-execution-mode',
-                            { 'aria-label': t('search', 'executionMode') },
-                            searchExecutionModeLabel(attrs.searchPresentation.executionMode),
-                          )
-                        : undefined,
-                      isSearchLocation && attrs.onRefreshSearch !== undefined
-                        ? tooltip(
-                            t('search', 'refresh'),
-                            m(
-                              IconButton,
-                              {
-                                className: 'fm-search-refresh',
-                                'aria-label': t('search', 'refresh'),
-                                onclick: attrs.onRefreshSearch,
-                              },
-                              refreshIcon({ size: 14 }),
-                            ),
-                          )
-                        : undefined,
-                    ],
-                  ),
+                        m(
+                          BreadcrumbTrail,
+                          {
+                            pathKey: `${activeLocationUri}\0${attrs.path}\0${attrs.searchPresentation?.kind ?? ''}\0${attrs.searchPresentation?.label ?? attrs.searchPresentation?.term ?? ''}`,
+                          },
+                          isSearchLocation
+                            ? searchBreadcrumbSegments(
+                                activeLocationUri,
+                                attrs.searchPresentation,
+                              ).map((segment) =>
+                                m(
+                                  'span.fm-breadcrumb-segment',
+                                  { key: segment.path },
+                                  segment.label,
+                                ),
+                              )
+                            : (remoteScheme !== undefined && attrs.path !== '/'
+                                ? breadcrumbSegments(attrs.path).slice(1)
+                                : breadcrumbSegments(attrs.path)
+                              ).map((segment) =>
+                                m(
+                                  'button.fm-breadcrumb-segment',
+                                  {
+                                    key: segment.path,
+                                    type: 'button',
+                                    onclick: () => void navigate(segment.path, attrs, false),
+                                  },
+                                  segment.label,
+                                ),
+                              ),
+                        ),
+                        isSearchLocation && attrs.searchPresentation !== undefined
+                          ? m(
+                              'span.fm-search-execution-mode',
+                              { 'aria-label': t('search', 'executionMode') },
+                              searchExecutionModeLabel(attrs.searchPresentation.executionMode),
+                            )
+                          : undefined,
+                        isSearchLocation && attrs.onRefreshSearch !== undefined
+                          ? tooltip(
+                              t('search', 'refresh'),
+                              m(
+                                IconButton,
+                                {
+                                  className: 'fm-search-refresh',
+                                  'aria-label': t('search', 'refresh'),
+                                  onclick: attrs.onRefreshSearch,
+                                },
+                                refreshIcon({ size: 14 }),
+                              ),
+                            )
+                          : undefined,
+                      ],
+                    ),
             tooltip(
               t('pane', 'newTab'),
               m(
@@ -1862,6 +1900,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     : { onColumnWidthChange: attrs.tableConfig.onColumnWidthChange }),
                   showGitStatusColumn: attrs.tableConfig.showGitStatusColumn === true,
                   showFullPath: isSearchLocation,
+                  groupByParent: attrs.tableConfig.groupByParent === true,
                   ...(renameCtrl.entry === undefined
                     ? {}
                     : { renamingEntryId: renameCtrl.entry.id }),
@@ -1875,6 +1914,19 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     m.redraw();
                   },
                   onRenameCommit: () => {
+                    const renaming = renameCtrl.entry;
+                    if (
+                      renaming !== undefined &&
+                      renameCtrl.error === undefined &&
+                      findRenameCollision(renaming, renameCtrl.value, attrs.entries) !== undefined
+                    ) {
+                      const message = document.createElement('span');
+                      message.textContent = t('pane', 'renameTargetExists', {
+                        name: renameCtrl.value,
+                      });
+                      toast({ html: message.outerHTML, className: 'fm-toast-warning' });
+                      return;
+                    }
                     const committed = renameCtrl.commit();
                     if (committed !== undefined) {
                       renameContext = undefined;

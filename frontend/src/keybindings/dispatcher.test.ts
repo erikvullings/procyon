@@ -146,6 +146,26 @@ describe('keybinding dispatcher', () => {
     expect(dispatchKeybinding(event('Tab', { metaKey: true }), macos, actions, {})).toBeUndefined();
   });
 
+  it('matches Ctrl+M to Multi-Rename via literal Control on macOS, leaving Cmd+M to Minimize', () => {
+    const multiRename: ActionDescriptor = {
+      id: 'core.openMultiRename',
+      title: 'Multi-Rename Tool',
+      category: 'fileOperations',
+      defaultShortcuts: [{ key: 'm', ctrl: true }],
+      contextRequirements: {},
+      source: { kind: 'core' },
+    };
+    const macos = { ...table, platform: 'macos' as const };
+    const m = (modifiers: Partial<KeyboardEvent>) => event('m', modifiers);
+    expect(dispatchKeybinding(m({ ctrlKey: true }), macos, [multiRename], {})).toBe(
+      'core.openMultiRename',
+    );
+    expect(dispatchKeybinding(m({ metaKey: true }), macos, [multiRename], {})).toBeUndefined();
+    expect(dispatchKeybinding(m({ ctrlKey: true }), table, [multiRename], {})).toBe(
+      'core.openMultiRename',
+    );
+  });
+
   it('never lets literal Ctrl on macOS fall through to a bare-key binding sharing the same key', () => {
     // core.rename's chord is bare F2 (no modifier). Before this fix, hasPrimaryModifier's
     // macOS check (metaKey && !ctrlKey) returned false for a literal Ctrl+F2 press too, which

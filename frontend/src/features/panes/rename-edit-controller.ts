@@ -21,6 +21,33 @@ export interface RenameEditingController {
   commit(): { entry: EntrySummary; name: string } | undefined;
 }
 
+/** Parent URI of `uri`, ignoring a trailing slash. */
+function parentUri(uri: string): string {
+  const trimmed = uri.replace(/\/+$/u, '');
+  return trimmed.slice(0, trimmed.lastIndexOf('/'));
+}
+
+/**
+ * Returns the sibling (same provider and parent folder) that already carries `name`, or undefined.
+ * Compared case-insensitively because the default macOS and Windows filesystems are; the entry
+ * being renamed is excluded so a case-only rename of itself stays allowed.
+ */
+export function findRenameCollision(
+  entry: EntrySummary,
+  name: string,
+  entries: readonly EntrySummary[],
+): EntrySummary | undefined {
+  const target = name.toLocaleLowerCase();
+  const parent = parentUri(entry.location.uri);
+  return entries.find(
+    (other) =>
+      other.id !== entry.id &&
+      other.location.providerId === entry.location.providerId &&
+      other.name.toLocaleLowerCase() === target &&
+      parentUri(other.location.uri) === parent,
+  );
+}
+
 /** Creates a controller managing the lifecycle of a single-entry inline rename. */
 export function createRenameEditingController(): RenameEditingController {
   let _entry: EntrySummary | undefined;

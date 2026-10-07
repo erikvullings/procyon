@@ -30,6 +30,7 @@ import {
   Pane,
   type PaneAttrs,
   type PaneTab,
+  SELECTION_MASK_STORAGE_KEY,
   searchBreadcrumbSegments,
 } from './pane';
 
@@ -104,7 +105,11 @@ const keybindingActions = [
     title: 'Select by mask',
     defaultShortcuts: [{ key: '+' }, { key: '+', shift: true }],
   },
-  { id: 'core.deselectByMask', title: 'Deselect by mask', defaultShortcuts: [{ key: '-' }] },
+  {
+    id: 'core.deselectByMask',
+    title: 'Deselect by mask',
+    defaultShortcuts: [{ key: '-' }, { key: '_', shift: true }],
+  },
   {
     id: 'core.toggleSelectionAndAdvance',
     title: 'Toggle selection and advance',
@@ -709,6 +714,7 @@ function mountUpdating(initial: PaneAttrs): (next: PaneAttrs) => void {
 beforeEach(() => {
   root = document.createElement('div');
   document.body.appendChild(root);
+  localStorage.removeItem(SELECTION_MASK_STORAGE_KEY);
 });
 
 afterEach(() => {
@@ -2139,6 +2145,46 @@ describe('Pane navigation input', () => {
       { type: 'selectByMask', matchingEntryIds: ['one', 'two'] },
       { type: 'deselectByMask', matchingEntryIds: ['two'] },
     ]);
+  });
+
+  it('opens deselect-by-mask from Shift+- and remembers the last mask', () => {
+    const onSelectionAction = vi.fn();
+    mount(attrs({ onSelectionAction }));
+    const pane = root.querySelector<HTMLElement>('.fm-pane');
+    const maskInput = () => root.querySelector<HTMLInputElement>('.fm-selection-mask-modal input');
+
+    pane?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '+', code: 'Equal', shiftKey: true, bubbles: true }),
+    );
+    m.redraw.sync();
+    const input = maskInput();
+    if (input === null) throw new Error('selection mask input missing');
+    input.value = '*.txt';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    m.redraw.sync();
+
+    pane?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '_', code: 'Minus', shiftKey: true, bubbles: true }),
+    );
+    m.redraw.sync();
+    expect(maskInput()?.value).toBe('*.txt');
+    maskInput()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onSelectionAction.mock.calls.map(([action]) => action)).toEqual([
+      { type: 'selectByMask', matchingEntryIds: ['one', 'two'] },
+      { type: 'deselectByMask', matchingEntryIds: ['one', 'two'] },
+    ]);
+
+    m.mount(root, null);
+    mount(attrs({ onSelectionAction }));
+    root
+      .querySelector<HTMLElement>('.fm-pane')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '+', code: 'Equal', shiftKey: true, bubbles: true }),
+      );
+    m.redraw.sync();
+    expect(maskInput()?.value).toBe('*.txt');
   });
 
   it('selects clicked rows and moves the cursor to the first in-word match', () => {

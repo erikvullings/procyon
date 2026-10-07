@@ -176,6 +176,8 @@ layers and never prerequisites for retrieval.
   answer, decoded JSON, selectable prose)*
 - [x] 0236 Keep the semantic worker warm while semantic search is enabled *(needs 0235)*
 - [x] 0237 Tolerate per-file failures during semantic reconciliation *(OneDrive timeouts)*
+- [x] 0238 Basket as a virtual folder *(needs 0165; regular pane columns, folder groups,
+  keyboard selection and F-keys)*
 
 ## File operations
 

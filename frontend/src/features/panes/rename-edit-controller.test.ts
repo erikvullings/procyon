@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EntryId, EntrySummary } from '../../models';
-import { createRenameEditingController } from './rename-edit-controller';
+import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
 
 function makeEntry(id: string, name: string): EntrySummary {
   return {
@@ -83,5 +83,26 @@ describe('createRenameEditingController', () => {
     ctrl.open(entry);
     const result = ctrl.commit();
     expect(result).toEqual({ entry, name: 'one.txt' });
+  });
+});
+
+describe('findRenameCollision', () => {
+  const a = makeEntry('a', 'a.txt');
+  const b = makeEntry('b', 'b.txt');
+  const elsewhere: EntrySummary = {
+    ...makeEntry('c', 'c.txt'),
+    location: { providerId: 'file', uri: 'file:///other/c.txt' },
+  };
+
+  it('finds an existing sibling with the target name, ignoring case', () => {
+    expect(findRenameCollision(a, 'B.TXT', [a, b])).toBe(b);
+  });
+
+  it('allows a case-only rename of the entry itself', () => {
+    expect(findRenameCollision(a, 'A.txt', [a, b])).toBeUndefined();
+  });
+
+  it('ignores same-named entries in another folder', () => {
+    expect(findRenameCollision(a, 'c.txt', [a, elsewhere])).toBeUndefined();
   });
 });

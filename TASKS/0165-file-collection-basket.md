@@ -52,3 +52,5 @@ providers before applying one deliberate action to the collection.
   basket tab is active; F5 still collects from the other pane. Basket icon controls share the
   workspace toolbar's button component, with selection-state transitions kept instantaneous to
   avoid flashing the action row.
+- 2026-10-06: Superseded visually by task 0238: the basket now behaves like a regular virtual
+  folder pane with grouped parent headers and normal pane keyboard/action handling.

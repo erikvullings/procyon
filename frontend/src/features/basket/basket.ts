@@ -155,6 +155,21 @@ export function basketSources(state: BasketState): readonly Location[] {
     .map((item) => item.location);
 }
 
+export function basketItemFromEntry(entry: EntrySummary, previous?: BasketItem): BasketItem {
+  return {
+    key: previous?.key ?? basketKey(entry.id, entry.location),
+    id: entry.id,
+    location: entry.location,
+    name: entry.name,
+    kind: entry.kind,
+    ...(entry.size === undefined ? {} : { size: entry.size }),
+    ...(previous?.folderSize === undefined ? {} : { folderSize: previous.folderSize }),
+    ...(entry.modifiedAt === undefined ? {} : { modifiedAt: entry.modifiedAt }),
+    metadataRevision: entry.metadataRevision,
+    status: 'ready',
+  };
+}
+
 export function withBasketFolderSize(state: BasketState, key: string, size: number): BasketState {
   return {
     ...state,
@@ -231,13 +246,13 @@ export function withBasketStatus(
 
 export async function refreshBasket(
   state: BasketState,
-  inspect: (item: BasketItem) => Promise<BasketStatus>,
+  inspect: (item: BasketItem) => Promise<BasketStatus | BasketItem>,
   keys?: ReadonlySet<string>,
 ): Promise<BasketState> {
   const indices = state.items.flatMap((item, index) =>
     keys === undefined || keys.has(item.key) ? [index] : [],
   );
-  const statuses = new Map<number, BasketStatus>();
+  const refreshed = new Map<number, BasketStatus | BasketItem>();
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(8, indices.length) }, async () => {
@@ -245,16 +260,17 @@ export async function refreshBasket(
         const index = indices[next++];
         if (index === undefined) continue;
         const item = state.items[index];
-        if (item !== undefined) statuses.set(index, await inspect(item));
+        if (item !== undefined) refreshed.set(index, await inspect(item));
       }
     }),
   );
   return {
     ...state,
-    items: state.items.map((item, index) => ({
-      ...item,
-      status: statuses.get(index) ?? item.status,
-    })),
+    items: state.items.map((item, index) => {
+      const result = refreshed.get(index);
+      if (result === undefined) return item;
+      return typeof result === 'string' ? { ...item, status: result } : result;
+    }),
   };
 }
 

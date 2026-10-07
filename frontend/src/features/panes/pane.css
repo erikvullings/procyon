@@ -26,6 +26,7 @@
 }
 
 .fm-pane > .fm-directory-table,
+.fm-pane > .fm-directory-grid,
 .fm-pane > .fm-directory-state {
   grid-row: 4;
 }
@@ -815,8 +816,13 @@ button.fm-breadcrumb-scheme:hover {
   color: var(--fm-error);
 }
 
-.fm-pane > .fm-directory-table {
+.fm-pane > .fm-directory-table,
+.fm-pane > .fm-directory-grid {
   border: 0;
+}
+
+.fm-pane > .fm-directory-grid {
+  min-height: 0;
 }
 
 .fm-pane-status {
@@ -854,4 +860,10 @@ button.fm-breadcrumb-scheme:hover {
 .fm-pane nav a.sidenav-trigger i {
   height: 1rem;
   line-height: 1rem;
+}
+
+/* Non-fatal warnings (e.g. an inline rename onto an existing name) - orange, unlike error toasts. */
+.toast.fm-toast-warning {
+  background-color: var(--fm-selected-row-text);
+  color: var(--fm-cursor-row-text);
 }

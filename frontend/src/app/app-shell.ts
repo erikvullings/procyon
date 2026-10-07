@@ -10,6 +10,7 @@ import {
   arrowLeftIcon,
   arrowRightIcon,
   basketIcon,
+  basketOpenIcon,
   closeIcon,
   commandIcon,
   compareIcon,
@@ -31,18 +32,15 @@ import {
 import {
   addToBasket,
   type BasketState,
-  basketSources,
+  basketItemFromEntry,
+  basketSummary,
   classifyBasketAbsence,
   emptyBasket,
-  findBasketOverlap,
   loadBasket,
   refreshBasket,
-  removeFromBasket,
   saveBasket,
-  selectBasketItems,
   withBasketFolderSize,
 } from '../features/basket/basket';
-import { BasketView } from '../features/basket/basket-view';
 import {
   type ChecksumController,
   type ChecksumControllerContext,
@@ -58,8 +56,7 @@ import {
   wouldDeleteEveryCopy,
 } from '../features/checksums/checksum-state';
 import { DuplicateReviewView } from '../features/checksums/duplicate-review-view';
-import { emptyClipboard, validatePasteTarget } from '../features/clipboard/clipboard';
-import { writeSystemClipboardText } from '../features/clipboard/copy-selection-actions';
+import { emptyClipboard } from '../features/clipboard/clipboard';
 import { CommandPalette } from '../features/command-palette/command-palette';
 import {
   evaluateActionAvailability,
@@ -136,6 +133,7 @@ import {
   dismissOperation,
   mergeOperationHistory,
   shouldAutoDismissOperation,
+  summariseActiveOperations,
 } from '../features/operations/operation-state';
 import {
   createOperationsController,
@@ -213,6 +211,7 @@ import {
   getLiveBindings,
   hasPrimaryModifier,
   type KeybindingRuntime,
+  usesLiteralControl,
 } from '../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -809,7 +808,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * to the tab that opened it, not the folder it happened to be showing at the time. */
   const openTerminalTabKeys = new Set<string>();
   const basketTabIds = new Set<TabId>();
-  let basketBusy = false;
+  let basketRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let disposeTerminalTab: ((tabKey: string) => void) | undefined;
   /** Directory-tree sidebar (task 0139): open/closed, lazily-fetched expansion/children cache,
    * the provider root it is currently rooted at, and the active-pane location it was last
@@ -923,7 +922,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let pendingOperationEvents: BackendEvent[] = [];
   let operationFrame: number | undefined;
   const autoDismissTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
-  const operationCentreOpenTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
   const dismissedOperationIds = loadDismissedOperationIds();
   let removed = false;
 
@@ -960,39 +958,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (existing === undefined) return;
     clearTimeout(existing);
     autoDismissTimers.delete(operationId);
-  }
-
-  function operationIsActive(operation: Operation): boolean {
-    return (
-      operation.state === 'queued' ||
-      operation.state === 'planning' ||
-      operation.state === 'running' ||
-      operation.state === 'paused' ||
-      operation.state === 'waitingForConflictResolution' ||
-      operation.state === 'cancelling'
-    );
-  }
-
-  function scheduleOperationCentreOpen(operationId: OperationId, delayMs: number): void {
-    if (operationCentreOpenTimers.has(operationId)) return;
-    operationCentreOpenTimers.set(
-      operationId,
-      setTimeout(() => {
-        operationCentreOpenTimers.delete(operationId);
-        const operation = operations.byId[operationId];
-        if (operation !== undefined && operationIsActive(operation)) {
-          setOperationCentreVisible(true);
-          m.redraw();
-        }
-      }, delayMs),
-    );
-  }
-
-  function cancelOperationCentreOpen(operationId: OperationId): void {
-    const timer = operationCentreOpenTimers.get(operationId);
-    if (timer === undefined) return;
-    clearTimeout(timer);
-    operationCentreOpenTimers.delete(operationId);
   }
 
   function clearOperationSourceSelections(operation: Operation): void {
@@ -1952,11 +1917,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     options?: { readonly background?: boolean },
   ): void {
     refreshDirectoryTree();
+    scheduleBasketRefresh();
     if (workspace === undefined) return;
     const background = options?.background ?? true;
     for (const candidate of workspace.paneOrder) {
       const activeTab =
         workspace.panesById[candidate]?.tabsById[workspace.panesById[candidate]?.activeTabId ?? ''];
+      if (basketTabIds.has(workspace.panesById[candidate]?.activeTabId ?? '')) continue;
       if (activeTab?.location.uri.startsWith('search://')) continue;
       // Background refreshes are used for opportunistic reloads (e.g. deltas/watch events),
       // while some callers (operation completion) request a foreground reload to guarantee
@@ -2026,6 +1993,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   function applyDelta(paneId: PaneId, delta: DirectoryDelta): void {
     const key = activeTabKey(paneId);
     const current = directories.get(key);
+    scheduleBasketRefresh();
     const revision = delta.type === 'reset' ? delta.snapshot.revision : delta.revision;
     if (current === undefined || current.revision === undefined) {
       refetchAffectedPanes(paneId);
@@ -2041,6 +2009,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     if (delta.type === 'reset') {
+      // Large directories are reset with only their first page. Applying that verbatim would
+      // drop every later page the user already loaded and prune the cursor onto page one, so
+      // re-fetch instead: background reloads re-hydrate all previously loaded pages.
+      if (delta.snapshot.hasMore && delta.snapshot.entries.length < current.entries.length) {
+        refetchAffectedPanes(paneId);
+        return;
+      }
       navigation.applySnapshot(paneId, delta.snapshot);
       m.redraw();
       return;
@@ -2185,8 +2160,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   function activeDirectory(): { paneId: PaneId; location: Location } | undefined {
     const paneId = workspace?.activePaneId;
-    if (paneId !== undefined && basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''))
-      return undefined;
     const location =
       paneId === undefined ? undefined : directories.get(activeTabKey(paneId))?.location;
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
@@ -2641,10 +2614,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function displayShortcut(shortcut: string): string {
-    return shortcut
-      .split('+')
+    const parts = shortcut.split('+');
+    const literalControl = usesLiteralControl({ key: parts.at(-1) ?? '', ctrl: true });
+    return parts
       .map((part) => {
-        if (part === 'CTRL') return platform === 'macos' ? 'Cmd' : 'Ctrl';
+        if (part === 'CTRL') return platform === 'macos' && !literalControl ? 'Cmd' : 'Ctrl';
         if (part === 'ALT') return platform === 'macos' ? 'Option' : 'Alt';
         if (part === 'SHIFT') return 'Shift';
         return part.length === 1 ? part.toUpperCase() : part;
@@ -2755,8 +2729,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDismissedOperationIds: () => dismissedOperationIds,
     clearDismissedOperation,
     scheduleAutoDismiss,
-    scheduleOperationCentreOpen,
-    cancelOperationCentreOpen,
     clearOperationSourceSelections,
     removeOperationSourcesFromSearchResults,
     removeOperationSourcesFromDiskUsage,
@@ -2931,12 +2903,180 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     m.redraw();
   }
 
+  function basketVirtualLocation(workspaceId: string): Location {
+    return { providerId: 'basket', uri: `basket://local/${encodeURIComponent(workspaceId)}` };
+  }
+
+  function basketEntries(state: BasketState): readonly EntrySummary[] {
+    return state.items.map((item) => ({
+      id: item.id,
+      location: item.location,
+      name: item.name,
+      kind: item.kind,
+      hidden: false,
+      readOnly: item.status !== 'ready',
+      metadataRevision: item.metadataRevision,
+      ...(item.kind === 'directory'
+        ? item.folderSize === undefined
+          ? {}
+          : { size: item.folderSize }
+        : item.size === undefined
+          ? {}
+          : { size: item.size }),
+      ...(item.modifiedAt === undefined ? {} : { modifiedAt: item.modifiedAt }),
+    }));
+  }
+
+  function syncBasketVirtualDirectory(paneId: PaneId, tabId: TabId, workspaceId: string): void {
+    const key = tabKey(paneId, tabId);
+    const basket = basketFor(workspaceId);
+    const entries = basketEntries(basket);
+    const summary = basketSummary(basket);
+    directories.set(key, {
+      state: { type: 'loaded' },
+      entries,
+      location: basketVirtualLocation(workspaceId),
+      writable: false,
+      hasMore: false,
+      totalKnownEntries: entries.length,
+      totalKnownSize: summary.knownSize,
+      totalKnownFileCount: summary.fileCount,
+    });
+    const selection = selections.get(key) ?? emptySelection;
+    if (entries.length === 0) {
+      selections.set(key, emptySelection);
+    } else if (!entries.some((entry) => entry.id === selection.cursorEntryId)) {
+      // A transient tab may still have its borrowed folder's cursor, or have opened empty.
+      const tab = workspace?.panesById[paneId]?.tabsById[tabId];
+      const sorted = entriesSortedFor(
+        key,
+        entries,
+        effectiveSort(tab?.view.sort ?? []),
+        tab?.view.foldersFirst ?? false,
+        true,
+      );
+      const first = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab))[0];
+      if (first !== undefined) {
+        selections.set(
+          key,
+          reduceSelection(
+            selection,
+            { type: 'positionCursor', entryId: first.id },
+            entries.map((entry) => entry.id),
+          ),
+        );
+      }
+    }
+  }
+
+  function selectedBasketKeys(paneId: PaneId): readonly string[] {
+    const key = activeTabKey(paneId);
+    const directory = directories.get(key);
+    const basket = workspace === undefined ? emptyBasket : basketFor(workspace.id);
+    const selection = selections.get(key);
+    const selected = getSelectedEntriesOrCursor(selection, directory?.entries ?? []);
+    if (selected.length === 0) return [];
+    const selectedRefs = new Set(
+      selected.map((entry) => `${entry.location.providerId}\0${entry.id}`),
+    );
+    return basket.items
+      .filter((item) => selectedRefs.has(`${item.location.providerId}\0${item.id}`))
+      .map((item) => item.key);
+  }
+
+  function removeSelectedBasketItems(paneId: PaneId): boolean {
+    const current = workspace;
+    if (current === undefined || !basketTabIds.has(current.panesById[paneId]?.activeTabId ?? '')) {
+      return false;
+    }
+    const keys = new Set(selectedBasketKeys(paneId));
+    if (keys.size === 0) return true;
+    const before = basketFor(current.id);
+    const removedIds = new Set(
+      before.items.filter((item) => keys.has(item.key)).map((item) => item.id),
+    );
+    updateBasket(current.id, {
+      ...before,
+      items: before.items.filter((item) => !keys.has(item.key)),
+      selectedKeys: before.selectedKeys.filter((key) => !keys.has(key)),
+    });
+    const tabId = current.panesById[paneId]?.activeTabId;
+    if (tabId !== undefined) {
+      const key = tabKey(paneId, tabId);
+      const directory = directories.get(key);
+      const tab = current.panesById[paneId]?.tabsById[tabId];
+      const sorted = entriesSortedFor(
+        key,
+        directory?.entries ?? [],
+        effectiveSort(tab?.view.sort ?? []),
+        tab?.view.foldersFirst ?? false,
+        true,
+      );
+      const visible = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
+      selections.set(
+        key,
+        reduceSelection(
+          selections.get(key) ?? emptySelection,
+          { type: 'prune', removedEntryIds: [...removedIds] },
+          visible.map((entry) => entry.id),
+        ),
+      );
+    }
+    return true;
+  }
+
+  async function prepareFileOperationEntries(
+    paneId: PaneId,
+    entries: readonly EntrySummary[],
+  ): Promise<readonly EntrySummary[] | undefined> {
+    const current = workspace;
+    if (current === undefined || !basketTabIds.has(current.panesById[paneId]?.activeTabId ?? '')) {
+      return entries;
+    }
+    await recheckBasket(current.id, true);
+    const tabId = current.panesById[paneId]?.activeTabId;
+    if (tabId !== undefined) syncBasketVirtualDirectory(paneId, tabId, current.id);
+    const key = activeTabKey(paneId);
+    const refreshed = getSelectedEntriesOrCursor(
+      selections.get(key),
+      directories.get(key)?.entries ?? [],
+    );
+    const unavailable = refreshed.filter((entry) => entry.readOnly);
+    if (unavailable.length > 0) {
+      toast({ html: t('basket', 'unavailableCount', unavailable.length) });
+      return undefined;
+    }
+    if (refreshed.length === 0) {
+      toast({ html: t('basket', 'noAvailable') });
+      return undefined;
+    }
+    return refreshed;
+  }
+
   function basketVisible(): boolean {
     return (
       workspace?.paneOrder.some((paneId) =>
         basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''),
       ) ?? false
     );
+  }
+
+  function scheduleBasketRefresh(): void {
+    const workspaceId = workspace?.id;
+    if (workspaceId === undefined || !basketVisible()) return;
+    if (basketRefreshTimer !== undefined) clearTimeout(basketRefreshTimer);
+    basketRefreshTimer = setTimeout(() => {
+      basketRefreshTimer = undefined;
+      void recheckBasket(workspaceId)
+        .then(() => {
+          if (workspace?.id === workspaceId && basketVisible()) {
+            void calculateBasketFolderSizes(workspaceId, true).catch(() => undefined);
+          }
+        })
+        .catch((error: unknown) => {
+          toast({ html: workspaceErrorMessage(error, t('basket', 'checkFailed')) });
+        });
+    }, 150);
   }
 
   function basketSourcePaneId(): PaneId | undefined {
@@ -2974,6 +3114,25 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
+  function basketTabLocation(): { paneId: PaneId; tabId: TabId } | undefined {
+    const current = workspace;
+    if (current === undefined) return undefined;
+    for (const paneId of current.paneOrder) {
+      const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
+      if (tabId !== undefined) return { paneId, tabId };
+    }
+    return undefined;
+  }
+
+  function toggleBasket(): void {
+    const open = basketTabLocation();
+    if (open === undefined) {
+      openBasket();
+      return;
+    }
+    tabController.requestCloseTab(open.paneId, open.tabId);
+  }
+
   function openBasket(): void {
     const current = workspace;
     if (current === undefined) return;
@@ -2981,6 +3140,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
       if (tabId !== undefined) {
         selectTab(attrsClient, paneId, tabId);
+        inspectBasketOnOpen(current.id);
         return;
       }
     }
@@ -3002,6 +3162,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         const tabId = next.panesById[paneId]?.activeTabId;
         if (tabId !== undefined) basketTabIds.add(tabId);
         basketFor(next.id);
+        inspectBasketOnOpen(next.id);
         m.redraw();
       },
     ).catch((error: unknown) => {
@@ -3009,26 +3170,46 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     });
   }
 
-  function basketDestination(
-    paneId: PaneId,
-  ): { location: Location; writable: boolean } | undefined {
-    const otherId = workspace?.paneOrder.find((id) => id !== paneId);
-    if (otherId === undefined || basketTabIds.has(workspace?.panesById[otherId]?.activeTabId ?? ''))
-      return undefined;
-    const directory = directories.get(activeTabKey(otherId));
-    return directory?.location === undefined
-      ? undefined
-      : {
-          location: directory.location,
-          writable: directory.writable === true,
-        };
-  }
-
   async function recheckBasket(workspaceId: string, selectedOnly = false): Promise<BasketState> {
     const before = basketFor(workspaceId);
     const visibleEntries = [...directories.values()].flatMap((directory) => directory.entries);
-    const selected = selectedOnly ? new Set(before.selectedKeys) : undefined;
-    basketBusy = true;
+    const selected =
+      selectedOnly && workspace?.id === workspaceId
+        ? new Set(
+            workspace.paneOrder
+              .filter((paneId) => basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''))
+              .flatMap((paneId) => selectedBasketKeys(paneId)),
+          )
+        : undefined;
+    const parentCache = new Map<string, Promise<readonly EntrySummary[]>>();
+    const entriesInParent = (location: Location): Promise<readonly EntrySummary[]> => {
+      const parent = parentLocation(location);
+      const cacheKey = `${parent.providerId}\0${parent.uri}`;
+      const cached = parentCache.get(cacheKey);
+      if (cached !== undefined) return cached;
+      const request = (async (): Promise<readonly EntrySummary[]> => {
+        const entries: EntrySummary[] = [];
+        // Listing sessions are UUID-keyed and cancel older requests sharing their pane ID.
+        const paneId = crypto.randomUUID();
+        let continuationToken: string | undefined;
+        do {
+          const snapshot = await attrsClient.listDirectory({
+            workspaceId,
+            paneId,
+            requestId: crypto.randomUUID(),
+            location: parent,
+            ...(continuationToken === undefined ? {} : { continuationToken }),
+            showHidden: true,
+          });
+          entries.push(...snapshot.entries);
+          continuationToken = snapshot.continuationToken;
+          if (!snapshot.hasMore) break;
+        } while (continuationToken !== undefined);
+        return entries;
+      })();
+      parentCache.set(cacheKey, request);
+      return request;
+    };
     m.redraw();
     try {
       const checked = await refreshBasket(
@@ -3039,10 +3220,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               entryId: item.id,
               location: item.location,
               verifyIdentity: true,
-              ...(item.size === undefined ? {} : { expectedSize: item.size }),
-              ...(item.modifiedAt === undefined ? {} : { expectedModifiedAt: item.modifiedAt }),
             });
-            return 'ready';
+            const fresh = (await entriesInParent(item.location)).find(
+              (entry) =>
+                entry.id === item.id &&
+                entry.location.providerId === item.location.providerId &&
+                entry.location.uri === item.location.uri,
+            );
+            return fresh === undefined
+              ? { ...item, status: 'ready' }
+              : basketItemFromEntry(fresh, item);
           } catch (error) {
             if (typeof error === 'object' && error !== null && 'code' in error) {
               if (error.code === 'notFound') {
@@ -3058,13 +3245,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (basketFor(workspaceId) === before) updateBasket(workspaceId, checked);
       return checked;
     } finally {
-      basketBusy = false;
       m.redraw();
     }
   }
 
   let basketFolderScan: AbortController | undefined;
-  let basketSizing = false;
 
   async function calculateBasketFolderSizes(
     workspaceId: string,
@@ -3091,7 +3276,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         }),
       });
     }
-    basketSizing = folders.length > 0;
     m.redraw();
     let index = 0;
     let failures = 0;
@@ -3130,7 +3314,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     } finally {
       if (basketFolderScan === controller) {
         basketFolderScan = undefined;
-        basketSizing = false;
         m.redraw();
       }
     }
@@ -3152,108 +3335,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
   }
 
-  function runBasketAction(
-    paneId: PaneId,
-    kind: 'copy' | 'move' | 'checksum' | 'archive' | 'delete' | 'copyNames' | 'copyPaths',
-  ): void {
-    const current = workspace;
-    if (current === undefined || basketBusy) return;
-    if (basketFor(current.id).selectedKeys.length === 0) {
-      toast({ html: t('basket', 'noSelected') });
-      return;
-    }
-    void recheckBasket(current.id, true)
-      .then(async (checked) => {
-        if (workspace?.id !== current.id || basketFor(current.id) !== checked) return;
-        const sources = basketSources(checked);
-        const selected = new Set(checked.selectedKeys);
-        if (kind === 'copyNames' || kind === 'copyPaths') {
-          const items = checked.items.filter(
-            (item) => selected.has(item.key) && item.status === 'ready',
-          );
-          if (items.length === 0) {
-            toast({ html: t('basket', 'noAvailable') });
-            return;
-          }
-          await writeSystemClipboardText(
-            items
-              .map((item) => (kind === 'copyNames' ? item.name : pathFromUri(item.location.uri)))
-              .join('\n'),
-          );
-          return;
-        }
-        if (
-          findBasketOverlap(
-            checked.items.filter((item) => item.status === 'ready' && selected.has(item.key)),
-          ) !== undefined
-        ) {
-          toast({ html: t('basket', 'overlap') });
-          return;
-        }
-        if (sources.length === 0) {
-          toast({ html: t('basket', 'noAvailable') });
-          return;
-        }
-        if (kind === 'checksum') {
-          const chosen = new Set(sources.map((source) => `${source.providerId}\0${source.uri}`));
-          const files = checked.items.filter(
-            (item) =>
-              item.kind === 'file' &&
-              chosen.has(`${item.location.providerId}\0${item.location.uri}`),
-          );
-          if (files.length === 0) {
-            toast({ html: t('basket', 'checksumFiles') });
-            return;
-          }
-          checksumController.calculateChecksums(
-            ['sha256'],
-            files.map((item) => item.location),
-          );
-          return;
-        }
-        if (kind === 'delete') {
-          await opsController.delete(
-            sources,
-            currentSettings?.confirmPermanentDelete === false,
-            false,
-          );
-          return;
-        }
-        const destination = basketDestination(paneId);
-        if (destination === undefined || !destination.writable) {
-          toast({ html: t('basket', 'noDestination') });
-          return;
-        }
-        if (kind === 'archive') {
-          dialogs.openArchiveCreate({
-            sources: [...sources],
-            destinationDirectory: destination.location,
-            moveSources: false,
-          });
-          return;
-        }
-        const validation = validatePasteTarget(
-          { mode: kind, locations: [...sources] },
-          { location: destination.location, writable: true, loaded: true },
-        );
-        if (!validation.ok) {
-          toast({ html: validation.message });
-          return;
-        }
-        if (kind === 'copy') await opsController.copy(sources, destination.location);
-        else await opsController.move(sources, destination.location);
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: workspaceErrorMessage(
-            error,
-            kind === 'copyNames' || kind === 'copyPaths'
-              ? t('clipboard', 'writeFailed')
-              : t('basket', 'actionFailed'),
-          ),
-        });
-      });
-  }
   let actionCommandController: ActionCommandController;
 
   const workspaceControllerContext: WorkspaceControllerContext = {
@@ -3426,9 +3507,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getPlugins: () => plugins,
     collectIntoBasketIfVisible: () => {
       if (!basketVisible()) return false;
+      if (
+        workspace !== undefined &&
+        basketTabIds.has(workspace.panesById[workspace.activePaneId]?.activeTabId ?? '')
+      ) {
+        return false;
+      }
       collectSelection();
       return true;
     },
+    removeFromBasketIfActive: () => {
+      if (workspace === undefined) return false;
+      return removeSelectedBasketItems(workspace.activePaneId);
+    },
+    prepareFileOperationEntries,
     clipboard,
     getFindFilesOpen: () => findFilesOpen,
     getViewer: (paneId) => {
@@ -3669,15 +3761,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         selected.length > 0
           ? selected
           : directory.entries.filter((entry) => !isParentEntry(entry.id));
-      if (entriesToRename.length === 0) return;
+      const firstEntry = entriesToRename[0];
+      if (firstEntry === undefined) return;
+      const firstParent = parentLocation(firstEntry.location);
+      const singleParent = entriesToRename.every((entry) => {
+        const parent = parentLocation(entry.location);
+        return parent.providerId === firstParent.providerId && parent.uri === firstParent.uri;
+      });
       const selectedIds = new Set(entriesToRename.map((entry) => entry.id));
       dialogs.openMultiRename(
         entriesToRename,
-        active.location,
+        singleParent ? firstParent : undefined,
         new Set(
-          directory.entries
-            .filter((entry) => !selectedIds.has(entry.id))
-            .map((entry) => entry.name),
+          singleParent
+            ? directory.entries
+                .filter((entry) => !selectedIds.has(entry.id))
+                .map((entry) => entry.name)
+            : [],
         ),
       );
       m.redraw();
@@ -3834,6 +3934,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getNavigation: () => navigation,
     getOpsController: () => opsController,
     getGetSelectedEntries: () => getSelectedEntriesOrCursor,
+    prepareFileOperationEntries,
     getClipboard: () => clipboard(),
     replaceClipboard: (next) => replaceClipboard(next),
     toast: (options) => toast(options),
@@ -3846,6 +3947,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
+    openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
     openDocumentSummary: (_paneId, entry) => {
       if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
@@ -4324,6 +4426,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               getShowGitStatusColumn: () =>
                 currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
               updatePane: (paneId, tabId, view, preferredCursorName) => {
+                if (basketTabIds.has(tabId)) return;
                 const key = tabKey(paneId, tabId);
                 const previous = directories.get(key);
                 if (
@@ -4473,11 +4576,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 !shouldAutoDismissOperation(operation) && !dismissedOperationIds.has(operation.id),
             );
             operations = createOperationsState(relevant);
-            for (const operation of relevant) {
-              if (!operationIsActive(operation)) continue;
-              const elapsed = Date.now() - Date.parse(operation.createdAt);
-              scheduleOperationCentreOpen(operation.id, Math.max(0, 3_000 - elapsed));
-            }
             m.redraw();
           }
         })
@@ -4509,8 +4607,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (operationFrame !== undefined) cancelAnimationFrame(operationFrame);
       for (const timer of autoDismissTimers.values()) clearTimeout(timer);
       autoDismissTimers.clear();
-      for (const timer of operationCentreOpenTimers.values()) clearTimeout(timer);
-      operationCentreOpenTimers.clear();
       workspaceRequest?.abort();
       unsubscribeEvents?.();
       unsubscribeNativeFileDrops?.();
@@ -4530,6 +4626,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (operation) =>
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
+      const activeOperationProgress = summariseActiveOperations(operations);
       // macOS's overlay title bar (spec follow-up) keeps the native traffic lights, but
       // draws our own centred title in a reserved CSS row instead of the OS title text
       // (hidden via hiddenTitle) -- this is what makes the frame colour match, since a
@@ -4568,10 +4665,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       );
       const shortcutFor = (actionId: string): string | undefined =>
         liveShortcuts.find((binding) => binding.actionId === actionId)?.shortcut;
-      const basketF5 = basketVisible() && shortcutFor('core.copy') === 'F5';
       const basketFocused =
         workspace !== undefined &&
         basketTabIds.has(workspace.panesById[workspace.activePaneId]?.activeTabId ?? '');
+      const basketF5 = basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
       return m(
         '.fm-app-shell',
         {
@@ -4764,16 +4861,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             tooltip(
-              t('basket', 'open'),
+              basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
               m(
                 IconButton,
                 {
                   className: 'fm-basket-open-button',
                   disabled: workspace === undefined,
-                  'aria-label': t('basket', 'open'),
-                  onclick: openBasket,
+                  'aria-label':
+                    basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
+                  'aria-pressed': String(basketTabLocation() !== undefined),
+                  onclick: toggleBasket,
                 },
-                basketIcon(),
+                basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
               ),
             ),
             m('.fm-toolbar-separator', {
@@ -4921,10 +5020,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               m(
                 IconButton,
                 {
-                  className: 'fm-operation-centre-button',
+                  className: [
+                    'fm-operation-centre-button',
+                    activeOperationProgress === undefined ? '' : 'fm-operations-busy',
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
                   disabled: workspace === undefined,
                   'aria-label': t('shell', 'operationCentre'),
                   'aria-pressed': String(workspace?.operationCentre.visible === true),
+                  ...(activeOperationProgress === undefined
+                    ? {}
+                    : {
+                        'aria-busy': 'true',
+                        ...(activeOperationProgress.percent === undefined
+                          ? {}
+                          : {
+                              style: {
+                                '--fm-operation-progress': `${activeOperationProgress.percent}%`,
+                              },
+                            }),
+                      }),
                   onclick: toggleOperationCentre,
                 },
                 listIcon(),
@@ -5167,19 +5283,39 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               : m(WorkspaceLayoutView, {
                   workspace,
                   paneContent: (paneId) => {
+                    const currentWorkspace = workspace;
+                    const tabId = currentWorkspace?.panesById[paneId]?.activeTabId;
+                    if (
+                      currentWorkspace !== undefined &&
+                      tabId !== undefined &&
+                      basketTabIds.has(tabId)
+                    ) {
+                      syncBasketVirtualDirectory(paneId, tabId, currentWorkspace.id);
+                    }
                     const content = paneContentBuilder(
                       attrs.client,
                       attrs.entryFormatSettings ?? loadedEntryFormatSettings,
                       paneId,
                     );
-                    const basketTabs = workspace?.panesById[paneId]?.tabOrder.filter((id) =>
+                    const basketTabs = currentWorkspace?.panesById[paneId]?.tabOrder.filter((id) =>
                       basketTabIds.has(id),
                     );
+                    const isActiveBasketTab =
+                      currentWorkspace !== undefined &&
+                      tabId !== undefined &&
+                      basketTabIds.has(tabId);
                     const titledContent =
                       basketTabs === undefined || basketTabs.length === 0
                         ? content
                         : {
                             ...content,
+                            groupByParent: basketTabs.some((id) => id === tabId),
+                            ...(isActiveBasketTab
+                              ? {
+                                  location: basketVirtualLocation(currentWorkspace.id),
+                                  breadcrumbLabel: t('basket', 'title'),
+                                }
+                              : {}),
                             viewerTitles: new Map([
                               ...(content.viewerTitles ?? []),
                               ...basketTabs.map((id): [TabId, string] => [
@@ -5188,61 +5324,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               ]),
                             ]),
                           };
-                    const tabId = workspace?.panesById[paneId]?.activeTabId;
-                    if (
-                      workspace === undefined ||
-                      tabId === undefined ||
-                      !basketTabIds.has(tabId)
-                    ) {
-                      return titledContent;
-                    }
-                    const workspaceId = workspace.id;
-                    const basket = basketFor(workspaceId);
-                    const destination = basketDestination(paneId);
-                    return {
-                      ...titledContent,
-                      viewerContent: m(BasketView, {
-                        basket,
-                        onAdd: collectSelection,
-                        ...(basketF5 ? { addShortcut: 'F5' } : {}),
-                        ...(destination?.writable ? { destination: destination.location } : {}),
-                        busy: basketBusy,
-                        sizingFolders: basketSizing,
-                        onOpen: () => inspectBasketOnOpen(workspaceId),
-                        onClose: () => basketFolderScan?.abort(),
-                        onToggle: (key) =>
-                          updateBasket(
-                            workspaceId,
-                            selectBasketItems(
-                              basketFor(workspaceId),
-                              basket.selectedKeys.includes(key)
-                                ? basket.selectedKeys.filter((id) => id !== key)
-                                : [...basket.selectedKeys, key],
-                            ),
-                          ),
-                        onSelectAll: () => {
-                          const currentBasket = basketFor(workspaceId);
-                          updateBasket(
-                            workspaceId,
-                            selectBasketItems(
-                              currentBasket,
-                              currentBasket.items.map((item) => item.key),
-                            ),
-                          );
-                        },
-                        onDeselectAll: () =>
-                          updateBasket(workspaceId, selectBasketItems(basketFor(workspaceId), [])),
-                        onRemove: (key) =>
-                          updateBasket(workspaceId, removeFromBasket(basketFor(workspaceId), key)),
-                        onClear: () =>
-                          updateBasket(workspaceId, {
-                            ...basketFor(workspaceId),
-                            items: [],
-                            selectedKeys: [],
-                          }),
-                        onAction: (kind) => runBasketAction(paneId, kind),
-                      }),
-                    };
+                    return titledContent;
                   },
                   onActivatePane: (paneId) =>
                     void activatePane(attrs.client, paneId).catch(() => undefined),
@@ -5565,8 +5647,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
                 const available = collect
                   ? basketSourcePaneId() !== undefined
-                  : (!basketFocused || binding.actionId === 'core.showShortcutsHelp') &&
-                    binding.actionAvailable;
+                  : binding.actionAvailable;
                 return m(
                   'span.fm-function-key',
                   {

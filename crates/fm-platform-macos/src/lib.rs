@@ -1480,6 +1480,7 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
         ),
         NativeMenuRole::ShowAll => ("Show All", sel!(unhideAllApplications:), "", 0),
         NativeMenuRole::Quit => ("Quit", sel!(terminate:), "q", MODIFIER_COMMAND_BIT),
+        // Cmd+M stays the standard Minimize; the Multi-Rename Tool uses literal Control+M.
         NativeMenuRole::Minimize => (
             "Minimize",
             sel!(performMiniaturize:),

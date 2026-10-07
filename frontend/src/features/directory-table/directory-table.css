@@ -221,6 +221,21 @@
   background: var(--fm-hover);
 }
 
+.fm-directory-group-row {
+  color: var(--fm-muted);
+  font-weight: 600;
+  background: var(--fm-directory-row-highlight, color-mix(in srgb, var(--fm-text) 4%, transparent));
+}
+
+.fm-directory-group-row:hover {
+  background: var(--fm-directory-row-highlight, color-mix(in srgb, var(--fm-text) 4%, transparent));
+}
+
+.fm-directory-group-cell {
+  display: flex;
+  align-items: center;
+}
+
 .fm-directory-cell {
   overflow: hidden;
   box-sizing: border-box;

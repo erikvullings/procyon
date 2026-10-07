@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ActionDescriptor, EntryId, EntrySummary, PaneId } from '../../models';
 import type { PaneDirectoryView } from '../navigation/navigation';
+import { withParentEntry } from '../panes/parent-entry';
 import {
   type ActionCommandControllerContext,
   createActionCommandController,
@@ -81,6 +82,7 @@ function fakeContext(
     findDuplicates: () => {},
     openDiskUsage: () => {},
     openPropertiesForActivePane: () => {},
+    openMultiRenameForActivePane: () => {},
     openSemanticAssistant: () => {},
     openKnowledgeSearch: () => {},
     uninstallApplication: () => {},
@@ -256,6 +258,25 @@ describe('action-command-controller uninstallApplication wiring', () => {
     createActionCommandController(context).invokePaletteAction(searchKnowledge, undefined, {});
 
     expect(openKnowledgeSearch).toHaveBeenCalledOnce();
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it('opens the Multi-Rename Tool from the palette instead of the generic backend invoke', () => {
+    const openMultiRenameForActivePane = vi.fn();
+    const getClient = vi.fn();
+    const multiRename = {
+      id: 'core.openMultiRename',
+      title: 'Multi-Rename Tool',
+      category: 'file',
+      defaultShortcuts: [],
+      contextRequirements: {},
+      source: { kind: 'core' as const },
+    };
+    const context = fakeContext({ openMultiRenameForActivePane, getClient });
+
+    createActionCommandController(context).invokePaletteAction(multiRename, undefined, {});
+
+    expect(openMultiRenameForActivePane).toHaveBeenCalledOnce();
     expect(getClient).not.toHaveBeenCalled();
   });
 
@@ -461,5 +482,43 @@ describe('action-command-controller file operations from the context menu and pa
 
     expect(requestRename).toHaveBeenCalledWith(paneId, [entry.id]);
     expect(getClient).not.toHaveBeenCalled();
+  });
+});
+
+describe('action-command-controller context-menu copy actions', () => {
+  it('copies the parent folder path for the synthetic ".." entry', async () => {
+    const paneId = 'pane-1' as PaneId;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const parent = withParentEntry('/Users/me/Downloads', [bundleEntry()])[0];
+    if (parent === undefined) throw new Error('expected a parent entry');
+    const copyPath = {
+      id: 'core.copyPath',
+      title: 'Copy Full Path',
+      category: 'edit',
+      defaultShortcuts: [],
+      contextRequirements: {},
+      source: { kind: 'core' as const },
+    };
+    const context = fakeContext({
+      getRegisteredActions: () => [copyPath],
+      getContextMenu: () => ({ paneId, entries: [parent], x: 0, y: 0 }),
+      getDirectories: () =>
+        new Map([
+          [
+            paneId,
+            {
+              state: { type: 'loaded' },
+              location: { providerId: 'local', uri: 'file:///Users/me/Downloads' },
+              entries: [bundleEntry()],
+              hasMore: false,
+            } as PaneDirectoryView,
+          ],
+        ]),
+    });
+
+    createActionCommandController(context).invokeContextMenuAction('core.copyPath');
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Users/me'));
+    vi.unstubAllGlobals();
   });
 });

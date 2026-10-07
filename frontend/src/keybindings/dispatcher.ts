@@ -62,6 +62,16 @@ export function normalizedShortcut(chord: KeyChord): string {
   ].join('+');
 }
 
+/** Keys whose Ctrl chords mean the literal Control key on every platform instead of being
+ * translated to Cmd on macOS: Tab (Cmd+Tab is the OS app switcher) and M (Total Commander's
+ * Ctrl+M Multi-Rename Tool; Cmd+M stays the standard macOS Minimize). */
+const LITERAL_CONTROL_KEYS = new Set(['TAB', 'M']);
+
+/** Returns whether a chord's Ctrl modifier is the literal Control key on macOS too. */
+export function usesLiteralControl(chord: KeyChord): boolean {
+  return Boolean(chord.ctrl) && LITERAL_CONTROL_KEYS.has(chord.key.toUpperCase());
+}
+
 /** Returns whether an event uses the host's primary shortcut modifier. */
 export function hasPrimaryModifier(event: KeyboardEvent, platform: SelectionPlatform): boolean {
   return platform === 'macos' ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
@@ -93,20 +103,19 @@ function matches(event: KeyboardEvent, chord: KeyChord, platform: SelectionPlatf
   // Ctrl+Tab/Ctrl+Shift+Tab is a platform-invariant tab-cycling convention (every
   // browser and desktop app honours literal Control here, never Command) because
   // Cmd+Tab is reserved by macOS for the app switcher and never reaches the page.
-  // So Tab chords check the literal Control key instead of going through the
-  // translated "primary modifier" used for every other shortcut.
-  const modifierMatches =
-    chord.key.toUpperCase() === 'TAB'
-      ? event.ctrlKey === wantsModifier && !event.metaKey
-      : wantsModifier
-        ? hasPrimaryModifier(event, platform)
-        : // A bare chord must reject literal Control on macOS too, not just Command:
-          // `hasPrimaryModifier` only recognises Cmd there, so without this check a
-          // Ctrl-held keypress would look identical to an unmodified one and silently
-          // fall through to whatever bare binding shares the same key (e.g. Ctrl+Backspace
-          // on macOS matching the plain-Backspace "parent directory" binding instead of
-          // doing nothing, since the real Ctrl-translated shortcut there needs Cmd).
-          !event.ctrlKey && !event.metaKey;
+  // So Tab chords (and Ctrl+M, see LITERAL_CONTROL_KEYS) check the literal Control key
+  // instead of going through the translated "primary modifier" used for every other shortcut.
+  const modifierMatches = LITERAL_CONTROL_KEYS.has(chord.key.toUpperCase())
+    ? event.ctrlKey === wantsModifier && !event.metaKey
+    : wantsModifier
+      ? hasPrimaryModifier(event, platform)
+      : // A bare chord must reject literal Control on macOS too, not just Command:
+        // `hasPrimaryModifier` only recognises Cmd there, so without this check a
+        // Ctrl-held keypress would look identical to an unmodified one and silently
+        // fall through to whatever bare binding shares the same key (e.g. Ctrl+Backspace
+        // on macOS matching the plain-Backspace "parent directory" binding instead of
+        // doing nothing, since the real Ctrl-translated shortcut there needs Cmd).
+        !event.ctrlKey && !event.metaKey;
   if (!modifierMatches) return false;
   return Boolean(chord.shift) === event.shiftKey && Boolean(chord.alt) === event.altKey;
 }

@@ -117,3 +117,47 @@ export function shouldAutoDismissOperation(operation: Operation): boolean {
       operation.state === 'interrupted')
   );
 }
+
+export function isActiveOperation(operation: Operation): boolean {
+  return (
+    operation.state === 'queued' ||
+    operation.state === 'planning' ||
+    operation.state === 'running' ||
+    operation.state === 'paused' ||
+    operation.state === 'waitingForConflictResolution' ||
+    operation.state === 'cancelling'
+  );
+}
+
+export interface ActiveOperationsSummary {
+  readonly count: number;
+  /** Overall completion (0-100) when every active job reports a byte or item total. */
+  readonly percent?: number;
+}
+
+/** Aggregates active jobs for the compact toolbar progress indicator. */
+export function summariseActiveOperations(
+  state: OperationCentreState,
+): ActiveOperationsSummary | undefined {
+  let count = 0;
+  let done = 0;
+  let total = 0;
+  let measurable = true;
+  for (const operation of Object.values(state.byId)) {
+    if (operation === undefined || !isActiveOperation(operation)) continue;
+    count += 1;
+    const { completedBytes, totalBytes, completedItems, totalItems } = operation.progress;
+    if (totalBytes !== undefined && totalBytes > 0) {
+      done += Math.min(completedBytes, totalBytes) / totalBytes;
+      total += 1;
+    } else if (totalItems !== undefined && totalItems > 0) {
+      done += Math.min(completedItems, totalItems) / totalItems;
+      total += 1;
+    } else {
+      measurable = false;
+    }
+  }
+  if (count === 0) return undefined;
+  if (!measurable || total === 0) return { count };
+  return { count, percent: Math.round((done / total) * 100) };
+}

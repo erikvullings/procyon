@@ -960,7 +960,18 @@ fn selection_actions() -> Vec<ActionDescriptor> {
                 },
             ],
         ),
-        ("core.deselectByMask", "Deselect by Mask", vec![key("-")]),
+        (
+            "core.deselectByMask",
+            "Deselect by Mask",
+            vec![
+                key("-"),
+                KeyChord {
+                    key: "_".to_owned(),
+                    shift: true,
+                    ..KeyChord::default()
+                },
+            ],
+        ),
         (
             "core.clearSelection",
             "Clear Selection",
@@ -1122,7 +1133,17 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(shortcuts("core.deselectByMask"), vec![key("-")]);
+        assert_eq!(
+            shortcuts("core.deselectByMask"),
+            vec![
+                key("-"),
+                KeyChord {
+                    key: "_".to_owned(),
+                    shift: true,
+                    ..KeyChord::default()
+                },
+            ]
+        );
     }
 
     #[test]

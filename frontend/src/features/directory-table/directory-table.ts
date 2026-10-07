@@ -63,6 +63,7 @@ function listEntryIcon(
       'aria-hidden': 'true',
     });
   }
+
   const nativeIconDataUri = nativeIconLoader?.iconDataUri(entry);
   return nativeIconDataUri === undefined
     ? entryIcon(entry, { className: 'fm-entry-icon' })
@@ -73,6 +74,26 @@ function listEntryIcon(
         alt: '',
         'aria-hidden': 'true',
       });
+}
+
+type DirectoryDisplayRow =
+  | { readonly type: 'group'; readonly label: string; readonly entryIndex: number }
+  | { readonly type: 'entry'; readonly entry: EntrySummary; readonly entryIndex: number };
+
+function directoryDisplayRows(source: DirectoryEntrySource): readonly DirectoryDisplayRow[] {
+  const rows: DirectoryDisplayRow[] = [];
+  let previousLabel: string | undefined;
+  for (let index = 0; index < (source.loadedLength ?? source.length); index += 1) {
+    const entry = source.entryAt(index);
+    if (entry === undefined) break;
+    const label = parentPathLabel(entry);
+    if (label !== previousLabel) {
+      rows.push({ type: 'group', label, entryIndex: index });
+      previousLabel = label;
+    }
+    rows.push({ type: 'entry', entry, entryIndex: index });
+  }
+  return rows;
 }
 
 /** A single column's persisted width, keyed by column id. */
@@ -124,6 +145,8 @@ export interface DirectoryTableAttrs {
   readonly nameMatchPrefix?: string;
   /** Splits search-result names into compact parent-path and filename columns. */
   readonly showFullPath?: boolean;
+  /** Inserts non-interactive parent-folder rows before groups; entry indices remain unchanged. */
+  readonly groupByParent?: boolean;
   readonly sort?: readonly SortDescriptor[];
   readonly onSortChange?: (sort: readonly SortDescriptor[]) => void;
   readonly formatSettings?: EntryFormatSettings;
@@ -252,6 +275,14 @@ function parentPath(entry: EntrySummary): string {
   } catch {
     return entry.location.uri;
   }
+}
+
+export function parentPathLabel(entry: EntrySummary): string {
+  const path = parentPath(entry);
+  const { prefix, segments } = displayPathParts(path);
+  if (prefix === '~') return segments.length === 0 ? '~' : `~/${segments.join('/')}`;
+  if (prefix === '/') return `/${segments.join('/')}`;
+  return [prefix, ...segments].filter(Boolean).join('/');
 }
 
 function displayPathParts(path: string): { prefix: string; segments: readonly string[] } {
@@ -801,9 +832,14 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     alignment: 'nearest' | 'center',
   ): void {
     if (element === undefined || attrs.source === undefined) return;
+    const displayRows =
+      attrs.groupByParent === true ? directoryDisplayRows(attrs.source) : undefined;
+    const rowIndex =
+      displayRows?.findIndex((row) => row.type === 'entry' && row.entryIndex === cursorIndex) ??
+      cursorIndex;
     const nextScrollTop = scrollOffsetForIndex({
-      index: cursorIndex,
-      entryCount: attrs.source.length,
+      index: rowIndex < 0 ? cursorIndex : rowIndex,
+      entryCount: displayRows?.length ?? attrs.source.length,
       rowHeight,
       scrollTop: element.scrollTop,
       viewportHeight: attrs.viewportHeight ?? (element.clientHeight || DEFAULT_VIEWPORT_HEIGHT),
@@ -876,11 +912,16 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
         attrs.cursorIndex === undefined ? undefined : source?.entryAt(attrs.cursorIndex);
       const viewportHeight =
         attrs.viewportHeight ?? (element?.clientHeight || DEFAULT_VIEWPORT_HEIGHT);
+      const displayRows =
+        source !== undefined && attrs.groupByParent === true
+          ? directoryDisplayRows(source)
+          : undefined;
+      const displayLength = displayRows?.length ?? source?.length;
       const window =
         source === undefined
           ? undefined
           : calculateVisibleWindow({
-              entryCount: source.length,
+              entryCount: displayLength ?? source.length,
               rowHeight,
               scrollTop,
               viewportHeight,
@@ -899,7 +940,34 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       let sawUnloadedEntry = false;
       if (source !== undefined && window !== undefined && state === undefined) {
         for (let index = window.start; index < window.end; index += 1) {
-          const entry = source.entryAt(index);
+          const displayRow = displayRows?.[index];
+          if (displayRow?.type === 'group') {
+            rows.push(
+              m(
+                '.fm-directory-row.fm-directory-group-row',
+                {
+                  key: `group:${displayRow.entryIndex}:${displayRow.label}`,
+                  role: 'row',
+                  'aria-rowindex': index + 2,
+                  'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
+                  style: {
+                    height: `${rowHeight}px`,
+                    transform: `translateY(${window.offsetTop + (index - window.start) * rowHeight}px)`,
+                    gridTemplateColumns: gridTemplate(columns, columnWidths),
+                    ...directoryGridStyle(columns),
+                  },
+                },
+                m(
+                  '.fm-directory-cell.fm-directory-group-cell',
+                  { role: 'rowheader', style: { gridColumn: `1 / ${columns.length + 1}` } },
+                  displayRow.label,
+                ),
+              ),
+            );
+            continue;
+          }
+          const entryIndex = displayRow?.entryIndex ?? index;
+          const entry = displayRow?.entry ?? source.entryAt(index);
           if (entry === undefined) {
             // Not yet fetched (beyond the loaded pages, ahead of the total known count):
             // request more immediately rather than waiting for the physical scroll bottom,
@@ -907,7 +975,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
             sawUnloadedEntry = true;
             continue;
           }
-          const cursor = index === attrs.cursorIndex;
+          const cursor = entryIndex === attrs.cursorIndex;
           const selected = attrs.selectedEntryIds?.has(entry.id) ?? false;
           rows.push(
             m(
@@ -918,7 +986,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 role: 'row',
                 'aria-rowindex': index + 2,
                 'aria-selected': selected ? 'true' : 'false',
-                'data-entry-index': index,
+                'data-entry-index': entryIndex,
                 'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
                 draggable:
                   attrs.onPointerDragStart !== undefined
@@ -926,14 +994,14 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                     : attrs.onDragStart === undefined
                       ? undefined
                       : true,
-                ondragstart: (event: DragEvent) => attrs.onDragStart?.(index, event),
+                ondragstart: (event: DragEvent) => attrs.onDragStart?.(entryIndex, event),
                 onpointerdown: (event: PointerEvent) => {
                   if (attrs.onPointerDragStart === undefined) return;
                   beginPointerFileDrag(event, {
-                    index,
+                    index: entryIndex,
                     onStart: (sourceIndex, eventModifiers) =>
                       attrs.onPointerDragStart?.(sourceIndex, eventModifiers),
-                    onNativeDragOut: (sourceIndex) => attrs.onPointerDragOut?.(sourceIndex),
+                    onNativeDragOut: () => attrs.onPointerDragOut?.(entryIndex),
                     onCancel: () => attrs.onPointerDragCancel?.(),
                     ...(attrs.pointerDragEffect === undefined
                       ? {}
@@ -941,36 +1009,36 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   });
                 },
                 ondragover: (event: DragEvent) => {
-                  if (attrs.onDragOver?.(index, event) !== true) return;
+                  if (attrs.onDragOver?.(entryIndex, event) !== true) return;
                   event.preventDefault();
-                  dragTargetIndex = index;
+                  dragTargetIndex = entryIndex;
                 },
                 ondragleave: () => {
-                  if (dragTargetIndex === index) dragTargetIndex = undefined;
+                  if (dragTargetIndex === entryIndex) dragTargetIndex = undefined;
                 },
                 ondrop: (event: DragEvent) => {
                   event.preventDefault();
                   dragTargetIndex = undefined;
-                  attrs.onDrop?.(index, event);
+                  attrs.onDrop?.(entryIndex, event);
                 },
                 onclick: (event: MouseEvent) => {
                   if (consumePointerFileDragClick()) return;
-                  attrs.onCursorChange?.(index, {
+                  attrs.onCursorChange?.(entryIndex, {
                     shiftKey: event.shiftKey,
                     ctrlKey: event.ctrlKey || event.metaKey,
                   });
                 },
                 oncontextmenu: (event: MouseEvent) => {
                   event.preventDefault();
-                  attrs.onContextMenu?.(index, event.clientX, event.clientY);
+                  attrs.onContextMenu?.(entryIndex, event.clientX, event.clientY);
                 },
-                ondblclick: () => attrs.onActivate?.(index),
+                ondblclick: () => attrs.onActivate?.(entryIndex),
                 class: [
                   entry.hidden ? 'fm-hidden-entry' : '',
                   cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
                   attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
-                  dragTargetIndex === index ? 'fm-drop-target' : '',
+                  dragTargetIndex === entryIndex ? 'fm-drop-target' : '',
                 ].join(' '),
                 style: {
                   height: `${rowHeight}px`,
@@ -1023,7 +1091,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                         attrs.showFullPath,
                         attrs.thumbnailLoader,
                         attrs.finderTagsLoader,
-                        index === 0 ? undefined : source.entryAt(index - 1),
+                        entryIndex === 0 ? undefined : source.entryAt(entryIndex - 1),
                         separateExtension,
                       ),
                 ),
@@ -1054,7 +1122,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               role: 'grid',
               tabindex: 0,
               'aria-label': attrs.label ?? t('table', 'directoryContents'),
-              'aria-rowcount': (source?.length ?? 0) + 1,
+              'aria-rowcount': (displayLength ?? 0) + 1,
               'aria-colcount': columns.length,
               'aria-activedescendant':
                 cursorEntry === undefined ? undefined : rowId(cursorEntry.id),
@@ -1145,7 +1213,9 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   '.fm-directory-body',
                   {
                     role: 'rowgroup',
-                    style: { height: `${Math.max(window?.totalHeight ?? 0, viewportHeight)}px` },
+                    style: {
+                      height: `${Math.max((displayLength ?? 0) * rowHeight, viewportHeight)}px`,
+                    },
                   },
                   rows,
                 ),
