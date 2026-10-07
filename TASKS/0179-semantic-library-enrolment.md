@@ -84,3 +84,11 @@ query still applies its active workspace/root/tenant scope.
 - 2026-10-08 Copilot: The folder preview remains the disclosure and confirmation step; the
   redundant acknowledgment checkbox was removed. Desktop confirmation now saves inclusion and
   starts reconciliation in the background, so the dialog closes without waiting for indexing.
+- 2026-10-07 Copilot: Closed the local `.gitignore` eligibility gap in the task 0182 host
+  reconciliation. Repository discovery and tracked-file checks precede bounded, per-directory
+  evaluation of nested ignore rules and negations; ignored directories are pruned unless they
+  contain tracked entries or the root explicitly includes `GitIgnored`. Non-Git roots and other
+  providers retain their existing behavior. The curated policy still enforces independent safety
+  reasons, and complete reconciliation removes newly ignored occurrences from the authoritative
+  catalog. Integration coverage includes tracked files, nested rules, overrides, non-Git roots,
+  and stale citation rejection.

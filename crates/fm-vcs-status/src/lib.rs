@@ -16,6 +16,107 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus};
+use thiserror::Error;
+
+/// Failure to evaluate repository ignore rules during semantic enumeration.
+#[derive(Debug, Error)]
+pub enum GitIgnoreError {
+    /// Git repository or ignore rules could not be read.
+    #[error("failed to evaluate git ignore rules: {0}")]
+    Git(#[from] git2::Error),
+    /// An ignore file could not be read or parsed.
+    #[error("failed to read git ignore rules: {0}")]
+    Ignore(#[from] ignore::Error),
+    /// An ignore file could not be inspected.
+    #[error("failed to inspect git ignore rules: {0}")]
+    Io(#[from] std::io::Error),
+    /// The listed path is outside the discovered working tree.
+    #[error("listed directory is outside its git working tree")]
+    OutsideWorktree,
+    /// The blocking ignore lookup failed.
+    #[error("git ignore lookup failed: {0}")]
+    Join(#[from] tokio::task::JoinError),
+}
+
+/// Evaluates direct children against the current working tree's ignore rules.
+///
+/// Unlike pane status this performs no repository-wide walk or caching, so
+/// changed and nested `.gitignore` rules take effect on each reconciliation.
+/// A non-repository directory has no Git ignore rules.
+pub async fn ignored_entries(
+    directory: &Path,
+    entries: &[EntrySummary],
+) -> Result<Vec<bool>, GitIgnoreError> {
+    let directory = directory.to_path_buf();
+    let entries = entries
+        .iter()
+        .map(|entry| (entry.name.clone(), entry.kind))
+        .collect::<Vec<_>>();
+    tokio::task::spawn_blocking(move || {
+        let directory = canonical(&directory);
+        let repo = match git2::Repository::discover(&directory) {
+            Ok(repo) => repo,
+            Err(error) if error.code() == git2::ErrorCode::NotFound => {
+                return Ok(vec![false; entries.len()]);
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let Some(workdir) = repo.workdir() else {
+            return Ok(vec![false; entries.len()]);
+        };
+        let relative = directory
+            .strip_prefix(workdir)
+            .map_err(|_| GitIgnoreError::OutsideWorktree)?;
+        let index = repo.index()?;
+        let mut builder = ignore::gitignore::GitignoreBuilder::new(workdir);
+        let mut current = workdir.to_path_buf();
+        for component in relative.components() {
+            add_gitignore(&mut builder, &current)?;
+            current.push(component);
+        }
+        add_gitignore(&mut builder, &current)?;
+        let matcher = builder.build()?;
+        entries
+            .into_iter()
+            .map(|(name, kind)| {
+                let path = relative.join(name);
+                if index.get_path(&path, 0).is_some() {
+                    return Ok(false);
+                }
+                let ignored = matcher
+                    .matched_path_or_any_parents(workdir.join(&path), kind == EntryKind::Directory)
+                    .is_ignore();
+                if ignored && kind == EntryKind::Directory {
+                    let mut prefix = path.to_string_lossy().replace('\\', "/").into_bytes();
+                    prefix.push(b'/');
+                    if index.iter().any(|entry| entry.path.starts_with(&prefix)) {
+                        return Ok(false);
+                    }
+                }
+                Ok(ignored)
+            })
+            .collect()
+    })
+    .await?
+}
+
+fn add_gitignore(
+    builder: &mut ignore::gitignore::GitignoreBuilder,
+    directory: &Path,
+) -> Result<(), GitIgnoreError> {
+    let path = directory.join(".gitignore");
+    match std::fs::metadata(&path) {
+        Ok(metadata) if metadata.is_file() => {
+            if let Some(error) = builder.add(path) {
+                return Err(error.into());
+            }
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
 
 /// Computes and caches git working-tree status for directory listings.
 #[derive(Default)]

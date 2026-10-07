@@ -2,6 +2,7 @@
 
 #![allow(clippy::unwrap_used, missing_docs)]
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,8 +29,9 @@ use fm_application::semantic_ocr::{
 };
 use fm_domain::{Location, WorkspaceId};
 use fm_semantic_library::{
-    DeviceLibraryIdentity, EligibilityReason, EligibilityReasonCounts, GemmaMediaSelection,
-    LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId,
+    DeviceLibraryIdentity, EligibilityOverride, EligibilityReason, EligibilityReasonCounts,
+    GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
+    ResourceProfileKind, RootId,
 };
 #[cfg(unix)]
 use fm_transport_dto::ResolveRagCitationRequestDto;
@@ -259,10 +261,7 @@ impl SemanticCapability for FailingDocumentCapability {
 }
 
 fn project_temp_dir(prefix: &str) -> TempDir {
-    let parent =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/application-indexing-tests");
-    std::fs::create_dir_all(&parent).unwrap();
-    let parent = std::fs::canonicalize(parent).unwrap();
+    let parent = std::fs::canonicalize(std::env::temp_dir()).unwrap();
     tempfile::Builder::new()
         .prefix(prefix)
         .tempdir_in(parent)
@@ -365,6 +364,210 @@ fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Loca
         .id
         .parse()
         .unwrap()
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn gitignore_rules_filter_recursive_indexing_and_prune_previous_observations() {
+    let root = project_temp_dir("gitignore-root-");
+    let repo = git2::Repository::init(root.path()).unwrap();
+    std::fs::create_dir(root.path().join("private")).unwrap();
+    std::fs::create_dir(root.path().join("nested")).unwrap();
+    for path in [
+        "tracked.txt",
+        "ignored.txt",
+        "visible.md",
+        "private/inside.md",
+        "private/tracked.md",
+        "nested/ignored.txt",
+        "nested/keep.txt",
+    ] {
+        std::fs::write(root.path().join(path), format!("semantic {path}")).unwrap();
+    }
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("tracked.txt")).unwrap();
+    index.add_path(Path::new("private/tracked.md")).unwrap();
+    index.write().unwrap();
+    std::fs::write(root.path().join(".gitignore"), "*.txt\nprivate/\n").unwrap();
+    std::fs::write(root.path().join("nested/.gitignore"), "!keep.txt\n").unwrap();
+    assert!(
+        repo.index()
+            .unwrap()
+            .get_path(Path::new("tracked.txt"), 0)
+            .is_some()
+    );
+
+    let state = project_temp_dir("gitignore-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1991));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+
+    let first = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        first.observed_files, 4,
+        "tracked files and nested negation survive"
+    );
+    assert!(
+        first
+            .skipped_reason_counts
+            .iter()
+            .any(|count| { count.reason == EligibilityReason::GitIgnored && count.count >= 3 })
+    );
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences,
+        4
+    );
+    let results = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                TenantId::new(workspace_id.to_string()),
+                WorkerLibraryId::new(first.library_id.clone()),
+            ),
+            request_id: SemanticOperationId::new("gitignore-before"),
+            text: "semantic".into(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .unwrap();
+    let mut visible_source = None;
+    for result in results {
+        let source_id = result.metadata.get("source_id").unwrap().clone();
+        let resolved = service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: source_id.clone(),
+                },
+            )
+            .await
+            .unwrap();
+        if resolved.location.uri.ends_with("/visible.md") {
+            visible_source = Some(source_id);
+        }
+    }
+    let visible_source = visible_source.expect("visible source was indexed");
+
+    std::fs::write(
+        root.path().join(".gitignore"),
+        "*.txt\nprivate/\nvisible.md\n",
+    )
+    .unwrap();
+    let second = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(second.observed_files, 3);
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences,
+        3,
+        "a newly ignored file must not remain searchable in the authoritative catalog"
+    );
+    assert!(matches!(
+        service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: visible_source,
+                },
+            )
+            .await,
+        Err(fm_application::ApplicationError::NotFound)
+    ));
+}
+
+#[tokio::test]
+async fn non_repository_content_and_explicit_gitignore_include_remain_indexable() {
+    let root = project_temp_dir("include-root-");
+    let repo = git2::Repository::init(root.path()).unwrap();
+    std::fs::create_dir(root.path().join("drafts")).unwrap();
+    std::fs::write(root.path().join(".gitignore"), "drafts/\n").unwrap();
+    std::fs::write(root.path().join("drafts/note.md"), "semantic draft").unwrap();
+    std::fs::write(root.path().join(".secret.md"), "semantic secret").unwrap();
+    let state = project_temp_dir("include-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1992));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let revision = library.status(&HOST).unwrap().revision;
+    library
+        .update_eligibility_overrides(
+            &HOST,
+            root_id,
+            workspace_id,
+            revision,
+            BTreeMap::from([(EligibilityReason::GitIgnored, EligibilityOverride::Include)]),
+        )
+        .unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+    assert_eq!(
+        service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap()
+            .observed_files,
+        1
+    );
+    drop(repo);
+
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("note.md"), "semantic non git").unwrap();
+    std::fs::write(outside.path().join(".gitignore"), "*.md\n").unwrap();
+    let subrepo = outside.path().join("subrepo");
+    std::fs::create_dir(&subrepo).unwrap();
+    git2::Repository::init(&subrepo).unwrap();
+    std::fs::write(subrepo.join(".gitignore"), "*.md\n").unwrap();
+    std::fs::write(subrepo.join("ignored.md"), "semantic subrepo").unwrap();
+    let state = project_temp_dir("non-repo-state-");
+    let library = self::library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(outside.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.observed_files, 1);
+    assert!(
+        report
+            .skipped_reason_counts
+            .iter()
+            .any(|count| count.reason == EligibilityReason::GitIgnored)
+    );
 }
 
 #[cfg(unix)]

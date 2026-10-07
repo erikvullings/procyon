@@ -9,11 +9,12 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
-use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, WorkspaceId};
+use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError, WorkspaceId};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
     OccurrenceId, RootId,
 };
+use fm_vcs_status::{GitIgnoreError, ignored_entries};
 use fm_vfs::{
     EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError,
 };
@@ -89,6 +90,12 @@ pub enum SemanticIndexingError {
     /// A provider failed while listing or reading the enrolled root.
     #[error(transparent)]
     Provider(#[from] VfsError),
+    /// Local path could not be translated for repository ignore evaluation.
+    #[error(transparent)]
+    Location(#[from] LocationError),
+    /// Repository ignore rules could not be evaluated.
+    #[error(transparent)]
+    GitIgnore(#[from] GitIgnoreError),
     /// The semantic worker rejected ingestion or job polling.
     #[error(transparent)]
     Semantic(#[from] SemanticError),
@@ -195,7 +202,7 @@ impl SemanticIndexingService {
                         cancellation.child_token(),
                     )
                     .await;
-                let page = match listed {
+                let mut page = match listed {
                     Ok(page) => page,
                     Err(error) if depth > 0 && is_entry_local_failure(&error) => {
                         tracing::debug!(%error, "semantic reconciliation skipped an unreadable directory");
@@ -208,6 +215,7 @@ impl SemanticIndexingService {
                 if page.entries.len() > PAGE_SIZE {
                     return Err(SemanticIndexingError::InvalidProviderPage);
                 }
+                annotate_git_ignored(&directory, &mut page.entries).await?;
                 for entry in page.entries {
                     check_cancelled(&cancellation)?;
                     entry_count = entry_count.saturating_add(1);
@@ -561,7 +569,7 @@ impl SemanticIndexingService {
         // Re-inspect without following links so a changed or replaced file is
         // remediated exactly as it is now, and a directory or symlink target is
         // never opened as a document.
-        let entry = provider
+        let mut entry = provider
             .inspect(
                 &EntryRef {
                     id: fm_domain::EntryId::new(),
@@ -573,6 +581,11 @@ impl SemanticIndexingService {
         if entry.kind != EntryKind::File {
             return Ok(SingleFileIngestOutcome::Ineligible);
         }
+        let parent = entry
+            .location
+            .parent()?
+            .ok_or(SemanticIndexingError::InvalidProviderPage)?;
+        annotate_git_ignored(&parent, std::slice::from_mut(&mut entry)).await?;
         // Only remediate files the curated policy would still admit for this
         // root: an unrelated or newly excluded file must never be OCR'd.
         let plan = library.worker_feed_plan(
@@ -602,6 +615,21 @@ impl SemanticIndexingService {
             EntryIngestOutcome::Ingested(report) => Ok(SingleFileIngestOutcome::Ingested(report)),
         }
     }
+}
+
+async fn annotate_git_ignored(
+    directory: &Location,
+    entries: &mut [EntrySummary],
+) -> Result<(), SemanticIndexingError> {
+    if directory.provider_id.as_str() == "local" {
+        let ignored = ignored_entries(&directory.to_native_path()?, entries).await?;
+        for (entry, ignored) in entries.iter_mut().zip(ignored) {
+            if ignored {
+                entry.git_status = Some(GitFileStatus::Ignored);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Shared per-root ingestion context resolved once for a reconciliation or a
