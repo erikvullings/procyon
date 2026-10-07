@@ -30,7 +30,7 @@ fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true
 fm-semantic-protocol.workspace = true
 fs2.workspace = true
-lattice-inference = { git = "https://github.com/ohdearquant/lattice.git", rev = "17915f3748a4047c0af61bd8bc7066d1dccf24b4", default-features = false, features = ["std", "f16"], optional = true }
+lattice-inference = { git = "https://github.com/ohdearquant/lattice.git", rev = "17915f3748a4047c0af61bd8bc7066d1dccf24b4", default-features = false, features = ["std"], optional = true }
 ort = {workspace = true, optional = true, features = ["std", "ndarray", "tracing", "api-27"]}
 prost.workspace = true
 rand.workspace = true

@@ -164,3 +164,37 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   failure is the previously reproduced unrelated 15-second timeout in
   `scripts/native-spa-smoke.test.mjs`. These environmental failures are not
   evidence that the optional multimodal package is complete or qualified.
+- 2026-10-07: User clarified that a text-only Rust/ONNX port has no product
+  value: implement the **complete native Rust multimodal path** (including
+  images, audio, and video) before offering Gemma; do not spend further
+  implementation effort on ONNX unless every modality can be qualified. The
+  checkpoint stores BF16 weights; the existing native text probe converts
+  BF16 weights to FP32 and computes on CPU in FP32. The `f16` Lattice feature
+  was unnecessary for BF16 decoding and has been removed. FP16 inference is
+  forbidden; BF16 computation is an optional later optimization on verified
+  hardware, not a default on CPUs.
+- 2026-10-07: Started native multimodal inference at the checkpoint-backed
+  projection seam in `gemma_multimodal.rs`: BF16/F32 weight validation and
+  FP32 scale-free RMS normalization + learned projection from 768-dimensional
+  vision or 1536-dimensional audio soft tokens into the 512-dimensional
+  language-model space. Real-checkpoint Rust/Python goldens for both
+  projections live in `embeddinggemma-multimodal-reference-v1.json`; FP16
+  weight and malformed-input rejection are covered. This is one stage,
+  **not** an image/audio/video embedding API. Next native stages: bounded
+  image/video frame and 16-kHz audio preprocessing; Gemma4 vision tower
+  (16 layers, patch/position encoding and pooling), Gemma4 audio tower
+  (12 layers and subsampling), then a bidirectional language encoder that
+  accepts projected soft tokens in place of placeholder IDs. The pinned
+  Lattice text encoder only accepts token IDs, so its current `encode` API
+  cannot simply be called after the projection. Compare each stage and
+  end-to-end media vectors against Python before any worker integration,
+  packaging, or UI activation. Video shares the vision tower; its processor
+  samples up to 32 frames at 1 fps with 140 soft tokens per frame.
+- 2026-10-07: After removing Lattice's optional `f16` feature, both native
+  text and vision/audio projection goldens still passed using BF16 checkpoint
+  weights decoded for FP32 CPU computation. Two projection unit tests, all
+  100 worker unit tests, repository lint, and feature-gated clippy passed.
+  Full `pnpm test` again stopped on the unrelated load-sensitive
+  `fm-semantic-docling` descendant-cleanup test (passed immediately in
+  isolation); remaining suites were not reached. This work is a first native
+  inference stage and must not be described as support for media embeddings.
