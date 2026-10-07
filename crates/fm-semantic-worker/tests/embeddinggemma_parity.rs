@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder};
 use fm_semantic_worker::gemma_probe::{GemmaTextProbe, GemmaTextTask};
 use serde::Deserialize;
 
@@ -10,6 +11,51 @@ use serde::Deserialize;
 struct Reference {
     revision: String,
     cases: Vec<Case>,
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned, verified checkpoint"]
+fn unified_native_encoder_preserves_text_roles_and_dimensions() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let reference: Reference =
+        serde_json::from_str(include_str!("embeddinggemma-reference-v1.json"))
+            .expect("generated Python reference");
+    for case in reference.cases {
+        let task = match case.task.as_str() {
+            "search" => GemmaTextTask::Search,
+            "question" => GemmaTextTask::Question,
+            "code" => GemmaTextTask::Code,
+            "document" => GemmaTextTask::Document,
+            other => panic!("unknown reference task: {other}"),
+        };
+        let encoder = GemmaNativeEncoder::open(
+            &directory,
+            case.dimensions,
+            GemmaMedia {
+                images: false,
+                audio: false,
+                video: false,
+            },
+        )
+        .expect("native text encoder");
+        let actual = encoder
+            .encode_text(task, &case.text, case.title.as_deref())
+            .expect("native inference");
+        let cosine = actual
+            .iter()
+            .zip(&case.vector)
+            .map(|(left, right)| f64::from(*left) * f64::from(*right))
+            .sum::<f64>();
+        assert!(
+            cosine > 0.99999,
+            "{} at {} dimensions diverges from Python: cosine {cosine}",
+            case.task,
+            case.dimensions
+        );
+    }
 }
 
 #[derive(Deserialize)]

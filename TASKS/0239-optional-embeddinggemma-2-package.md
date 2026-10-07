@@ -198,3 +198,42 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   `fm-semantic-docling` descendant-cleanup test (passed immediately in
   isolation); remaining suites were not reached. This work is a first native
   inference stage and must not be described as support for media embeddings.
+- 2026-10-07: Continued the **experimental, feature-gated** Rust CPU port:
+  Gemma4 vision and audio towers, scale-free multimodal projection, and
+  bidirectional soft-token language fusion now compose behind
+  `GemmaNativeEncoder`. It supports model-owned text prompts and 128/256/512/768
+  dimensions; bounded PNG/JPEG images; decoded 16-kHz PCM and bounded
+  WAV/FLAC/MP3/M4A-AAC; and H.264 MP4/MOV video sampling with timestamps.
+  Video uses 1 fps up to 32 seconds and uniform sampling across longer
+  supported clips. Unsupported codecs, B-frame reorder, and decode/resource
+  limit violations fail explicitly rather than returning a partial vector.
+  CPU calculations are FP32 from BF16 weights; FP16 checkpoints are rejected.
+  Python 5.19.0 goldens cover patch geometry and pixels, mel extraction,
+  vision/audio tower outputs, fusion, full text roles, image, PCM, audio-file,
+  and one-/two-frame video embeddings. The audio decoder's AAC route retains
+  about 21 ms of priming in the tested M4A fixture.
+  This remains a probe, **not** the installed optional package: signed
+  artifacts, model/index identity and migration, consent/ingestion and host
+  parity, cancellation and supported-target/GPU qualification remain open.
+- 2026-10-07: Diagnosed the initial two-frame cosine shortfall to uint8 bicubic
+  preprocessing, not language fusion. Torchvision rounds half values away
+  from zero after each resampling pass; ties-to-even yielded 3,872 differing
+  bytes in a 967,680-byte video frame and amplified through vision inference.
+  Correcting the two passes reduced this to 32 bytes (one unit each) and
+  projected-token maximum error to 0.014. Full image, one-frame video, and
+  two-frame video cosines are now above 0.9999998 against pinned upstream
+  FP32 vectors; the ignored parity test requires >0.99999 for all three.
+  A bounded real H.264 MP4 also yields a vector and the expected presentation
+  timestamps. The PCM16 WAV golden compares against Python inference on the
+  *decoded quantized samples*: quantization alone shifts the unquantized
+  vector cosine to about 0.999774, while native decoded-WAV parity against
+  the equivalent upstream input exceeds 0.99999. These checks do not
+  establish cross-platform support, retrieval quality, production throughput,
+  or the optional installation contract.
+- 2026-10-07: Confirmed the existing worker's index directory and activation
+  marker key only model ID/revision, unlike its dimension-aware embedding
+  cache. A dimension-only index change passed focused tests, but would silently
+  force every existing E5 library to rebuild on upgrade. It was intentionally
+  **not retained**: design the Gemma identity/migration together with a safe
+  legacy E5 preservation path and explicit consent rather than changing this
+  production path as a probe side effect.
