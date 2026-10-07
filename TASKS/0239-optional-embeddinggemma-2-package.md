@@ -305,3 +305,19 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   four targets. Labelled retrieval quality, RAM and throughput by dimension,
   signed-artifact installation, and offline release lifecycle remain gates.
   Keep this task in progress and do not expose Gemma in the standard release.
+- 2026-10-07: The local production bundle builder produced a Gemma-enabled
+  release-mode worker plus all five verified original files alongside the E5
+  model on macOS. Packaged-worker ingestion/restart, E5 model activation, Zvec
+  recovery, and component acceptance smoke tests passed. The E5 production
+  bundle smoke now also launches the **packaged** Gemma-enabled worker over
+  authenticated IPC and ingests/retrieves PNG, MP3, and H.264 MP4 with
+  timestamped video evidence offline (46 seconds in optimized mode on this
+  macOS CPU). This does not verify a signed installed catalog or other targets.
+  The E5 production
+  evaluation's identity report now lists only its own runtime/model components;
+  the catalog digest still binds all optional Gemma files. Its later
+  `InvalidObservation("multilingual-recall")` failure also reproduces with an
+  **E5-only control bundle**: the evaluator compares Ask's fused candidate
+  scores and chunks with a separate dense-search result and a dense-score
+  threshold. Do not weaken its release gate or treat the local bundle as
+  qualified; correct that evaluation contract separately before publishing.

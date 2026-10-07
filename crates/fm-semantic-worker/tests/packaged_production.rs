@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(feature = "gemma-native")]
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
 use fm_semantic_worker::{
     IngestionScope, IngestionState, ManagedWorkerLaunch, ManagedWorkerResolver, WorkerConnector,
     WorkerHealth,
@@ -160,6 +162,110 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
             .any(|result| result.document_id == "qualification-document")
     );
     restarted.shutdown(Duration::from_secs(10)).await.unwrap();
+    connector
+        .wait_until_stopped(Duration::from_secs(12))
+        .await
+        .unwrap();
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the exact Gemma-enabled packaged worker and verified original model files"]
+async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+
+    let original_files: BTreeMap<String, PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified original-file paths"),
+    )
+    .unwrap();
+    let files = GemmaNativeFiles::from_original_files(&original_files).unwrap();
+    let runtime = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let launch = ManagedWorkerLaunch::new_gemma(
+        required_path("PROCYON_SEMANTIC_PRODUCTION_WORKER"),
+        data.path().to_owned(),
+        required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY"),
+        files,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: true,
+            video: true,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let connector = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
+        .with_startup_timeout(Duration::from_secs(30));
+    let client = connector
+        .connect()
+        .await
+        .expect("start packaged Gemma worker");
+    assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+
+    let image = ImageBuffer::from_fn(128, 96, |x, y| {
+        Rgb([
+            ((x * 2 + y) % 256) as u8,
+            ((x + y * 2) % 256) as u8,
+            ((x + y) % 256) as u8,
+        ])
+    });
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, ImageFormat::Png).unwrap();
+    for (name, media_type, content) in [
+        ("image", "image/png", png.into_inner()),
+        (
+            "audio",
+            "audio/mpeg",
+            include_bytes!("fixtures/gemma-audio-440hz-44k.mp3").to_vec(),
+        ),
+        (
+            "video",
+            "video/mp4",
+            include_bytes!("fixtures/gemma-video-2s.mp4").to_vec(),
+        ),
+    ] {
+        let job_id = client
+            .ingest(
+                &format!("gemma-{name}"),
+                IngestionScope::new("qualification-tenant", "qualification-library"),
+                &format!("document-{name}"),
+                BTreeMap::from([
+                    ("occurrence_id".into(), format!("occurrence-{name}")),
+                    ("source_id".into(), format!("source-{name}")),
+                    ("root_id".into(), "qualification-root".into()),
+                    ("title".into(), format!("Gemma {name}")),
+                ]),
+                media_type,
+                content,
+            )
+            .await
+            .expect("submit packaged media");
+        assert_eq!(
+            wait_for_ingestion(&client, &job_id).await,
+            IngestionState::Completed,
+            "{name}"
+        );
+        let results = client
+            .query(
+                "qualification-tenant",
+                "qualification-library",
+                &format!("Gemma {name}"),
+                10,
+            )
+            .await
+            .expect("search packaged media");
+        let result = results
+            .iter()
+            .find(|result| result.document_id == format!("document-{name}"))
+            .expect("packaged media is retrievable");
+        assert_eq!(result.metadata.get("media_type").unwrap(), media_type);
+        if name == "video" {
+            let provenance = result.metadata.get("semantic.provenance").unwrap();
+            assert!(provenance.contains("sampledTimestampsMs"), "{provenance}");
+            assert!(provenance.contains("1000"), "{provenance}");
+        }
+    }
+    client.shutdown(Duration::from_secs(10)).await.unwrap();
     connector
         .wait_until_stopped(Duration::from_secs(12))
         .await

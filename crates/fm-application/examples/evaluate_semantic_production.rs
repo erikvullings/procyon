@@ -21,8 +21,9 @@ use fm_application::semantic_production_evaluation::{
     RetrievalPolicyIdentity,
 };
 use fm_semantic_components::{
-    PRODUCTION_MODEL_COMPONENT_ID, PRODUCTION_WORKER_COMPONENT_ID,
-    PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID, ProductionCatalogManifest, verify_production_payloads,
+    PRODUCTION_MODEL_COMPONENT_ID, PRODUCTION_ONNX_RUNTIME_COMPONENT_ID,
+    PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID,
+    ProductionCatalogManifest, verify_production_payloads,
 };
 use fm_semantic_conversion::{ChunkProvenance, Provenance};
 use fm_semantic_worker::rag_retrieval::{
@@ -349,6 +350,15 @@ fn artifact_identities(manifest: &ProductionCatalogManifest) -> Vec<ProductionAr
         .catalog()
         .artifacts()
         .iter()
+        .filter(|artifact| {
+            matches!(
+                artifact.component_id().as_str(),
+                PRODUCTION_MODEL_COMPONENT_ID
+                    | PRODUCTION_WORKER_COMPONENT_ID
+                    | PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID
+                    | PRODUCTION_ONNX_RUNTIME_COMPONENT_ID
+            )
+        })
         .map(|artifact| ProductionArtifactIdentity {
             component_id: artifact.component_id().as_str().into(),
             artifact_id: artifact.id().as_str().into(),
