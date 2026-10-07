@@ -3583,7 +3583,9 @@ fn map_artifact_kind(
     match kind {
         core::ArtifactKind::Worker => (SemanticComponentKind::Worker, None),
         core::ArtifactKind::Runtime => (SemanticComponentKind::Runtime, None),
-        core::ArtifactKind::Model(identity) => (
+        core::ArtifactKind::Model(identity)
+        | core::ArtifactKind::OriginalModel(identity)
+        | core::ArtifactKind::ModelFile(identity) => (
             SemanticComponentKind::Model,
             Some(map_model_identity(identity)),
         ),

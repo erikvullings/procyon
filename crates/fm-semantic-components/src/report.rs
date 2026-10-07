@@ -146,7 +146,11 @@ pub(crate) fn build_status(
     let active_model = state.active_model().map(|selection| selection.identity());
     for component in state.installed_components() {
         let status = match component.kind() {
-            ArtifactKind::Model(identity) if Some(identity) != active_model => {
+            ArtifactKind::Model(identity)
+            | ArtifactKind::OriginalModel(identity)
+            | ArtifactKind::ModelFile(identity)
+                if Some(identity) != active_model =>
+            {
                 ComponentLifecycleStatus::Rollback
             }
             _ => ComponentLifecycleStatus::Active,

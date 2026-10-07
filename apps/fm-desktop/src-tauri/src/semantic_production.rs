@@ -494,6 +494,12 @@ impl ActivationProbe for ProductionActivation {
                         .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
+            ArtifactKind::OriginalModel(_) => {
+                return Err(ActivationError::new(
+                    "original-file model runtime is not configured for the managed worker",
+                ));
+            }
+            ArtifactKind::ModelFile(_) => {}
         }
         Ok(())
     }

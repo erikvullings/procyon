@@ -237,3 +237,36 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   **not retained**: design the Gemma identity/migration together with a safe
   legacy E5 preservation path and explicit consent rather than changing this
   production path as a probe side effect.
+- 2026-10-07: Added cooperative cancellation to the feature-gated native CPU
+  text, image, audio, and video entry points and their inference stages.
+  H.264 frame sampling, bicubic visual preprocessing, audio packet
+  decoding/resampling, and mel feature extraction check cancellation during
+  work rather than just before starting; stage errors map to one public
+  cancellation variant. The earlier noncancellable probe APIs remain
+  compatible. `fm-metadata` (35 library tests), `fm-semantic-worker` with `gemma-probe`
+  (affected package tests), feature-gated Clippy, and ten ignored
+  checkpoint-backed text/audio/image/video parity and cancellation tests
+  passed. This does not implement an installed package or job wiring:
+  signed Gemma artifacts, E5-preserving index/migration consent,
+  policy-bound media ingestion, host/UI parity, and supported-platform
+  qualification remain open; keep the option hidden and task in progress.
+- 2026-10-07: User chose installation of the original pinned Hugging Face
+  safetensors, tokenizer, and processor files directly, rather than creating
+  another model pack or retaining a duplicate extracted checkpoint. The
+  existing signed catalog, installer, and durable state assume exactly one
+  payload per model; extend those contracts to verify and retain multiple
+  immutable file artifacts as one atomic model installation, preserving the
+  existing single-pack E5 path. Native inference must remain local/offline.
+- 2026-10-07: Added signed original-file catalog entries and atomic multi-file
+  installation, retaining E5's single-pack manifest and installation path.
+  The component manager resolves all installed original paths only after
+  checking each artifact's signed version, checksum, length, and safe file
+  type; the native Gemma loader accepts the complete set of independently
+  located files without repacking the checkpoint. Negative tests cover
+  missing, unsafe, colliding, unreferenced, corrupt-download, and post-install
+  tampered files. This is installation groundwork, not a Gemma production
+  release: the current managed worker still takes an E5-style model pack and
+  there is no signed Gemma catalog entry, model migration, media ingestion,
+  UI activation, or supported-platform qualification. Original-file primary
+  artifacts have a distinct signed kind; current desktop activation rejects
+  them explicitly until native worker launch is wired. Keep the option hidden.

@@ -334,6 +334,12 @@ impl ActivationProbe for DeveloperActivation {
                         .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
+            ArtifactKind::OriginalModel(_) => {
+                return Err(ActivationError::new(
+                    "original-file model runtime is not configured for the developer worker",
+                ));
+            }
+            ArtifactKind::ModelFile(_) => {}
         }
         Ok(())
     }
@@ -472,6 +478,25 @@ mod tests {
         DeveloperActivation
             .validate(&model_artifact("example.model", "revision-one"), &pack)
             .expect("activation");
+    }
+
+    #[test]
+    fn original_file_model_is_not_activated_without_a_native_worker() {
+        let directory = tempfile::tempdir().expect("directory");
+        let weights = directory.path().join("model.safetensors");
+        fs::write(&weights, b"verified original weights").expect("weights");
+        let mut artifact = serde_json::to_value(model_artifact("example.model", "revision-one"))
+            .expect("catalog artifact");
+        artifact["kind"]["kind"] = "originalModel".into();
+        let artifact: CatalogArtifact = serde_json::from_value(artifact).expect("original model");
+
+        assert!(
+            DeveloperActivation
+                .validate(&artifact, &weights)
+                .unwrap_err()
+                .to_string()
+                .contains("not configured")
+        );
     }
 
     #[test]

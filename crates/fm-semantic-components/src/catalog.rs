@@ -361,6 +361,10 @@ pub enum ArtifactKind {
     Runtime,
     /// Model package for one exact embedding space.
     Model(ModelIdentity),
+    /// Original primary model file for one exact embedding space.
+    OriginalModel(ModelIdentity),
+    /// One additional original file belonging to an exact model revision.
+    ModelFile(ModelIdentity),
 }
 
 /// Platform, protocol, runtime, and index-schema constraints for an artifact.
@@ -850,6 +854,10 @@ impl ModelMetadata {
 pub struct ModelManifest {
     artifact_id: ArtifactId,
     metadata: ModelMetadata,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    primary_file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    files: BTreeMap<String, ArtifactId>,
 }
 
 impl ModelManifest {
@@ -859,7 +867,33 @@ impl ModelManifest {
         Self {
             artifact_id,
             metadata,
+            primary_file_name: None,
+            files: BTreeMap::new(),
         }
+    }
+
+    /// Names the primary original file and associates its remaining files with signed artifacts.
+    #[must_use]
+    pub fn with_original_files(
+        mut self,
+        primary_file_name: impl Into<String>,
+        files: BTreeMap<String, ArtifactId>,
+    ) -> Self {
+        self.primary_file_name = Some(primary_file_name.into());
+        self.files = files;
+        self
+    }
+
+    /// Primary original filename, or `None` for an existing single-file pack.
+    #[must_use]
+    pub fn primary_file_name(&self) -> Option<&str> {
+        self.primary_file_name.as_deref()
+    }
+
+    /// Additional original files, keyed by their relative model filename.
+    #[must_use]
+    pub const fn files(&self) -> &BTreeMap<String, ArtifactId> {
+        &self.files
     }
 
     /// Returns the model package artifact.
@@ -873,6 +907,17 @@ impl ModelManifest {
     pub const fn metadata(&self) -> &ModelMetadata {
         &self.metadata
     }
+}
+
+fn valid_model_filename(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.ends_with('.')
+        && !is_windows_reserved_component(name)
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 /// Curated semantic component and model data covered by one signature.
@@ -1016,6 +1061,7 @@ impl CatalogManifest {
         let mut models = BTreeMap::new();
         let mut portable_model_identities = BTreeSet::new();
         let mut model_artifacts = BTreeMap::new();
+        let mut model_file_artifacts = BTreeSet::new();
         for model in &self.models {
             model.metadata.validate()?;
             if models.insert(model.metadata.identity(), model).is_some() {
@@ -1047,11 +1093,67 @@ impl CatalogManifest {
                     id: model.artifact_id.clone(),
                 }
             })?;
-            if !matches!(
-                artifact.kind(),
-                ArtifactKind::Model(identity) if identity == model.metadata.identity()
-            ) || artifact.license() != model.metadata.license()
-                || artifact.resources().installed_bytes() != model.metadata.estimated_disk_bytes()
+            if model.primary_file_name.as_deref().is_some_and(|name| {
+                !valid_model_filename(name)
+                    || model
+                        .files
+                        .keys()
+                        .any(|other| other.eq_ignore_ascii_case(name))
+            }) || (model.primary_file_name.is_none() && !model.files.is_empty())
+            {
+                return Err(CatalogError::InvalidModelFilename);
+            }
+            let mut model_file_components = BTreeSet::new();
+            let additional_bytes = model.files.iter().try_fold(0_u64, |total, (name, id)| {
+                if !valid_model_filename(name)
+                    || model
+                        .files
+                        .keys()
+                        .filter(|other| other.eq_ignore_ascii_case(name))
+                        .count()
+                        != 1
+                {
+                    return Err(CatalogError::InvalidModelFilename);
+                }
+                let file = artifacts
+                    .get(id)
+                    .ok_or_else(|| CatalogError::MissingModelArtifact { id: id.clone() })?;
+                if !matches!(
+                    file.kind(),
+                    ArtifactKind::ModelFile(identity) if identity == model.metadata.identity()
+                ) || file.license() != model.metadata.license()
+                    || file.compatibility().index_schema_version()
+                        != artifact.compatibility().index_schema_version()
+                    || file.compatibility().runtimes() != artifact.compatibility().runtimes()
+                    || file.compatibility().target().is_some()
+                    || file.component_id() == artifact.component_id()
+                    || !model_file_components.insert(file.component_id())
+                {
+                    return Err(CatalogError::ModelArtifactMismatch { id: id.clone() });
+                }
+                if !model_file_artifacts.insert(id) {
+                    return Err(CatalogError::DuplicateModelFileArtifact { id: id.clone() });
+                }
+                total
+                    .checked_add(file.resources().installed_bytes())
+                    .ok_or(CatalogError::InvalidResourceEstimate)
+            })?;
+            let correct_kind = match artifact.kind() {
+                ArtifactKind::OriginalModel(identity) if model.primary_file_name.is_some() => {
+                    identity == model.metadata.identity()
+                }
+                ArtifactKind::Model(identity) if model.primary_file_name.is_none() => {
+                    identity == model.metadata.identity()
+                }
+                _ => false,
+            };
+            if !correct_kind
+                || artifact.license() != model.metadata.license()
+                || artifact
+                    .resources()
+                    .installed_bytes()
+                    .checked_add(additional_bytes)
+                    != Some(model.metadata.estimated_disk_bytes())
                 || artifact.resources().ram_bytes() != model.metadata.estimated_ram_bytes()
                 || !artifact
                     .compatibility()
@@ -1065,12 +1167,20 @@ impl CatalogManifest {
             model_artifacts.insert(&model.artifact_id, model);
         }
         for artifact in &self.artifacts {
-            if matches!(artifact.kind(), ArtifactKind::Model(_))
-                && !model_artifacts.contains_key(artifact.id())
-            {
-                return Err(CatalogError::MissingModelManifest {
-                    id: artifact.id().clone(),
-                });
+            match artifact.kind() {
+                ArtifactKind::Model(_) | ArtifactKind::OriginalModel(_)
+                    if !model_artifacts.contains_key(artifact.id()) =>
+                {
+                    return Err(CatalogError::MissingModelManifest {
+                        id: artifact.id().clone(),
+                    });
+                }
+                ArtifactKind::ModelFile(_) if !model_file_artifacts.contains(artifact.id()) => {
+                    return Err(CatalogError::MissingModelManifest {
+                        id: artifact.id().clone(),
+                    });
+                }
+                _ => {}
             }
         }
         for identity in self.profile_resolutions.values() {
@@ -1617,13 +1727,19 @@ impl TrustedCatalog {
             .ok_or_else(|| CatalogError::UnknownProfileModel {
                 identity: identity.clone(),
             })?;
-        let mut selected = Vec::with_capacity(runtime_and_worker_artifacts.len() + 1);
+        let mut selected =
+            Vec::with_capacity(runtime_and_worker_artifacts.len() + 1 + model.files().len());
         let mut seen = BTreeSet::new();
         for id in runtime_and_worker_artifacts {
             let artifact = self
                 .artifact(id)
                 .ok_or_else(|| CatalogError::UnknownArtifact { id: id.clone() })?;
-            if matches!(artifact.kind(), ArtifactKind::Model(_)) {
+            if matches!(
+                artifact.kind(),
+                ArtifactKind::Model(_)
+                    | ArtifactKind::OriginalModel(_)
+                    | ArtifactKind::ModelFile(_)
+            ) {
                 return Err(CatalogError::ModelArtifactInBasePlan { id: id.clone() });
             }
             if !seen.insert(id) {
@@ -1637,6 +1753,12 @@ impl TrustedCatalog {
             });
         }
         selected.push(model.artifact_id().clone());
+        for id in model.files().values() {
+            if !seen.insert(id) {
+                return Err(CatalogError::DuplicateOfferedArtifact { id: id.clone() });
+            }
+            selected.push(id.clone());
+        }
         Ok(selected)
     }
 
@@ -1698,14 +1820,32 @@ impl TrustedCatalog {
         }
         let offered_models: Vec<_> = artifacts
             .iter()
-            .filter(|artifact| matches!(artifact.kind(), ArtifactKind::Model(_)))
+            .filter(|artifact| {
+                matches!(
+                    artifact.kind(),
+                    ArtifactKind::Model(_) | ArtifactKind::OriginalModel(_)
+                )
+            })
             .collect();
         if offered_models.len() != 1
             || !matches!(
                 offered_models[0].kind(),
-                ArtifactKind::Model(identity) if identity == &resolved_model
+                ArtifactKind::Model(identity) | ArtifactKind::OriginalModel(identity)
+                    if identity == &resolved_model
             )
         {
+            return Err(CatalogError::ProfileModelNotOffered { profile });
+        }
+        let model = self
+            .model(&resolved_model)
+            .ok_or(CatalogError::ProfileModelNotOffered { profile })?;
+        let required_files: BTreeSet<_> = model.files().values().collect();
+        let offered_files: BTreeSet<_> = artifacts
+            .iter()
+            .filter(|artifact| matches!(artifact.kind(), ArtifactKind::ModelFile(_)))
+            .map(|artifact| artifact.id())
+            .collect();
+        if offered_models[0].id() != model.artifact_id() || offered_files != required_files {
             return Err(CatalogError::ProfileModelNotOffered { profile });
         }
         let active_schema = offered_models[0].compatibility().index_schema_version();
@@ -2177,6 +2317,15 @@ pub enum CatalogError {
     #[error("model artifact `{}` is absent", id.as_str())]
     MissingModelArtifact {
         /// Missing artifact identifier.
+        id: ArtifactId,
+    },
+    /// An original model member filename is unsafe or collides on a portable filesystem.
+    #[error("original model filename is unsafe or ambiguous")]
+    InvalidModelFilename,
+    /// Two model members refer to the same artifact.
+    #[error("original model artifact `{}` is referenced more than once", id.as_str())]
+    DuplicateModelFileArtifact {
+        /// Ambiguous artifact identifier.
         id: ArtifactId,
     },
     /// A model artifact had no complete model metadata record.

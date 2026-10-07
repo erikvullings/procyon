@@ -360,6 +360,268 @@ fn fixture_catalog_manifest() -> CatalogManifest {
     .expect("valid complete manifest")
 }
 
+fn fixture_direct_files_manifest() -> CatalogManifest {
+    let mut value = serde_json::to_value(fixture_catalog_manifest()).expect("fixture catalog");
+    let mut tokenizer = value["artifacts"][2].clone();
+    tokenizer["id"] = "fixture.model.multilingual.tokenizer.deadbeef".into();
+    tokenizer["component_id"] = "fixture.model.multilingual.tokenizer".into();
+    tokenizer["kind"]["kind"] = "modelFile".into();
+    tokenizer["resources"]["download_bytes"] = 7.into();
+    tokenizer["resources"]["installed_bytes"] = 7.into();
+    tokenizer["resources"]["ram_bytes"] = 1.into();
+    tokenizer["checksum"] = serde_json::to_value(Sha256Digest::calculate(b"tokens!")).unwrap();
+    value["artifacts"][2]["resources"]["installed_bytes"] = 279_999_993_u64.into();
+    value["artifacts"][2]["kind"]["kind"] = "originalModel".into();
+    value["models"][0]["files"] = serde_json::json!({
+        "tokenizer.json": "fixture.model.multilingual.tokenizer.deadbeef"
+    });
+    value["models"][0]["primary_file_name"] = "model.safetensors".into();
+    value["artifacts"]
+        .as_array_mut()
+        .expect("artifacts")
+        .push(tokenizer);
+    serde_json::from_value(value).expect("direct-file manifest")
+}
+
+#[test]
+fn signed_model_can_select_original_files_without_changing_single_pack_models() {
+    let manifest = fixture_direct_files_manifest();
+    let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+    let signature = signing_key.sign(&manifest.canonical_bytes().expect("canonical catalog"));
+    let catalog = TrustedCatalog::verify(
+        SignedCatalogManifest::new(manifest, signature.to_bytes()),
+        &signing_key.verifying_key(),
+    )
+    .expect("complete signed direct-file model");
+    let selected = catalog
+        .installation_artifacts(
+            SemanticProfile::CompactMultilingual,
+            &[
+                ArtifactId::new("fixture.worker.macos-aarch64.1-2-0").unwrap(),
+                ArtifactId::new("fixture.runtime.macos-aarch64.1-4-0").unwrap(),
+            ],
+        )
+        .expect("complete install plan");
+    assert_eq!(selected.len(), 4);
+    assert_eq!(
+        selected[3].as_str(),
+        "fixture.model.multilingual.tokenizer.deadbeef"
+    );
+    let target = TargetTriple::new("macos", "aarch64").unwrap();
+    catalog
+        .installation_offer(
+            SemanticProfile::CompactMultilingual,
+            &selected,
+            &target,
+            1,
+            Path::new("/tmp/semantic-test"),
+            1024,
+        )
+        .expect("complete offer");
+    assert!(matches!(
+        catalog.installation_offer(
+            SemanticProfile::CompactMultilingual,
+            &selected[..3],
+            &target,
+            1,
+            Path::new("/tmp/semantic-test"),
+            1024,
+        ),
+        Err(CatalogError::ProfileModelNotOffered { .. })
+    ));
+    assert_eq!(fixture_catalog_manifest().models().len(), 1);
+}
+
+#[test]
+fn original_model_files_are_complete_safe_and_bound_to_one_signed_revision() {
+    let original = serde_json::to_value(fixture_direct_files_manifest()).unwrap();
+    let mutations: &[ManifestMutation] = &[
+        ("missing original file", |value: &mut serde_json::Value| {
+            value["artifacts"].as_array_mut().unwrap().pop();
+        }),
+        ("wrong revision", |value: &mut serde_json::Value| {
+            value["artifacts"][3]["kind"]["model"]["revision"] = "other".into();
+        }),
+        (
+            "wrong aggregate disk size",
+            |value: &mut serde_json::Value| {
+                value["models"][0]["metadata"]["estimated_disk_bytes"] = 12.into();
+            },
+        ),
+        ("unsafe name", |value: &mut serde_json::Value| {
+            value["models"][0]["files"] = serde_json::json!({
+                "../escape": "fixture.model.multilingual.tokenizer.deadbeef"
+            });
+        }),
+        ("unsafe primary name", |value: &mut serde_json::Value| {
+            value["models"][0]["primary_file_name"] = "../escape".into();
+        }),
+        ("primary name collision", |value: &mut serde_json::Value| {
+            value["models"][0]["primary_file_name"] = "TOKENIZER.JSON".into();
+        }),
+        ("reserved primary name", |value: &mut serde_json::Value| {
+            value["models"][0]["primary_file_name"] = "CON".into();
+        }),
+        (
+            "missing primary file name",
+            |value: &mut serde_json::Value| {
+                value["models"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("primary_file_name");
+            },
+        ),
+        (
+            "pack mislabeled as original file",
+            |value: &mut serde_json::Value| {
+                value["artifacts"][2]["kind"]["kind"] = "model".into();
+            },
+        ),
+        ("case-fold collision", |value: &mut serde_json::Value| {
+            value["models"][0]["files"]["TOKENIZER.JSON"] =
+                "fixture.model.multilingual.tokenizer.deadbeef".into();
+        }),
+        (
+            "unreferenced model file",
+            |value: &mut serde_json::Value| {
+                value["models"][0]["files"] = serde_json::json!({});
+            },
+        ),
+    ];
+    for (name, mutate) in mutations {
+        let mut mutated = original.clone();
+        mutate(&mut mutated);
+        assert!(
+            verify_signed_manifest_value(mutated).is_err(),
+            "accepted {name}"
+        );
+    }
+    let mut pack_as_original = serde_json::to_value(fixture_catalog_manifest()).unwrap();
+    pack_as_original["artifacts"][2]["kind"]["kind"] = "originalModel".into();
+    assert!(
+        verify_signed_manifest_value(pack_as_original).is_err(),
+        "original model without a signed primary filename"
+    );
+}
+
+#[test]
+fn original_model_files_install_atomically_and_reject_a_corrupt_member() {
+    let catalog = trust_manifest(fixture_direct_files_manifest());
+    let ids = catalog
+        .installation_artifacts(
+            SemanticProfile::CompactMultilingual,
+            &[
+                ArtifactId::new("fixture.worker.macos-aarch64.1-2-0").unwrap(),
+                ArtifactId::new("fixture.runtime.macos-aarch64.1-4-0").unwrap(),
+            ],
+        )
+        .unwrap();
+    let original: BTreeMap<_, _> = [
+        (
+            "fixture.worker.macos-aarch64.1-2-0",
+            b"fixture worker".to_vec(),
+        ),
+        (
+            "fixture.runtime.macos-aarch64.1-4-0",
+            b"fixture runtime".to_vec(),
+        ),
+        (
+            "fixture.model.multilingual.deadbeef",
+            b"fixture model".to_vec(),
+        ),
+        (
+            "fixture.model.multilingual.tokenizer.deadbeef",
+            b"tokens!".to_vec(),
+        ),
+    ]
+    .into_iter()
+    .map(|(id, bytes)| (ArtifactId::new(id).unwrap(), bytes))
+    .collect();
+    for corrupt_member in [false, true] {
+        let directory = project_temp_dir("original-model-files-");
+        let manager = ComponentManager::new(
+            SemanticStateStore::new(directory.path().join("config")),
+            directory.path().join("app-data"),
+        );
+        let mut artifacts = original.clone();
+        if corrupt_member {
+            artifacts.insert(
+                ArtifactId::new("fixture.model.multilingual.tokenizer.deadbeef").unwrap(),
+                b"invalid".to_vec(),
+            );
+        }
+        let source = ResumableMemorySource {
+            artifacts,
+            requests: Mutex::new(Vec::new()),
+            interrupt_worker_once: AtomicBool::new(false),
+        };
+        let target = TargetTriple::new("macos", "aarch64").unwrap();
+        let offer = catalog
+            .installation_offer(
+                SemanticProfile::CompactMultilingual,
+                &ids,
+                &target,
+                1,
+                &directory.path().join("app-data/semantic"),
+                100,
+            )
+            .unwrap();
+        let result = manager.install(
+            offer.consent(),
+            &catalog,
+            &InstallEnvironment::new(target, 1, BTreeMap::new()),
+            &source,
+            &FixedFreeSpace(u64::MAX),
+            &AcceptActivation,
+        );
+        let state = manager.state().unwrap();
+        if corrupt_member {
+            assert!(result.is_err(), "corrupt original file was installed");
+            assert!(state.active_model().is_none());
+            assert!(state.installed_components().is_empty());
+        } else {
+            assert_eq!(result.unwrap().installed_artifacts().len(), 4);
+            assert_eq!(state.installed_components().len(), 4);
+            let file = state
+                .installed_components()
+                .iter()
+                .find(|component| matches!(component.kind(), ArtifactKind::ModelFile(_)))
+                .expect("installed original tokenizer");
+            assert_eq!(std::fs::read(file.installed_path()).unwrap(), b"tokens!");
+            let originals = manager
+                .verified_original_model_files(
+                    &catalog,
+                    catalog
+                        .resolve_profile(SemanticProfile::CompactMultilingual)
+                        .unwrap(),
+                )
+                .unwrap()
+                .expect("verified original file paths");
+            assert_eq!(originals.len(), 2);
+            assert_eq!(
+                std::fs::read(&originals["model.safetensors"]).unwrap(),
+                b"fixture model"
+            );
+            assert_eq!(
+                std::fs::read(&originals["tokenizer.json"]).unwrap(),
+                b"tokens!"
+            );
+            std::fs::write(&originals["tokenizer.json"], b"altered").unwrap();
+            assert!(
+                manager
+                    .verified_original_model_files(
+                        &catalog,
+                        catalog
+                            .resolve_profile(SemanticProfile::CompactMultilingual)
+                            .unwrap(),
+                    )
+                    .is_err(),
+                "tampered installed files must not reach the worker"
+            );
+        }
+    }
+}
+
 fn fixture_production_manifest(
     reverse_provenance: bool,
 ) -> Result<ProductionCatalogManifest, CatalogError> {
