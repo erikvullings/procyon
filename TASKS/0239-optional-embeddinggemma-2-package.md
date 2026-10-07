@@ -135,3 +135,32 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   establish golden-vector parity and CPU resource/decoding bounds for text,
   vision, and audio on each supported platform; only then wire model packs,
   policy/migration, and frontend activation.
+- 2026-10-07: First text/code Rust port is an opt-in `gemma-probe` feature in
+  `fm-semantic-worker`, pinned to Lattice commit
+  `17915f3748a4047c0af61bd8bc7066d1dccf24b4`. The local-only example and
+  ignored real-checkpoint parity test cover search, question, code, and titled
+  document prompts at 768/512/256/128 dimensions against generated upstream
+  Python `SentenceTransformer` vectors (cosine >0.99999). The checkpoint
+  fetch descriptor pins revision
+  `914f7f89142e33e77833254d9c9b90c3cef7303b` and exact file hashes.
+  No production path loads this crate or checkpoint.
+- 2026-10-07: Direct PyTorch ONNX export of the **text-only** tower with
+  masked-mean pooling and L2 normalization works after naming the graph output
+  `sentence_vector` (the initial `embedding` output name collided with an
+  internal Gather output). `scripts/probe-embeddinggemma-onnx.py --dynamic`
+  exported a variable-sequence graph with approximately 1.0 GiB of external
+  FP32 weights; ONNX Runtime CPU matched four pinned upstream prompt/dimension
+  vectors to max absolute error <2.7e-7 at 15-21 tokens. Static export also
+  matched. This demonstrates an ONNX text path, **not** an Optimum-supported
+  automatic conversion or a drop-in E5 graph: export uses installed Python
+  Torch/Transformers, and media encoders, long sequences, batching, platform
+  parity, memory and throughput still require independent qualification.
+  Text-only extraction excludes vision/audio weights and does not meet this
+  task's multimodal CPU requirement. Keep 0239 in progress and Gemma hidden.
+- 2026-10-07: Probe unit/parity tests, default worker tests, optional-feature
+  clippy, repository lint, all 2,332 frontend tests, and 110/111 script tests
+  passed. Full `pnpm test` stopped at a process-descendant cleanup test in
+  `fm-semantic-docling`, which passed in isolation. The remaining script
+  failure is the previously reproduced unrelated 15-second timeout in
+  `scripts/native-spa-smoke.test.mjs`. These environmental failures are not
+  evidence that the optional multimodal package is complete or qualified.

@@ -3290,6 +3290,7 @@ dependencies = [
  "fm-semantic-protocol",
  "fs2",
  "interprocess",
+ "lattice-inference",
  "lopdf",
  "ort",
  "prost",
@@ -5534,6 +5535,27 @@ dependencies = [
  "euclid",
  "polycool",
  "smallvec",
+]
+
+[[package]]
+name = "lattice-inference"
+version = "0.11.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+dependencies = [
+ "base64 0.22.1",
+ "clap",
+ "half",
+ "image",
+ "indexmap 2.14.0",
+ "libc",
+ "memmap2",
+ "rayon",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tracing",
 ]
 
 [[package]]

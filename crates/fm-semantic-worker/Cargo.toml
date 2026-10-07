@@ -20,6 +20,8 @@ semantic-runtime = [
 ]
 # Explicitly non-production local bundle used only for end-to-end development.
 developer-bundle = ["semantic-runtime"]
+# Experimental local CPU parity probe only; never selected by managed workers.
+gemma-probe = ["dep:lattice-inference"]
 
 [dependencies]
 caseless.workspace = true
@@ -28,6 +30,7 @@ fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true
 fm-semantic-protocol.workspace = true
 fs2.workspace = true
+lattice-inference = { git = "https://github.com/ohdearquant/lattice.git", rev = "17915f3748a4047c0af61bd8bc7066d1dccf24b4", default-features = false, features = ["std", "f16"], optional = true }
 ort = {workspace = true, optional = true, features = ["std", "ndarray", "tracing", "api-27"]}
 prost.workspace = true
 rand.workspace = true
@@ -62,3 +65,7 @@ windows-permissions.workspace = true
 
 [lints]
 workspace = true
+
+[[example]]
+name = "embeddinggemma_text_probe"
+required-features = ["gemma-probe"]

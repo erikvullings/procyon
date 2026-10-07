@@ -160,24 +160,21 @@ function defaultCacheRoot() {
  * Ensures every pinned file is present and verified, then returns the cache
  * directory holding exactly those files.
  */
-export async function fetchMultilingualModel(cacheRoot = defaultCacheRoot()) {
-  const directory = path.join(
-    cacheRoot,
-    MULTILINGUAL_MODEL.repository.replace('/', '--'),
-    MULTILINGUAL_MODEL.revision,
-  );
+export async function fetchPinnedModel(model, cacheRoot = defaultCacheRoot()) {
+  const directory = path.join(cacheRoot, model.repository.replace('/', '--'), model.revision);
   fs.mkdirSync(directory, { recursive: true });
-  const total = MULTILINGUAL_MODEL.files.reduce((sum, file) => sum + file.bytes, 0);
+  const total = model.files.reduce((sum, file) => sum + file.bytes, 0);
   let cached = 0;
-  for (const descriptor of MULTILINGUAL_MODEL.files) {
+  for (const descriptor of model.files) {
     const destination = path.join(directory, descriptor.name);
     if (isAlreadyCached(destination, descriptor)) {
       cached += descriptor.bytes;
       continue;
     }
-    const url = `https://huggingface.co/${MULTILINGUAL_MODEL.repository}/resolve/${MULTILINGUAL_MODEL.revision}/${descriptor.remote}`;
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    const url = `https://huggingface.co/${model.repository}/resolve/${model.revision}/${descriptor.remote}`;
     process.stderr.write(
-      `Downloading ${descriptor.name} (${(descriptor.bytes / 1024 / 1024).toFixed(0)} MiB) from the pinned revision ${MULTILINGUAL_MODEL.revision}\n`,
+      `Downloading ${descriptor.name} (${(descriptor.bytes / 1024 / 1024).toFixed(0)} MiB) from the pinned revision ${model.revision}\n`,
     );
     // eslint-disable-next-line no-await-in-loop -- sequential downloads keep progress readable and bandwidth bounded.
     await download(url, destination, descriptor);
@@ -187,6 +184,10 @@ export async function fetchMultilingualModel(cacheRoot = defaultCacheRoot()) {
     `Verified ${(cached / 1024 / 1024).toFixed(0)} MiB of ${(total / 1024 / 1024).toFixed(0)} MiB in ${directory}\n`,
   );
   return directory;
+}
+
+export function fetchMultilingualModel(cacheRoot) {
+  return fetchPinnedModel(MULTILINGUAL_MODEL, cacheRoot);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

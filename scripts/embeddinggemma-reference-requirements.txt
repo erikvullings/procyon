@@ -1,0 +1,9 @@
+torch==2.14.1
+numpy==2.5.3
+transformers==5.19.0
+sentence-transformers==6.1.0
+pillow==12.1.1
+torchvision==0.29.1
+onnx==1.23.2
+onnxscript==0.7.2
+onnxruntime==1.30.0

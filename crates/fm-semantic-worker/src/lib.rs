@@ -10,6 +10,8 @@ pub mod developer_bundle;
 mod developer_onnx;
 pub mod document_summary;
 pub mod embedding;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_probe;
 pub mod ingestion;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
