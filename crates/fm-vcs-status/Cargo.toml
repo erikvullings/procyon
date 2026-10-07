@@ -11,6 +11,8 @@ chrono.workspace = true
 dunce.workspace = true
 fm-domain.workspace = true
 git2.workspace = true
+ignore.workspace = true
+thiserror.workspace = true
 tokio = {workspace = true, features = ["rt"]}
 
 [dev-dependencies]

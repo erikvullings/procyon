@@ -84,3 +84,7 @@ application closes rather than installing an always-running login service.
   Failed conversion jobs and oversized documents are isolated per document, allowing the complete
   root listing to commit while reporting failed and skipped occurrences. Developer index storage
   now uses the official Zvec category counted by Settings.
+- 2026-10-07: Recursive local reconciliation now supplies repository-aware `.gitignore` matches
+  to eligibility instead of depending on pane-only Git status. Per-run rule evaluation notices
+  ignore changes without a status-cache invalidation; a completed reconciliation prunes
+  previously indexed files that become ignored. Single-file OCR remediation uses the same check.
