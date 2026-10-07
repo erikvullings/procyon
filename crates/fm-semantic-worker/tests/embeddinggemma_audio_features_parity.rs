@@ -68,6 +68,7 @@ fn pcm_to_masked_mel_features_matches_python() {
         );
         eprintln!("PCM {} samples: max error {max_error}", case.pcm.len());
     }
+
     assert!(matches!(
         extractor.extract_pcm16k(&[f32::NAN; 320], 320),
         Err(GemmaAudioFeaturesError::NonFinite)
@@ -84,4 +85,23 @@ fn pcm_to_masked_mel_features_matches_python() {
         extractor.extract_pcm16k(&[0.0; 320], 200),
         Err(GemmaAudioFeaturesError::InvalidLength)
     ));
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancellation_during_feature_extraction_returns_no_partial_features() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let extractor = GemmaAudioFeatureExtractor::open(&directory).expect("pinned processor");
+    let checks = std::cell::Cell::new(0);
+    assert!(matches!(
+        extractor.extract_pcm16k_cancellable(&[0.0; 160_000], 160_000, || {
+            checks.set(checks.get() + 1);
+            checks.get() > 20
+        }),
+        Err(GemmaAudioFeaturesError::Cancelled)
+    ));
+    assert!(checks.get() > 20);
 }

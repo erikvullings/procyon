@@ -6,6 +6,7 @@ use lattice_inference::{
     forward::cpu::{matmul_bt, rms_norm},
     weights::{SafetensorsFile, TensorSource},
 };
+use tokio_util::sync::CancellationToken;
 
 const WIDTH: usize = 768;
 const HEAD: usize = 64;
@@ -20,6 +21,9 @@ const EPS: f32 = 1e-6;
 /// Invalid checkpoint, input patches, or vision output.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaVisionError {
+    /// The owning job no longer permits inference.
+    #[error("Gemma vision inference cancelled")]
+    Cancelled,
     /// Local checkpoint or configuration could not be read.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -92,8 +96,15 @@ fn tensor(
 impl GemmaVisionTower {
     /// Load the pinned architecture from a locally verified checkpoint directory.
     pub fn open(directory: &Path) -> Result<Self, GemmaVisionError> {
-        let config: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("config.json"))?)?;
+        Self::open_files(
+            &directory.join("config.json"),
+            &directory.join("model.safetensors"),
+        )
+    }
+
+    /// Load the original config and vision weights from independent verified paths.
+    pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self, GemmaVisionError> {
+        let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let c = &config["vision_config"];
         if config["model_type"] != "embedding_gemma2"
             || c["model_type"] != "gemma4_vision"
@@ -116,7 +127,7 @@ impl GemmaVisionTower {
         {
             return Err(GemmaVisionError::Configuration);
         }
-        let mut ckpt = SafetensorsFile::open(&directory.join("model.safetensors"))?;
+        let mut ckpt = SafetensorsFile::open(weights_path)?;
         let prefix = "vision_tower.";
         let patch_projection = tensor(
             &mut ckpt,
@@ -171,6 +182,25 @@ impl GemmaVisionTower {
         positions: &[[i32; 2]],
         valid_patches: usize,
     ) -> Result<Vec<Vec<f32>>, GemmaVisionError> {
+        self.encode_patches_cancellable(
+            patches,
+            positions,
+            valid_patches,
+            &CancellationToken::new(),
+        )
+    }
+
+    /// Encodes a frame while honoring the owning job's cancellation.
+    pub fn encode_patches_cancellable(
+        &self,
+        patches: &[f32],
+        positions: &[[i32; 2]],
+        valid_patches: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<Vec<f32>>, GemmaVisionError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaVisionError::Cancelled);
+        }
         let n = positions.len();
         if n == 0
             || n > MAX_PATCHES
@@ -220,6 +250,9 @@ impl GemmaVisionTower {
             }
         }
         for layer in &self.layers {
+            if cancellation.is_cancelled() {
+                return Err(GemmaVisionError::Cancelled);
+            }
             let mut x = hidden.clone();
             rms_norm(&mut x, &layer.input_norm, WIDTH, EPS);
             let mut q = linear(&x, &layer.q, n, WIDTH, WIDTH);
@@ -243,6 +276,9 @@ impl GemmaVisionTower {
             let mut context = vec![0.0; n * WIDTH];
             for h in 0..HEADS {
                 for t in 0..valid_patches {
+                    if cancellation.is_cancelled() {
+                        return Err(GemmaVisionError::Cancelled);
+                    }
                     let qt = &q[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
                     let mut logits = Vec::with_capacity(valid_patches);
                     for j in 0..valid_patches {
@@ -281,6 +317,9 @@ impl GemmaVisionTower {
             for (dst, update) in hidden.iter_mut().zip(ff) {
                 *dst += update;
             }
+        }
+        if cancellation.is_cancelled() {
+            return Err(GemmaVisionError::Cancelled);
         }
         let pool_width = grid_width / 3;
         let mut pooled = vec![vec![0.0; WIDTH]; valid_patches / 9];

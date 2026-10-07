@@ -1,19 +1,23 @@
 //! Experimental offline CPU inference for the pinned multimodal checkpoint.
 
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use fm_metadata::{VideoSamplingError, sample_video_frames};
+use fm_metadata::{VideoSamplingError, sample_video_frames_cancellable};
 use tokenizers::Tokenizer;
+use tokio_util::sync::CancellationToken;
 
 use crate::gemma_audio::{GemmaAudioError, GemmaAudioTower};
-use crate::gemma_audio_decode::{AudioDecodeError, decode_audio_16k};
+use crate::gemma_audio_decode::{AudioDecodeError, decode_audio_16k_cancellable};
 use crate::gemma_audio_features::{GemmaAudioFeatureExtractor, GemmaAudioFeaturesError};
 use crate::gemma_fusion::{GemmaFusionEncoder, GemmaFusionError};
 use crate::gemma_multimodal::{GemmaModality, GemmaProjection, GemmaProjectionError};
 use crate::gemma_probe::{GemmaProbeError, GemmaTextTask};
 use crate::gemma_vision::{GemmaVisionError, GemmaVisionTower};
-use crate::gemma_visual::{GemmaVisualError, VisualKind, prepare_frame, validate_processor_config};
+use crate::gemma_visual::{
+    GemmaVisualError, VisualKind, prepare_frame_cancellable, validate_processor_config_file,
+};
 
 /// Which media a caller has explicitly enabled for this encoder.
 #[derive(Debug, Clone, Copy)]
@@ -32,6 +36,79 @@ pub struct GemmaVideoEmbedding {
     pub vector: Vec<f32>,
     /// Presentation timestamps, in milliseconds, for every retained frame.
     pub timestamps_ms: Vec<u64>,
+}
+
+/// Original, independently verified upstream model files; no repacking or copy is required.
+pub struct GemmaNativeFiles {
+    /// BF16/F32 safetensors checkpoint.
+    pub weights: PathBuf,
+    /// Hugging Face tokenizer JSON.
+    pub tokenizer: PathBuf,
+    /// EmbeddingGemma 2 model configuration.
+    pub config: PathBuf,
+    /// Image and video processor configuration.
+    pub visual_processor: PathBuf,
+    /// Audio processor configuration.
+    pub audio_processor: PathBuf,
+}
+
+impl GemmaNativeFiles {
+    /// Resolve the complete original-file set returned by the signed component manager.
+    pub fn from_original_files(
+        files: &BTreeMap<String, PathBuf>,
+    ) -> Result<Self, GemmaNativeError> {
+        let required = |name: &str| {
+            files
+                .get(name)
+                .cloned()
+                .ok_or(GemmaNativeError::Input("incomplete original model files"))
+        };
+        Ok(Self {
+            weights: required("model.safetensors")?,
+            tokenizer: required("tokenizer.json")?,
+            config: required("config.json")?,
+            visual_processor: required("processor_config.json")?,
+            audio_processor: required("preprocessor_config.json")?,
+        })
+    }
+
+    /// Resolve the original upstream filenames in a development cache.
+    #[must_use]
+    pub fn from_directory(directory: &Path) -> Self {
+        Self {
+            weights: directory.join("model.safetensors"),
+            tokenizer: directory.join("tokenizer.json"),
+            config: directory.join("config.json"),
+            visual_processor: directory.join("processor_config.json"),
+            audio_processor: directory.join("preprocessor_config.json"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod original_files_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn resolves_original_files_without_repacking_and_rejects_incomplete_installation() {
+        let files: BTreeMap<_, _> = [
+            "model.safetensors",
+            "tokenizer.json",
+            "config.json",
+            "processor_config.json",
+            "preprocessor_config.json",
+        ]
+        .into_iter()
+        .map(|name| (name.to_owned(), PathBuf::from("/verified").join(name)))
+        .collect();
+        let resolved = GemmaNativeFiles::from_original_files(&files).unwrap();
+        assert_eq!(resolved.weights, files["model.safetensors"]);
+        assert_eq!(resolved.audio_processor, files["preprocessor_config.json"]);
+        let mut incomplete = files;
+        incomplete.remove("tokenizer.json");
+        assert!(GemmaNativeFiles::from_original_files(&incomplete).is_err());
+    }
 }
 
 /// Native text and optional media encoder. A single language model serves all modalities.
@@ -60,11 +137,23 @@ impl GemmaNativeEncoder {
         dimensions: usize,
         media: GemmaMedia,
     ) -> Result<Self, GemmaNativeError> {
+        Self::open_files(
+            &GemmaNativeFiles::from_directory(directory),
+            dimensions,
+            media,
+        )
+    }
+
+    /// Load the original pinned model files at independent verified paths, offline.
+    pub fn open_files(
+        files: &GemmaNativeFiles,
+        dimensions: usize,
+        media: GemmaMedia,
+    ) -> Result<Self, GemmaNativeError> {
         if ![128, 256, 512, 768].contains(&dimensions) {
             return Err(GemmaNativeError::Input("unsupported embedding dimension"));
         }
-        let config: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("config.json"))?)?;
+        let config: serde_json::Value = serde_json::from_reader(File::open(&files.config)?)?;
         let id = |name: &str| {
             config[name]
                 .as_u64()
@@ -85,26 +174,26 @@ impl GemmaNativeEncoder {
         let image_id = id("image_token_id")?;
         let video_id = id("video_token_id")?;
         let audio_id = id("audio_token_id")?;
-        let tokenizer = Tokenizer::from_file(directory.join("tokenizer.json"))
-            .map_err(GemmaNativeError::Tokenizer)?;
+        let tokenizer =
+            Tokenizer::from_file(&files.tokenizer).map_err(GemmaNativeError::Tokenizer)?;
         let eoa = tokenizer
             .token_to_id("<audio|>")
             .ok_or(GemmaNativeError::Input("missing end-of-audio token"))?;
-        let language = GemmaFusionEncoder::open(directory)?;
+        let language = GemmaFusionEncoder::open_files(&files.config, &files.weights)?;
         let vision = if media.images || media.video {
-            validate_processor_config(directory)?;
+            validate_processor_config_file(&files.visual_processor)?;
             Some((
-                GemmaVisionTower::open(directory)?,
-                GemmaProjection::open(directory, GemmaModality::Vision)?,
+                GemmaVisionTower::open_files(&files.config, &files.weights)?,
+                GemmaProjection::open_files(&files.config, &files.weights, GemmaModality::Vision)?,
             ))
         } else {
             None
         };
         let audio = if media.audio {
             Some((
-                GemmaAudioFeatureExtractor::open(directory)?,
-                GemmaAudioTower::open(directory)?,
-                GemmaProjection::open(directory, GemmaModality::Audio)?,
+                GemmaAudioFeatureExtractor::open_file(&files.audio_processor)?,
+                GemmaAudioTower::open_files(&files.config, &files.weights)?,
+                GemmaProjection::open_files(&files.config, &files.weights, GemmaModality::Audio)?,
             ))
         } else {
             None
@@ -135,26 +224,61 @@ impl GemmaNativeEncoder {
         text: &str,
         title: Option<&str>,
     ) -> Result<Vec<f32>, GemmaNativeError> {
+        self.encode_text_cancellable(task, text, title, &CancellationToken::new())
+    }
+
+    /// Embed a text query or document while honoring cancellation.
+    pub fn encode_text_cancellable(
+        &self,
+        task: GemmaTextTask,
+        text: &str,
+        title: Option<&str>,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         let formatted = task.format(text, title)?;
         let tokens = self
             .tokenizer
             .encode(formatted, true)
             .map_err(GemmaNativeError::Tokenizer)?;
-        Ok(self
-            .language
-            .encode(tokens.get_ids(), &[], self.dimensions)?)
+        Ok(self.language.encode_cancellable(
+            tokens.get_ids(),
+            &[],
+            self.dimensions,
+            cancellation,
+        )?)
     }
 
     /// Embed a standalone bounded PNG or JPEG image.
     pub fn encode_image(&self, encoded: &[u8]) -> Result<Vec<f32>, GemmaNativeError> {
+        self.encode_image_cancellable(encoded, &CancellationToken::new())
+    }
+
+    /// Embed an image while honoring the owning job's cancellation.
+    pub fn encode_image_cancellable(
+        &self,
+        encoded: &[u8],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         if !self.media.images {
             return Err(GemmaNativeError::Input("image embedding is disabled"));
         }
         let mut ids = vec![self.bos];
         let mut replacements = Vec::new();
-        self.append_frame(encoded, VisualKind::Image, &mut ids, &mut replacements)?;
+        self.append_frame(
+            encoded,
+            VisualKind::Image,
+            &mut ids,
+            &mut replacements,
+            cancellation,
+        )?;
         ids.push(self.eos);
-        self.fuse(&ids, &replacements)
+        self.fuse(&ids, &replacements, cancellation)
     }
 
     /// Embed up to 32 timestamped, already decoded video frames. The caller
@@ -163,6 +287,18 @@ impl GemmaNativeEncoder {
         &self,
         frames: &[(&[u8], u64)],
     ) -> Result<Vec<f32>, GemmaNativeError> {
+        self.encode_video_frames_cancellable(frames, &CancellationToken::new())
+    }
+
+    /// Embed timestamped frames while honoring the owning job's cancellation.
+    pub fn encode_video_frames_cancellable(
+        &self,
+        frames: &[(&[u8], u64)],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         if !self.media.video {
             return Err(GemmaNativeError::Input("video embedding is disabled"));
         }
@@ -178,23 +314,41 @@ impl GemmaNativeEncoder {
         let mut ids = vec![self.bos];
         let mut replacements = Vec::new();
         for &(encoded, _) in frames {
-            self.append_frame(encoded, VisualKind::VideoFrame, &mut ids, &mut replacements)?;
+            self.append_frame(
+                encoded,
+                VisualKind::VideoFrame,
+                &mut ids,
+                &mut replacements,
+                cancellation,
+            )?;
         }
         ids.push(self.eos);
-        self.fuse(&ids, &replacements)
+        self.fuse(&ids, &replacements, cancellation)
     }
 
     /// Decode and embed a bounded H.264-in-MP4/MOV clip at up to one frame per second.
     pub fn encode_h264_video(&self, bytes: &[u8]) -> Result<GemmaVideoEmbedding, GemmaNativeError> {
+        self.encode_h264_video_cancellable(bytes, &CancellationToken::new())
+    }
+
+    /// Decode, sample, and embed a bounded clip while honoring cancellation.
+    pub fn encode_h264_video_cancellable(
+        &self,
+        bytes: &[u8],
+        cancellation: &CancellationToken,
+    ) -> Result<GemmaVideoEmbedding, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         if !self.media.video {
             return Err(GemmaNativeError::Input("video embedding is disabled"));
         }
-        let frames = sample_video_frames(bytes)?;
+        let frames = sample_video_frames_cancellable(bytes, || cancellation.is_cancelled())?;
         let references: Vec<_> = frames
             .iter()
             .map(|frame| (frame.bytes.as_slice(), frame.timestamp_ms))
             .collect();
-        let vector = self.encode_video_frames(&references)?;
+        let vector = self.encode_video_frames_cancellable(&references, cancellation)?;
         Ok(GemmaVideoEmbedding {
             vector,
             timestamps_ms: frames.iter().map(|frame| frame.timestamp_ms).collect(),
@@ -203,33 +357,62 @@ impl GemmaNativeEncoder {
 
     /// Embed at most 30 seconds of decoded, normalized mono 16-kHz PCM.
     pub fn encode_audio_pcm16k(&self, pcm: &[f32]) -> Result<Vec<f32>, GemmaNativeError> {
+        self.encode_audio_pcm16k_cancellable(pcm, &CancellationToken::new())
+    }
+
+    /// Embed bounded PCM while honoring cancellation throughout preprocessing and inference.
+    pub fn encode_audio_pcm16k_cancellable(
+        &self,
+        pcm: &[f32],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         let (extractor, tower, projection) = self
             .audio
             .as_ref()
             .ok_or(GemmaNativeError::Input("audio embedding is disabled"))?;
-        let features = extractor.extract_pcm16k(pcm, pcm.len())?;
-        let tokens = tower.encode_features(
+        let features =
+            extractor.extract_pcm16k_cancellable(pcm, pcm.len(), || cancellation.is_cancelled())?;
+        let tokens = tower.encode_features_cancellable(
             &features.features,
             features.frame_count,
             features.valid_frames,
+            cancellation,
         )?;
         let mut ids = vec![self.bos, self.boa];
         let mut replacements = Vec::with_capacity(tokens.len());
         for token in tokens {
+            if cancellation.is_cancelled() {
+                return Err(GemmaNativeError::Cancelled);
+            }
             replacements.push(projection.project(&token)?);
             ids.push(self.audio_id);
         }
         ids.extend([self.eoa, self.eos]);
-        self.fuse(&ids, &replacements)
+        self.fuse(&ids, &replacements, cancellation)
     }
 
     /// Decode a bounded WAV, FLAC, MP3, or M4A/AAC file before embedding.
     pub fn encode_audio_file(&self, encoded: &[u8]) -> Result<Vec<f32>, GemmaNativeError> {
+        self.encode_audio_file_cancellable(encoded, &CancellationToken::new())
+    }
+
+    /// Decode and embed bounded audio while honoring cancellation.
+    pub fn encode_audio_file_cancellable(
+        &self,
+        encoded: &[u8],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         if !self.media.audio {
             return Err(GemmaNativeError::Input("audio embedding is disabled"));
         }
-        let pcm = decode_audio_16k(encoded)?;
-        self.encode_audio_pcm16k(&pcm)
+        let pcm = decode_audio_16k_cancellable(encoded, || cancellation.is_cancelled())?;
+        self.encode_audio_pcm16k_cancellable(&pcm, cancellation)
     }
 
     fn append_frame(
@@ -238,22 +421,30 @@ impl GemmaNativeEncoder {
         kind: VisualKind,
         ids: &mut Vec<u32>,
         replacements: &mut Vec<Vec<f32>>,
+        cancellation: &CancellationToken,
     ) -> Result<(), GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         let (tower, projection) = self
             .vision
             .as_ref()
             .ok_or(GemmaNativeError::Input("vision encoder is disabled"))?;
-        let prepared = prepare_frame(encoded, kind)?;
-        let tokens = tower.encode_patches(
+        let prepared = prepare_frame_cancellable(encoded, kind, || cancellation.is_cancelled())?;
+        let tokens = tower.encode_patches_cancellable(
             &prepared.pixels,
             &prepared.positions,
             prepared.valid_patches,
+            cancellation,
         )?;
         if tokens.len() != prepared.soft_tokens {
             return Err(GemmaNativeError::Input("vision soft-token count mismatch"));
         }
         ids.push(self.boi);
         for token in tokens {
+            if cancellation.is_cancelled() {
+                return Err(GemmaNativeError::Cancelled);
+            }
             replacements.push(projection.project(&token)?);
             ids.push(match kind {
                 VisualKind::Image => self.image_id,
@@ -264,7 +455,15 @@ impl GemmaNativeEncoder {
         Ok(())
     }
 
-    fn fuse(&self, ids: &[u32], tokens: &[Vec<f32>]) -> Result<Vec<f32>, GemmaNativeError> {
+    fn fuse(
+        &self,
+        ids: &[u32],
+        tokens: &[Vec<f32>],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaNativeError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
         let replacements: Vec<_> = ids
             .iter()
             .enumerate()
@@ -275,13 +474,18 @@ impl GemmaNativeEncoder {
         if replacements.len() != tokens.len() {
             return Err(GemmaNativeError::Input("media token count mismatch"));
         }
-        Ok(self.language.encode(ids, &replacements, self.dimensions)?)
+        Ok(self
+            .language
+            .encode_cancellable(ids, &replacements, self.dimensions, cancellation)?)
     }
 }
 
 /// Rejected native checkpoint, media input, or inference result.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaNativeError {
+    /// The owning job no longer permits inference.
+    #[error("Gemma inference cancelled")]
+    Cancelled,
     /// Checkpoint file could not be read.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -293,7 +497,7 @@ pub enum GemmaNativeError {
     Input(&'static str),
     /// Source video could not be safely decoded and sampled.
     #[error(transparent)]
-    Video(#[from] VideoSamplingError),
+    Video(VideoSamplingError),
     /// Local tokenizer could not be read or used.
     #[error("Gemma tokenization failed: {0}")]
     Tokenizer(Box<dyn std::error::Error + Send + Sync>),
@@ -302,23 +506,48 @@ pub enum GemmaNativeError {
     Prompt(#[from] GemmaProbeError),
     /// Visual decoding or preprocessing failed.
     #[error(transparent)]
-    Visual(#[from] GemmaVisualError),
+    Visual(GemmaVisualError),
     /// Vision inference failed.
     #[error(transparent)]
-    Vision(#[from] GemmaVisionError),
+    Vision(GemmaVisionError),
     /// Audio preprocessing failed.
     #[error(transparent)]
-    AudioFeatures(#[from] GemmaAudioFeaturesError),
+    AudioFeatures(GemmaAudioFeaturesError),
     /// Audio source decoding or resampling failed.
     #[error(transparent)]
-    AudioDecode(#[from] AudioDecodeError),
+    AudioDecode(AudioDecodeError),
     /// Audio inference failed.
     #[error(transparent)]
-    Audio(#[from] GemmaAudioError),
+    Audio(GemmaAudioError),
     /// Projection failed.
     #[error(transparent)]
     Projection(#[from] GemmaProjectionError),
     /// Language-model fusion failed.
     #[error(transparent)]
-    Fusion(#[from] GemmaFusionError),
+    Fusion(GemmaFusionError),
 }
+
+macro_rules! map_stage_cancellation {
+    ($($error:ty => $variant:ident),+ $(,)?) => {
+        $(
+            impl From<$error> for GemmaNativeError {
+                fn from(error: $error) -> Self {
+                    match error {
+                        <$error>::Cancelled => Self::Cancelled,
+                        other => Self::$variant(other),
+                    }
+                }
+            }
+        )+
+    };
+}
+
+map_stage_cancellation!(
+    VideoSamplingError => Video,
+    GemmaVisualError => Visual,
+    GemmaVisionError => Vision,
+    GemmaAudioFeaturesError => AudioFeatures,
+    AudioDecodeError => AudioDecode,
+    GemmaAudioError => Audio,
+    GemmaFusionError => Fusion,
+);

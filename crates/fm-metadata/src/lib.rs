@@ -17,5 +17,5 @@ pub use thumbnail::{
 };
 pub use video::{
     SUPPORTED_VIDEO_EXTENSIONS, SampledVideoFrame, VideoSamplingError, generate_video_thumbnail,
-    is_supported_video_extension, sample_video_frames,
+    is_supported_video_extension, sample_video_frames, sample_video_frames_cancellable,
 };

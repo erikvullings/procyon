@@ -4,6 +4,7 @@ use std::fs::File;
 use std::path::Path;
 
 use lattice_inference::weights::{SafetensorsFile, TensorSource};
+use tokio_util::sync::CancellationToken;
 
 const BANDS: usize = 128;
 const WIDTH: usize = 1024;
@@ -16,6 +17,9 @@ const MAX_FRAMES: usize = 3000;
 /// Invalid or unsupported checkpoint and audio feature input.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaAudioError {
+    /// The owning job no longer permits inference.
+    #[error("Gemma audio inference cancelled")]
+    Cancelled,
     /// Local checkpoint or configuration could not be read.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -480,8 +484,15 @@ pub struct GemmaAudioTower {
 impl GemmaAudioTower {
     /// Load the local BF16/F32 audio encoder weights for FP32 CPU inference.
     pub fn open(directory: &Path) -> Result<Self> {
-        let config: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("config.json"))?)?;
+        Self::open_files(
+            &directory.join("config.json"),
+            &directory.join("model.safetensors"),
+        )
+    }
+
+    /// Load the original config and audio weights from independent verified paths.
+    pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self> {
+        let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let audio = &config["audio_config"];
         if config["model_type"] != "embedding_gemma2"
             || audio["model_type"] != "gemma4_audio"
@@ -504,7 +515,7 @@ impl GemmaAudioTower {
             return Err(GemmaAudioError::Config);
         }
 
-        let mut checkpoint = SafetensorsFile::open(&directory.join("model.safetensors"))?;
+        let mut checkpoint = SafetensorsFile::open(weights_path)?;
         Ok(Self {
             conv0: Conv2::load(&mut checkpoint, 0, 1, 128)?,
             conv1: Conv2::load(&mut checkpoint, 1, 128, 32)?,
@@ -532,6 +543,25 @@ impl GemmaAudioTower {
         frame_count: usize,
         valid_frames: usize,
     ) -> Result<Vec<Vec<f32>>> {
+        self.encode_features_cancellable(
+            features,
+            frame_count,
+            valid_frames,
+            &CancellationToken::new(),
+        )
+    }
+
+    /// Encode valid audio features while honoring job cancellation.
+    pub fn encode_features_cancellable(
+        &self,
+        features: &[f32],
+        frame_count: usize,
+        valid_frames: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<Vec<f32>>> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaAudioError::Cancelled);
+        }
         if frame_count == 0
             || frame_count > MAX_FRAMES
             || valid_frames == 0
@@ -574,7 +604,13 @@ impl GemmaAudioTower {
             })
             .collect::<Vec<_>>();
         for layer in &self.layers {
+            if cancellation.is_cancelled() {
+                return Err(GemmaAudioError::Cancelled);
+            }
             layer.run(&mut tokens, valid, &positions);
+        }
+        if cancellation.is_cancelled() {
+            return Err(GemmaAudioError::Cancelled);
         }
         let result = tokens
             .into_iter()

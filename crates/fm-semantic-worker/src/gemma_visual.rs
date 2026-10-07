@@ -14,8 +14,12 @@ const MAX_SOURCE_PIXELS: u64 = 25_000_000;
 
 /// Rejects checkpoints whose image/video preprocessing differs from this native path.
 pub fn validate_processor_config(directory: &Path) -> Result<(), GemmaVisualError> {
-    let config: serde_json::Value =
-        serde_json::from_reader(File::open(directory.join("processor_config.json"))?)?;
+    validate_processor_config_file(&directory.join("processor_config.json"))
+}
+
+/// Verify the pinned visual processor supplied as an independent original file.
+pub fn validate_processor_config_file(path: &Path) -> Result<(), GemmaVisualError> {
+    let config: serde_json::Value = serde_json::from_reader(File::open(path)?)?;
     for (name, limit, processor) in [
         ("image_processor", 280, "Gemma4ImageProcessor"),
         ("video_processor", 140, "EmbeddingGemma2VideoProcessor"),
@@ -88,6 +92,18 @@ pub struct PreparedFrame {
 
 /// Converts a PNG/JPEG image or previously sampled video frame into vision patches.
 pub fn prepare_frame(encoded: &[u8], kind: VisualKind) -> Result<PreparedFrame, GemmaVisualError> {
+    prepare_frame_cancellable(encoded, kind, || false)
+}
+
+/// Prepare an image while honoring cancellation during resize and patch extraction.
+pub fn prepare_frame_cancellable(
+    encoded: &[u8],
+    kind: VisualKind,
+    is_cancelled: impl Fn() -> bool,
+) -> Result<PreparedFrame, GemmaVisualError> {
+    if is_cancelled() {
+        return Err(GemmaVisualError::Cancelled);
+    }
     if encoded.is_empty() || encoded.len() > MAX_SOURCE_BYTES {
         return Err(GemmaVisualError::SourceTooLarge);
     }
@@ -107,12 +123,15 @@ pub fn prepare_frame(encoded: &[u8], kind: VisualKind) -> Result<PreparedFrame, 
     limits.max_alloc = Some(128 * 1024 * 1024);
     reader.limits(limits);
     let source = reader.decode()?.to_rgb8();
+    if is_cancelled() {
+        return Err(GemmaVisualError::Cancelled);
+    }
     let maximum = kind.soft_token_limit() * POOL_SIDE * POOL_SIDE;
     let (target_height, target_width) = resized_shape(height, width, maximum)?;
     let resized = if source.width() == target_width && source.height() == target_height {
         source
     } else {
-        resize_bicubic(&source, target_width, target_height)
+        resize_bicubic(&source, target_width, target_height, &is_cancelled)?
     };
     let grid_width = target_width as usize / PATCH_SIDE;
     let grid_height = target_height as usize / PATCH_SIDE;
@@ -120,6 +139,9 @@ pub fn prepare_frame(encoded: &[u8], kind: VisualKind) -> Result<PreparedFrame, 
     let mut pixels = vec![0.0; maximum * PATCH_VALUES];
     let mut positions = vec![[-1; 2]; maximum];
     for patch_y in 0..grid_height {
+        if is_cancelled() {
+            return Err(GemmaVisualError::Cancelled);
+        }
         for patch_x in 0..grid_width {
             let index = patch_y * grid_width + patch_x;
             positions[index] = [patch_x as i32, patch_y as i32];
@@ -181,7 +203,12 @@ fn weights(input: u32, output: u32) -> Vec<Vec<(usize, f64)>> {
         .collect()
 }
 
-fn resize_bicubic(source: &RgbImage, width: u32, height: u32) -> RgbImage {
+fn resize_bicubic(
+    source: &RgbImage,
+    width: u32,
+    height: u32,
+    is_cancelled: &impl Fn() -> bool,
+) -> Result<RgbImage, GemmaVisualError> {
     let output_width = width as usize;
     let output_height = height as usize;
     let vertical = weights(source.height(), height);
@@ -190,6 +217,9 @@ fn resize_bicubic(source: &RgbImage, width: u32, height: u32) -> RgbImage {
     // rounded away from zero; ties-to-even changes downstream embeddings.
     let mut intermediate = vec![0_u8; output_width * source.height() as usize * 3];
     for (y, row) in intermediate.chunks_exact_mut(output_width * 3).enumerate() {
+        if is_cancelled() {
+            return Err(GemmaVisualError::Cancelled);
+        }
         for (x, samples) in horizontal.iter().enumerate() {
             for channel in 0..3 {
                 let sum: f64 = samples
@@ -204,6 +234,9 @@ fn resize_bicubic(source: &RgbImage, width: u32, height: u32) -> RgbImage {
     }
     let mut result = vec![0_u8; output_width * output_height * 3];
     for (y, row) in result.chunks_exact_mut(output_width * 3).enumerate() {
+        if is_cancelled() {
+            return Err(GemmaVisualError::Cancelled);
+        }
         for x in 0..output_width {
             for channel in 0..3 {
                 let sum: f64 = vertical[y]
@@ -217,7 +250,7 @@ fn resize_bicubic(source: &RgbImage, width: u32, height: u32) -> RgbImage {
             }
         }
     }
-    RgbImage::from_raw(width, height, result).expect("validated image dimensions")
+    Ok(RgbImage::from_raw(width, height, result).expect("validated image dimensions"))
 }
 
 fn resized_shape(
@@ -250,6 +283,9 @@ fn resized_shape(
 /// Unsafe or unsupported visual input.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaVisualError {
+    /// The owning job cancelled visual preprocessing.
+    #[error("Gemma visual preprocessing cancelled")]
+    Cancelled,
     /// Local processor configuration is incompatible with the native implementation.
     #[error("unsupported Gemma image/video processor configuration")]
     ProcessorConfig,

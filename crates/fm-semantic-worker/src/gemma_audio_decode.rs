@@ -26,6 +26,9 @@ const OUTPUT_RATE: u32 = 16_000;
 /// Audio cannot be decoded within the supported model and resource limits.
 #[derive(Debug, thiserror::Error)]
 pub enum AudioDecodeError {
+    /// The owning job cancelled decoding or resampling.
+    #[error("audio decoding cancelled")]
+    Cancelled,
     /// Encoded input exceeds the fixed resource limit.
     #[error("encoded audio must contain between 1 and 67108864 bytes")]
     EncodedLength,
@@ -48,6 +51,17 @@ pub enum AudioDecodeError {
 /// The caller retains authority over file access and may reject the source
 /// before reading it. Inputs longer than 30 seconds are rejected, not clipped.
 pub fn decode_audio_16k(encoded: &[u8]) -> Result<Vec<f32>, AudioDecodeError> {
+    decode_audio_16k_cancellable(encoded, || false)
+}
+
+/// Decode audio while checking for cancellation during packet processing and resampling.
+pub fn decode_audio_16k_cancellable(
+    encoded: &[u8],
+    is_cancelled: impl Fn() -> bool,
+) -> Result<Vec<f32>, AudioDecodeError> {
+    if is_cancelled() {
+        return Err(AudioDecodeError::Cancelled);
+    }
     if encoded.is_empty() || encoded.len() > MAX_ENCODED_BYTES {
         return Err(AudioDecodeError::EncodedLength);
     }
@@ -120,6 +134,9 @@ pub fn decode_audio_16k(encoded: &[u8]) -> Result<Vec<f32>, AudioDecodeError> {
     let mut mono = Vec::new();
     let mut packet_count = 0;
     loop {
+        if is_cancelled() {
+            return Err(AudioDecodeError::Cancelled);
+        }
         let packet = match format.next_packet() {
             Ok(packet) => packet,
             Err(SymphoniaError::IoError(io)) if io.kind() == ErrorKind::UnexpectedEof => break,
@@ -162,12 +179,16 @@ pub fn decode_audio_16k(encoded: &[u8]) -> Result<Vec<f32>, AudioDecodeError> {
         }
         let mut buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
         buffer.copy_interleaved_ref(decoded);
-        for frame in buffer
+        for (index, frame) in buffer
             .samples()
             .chunks_exact(decoded_channels)
             .skip(start)
             .take(end - start)
+            .enumerate()
         {
+            if index % 1024 == 0 && is_cancelled() {
+                return Err(AudioDecodeError::Cancelled);
+            }
             let sample = frame.iter().copied().sum::<f32>() / decoded_channels as f32;
             if !sample.is_finite() || sample.abs() > 1.0 {
                 return Err(AudioDecodeError::Corrupt(
@@ -193,7 +214,7 @@ pub fn decode_audio_16k(encoded: &[u8]) -> Result<Vec<f32>, AudioDecodeError> {
             "decoded fewer frames than the source declares".into(),
         ));
     }
-    resample(&mono, rate)
+    resample(&mono, rate, &is_cancelled)
 }
 
 fn probe_error(error: SymphoniaError) -> AudioDecodeError {
@@ -203,7 +224,14 @@ fn probe_error(error: SymphoniaError) -> AudioDecodeError {
     }
 }
 
-fn resample(source: &[f32], rate: u32) -> Result<Vec<f32>, AudioDecodeError> {
+fn resample(
+    source: &[f32],
+    rate: u32,
+    is_cancelled: &impl Fn() -> bool,
+) -> Result<Vec<f32>, AudioDecodeError> {
+    if is_cancelled() {
+        return Err(AudioDecodeError::Cancelled);
+    }
     if rate == OUTPUT_RATE {
         return Ok(source.to_vec());
     }
@@ -216,6 +244,9 @@ fn resample(source: &[f32], rate: u32) -> Result<Vec<f32>, AudioDecodeError> {
     let ratio = f64::from(rate) / f64::from(OUTPUT_RATE);
     let mut output = Vec::with_capacity(output_len as usize);
     for n in 0..output_len {
+        if n % 256 == 0 && is_cancelled() {
+            return Err(AudioDecodeError::Cancelled);
+        }
         let center = n as f64 * ratio;
         let nearest = center.floor() as isize;
         let mut weighted = 0.0;

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use gemma_audio::{GemmaAudioError, GemmaAudioTower};
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -88,4 +89,20 @@ fn checkpoint_audio_soft_tokens_match_python_fp32() {
             case.valid_frames, case.frame_count
         );
     }
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancelled_audio_does_not_encode_features() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let tower = GemmaAudioTower::open(&directory).expect("load native audio tower");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        tower.encode_features_cancellable(&[0.0; 128], 1, 1, &cancellation),
+        Err(GemmaAudioError::Cancelled)
+    ));
 }

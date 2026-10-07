@@ -2,7 +2,8 @@
 #![cfg(feature = "gemma-probe")]
 
 use fm_semantic_worker::gemma_visual::{
-    GemmaVisualError, VisualKind, prepare_frame, validate_processor_config,
+    GemmaVisualError, VisualKind, prepare_frame, prepare_frame_cancellable,
+    validate_processor_config,
 };
 use image::{ImageBuffer, ImageFormat, Rgb};
 use serde::Deserialize;
@@ -57,6 +58,7 @@ fn image_and_video_patches_match_upstream_geometry_and_pixels() {
         {
             assert_eq!(prepared.positions[position], expected);
         }
+
         let differences: Vec<_> = case
             .values
             .iter()
@@ -74,4 +76,20 @@ fn image_and_video_patches_match_upstream_geometry_and_pixels() {
                 .map(|(index, value)| (index, prepared.pixels[*index], value,))
         );
     }
+}
+
+#[test]
+fn cancelled_resize_does_not_return_partial_patches() {
+    let rgb = ImageBuffer::from_pixel(128, 96, Rgb([20u8, 40, 60]));
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    rgb.write_to(&mut bytes, ImageFormat::Png).expect("PNG");
+    let checks = std::cell::Cell::new(0);
+    assert!(matches!(
+        prepare_frame_cancellable(bytes.get_ref(), VisualKind::Image, || {
+            checks.set(checks.get() + 1);
+            checks.get() > 4
+        }),
+        Err(GemmaVisualError::Cancelled)
+    ));
+    assert!(checks.get() > 4);
 }

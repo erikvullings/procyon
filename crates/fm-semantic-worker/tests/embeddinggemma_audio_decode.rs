@@ -5,7 +5,7 @@
 #[path = "../src/gemma_audio_decode.rs"]
 mod gemma_audio_decode;
 
-use gemma_audio_decode::{AudioDecodeError, decode_audio_16k};
+use gemma_audio_decode::{AudioDecodeError, decode_audio_16k, decode_audio_16k_cancellable};
 
 fn wav_sine(sample_rate: u32, channels: u16, frequency: f64, seconds: f64) -> Vec<u8> {
     let frames = (sample_rate as f64 * seconds) as u32;
@@ -102,6 +102,20 @@ fn native_16k_audio_preserves_pcm_samples() {
     assert_eq!(output.len(), 4_800);
     let reference = 0.6 * (std::f64::consts::TAU * 440.0 / 16_000.0).sin();
     assert!((f64::from(output[1]) - reference).abs() < 0.00005);
+}
+
+#[test]
+fn cancellation_during_audio_resampling_returns_no_partial_pcm() {
+    let wav = wav_sine(48_000, 1, 440.0, 1.0);
+    let checks = std::cell::Cell::new(0);
+    assert!(matches!(
+        decode_audio_16k_cancellable(&wav, || {
+            checks.set(checks.get() + 1);
+            checks.get() > 100
+        }),
+        Err(AudioDecodeError::Cancelled)
+    ));
+    assert!(checks.get() > 100);
 }
 
 #[test]

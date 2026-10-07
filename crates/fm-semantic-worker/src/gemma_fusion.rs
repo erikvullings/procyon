@@ -1,6 +1,5 @@
 //! Experimental CPU encoder for text with projected image, audio or video soft tokens.
 
-use std::fs::File;
 use std::path::Path;
 
 use lattice_inference::forward::cpu::{elementwise_mul, matmul_bt};
@@ -12,6 +11,7 @@ use lattice_inference::model::gemma4_ops::{
     gemma4_rms_norm, gemma4_rope_cos_sin, gemma4_rope_inv_freq,
 };
 use lattice_inference::weights::{SafetensorsFile, TensorSource};
+use tokio_util::sync::CancellationToken;
 
 const MAX_TOKENS: usize = 8192;
 
@@ -69,9 +69,17 @@ fn tensor(
 impl GemmaFusionEncoder {
     /// Reads validated BF16/F32 text weights from a local checkpoint.
     pub fn open(directory: &Path) -> Result<Self, GemmaFusionError> {
-        let config = EmbeddingGemma2Config::from_model_dir(directory)?;
-        let root: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("config.json"))?)?;
+        Self::open_files(
+            &directory.join("config.json"),
+            &directory.join("model.safetensors"),
+        )
+    }
+
+    /// Load the original upstream config and safetensors from independent verified paths.
+    pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self, GemmaFusionError> {
+        let config_text = std::fs::read_to_string(config_path)?;
+        let config = EmbeddingGemma2Config::from_config_json_str(&config_text)?;
+        let root: serde_json::Value = serde_json::from_str(&config_text)?;
         let media_ids = [
             root["image_token_id"].as_u64(),
             root["audio_token_id"].as_u64(),
@@ -86,7 +94,7 @@ impl GemmaFusionEncoder {
         if config.hidden_size != 512 || config.embedding_dim != 768 {
             return Err(GemmaFusionError::InvalidCheckpoint("text geometry".into()));
         }
-        let mut file = SafetensorsFile::open(&directory.join("model.safetensors"))?;
+        let mut file = SafetensorsFile::open(weights_path)?;
         let hidden = config.hidden_size;
         let ple = config.hidden_size_per_layer_input;
         let layers = config.num_hidden_layers;
@@ -160,6 +168,20 @@ impl GemmaFusionEncoder {
         replacements: &[(usize, &[f32])],
         dimensions: usize,
     ) -> Result<Vec<f32>, GemmaFusionError> {
+        self.encode_cancellable(ids, replacements, dimensions, &CancellationToken::new())
+    }
+
+    /// Embed a sequence, stopping promptly if its owning job is cancelled.
+    pub fn encode_cancellable(
+        &self,
+        ids: &[u32],
+        replacements: &[(usize, &[f32])],
+        dimensions: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaFusionError> {
+        if cancellation.is_cancelled() {
+            return Err(GemmaFusionError::Cancelled);
+        }
         if ids.is_empty() || ids.len() > MAX_TOKENS || ![128, 256, 512, 768].contains(&dimensions) {
             return Err(GemmaFusionError::InvalidInput(
                 "sequence length or dimension",
@@ -204,7 +226,13 @@ impl GemmaFusionEncoder {
         }
         let base = states.clone();
         for (index, layer) in self.layers.iter().enumerate() {
-            self.apply_layer(index, layer, &base, &mut states);
+            if cancellation.is_cancelled() {
+                return Err(GemmaFusionError::Cancelled);
+            }
+            self.apply_layer(index, layer, &base, &mut states, cancellation)?;
+        }
+        if cancellation.is_cancelled() {
+            return Err(GemmaFusionError::Cancelled);
         }
         gemma4_rms_norm(&mut states, &self.output_norm, width, cfg.rms_norm_eps);
         let mut projected = vec![0.0; length * cfg.embedding_dim];
@@ -233,7 +261,14 @@ impl GemmaFusionEncoder {
         Ok(vector)
     }
 
-    fn apply_layer(&self, index: usize, layer: &Layer, base: &[f32], states: &mut [f32]) {
+    fn apply_layer(
+        &self,
+        index: usize,
+        layer: &Layer,
+        base: &[f32],
+        states: &mut [f32],
+        cancellation: &CancellationToken,
+    ) -> Result<(), GemmaFusionError> {
         let cfg = &self.config;
         let n = states.len() / cfg.hidden_size;
         let h = cfg.hidden_size;
@@ -293,11 +328,15 @@ impl GemmaFusionEncoder {
             shape.num_key_value_heads,
             shape.head_dim,
             window,
-        );
+            cancellation,
+        )?;
         let mut result = vec![0.0; n * h];
         matmul_bt(&attended, &layer.o, &mut result, n, q_dim, h);
         gemma4_rms_norm(&mut result, &layer.attention_norm, h, eps);
         add(states, &result);
+        if cancellation.is_cancelled() {
+            return Err(GemmaFusionError::Cancelled);
+        }
 
         normalized.copy_from_slice(states);
         gemma4_rms_norm(&mut normalized, &layer.feed_norm, h, eps);
@@ -345,6 +384,7 @@ impl GemmaFusionEncoder {
         for value in states {
             *value *= layer.residual_scale;
         }
+        Ok(())
     }
 }
 
@@ -364,11 +404,15 @@ fn attention(
     kv_heads: usize,
     head_dim: usize,
     window: Option<usize>,
-) -> Vec<f32> {
+    cancellation: &CancellationToken,
+) -> Result<Vec<f32>, GemmaFusionError> {
     let mut output = vec![0.0; q.len()];
     let mut scores = vec![0.0; tokens];
     let group = heads / kv_heads;
     for position in 0..tokens {
+        if cancellation.is_cancelled() {
+            return Err(GemmaFusionError::Cancelled);
+        }
         let start = window.map_or(0, |radius| position.saturating_sub(radius));
         let end = window.map_or(tokens, |radius| (position + radius + 1).min(tokens));
         for head in 0..heads {
@@ -402,12 +446,15 @@ fn attention(
             }
         }
     }
-    output
+    Ok(output)
 }
 
 /// Invalid checkpoint or soft-token fusion input.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaFusionError {
+    /// The owning job no longer permits inference.
+    #[error("Gemma inference cancelled")]
+    Cancelled,
     /// Input sequence or replacement is unsupported.
     #[error("invalid Gemma fusion input: {0}")]
     InvalidInput(&'static str),

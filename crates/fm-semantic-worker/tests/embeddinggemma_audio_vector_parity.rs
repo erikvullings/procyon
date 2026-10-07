@@ -3,8 +3,9 @@
 
 use std::path::PathBuf;
 
-use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder};
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder, GemmaNativeError};
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -71,6 +72,7 @@ fn encoded_pcm_matches_upstream_multimodal_vector() {
     for sample in pcm {
         wav.extend_from_slice(&((sample * 32767.0).round() as i16).to_le_bytes());
     }
+
     let actual_file = encoder.encode_audio_file(&wav).expect("decoded WAV vector");
     let cosine: f64 = actual_file
         .iter()
@@ -78,4 +80,33 @@ fn encoded_pcm_matches_upstream_multimodal_vector() {
         .map(|(a, b)| f64::from(*a) * f64::from(*b))
         .sum();
     assert!(cosine > 0.99999, "decoded WAV embedding cosine {cosine}");
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancelled_audio_file_does_not_decode_or_infer() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open(
+        &directory,
+        128,
+        GemmaMedia {
+            images: false,
+            audio: true,
+            video: false,
+        },
+    )
+    .expect("native audio model");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        encoder.encode_audio_file_cancellable(&[], &cancellation),
+        Err(GemmaNativeError::Cancelled)
+    ));
+    assert!(matches!(
+        encoder.encode_audio_pcm16k_cancellable(&[], &cancellation),
+        Err(GemmaNativeError::Cancelled)
+    ));
 }

@@ -3,13 +3,19 @@
 
 use std::path::PathBuf;
 
+use fm_metadata::VideoSamplingError;
+use fm_semantic_worker::gemma_audio::GemmaAudioError;
+use fm_semantic_worker::gemma_audio_decode::AudioDecodeError;
+use fm_semantic_worker::gemma_audio_features::GemmaAudioFeaturesError;
 use fm_semantic_worker::gemma_fusion::GemmaFusionEncoder;
+use fm_semantic_worker::gemma_fusion::GemmaFusionError;
 use fm_semantic_worker::gemma_multimodal::{GemmaModality, GemmaProjection};
-use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder};
-use fm_semantic_worker::gemma_vision::GemmaVisionTower;
-use fm_semantic_worker::gemma_visual::{VisualKind, prepare_frame};
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder, GemmaNativeError};
+use fm_semantic_worker::gemma_vision::{GemmaVisionError, GemmaVisionTower};
+use fm_semantic_worker::gemma_visual::{GemmaVisualError, VisualKind, prepare_frame};
 use image::{ImageBuffer, ImageFormat, Rgb};
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -30,6 +36,38 @@ fn patterned_png() -> Vec<u8> {
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, ImageFormat::Png).expect("PNG");
     png.into_inner()
+}
+
+#[test]
+fn all_native_stages_report_a_single_cancellation_error() {
+    assert!(matches!(
+        GemmaNativeError::from(VideoSamplingError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(GemmaVisualError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(GemmaVisionError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(AudioDecodeError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(GemmaAudioFeaturesError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(GemmaAudioError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
+    assert!(matches!(
+        GemmaNativeError::from(GemmaFusionError::Cancelled),
+        GemmaNativeError::Cancelled
+    ));
 }
 
 #[test]
@@ -169,4 +207,57 @@ fn h264_video_file_retains_frame_timestamps() {
         .sum::<f64>()
         .sqrt();
     assert!((norm - 1.0).abs() < 1e-5);
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancelled_image_request_does_not_decode_or_infer() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open(
+        &directory,
+        768,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("native image encoder");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        encoder.encode_image_cancellable(&patterned_png(), &cancellation),
+        Err(GemmaNativeError::Cancelled)
+    ));
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancelled_video_request_does_not_sample_or_infer() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open(
+        &directory,
+        128,
+        GemmaMedia {
+            images: false,
+            audio: false,
+            video: true,
+        },
+    )
+    .expect("native video encoder");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        encoder.encode_h264_video_cancellable(
+            include_bytes!("fixtures/gemma-video-2s.mp4"),
+            &cancellation
+        ),
+        Err(GemmaNativeError::Cancelled)
+    ));
 }

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use gemma_vision::GemmaVisionTower;
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -68,6 +69,7 @@ fn native_vision_matches_upstream_real_image_and_video_frame() {
             pixels.extend(vec![0.0; pixels.len()]);
             positions.extend(vec![[-1, -1]; valid]);
         }
+
         let actual = tower
             .encode_patches(&pixels, &positions, valid)
             .expect("encode frame");
@@ -86,4 +88,21 @@ fn native_vision_matches_upstream_real_image_and_video_frame() {
             );
         }
     }
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn cancelled_vision_does_not_encode_a_frame() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let tower = GemmaVisionTower::open(&directory).expect("load vision tower");
+    let (pixels, positions) = patches(0);
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        tower.encode_patches_cancellable(&pixels, &positions, positions.len(), &cancellation),
+        Err(gemma_vision::GemmaVisionError::Cancelled)
+    ));
 }

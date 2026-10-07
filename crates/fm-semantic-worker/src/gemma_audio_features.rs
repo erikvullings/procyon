@@ -13,6 +13,9 @@ const MAX_SAMPLES: usize = 480_000;
 /// Rejected checkpoint configuration or invalid PCM.
 #[derive(Debug, thiserror::Error)]
 pub enum GemmaAudioFeaturesError {
+    /// The owning job cancelled preprocessing.
+    #[error("Gemma audio preprocessing cancelled")]
+    Cancelled,
     /// Cannot read the pinned local processor configuration.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -49,8 +52,12 @@ pub struct GemmaAudioFeatureExtractor {
 impl GemmaAudioFeatureExtractor {
     /// Verify the pinned audio preprocessing parameters before extracting features.
     pub fn open(directory: &Path) -> Result<Self, GemmaAudioFeaturesError> {
-        let config: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("preprocessor_config.json"))?)?;
+        Self::open_file(&directory.join("preprocessor_config.json"))
+    }
+
+    /// Open an independently verified original audio processor file.
+    pub fn open_file(path: &Path) -> Result<Self, GemmaAudioFeaturesError> {
+        let config: serde_json::Value = serde_json::from_reader(File::open(path)?)?;
         if config["feature_extractor_type"] != "Gemma4AudioFeatureExtractor"
             || config["feature_size"] != BANDS
             || config["sampling_rate"] != SAMPLE_RATE
@@ -108,6 +115,19 @@ impl GemmaAudioFeatureExtractor {
         pcm: &[f32],
         padded_samples: usize,
     ) -> Result<GemmaAudioFeatures, GemmaAudioFeaturesError> {
+        self.extract_pcm16k_cancellable(pcm, padded_samples, || false)
+    }
+
+    /// Extract features while checking for cancellation between frames.
+    pub fn extract_pcm16k_cancellable(
+        &self,
+        pcm: &[f32],
+        padded_samples: usize,
+        is_cancelled: impl Fn() -> bool,
+    ) -> Result<GemmaAudioFeatures, GemmaAudioFeaturesError> {
+        if is_cancelled() {
+            return Err(GemmaAudioFeaturesError::Cancelled);
+        }
         if pcm.len() <= FRAME / 2 || padded_samples < pcm.len() || padded_samples > MAX_SAMPLES {
             return Err(GemmaAudioFeaturesError::InvalidLength);
         }
@@ -128,6 +148,9 @@ impl GemmaAudioFeatureExtractor {
         let mut real = [0.0_f64; FFT];
         let mut imaginary = [0.0_f64; FFT];
         for frame in 0..valid_frames {
+            if is_cancelled() {
+                return Err(GemmaAudioFeaturesError::Cancelled);
+            }
             real.fill(0.0);
             imaginary.fill(0.0);
             for (sample, value) in real[..FRAME].iter_mut().enumerate() {

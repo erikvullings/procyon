@@ -179,6 +179,9 @@ pub struct SampledVideoFrame {
 /// An unsupported video or a violated ingestion budget.
 #[derive(Debug, thiserror::Error)]
 pub enum VideoSamplingError {
+    /// The owning operation was cancelled before sampling completed.
+    #[error("video sampling cancelled")]
+    Cancelled,
     /// The source exceeds the same bounded-read limit as thumbnails.
     #[error("video exceeds {limit} source bytes ({size})")]
     SourceTooLarge {
@@ -409,6 +412,18 @@ fn checked_annex_b(
 /// Streams with composition offsets (B-frame reordering) are rejected rather
 /// than assigning an incorrect source timestamp to a decoded frame.
 pub fn sample_video_frames(bytes: &[u8]) -> Result<Vec<SampledVideoFrame>, VideoSamplingError> {
+    sample_video_frames_cancellable(bytes, || false)
+}
+
+/// Sample frames while checking the caller's cancellation state before and
+/// between decoded samples.
+pub fn sample_video_frames_cancellable(
+    bytes: &[u8],
+    is_cancelled: impl Fn() -> bool,
+) -> Result<Vec<SampledVideoFrame>, VideoSamplingError> {
+    if is_cancelled() {
+        return Err(VideoSamplingError::Cancelled);
+    }
     if bytes.len() as u64 > MAX_SOURCE_BYTES {
         return Err(VideoSamplingError::SourceTooLarge {
             size: bytes.len() as u64,
@@ -504,6 +519,9 @@ pub fn sample_video_frames(bytes: &[u8]) -> Result<Vec<SampledVideoFrame>, Video
     let mut previous_timestamp = None;
     let mut started = false;
     for sample_id in 1..=sample_count {
+        if is_cancelled() {
+            return Err(VideoSamplingError::Cancelled);
+        }
         let sample = reader
             .read_sample(track_id, sample_id)
             .map_err(|_| VideoSamplingError::DecodeFailed)?
@@ -588,6 +606,9 @@ pub fn sample_video_frames(bytes: &[u8]) -> Result<Vec<SampledVideoFrame>, Video
     }
     if frames.is_empty() {
         return Err(VideoSamplingError::DecodeFailed);
+    }
+    if is_cancelled() {
+        return Err(VideoSamplingError::Cancelled);
     }
     Ok(frames)
 }
@@ -756,6 +777,29 @@ mod tests {
             let decoded = image::load_from_memory(&frame.bytes).expect("JPEG frame");
             assert_eq!((decoded.width(), decoded.height()), (64, 64));
         }
+    }
+
+    #[test]
+    fn cancelled_video_sampling_does_not_decode() {
+        let bytes = encode_fixture_mp4(64, 64);
+        assert!(matches!(
+            sample_video_frames_cancellable(&bytes, || true),
+            Err(VideoSamplingError::Cancelled)
+        ));
+    }
+
+    #[test]
+    fn cancellation_after_first_sample_discards_partial_video_frames() {
+        let bytes = encode_fixture_mp4_frames(64, 64, &[0, 500, 1000], 1000);
+        let checks = std::cell::Cell::new(0);
+        assert!(matches!(
+            sample_video_frames_cancellable(&bytes, || {
+                checks.set(checks.get() + 1);
+                checks.get() > 2
+            }),
+            Err(VideoSamplingError::Cancelled)
+        ));
+        assert!(checks.get() > 2);
     }
 
     #[test]

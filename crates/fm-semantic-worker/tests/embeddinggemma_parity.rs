@@ -3,9 +3,12 @@
 
 use std::path::PathBuf;
 
-use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder};
+use fm_semantic_worker::gemma_native::{
+    GemmaMedia, GemmaNativeEncoder, GemmaNativeError, GemmaNativeFiles,
+};
 use fm_semantic_worker::gemma_probe::{GemmaTextProbe, GemmaTextTask};
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -107,4 +110,65 @@ fn cpu_text_roles_and_dimensions_match_pinned_python_reference() {
             case.dimensions
         );
     }
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned, verified checkpoint"]
+fn cancelled_text_request_does_not_tokenize_or_infer() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open(
+        &directory,
+        128,
+        GemmaMedia {
+            images: false,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("native text model");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        encoder.encode_text_cancellable(GemmaTextTask::Search, "query", None, &cancellation),
+        Err(GemmaNativeError::Cancelled)
+    ));
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned, verified checkpoint"]
+fn opens_original_checkpoint_files_from_independent_verified_locations() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let separate_config = tempfile::tempdir().expect("independent config location");
+    let config = separate_config.path().join("config.json");
+    std::fs::copy(directory.join("config.json"), &config).expect("copy small config");
+    let files = GemmaNativeFiles {
+        weights: directory.join("model.safetensors"),
+        tokenizer: directory.join("tokenizer.json"),
+        config,
+        visual_processor: directory.join("processor_config.json"),
+        audio_processor: directory.join("preprocessor_config.json"),
+    };
+    let encoder = GemmaNativeEncoder::open_files(
+        &files,
+        128,
+        GemmaMedia {
+            images: false,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("load without co-located weights and config");
+    assert_eq!(
+        encoder
+            .encode_text(GemmaTextTask::Search, "query", None)
+            .expect("embed query")
+            .len(),
+        128
+    );
 }

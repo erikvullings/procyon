@@ -42,8 +42,20 @@ pub struct GemmaProjection {
 impl GemmaProjection {
     /// Loads the actual multimodal projection from an offline checkpoint.
     pub fn open(directory: &Path, modality: GemmaModality) -> Result<Self, GemmaProjectionError> {
-        let config: serde_json::Value =
-            serde_json::from_reader(File::open(directory.join("config.json"))?)?;
+        Self::open_files(
+            &directory.join("config.json"),
+            &directory.join("model.safetensors"),
+            modality,
+        )
+    }
+
+    /// Load the original projection config and weights from independent verified paths.
+    pub fn open_files(
+        config_path: &Path,
+        weights_path: &Path,
+        modality: GemmaModality,
+    ) -> Result<Self, GemmaProjectionError> {
+        let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let tower = &config[format!("{}_config", modality.name())];
         let expected_width = modality.width();
         let expected_input = if matches!(modality, GemmaModality::Audio) {
@@ -60,7 +72,7 @@ impl GemmaProjection {
             return Err(GemmaProjectionError::IncompatibleConfig);
         }
 
-        let mut checkpoint = SafetensorsFile::open(&directory.join("model.safetensors"))?;
+        let mut checkpoint = SafetensorsFile::open(weights_path)?;
         let name = format!("embed_{}.embedding_projection.weight", modality.name());
         let dtype = TensorSource::tensor_dtype(&mut checkpoint, &name)?;
         if !matches!(dtype.as_deref(), Some("BF16" | "F32")) {

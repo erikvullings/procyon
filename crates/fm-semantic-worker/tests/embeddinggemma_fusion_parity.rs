@@ -3,8 +3,9 @@
 
 use std::path::PathBuf;
 
-use fm_semantic_worker::gemma_fusion::GemmaFusionEncoder;
+use fm_semantic_worker::gemma_fusion::{GemmaFusionEncoder, GemmaFusionError};
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -59,6 +60,7 @@ fn image_and_audio_tokens_match_python_bidirectional_embeddings() {
             case.modality
         );
     }
+
     let long = reference.long_video;
     let replacements: Vec<_> = long
         .ids
@@ -76,4 +78,20 @@ fn image_and_audio_tokens_match_python_bidirectional_embeddings() {
         .map(|(a, b)| f64::from(*a) * f64::from(*b))
         .sum();
     assert!(cosine > 0.99999, "long video fusion cosine {cosine}");
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the verified checkpoint"]
+fn cancelled_fusion_does_not_compute_a_vector() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaFusionEncoder::open(&directory).expect("load native encoder");
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert!(matches!(
+        encoder.encode_cancellable(&[2, 1], &[], 768, &cancellation),
+        Err(GemmaFusionError::Cancelled)
+    ));
 }
