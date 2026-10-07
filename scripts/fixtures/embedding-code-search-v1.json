@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "generated-code-search-v1",
+  "documents": [
+    {
+      "id": "retry-after",
+      "text": "export function retryDelay(headers: Headers, now: number): number {\n  const seconds = Number(headers.get('retry-after'));\n  return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 2000;\n}"
+    },
+    {
+      "id": "backoff",
+      "text": "export function retryDelay(attempt: number): number {\n  return Math.min(2000 * 2 ** attempt, 30000);\n}"
+    },
+    {
+      "id": "scope",
+      "text": "fn allowed_records(records: Vec<Record>, tenant: &str) -> Vec<Record> {\n  records.into_iter().filter(|r| r.tenant_id == tenant && r.available).collect()\n}"
+    },
+    {
+      "id": "scope-display",
+      "text": "fn display_records(records: Vec<Record>) -> Vec<Record> {\n  records.into_iter().filter(|r| !r.hidden).collect()\n}"
+    },
+    {
+      "id": "hash",
+      "text": "fn content_digest(input: &[u8]) -> String {\n  hex::encode(sha2::Sha256::digest(input))\n}"
+    },
+    {
+      "id": "checksum",
+      "text": "fn checksum_match(left: &[u8], right: &[u8]) -> bool {\n  left == right\n}"
+    },
+    {
+      "id": "cancel",
+      "text": "async fn copy_items(items: &[Item], token: CancellationToken) -> Result<()> {\n  for item in items { if token.is_cancelled() { return Err(Error::Cancelled); } copy(item).await?; }\n  Ok(())\n}"
+    },
+    {
+      "id": "copy",
+      "text": "async fn copy_items(items: &[Item]) -> Result<()> {\n  for item in items { copy(item).await?; }\n  Ok(())\n}"
+    },
+    {
+      "id": "normalize",
+      "text": "fn l2_normalize(values: &mut [f32]) {\n  let norm = values.iter().map(|x| x * x).sum::<f32>().sqrt();\n  for x in values { *x /= norm; }\n}"
+    },
+    {
+      "id": "truncate",
+      "text": "fn truncate_vector(values: &[f32], dimensions: usize) -> Vec<f32> {\n  values[..dimensions].to_vec()\n}"
+    },
+    {
+      "id": "archive",
+      "text": "fn reject_unsafe_archive_path(path: &Path) -> Result<()> {\n  if path.components().any(|c| matches!(c, Component::ParentDir)) { return Err(Error::Traversal); }\n  Ok(())\n}"
+    },
+    {
+      "id": "archive-list",
+      "text": "fn list_archive_paths(entries: &[Entry]) -> Vec<PathBuf> {\n  entries.iter().map(|e| e.path.clone()).collect()\n}"
+    }
+  ],
+  "cases": [
+    {
+      "id": "retry",
+      "query": "Respect server Retry-After header in milliseconds",
+      "relevantIds": ["retry-after"]
+    },
+    {
+      "id": "isolation",
+      "query": "Only return records owned by the current tenant",
+      "relevantIds": ["scope"]
+    },
+    {
+      "id": "digest",
+      "query": "Calculate SHA-256 hex digest of input bytes",
+      "relevantIds": ["hash"]
+    },
+    {
+      "id": "cancellation",
+      "query": "Stop an asynchronous file copy job when cancellation is requested",
+      "relevantIds": ["cancel"]
+    },
+    {
+      "id": "unit-vector",
+      "query": "Make a floating point embedding unit length using its L2 norm",
+      "relevantIds": ["normalize"]
+    },
+    {
+      "id": "traversal",
+      "query": "Reject parent traversal components in archive extraction paths",
+      "relevantIds": ["archive"]
+    }
+  ]
+}

@@ -41,9 +41,18 @@ python scripts/compare-embedding-models.py e5 --output /tmp/e5.json
 python scripts/compare-embedding-models.py gemma --output /tmp/gemma.json
 python scripts/compare-embedding-models.py gemma --image-smoke --output /tmp/image.json
 python scripts/compare-embedding-models.py gemma --audio-smoke --output /tmp/audio.json
+python scripts/compare-embedding-models.py e5 --corpus code --output /tmp/e5-code.json
+python scripts/compare-embedding-models.py gemma --corpus code --output /tmp/gemma-code.json
+python scripts/compare-embedding-models.py e5 --corpus code --device mps --output /tmp/e5-code-mps.json
+python scripts/compare-embedding-models.py gemma --corpus code --device mps --output /tmp/gemma-code-mps.json
+python scripts/compare-embedding-models.py gemma --image-eval --output /tmp/image-eval.json
+python scripts/compare-embedding-models.py gemma --image-eval --device mps --output /tmp/image-eval-mps.json
 python -m unittest discover -s scripts -p 'test_compare_embedding_models.py'
 ```
 
+The `mps` commands apply only where PyTorch reports Apple MPS available;
+unavailable devices fail before inference rather than producing a CPU result.
+Run each command separately, not concurrently, to reduce measurement interference.
 Here `python` is the evaluation venv interpreter. Reports contain per-case ranked
 chunk IDs; keep reports local rather than committing private-workload results.
 Model revisions: E5 `614241f622f53c4eeff9890bdc4f31cfecc418b3`;
@@ -94,6 +103,93 @@ At FP32, raw vectors for one million chunks occupy approximately 0.512, 1.024,
 WAL, and migration overlap. 128d on the same Google model card drops
 multimodal benchmark quality noticeably, so no default dimension is
 established by this small text fixture.
+
+## Optional-pack evaluation: code and images
+
+[`embedding-code-search-v1.json`](../../scripts/fixtures/embedding-code-search-v1.json)
+contains **12 generated, repository-owned TypeScript/Rust snippets** with six
+hand-labelled natural-language queries (one relevant snippet each). Similar
+names and APIs with materially different behavior act as hard negatives:
+retry header versus exponential backoff, tenant authorization versus hidden
+display, content digest versus equality check, cancellable versus uncancellable
+copy, L2 normalization versus truncation, and safe archive path versus listing.
+Both models see the same raw snippets and questions. E5 uses case-folded
+`query: ` and `passage: `; Gemma uses `CodeRetrieval` for queries and `Document`
+for snippets. No filename/title is supplied to either model. Both use cosine
+ranking on normalized vectors; all Gemma truncation dimensions are applied
+and renormalized symmetrically. The code corpus SHA-256 is
+`c2420e55dabdbecacba39542b33ce483e988e74c33495c5e44121a190c558bac`.
+
+| Code retrieval, six questions | E5 384d | Gemma 128d | Gemma 256d | Gemma 512d | Gemma 768d |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Recall@1 / recall@3 / MRR, CPU | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
+| Recall@1 / recall@3 / MRR, MPS | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
+
+| Warm, code, FP32, 4 CPU threads | E5 CPU | E5 MPS | Gemma CPU | Gemma MPS |
+| --- | ---: | ---: | ---: | ---: |
+| Model construction from cached files (seconds) | 1.00 | 1.06 | 1.22 | 1.47 |
+| 12 snippets, batch size 8 (docs/second) | 321 | 583 | 58 | 192 |
+| Six individual queries, median / p95 (ms) | 5.55 / 5.66 | 6.41 / 6.97 | 25.15 / 25.79 | 25.02 / 28.28 |
+| Process peak RSS, GB | 1.01 | 1.04 | 2.40 | 2.40 |
+| MPS allocated / driver bytes **after run**, GB | n/a | 0.47 / 1.12 | n/a | 1.08 / 2.17 |
+
+Timed code document batches and queries were each preceded by an equivalent
+warm-up. MPS timings synchronize the device after inference. MPS helps
+Gemma's small-batch document throughput on this Mac (~3.3x) but not
+single-query latency in the repeated run; it does not establish a win over E5. The MPS
+numbers are allocator/driver **post-run** snapshots, not peak VRAM; on
+unified-memory Macs, do not add them to process RSS. This is PyTorch versus
+PyTorch, not a measurement of the shipped E5 ONNX worker. Model construction
+from a warmed local cache is not a cold-start time. Six easy, single-positive
+queries all rank at position 1 and do **not** demonstrate code-retrieval
+advantage or statistical confidence; actual larger labelled codebases with
+multilingual queries and adversarial distractors are still required.
+
+`--image-eval` deterministically draws four labeled color/shape subjects,
+then resizes and JPEG-compresses a positive for each. Four additional
+same-color or same-shape negatives yield 12 images. Four text-to-image queries
+use `SearchQuery` against the 12 **unprefixed** image embeddings; four
+image-to-image queries use the original (removed from its candidate list)
+to find the compressed variant. Relevant images are labelled **before**
+inference. At **each** Gemma dimension (128, 256, 512, 768), both tasks
+achieved recall@2 = 1 and MRR = 1 on CPU and MPS. Text queries have two
+positives per query; image queries have one after self-exclusion.
+
+| Warm image fixture, 12 images, FP32 | CPU | MPS |
+| --- | ---: | ---: |
+| Serial images/second (includes per-image preprocessing) | 1.01 | 5.55 |
+| Four text queries, median ms | 32.94 | 23.78 |
+| Process peak RSS, GB | 3.08 | 3.08 |
+| MPS allocated / driver bytes **after run**, GB | n/a | 1.76 / 2.84 |
+
+This validates the image API and straightforward cross-modal alignment,
+not photographic relevance, captions, difficult near-duplicates, threshold
+selection, scale, or the optical duplicate-detection requirements of task
+0170. E5 has no image encoder; there is no equivalent E5 image retrieval
+score. The prior one-pair image smoke and generated audio check below remain
+separate feasibility checks, **not** evidence for packaging.
+
+**Prompt routing for a possible package:** use `SearchQuery` for search
+queries, `QuestionAnswering` for question-answering retrieval when that is
+the chosen task, `CodeRetrieval` for code-search queries, and `Document` for
+untitled text/code candidates (`title: none | text: ...`); supply a real
+title in Gemma's explicit `title: ... | text: ...` format only if genuinely
+available. Media dictionaries are **unprefixed**. Prompts and formatting
+change the embedding contract and cache identity; do not reuse general-search
+query vectors for code/QA tasks or pretend these six code queries evaluate
+the QA prompt. E5's production prefixes remain `query: ` / `passage: `.
+See the [Google developer guide](https://developers.googleblog.com/embeddinggemma-2-the-developer-guide/)
+and [model card's prompt table](https://huggingface.co/google/embeddinggemma-2).
+
+**Optional-package decision: evidence insufficient to ship.** The test
+confirms Gemma can run code/text/images locally, including MPS, but finds no
+measured code-ranking gain over E5 on this corpus. CPU text throughput is
+worse, and an image-enabled process has a materially larger resident footprint
+and checkpoint download. A gated optional package would still need a reviewed
+license/distribution path, trusted subset packaging, offline native runtime on
+all supported targets, substantial labelled retrieval quality evidence and
+resource limits. No optional package, checkbox, migration, or media ingest
+was implemented.
 
 ## Media feasibility and boundaries
 
