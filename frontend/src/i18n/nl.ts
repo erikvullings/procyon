@@ -1331,6 +1331,24 @@ export const nl = {
     multilingualQualityName: 'Meertalige kwaliteit',
     multilingualQualityDescription:
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
+    gemmaName: 'EmbeddingGemma 2 (optioneel)',
+    gemmaDescription:
+      'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
+    gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
+    gemmaFreshLibraryExplanation:
+      'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen dimensie en mediatoestemmingen kunnen alleen met een nieuwe index worden gewijzigd.',
+    gemmaDimensions: 'Dimensies van de embeddings',
+    gemmaSelectDimension: 'Kies een dimensie',
+    gemmaDimensionTradeoff:
+      'Kleinere vectoren gebruiken minder indexruimte, maar 128 dimensies kunnen de zoekkwaliteit voor afbeeldingen en andere media verminderen.',
+    gemmaImages: 'Afbeeldingen opnemen',
+    gemmaAudio: 'Audio opnemen',
+    gemmaVideo: 'Video opnemen (gebruikt de vision-encoder)',
+    gemmaFreshConsent:
+      'Ik begrijp dat Gemma met een lege index begint en mijn E5-gegevens niet migreert.',
+    gemmaConsentRequired: 'Kies een dimensie en bevestig de informatie over de nieuwe bibliotheek.',
+    gemmaExistingSetup:
+      'Bestaande bibliotheek: {dimensions} dimensies · afbeeldingen: {images} · audio: {audio} · video: {video}. Deze keuzes staan vast.',
     recommended: 'Aanbevolen',
     noProfiles: 'Deze host biedt geen modelprofielen aan.',
     reviewInstallation:

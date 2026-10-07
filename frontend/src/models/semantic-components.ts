@@ -52,3 +52,14 @@ export type { SemanticRuntimeExecutableDownloadDto as SemanticRuntimeExecutableD
 export type { SemanticUninstallReceiptDto as SemanticUninstallReceipt } from '../api/generated/models/semanticUninstallReceiptDto';
 export type { SemanticWorkerPatchResponseDto as SemanticWorkerPatchResponse } from '../api/generated/models/semanticWorkerPatchResponseDto';
 export type { UninstallSemanticComponentsRequestDto as UninstallSemanticComponentsRequest } from '../api/generated/models/uninstallSemanticComponentsRequestDto';
+
+/** Desktop-only initialization of a separate, immutable Gemma library. */
+export interface InitializeGemmaLibraryRequest {
+  readonly dimensions: 128 | 256 | 512 | 768;
+  readonly images: boolean;
+  readonly audio: boolean;
+  readonly video: boolean;
+  readonly confirmFreshIndex: boolean;
+}
+
+export type GemmaLibrarySetup = Omit<InitializeGemmaLibraryRequest, 'confirmFreshIndex'>;

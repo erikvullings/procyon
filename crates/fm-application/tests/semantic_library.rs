@@ -29,11 +29,11 @@ use fm_semantic_library::{
     CatalogObservation, CommitStep, ContentFingerprint, ConversationEvidencePin, ConversationPinId,
     DeletionPlanId, DerivedArtifactId, DeviceLibraryIdentity, DocumentArtifacts,
     DocumentMeasurement, EligibilityCandidate, EligibilityDecision, EligibilityEntryKind,
-    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity, HardQuotas,
-    LibraryId, LibraryOperation, ModelIdentity, ObservedRootIdentity, OccurrenceScope,
-    ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId, RootMoveResolution,
-    RootUnavailabilityReason, SemanticCatalog, SemanticLibraryCoordinator, SemanticLibraryPolicy,
-    SemanticLibraryState, ServerEnrolmentPolicy,
+    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity,
+    GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation, ModelIdentity,
+    ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile, ResourceProfileKind,
+    RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
+    SemanticLibraryCoordinator, SemanticLibraryPolicy, SemanticLibraryState, ServerEnrolmentPolicy,
 };
 use fm_transport_dto::RuntimeKindDto;
 use fm_transport_dto::{ConfirmSemanticEnrolmentRequestDto, PreviewSemanticEnrolmentRequestDto};
@@ -1108,6 +1108,57 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
     );
 }
 
+#[test]
+fn a_gemma_library_feeds_only_media_selected_at_creation() {
+    let directory = project_temp_dir("gemma-media-feed-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: true,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+    let root_id: RootId = service.status(&HOST).unwrap().roots[0].id.parse().unwrap();
+    let plan = service
+        .worker_feed_plan(
+            &HOST,
+            &[
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/photo.png", Some("image/png"), false),
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/song.wav", Some("audio/wav"), false),
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/clip.mp4", Some("video/mp4"), false),
+                },
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        plan.eligible_locations,
+        [
+            location("file:///docs/photo.png"),
+            location("file:///docs/clip.mp4")
+        ]
+    );
+}
+
 fn candidate(uri: &str, mime: Option<&str>, hidden: bool) -> EligibilityCandidate {
     EligibilityCandidate {
         location: location(uri),
@@ -1537,6 +1588,108 @@ fn installed_profiles() -> Vec<SemanticModelProfile> {
             estimated_ram_bytes: 2_048,
         },
     }]
+}
+
+#[tokio::test]
+async fn fresh_gemma_setup_switches_libraries_without_overwriting_e5() {
+    let directory = project_temp_dir("gemma-composition-");
+    let settings = directory.path().join("settings");
+    let data_root = directory.path().join("semantic");
+    let mut profiles = installed_profiles();
+    let mut gemma = profiles[0].clone();
+    gemma.profile = SemanticProfile::EmbeddingGemma2;
+    gemma.recommended = false;
+    gemma.resolved_model = SemanticModelIdentity::new(
+        "google-embeddinggemma-2",
+        "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    );
+    gemma.metadata.identity = gemma.resolved_model.clone();
+    profiles.push(gemma.clone());
+    let components =
+        MutableComponentCapability::new(installed_component_status(&data_root), profiles);
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        directory.path().join("workspaces"),
+        &settings,
+    )
+    .with_semantic_component_capability(components.clone());
+    let initial = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    let media = GemmaMediaSelection {
+        images: true,
+        audio: false,
+        video: true,
+    };
+    assert!(
+        service
+            .initialize_semantic_gemma_library(256, media, false)
+            .await
+            .is_err()
+    );
+    assert!(
+        service
+            .semantic_gemma_library_setup()
+            .await
+            .unwrap()
+            .is_none()
+    );
+    service
+        .initialize_semantic_gemma_library(256, media, true)
+        .await
+        .unwrap();
+    service
+        .initialize_semantic_gemma_library(256, media, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .semantic_gemma_library_setup()
+            .await
+            .unwrap()
+            .unwrap()
+            .dimensions,
+        256
+    );
+    assert!(
+        service
+            .initialize_semantic_gemma_library(512, media, true)
+            .await
+            .is_err()
+    );
+
+    components.set_status(SemanticComponentStatus::new(
+        SemanticComponentLifecycle::InstalledEnabled,
+        Some(data_root),
+        Some(SemanticModelSelection::new(
+            SemanticProfile::EmbeddingGemma2,
+            gemma.resolved_model,
+        )),
+        None,
+        Vec::new(),
+        SemanticDiskUse::empty(),
+    ));
+    let active = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    assert_eq!(active.model.dimensions, 256);
+    assert_ne!(active.library_id, initial.library_id);
+    components.set_status(installed_component_status(
+        &directory.path().join("semantic"),
+    ));
+    let restored = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    assert_eq!(restored, initial);
 }
 
 #[tokio::test]

@@ -269,6 +269,19 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<SemanticModelProfile[]>('list_semantic_component_profiles');
   }
 
+  async getGemmaLibrarySetup(
+    _signal?: AbortSignal,
+  ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null> {
+    return invoke('get_semantic_gemma_library_setup');
+  }
+
+  async initializeGemmaLibrary(
+    request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('initialize_semantic_gemma_library', { request });
+  }
+
   async createSemanticComponentInstallationOffer(
     request: CreateSemanticInstallationOfferRequest,
     _signal?: AbortSignal,

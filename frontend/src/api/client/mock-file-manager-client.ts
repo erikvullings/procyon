@@ -265,6 +265,8 @@ export type MockClientMethod =
   | 'getSemanticComponentCapabilities'
   | 'getSemanticComponentStatus'
   | 'listSemanticComponentProfiles'
+  | 'initializeGemmaLibrary'
+  | 'getGemmaLibrarySetup'
   | 'createSemanticComponentInstallationOffer'
   | 'acceptSemanticComponentInstallationOffer'
   | 'pauseSemanticComponentIndexing'
@@ -948,6 +950,7 @@ function mockSemanticIdentity(profile: SemanticProfile): SemanticModelIdentity {
     compactMultilingual: 'compact-multilingual',
     compactEnglish: 'compact-english',
     multilingualQuality: 'multilingual-quality',
+    embeddingGemma2: 'embeddinggemma-2',
   }[profile];
   return {
     modelId: `mock-${suffix}`,
@@ -1640,6 +1643,24 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('listSemanticComponentProfiles', signal, () => {
       this.requireSemanticAvailable();
       return mockSemanticProfiles();
+    });
+  }
+
+  getGemmaLibrarySetup(
+    signal?: AbortSignal,
+  ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null> {
+    return this.perform('getGemmaLibrarySetup', signal, () => null);
+  }
+
+  initializeGemmaLibrary(
+    _request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('initializeGemmaLibrary', signal, () => {
+      throw new MockClientError(
+        'unavailable',
+        'The mock host does not include a signed Gemma package.',
+      );
     });
   }
 

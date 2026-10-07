@@ -1328,6 +1328,24 @@ export const en = {
     multilingualQualityName: 'Multilingual quality',
     multilingualQualityDescription:
       'Higher-quality multilingual retrieval with greater disk, memory, and indexing cost.',
+    gemmaName: 'EmbeddingGemma 2 (optional)',
+    gemmaDescription:
+      'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
+    gemmaSetupTitle: 'New EmbeddingGemma 2 library',
+    gemmaFreshLibraryExplanation:
+      'This starts an empty library. Your E5 library and its index stay intact. The selected dimension and media permissions cannot change without creating a new index.',
+    gemmaDimensions: 'Embedding dimensions',
+    gemmaSelectDimension: 'Select a dimension',
+    gemmaDimensionTradeoff:
+      'Smaller vectors use less index storage, but 128 dimensions may reduce image and other media retrieval quality.',
+    gemmaImages: 'Include images',
+    gemmaAudio: 'Include audio',
+    gemmaVideo: 'Include video (uses the vision encoder)',
+    gemmaFreshConsent:
+      'I understand that Gemma starts with an empty index and does not migrate my E5 data.',
+    gemmaConsentRequired: 'Select a dimension and confirm the new-library disclosure.',
+    gemmaExistingSetup:
+      'Existing library: {dimensions} dimensions · images: {images} · audio: {audio} · video: {video}. These choices are locked.',
     recommended: 'Recommended',
     noProfiles: 'No model profiles are available from this host.',
     reviewInstallation: 'Review the complete signed offer before anything is downloaded.',

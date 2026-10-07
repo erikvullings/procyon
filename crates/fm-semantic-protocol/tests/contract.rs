@@ -42,6 +42,7 @@ fn assert_query_request_shape(request: v1::QueryRequest) {
         query,
         maximum_results,
         concept_query,
+        intent,
     } = request;
     assert!(session.is_some());
     assert!(scope.is_some());
@@ -49,6 +50,7 @@ fn assert_query_request_shape(request: v1::QueryRequest) {
     assert!(!query.is_empty());
     assert!(maximum_results > 0);
     assert!(concept_query.is_none());
+    assert_eq!(intent, v1::QueryIntent::Search as i32);
 }
 
 #[test]
@@ -92,6 +94,7 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
         query: "revenue".to_owned(),
         maximum_results: 20,
         concept_query: None,
+        intent: v1::QueryIntent::Search as i32,
     };
     assert_eq!(validate_query(&query), Ok(()));
     assert_query_request_shape(query.clone());
@@ -101,6 +104,39 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
     assert_eq!(
         validate_query(&unscoped),
         Err(RequestValidationError::MissingScope)
+    );
+}
+
+#[test]
+fn typed_query_intents_round_trip_and_reject_unknown_or_concept_roles() {
+    let mut query = v1::QueryRequest {
+        session: Some(session()),
+        scope: Some(scope()),
+        request_id: "intent-query".into(),
+        query: "find code".into(),
+        maximum_results: 10,
+        concept_query: None,
+        intent: v1::QueryIntent::CodeRetrieval as i32,
+    };
+    let decoded = v1::QueryRequest::decode(query.encode_to_vec().as_slice()).unwrap();
+    assert_eq!(decoded.intent, query.intent);
+    assert_eq!(validate_query(&decoded), Ok(()));
+    query.intent = v1::QueryIntent::QuestionAnswering as i32;
+    assert_eq!(validate_query(&query), Ok(()));
+    query.intent = 99;
+    assert_eq!(
+        validate_query(&query),
+        Err(RequestValidationError::InvalidQueryIntent)
+    );
+    query.intent = v1::QueryIntent::QuestionAnswering as i32;
+    query.concept_query = Some(v1::ConceptQuery {
+        vocabulary_id: "v".into(),
+        concept_uris: vec!["urn:concept:a".into()],
+        ..Default::default()
+    });
+    assert_eq!(
+        validate_query(&query),
+        Err(RequestValidationError::InvalidQueryIntent)
     );
 }
 
@@ -120,6 +156,7 @@ fn concept_queries_are_bounded_and_do_not_require_text() {
             include_unavailable: true,
             offset: 0,
         }),
+        intent: v1::QueryIntent::Search as i32,
     };
     assert_eq!(validate_query(&query), Ok(()));
 

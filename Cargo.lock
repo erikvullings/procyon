@@ -3026,6 +3026,7 @@ dependencies = [
  "fm-platform-windows",
  "fm-search-acceleration",
  "fm-semantic-components",
+ "fm-semantic-library",
  "fm-semantic-worker",
  "fm-transport-dto",
  "fs2",

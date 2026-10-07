@@ -229,6 +229,13 @@ export interface FileManagerClient {
   getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities>;
   getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus>;
   listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]>;
+  getGemmaLibrarySetup(
+    signal?: AbortSignal,
+  ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null>;
+  initializeGemmaLibrary(
+    request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
+    signal?: AbortSignal,
+  ): Promise<void>;
   createSemanticComponentInstallationOffer(
     request: CreateSemanticInstallationOfferRequest,
     signal?: AbortSignal,

@@ -3,10 +3,12 @@
 
 use std::path::PathBuf;
 
+use fm_semantic_worker::gemma_embedding::GemmaTextEmbeddingProvider;
 use fm_semantic_worker::gemma_native::{
     GemmaMedia, GemmaNativeEncoder, GemmaNativeError, GemmaNativeFiles,
 };
 use fm_semantic_worker::gemma_probe::{GemmaTextProbe, GemmaTextTask};
+use fm_semantic_worker::ingestion::{DocumentEmbeddingInput, EmbeddingProvider};
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
@@ -171,4 +173,64 @@ fn opens_original_checkpoint_files_from_independent_verified_locations() {
             .len(),
         128
     );
+}
+
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned, verified checkpoint"]
+fn native_model_serves_search_and_document_embeddings_through_worker_contract() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = std::sync::Arc::new(
+        GemmaNativeEncoder::open(
+            &directory,
+            256,
+            GemmaMedia {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        )
+        .expect("native multimodal model"),
+    );
+    let search = GemmaTextEmbeddingProvider::new(encoder.clone(), GemmaTextTask::Search);
+    let document = GemmaTextEmbeddingProvider::new(encoder, GemmaTextTask::Document);
+    assert_ne!(
+        search.cache_input("Case-sensitive"),
+        search.cache_input("case-sensitive")
+    );
+    assert_ne!(
+        search.preprocessing_version(),
+        fm_semantic_worker::embedding::EMBEDDING_PREPROCESSING_VERSION
+    );
+    let cancellation = CancellationToken::new();
+    let query = search
+        .embed(&["leaking tap".into()], &cancellation)
+        .expect("search");
+    let corpus = document
+        .embed(&["leaking tap".into()], &cancellation)
+        .expect("document");
+    assert_eq!(query[0].len(), 256);
+    assert_eq!(search.identity(), document.identity());
+    assert_ne!(query, corpus);
+    let titled = document
+        .embed_documents(
+            &[DocumentEmbeddingInput {
+                text: "leaking tap".into(),
+                title: Some("Repair guide".into()),
+            }],
+            &cancellation,
+        )
+        .expect("titled document");
+    assert_ne!(titled, corpus);
+    assert_ne!(
+        document.cache_document_input(Some("Repair guide"), "leaking tap"),
+        document.cache_document_input(None, "leaking tap")
+    );
+    cancellation.cancel();
+    assert!(matches!(
+        search.embed(&["leaking tap".into()], &cancellation),
+        Err(fm_semantic_worker::embedding::EmbeddingError::Cancelled)
+    ));
 }

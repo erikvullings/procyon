@@ -27,6 +27,12 @@ use crate::embedding::{
     EmbeddingError, EmbeddingModelIdentity, EmbeddingResourceProfile, LocalEmbeddingRuntime,
     VectorNormalization, case_fold_embedding_input,
 };
+#[cfg(feature = "gemma-native")]
+use crate::gemma_embedding::{GEMMA_PREPROCESSING_VERSION, GemmaTextEmbeddingProvider};
+#[cfg(feature = "gemma-native")]
+use crate::gemma_native::{GemmaMedia, GemmaNativeEncoder, GemmaNativeFiles};
+#[cfg(feature = "gemma-native")]
+use crate::gemma_probe::GemmaTextTask;
 use crate::ingestion::{
     DerivedIndex, EmbeddingProvider, IngestionCoordinator, IngestionEventSink, IngestionProgress,
     InteractivePriority, PipelineIngestionBackend, ResourceProbe, ResourceState,
@@ -39,11 +45,43 @@ use crate::semantic_storage::{
 };
 use crate::zvec_storage::{ZVEC_SCHEMA_VERSION, ZvecRecord, ZvecStorage, ZvecStorageError};
 use crate::{
-    ServerError, WorkerConfig, WorkerIngestionBackend, WorkerQueryBackend, WorkerServer,
-    run_desktop_worker_with_factory,
+    ManagedModel, ServerError, WorkerConfig, WorkerIngestionBackend, WorkerQueryBackend,
+    WorkerServer, run_desktop_worker_with_factory,
 };
 
 const INDEX_REBUILD_BATCH_SIZE: usize = 256;
+
+#[cfg(feature = "gemma-native")]
+fn gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
+    format!(
+        "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
+        u8::from(media.images),
+        u8::from(media.audio),
+        u8::from(media.video)
+    )
+}
+
+#[cfg(feature = "gemma-native")]
+fn prepare_gemma_index_marker(
+    model_directory: &Path,
+    dimensions: usize,
+    media: GemmaMedia,
+) -> Result<(), DeveloperBundleError> {
+    let marker = model_directory.join("embedding-space");
+    let space = gemma_embedding_space(dimensions, media);
+    if marker.exists() {
+        if std::fs::read_to_string(&marker)? != space {
+            return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+        }
+    } else {
+        if model_directory.join("catalog.sqlite").exists() || model_directory.join("zvec").exists()
+        {
+            return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+        }
+        std::fs::write(marker, space)?;
+    }
+    Ok(())
+}
 
 /// Fixed vector width for the non-production developer embedder.
 pub const DEVELOPMENT_EMBEDDING_DIMENSIONS: usize = 384;
@@ -234,6 +272,8 @@ struct DeveloperModel {
     loader: Box<dyn CpuEmbeddingLoader>,
     package_directory: PathBuf,
     description: String,
+    #[cfg(feature = "gemma-native")]
+    gemma: Option<(Arc<GemmaNativeEncoder>, GemmaMedia)>,
 }
 
 impl DeveloperModel {
@@ -252,6 +292,8 @@ impl DeveloperModel {
                 loader: Box::new(DevelopmentEmbeddingLoader),
                 package_directory: fixture_directory.to_owned(),
                 description: "deterministic token-hashing fixture".to_owned(),
+                #[cfg(feature = "gemma-native")]
+                gemma: None,
             });
         };
         if !model_pack.is_absolute() {
@@ -320,6 +362,51 @@ impl DeveloperModel {
             loader,
             package_directory,
             description,
+            #[cfg(feature = "gemma-native")]
+            gemma: None,
+        })
+    }
+
+    #[cfg(feature = "gemma-native")]
+    fn resolve_gemma(
+        files: &GemmaNativeFiles,
+        dimensions: usize,
+        media: GemmaMedia,
+    ) -> Result<Self, DeveloperBundleError> {
+        for path in [
+            &files.weights,
+            &files.tokenizer,
+            &files.config,
+            &files.visual_processor,
+            &files.audio_processor,
+        ] {
+            if !path.is_absolute()
+                || !std::fs::symlink_metadata(path)
+                    .is_ok_and(|metadata| metadata.file_type().is_file())
+            {
+                return Err(DeveloperBundleError::InvalidGemmaFile(path.clone()));
+            }
+        }
+        let encoder = Arc::new(
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+                .map_err(|error| DeveloperBundleError::Gemma(error.to_string()))?,
+        );
+        let identity =
+            GemmaTextEmbeddingProvider::new(Arc::clone(&encoder), GemmaTextTask::Document)
+                .identity()
+                .clone();
+        Ok(Self {
+            identity,
+            query_prefix: String::new(),
+            passage_prefix: String::new(),
+            loader: Box::new(DevelopmentEmbeddingLoader),
+            package_directory: files
+                .weights
+                .parent()
+                .ok_or_else(|| DeveloperBundleError::InvalidGemmaFile(files.weights.clone()))?
+                .to_owned(),
+            description: "google/embeddinggemma-2 (native CPU)".to_owned(),
+            gemma: Some((encoder, media)),
         })
     }
 
@@ -329,6 +416,11 @@ impl DeveloperModel {
         hasher.update(self.identity.model_id.as_bytes());
         hasher.update(b"\0");
         hasher.update(self.identity.model_revision.as_bytes());
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = &self.gemma {
+            hasher.update(b"\0");
+            hasher.update(gemma_embedding_space(self.identity.dimensions, *media).as_bytes());
+        }
         let digest = hasher.finalize();
         let slug = self
             .identity
@@ -343,6 +435,18 @@ impl DeveloperModel {
             })
             .take(48)
             .collect::<String>();
+        #[cfg(feature = "gemma-native")]
+        let slug = if let Some((_, media)) = &self.gemma {
+            format!(
+                "{slug}-d{}-i{}-a{}-v{}",
+                self.identity.dimensions,
+                u8::from(media.images),
+                u8::from(media.audio),
+                u8::from(media.video)
+            )
+        } else {
+            slug
+        };
         data_directory.join("indexes").join(format!(
             "{slug}-{:016x}",
             u64::from_be_bytes(digest[..8].try_into().unwrap_or([0; 8]))
@@ -401,6 +505,12 @@ fn prepare_active_model_index(
     const REINDEX_RESET_PENDING_NAME: &str = "model-reindex-reset.pending";
 
     let model_directory = model.index_directory(data_directory);
+    #[cfg(feature = "gemma-native")]
+    if model.gemma.is_some() {
+        // Gemma has a separate dimension/media-specific space. Do not touch
+        // E5's activation marker or clear E5's existing index on a switch.
+        return Ok(model_directory);
+    }
     let identity = format!(
         "{}\n{}\n{}\n{}\n",
         model.identity.model_id,
@@ -522,11 +632,14 @@ impl IngestionEventSink for DiscardDeveloperEvents {
 
 struct DeveloperWorker {
     catalog: SemanticCatalog,
-    embedder: Arc<LocalEmbeddingRuntime>,
+    passages: Arc<dyn EmbeddingProvider>,
+    queries: Arc<dyn EmbeddingProvider>,
+    #[cfg(feature = "gemma-native")]
+    gemma_question: Option<Arc<dyn EmbeddingProvider>>,
+    #[cfg(feature = "gemma-native")]
+    gemma_code: Option<Arc<dyn EmbeddingProvider>>,
     index: Arc<ZvecStorage>,
     manifest: LibraryIndexManifest,
-    query_prefix: String,
-    passage_prefix: String,
     data_directory: PathBuf,
     description: String,
     ocr: OcrConfigSource,
@@ -587,24 +700,90 @@ impl DeveloperWorker {
         model: DeveloperModel,
         ocr: OcrConfigSource,
     ) -> Result<Self, DeveloperBundleError> {
-        let package = CuratedModelPackage {
-            identity: model.identity.clone(),
-            directory: model.package_directory.clone(),
+        #[cfg(feature = "gemma-native")]
+        let gemma = model.gemma.as_ref();
+        let (passages, queries): (Arc<dyn EmbeddingProvider>, Arc<dyn EmbeddingProvider>) = {
+            #[cfg(feature = "gemma-native")]
+            if let Some((encoder, _)) = gemma {
+                (
+                    Arc::new(GemmaTextEmbeddingProvider::new(
+                        Arc::clone(encoder),
+                        GemmaTextTask::Document,
+                    )),
+                    Arc::new(GemmaTextEmbeddingProvider::new(
+                        Arc::clone(encoder),
+                        GemmaTextTask::Search,
+                    )),
+                )
+            } else {
+                let package = CuratedModelPackage {
+                    identity: model.identity.clone(),
+                    directory: model.package_directory.clone(),
+                };
+                let embedder = Arc::new(LocalEmbeddingRuntime::load(
+                    &package,
+                    model.loader.as_ref(),
+                    EmbeddingResourceProfile::Fast,
+                    VectorNormalization::L2,
+                )?);
+                (
+                    RolePrefixedEmbedder::wrap(&embedder, &model.passage_prefix),
+                    RolePrefixedEmbedder::wrap(&embedder, &model.query_prefix),
+                )
+            }
+            #[cfg(not(feature = "gemma-native"))]
+            {
+                let package = CuratedModelPackage {
+                    identity: model.identity.clone(),
+                    directory: model.package_directory.clone(),
+                };
+                let embedder = Arc::new(LocalEmbeddingRuntime::load(
+                    &package,
+                    model.loader.as_ref(),
+                    EmbeddingResourceProfile::Fast,
+                    VectorNormalization::L2,
+                )?);
+                (
+                    RolePrefixedEmbedder::wrap(&embedder, &model.passage_prefix),
+                    RolePrefixedEmbedder::wrap(&embedder, &model.query_prefix),
+                )
+            }
         };
-        let embedder = Arc::new(LocalEmbeddingRuntime::load(
-            &package,
-            model.loader.as_ref(),
-            EmbeddingResourceProfile::Fast,
-            VectorNormalization::L2,
-        )?);
 
+        #[cfg(feature = "gemma-native")]
+        let gemma_question = gemma.map(|(encoder, _)| {
+            Arc::new(GemmaTextEmbeddingProvider::new(
+                Arc::clone(encoder),
+                GemmaTextTask::Question,
+            )) as Arc<dyn EmbeddingProvider>
+        });
+        #[cfg(feature = "gemma-native")]
+        let gemma_code = gemma.map(|(encoder, _)| {
+            Arc::new(GemmaTextEmbeddingProvider::new(
+                Arc::clone(encoder),
+                GemmaTextTask::Code,
+            )) as Arc<dyn EmbeddingProvider>
+        });
         retire_superseded_flat_layout(data_directory)?;
         // Each model owns its own catalog and vector index: an index built for
         // one embedding space is meaningless in another, so switching profiles
         // must start a new index rather than corrupt or reject the old one.
         let model_directory = prepare_active_model_index(data_directory, &model)?;
         std::fs::create_dir_all(&model_directory)?;
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = gemma {
+            prepare_gemma_index_marker(&model_directory, model.identity.dimensions, *media)?;
+        }
         let manifest = developer_manifest(&model.identity);
+        #[cfg(feature = "gemma-native")]
+        let manifest = if gemma.is_some() {
+            LibraryIndexManifest {
+                embedding_preprocessing: GEMMA_PREPROCESSING_VERSION.into(),
+                ..manifest
+            }
+        } else {
+            manifest
+        };
         let catalog = SemanticCatalog::open(model_directory.join("catalog.sqlite"))?;
         let index_directory = model_directory.join("zvec");
         let index = if ZvecStorage::migration_pending(&index_directory) {
@@ -632,11 +811,14 @@ impl DeveloperWorker {
         catalog.validate_registered_library_manifests(&manifest)?;
         Ok(Self {
             catalog,
-            embedder,
+            passages,
+            queries,
+            #[cfg(feature = "gemma-native")]
+            gemma_question,
+            #[cfg(feature = "gemma-native")]
+            gemma_code,
             index: Arc::new(index),
             manifest,
-            query_prefix: model.query_prefix,
-            passage_prefix: model.passage_prefix,
             data_directory: data_directory.to_owned(),
             description: model.description,
             ocr,
@@ -645,7 +827,7 @@ impl DeveloperWorker {
 
     fn open_managed(
         data_directory: &Path,
-        model_pack: &Path,
+        model: &ManagedModel,
         ocrmypdf_executable: Option<&Path>,
     ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
@@ -657,7 +839,15 @@ impl DeveloperWorker {
                 data_directory.to_owned(),
             ));
         }
-        let model = DeveloperModel::resolve_managed(model_pack)?;
+        let model = match model {
+            ManagedModel::Pack(path) => DeveloperModel::resolve_managed(path)?,
+            #[cfg(feature = "gemma-native")]
+            ManagedModel::Gemma {
+                files,
+                dimensions,
+                media,
+            } => DeveloperModel::resolve_gemma(files, *dimensions, *media)?,
+        };
         Self::open_with_model(
             data_directory,
             model,
@@ -665,10 +855,17 @@ impl DeveloperWorker {
         )
     }
 
-    /// Composes search-only knowledge retrieval over the same catalog, model,
-    /// and native Zvec index the dense route uses.
+    /// Composes Ask retrieval over the same catalog and native Zvec index;
+    /// Gemma uses its question prompt while E5 retains its search prefix.
     fn knowledge_backend(&self) -> Arc<dyn crate::WorkerKnowledgeBackend> {
-        let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
+        #[cfg(feature = "gemma-native")]
+        let queries = self
+            .gemma_question
+            .as_ref()
+            .unwrap_or(&self.queries)
+            .clone();
+        #[cfg(not(feature = "gemma-native"))]
+        let queries = Arc::clone(&self.queries);
         let vector_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
         let full_text_index: Arc<dyn crate::knowledge_retrieval::FullTextCandidateIndex> =
             self.index.clone();
@@ -681,8 +878,8 @@ impl DeveloperWorker {
     }
 
     fn backends(&self) -> (Arc<dyn WorkerIngestionBackend>, Arc<dyn WorkerQueryBackend>) {
-        let passages = RolePrefixedEmbedder::wrap(&self.embedder, &self.passage_prefix);
-        let queries = RolePrefixedEmbedder::wrap(&self.embedder, &self.query_prefix);
+        let passages = Arc::clone(&self.passages);
+        let queries = Arc::clone(&self.queries);
         let derived_index: Arc<dyn DerivedIndex> = self.index.clone();
         let candidate_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
         let ocr_configuration = self.ocr.configuration();
@@ -708,9 +905,19 @@ impl DeveloperWorker {
         let ingestion: Arc<dyn WorkerIngestionBackend> = Arc::new(
             PipelineIngestionBackend::with_library_manifest(coordinator, self.manifest.clone()),
         );
-        let query: Arc<dyn WorkerQueryBackend> = Arc::new(DenseWorkerQueryBackend::new(
-            SemanticSearchService::new(self.catalog.clone(), queries, candidate_index),
+        let query_backend = DenseWorkerQueryBackend::new(SemanticSearchService::new(
+            self.catalog.clone(),
+            queries,
+            candidate_index,
         ));
+        #[cfg(feature = "gemma-native")]
+        let query_backend = match (&self.gemma_question, &self.gemma_code) {
+            (Some(question), Some(code)) => {
+                query_backend.with_intent_embedders(Arc::clone(question), Arc::clone(code))
+            }
+            _ => query_backend,
+        };
+        let query: Arc<dyn WorkerQueryBackend> = Arc::new(query_backend);
         (ingestion, query)
     }
 
@@ -800,16 +1007,16 @@ pub async fn run_developer_worker(
 /// # Errors
 ///
 /// Returns setup, persistence, Zvec, embedding, lock, or IPC failures. The
-/// model pack must be marked for production by the signed release builder.
+/// E5 model packs must be marked for production by the signed release builder.
 pub async fn run_managed_worker(
     runtime_directory: &Path,
     data_directory: &Path,
-    model_pack: &Path,
+    model: &ManagedModel,
     ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
-        DeveloperWorker::open_managed(data_directory, model_pack, ocrmypdf_executable)
+        DeveloperWorker::open_managed(data_directory, model, ocrmypdf_executable)
             .map(|worker| worker.into_server(config))
             .map_err(|error| ServerError::Io(io::Error::other(error)))
     })
@@ -829,6 +1036,15 @@ enum DeveloperBundleError {
     DevelopmentModelPack,
     #[error("developer model pack declares unusable limits or location")]
     UnusableModelPack,
+    #[cfg(feature = "gemma-native")]
+    #[error("Gemma original file must be an absolute regular file: {0}")]
+    InvalidGemmaFile(PathBuf),
+    #[cfg(feature = "gemma-native")]
+    #[error("native Gemma checkpoint failed: {0}")]
+    Gemma(String),
+    #[cfg(feature = "gemma-native")]
+    #[error("Gemma index belongs to a different dimension or media embedding space")]
+    GemmaIndexIdentityMismatch,
     #[error("developer model pack failed: {0}")]
     ModelPack(#[from] fm_semantic_components::ModelPackError),
     #[error("developer data path is not a directory: {0}")]
@@ -881,6 +1097,427 @@ mod tests {
         DeveloperModel::resolve(None, &data_directory.join("development-embedder"))
             .expect("fixture model")
             .index_directory(data_directory)
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    fn gemma_space_marks_dimensions_and_each_media_without_touching_e5_activation() {
+        let directory = TestDirectory::new("gemma-index-identity");
+        drop(DeveloperWorker::open(&directory.0, None).unwrap());
+        let e5_directory = fixture_index_directory(&directory.0);
+        let e5_marker = std::fs::read(directory.0.join("active-model-index")).unwrap();
+        std::fs::write(e5_directory.join("preserve-me"), b"E5").unwrap();
+        let media = GemmaMedia {
+            images: false,
+            audio: false,
+            video: true,
+        };
+        let gemma_index = directory.0.join("indexes").join("gemma-dimension-media");
+        std::fs::create_dir_all(&gemma_index).unwrap();
+        prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(gemma_index.join("embedding-space")).unwrap(),
+            "embeddinggemma-2/512/images-0/audio-0/video-1/v1"
+        );
+        prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
+        for other in [
+            (256, media),
+            (
+                512,
+                GemmaMedia {
+                    images: true,
+                    ..media
+                },
+            ),
+            (
+                512,
+                GemmaMedia {
+                    audio: true,
+                    ..media
+                },
+            ),
+            (
+                512,
+                GemmaMedia {
+                    video: false,
+                    ..media
+                },
+            ),
+        ] {
+            assert!(matches!(
+                prepare_gemma_index_marker(&gemma_index, other.0, other.1),
+                Err(DeveloperBundleError::GemmaIndexIdentityMismatch)
+            ));
+        }
+        drop(DeveloperWorker::open(&directory.0, None).unwrap());
+        assert_eq!(
+            std::fs::read(directory.0.join("active-model-index")).unwrap(),
+            e5_marker
+        );
+        assert_eq!(
+            std::fs::read(e5_directory.join("preserve-me")).unwrap(),
+            b"E5"
+        );
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    fn managed_gemma_rejects_incomplete_original_files_without_a_fixture_fallback() {
+        let directory = TestDirectory::new("gemma-invalid-originals");
+        let files = GemmaNativeFiles::from_directory(&directory.0);
+        let media = GemmaMedia {
+            images: false,
+            audio: false,
+            video: false,
+        };
+        assert!(matches!(
+            DeveloperModel::resolve_gemma(&files, 128, media),
+            Err(DeveloperBundleError::InvalidGemmaFile(_))
+        ));
+        for path in [
+            &files.weights,
+            &files.tokenizer,
+            &files.config,
+            &files.visual_processor,
+            &files.audio_processor,
+        ] {
+            std::fs::write(path, b"original").unwrap();
+        }
+        assert!(matches!(
+            DeveloperModel::resolve_gemma(&files, 123, media),
+            Err(DeveloperBundleError::Gemma(_))
+        ));
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    #[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+    fn managed_gemma_ingests_and_retrieves_enabled_media_with_temporal_evidence() {
+        use image::{ImageBuffer, ImageFormat, Rgb};
+
+        let original = PathBuf::from(
+            std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR").expect("pinned checkpoint directory"),
+        );
+        let directory = TestDirectory::new("managed-gemma-media");
+        let model = ManagedModel::Gemma {
+            files: GemmaNativeFiles::from_directory(&original),
+            dimensions: 128,
+            media: GemmaMedia {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        };
+        let worker = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        let (ingestion, query) = worker.backends();
+        let image = ImageBuffer::from_fn(128, 96, |x, y| {
+            Rgb([
+                ((x * 2 + y) % 256) as u8,
+                ((x + y * 2) % 256) as u8,
+                ((x + y) % 256) as u8,
+            ])
+        });
+        let mut png = std::io::Cursor::new(Vec::new());
+        image.write_to(&mut png, ImageFormat::Png).unwrap();
+
+        for (name, media_type, content) in [
+            ("image", "image/png", png.into_inner()),
+            (
+                "audio",
+                "audio/mpeg",
+                include_bytes!("../tests/fixtures/gemma-audio-440hz-44k.mp3").to_vec(),
+            ),
+            (
+                "video",
+                "video/mp4",
+                include_bytes!("../tests/fixtures/gemma-video-2s.mp4").to_vec(),
+            ),
+        ] {
+            let job_id = ingestion
+                .enqueue(
+                    WorkerIngestionInput {
+                        job_id: format!("job-{name}"),
+                        tenant_id: "tenant".into(),
+                        library_id: "library".into(),
+                        document_id: format!("document-{name}"),
+                        media_type: media_type.into(),
+                        metadata: BTreeMap::from([
+                            ("occurrence_id".into(), format!("occurrence-{name}")),
+                            ("source_id".into(), format!("source-{name}")),
+                            ("root_id".into(), "root".into()),
+                            ("modified_at_ms".into(), "1".into()),
+                            ("title".into(), format!("Gemma {name}")),
+                        ]),
+                        content,
+                    },
+                    CancellationToken::new(),
+                )
+                .unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(180);
+            loop {
+                let job = ingestion
+                    .job("tenant", "library", &job_id)
+                    .unwrap()
+                    .unwrap();
+                if job.state == IngestionState::Completed {
+                    break;
+                }
+                assert_ne!(job.state, IngestionState::Failed, "{name}: {:?}", job.error);
+                assert!(std::time::Instant::now() < deadline, "{name} timed out");
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let results = query
+                .query(
+                    WorkerQueryInput {
+                        tenant_id: "tenant".into(),
+                        library_id: "library".into(),
+                        query: format!("Gemma {name}"),
+                        intent: fm_semantic_protocol::v1::QueryIntent::Search,
+                        concept_query: None,
+                        maximum_results: 10,
+                    },
+                    &CancellationToken::new(),
+                )
+                .unwrap();
+            let result = results
+                .iter()
+                .find(|result| result.document_id == format!("document-{name}"))
+                .expect("media result must be searchable by text");
+            assert_eq!(result.metadata.get("media_type").unwrap(), media_type);
+            let provenance = result.metadata.get("semantic.provenance").unwrap();
+            if name == "video" {
+                assert!(provenance.contains("sampledTimestampsMs"), "{provenance}");
+                assert!(provenance.contains("1000"), "{provenance}");
+                assert!(result.excerpt.contains("partial temporal coverage"));
+            }
+        }
+
+        let bad_job = ingestion
+            .enqueue(
+                WorkerIngestionInput {
+                    job_id: "job-invalid-video".into(),
+                    tenant_id: "tenant".into(),
+                    library_id: "library".into(),
+                    document_id: "document-invalid-video".into(),
+                    media_type: "video/mp4".into(),
+                    metadata: BTreeMap::from([
+                        ("occurrence_id".into(), "occurrence-invalid-video".into()),
+                        ("source_id".into(), "source-invalid-video".into()),
+                        ("root_id".into(), "root".into()),
+                        ("modified_at_ms".into(), "1".into()),
+                    ]),
+                    content: b"not an H.264 MP4".to_vec(),
+                },
+                CancellationToken::new(),
+            )
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            let job = ingestion
+                .job("tenant", "library", &bad_job)
+                .unwrap()
+                .unwrap();
+            if job.state == IngestionState::Failed {
+                assert!(job.error.is_some());
+                break;
+            }
+            assert_ne!(job.state, IngestionState::Completed);
+            assert!(
+                std::time::Instant::now() < deadline,
+                "invalid video timed out"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let results = query
+            .query(
+                WorkerQueryInput {
+                    tenant_id: "tenant".into(),
+                    library_id: "library".into(),
+                    query: "invalid video".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
+                    concept_query: None,
+                    maximum_results: 10,
+                },
+                &CancellationToken::new(),
+            )
+            .unwrap();
+        assert!(
+            results
+                .iter()
+                .all(|result| result.document_id != "document-invalid-video")
+        );
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    #[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned original files"]
+    fn managed_gemma_uses_native_document_and_query_routes_and_preserves_e5() {
+        let original = PathBuf::from(
+            std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR").expect("pinned checkpoint directory"),
+        );
+        let directory = TestDirectory::new("managed-gemma");
+        drop(DeveloperWorker::open(&directory.0, None).unwrap());
+        let e5_index = fixture_index_directory(&directory.0);
+        std::fs::write(e5_index.join("e5-preserved"), b"old vector space").unwrap();
+        let e5_marker = std::fs::read(directory.0.join("active-model-index")).unwrap();
+        let files = GemmaNativeFiles::from_directory(&original);
+        let model = ManagedModel::Gemma {
+            files,
+            dimensions: 128,
+            media: GemmaMedia {
+                images: false,
+                audio: false,
+                video: false,
+            },
+        };
+        let worker = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        assert_eq!(
+            worker.passages.identity().model_id,
+            "google-embeddinggemma-2"
+        );
+        assert_eq!(
+            worker.passages.identity().model_revision,
+            "914f7f89142e33e77833254d9c9b90c3cef7303b"
+        );
+        assert_eq!(worker.manifest.dimensions, 128);
+        assert_eq!(
+            worker.manifest.embedding_preprocessing,
+            GEMMA_PREPROCESSING_VERSION
+        );
+        let documents = worker
+            .passages
+            .embed(
+                &["Case-Sensitive Document".into()],
+                &CancellationToken::new(),
+            )
+            .unwrap();
+        let queries = worker
+            .queries
+            .embed(
+                &["Case-Sensitive Document".into()],
+                &CancellationToken::new(),
+            )
+            .unwrap();
+        assert_eq!(documents[0].len(), 128);
+        assert_ne!(documents, queries);
+        for embedder in [
+            worker.gemma_question.as_ref().unwrap(),
+            worker.gemma_code.as_ref().unwrap(),
+        ] {
+            let vectors = embedder
+                .embed(
+                    &["Case-Sensitive Document".into()],
+                    &CancellationToken::new(),
+                )
+                .unwrap();
+            assert_eq!(vectors[0].len(), 128);
+            assert_ne!(vectors, queries);
+        }
+        let gemma_index = std::fs::read_dir(directory.0.join("indexes"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("google-embeddinggemma-2-")
+            })
+            .unwrap();
+        assert!(
+            gemma_index
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("-d128-i0-a0-v0-")
+        );
+        assert!(gemma_index.join("catalog.sqlite").is_file());
+        assert_eq!(
+            std::fs::read_to_string(gemma_index.join("embedding-space")).unwrap(),
+            "embeddinggemma-2/128/images-0/audio-0/video-0/v1"
+        );
+        let (ingestion, query) = worker.backends();
+        let job_id = ingestion
+            .enqueue(
+                WorkerIngestionInput {
+                    job_id: "job-gemma-text".into(),
+                    tenant_id: "tenant-gemma".into(),
+                    library_id: "library-gemma".into(),
+                    document_id: "document-gemma".into(),
+                    media_type: "text/plain".into(),
+                    metadata: BTreeMap::from([
+                        ("occurrence_id".into(), "occurrence-gemma".into()),
+                        ("source_id".into(), "source-gemma".into()),
+                        ("root_id".into(), "root-gemma".into()),
+                        ("modified_at_ms".into(), "1".into()),
+                        ("title".into(), "Native worker startup".into()),
+                    ]),
+                    content: b"Native Gemma semantic indexes preserve searchable evidence."
+                        .to_vec(),
+                },
+                CancellationToken::new(),
+            )
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(45);
+        loop {
+            let job = ingestion
+                .job("tenant-gemma", "library-gemma", &job_id)
+                .unwrap()
+                .unwrap();
+            if job.state == IngestionState::Completed {
+                break;
+            }
+            assert_ne!(job.state, IngestionState::Failed, "{:?}", job.error);
+            assert!(
+                std::time::Instant::now() < deadline,
+                "native ingestion timed out"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let query_input = WorkerQueryInput {
+            tenant_id: "tenant-gemma".into(),
+            library_id: "library-gemma".into(),
+            query: "searchable evidence".into(),
+            intent: fm_semantic_protocol::v1::QueryIntent::Search,
+            concept_query: None,
+            maximum_results: 10,
+        };
+        let before = query
+            .query(query_input.clone(), &CancellationToken::new())
+            .unwrap();
+        assert_eq!(before[0].document_id, "document-gemma");
+        for intent in [
+            fm_semantic_protocol::v1::QueryIntent::QuestionAnswering,
+            fm_semantic_protocol::v1::QueryIntent::CodeRetrieval,
+        ] {
+            let results = query
+                .query(
+                    WorkerQueryInput {
+                        intent,
+                        ..query_input.clone()
+                    },
+                    &CancellationToken::new(),
+                )
+                .unwrap();
+            assert_eq!(results[0].document_id, "document-gemma");
+        }
+        drop(query);
+        drop(ingestion);
+        drop(worker);
+        let reopened = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        let (_, query) = reopened.backends();
+        let after = query.query(query_input, &CancellationToken::new()).unwrap();
+        assert_eq!(after[0].document_id, "document-gemma");
+        drop(query);
+        drop(reopened);
+        drop(DeveloperWorker::open(&directory.0, None).unwrap());
+        assert_eq!(
+            std::fs::read(directory.0.join("active-model-index")).unwrap(),
+            e5_marker
+        );
+        assert_eq!(
+            std::fs::read(e5_index.join("e5-preserved")).unwrap(),
+            b"old vector space"
+        );
     }
 
     fn embedding_runtime(directory: &Path) -> LocalEmbeddingRuntime {
@@ -1054,6 +1691,7 @@ mod tests {
                     tenant_id: "tenant-development".into(),
                     library_id: "library-development".into(),
                     query: "semantic evidence".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
                     concept_query: None,
                     maximum_results: 10,
                 },
@@ -1075,6 +1713,7 @@ mod tests {
                     tenant_id: "tenant-development".into(),
                     library_id: "library-development".into(),
                     query: "semantic evidence".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
                     concept_query: None,
                     maximum_results: 10,
                 },
@@ -1098,6 +1737,7 @@ mod tests {
                     tenant_id: "tenant-development".into(),
                     library_id: "library-development".into(),
                     query: "semantic evidence".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
                     concept_query: None,
                     maximum_results: 10,
                 },
@@ -1486,6 +2126,7 @@ mod tests {
                     tenant_id: "tenant-multilingual".into(),
                     library_id: "library-multilingual".into(),
                     query: "how do I fix a dripping kitchen tap".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
                     concept_query: None,
                     maximum_results: 10,
                 },
@@ -1498,6 +2139,7 @@ mod tests {
                     tenant_id: "tenant-multilingual".into(),
                     library_id: "library-multilingual".into(),
                     query: "HOW DO I FIX A DRIPPING KITCHEN TAP".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
                     concept_query: None,
                     maximum_results: 10,
                 },

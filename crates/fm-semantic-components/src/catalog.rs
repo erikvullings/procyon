@@ -1517,8 +1517,20 @@ impl ProductionCatalogManifest {
         if self
             .catalog
             .profile_resolutions
-            .values()
-            .any(|identity| identity != &self.pipeline.model)
+            .iter()
+            .any(|(profile, identity)| {
+                if *profile == SemanticProfile::EmbeddingGemma2 {
+                    identity.model_id().as_str() != "google-embeddinggemma-2"
+                        || identity.revision().as_str()
+                            != "914f7f89142e33e77833254d9c9b90c3cef7303b"
+                        || !self.catalog.models.iter().any(|model| {
+                            model.metadata.identity() == identity
+                                && model.primary_file_name() == Some("model.safetensors")
+                        })
+                } else {
+                    identity != &self.pipeline.model
+                }
+            })
         {
             return Err(CatalogError::ProductionCompatibilityMismatch {
                 field: "profile model",

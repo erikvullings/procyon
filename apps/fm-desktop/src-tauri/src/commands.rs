@@ -705,11 +705,82 @@ pub(crate) async fn get_semantic_component_status(
 pub(crate) async fn list_semantic_component_profiles(
     state: State<'_, AppState>,
 ) -> Result<Vec<SemanticModelProfileDto>, SemanticComponentErrorDto> {
-    state
+    let mut profiles = state
         .service
         .semantic_component_catalog_profiles_dto()
         .await
-        .map_err(semantic_component_error)
+        .map_err(semantic_component_error)?;
+    if !cfg!(feature = "semantic-gemma") {
+        profiles.retain(|profile| {
+            profile.profile != fm_transport_dto::SemanticProfileDto::EmbeddingGemma2
+        });
+    }
+    Ok(profiles)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InitializeGemmaLibraryRequest {
+    dimensions: u32,
+    images: bool,
+    audio: bool,
+    video: bool,
+    confirm_fresh_index: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GemmaLibrarySetup {
+    dimensions: u32,
+    images: bool,
+    audio: bool,
+    video: bool,
+}
+
+/// Reads the choices of an existing library; the setup form must not alter them.
+#[tauri::command]
+pub(crate) async fn get_semantic_gemma_library_setup(
+    state: State<'_, AppState>,
+) -> Result<Option<GemmaLibrarySetup>, SemanticLibraryErrorDto> {
+    state
+        .service
+        .semantic_gemma_library_setup()
+        .await
+        .map(|setup| {
+            setup.map(|setup| GemmaLibrarySetup {
+                dimensions: setup.dimensions,
+                images: setup.media.images,
+                audio: setup.media.audio,
+                video: setup.media.video,
+            })
+        })
+        .map_err(semantic_library_error)
+}
+
+/// Creates an empty, immutable Gemma library without touching the E5 library.
+#[tauri::command]
+pub(crate) async fn initialize_semantic_gemma_library(
+    state: State<'_, AppState>,
+    request: InitializeGemmaLibraryRequest,
+) -> Result<(), SemanticLibraryErrorDto> {
+    if !cfg!(feature = "semantic-gemma") {
+        return Err(semantic_library_error(
+            fm_application::semantic_library::SemanticLibraryError::Unavailable,
+        ));
+    }
+    state
+        .service
+        .initialize_semantic_gemma_library(
+            request.dimensions,
+            fm_semantic_library::GemmaMediaSelection {
+                images: request.images,
+                audio: request.audio,
+                video: request.video,
+            },
+            request.confirm_fresh_index,
+        )
+        .await
+        .map_err(semantic_library_error)
 }
 
 /// Creates a complete signed installation disclosure before consent.
@@ -718,6 +789,13 @@ pub(crate) async fn create_semantic_component_installation_offer(
     state: State<'_, AppState>,
     request: CreateSemanticInstallationOfferRequestDto,
 ) -> Result<SemanticInstallationOfferDto, SemanticComponentErrorDto> {
+    if !cfg!(feature = "semantic-gemma")
+        && request.profile == fm_transport_dto::SemanticProfileDto::EmbeddingGemma2
+    {
+        return Err(semantic_component_error(
+            fm_application::semantic_components::SemanticComponentError::Unavailable,
+        ));
+    }
     state
         .service
         .create_semantic_component_installation_offer(request)

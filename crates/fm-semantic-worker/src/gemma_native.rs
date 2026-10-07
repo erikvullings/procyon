@@ -20,7 +20,7 @@ use crate::gemma_visual::{
 };
 
 /// Which media a caller has explicitly enabled for this encoder.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GemmaMedia {
     /// Standalone image embeddings.
     pub images: bool,
@@ -39,6 +39,7 @@ pub struct GemmaVideoEmbedding {
 }
 
 /// Original, independently verified upstream model files; no repacking or copy is required.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GemmaNativeFiles {
     /// BF16/F32 safetensors checkpoint.
     pub weights: PathBuf,
@@ -131,6 +132,17 @@ pub struct GemmaNativeEncoder {
 }
 
 impl GemmaNativeEncoder {
+    /// Media towers enabled at construction.
+    #[must_use]
+    pub const fn media(&self) -> GemmaMedia {
+        self.media
+    }
+    /// Selected Matryoshka embedding width.
+    #[must_use]
+    pub const fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
     /// Load the pinned local BF16/F32 checkpoint for FP32 CPU inference.
     pub fn open(
         directory: &Path,

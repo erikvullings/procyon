@@ -2130,6 +2130,7 @@ fn fake_model_identity(profile: SemanticProfile) -> SemanticModelIdentity {
         SemanticProfile::CompactMultilingual => "compact-multilingual",
         SemanticProfile::CompactEnglish => "compact-english",
         SemanticProfile::MultilingualQuality => "multilingual-quality",
+        SemanticProfile::EmbeddingGemma2 => "embeddinggemma-2",
     };
     SemanticModelIdentity::new(format!("fake-{suffix}"), format!("fake-{suffix}-revision"))
 }
@@ -2148,7 +2149,9 @@ fn fake_model_metadata(profile: SemanticProfile) -> SemanticModelMetadata {
         runtime_version_requirement: "^1.0".to_owned(),
         language_coverage: match profile {
             SemanticProfile::CompactEnglish => vec!["en".to_owned()],
-            SemanticProfile::CompactMultilingual | SemanticProfile::MultilingualQuality => {
+            SemanticProfile::CompactMultilingual
+            | SemanticProfile::MultilingualQuality
+            | SemanticProfile::EmbeddingGemma2 => {
                 vec!["en".to_owned(), "nl".to_owned()]
             }
         },
@@ -2698,6 +2701,7 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
         SemanticProfile::all()
             .iter()
             .copied()
+            .filter(|profile| self.catalog.resolve_profile(*profile).is_some())
             .map(|profile| map_catalog_profile(&self.catalog, profile))
             .collect()
     }

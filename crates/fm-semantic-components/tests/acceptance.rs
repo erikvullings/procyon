@@ -129,6 +129,7 @@ fn setup_profiles_are_abstract_and_compact_multilingual_is_recommended() {
             SemanticProfile::CompactMultilingual,
             SemanticProfile::CompactEnglish,
             SemanticProfile::MultilingualQuality,
+            SemanticProfile::EmbeddingGemma2,
         ]
     );
     assert!(

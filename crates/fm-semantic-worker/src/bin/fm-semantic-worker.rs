@@ -18,16 +18,16 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             )
             .await;
         }
-        let model_pack = arguments.semantic_model_pack.ok_or_else(|| {
+        let model = arguments.managed_model.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--semantic-model-pack is required with --semantic-data-dir",
+                "one managed model is required with --semantic-data-dir",
             )
         })?;
         return fm_semantic_worker::developer_bundle::run_managed_worker(
             &arguments.runtime_directory,
             &semantic_data_directory,
-            &model_pack,
+            &model,
             arguments.ocrmypdf_executable.as_deref(),
             arguments.idle_timeout,
         )
@@ -45,6 +45,8 @@ struct Arguments {
     #[cfg(feature = "semantic-runtime")]
     semantic_model_pack: Option<PathBuf>,
     #[cfg(feature = "semantic-runtime")]
+    managed_model: Option<fm_semantic_worker::ManagedModel>,
+    #[cfg(feature = "semantic-runtime")]
     ocrmypdf_executable: Option<PathBuf>,
     #[cfg(feature = "semantic-runtime")]
     development_mode: bool,
@@ -60,6 +62,18 @@ fn arguments_from(
     let mut semantic_data_directory = None;
     #[cfg(feature = "semantic-runtime")]
     let mut semantic_model_pack = None;
+    #[cfg(feature = "gemma-native")]
+    let mut gemma_paths = [None, None, None, None, None];
+    #[cfg(feature = "gemma-native")]
+    let mut gemma_dimensions = None;
+    #[cfg(feature = "gemma-native")]
+    let mut gemma_media = fm_semantic_worker::gemma_native::GemmaMedia {
+        images: false,
+        audio: false,
+        video: false,
+    };
+    #[cfg(feature = "gemma-native")]
+    let mut gemma_selected = false;
     #[cfg(feature = "semantic-runtime")]
     let mut ocrmypdf_executable = None;
     #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
@@ -135,6 +149,81 @@ fn arguments_from(
                     "--ocrmypdf-executable requires the opt-in semantic-runtime feature",
                 ));
             }
+        } else if argument.to_string_lossy().starts_with("--gemma-") {
+            #[cfg(feature = "gemma-native")]
+            {
+                let flag = argument.to_string_lossy();
+                let position = match flag.as_ref() {
+                    "--gemma-weights" => Some(0),
+                    "--gemma-tokenizer" => Some(1),
+                    "--gemma-config" => Some(2),
+                    "--gemma-visual-processor" => Some(3),
+                    "--gemma-audio-processor" => Some(4),
+                    _ => None,
+                };
+                gemma_selected = true;
+                if let Some(position) = position {
+                    if gemma_paths[position].is_some() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "duplicate Gemma file",
+                        ));
+                    }
+                    gemma_paths[position] =
+                        Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                            io::Error::new(io::ErrorKind::InvalidInput, "Gemma file path required")
+                        })?));
+                } else if flag == "--gemma-dimensions" {
+                    if gemma_dimensions.is_some() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "duplicate Gemma dimensions",
+                        ));
+                    }
+                    gemma_dimensions = Some(
+                        arguments
+                            .next()
+                            .ok_or_else(|| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "Gemma dimensions required",
+                                )
+                            })?
+                            .to_string_lossy()
+                            .parse::<usize>()
+                            .map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "invalid Gemma dimensions",
+                                )
+                            })?,
+                    );
+                } else {
+                    let enabled = match flag.as_ref() {
+                        "--gemma-images" => &mut gemma_media.images,
+                        "--gemma-audio" => &mut gemma_media.audio,
+                        "--gemma-video" => &mut gemma_media.video,
+                        _ => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "unknown Gemma argument",
+                            ));
+                        }
+                    };
+                    if *enabled {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "duplicate Gemma media flag",
+                        ));
+                    }
+                    *enabled = true;
+                }
+            }
+            #[cfg(not(feature = "gemma-native"))]
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Gemma arguments require the gemma-native feature",
+            ));
         } else if argument == "--developer-data-dir" {
             #[cfg(feature = "developer-bundle")]
             {
@@ -181,6 +270,65 @@ fn arguments_from(
     }
     let runtime_directory = runtime_directory
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "--runtime-dir is required"))?;
+    #[cfg(feature = "semantic-runtime")]
+    let managed_model = {
+        #[cfg(feature = "gemma-native")]
+        if gemma_selected {
+            if semantic_model_pack.is_some()
+                || development_mode
+                || semantic_data_directory.is_none()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Gemma requires managed data and excludes a model pack",
+                ));
+            }
+            let [
+                weights,
+                tokenizer,
+                config,
+                visual_processor,
+                audio_processor,
+            ] = gemma_paths.map(|path| {
+                path.ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "all five Gemma files are required",
+                    )
+                })
+            });
+            let dimensions = gemma_dimensions.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Gemma dimensions are required")
+            })?;
+            if ![128, 256, 512, 768].contains(&dimensions) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "unsupported Gemma dimensions",
+                ));
+            }
+            Some(fm_semantic_worker::ManagedModel::Gemma {
+                files: fm_semantic_worker::gemma_native::GemmaNativeFiles {
+                    weights: weights?,
+                    tokenizer: tokenizer?,
+                    config: config?,
+                    visual_processor: visual_processor?,
+                    audio_processor: audio_processor?,
+                },
+                dimensions,
+                media: gemma_media,
+            })
+        } else {
+            semantic_model_pack
+                .clone()
+                .map(fm_semantic_worker::ManagedModel::Pack)
+        }
+        #[cfg(not(feature = "gemma-native"))]
+        {
+            semantic_model_pack
+                .clone()
+                .map(fm_semantic_worker::ManagedModel::Pack)
+        }
+    };
     Ok(Arguments {
         runtime_directory,
         idle_timeout,
@@ -188,6 +336,8 @@ fn arguments_from(
         semantic_data_directory,
         #[cfg(feature = "semantic-runtime")]
         semantic_model_pack,
+        #[cfg(feature = "semantic-runtime")]
+        managed_model,
         #[cfg(feature = "semantic-runtime")]
         ocrmypdf_executable,
         #[cfg(feature = "semantic-runtime")]
@@ -307,5 +457,79 @@ mod tests {
         .expect("unknown argument must be rejected");
 
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    fn gemma_cli_requires_complete_original_files_and_excludes_pack() {
+        let base = ["--runtime-dir", "runtime", "--semantic-data-dir", "data"];
+        let files = [
+            "--gemma-weights",
+            "/model/weights",
+            "--gemma-tokenizer",
+            "/model/tokenizer",
+            "--gemma-config",
+            "/model/config",
+            "--gemma-visual-processor",
+            "/model/visual",
+            "--gemma-audio-processor",
+            "/model/audio",
+            "--gemma-dimensions",
+            "512",
+            "--gemma-images",
+            "--gemma-video",
+        ];
+        let complete = arguments_from(base.into_iter().chain(files).map(Into::into)).unwrap();
+        assert!(matches!(
+            complete.managed_model,
+            Some(fm_semantic_worker::ManagedModel::Gemma {
+                dimensions: 512,
+                ..
+            })
+        ));
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files[..8].iter().copied())
+                    .chain(files[10..].iter().copied())
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--semantic-model-pack", "/model/pack"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        let mut unsupported = files;
+        unsupported[11] = "999";
+        assert!(arguments_from(base.into_iter().chain(unsupported).map(Into::into)).is_err());
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--gemma-audio", "--gemma-audio"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+    }
+
+    #[cfg(not(feature = "gemma-native"))]
+    #[test]
+    fn gemma_cli_fails_closed_when_native_feature_is_absent() {
+        let error = arguments_from([
+            "--runtime-dir".into(),
+            "runtime".into(),
+            "--gemma-weights".into(),
+            "/model/weights".into(),
+        ])
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("gemma-native feature"));
     }
 }

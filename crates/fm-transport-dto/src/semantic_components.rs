@@ -82,6 +82,8 @@ pub enum SemanticProfileDto {
     CompactEnglish,
     /// Larger multilingual model profile prioritising retrieval quality.
     MultilingualQuality,
+    /// Opt-in multimodal EmbeddingGemma 2 profile.
+    EmbeddingGemma2,
 }
 
 /// Required handling of index data during component uninstall.

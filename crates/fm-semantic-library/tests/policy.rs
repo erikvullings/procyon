@@ -6,8 +6,8 @@ use std::path::Path;
 use fm_domain::{Location, WorkspaceId};
 use fm_semantic_library::{
     CURRENT_POLICY_SCHEMA_VERSION, DeviceLibraryIdentity, EligibilityOverride, EligibilityReason,
-    EnrolledRoot, ExclusionId, FilesystemIdentity, LibraryId, ModelIdentity, ResourceBudgets,
-    ResourceProfile, ResourceProfileKind, RootId, SemanticLibraryPolicy,
+    EnrolledRoot, ExclusionId, FilesystemIdentity, GemmaMediaSelection, LibraryId, ModelIdentity,
+    ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId, SemanticLibraryPolicy,
     SemanticLibraryPolicyStore, VocabularyId,
 };
 use tempfile::TempDir;
@@ -51,6 +51,116 @@ fn policy_round_trips_atomically_with_stable_library_and_model_identity() {
     assert_eq!(actual.library().id(), expected.library().id());
     assert_eq!(actual.library().model(), expected.library().model());
     assert!(store.path().starts_with(directory.path()));
+}
+
+#[test]
+fn new_gemma_library_persists_immutable_dimensions_and_independent_media_consent() {
+    let media = GemmaMediaSelection {
+        images: false,
+        audio: true,
+        video: true,
+    };
+    let model = ModelIdentity::embeddinggemma_2(256, media).expect("supported width");
+    let directory = project_temp_dir("gemma-policy-");
+    let store = SemanticLibraryPolicyStore::new(directory.path());
+    let policy = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(LibraryId::new(), model.clone()),
+        ResourceProfile {
+            kind: ResourceProfileKind::Balanced,
+            budgets: ResourceBudgets::default(),
+        },
+    )
+    .unwrap();
+    store.save(&policy).unwrap();
+
+    let reloaded = store.load().unwrap();
+    assert_eq!(reloaded.library().model(), &model);
+    assert_eq!(reloaded.library().model().gemma_media(), Some(media));
+    assert_ne!(
+        model.embedding_space(),
+        ModelIdentity::embeddinggemma_2(
+            256,
+            GemmaMediaSelection {
+                images: true,
+                ..media
+            }
+        )
+        .unwrap()
+        .embedding_space()
+    );
+    assert!(ModelIdentity::embeddinggemma_2(384, media).is_err());
+}
+
+#[test]
+fn changing_gemma_media_or_dimensions_requires_a_new_library() {
+    let media = GemmaMediaSelection {
+        images: true,
+        audio: false,
+        video: false,
+    };
+    let original = ModelIdentity::embeddinggemma_2(256, media).unwrap();
+    let mut policy = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(LibraryId::new(), original.clone()),
+        ResourceProfile {
+            kind: ResourceProfileKind::Balanced,
+            budgets: ResourceBudgets::default(),
+        },
+    )
+    .unwrap();
+    let original_revision = policy.revision();
+
+    assert!(
+        policy
+            .migrate_model(ModelIdentity::embeddinggemma_2(512, media).unwrap())
+            .is_err()
+    );
+    assert!(
+        policy
+            .migrate_model(
+                ModelIdentity::embeddinggemma_2(
+                    256,
+                    GemmaMediaSelection {
+                        audio: true,
+                        ..media
+                    }
+                )
+                .unwrap()
+            )
+            .is_err()
+    );
+    assert_eq!(policy.library().model(), &original);
+    assert_eq!(policy.revision(), original_revision);
+}
+
+#[test]
+fn a_gemma_identity_cannot_claim_a_different_embedding_space_or_revision() {
+    let model = ModelIdentity::embeddinggemma_2(
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    for (field, value) in [
+        ("embeddingSpace", "e5-space"),
+        ("revision", "unverified-revision"),
+    ] {
+        let mut forged = serde_json::to_value(&model).unwrap();
+        forged[field] = serde_json::json!(value);
+        let forged: ModelIdentity = serde_json::from_value(forged).unwrap();
+        assert!(
+            SemanticLibraryPolicy::new(
+                DeviceLibraryIdentity::new(LibraryId::new(), forged),
+                ResourceProfile {
+                    kind: ResourceProfileKind::Balanced,
+                    budgets: ResourceBudgets::default(),
+                },
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]

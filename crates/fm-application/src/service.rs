@@ -915,6 +915,30 @@ impl FileManagerService {
         Ok(status)
     }
 
+    /// Starts a separate, empty Gemma library after explicit fresh-index consent.
+    pub async fn initialize_semantic_gemma_library(
+        &self,
+        dimensions: u32,
+        media: fm_semantic_library::GemmaMediaSelection,
+        confirm_fresh_index: bool,
+    ) -> Result<(), SemanticLibraryError> {
+        if !confirm_fresh_index {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        self.semantic_library
+            .initialize_gemma(&self.semantic_components, dimensions, media)
+            .await
+    }
+
+    /// Reads locked Gemma dimensions and media choices, if initialized.
+    pub async fn semantic_gemma_library_setup(
+        &self,
+    ) -> Result<Option<crate::semantic_library::GemmaLibrarySetup>, SemanticLibraryError> {
+        self.semantic_library
+            .gemma_setup(&self.semantic_components)
+            .await
+    }
+
     /// Replaces the composed default with an explicitly configured library
     /// service.
     #[must_use]

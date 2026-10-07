@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockClientError, MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
+import type { SemanticModelProfile } from '../../models';
 import { SemanticComponentManagement } from './semantic-component-management';
 
 let root: HTMLElement;
@@ -46,7 +47,92 @@ function setInput(selector: string, value: string): void {
   m.redraw.sync();
 }
 
+async function withGemmaProfile(client: MockFileManagerClient): Promise<void> {
+  const profiles = await client.listSemanticComponentProfiles();
+  const base = profiles[0];
+  if (base === undefined) throw new Error('mock catalog has no model profiles');
+  const gemma: SemanticModelProfile = {
+    ...base,
+    profile: 'embeddingGemma2',
+    recommended: false,
+    resolvedModel: {
+      modelId: 'google-embeddinggemma-2',
+      revision: '914f7f89142e33e77833254d9c9b90c3cef7303b',
+    },
+  };
+  vi.spyOn(client, 'listSemanticComponentProfiles').mockResolvedValue([...profiles, gemma]);
+}
+
 describe('SemanticComponentManagement', () => {
+  it('requires immutable Gemma choices and fresh-index consent before installing beside E5', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
+      authority: 'desktopManaged',
+      runtimeExecutableDownload: 'directDistribution',
+      operations: ['viewStatus', 'viewCatalog', 'createInstallationOffer', 'installOrEnable'],
+    });
+    const initialize = vi.spyOn(client, 'initializeGemmaLibrary').mockResolvedValue();
+    const accept = vi.spyOn(client, 'acceptSemanticComponentInstallationOffer');
+    mountComponent(client);
+    await waitForLoaded();
+
+    const selectable = root.querySelectorAll<HTMLInputElement>(
+      '.fm-semantic-install input[type="radio"]',
+    );
+    expect([...selectable].map((option) => option.value)).toEqual(['embeddingGemma2']);
+    button('Review installation').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
+    expect(button('Accept and install').disabled).toBe(true);
+    const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
+    if (dimensions === null) throw new Error('Gemma dimensions missing');
+    dimensions.value = '256';
+    dimensions.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLInputElement>('#fm-semantic-gemma-images')?.click();
+    root.querySelector<HTMLInputElement>('#fm-semantic-gemma-video')?.click();
+    const consent = [
+      ...root.querySelectorAll<HTMLInputElement>('.fm-semantic-gemma-setup input[type="checkbox"]'),
+    ].at(-1);
+    consent?.click();
+    m.redraw.sync();
+    expect(button('Accept and install').disabled).toBe(false);
+
+    button('Accept and install').click();
+    await vi.waitFor(() => expect(accept).toHaveBeenCalledOnce());
+    expect(initialize).toHaveBeenCalledWith({
+      dimensions: 256,
+      images: true,
+      audio: false,
+      video: true,
+      confirmFreshIndex: true,
+    });
+  });
+
+  it('shows persisted Gemma choices as locked when retrying an installation', async () => {
+    const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: false,
+      audio: true,
+      video: false,
+    });
+    const initialize = vi.spyOn(client, 'initializeGemmaLibrary');
+    mountComponent(client);
+    await waitForLoaded();
+    const gemma = root.querySelector<HTMLInputElement>(
+      '.fm-semantic-install input[value="embeddingGemma2"]',
+    );
+    gemma?.click();
+    button('Review installation').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Existing library: 512 dimensions'));
+    expect(root.querySelector('#fm-semantic-gemma-dimensions')).toBeNull();
+    expect(button('Accept and install').disabled).toBe(false);
+    button('Accept and install').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Installed and enabled'));
+    expect(initialize).not.toHaveBeenCalled();
+  });
+
   it('shows meaningful loading copy, then loads capabilities, status, and profiles', async () => {
     const client = new MockFileManagerClient();
     const capabilities = vi.spyOn(client, 'getSemanticComponentCapabilities');

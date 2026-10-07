@@ -20,7 +20,9 @@ semantic-runtime = [
 ]
 # Explicitly non-production local bundle used only for end-to-end development.
 developer-bundle = ["semantic-runtime"]
-# Experimental local CPU parity probe only; never selected by managed workers.
+# Native CPU dependencies stay out of the E5-only runtime. Optional Gemma
+# worker binaries must be built with gemma-native.
+gemma-native = ["semantic-runtime", "gemma-probe"]
 gemma-probe = ["dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
 
 [dependencies]

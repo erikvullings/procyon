@@ -13,6 +13,21 @@ use crate::{
 /// Current durable semantic-library policy schema.
 pub const CURRENT_POLICY_SCHEMA_VERSION: u32 = 3;
 
+const GEMMA_MODEL_ID: &str = "google-embeddinggemma-2";
+const GEMMA_REVISION: &str = "914f7f89142e33e77833254d9c9b90c3cef7303b";
+
+/// Creation-time media permissions for an EmbeddingGemma 2 library.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GemmaMediaSelection {
+    /// Index consented images.
+    pub images: bool,
+    /// Index consented audio.
+    pub audio: bool,
+    /// Index consented video.
+    pub video: bool,
+}
+
 /// Exact embedding identity applied to every document in a library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +36,8 @@ pub struct ModelIdentity {
     revision: String,
     dimensions: u32,
     embedding_space: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gemma_media: Option<GemmaMediaSelection>,
 }
 
 impl ModelIdentity {
@@ -41,6 +58,27 @@ impl ModelIdentity {
             revision: revision.into(),
             dimensions,
             embedding_space: embedding_space.into(),
+            gemma_media: None,
+        };
+        identity.validate()?;
+        Ok(identity)
+    }
+
+    /// Creates a fresh, separately keyed EmbeddingGemma 2 library identity.
+    ///
+    /// # Errors
+    ///
+    /// Rejects dimensions unsupported by the pinned checkpoint.
+    pub fn embeddinggemma_2(
+        dimensions: u32,
+        media: GemmaMediaSelection,
+    ) -> Result<Self, PolicyError> {
+        let identity = Self {
+            model_id: GEMMA_MODEL_ID.to_owned(),
+            revision: GEMMA_REVISION.to_owned(),
+            dimensions,
+            embedding_space: gemma_embedding_space(dimensions, media),
+            gemma_media: Some(media),
         };
         identity.validate()?;
         Ok(identity)
@@ -51,6 +89,12 @@ impl ModelIdentity {
             || self.revision.trim().is_empty()
             || self.embedding_space.trim().is_empty()
             || self.dimensions == 0
+            || (self.model_id == GEMMA_MODEL_ID
+                && (self.gemma_media.is_none_or(|media| {
+                    self.embedding_space != gemma_embedding_space(self.dimensions, media)
+                }) || self.revision != GEMMA_REVISION
+                    || !matches!(self.dimensions, 128 | 256 | 512 | 768)))
+            || (self.model_id != GEMMA_MODEL_ID && self.gemma_media.is_some())
         {
             return Err(PolicyError::InvalidModelIdentity);
         }
@@ -80,6 +124,21 @@ impl ModelIdentity {
     pub fn embedding_space(&self) -> &str {
         &self.embedding_space
     }
+
+    /// Returns the immutable media choices, if this is a Gemma library.
+    #[must_use]
+    pub const fn gemma_media(&self) -> Option<GemmaMediaSelection> {
+        self.gemma_media
+    }
+}
+
+fn gemma_embedding_space(dimensions: u32, media: GemmaMediaSelection) -> String {
+    format!(
+        "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
+        u8::from(media.images),
+        u8::from(media.audio),
+        u8::from(media.video)
+    )
 }
 
 /// Stable device-local library and its current exact embedding identity.
@@ -523,6 +582,9 @@ impl SemanticLibraryPolicy {
         if self.library.model() == &model {
             return Ok(false);
         }
+        if self.library.model().gemma_media().is_some() || model.gemma_media().is_some() {
+            return Err(PolicyError::ImmutableGemmaLibrary);
+        }
         self.advance_revision()?;
         self.library = DeviceLibraryIdentity::new(self.library.id(), model);
         Ok(true)
@@ -828,6 +890,9 @@ pub enum PolicyError {
     /// Model identity is incomplete.
     #[error("semantic model identity is invalid")]
     InvalidModelIdentity,
+    /// Gemma selection is fixed when the library is created.
+    #[error("EmbeddingGemma 2 dimensions and media require a new library")]
+    ImmutableGemmaLibrary,
     /// One or more hard resource budgets are zero or inconsistent.
     #[error("semantic resource budgets are invalid")]
     InvalidResourceBudgets,

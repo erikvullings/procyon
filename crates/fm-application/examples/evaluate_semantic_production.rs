@@ -556,6 +556,7 @@ fn provenance_kind(provenance: &ChunkProvenance) -> &'static str {
         Provenance::Slide { .. } => "slide",
         Provenance::SpreadsheetRange { .. } => "spreadsheetRange",
         Provenance::DocxBlock { .. } => "docxBlock",
+        Provenance::Media { .. } => "media",
         Provenance::EpubText { .. } => "epubText",
     }
 }

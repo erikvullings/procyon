@@ -4,8 +4,8 @@ use fm_domain::{Location, LocationError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ResourceBudgets;
 use crate::hierarchy::is_same_or_descendant;
+use crate::{GemmaMediaSelection, ResourceBudgets};
 
 /// Stable reason why an entry is skipped by semantic enrolment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -252,6 +252,34 @@ impl EligibilityPolicy {
             .map(str::to_owned)
             .collect(),
         }
+    }
+
+    /// Extends the curated document allow-list only for media selected when
+    /// the Gemma library was initialized.
+    #[must_use]
+    pub fn with_gemma_media(mut self, media: GemmaMediaSelection) -> Self {
+        if media.images {
+            self.supported_mime_types
+                .extend(["image/jpeg", "image/png", "image/webp"].map(str::to_owned));
+        }
+        if media.audio {
+            self.supported_mime_types.extend(
+                [
+                    "audio/wav",
+                    "audio/x-wav",
+                    "audio/mpeg",
+                    "audio/flac",
+                    "audio/aac",
+                    "audio/mp4",
+                ]
+                .map(str::to_owned),
+            );
+        }
+        if media.video {
+            self.supported_mime_types
+                .extend(["video/mp4", "video/quicktime"].map(str::to_owned));
+        }
+        self
     }
 
     /// Evaluates one host-supplied entry without accessing its filesystem path.

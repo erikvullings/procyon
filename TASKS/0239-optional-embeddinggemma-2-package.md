@@ -62,14 +62,13 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   authority in Procyon rather than granting the worker filesystem traversal
   or network access. Do not conflate semantic image similarity with exact or
   perceptual duplicate detection in 0170.
-- Switching from E5 to Gemma stages the installed package, obtains explicit
-  reindex consent, preserves enrolled roots and policy, rebuilds a separate
-  compatible SQLite/Zvec embedding space, and supports interruption/retry
-  without mixed-model results. Include dimension and other
-  embedding-affecting settings in cache/index identity; the existing cache
-  key does not include dimension. Reuse retained, authorized converted chunks
-  where safe, but fall back to reconversion when absent or incompatible;
-  never assume excluded or unbacked-up chunks are recoverable.
+- Starting a Gemma library may begin with an empty index rather than migrating
+  an existing E5 library. Require explicit consent before starting over; keep
+  the existing E5 library and its indexes available rather than silently
+  deleting or mixing them with Gemma results. Create a separate compatible
+  SQLite/Zvec embedding space; include dimension and modality choices in its
+  cache/index identity, and support interruption/retry during fresh indexing.
+  Do not promise reuse of prior converted chunks or enrolled roots.
 - Compare E5 and Gemma with the same labelled multilingual text and realistic
   code workloads; evaluate image retrieval and near-duplicate negatives
   separately, and audio/video retrieval if enabled. Report ranking quality,
@@ -270,3 +269,39 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   UI activation, or supported-platform qualification. Original-file primary
   artifacts have a distinct signed kind; current desktop activation rejects
   them explicitly until native worker launch is wired. Keep the option hidden.
+- 2026-10-07: User clarified that preserving or migrating an existing E5 index
+  is not a prerequisite: users may initialize a fresh Gemma library. E5
+  remains available and must not be silently deleted or mixed with Gemma.
+  Continue through managed native launch and media ingestion before exposure.
+- 2026-10-07: Added a creation-time `EmbeddingGemma 2` policy identity for
+  128/256/512/768 dimensions and independent image/audio/video consent,
+  persisted with a distinct embedding-space key for every combination.
+  Existing E5 model identities remain unchanged; policy migration now rejects
+  changing a Gemma library's model or media choices, requiring a fresh library
+  instead. The host feed can admit only consented MIME types, with E5's
+  document-only allow-list unchanged. A local release builder can stage the
+  five hash-pinned upstream files as separate signed catalog artifacts.
+  This does **not** make Gemma available to users yet: native managed-worker
+  startup, actual media ingestion, new-library setup UI and host parity, and
+  supported-platform qualification are still in progress.
+- 2026-10-07: Integrated the optional original-file model with the managed
+  native worker, a separate dimension/media-bound index, transactional
+  fresh-library setup, consented media ingestion, typed search/Ask/code prompt
+  roles, and desktop settings. An ignored optimized macOS test using the pinned
+  checkpoint ingested PNG, MP3, and sampled H.264 MP4 through the real worker
+  pipeline and retrieved each through text search, including video timestamp
+  evidence; malformed video failed without publishing a result. On this local
+  Apple Silicon machine, the three-media test at 128 dimensions took 44.94
+  seconds wall time and reached 4,083,417,088 bytes maximum resident memory
+  (`/usr/bin/time -l`, after compilation). This is one workload on one CPU,
+  not a supported-platform resource ceiling. The unoptimized test
+  took more than three minutes on its first image, so debug timings are not
+  representative of a release build. E5 and Gemma index-switch tests preserve
+  the prior E5 data. Without the `semantic-gemma` desktop feature, the desktop
+  hides the optional profile and rejects direct setup/offer requests; an E5-only
+  signed catalog has no Gemma profile. This is local macOS functional evidence,
+  **not** supported-platform qualification: the existing release workflow does
+  not yet fetch, build, sign, smoke, or measure the optional model across its
+  four targets. Labelled retrieval quality, RAM and throughput by dimension,
+  signed-artifact installation, and offline release lifecycle remain gates.
+  Keep this task in progress and do not expose Gemma in the standard release.

@@ -484,6 +484,7 @@ impl SemanticIndexingService {
                 &decision,
                 FeedDocument {
                     tenant_id,
+                    title: entry.name.clone(),
                     root_id: context.root_id,
                     workspace_id: *workspace_id,
                     media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
@@ -691,6 +692,16 @@ fn media_type(entry: &EntrySummary) -> Option<&'static str> {
                 Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             }
             "application/xml" => Some("application/xml"),
+            "image/jpeg" => Some("image/jpeg"),
+            "image/png" => Some("image/png"),
+            "image/webp" => Some("image/webp"),
+            "audio/wav" | "audio/x-wav" => Some("audio/wav"),
+            "audio/mpeg" => Some("audio/mpeg"),
+            "audio/flac" => Some("audio/flac"),
+            "audio/aac" => Some("audio/aac"),
+            "audio/mp4" => Some("audio/mp4"),
+            "video/mp4" => Some("video/mp4"),
+            "video/quicktime" => Some("video/quicktime"),
             "text/css" => Some("text/css"),
             "text/csv" => Some("text/csv"),
             "text/html" => Some("text/html"),
@@ -716,6 +727,16 @@ fn media_type(entry: &EntrySummary) -> Option<&'static str> {
         Some("css") => Some("text/css"),
         Some("js" | "mjs" | "cjs") => Some("text/javascript"),
         Some("pdf") => Some("application/pdf"),
+        Some("jpg" | "jpeg") => Some("image/jpeg"),
+        Some("png") => Some("image/png"),
+        Some("webp") => Some("image/webp"),
+        Some("wav") => Some("audio/wav"),
+        Some("mp3") => Some("audio/mpeg"),
+        Some("flac") => Some("audio/flac"),
+        Some("aac") => Some("audio/aac"),
+        Some("m4a") => Some("audio/mp4"),
+        Some("mp4" | "m4v") => Some("video/mp4"),
+        Some("mov") => Some("video/quicktime"),
         Some("docx") => {
             Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         }
@@ -782,6 +803,7 @@ async fn read_bounded(
 
 struct FeedDocument<'content> {
     tenant_id: String,
+    title: String,
     root_id: RootId,
     workspace_id: WorkspaceId,
     media_type: &'content str,
@@ -801,6 +823,9 @@ async fn ingest_and_wait(
     document: FeedDocument<'_>,
     cancellation: &CancellationToken,
 ) -> Result<IngestionOutcome, SemanticIndexingError> {
+    if document.title.len() > 1024 {
+        return Err(SemanticIndexingError::LimitExceeded("title bytes"));
+    }
     let operation_id = SemanticOperationId::new(Uuid::new_v4().to_string());
     let occurrence_id = decision.occurrence_id().to_string();
     let workspace = document.workspace_id.to_string();
@@ -809,7 +834,7 @@ async fn ingest_and_wait(
         TenantId::new(document.tenant_id),
         LibraryId::new(decision.library_id().to_string()),
     );
-    let metadata = BTreeMap::from([
+    let mut metadata = BTreeMap::from([
         ("occurrence_id".to_owned(), scoped_occurrence_id),
         ("source_id".to_owned(), occurrence_id),
         ("root_id".to_owned(), document.root_id.to_string()),
@@ -819,6 +844,7 @@ async fn ingest_and_wait(
             document.modified_at_ms.to_string(),
         ),
     ]);
+    metadata.insert("title".to_owned(), document.title);
     let job_id = semantic
         .ingest(DocumentIngestion {
             scope: scope.clone(),

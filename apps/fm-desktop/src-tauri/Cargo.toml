@@ -32,6 +32,7 @@ crate-type = ["rlib"]
 
 [features]
 native-spa-smoke = ["tauri/custom-protocol"]
+semantic-gemma = ["fm-semantic-worker/gemma-native"]
 
 [build-dependencies]
 tauri-build = { workspace = true, features = [] }
@@ -44,6 +45,7 @@ fm-events.workspace = true
 fm-platform.workspace = true
 fm-search-acceleration.workspace = true
 fm-semantic-components.workspace = true
+fm-semantic-library.workspace = true
 fm-semantic-worker.workspace = true
 fm-transport-dto.workspace = true
 dirs.workspace = true

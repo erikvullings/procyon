@@ -28,8 +28,8 @@ use fm_application::semantic_ocr::{
 };
 use fm_domain::{Location, WorkspaceId};
 use fm_semantic_library::{
-    DeviceLibraryIdentity, EligibilityReason, EligibilityReasonCounts, LibraryId, ModelIdentity,
-    ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId,
+    DeviceLibraryIdentity, EligibilityReason, EligibilityReasonCounts, GemmaMediaSelection,
+    LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId,
 };
 #[cfg(unix)]
 use fm_transport_dto::ResolveRagCitationRequestDto;
@@ -51,6 +51,7 @@ struct RemediatingDocumentCapability {
     restart_count: AtomicUsize,
     cancel_count: AtomicUsize,
     remediated_contents: Mutex<Vec<Vec<u8>>>,
+    ingested_titles: Mutex<Vec<String>>,
 }
 
 impl RemediatingDocumentCapability {
@@ -62,6 +63,7 @@ impl RemediatingDocumentCapability {
             restart_count: AtomicUsize::new(0),
             cancel_count: AtomicUsize::new(0),
             remediated_contents: Mutex::new(Vec::new()),
+            ingested_titles: Mutex::new(Vec::new()),
         }
     }
 
@@ -80,6 +82,13 @@ impl SemanticCapability for RemediatingDocumentCapability {
     }
 
     async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.ingested_titles.lock().unwrap().push(
+            ingestion
+                .metadata
+                .get("title")
+                .expect("host supplies a real display title")
+                .clone(),
+        );
         if ingestion.content.starts_with(b"scan-") && !self.ocr_enabled.load(Ordering::Acquire) {
             return Ok(SemanticJobId::new(format!(
                 "ocr-required-{}",
@@ -261,14 +270,18 @@ fn project_temp_dir(prefix: &str) -> TempDir {
 }
 
 fn library(directory: &TempDir) -> SemanticLibraryService {
+    library_with_model(
+        directory,
+        ModelIdentity::new("fixture-model", "revision-1", 384, "fixture-space").unwrap(),
+    )
+}
+
+fn library_with_model(directory: &TempDir, model: ModelIdentity) -> SemanticLibraryService {
     SemanticLibraryService::desktop_managed(
         SemanticLibraryConfiguration::new(
             directory.path().join("library-config"),
             directory.path().join("semantic-data"),
-            DeviceLibraryIdentity::new(
-                LibraryId::from_uuid(Uuid::from_u128(0x190)),
-                ModelIdentity::new("fixture-model", "revision-1", 384, "fixture-space").unwrap(),
-            ),
+            DeviceLibraryIdentity::new(LibraryId::from_uuid(Uuid::from_u128(0x190)), model),
             ResourceProfile {
                 kind: ResourceProfileKind::Balanced,
                 budgets: ResourceBudgets::default(),
@@ -289,6 +302,46 @@ fn library(directory: &TempDir) -> SemanticLibraryService {
         )),
     )
     .unwrap()
+}
+
+#[tokio::test]
+async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
+    let root = project_temp_dir("media-root-");
+    for name in ["image.png", "sound.wav", "clip.mp4"] {
+        std::fs::write(root.path().join(name), b"fixture-bytes").unwrap();
+    }
+    let state = project_temp_dir("media-state-");
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            256,
+            GemmaMediaSelection {
+                images: true,
+                audio: false,
+                video: true,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1910)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.observed_files, 2);
+    assert_eq!(report.ingested_occurrences, 2);
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {
@@ -408,8 +461,8 @@ async fn recursive_indexing_filters_entries_and_resolves_search_evidence() {
             assert!(
                 !result
                     .metadata
-                    .values()
-                    .any(|value| value.contains("welcome.txt"))
+                    .iter()
+                    .any(|(key, value)| { key != "title" && value.contains("welcome.txt") })
             );
             let source_id = result.metadata.get("source_id").unwrap().clone();
             let resolved = service
@@ -815,6 +868,14 @@ async fn successful_ocr_reingests_only_selected_files_and_updates_reported_state
 
     let remediated = capability.remediated_contents.lock().unwrap().clone();
     assert_eq!(remediated.len(), 2);
+    assert!(
+        capability
+            .ingested_titles
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|title| title == "one.pdf")
+    );
     assert!(remediated.contains(&b"scan-one".to_vec()));
     assert!(remediated.contains(&b"scan-two".to_vec()));
     assert!(!remediated.contains(&b"scan-three".to_vec()));
