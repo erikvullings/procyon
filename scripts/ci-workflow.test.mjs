@@ -152,3 +152,63 @@ test('README documents CI with a badge and a short section', () => {
   assert.match(readme, /badge\.svg/, 'expected a CI badge');
   assert.match(readme, /## CI/);
 });
+
+function reuseApi({ pulls, runs = [], jobs = {}, trees = {} }) {
+  return {
+    pullsForCommit: async () => pulls,
+    successfulPullRequestRuns: async () => runs,
+    jobsForRun: async (id) => jobs[id] ?? [],
+    testedTreeForRun: async (id) => trees[id],
+  };
+}
+
+const mergedPull = {
+  number: 7,
+  merge_commit_sha: 'merge',
+  merged_at: 'now',
+  head: { sha: 'head' },
+};
+const green = [{ conclusion: 'success' }, { conclusion: 'success' }];
+
+test('main CI reuses a fully green pull-request run only for the identical tree', async () => {
+  const { decideReuse } = await import('./ci-reuse-gate.mjs');
+  const api = reuseApi({
+    pulls: [mergedPull],
+    runs: [{ id: 1 }],
+    jobs: { 1: green },
+    trees: { 1: 'T' },
+  });
+  assert.equal((await decideReuse({ sha: 'merge', tree: 'T', api })).reuse, true);
+  assert.equal((await decideReuse({ sha: 'merge', tree: 'other', api })).reuse, false);
+});
+
+test('main CI does not reuse runs with skipped jobs, missing trees or no merged PR', async () => {
+  const { decideReuse } = await import('./ci-reuse-gate.mjs');
+  const skipped = reuseApi({
+    pulls: [mergedPull],
+    runs: [{ id: 1 }],
+    jobs: { 1: [{ conclusion: 'success' }, { conclusion: 'skipped' }] },
+    trees: { 1: 'T' },
+  });
+  assert.equal((await decideReuse({ sha: 'merge', tree: 'T', api: skipped })).reuse, false);
+  const noTree = reuseApi({ pulls: [mergedPull], runs: [{ id: 1 }], jobs: { 1: green } });
+  assert.equal((await decideReuse({ sha: 'merge', tree: 'T', api: noTree })).reuse, false);
+  const direct = reuseApi({ pulls: [{ ...mergedPull, merge_commit_sha: 'elsewhere' }] });
+  assert.equal((await decideReuse({ sha: 'merge', tree: 'T', api: direct })).reuse, false);
+});
+
+test('expensive CI jobs are skipped only when the reuse gate approves', () => {
+  const changes = workflow.jobs.changes;
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression syntax.
+  assert.equal(changes.outputs.reuse, '${{ steps.reuse.outputs.reuse }}');
+  const gate = changes.steps.find((step) => step.id === 'reuse');
+  assert.equal(gate.if, "github.event_name == 'push'");
+  assert.match(gate.run, /ci-reuse-gate\.mjs/);
+  const upload = changes.steps.find((step) => /upload-artifact/.test(step.uses ?? ''));
+  assert.equal(upload.with.name, 'ci-tested-tree');
+  assert.equal(upload.if, "github.event_name == 'pull_request'");
+  for (const name of ['rust', 'frontend', 'desktop', 'native-spa-smoke']) {
+    assert.match(workflow.jobs[name].if, /^needs\.changes\.outputs\.reuse != 'true' && \(/u, name);
+  }
+  assert.equal(workflow.permissions.actions, 'read');
+});
