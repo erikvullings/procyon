@@ -289,8 +289,10 @@ block base application packaging and application failures do not rebuild compone
 ## CI
 
 Pull requests run formatting, lint, tests, architecture checks, and unsigned desktop package
-smoke tests through `.github/workflows/ci.yml`. Release workflows run only from their documented
-tag or manual qualification boundaries.
+smoke tests through `.github/workflows/ci.yml`. A push to `main` reuses the pull-request result
+when its tree is identical to the tree a fully green pull-request run tested (for example an
+up-to-date squash merge); otherwise it runs the full suite. Release workflows run only from their
+documented tag or manual qualification boundaries and always sign and notarize from source.
 
 ## Project status
 

@@ -203,7 +203,8 @@ when either checked-in HTTP artifact is stale relative to the backend.
 
 Version is workspace-wide via `[workspace.package].version` in the root `Cargo.toml` (MSI/WiX only
 accepts numeric pre-release identifiers, hence `0.1.0-1`, `0.1.0-2`, ... not `0.1.0-alpha.1`).
-Flow: bump version → commit → push → wait for `main` CI green → tag (`vX.Y.Z-N`, matching the
+Flow: bump version → commit → push → wait for `main` CI green (near-instant when the PR was up to
+date with `main` and fully green: `scripts/ci-reuse-gate.mjs` reuses that run for an identical tree) → tag (`vX.Y.Z-N`, matching the
 Cargo version) → push tag → `release-desktop.yml` builds macOS/Windows/Linux, publishes the GitHub
 Release, updates the Homebrew tap, and attempts a Chocolatey push. That push has failed with an
 upstream 504 on every release so far ([chocolatey/home#264](https://github.com/chocolatey/home/issues/264))
