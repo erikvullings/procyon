@@ -832,7 +832,7 @@ export const nl = {
     title: 'Vraag je bestanden',
     includeFolderTitle: 'Deze map opnemen?',
     includeFolderExplanation:
-      'Vraag gebruikt geïndexeerde inhoud. Controleer en voeg deze map en onderliggende mappen toe voordat je een vraag stelt.',
+      'Neem deze map en submappen op om hun bestanden te doorzoeken en er vragen over te stellen.',
     openAssistant: 'Vraag je bestanden',
     options: 'Opties en privacy',
     includeCurrentFolder: 'Huidige map indexeren',
@@ -1504,6 +1504,8 @@ export const nl = {
     estimate: 'Schatting',
     partialEstimate: 'Gedeeltelijke schatting',
     estimateUnavailable: 'Schatting niet beschikbaar',
+    estimateUnavailableGuidance:
+      'De omvang kon niet worden geschat. Indexering kan extra schijfruimte gebruiken.',
     estimateUnavailableValue: 'Niet beschikbaar',
     estimatedFiles: 'Geschat aantal bestanden',
     estimatedSourceBytes: 'Geschatte bronbytes',
@@ -1513,9 +1515,9 @@ export const nl = {
     missingModelDownload: 'Ontbrekende modeldownload',
     noSkippedCounts: 'Er is geen niet-ondersteunde of overgeslagen inhoud gemeld.',
     budgetWarning: 'De schatting overschrijdt deze limieten: {budgets}.',
-    normalizedExcerptsDisclosure: 'Genormaliseerde fragmenten worden lokaal bewaard.',
-    confirmConsent:
-      'Ik begrijp dat dit duurzame toestemming geeft voor verwerking en lokale opslag van deze map en onderliggende mappen.',
+    normalizedExcerptsDisclosure:
+      'Indexering bewaart tekstfragmenten en embeddings lokaal totdat u de map verwijdert.',
+    confirmInclusion: 'OK, map indexeren',
     includeFolder: 'Map opnemen en indexeren',
     reviewExclusion: 'Uitsluiting controleren',
     exclusionPlan: 'Destructief uitsluitingsplan',

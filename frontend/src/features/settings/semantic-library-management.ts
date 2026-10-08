@@ -28,6 +28,7 @@ export interface SemanticFolderEnrolmentPromptAttrs {
   readonly workspaceId: WorkspaceId;
   readonly location: Location;
   readonly onEnrolled: () => void;
+  readonly onCancel: () => void;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
@@ -145,11 +146,10 @@ function deletionCategoryLabel(category: SemanticDeletionCategory): string {
 
 function estimateView(
   preview: SemanticEnrolmentPreview,
-  confirmed: boolean,
   busy: BusyAction | undefined,
-  onConfirmed: (value: boolean) => void,
   onEnrol: () => void,
-  consentId = 'fm-semantic-library-consent',
+  onCancel: () => void,
+  actionLabel: string,
 ): Vnode {
   const estimate = preview.estimate;
   const estimateHeading =
@@ -164,10 +164,15 @@ function estimateView(
     [
       m('h6#semantic-enrolment-preview', estimateHeading),
       estimate.completeness === 'unavailable'
-        ? m(
-            'p.fm-semantic-library-estimate-warning',
-            estimate.unavailableReason ?? t('semanticLibrary', 'estimateUnavailable'),
-          )
+        ? m('.fm-semantic-library-estimate-warning', [
+            m('p', t('semanticLibrary', 'estimateUnavailableGuidance')),
+            estimate.unavailableReason == null
+              ? undefined
+              : m('details', [
+                  m('summary', t('button', 'details')),
+                  m('span', estimate.unavailableReason),
+                ]),
+          ])
         : m('dl.fm-semantic-library-values', [
             m('dt', t('semanticLibrary', 'estimatedFiles')),
             m('dd', String(estimate.estimatedFiles ?? 0)),
@@ -200,24 +205,18 @@ function estimateView(
             }),
           ),
       m('p.fm-semantic-library-disclosure', t('semanticLibrary', 'normalizedExcerptsDisclosure')),
-      m('label.fm-semantic-library-confirmation', { for: consentId }, [
-        m('input', {
-          id: consentId,
-          type: 'checkbox',
-          checked: confirmed,
-          onchange: (event: Event) => onConfirmed((event.target as HTMLInputElement).checked),
-        }),
-        m('span', t('semanticLibrary', 'confirmConsent')),
+      m('.fm-semantic-library-actions', [
+        m(
+          'button.fm-semantic-library-action',
+          { type: 'button', disabled: busy !== undefined, onclick: onCancel },
+          t('button', 'cancel'),
+        ),
+        m(
+          'button.fm-semantic-library-action',
+          { type: 'button', disabled: busy !== undefined, onclick: onEnrol },
+          busy === 'enrol' ? t('semanticLibrary', 'working') : actionLabel,
+        ),
       ]),
-      m(
-        'button.fm-semantic-library-action',
-        {
-          type: 'button',
-          disabled: !confirmed || busy !== undefined,
-          onclick: onEnrol,
-        },
-        busy === 'enrol' ? t('semanticLibrary', 'working') : t('semanticLibrary', 'includeFolder'),
-      ),
     ],
   );
 }
@@ -227,7 +226,6 @@ export const SemanticFolderEnrolmentPrompt: FactoryComponent<
   SemanticFolderEnrolmentPromptAttrs
 > = () => {
   let preview: SemanticEnrolmentPreview | undefined;
-  let confirmed = false;
   let busy: 'preview' | 'enrol' | undefined;
   let error: string | undefined;
 
@@ -284,14 +282,18 @@ export const SemanticFolderEnrolmentPrompt: FactoryComponent<
               )
             : estimateView(
                 preview,
-                confirmed,
                 busy,
-                (value) => {
-                  confirmed = value;
-                },
                 () => void enrol(attrs),
-                'fm-semantic-folder-consent',
+                attrs.onCancel,
+                t('semanticLibrary', 'confirmInclusion'),
               ),
+        preview === undefined && busy !== 'preview'
+          ? m(
+              'button.fm-semantic-library-action',
+              { type: 'button', onclick: attrs.onCancel },
+              t('button', 'cancel'),
+            )
+          : undefined,
         error === undefined
           ? undefined
           : m('p.fm-semantic-library-error', { role: 'alert' }, error),
@@ -496,7 +498,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let folder: SemanticFolderStatus | undefined;
   let preview: SemanticEnrolmentPreview | undefined;
   let exclusionPlan: SemanticExclusionPlan | undefined;
-  let consentConfirmed = false;
   let exclusionConfirmed = false;
   let busy: BusyAction | undefined;
   let error: string | undefined;
@@ -561,7 +562,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       const message = errorMessage(cause);
       preview = undefined;
       exclusionPlan = undefined;
-      consentConfirmed = false;
       exclusionConfirmed = false;
       await load(attrs, true);
       error = message;
@@ -583,7 +583,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
         location: attrs.location as Location,
         recursive: true,
       });
-      consentConfirmed = false;
     });
   }
 
@@ -598,7 +597,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
         location: attrs.location as Location,
       });
       preview = undefined;
-      consentConfirmed = false;
     });
   }
 
@@ -828,12 +826,12 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             ? undefined
             : estimateView(
                 preview,
-                consentConfirmed,
                 busy,
-                (value) => {
-                  consentConfirmed = value;
-                },
                 () => confirmInclusion(attrs),
+                () => {
+                  preview = undefined;
+                },
+                t('semanticLibrary', 'includeFolder'),
               ),
           exclusionPlan === undefined
             ? undefined

@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
 import type { Location, WorkspaceProjection } from '../../models';
-import { SemanticLibraryManagement } from './semantic-library-management';
+import {
+  SemanticFolderEnrolmentPrompt,
+  SemanticLibraryManagement,
+} from './semantic-library-management';
 
 let root: HTMLElement;
 const location: Location = { providerId: 'file', uri: 'mock:///' };
@@ -65,7 +68,7 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).not.toContain('mock-volume');
   });
 
-  it('requires disclosure confirmation and submits no estimate counts', async () => {
+  it('includes a folder with one confirmation and submits no estimate counts', async () => {
     const preview = vi.spyOn(client, 'previewSemanticEnrolment');
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
     mountComponent(client);
@@ -77,24 +80,29 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('42');
     expect(root.textContent).toContain('Missing model download');
     expect(root.textContent).toContain('Unsupported MIME type');
-    expect(root.textContent).toContain('Normalized excerpts will be retained locally');
-    expect(button('Include and index folder').disabled).toBe(true);
+    expect(root.textContent).toContain('stores extracted text and embeddings locally');
+    expect(root.querySelector('#fm-semantic-library-consent')).toBeNull();
+    expect(button('Include and index folder').disabled).toBe(false);
     expect(preview).toHaveBeenCalledWith({
       workspaceId: workspace.id,
       location,
       recursive: true,
     });
 
-    root.querySelector<HTMLInputElement>('#fm-semantic-library-consent')?.click();
-    m.redraw.sync();
+    button('Cancel').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).toBeNull());
+    expect(confirm).not.toHaveBeenCalled();
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
     button('Include and index folder').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Included here'));
-    expect(confirm).toHaveBeenCalledWith({
-      confirmationId: 'mock-enrol-confirmation-1',
-      policyRevision: 1,
-      workspaceId: workspace.id,
-      location,
-    });
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policyRevision: 1,
+        workspaceId: workspace.id,
+        location,
+      }),
+    );
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('estimatedFiles');
   });
 
@@ -388,5 +396,49 @@ describe('SemanticLibraryManagement', () => {
         'Het beleid is gewijzigd',
       ),
     );
+  });
+});
+
+describe('SemanticFolderEnrolmentPrompt', () => {
+  it('shows impact without a second checkbox and keeps failures visible', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'unavailable',
+        unavailableReason:
+          'A provider-neutral recursive estimate is not available for this source.',
+      },
+    });
+    vi.spyOn(client, 'confirmSemanticEnrolment').mockRejectedValue(
+      new Error('Indexing unavailable'),
+    );
+    const onEnrolled = vi.fn();
+    const onCancel = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled,
+          onCancel,
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Size could not be estimated'));
+    expect(root.textContent).toContain('stores extracted text and embeddings locally');
+    expect(root.querySelector('details')?.open).toBe(false);
+    expect(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
+
+    button('OK, index folder').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing unavailable'));
+    expect(onEnrolled).not.toHaveBeenCalled();
+    button('Cancel').click();
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

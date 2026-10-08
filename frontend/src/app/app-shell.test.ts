@@ -4664,17 +4664,19 @@ describe('AppShell', () => {
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
-      .find((button) => button.textContent?.trim() === 'Close')
+      .find((button) => button.textContent?.trim() === 'Cancel')
       ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      ),
+    );
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
-    await vi.waitFor(() =>
-      expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).not.toBeNull(),
-    );
-    root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')?.click();
+    expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).toBeNull();
     const includeButton = await vi.waitFor(() => {
       const candidate = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent?.trim() === 'Include and index folder',
+        (button) => button.textContent?.trim() === 'OK, index folder',
       );
       expect(candidate?.disabled).toBe(false);
       return candidate;
@@ -4682,6 +4684,11 @@ describe('AppShell', () => {
     includeButton?.click();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      ),
+    );
   });
 
   it('focuses the existing Knowledge tab instead of creating another Ask tab', async () => {

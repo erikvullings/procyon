@@ -732,9 +732,20 @@ main.fm-workspace {
 }
 
 .fm-semantic-library-source-unavailable,
-.fm-semantic-library-error,
-.fm-semantic-library-estimate-warning {
+.fm-semantic-library-error {
   color: var(--fm-error);
+}
+
+.fm-semantic-folder-prompt .fm-semantic-library-plan {
+  border: 0;
+  padding: 0;
+}
+
+.fm-semantic-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 .fm-semantic-library-confirmation {

@@ -5486,6 +5486,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         semanticEnrolmentReturnToAsk = false;
                         openRagAsk();
                       },
+                      onCancel: () => {
+                        semanticEnrolmentRequest = undefined;
+                      },
                     }),
                   ),
                 }),

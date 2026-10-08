@@ -839,7 +839,7 @@ export const en = {
     title: 'Ask your files',
     includeFolderTitle: 'Include this folder?',
     includeFolderExplanation:
-      'Ask uses indexed content. Review and include this folder and its descendants before asking a question.',
+      'Include this folder and its subfolders to search and ask about their files.',
     openAssistant: 'Ask your files',
     options: 'Options and privacy',
     includeCurrentFolder: 'Index current folder',
@@ -1499,6 +1499,8 @@ export const en = {
     estimate: 'Estimate',
     partialEstimate: 'Partial estimate',
     estimateUnavailable: 'Estimate unavailable',
+    estimateUnavailableGuidance:
+      'Size could not be estimated. Indexing may use additional disk space.',
     estimateUnavailableValue: 'Unavailable',
     estimatedFiles: 'Estimated files',
     estimatedSourceBytes: 'Estimated source bytes',
@@ -1508,9 +1510,9 @@ export const en = {
     missingModelDownload: 'Missing model download',
     noSkippedCounts: 'No unsupported or skipped content was reported.',
     budgetWarning: 'The estimate exceeds these resource budgets: {budgets}.',
-    normalizedExcerptsDisclosure: 'Normalized excerpts will be retained locally.',
-    confirmConsent:
-      'I understand this grants durable processing and local storage consent for this folder and its descendants.',
+    normalizedExcerptsDisclosure:
+      'Indexing stores extracted text and embeddings locally until you remove the folder.',
+    confirmInclusion: 'OK, index folder',
     includeFolder: 'Include and index folder',
     reviewExclusion: 'Review exclusion',
     exclusionPlan: 'Destructive exclusion plan',

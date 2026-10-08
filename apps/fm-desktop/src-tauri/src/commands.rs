@@ -1259,27 +1259,24 @@ pub(crate) async fn confirm_semantic_enrolment(
         );
         return Ok(status);
     };
-    if let Err(error) = state
-        .service
-        .semantic_reconcile_enrolled_root(
-            &desktop_semantic_access(),
-            root_id,
-            tokio_util::sync::CancellationToken::new(),
-        )
-        .await
-    {
-        tracing::error!(
-            root_id = %root_id,
-            error = %error,
-            "semantic developer indexing failed after enrolment"
-        );
-        return Ok(status);
-    }
-    state
-        .service
-        .semantic_library_status_dto(&desktop_semantic_access())
-        .await
-        .map_err(semantic_library_error)
+    let service = Arc::clone(&state.service);
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = service
+            .semantic_reconcile_enrolled_root(
+                &desktop_semantic_access(),
+                root_id,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        {
+            tracing::error!(
+                root_id = %root_id,
+                error = %error,
+                "semantic indexing failed after including a folder"
+            );
+        }
+    });
+    Ok(status)
 }
 
 /// Creates an authoritative destructive exclusion plan.

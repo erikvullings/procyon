@@ -2090,16 +2090,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                           enrolmentOpen = false;
                           m.redraw();
                         },
+                        onCancel: () => {
+                          enrolmentOpen = false;
+                        },
                       })
                     : undefined,
-                  buttons: [
-                    {
-                      label: t('button', 'close'),
-                      onclick: () => {
-                        enrolmentOpen = false;
-                      },
-                    },
-                  ],
                 }),
             m(ModalPanel, {
               className: 'fm-dense-modal fm-knowledge-settings-modal',
