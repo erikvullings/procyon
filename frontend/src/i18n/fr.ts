@@ -419,6 +419,8 @@ export const fr = {
     fileName: 'Nom du fichier',
     applyToAllSimilar: 'Appliquer à tous les conflits similaires',
     permanentDeleteSummary: 'Cela supprimera définitivement {count} éléments ({size}).',
+    permanentDeleteBeforePlanning:
+      'Les éléments sélectionnés et tout leur contenu seront supprimés définitivement. Le comptage commencera après confirmation.',
     irreversible: 'Cette action est irréversible.',
     completedWithWarnings: 'Terminé avec des avertissements.',
     showWarning: "Afficher l'avertissement",

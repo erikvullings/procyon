@@ -18,6 +18,39 @@ fn service(root: &tempfile::TempDir) -> FileManagerService {
     )
 }
 
+#[tokio::test]
+async fn repeated_copy_reuses_active_job_and_move_of_same_source_is_rejected() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source.txt");
+    let destination = root.path().join("destination");
+    fs::write(&source, b"source").unwrap();
+    fs::create_dir(&destination).unwrap();
+    fs::write(destination.join("source.txt"), b"existing").unwrap();
+    let service = service(&root);
+    let mut request = StartOperationRequestDto {
+        operation_type: OperationKindDto::Copy,
+        sources: vec![Location::from_native_path(&source).unwrap().into()],
+        destination: Some(Location::from_native_path(&destination).unwrap().into()),
+        destinations: vec![],
+        conflict_policy: OperationConflictPolicyDto::Ask,
+        name: None,
+        archive_format: None,
+        archive_compression_level: None,
+        create_intermediate_directories: false,
+        symlink_policy: SymlinkPolicyDto::CopyLink,
+        permanent_delete_confirmed: false,
+        override_read_only: false,
+        link: None,
+    };
+    let first = service.start_operation(request.clone(), None).unwrap();
+    let second = service.start_operation(request.clone(), None).unwrap();
+    assert_eq!(first.id, second.id);
+    request.operation_type = OperationKindDto::Move;
+    assert!(service.start_operation(request, None).is_err());
+    service.cancel_operation(first.id.into()).unwrap();
+    assert_eq!(fs::read(&source).unwrap(), b"source");
+}
+
 async fn copy_directory(
     service: &FileManagerService,
     source: &std::path::Path,
@@ -98,7 +131,8 @@ async fn copies_symlink_cycles_as_links_without_following_them() {
         fs::read_link(destination.join("source/loop")).unwrap(),
         std::path::PathBuf::from(".")
     );
-    assert_eq!(result.progress.total_items, Some(2));
+    assert_eq!(result.progress.total_items, None);
+    assert_eq!(result.progress.completed_items, 2);
 }
 
 #[cfg(unix)]
@@ -173,8 +207,10 @@ async fn plans_and_copies_ten_thousand_small_files() {
     let result = copy_directory(&service(&root), &source, &destination).await;
 
     assert_eq!(result.state, OperationStateDto::Completed);
-    assert_eq!(result.progress.total_items, Some(10_001));
-    assert_eq!(result.progress.total_bytes, Some(10_000));
+    assert_eq!(result.progress.total_items, None);
+    assert_eq!(result.progress.completed_items, 10_001);
+    assert_eq!(result.progress.total_bytes, None);
+    assert_eq!(result.progress.completed_bytes, 10_000);
     assert_eq!(
         fs::read_dir(destination.join("source")).unwrap().count(),
         10_000
@@ -182,7 +218,7 @@ async fn plans_and_copies_ten_thousand_small_files() {
 }
 
 #[tokio::test]
-async fn cancellation_during_large_tree_planning_stops_before_writes() {
+async fn cancellation_during_large_tree_copy_stops_remaining_entries() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("source");
     let destination = root.path().join("destination");
@@ -214,7 +250,10 @@ async fn cancellation_during_large_tree_planning_stops_before_writes() {
         .unwrap();
     loop {
         let current = service.get_operation(operation.id.into()).unwrap();
-        if current.state == OperationStateDto::Planning {
+        if matches!(
+            current.state,
+            OperationStateDto::Planning | OperationStateDto::Running
+        ) {
             service.cancel_operation(operation.id.into()).unwrap();
             break;
         }
@@ -226,7 +265,7 @@ async fn cancellation_during_large_tree_planning_stops_before_writes() {
                     | OperationStateDto::CompletedWithWarnings
                     | OperationStateDto::Failed
             ),
-            "planning completed before cancellation could be requested"
+            "copy completed before cancellation could be requested"
         );
         tokio::task::yield_now().await;
     }
@@ -245,7 +284,10 @@ async fn cancellation_during_large_tree_planning_stops_before_writes() {
         tokio::time::sleep(Duration::from_millis(2)).await;
     }
 
-    assert_eq!(fs::read_dir(&destination).unwrap().count(), 0);
+    assert!(
+        !destination.join("source").exists()
+            || fs::read_dir(destination.join("source")).unwrap().count() < 10_000
+    );
 }
 
 #[tokio::test]
@@ -265,7 +307,8 @@ async fn copies_a_nested_unicode_tree_and_empty_directories() {
         b"hello"
     );
     assert!(destination.join("source/子/empty").is_dir());
-    assert_eq!(result.progress.total_bytes, Some(5));
+    assert_eq!(result.progress.total_bytes, None);
+    assert_eq!(result.progress.completed_bytes, 5);
 }
 
 #[tokio::test]

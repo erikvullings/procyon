@@ -91,6 +91,8 @@ export interface AppDialogsContext {
   setCloseTabConfirmation(conf?: { readonly paneId: PaneId; readonly tabId: TabId }): void;
   getOperationConfirmation(): OperationConfirmationRequest | undefined;
   resolveOperationConfirmation(confirmed: boolean): void;
+  getPermanentDeleteRequest(): readonly Location[] | undefined;
+  resolvePermanentDeleteRequest(confirmed: boolean): void;
   getDialogs(): DialogUIController;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
   getFormatSettings(): EntryFormatSettings;
@@ -465,14 +467,25 @@ export function renderAppDialogs(
       })(),
     ),
     m(PermanentDeleteDialog, {
-      open: pendingDelete !== undefined,
-      ...(pendingDelete === undefined ? {} : { operationId: pendingDelete.id }),
-      itemCount: pendingDelete?.progress.totalItems ?? 0,
-      totalBytes: pendingDelete?.progress.totalBytes ?? 0,
-      sources: pendingDelete?.sources.map((source) => source.location) ?? [],
+      open: pendingDelete !== undefined || ctx.getPermanentDeleteRequest() !== undefined,
+      ...(pendingDelete === undefined || ctx.getPermanentDeleteRequest() !== undefined
+        ? {}
+        : { operationId: pendingDelete.id }),
+      ...(pendingDelete === undefined || ctx.getPermanentDeleteRequest() !== undefined
+        ? {}
+        : {
+            itemCount: pendingDelete.progress.totalItems,
+            totalBytes: pendingDelete.progress.totalBytes,
+          }),
+      sources:
+        ctx.getPermanentDeleteRequest() ??
+        pendingDelete?.sources.map((source) => source.location) ??
+        [],
       formatSettings: ctx.getFormatSettings(),
       onCancel: () => {
-        if (pendingDelete !== undefined) {
+        if (ctx.getPermanentDeleteRequest() !== undefined) {
+          ctx.resolvePermanentDeleteRequest(false);
+        } else if (pendingDelete !== undefined) {
           const id = pendingDelete.id;
           ctx.cancelAutoDismiss(id);
           ctx.rememberDismissedOperation(id);
@@ -487,6 +500,11 @@ export function renderAppDialogs(
         focusActivePaneAfterDeleteDialog(ctx);
       },
       onConfirm: () => {
+        if (ctx.getPermanentDeleteRequest() !== undefined) {
+          ctx.resolvePermanentDeleteRequest(true);
+          focusActivePaneAfterDeleteDialog(ctx);
+          return Promise.resolve();
+        }
         if (pendingDelete === undefined) return Promise.resolve();
         const id = pendingDelete.id;
         ctx.setOperations(transitionOperationState(ctx.getOperations(), id, 'running'));

@@ -251,6 +251,22 @@ describe('OperationCentre states', () => {
     expect(controls?.lastElementChild?.classList).toContain('fm-operation-eta');
   });
 
+  it('does not extrapolate a delete ETA from fluctuating byte rates', () => {
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([{ ...operation('running'), kind: 'delete' }]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    expect(root.querySelector('.fm-operation-eta')).toBeNull();
+    expect(root.querySelector('.fm-operation')?.textContent).toContain('2 / 4 items');
+  });
+
   const runningWithoutRate = operation('running');
   delete runningWithoutRate.progress.bytesPerSecond;
 

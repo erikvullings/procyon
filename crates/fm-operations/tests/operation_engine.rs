@@ -306,6 +306,39 @@ async fn scheduler_obeys_concurrency_and_publishes_full_event_sequence() {
 }
 
 #[tokio::test]
+async fn scheduler_runs_two_independent_deletes_concurrently() {
+    let scheduler = Scheduler::new(2, EventBus::new(32));
+    let first_executor = Arc::new(BlockingExecutor::default());
+    let second_executor = Arc::new(BlockingExecutor::default());
+    let mut first = operation();
+    first.kind = OperationKind::Delete;
+    let mut second = operation();
+    second.kind = OperationKind::Delete;
+    let first_id = scheduler.submit(first, first_executor.clone()).unwrap();
+    first_executor.first_started.notified().await;
+    let second_id = scheduler.submit(second, second_executor.clone()).unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        second_executor.first_started.notified(),
+    )
+    .await
+    .expect("second delete must start before the first finishes");
+
+    assert_eq!(
+        scheduler.get(first_id).unwrap().state,
+        OperationState::Running
+    );
+    assert_eq!(
+        scheduler.get(second_id).unwrap().state,
+        OperationState::Running
+    );
+    first_executor.release_first.notify_one();
+    second_executor.release_first.notify_one();
+    scheduler.wait(first_id).await.unwrap();
+    scheduler.wait(second_id).await.unwrap();
+}
+
+#[tokio::test]
 async fn cancellation_at_safe_point_cleans_partial_destination() {
     let scheduler = Scheduler::new(1, EventBus::new(32));
     let executor = Arc::new(BlockingExecutor::default());

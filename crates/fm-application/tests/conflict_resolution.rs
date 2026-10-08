@@ -203,7 +203,8 @@ async fn skip_and_apply_to_all_leave_every_existing_file_unchanged() {
         .unwrap();
 
     let completed = wait_for_state(&service, operation.id, OperationStateDto::Completed).await;
-    assert_eq!(completed.progress.completed_items, 3);
+    // Skipping the conflicting directory skips its entire subtree.
+    assert_eq!(completed.progress.completed_items, 1);
     assert_eq!(completed.progress.completed_bytes, 0);
     assert_eq!(
         fs::read(destination.join("source/first.txt")).unwrap(),

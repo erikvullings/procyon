@@ -81,5 +81,6 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
         fs::read(root.path().join("résumé.txt (1)")).unwrap(),
         b"unicode"
     );
-    assert_eq!(result.progress.total_bytes, Some(27));
+    assert_eq!(result.progress.total_bytes, None);
+    assert_eq!(result.progress.completed_bytes, 27);
 }
