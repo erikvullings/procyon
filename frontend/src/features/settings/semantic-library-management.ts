@@ -303,13 +303,13 @@ export const SemanticFolderEnrolmentPrompt: FactoryComponent<
 
 function exclusionPlanView(
   plan: SemanticExclusionPlan,
-  confirmed: boolean,
   busy: BusyAction | undefined,
-  onConfirmed: (value: boolean) => void,
   onExclude: () => void,
+  onCancel: () => void,
 ): Vnode {
   return m('section.fm-semantic-library-plan', { 'aria-labelledby': 'semantic-exclusion-plan' }, [
     m('h6#semantic-exclusion-plan', t('semanticLibrary', 'exclusionPlan')),
+    m('p.fm-semantic-library-location', plan.location.uri),
     m('p', { role: 'alert' }, t('semanticLibrary', 'exclusionWarning')),
     m(
       'ul.fm-semantic-library-cleanup',
@@ -320,19 +320,16 @@ function exclusionPlanView(
         ]),
       ),
     ),
-    m('label.fm-semantic-library-confirmation', [
-      m('input#fm-semantic-library-exclusion-confirm', {
-        type: 'checkbox',
-        checked: confirmed,
-        onchange: (event: Event) => onConfirmed((event.target as HTMLInputElement).checked),
-      }),
-      m('span', t('semanticLibrary', 'confirmExclusion')),
-    ]),
+    m(
+      'button.fm-semantic-library-action',
+      { type: 'button', disabled: busy !== undefined, onclick: onCancel },
+      t('button', 'cancel'),
+    ),
     m(
       'button.fm-semantic-library-action.fm-semantic-library-destructive',
       {
         type: 'button',
-        disabled: !confirmed || busy !== undefined,
+        disabled: busy !== undefined,
         onclick: onExclude,
       },
       busy === 'confirmExclusion'
@@ -346,6 +343,8 @@ function rootStatusView(
   root: SemanticRootStatus,
   workspaceId: WorkspaceId | undefined,
   busy: BusyAction | undefined,
+  canRemove: boolean,
+  onRemove: (location: Location) => void,
   onResumeCleanup: (planId: string) => void,
   onOverride: (
     root: SemanticRootStatus,
@@ -353,91 +352,118 @@ function rootStatusView(
     action: SemanticEligibilityOverride | undefined,
   ) => void,
 ): Vnode {
+  const removed = rootExclusion(root) !== undefined;
   return m('li.fm-semantic-library-root', { key: root.id }, [
-    m('strong', root.location.uri),
+    m('.fm-semantic-library-root-heading', [
+      m('strong.fm-semantic-library-location', root.location.uri),
+      removed ? m('span', t('semanticLibrary', 'excluded')) : undefined,
+      !removed &&
+      canRemove &&
+      workspaceId !== undefined &&
+      root.workspaceReferences.includes(workspaceId)
+        ? m(
+            'button.fm-semantic-library-action',
+            {
+              type: 'button',
+              disabled: busy !== undefined,
+              onclick: () => onRemove(root.location),
+            },
+            t('semanticLibrary', 'removeFolder'),
+          )
+        : undefined,
+    ]),
     root.availability.state === 'temporarilyUnavailable'
       ? m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
           m('strong', t('semanticLibrary', 'sourceUnavailable')),
           ` — ${root.availability.reason}`,
         ])
       : undefined,
-    m('dl.fm-semantic-library-values', [
-      m('dt', t('semanticLibrary', 'stableIdentity')),
-      m(
-        'dd',
-        root.stableIdentityVerified
-          ? t('semanticLibrary', 'verified')
-          : t('semanticLibrary', 'unverified'),
-      ),
-      m('dt', t('semanticLibrary', 'reconciliationGeneration')),
-      m('dd', String(root.reconciliationGeneration)),
-      m('dt', t('semanticLibrary', 'indexedGeneration')),
-      m('dd', String(root.indexedGeneration)),
-    ]),
-    root.attachedVocabularyIds.length === 0
-      ? m('p', t('semanticLibrary', 'noVocabularies'))
-      : m('p', [
-          `${t('semanticLibrary', 'attachedVocabularies')}: `,
-          root.attachedVocabularyIds.join(', '),
-        ]),
-    root.eligibilityReasonCounts.length === 0
-      ? undefined
-      : m(
-          'ul.fm-semantic-library-reasons',
-          root.eligibilityReasonCounts.map((reason) =>
-            m('li', { key: reason.reason }, `${reasonLabel(reason.reason)}: ${reason.count}`),
-          ),
+    root.ocrRequiredFiles.length > 0
+      ? m(
+          'p.fm-semantic-library-ocr-needed',
+          t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
+        )
+      : undefined,
+    m('details.fm-semantic-library-details', [
+      m('summary', t('semanticLibrary', 'folderDetails')),
+      m('dl.fm-semantic-library-values', [
+        m('dt', t('semanticLibrary', 'stableIdentity')),
+        m(
+          'dd',
+          root.stableIdentityVerified
+            ? t('semanticLibrary', 'verified')
+            : t('semanticLibrary', 'unverified'),
         ),
-    root.ocrRequiredFiles.length === 0
-      ? undefined
-      : m('section.fm-semantic-library-ocr', [
-          m('h6', t('semanticLibrary', 'ocrRequiredFiles')),
-          m('p', t('semanticLibrary', 'ocrRequiredGuidance')),
-          m(
-            'ul',
-            root.ocrRequiredFiles.map((location) =>
-              m(
-                'li',
-                { key: `${location.providerId}:${location.uri}` },
-                decodedLocation(location.uri),
-              ),
+        m('dt', t('semanticLibrary', 'reconciliationGeneration')),
+        m('dd', String(root.reconciliationGeneration)),
+        m('dt', t('semanticLibrary', 'indexedGeneration')),
+        m('dd', String(root.indexedGeneration)),
+      ]),
+      root.attachedVocabularyIds.length === 0
+        ? m('p', t('semanticLibrary', 'noVocabularies'))
+        : m('p', [
+            `${t('semanticLibrary', 'attachedVocabularies')}: `,
+            root.attachedVocabularyIds.join(', '),
+          ]),
+      root.eligibilityReasonCounts.length === 0
+        ? undefined
+        : m(
+            'ul.fm-semantic-library-reasons',
+            root.eligibilityReasonCounts.map((reason) =>
+              m('li', { key: reason.reason }, `${reasonLabel(reason.reason)}: ${reason.count}`),
             ),
           ),
-        ]),
-    workspaceId === undefined || !root.workspaceReferences.includes(workspaceId)
-      ? undefined
-      : m('fieldset.fm-semantic-library-overrides', [
-          m('legend', t('semanticLibrary', 'eligibilityOverrides')),
-          ...SAFE_OVERRIDE_REASONS.map((reason) => {
-            const selected =
-              root.eligibilityOverrides.find((override) => override.reason === reason)?.action ??
-              'default';
-            return m('label.fm-semantic-library-override', [
-              m('span', reasonLabel(reason)),
-              m(
-                'select.browser-default',
-                {
-                  'aria-label': `${reasonLabel(reason)} ${t('semanticLibrary', 'override')}`,
-                  value: selected,
-                  disabled: busy !== undefined,
-                  onchange: (event: Event) => {
-                    const value = (event.target as HTMLSelectElement).value;
-                    onOverride(
-                      root,
-                      reason,
-                      value === 'default' ? undefined : (value as SemanticEligibilityOverride),
-                    );
-                  },
-                },
-                [
-                  m('option', { value: 'default' }, t('semanticLibrary', 'overrideDefault')),
-                  m('option', { value: 'include' }, t('semanticLibrary', 'overrideInclude')),
-                  m('option', { value: 'exclude' }, t('semanticLibrary', 'overrideExclude')),
-                ],
+      root.ocrRequiredFiles.length === 0
+        ? undefined
+        : m('section.fm-semantic-library-ocr', [
+            m('h6', t('semanticLibrary', 'ocrRequiredFiles')),
+            m('p', t('semanticLibrary', 'ocrRequiredGuidance')),
+            m(
+              'ul',
+              root.ocrRequiredFiles.map((location) =>
+                m(
+                  'li',
+                  { key: `${location.providerId}:${location.uri}` },
+                  decodedLocation(location.uri),
+                ),
               ),
-            ]);
-          }),
-        ]),
+            ),
+          ]),
+      workspaceId === undefined || !root.workspaceReferences.includes(workspaceId)
+        ? undefined
+        : m('fieldset.fm-semantic-library-overrides', [
+            m('legend', t('semanticLibrary', 'eligibilityOverrides')),
+            ...SAFE_OVERRIDE_REASONS.map((reason) => {
+              const selected =
+                root.eligibilityOverrides.find((override) => override.reason === reason)?.action ??
+                'default';
+              return m('label.fm-semantic-library-override', [
+                m('span', reasonLabel(reason)),
+                m(
+                  'select.browser-default',
+                  {
+                    'aria-label': `${reasonLabel(reason)} ${t('semanticLibrary', 'override')}`,
+                    value: selected,
+                    disabled: busy !== undefined,
+                    onchange: (event: Event) => {
+                      const value = (event.target as HTMLSelectElement).value;
+                      onOverride(
+                        root,
+                        reason,
+                        value === 'default' ? undefined : (value as SemanticEligibilityOverride),
+                      );
+                    },
+                  },
+                  [
+                    m('option', { value: 'default' }, t('semanticLibrary', 'overrideDefault')),
+                    m('option', { value: 'include' }, t('semanticLibrary', 'overrideInclude')),
+                    m('option', { value: 'exclude' }, t('semanticLibrary', 'overrideExclude')),
+                  ],
+                ),
+              ]);
+            }),
+          ]),
+    ]),
     root.exclusions.length === 0
       ? undefined
       : m(
@@ -488,6 +514,16 @@ function rootStatusView(
   ]);
 }
 
+function rootExclusion(
+  root: SemanticRootStatus,
+): SemanticRootStatus['exclusions'][number] | undefined {
+  return root.exclusions.find(
+    (exclusion) =>
+      exclusion.location.providerId === root.location.providerId &&
+      exclusion.location.uri === root.location.uri,
+  );
+}
+
 /** Settings surface for semantic-library consent and active-folder policy. */
 export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManagementAttrs> = (
   initial,
@@ -498,7 +534,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let folder: SemanticFolderStatus | undefined;
   let preview: SemanticEnrolmentPreview | undefined;
   let exclusionPlan: SemanticExclusionPlan | undefined;
-  let exclusionConfirmed = false;
   let busy: BusyAction | undefined;
   let error: string | undefined;
   let contextKey = '';
@@ -562,7 +597,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       const message = errorMessage(cause);
       preview = undefined;
       exclusionPlan = undefined;
-      exclusionConfirmed = false;
       await load(attrs, true);
       error = message;
     } finally {
@@ -600,35 +634,27 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
     });
   }
 
-  function planExclusion(attrs: SemanticLibraryManagementAttrs): void {
-    if (attrs.workspaceId === undefined || attrs.location === undefined || status === undefined)
-      return;
+  function planExclusion(attrs: SemanticLibraryManagementAttrs, location: Location): void {
+    if (attrs.workspaceId === undefined || status === undefined) return;
     void action(attrs, 'planExclusion', async () => {
       exclusionPlan = await attrs.client.planSemanticExclusion({
         policyRevision: (status as SemanticLibraryStatus).revision,
         workspaceId: attrs.workspaceId as WorkspaceId,
-        location: attrs.location as Location,
+        location,
       });
-      exclusionConfirmed = false;
     });
   }
 
   function confirmExclusion(attrs: SemanticLibraryManagementAttrs): void {
-    if (
-      attrs.workspaceId === undefined ||
-      attrs.location === undefined ||
-      exclusionPlan === undefined
-    )
-      return;
+    if (attrs.workspaceId === undefined || exclusionPlan === undefined) return;
     void action(attrs, 'confirmExclusion', async () => {
       status = await attrs.client.confirmSemanticExclusion({
         confirmationId: (exclusionPlan as SemanticExclusionPlan).confirmationId,
         policyRevision: (exclusionPlan as SemanticExclusionPlan).policyRevision,
         workspaceId: attrs.workspaceId as WorkspaceId,
-        location: attrs.location as Location,
+        location: (exclusionPlan as SemanticExclusionPlan).location,
       });
       exclusionPlan = undefined;
-      exclusionConfirmed = false;
     });
   }
 
@@ -699,6 +725,25 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           m('p', t('semanticLibrary', 'unavailable')),
         );
       }
+      const includedRoots = status.roots.filter((root) => rootExclusion(root) === undefined);
+      const removedRoots = status.roots.filter((root) => rootExclusion(root) !== undefined);
+      const rootView = (candidate: SemanticRootStatus): Vnode =>
+        rootStatusView(
+          candidate,
+          attrs.workspaceId,
+          busy,
+          has('planExclusion'),
+          (location) => planExclusion(attrs, location),
+          (planId) =>
+            void action(attrs, 'cleanup', async () => {
+              status = await attrs.client.resumeSemanticCleanup({
+                planId,
+                policyRevision: (status as SemanticLibraryStatus).revision,
+              });
+            }),
+          (selectedRoot, reason, selectedOverride) =>
+            void updateOverride(attrs, selectedRoot, reason, selectedOverride),
+        );
       return m(
         'section.fm-semantic-library-management',
         { 'aria-label': t('semanticLibrary', 'title') },
@@ -713,7 +758,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
               ? t('semanticLibrary', 'ingestionPaused')
               : t('semanticLibrary', 'ingestionActive'),
           ),
-          m('p', t('semanticLibrary', 'pauseExplanation')),
+          status.paused ? m('p', t('semanticLibrary', 'pauseExplanation')) : undefined,
           has(status.paused ? 'resume' : 'pause')
             ? m(
                 'button.fm-semantic-library-action',
@@ -738,90 +783,103 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             : undefined,
           status.library == null
             ? undefined
-            : m('dl.fm-semantic-library-values', [
-                m('dt', t('semanticLibrary', 'libraryIdentity')),
-                m('dd', status.library.libraryId),
-                m('dt', t('semanticLibrary', 'model')),
-                m('dd', `${status.library.model.modelId} · ${status.library.model.revision}`),
-                m('dt', t('semanticLibrary', 'resourceProfile')),
-                m(
-                  'dd',
-                  status.resourceProfile == null
-                    ? t('semanticLibrary', 'notAvailable')
-                    : t(
-                        'semanticLibrary',
-                        status.resourceProfile.kind === 'compact'
-                          ? 'profileCompact'
-                          : status.resourceProfile.kind === 'balanced'
-                            ? 'profileBalanced'
-                            : 'profileQuality',
-                      ),
-                ),
-                m('dt', t('semanticLibrary', 'reconciliationInterval')),
-                m(
-                  'dd',
-                  status.reconciliationIntervalSeconds === 1_800
-                    ? t('semanticLibrary', 'everyThirtyMinutes')
-                    : t('semanticLibrary', 'everySeconds', {
-                        seconds: status.reconciliationIntervalSeconds ?? 0,
-                      }),
-                ),
+            : m('details.fm-semantic-library-details', [
+                m('summary', t('semanticLibrary', 'libraryDetails')),
+                m('dl.fm-semantic-library-values', [
+                  m('dt', t('semanticLibrary', 'libraryIdentity')),
+                  m('dd', status.library.libraryId),
+                  m('dt', t('semanticLibrary', 'model')),
+                  m('dd', `${status.library.model.modelId} · ${status.library.model.revision}`),
+                  m('dt', t('semanticLibrary', 'resourceProfile')),
+                  m(
+                    'dd',
+                    status.resourceProfile == null
+                      ? t('semanticLibrary', 'notAvailable')
+                      : t(
+                          'semanticLibrary',
+                          status.resourceProfile.kind === 'compact'
+                            ? 'profileCompact'
+                            : status.resourceProfile.kind === 'balanced'
+                              ? 'profileBalanced'
+                              : 'profileQuality',
+                        ),
+                  ),
+                  m('dt', t('semanticLibrary', 'reconciliationInterval')),
+                  m(
+                    'dd',
+                    status.reconciliationIntervalSeconds === 1_800
+                      ? t('semanticLibrary', 'everyThirtyMinutes')
+                      : t('semanticLibrary', 'everySeconds', {
+                          seconds: status.reconciliationIntervalSeconds ?? 0,
+                        }),
+                  ),
+                ]),
+                m('p', t('semanticLibrary', 'dataPreservedDisclosure')),
               ]),
-          m('p.fm-semantic-library-disclosure', t('semanticLibrary', 'dataPreservedDisclosure')),
           attrs.workspaceId === undefined || attrs.location === undefined
             ? m('p', t('semanticLibrary', 'openFolder'))
             : folder === undefined
               ? m('p', t('semanticLibrary', 'folderStatusUnavailable'))
-              : m('section.fm-semantic-library-folder', [
-                  m('h6', t('semanticLibrary', 'currentFolder')),
-                  m('p.fm-semantic-library-location', attrs.location.uri),
-                  m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder')),
-                  m(
-                    '.fm-semantic-library-consent-state',
-                    { 'data-consent': folder.consent, 'aria-live': 'polite' },
-                    consentLabel(folder.consent),
-                  ),
-                  folder.sourceAvailable
-                    ? undefined
-                    : m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
-                        m('strong', t('semanticLibrary', 'sourceUnavailable')),
-                        folder.unavailableReason == null
-                          ? undefined
-                          : ` — ${folder.unavailableReason}`,
-                      ]),
-                  (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
-                  folder.consent !== 'excluded' &&
-                  has('previewEnrolment')
-                    ? m(
-                        'button.fm-semantic-library-action',
-                        {
-                          type: 'button',
-                          disabled: busy !== undefined,
-                          onclick: () => previewInclusion(attrs),
-                        },
-                        busy === 'preview'
-                          ? t('semanticLibrary', 'working')
-                          : folder.consent === 'notIncluded'
-                            ? t('semanticLibrary', 'previewInclusion')
-                            : t('semanticLibrary', 'attachToWorkspace'),
-                      )
-                    : undefined,
-                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
-                  folder.workspaceReferenced &&
-                  has('planExclusion')
-                    ? m(
-                        'button.fm-semantic-library-action',
-                        {
-                          type: 'button',
-                          disabled: busy !== undefined,
-                          onclick: () => planExclusion(attrs),
-                        },
-                        busy === 'planExclusion'
-                          ? t('semanticLibrary', 'working')
-                          : t('semanticLibrary', 'reviewExclusion'),
-                      )
-                    : undefined,
-                ]),
+              : folder.consent === 'includedHere' &&
+                  includedRoots.some(
+                    (root) =>
+                      root.location.providerId === attrs.location?.providerId &&
+                      root.location.uri === attrs.location?.uri,
+                  )
+                ? undefined
+                : m('section.fm-semantic-library-folder', [
+                    m('h6', t('semanticLibrary', 'currentFolder')),
+                    m('p.fm-semantic-library-location', attrs.location.uri),
+                    folder.consent === 'notIncluded'
+                      ? m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder'))
+                      : undefined,
+                    m(
+                      '.fm-semantic-library-consent-state',
+                      { 'data-consent': folder.consent, 'aria-live': 'polite' },
+                      consentLabel(folder.consent),
+                    ),
+                    folder.sourceAvailable
+                      ? undefined
+                      : m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
+                          m('strong', t('semanticLibrary', 'sourceUnavailable')),
+                          folder.unavailableReason == null
+                            ? undefined
+                            : ` — ${folder.unavailableReason}`,
+                        ]),
+                    (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
+                    folder.consent !== 'excluded' &&
+                    has('previewEnrolment')
+                      ? m(
+                          'button.fm-semantic-library-action',
+                          {
+                            type: 'button',
+                            disabled: busy !== undefined,
+                            onclick: () => previewInclusion(attrs),
+                          },
+                          busy === 'preview'
+                            ? t('semanticLibrary', 'working')
+                            : folder.consent === 'notIncluded'
+                              ? t('semanticLibrary', 'previewInclusion')
+                              : t('semanticLibrary', 'attachToWorkspace'),
+                        )
+                      : undefined,
+                    (folder.consent === 'includedHere' ||
+                      folder.consent === 'inheritedFromParent') &&
+                    folder.workspaceReferenced &&
+                    has('planExclusion')
+                      ? m(
+                          'button.fm-semantic-library-action',
+                          {
+                            type: 'button',
+                            disabled: busy !== undefined,
+                            onclick: () => planExclusion(attrs, attrs.location as Location),
+                          },
+                          busy === 'planExclusion'
+                            ? t('semanticLibrary', 'working')
+                            : t('semanticLibrary', 'reviewExclusion'),
+                        )
+                      : undefined,
+                  ]),
           preview === undefined
             ? undefined
             : estimateView(
@@ -837,40 +895,45 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             ? undefined
             : exclusionPlanView(
                 exclusionPlan,
-                exclusionConfirmed,
                 busy,
-                (value) => {
-                  exclusionConfirmed = value;
-                },
                 () => confirmExclusion(attrs),
+                () => {
+                  exclusionPlan = undefined;
+                },
               ),
           error === undefined
             ? undefined
             : m('p.fm-semantic-library-error', { role: 'alert' }, error),
           m('section.fm-semantic-library-roots', [
             m('h6', t('semanticLibrary', 'enrolledRoots')),
-            status.roots.length === 0
+            includedRoots.length === 0
               ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
-              : m(
-                  'ul',
-                  status.roots.map((candidate) =>
-                    rootStatusView(
-                      candidate,
-                      attrs.workspaceId,
-                      busy,
-                      (planId) =>
-                        void action(attrs, 'cleanup', async () => {
-                          status = await attrs.client.resumeSemanticCleanup({
-                            planId,
-                            policyRevision: (status as SemanticLibraryStatus).revision,
-                          });
-                        }),
-                      (selectedRoot, reason, selectedOverride) =>
-                        void updateOverride(attrs, selectedRoot, reason, selectedOverride),
-                    ),
-                  ),
-                ),
+              : m('ul', includedRoots.map(rootView)),
           ]),
+          removedRoots.filter((root) => rootExclusion(root)?.cleanup.status !== 'complete').length >
+          0
+            ? m('section.fm-semantic-library-roots', [
+                m('h6', t('semanticLibrary', 'cleanupInProgress')),
+                m(
+                  'ul',
+                  removedRoots
+                    .filter((root) => rootExclusion(root)?.cleanup.status !== 'complete')
+                    .map(rootView),
+                ),
+              ])
+            : undefined,
+          removedRoots.some((root) => rootExclusion(root)?.cleanup.status === 'complete')
+            ? m('details.fm-semantic-library-roots.fm-semantic-library-details', [
+                m('summary', t('semanticLibrary', 'removedFolders')),
+                m(
+                  'ul',
+                  removedRoots
+                    .filter((root) => rootExclusion(root)?.cleanup.status === 'complete')
+                    .map(rootView),
+                ),
+              ])
+            : undefined,
+          m('p.fm-semantic-library-guidance', t('semanticLibrary', 'missingRootGuidance')),
         ],
       );
     },

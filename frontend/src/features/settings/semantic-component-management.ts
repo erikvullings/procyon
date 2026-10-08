@@ -297,7 +297,7 @@ function modelAndComponentStatus(
   const activeProfileNeedsUpdate =
     activeProfile !== undefined &&
     !modelSelectionMatchesProfile(status.activeModel ?? undefined, activeProfile);
-  return [
+  const sections = [
     status.dataRoot == null
       ? undefined
       : m('dl.fm-semantic-definition-list.fm-semantic-data-root', [
@@ -316,12 +316,6 @@ function modelAndComponentStatus(
             m('dt', t('semanticComponents', 'revision')),
             m('dd', status.activeModel.identity.revision),
           ]),
-          activeProfileNeedsUpdate
-            ? m(
-                'p.fm-semantic-component-note',
-                t('semanticComponents', 'activeModelUpdateAvailable'),
-              )
-            : undefined,
         ]),
     m('section.fm-semantic-status-section', [
       m('h6', t('semanticComponents', 'installedComponentsHeading')),
@@ -373,6 +367,21 @@ function modelAndComponentStatus(
       ]),
     ]),
   ].filter((node): node is Vnode => node !== undefined);
+  return status.activeModel == null
+    ? sections
+    : [
+        m('p.fm-semantic-active-model', [
+          `${t('semanticComponents', 'activeModelHeading')}: `,
+          m('strong', profileName(status.activeModel.profile)),
+        ]),
+        activeProfileNeedsUpdate
+          ? m('p.fm-semantic-component-note', t('semanticComponents', 'activeModelUpdateAvailable'))
+          : undefined,
+        m('details.fm-semantic-status-details', [
+          m('summary', t('semanticComponents', 'componentDetails')),
+          ...sections,
+        ]),
+      ].filter((node): node is Vnode => node !== undefined);
 }
 
 function componentList(
@@ -1148,43 +1157,53 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
-        ? m('fieldset.fm-semantic-install', [
-            m('legend', t('semanticComponents', 'installEnableLegend')),
-            status.lifecycle.state === 'offered' && offer === undefined && busy !== 'offer'
-              ? m('p', t('semanticComponents', 'existingOffer'))
-              : installProfile === 'embeddingGemma2'
-                ? undefined
-                : m('p', t('semanticComponents', 'reviewInstallation')),
-            profileChoices(
-              'fm-semantic-install-profile',
-              switchProfiles,
-              installProfile,
-              (profile) => {
-                if (busy !== undefined) return;
-                installProfile = profile;
-                offer = undefined;
-                if (profile === 'embeddingGemma2') createOffer();
-              },
-            ),
-            installProfile === 'embeddingGemma2' && busy === 'offer'
-              ? m('p', { role: 'status' }, t('semanticComponents', 'loadingOffer'))
-              : undefined,
-            installProfile !== 'embeddingGemma2' || (offer === undefined && busy !== 'offer')
-              ? m(
-                  'button.btn.fm-semantic-action',
-                  {
-                    type: 'button',
-                    disabled: busy !== undefined || switchProfiles.length === 0,
-                    onclick: createOffer,
+        ? m(
+            status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+              ? 'details.fm-semantic-model-switch'
+              : 'div',
+            [
+              status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+                ? m('summary', t('semanticComponents', 'changeModel'))
+                : undefined,
+              m('fieldset.fm-semantic-install', [
+                m('legend', t('semanticComponents', 'installEnableLegend')),
+                status.lifecycle.state === 'offered' && offer === undefined && busy !== 'offer'
+                  ? m('p', t('semanticComponents', 'existingOffer'))
+                  : installProfile === 'embeddingGemma2'
+                    ? undefined
+                    : m('p', t('semanticComponents', 'reviewInstallation')),
+                profileChoices(
+                  'fm-semantic-install-profile',
+                  switchProfiles,
+                  installProfile,
+                  (profile) => {
+                    if (busy !== undefined) return;
+                    installProfile = profile;
+                    offer = undefined;
+                    if (profile === 'embeddingGemma2') createOffer();
                   },
-                  busy === 'offer'
-                    ? t('semanticComponents', 'working')
-                    : installProfile === 'embeddingGemma2'
-                      ? t('semanticComponents', 'retryOffer')
-                      : t('semanticComponents', 'installEnableAction'),
-                )
-              : undefined,
-          ])
+                ),
+                installProfile === 'embeddingGemma2' && busy === 'offer'
+                  ? m('p', { role: 'status' }, t('semanticComponents', 'loadingOffer'))
+                  : undefined,
+                installProfile !== 'embeddingGemma2' || (offer === undefined && busy !== 'offer')
+                  ? m(
+                      'button.btn.fm-semantic-action',
+                      {
+                        type: 'button',
+                        disabled: busy !== undefined || switchProfiles.length === 0,
+                        onclick: createOffer,
+                      },
+                      busy === 'offer'
+                        ? t('semanticComponents', 'working')
+                        : installProfile === 'embeddingGemma2'
+                          ? t('semanticComponents', 'retryOffer')
+                          : t('semanticComponents', 'installEnableAction'),
+                    )
+                  : undefined,
+              ]),
+            ],
+          )
         : undefined,
       !canOffer &&
       installableLifecycle &&

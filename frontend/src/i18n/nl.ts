@@ -1322,6 +1322,8 @@ export const nl = {
     categoryModels: 'Modellen',
     categoryWorkers: 'Workerversies',
     installEnableLegend: 'Installeren / inschakelen',
+    changeModel: 'Embeddingmodel wijzigen',
+    componentDetails: 'Model- en opslagdetails',
     profileChoiceLegend: 'Kies een modelprofiel',
     compactMultilingualName: 'Compact meertalig',
     compactMultilingualDescription:
@@ -1470,10 +1472,10 @@ export const nl = {
     unavailable: 'Semantische bibliotheekinschrijving is niet beschikbaar in deze host.',
     administratorManaged:
       'Deze privébibliotheek wordt door de serverbeheerder ingericht en is hier alleen-lezen.',
-    ingestionActive: 'Inname actief',
-    ingestionPaused: 'Inname gepauzeerd',
-    pauseIngestion: 'Inname pauzeren',
-    resumeIngestion: 'Inname hervatten',
+    ingestionActive: 'Indexering aan',
+    ingestionPaused: 'Indexering gepauzeerd',
+    pauseIngestion: 'Indexering pauzeren',
+    resumeIngestion: 'Indexering hervatten',
     pauseExplanation:
       'Bestaande indexgegevens en toestemming blijven behouden. Zoekopdrachten kunnen de laatste volledige generaties gebruiken terwijl de inname is gepauzeerd.',
     libraryIdentity: 'Bibliotheekidentiteit',
@@ -1488,12 +1490,10 @@ export const nl = {
     notAvailable: 'Niet beschikbaar',
     dataPreservedDisclosure:
       'Semantische indexering bewaart genormaliseerde fragmenten lokaal totdat hun bronbereik expliciet wordt uitgesloten.',
-    openFolder:
-      'Open een map in een werkruimte en ga daarna hier terug om het indexeren te controleren en te starten.',
+    openFolder: 'Open een map in een paneel om deze aan zoeken toe te voegen.',
     folderStatusUnavailable: 'Toestemmingsstatus van de map is niet beschikbaar.',
     currentFolder: 'Map geselecteerd voor indexering',
-    changeFolder:
-      'Dit is de map die in het actieve paneel is geopend. Sluit Instellingen, open een andere map en ga daarna hier terug om een andere map te kiezen.',
+    changeFolder: 'Open een andere map in een paneel om die te kiezen.',
     includedHere: 'Hier opgenomen',
     inheritedFromParent: 'Geërfd van bovenliggende map',
     excluded: 'Uitgesloten',
@@ -1519,10 +1519,10 @@ export const nl = {
       'Indexering bewaart tekstfragmenten en embeddings lokaal totdat u de map verwijdert.',
     confirmInclusion: 'OK, map indexeren',
     includeFolder: 'Map opnemen en indexeren',
-    reviewExclusion: 'Uitsluiting controleren',
-    exclusionPlan: 'Destructief uitsluitingsplan',
+    reviewExclusion: 'Uit zoekresultaten verwijderen…',
+    exclusionPlan: 'Map uit zoekresultaten verwijderen?',
     exclusionWarning:
-      'Uitsluiten trekt toestemming in en verwijdert elke vermelde artefactcategorie wanneer geen andere ingeschreven vindplaats ernaar verwijst.',
+      'Dit verwijdert de map uit zoekresultaten en wist de lokale indexgegevens die geen andere opgenomen map nodig heeft. Uw oorspronkelijke bestanden blijven behouden.',
     confirmExclusion:
       'Ik begrijp dat bronvindplaatsen, afgeleide gegevens en opgeslagen gespreksbewijspinnen in dit bereik worden verwijderd.',
     excludeAndDelete: 'Uitsluiten en gegevens verwijderen',
@@ -1532,8 +1532,17 @@ export const nl = {
     categoryLabels: 'Labels',
     categoryVectors: 'Niet-gerefereerde vectoren',
     categoryConversationPins: 'Opgeslagen gespreksbewijspinnen',
-    enrolledRoots: 'Ingeschreven hoofdmappen',
-    noEnrolledRoots: 'Er zijn geen mappen ingeschreven.',
+    enrolledRoots: 'Opgenomen mappen',
+    noEnrolledRoots: 'Er zijn nog geen mappen opgenomen.',
+    cleanupInProgress: 'Verwijderen en opschonen',
+    removedFolders: 'Verwijderde mappen',
+    removeFolder: 'Verwijderen',
+    folderDetails: 'Indexeringsdetails',
+    libraryDetails: 'Bibliotheekdetails',
+    pdfTools: "Gescande pdf's doorzoekbaar maken",
+    ocrNeededCount: '{count} gescande pdf(s) hebben tekstherkenning nodig; zie indexeringsdetails.',
+    missingRootGuidance:
+      'Een verplaatste of verwijderde map verdwijnt niet automatisch uit de index. Offline mappen behouden hun zoekgegevens; gebruik Verwijderen om deze te wissen.',
     stableIdentity: 'Stabiele identiteit',
     verified: 'Geverifieerd',
     unverified: 'Niet beschikbaar; verplaatsen vereist nieuwe bevestiging',

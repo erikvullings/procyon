@@ -154,7 +154,12 @@ inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media
 permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
-development bundle. Standard release builds remain Gemma-disabled.
+development bundle. Standard release builds remain Gemma-disabled. Included
+folders can be removed directly from **Settings → Semantic library**, even when
+their sources are unavailable; confirm the displayed cleanup inventory to
+remove their local index data without deleting original files. Moving, deleting,
+or temporarily disconnecting an included root does not automatically purge its
+index, so remove it explicitly if it should no longer appear in search.
 
 To make scanned PDFs searchable, install OCRmyPDF 16.x or 17.x on the desktop,
 then open **Settings → Make scanned PDFs searchable** and allow OCRmyPDF.

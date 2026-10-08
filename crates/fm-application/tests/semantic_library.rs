@@ -36,7 +36,10 @@ use fm_semantic_library::{
     SemanticLibraryCoordinator, SemanticLibraryPolicy, SemanticLibraryState, ServerEnrolmentPolicy,
 };
 use fm_transport_dto::RuntimeKindDto;
-use fm_transport_dto::{ConfirmSemanticEnrolmentRequestDto, PreviewSemanticEnrolmentRequestDto};
+use fm_transport_dto::{
+    ConfirmSemanticEnrolmentRequestDto, NavigationModeDto, PreviewSemanticEnrolmentRequestDto,
+    WorkspaceCommandDto,
+};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -1525,6 +1528,139 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
     let status = service.semantic_library_status(&HOST).await.unwrap();
     assert_eq!(status.roots.len(), 1);
     assert!(status.roots[0].workspace_references.is_empty());
+}
+
+#[tokio::test]
+async fn facade_removes_an_enrolled_root_even_when_another_folder_is_active() {
+    let directory = project_temp_dir("facade-remove-root-");
+    let service = FileManagerService::new(
+        RuntimeKindDto::Mock,
+        directory.path().join("workspaces"),
+        directory.path().join("settings"),
+    );
+    let workspace = service.start_workspace(None).await.unwrap();
+    let pane = workspace
+        .panes
+        .iter()
+        .find(|pane| pane.id == workspace.active_pane_id)
+        .unwrap();
+    let root = pane
+        .tabs
+        .iter()
+        .find(|tab| tab.id == pane.active_tab_id)
+        .unwrap()
+        .location
+        .clone();
+    let preview = service
+        .preview_semantic_enrolment(
+            &HOST,
+            PreviewSemanticEnrolmentRequestDto {
+                workspace_id: workspace.id,
+                location: root.clone(),
+                recursive: true,
+            },
+        )
+        .await
+        .unwrap();
+    service
+        .confirm_semantic_enrolment(
+            &HOST,
+            ConfirmSemanticEnrolmentRequestDto {
+                confirmation_id: preview.confirmation_id,
+                policy_revision: preview.policy_revision,
+                workspace_id: workspace.id,
+                location: root.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let elsewhere = fm_transport_dto::LocationDto {
+        provider_id: root.provider_id.clone(),
+        uri: format!("file://{}", directory.path().display()),
+    };
+    service
+        .apply_workspace_command(WorkspaceCommandDto::NavigateTab {
+            workspace_id: workspace.id,
+            pane_id: pane.id,
+            tab_id: pane.active_tab_id,
+            location: Some(elsewhere.clone()),
+            navigation_mode: NavigationModeDto::Push,
+            expected_revision: workspace.revision,
+        })
+        .await
+        .unwrap();
+    service
+        .semantic_library_quarantine_unreachable_root(&Location::from(root.clone()))
+        .await;
+    assert!(matches!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].availability,
+        fm_application::semantic_library::SemanticRootAvailability::TemporarilyUnavailable { .. }
+    ));
+    let revision = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .revision;
+    let unrelated = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(
+                workspace.id.into(),
+                location("file:///not-an-enrolled-root"),
+            ),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        unrelated,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let descendant = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(
+                workspace.id.into(),
+                location(&format!("{}/child", root.uri.trim_end_matches('/'))),
+            ),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        descendant,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let missing_workspace = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(Uuid::from_u128(0x404).into(), root.clone().into()),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        missing_workspace,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let context = SemanticFolderContext::new(workspace.id.into(), root.into());
+    let plan = service
+        .semantic_library_plan_exclusion(&HOST, context.clone(), revision)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service
+            .semantic_library_confirm_exclusion(
+                &HOST,
+                &plan.confirmation_id,
+                revision,
+                SemanticFolderContext::new(workspace.id.into(), elsewhere.into()),
+            )
+            .await,
+        Err(SemanticLibraryError::StaleConfirmation)
+    ));
+    let excluded = service
+        .semantic_library_confirm_exclusion(&HOST, &plan.confirmation_id, revision, context)
+        .await
+        .unwrap();
+    assert_eq!(excluded.roots[0].exclusions.len(), 1);
 }
 
 #[tokio::test]

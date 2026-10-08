@@ -1036,12 +1036,13 @@ impl FileManagerService {
     ) -> Result<SemanticExclusionPlan, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PlanExclusion)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_active_or_enrolled_semantic_root(access, &context, &library)
+            .await?;
         let context = self.semantic_consent_context(context).await;
         library.plan_exclusion(access, context, expected_revision)
     }
 
-    /// Confirms one exclusion plan for the still-active folder.
+    /// Confirms one exclusion plan for the active folder or an enrolled root.
     ///
     /// # Errors
     ///
@@ -1056,7 +1057,8 @@ impl FileManagerService {
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::ConfirmExclusion)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_active_or_enrolled_semantic_root(access, &context, &library)
+            .await?;
         let context = self.semantic_consent_context(context).await;
         library.confirm_exclusion(access, confirmation_id, expected_revision, &context)
     }
@@ -1297,6 +1299,33 @@ impl FileManagerService {
             .and_then(|pane| pane.tabs.iter().find(|tab| tab.id == pane.active_tab_id))
             .map(|tab| &tab.location);
         if active == Some(&context.location) {
+            Ok(())
+        } else {
+            Err(SemanticLibraryError::WorkspaceRequired)
+        }
+    }
+
+    async fn ensure_active_or_enrolled_semantic_root(
+        &self,
+        access: &SemanticAccessContext,
+        context: &SemanticFolderContext,
+        library: &SemanticLibraryService,
+    ) -> Result<(), SemanticLibraryError> {
+        if self.ensure_active_semantic_folder(context).await.is_ok() {
+            return Ok(());
+        }
+        self.workspaces
+            .load(context.workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        let consent_workspace: uuid::Uuid = self
+            .semantic_workspace_id(context.workspace_id)
+            .await
+            .into();
+        if library.status(access)?.roots.iter().any(|root| {
+            root.location == context.location
+                && root.workspace_references.contains(&consent_workspace)
+        }) {
             Ok(())
         } else {
             Err(SemanticLibraryError::WorkspaceRequired)

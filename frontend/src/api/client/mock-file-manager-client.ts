@@ -2246,7 +2246,7 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticExclusionPlan> {
     return this.perform('planSemanticExclusion', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
       this.requireSemanticLibraryRevision(request.policyRevision);
       const root = this.semanticRootFor(request.location);
       if (root === undefined) {
@@ -2276,7 +2276,7 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
     return this.perform('confirmSemanticExclusion', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
       this.requireSemanticLibraryRevision(request.policyRevision);
       const plan = this.semanticExclusionPlans.get(request.confirmationId);
       if (
@@ -5481,6 +5481,21 @@ export class MockFileManagerClient implements FileManagerClient {
     ) {
       throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
     }
+  }
+
+  private requireActiveOrEnrolledSemanticRoot(workspaceId: WorkspaceId, location: Location): void {
+    if (
+      this.workspaces.has(workspaceId) &&
+      this.semanticLibrary.roots.some(
+        (root) =>
+          root.location.providerId === location.providerId &&
+          root.location.uri === location.uri &&
+          root.workspaceReferences.includes(workspaceId),
+      )
+    ) {
+      return;
+    }
+    this.requireActiveSemanticFolder(workspaceId, location);
   }
 
   private requireSemanticLibraryRevision(expected: number): void {

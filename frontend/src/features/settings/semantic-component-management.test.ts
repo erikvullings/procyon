@@ -680,6 +680,30 @@ describe('SemanticComponentManagement', () => {
     );
   });
 
+  it('keeps alternate E5 installation behind a model-change disclosure when Gemma is active', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    const status = await client.getSemanticComponentStatus();
+    const profiles = await client.listSemanticComponentProfiles();
+    const gemma = profiles.find((profile) => profile.profile === 'embeddingGemma2');
+    if (gemma === undefined) throw new Error('missing Gemma fixture');
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...status,
+      activeModel: { profile: 'embeddingGemma2', identity: gemma.resolvedModel },
+    });
+    mountComponent(client);
+    await waitForLoaded();
+
+    const switcher = root.querySelector<HTMLDetailsElement>('.fm-semantic-model-switch');
+    expect(switcher?.open).toBe(false);
+    expect(switcher?.querySelector('summary')?.textContent).toContain('Change embedding model');
+    expect(switcher?.querySelector('input[value="compactMultilingual"]')).not.toBeNull();
+    expect(root.querySelector('.fm-semantic-active-model')?.textContent).toContain(
+      'EmbeddingGemma 2',
+    );
+    expect(root.querySelector<HTMLDetailsElement>('.fm-semantic-status-details')?.open).toBe(false);
+  });
+
   it('renders resumable migration progress and exposes profile plan and confirmation', async () => {
     mountComponent(new MockFileManagerClient({ semanticLifecycle: 'migrating' }));
     await waitForLoaded();

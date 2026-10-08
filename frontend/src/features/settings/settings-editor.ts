@@ -627,70 +627,69 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                 : { location: current.activeLocation }),
                             }),
                           ),
-                          m('.row', m(SemanticOcrManagement, { client: current.client })),
-                          m(
-                            '.row',
+                          m('details.fm-settings-semantic-tools', [
+                            m('summary', t('semanticLibrary', 'pdfTools')),
+                            m(SemanticOcrManagement, { client: current.client }),
+                          ]),
+                          m('details.fm-settings-semantic-tools', [
+                            m('summary', t('semanticVocabulary', 'title')),
                             m(
-                              'h4.fm-settings-section-heading.col.s12',
-                              t('semanticVocabulary', 'title'),
-                            ),
-                          ),
-                          m(
-                            '.row',
-                            m(SemanticVocabularyManagement, {
-                              client: current.client,
-                              ...(current.activeWorkspaceId === undefined
-                                ? {}
-                                : { workspaceId: current.activeWorkspaceId }),
-                              onCreateConceptFolder: (
-                                vocabulary: SemanticVocabulary,
-                                conceptUri: string,
-                              ): void => {
-                                if (draft === undefined) return;
-                                const concept = vocabulary.concepts.find(
-                                  ({ uri }) => uri === conceptUri,
-                                );
-                                const label =
-                                  concept?.prefLabels.en ??
-                                  (concept ? Object.values(concept.prefLabels)[0] : undefined) ??
-                                  conceptUri;
-                                update(current, {
-                                  savedSearches: [
-                                    ...draft.savedSearches,
-                                    {
-                                      id: crypto.randomUUID(),
-                                      name: `${vocabulary.name}: ${label}`,
-                                      pinned: false,
-                                      query: {
-                                        schemaVersion: 3,
-                                        mode: 'concept',
-                                        scope: {
-                                          locations:
-                                            current.activeLocation === undefined
-                                              ? []
-                                              : [current.activeLocation],
-                                          recurse: true,
-                                          showHidden: false,
+                              '.row',
+                              m(SemanticVocabularyManagement, {
+                                client: current.client,
+                                ...(current.activeWorkspaceId === undefined
+                                  ? {}
+                                  : { workspaceId: current.activeWorkspaceId }),
+                                onCreateConceptFolder: (
+                                  vocabulary: SemanticVocabulary,
+                                  conceptUri: string,
+                                ): void => {
+                                  if (draft === undefined) return;
+                                  const concept = vocabulary.concepts.find(
+                                    ({ uri }) => uri === conceptUri,
+                                  );
+                                  const label =
+                                    concept?.prefLabels.en ??
+                                    (concept ? Object.values(concept.prefLabels)[0] : undefined) ??
+                                    conceptUri;
+                                  update(current, {
+                                    savedSearches: [
+                                      ...draft.savedSearches,
+                                      {
+                                        id: crypto.randomUUID(),
+                                        name: `${vocabulary.name}: ${label}`,
+                                        pinned: false,
+                                        query: {
+                                          schemaVersion: 3,
+                                          mode: 'concept',
+                                          scope: {
+                                            locations:
+                                              current.activeLocation === undefined
+                                                ? []
+                                                : [current.activeLocation],
+                                            recurse: true,
+                                            showHidden: false,
+                                          },
+                                          entryKinds: ['file'],
+                                          mimeTypes: [],
+                                          concept: {
+                                            vocabularyId: vocabulary.id,
+                                            conceptUri,
+                                            hierarchy: 'exact',
+                                            libraryId: '',
+                                            enrolledRootIds: [],
+                                          },
+                                          gitStatuses: [],
+                                          tags: [],
+                                          metadata: {},
                                         },
-                                        entryKinds: ['file'],
-                                        mimeTypes: [],
-                                        concept: {
-                                          vocabularyId: vocabulary.id,
-                                          conceptUri,
-                                          hierarchy: 'exact',
-                                          libraryId: '',
-                                          enrolledRootIds: [],
-                                        },
-                                        gitStatuses: [],
-                                        tags: [],
-                                        metadata: {},
                                       },
-                                    },
-                                  ],
-                                });
-                              },
-                            }),
-                          ),
+                                    ],
+                                  });
+                                },
+                              }),
+                            ),
+                          ]),
                           m(
                             '.row',
                             m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title')),
