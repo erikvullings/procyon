@@ -278,11 +278,16 @@ fn signed_catalog_with_gemma(include_gemma: bool) -> TrustedCatalog {
         )
         .unwrap();
         let model_artifact_id = ArtifactId::new(artifact_id).unwrap();
+        let original_gemma = profile == fm_semantic_components::SemanticProfile::EmbeddingGemma2;
         artifacts.push(
             CatalogArtifact::new(
                 model_artifact_id.clone(),
                 ComponentId::new(model_id).unwrap(),
-                ArtifactKind::Model(identity.clone()),
+                if original_gemma {
+                    ArtifactKind::OriginalModel(identity.clone())
+                } else {
+                    ArtifactKind::Model(identity.clone())
+                },
                 "1.0.0".parse().unwrap(),
                 ArtifactLocation::new(format!("https://fixtures.invalid/{artifact_id}")).unwrap(),
                 model_metadata.license().clone(),
@@ -297,7 +302,12 @@ fn signed_catalog_with_gemma(include_gemma: bool) -> TrustedCatalog {
             )
             .unwrap(),
         );
-        manifests.push(ModelManifest::new(model_artifact_id, model_metadata));
+        let manifest = ModelManifest::new(model_artifact_id, model_metadata);
+        manifests.push(if original_gemma {
+            manifest.with_original_files("model.safetensors", BTreeMap::new())
+        } else {
+            manifest
+        });
         profiles.insert(profile, identity);
     }
     let manifest = CatalogManifest::new(
@@ -491,6 +501,14 @@ async fn gemma_offer_activates_a_fresh_model_beside_an_existing_e5_installation(
         .semantic_component_install_or_enable(gemma.consent())
         .await
         .unwrap();
+    assert!(
+        service
+            .semantic_library_status(&fm_application::semantic_library::SemanticAccessContext::Host)
+            .await
+            .unwrap()
+            .available,
+        "Gemma installation must expose an enrollable semantic library",
+    );
     assert_eq!(std::fs::read(&e5_index).unwrap(), b"existing E5 data");
     assert_eq!(
         service

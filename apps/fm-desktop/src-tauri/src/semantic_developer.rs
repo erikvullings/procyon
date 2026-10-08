@@ -571,6 +571,33 @@ mod tests {
             .install_or_enable(offer.consent())
             .await
             .expect("install original files");
+        let status = bundle.components.status().await.expect("installed status");
+        assert!(
+            status.active_model().is_some(),
+            "installed original Gemma files must resolve to the active embedding space",
+        );
+        let service = fm_application::FileManagerService::new(
+            fm_transport_dto::RuntimeKindDto::Tauri,
+            data.path().join("workspaces"),
+            data.path(),
+        )
+        .with_semantic_component_capability(bundle.components.clone());
+        let library = service
+            .semantic_library_status(&fm_application::semantic_library::SemanticAccessContext::Host)
+            .await
+            .expect("semantic library status");
+        assert!(
+            library.available,
+            "Gemma library must be available for enrolment"
+        );
+        assert_eq!(
+            library
+                .library
+                .expect("initialized library")
+                .model
+                .dimensions,
+            128
+        );
         let original_model = bundle.original_model.expect("Gemma resolver");
         let launch = original_model()
             .expect("verified development model")

@@ -3741,6 +3741,7 @@ fn map_managed_status(
                         && matches!(
                             component.kind(),
                             core::ArtifactKind::Model(identity)
+                                | core::ArtifactKind::OriginalModel(identity)
                                 if identity == selection.identity()
                         )
                 })

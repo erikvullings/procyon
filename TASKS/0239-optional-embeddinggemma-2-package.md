@@ -353,3 +353,9 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   developer-bundle test installed E5 followed by signed Gemma originals and
   launched a native Gemma worker query; representative folder quality and
   other platform qualification remain open.
+- 2026-10-08: Corrected component status projection for the signed Gemma
+  original-file artifact: an activated `OriginalModel` must count as the
+  active model, just like a packaged `Model`. Otherwise the desktop reported
+  semantic-library enrolment unavailable even though installation and native
+  worker launch succeeded. The signed development bundle now verifies the
+  active model and enrollable Gemma library after installing beside E5.
