@@ -321,3 +321,17 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   scores and chunks with a separate dense-search result and a dense-score
   threshold. Do not weaken its release gate or treat the local bundle as
   qualified; correct that evaluation contract separately before publishing.
+- 2026-10-07: Repaired the E5 evaluator's Ask-versus-dense score-domain
+  contract. Reports retain independently validated raw dense candidates and
+  their unchanged 0.84/0.02 floor, and now record the actual Ask candidates
+  plus an explicit dense-similarity or hybrid-reciprocal-rank domain. Ranked
+  context, authorization, citation, and retrieval metric checks still apply;
+  hybrid ranks are verified rather than compared to cosine floors. Older
+  approved reports without the new optional fields remain readable and use
+  the previous dense validation. Both the E5-only control bundle and the
+  Gemma-enabled local macOS bundle completed packaged smoke and produced
+  blocked evaluation reports (missing other supported targets and manual
+  release evidence). The Gemma bundle's E5 evaluation measures E5, not
+  Gemma retrieval quality. Cross-platform and independently labelled Gemma
+  comparisons, installed signed-catalog lifecycle, and release feature
+  qualification remain open; keep this option hidden in standard releases.
