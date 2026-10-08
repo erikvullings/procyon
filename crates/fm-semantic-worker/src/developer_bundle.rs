@@ -680,6 +680,14 @@ impl DeveloperWorker {
         data_directory: &Path,
         model_pack: Option<&Path>,
     ) -> Result<Self, DeveloperBundleError> {
+        Self::open_with_ocr(data_directory, model_pack, None)
+    }
+
+    fn open_with_ocr(
+        data_directory: &Path,
+        model_pack: Option<&Path>,
+        ocrmypdf_executable: Option<&Path>,
+    ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
             return Err(DeveloperBundleError::RelativeDataDirectory);
         }
@@ -692,7 +700,10 @@ impl DeveloperWorker {
 
         let model =
             DeveloperModel::resolve(model_pack, &data_directory.join("development-embedder"))?;
-        Self::open_with_model(data_directory, model, OcrConfigSource::DeveloperEnvironment)
+        let ocr = ocrmypdf_executable.map_or(OcrConfigSource::DeveloperEnvironment, |path| {
+            OcrConfigSource::ManagedExecutable(Some(path.to_owned()))
+        });
+        Self::open_with_model(data_directory, model, ocr)
     }
 
     fn open_with_model(
@@ -977,6 +988,7 @@ pub async fn run_developer_worker(
     runtime_directory: &Path,
     data_directory: &Path,
     model_pack: Option<&Path>,
+    ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
 ) -> Result<(), ServerError> {
     eprintln!(
@@ -984,7 +996,13 @@ pub async fn run_developer_worker(
         data_directory.display()
     );
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
-        DeveloperWorker::open(data_directory, model_pack)
+        let worker = match ocrmypdf_executable {
+            Some(executable) => {
+                DeveloperWorker::open_with_ocr(data_directory, model_pack, Some(executable))
+            }
+            None => DeveloperWorker::open(data_directory, model_pack),
+        };
+        worker
             .inspect(|worker| {
                 eprintln!(
                     "Procyon semantic developer bundle: active model {}",

@@ -10,6 +10,9 @@ use fm_application::semantic_components::{
     DesktopSemanticDistribution, ManagedSemanticComponentAdapters,
     ManagedSemanticComponentCapability, ManagedSemanticComponentConfiguration,
 };
+use fm_application::semantic_ocr::{
+    DoclingOcrExecutableProbe, OcrExecutableProbe, OcrPolicyStore, SemanticOcrService,
+};
 use fm_semantic_components::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactKind, ArtifactRequest, ArtifactSource,
     ArtifactSourceError, CatalogArtifact, CatalogManifest, ComponentManager, ComponentQuiescer,
@@ -37,6 +40,8 @@ pub(crate) struct DeveloperSemanticBundle {
     /// Resolves the currently activated model pack when the worker is launched.
     pub(crate) active_model_pack: fm_semantic_worker::DeveloperModelPackResolver,
     pub(crate) original_model: Option<fm_semantic_worker::DeveloperManagedWorkerResolver>,
+    pub(crate) ocr: SemanticOcrService,
+    pub(crate) ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
 }
 
 impl DeveloperSemanticBundle {
@@ -120,6 +125,19 @@ impl DeveloperSemanticBundle {
         let installed_worker = active_component_payload(&state, worker, catalog_worker_path);
         let installed_runtime = active_component_payload(&state, runtime, catalog_runtime_path);
         let active_model_pack = active_model_pack_resolver(manager.clone());
+        let ocr_directory = configuration_directory.join("semantic-ocr");
+        let ocr_policy = Arc::new(OcrPolicyStore::load(&ocr_directory));
+        let ocr_probe: Arc<dyn OcrExecutableProbe> = Arc::new(DoclingOcrExecutableProbe);
+        let ocr_executable = {
+            let policy = Arc::clone(&ocr_policy);
+            let probe = Arc::clone(&ocr_probe);
+            Arc::new(move || {
+                super::semantic_production::configured_ocrmypdf_executable(
+                    policy.as_ref(),
+                    probe.as_ref(),
+                )
+            }) as fm_semantic_worker::DeveloperOcrExecutableResolver
+        };
         #[cfg(feature = "semantic-gemma")]
         let original_model = Some(original_model_resolver(
             manager.clone(),
@@ -131,6 +149,7 @@ impl DeveloperSemanticBundle {
                 .parent()
                 .expect("an installed artifact payload always has a parent")
                 .to_path_buf(),
+            Arc::clone(&ocr_executable),
         ));
         #[cfg(not(feature = "semantic-gemma"))]
         let original_model = None;
@@ -178,6 +197,8 @@ impl DeveloperSemanticBundle {
                 .to_path_buf(),
             active_model_pack,
             original_model,
+            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
+            ocr_executable,
         })
     }
 }
@@ -242,6 +263,7 @@ fn original_model_resolver(
     installed_worker: PathBuf,
     data_directory: PathBuf,
     native_library_directory: PathBuf,
+    ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
 ) -> fm_semantic_worker::DeveloperManagedWorkerResolver {
     Arc::new(move || {
         let state = manager.state().map_err(|error| error.to_string())?;
@@ -264,14 +286,17 @@ fn original_model_resolver(
             .ok_or_else(|| "Gemma original files are incomplete".to_owned())?;
         let files =
             GemmaNativeFiles::from_original_files(&original).map_err(|error| error.to_string())?;
-        Ok(Some(fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
-            installed_worker.clone(),
-            data_directory.clone(),
-            native_library_directory.clone(),
-            files,
-            dimensions,
-            media,
-        )))
+        Ok(Some(
+            fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
+                installed_worker.clone(),
+                data_directory.clone(),
+                native_library_directory.clone(),
+                files,
+                dimensions,
+                media,
+            )
+            .with_ocrmypdf_executable(ocr_executable()),
+        ))
     })
 }
 
@@ -576,12 +601,14 @@ mod tests {
             status.active_model().is_some(),
             "installed original Gemma files must resolve to the active embedding space",
         );
+        let ocr_executable = Arc::clone(&bundle.ocr_executable);
         let service = fm_application::FileManagerService::new(
             fm_transport_dto::RuntimeKindDto::Tauri,
             data.path().join("workspaces"),
             data.path(),
         )
-        .with_semantic_component_capability(bundle.components.clone());
+        .with_semantic_component_capability(bundle.components.clone())
+        .with_semantic_ocr_service(bundle.ocr);
         let library = service
             .semantic_library_status(&fm_application::semantic_library::SemanticAccessContext::Host)
             .await
@@ -598,6 +625,24 @@ mod tests {
                 .dimensions,
             128
         );
+        assert!(
+            matches!(
+                service.semantic_ocr_status().availability,
+                fm_application::semantic_ocr::OcrAvailability::Available { .. }
+            ),
+            "installed OCRmyPDF must be discoverable in the Gemma development desktop",
+        );
+        assert!(ocr_executable().is_none(), "OCR requires explicit consent");
+        service
+            .set_semantic_ocr_consent(true)
+            .await
+            .expect("enable installed OCRmyPDF");
+        assert!(ocr_executable().is_some(), "worker launch sees consent");
+        service
+            .set_semantic_ocr_consent(false)
+            .await
+            .expect("disable OCRmyPDF");
+        assert!(ocr_executable().is_none(), "worker launch sees revocation");
         let original_model = bundle.original_model.expect("Gemma resolver");
         let launch = original_model()
             .expect("verified development model")
@@ -616,6 +661,7 @@ mod tests {
             &bundle.native_library_directory,
             Some(bundle.active_model_pack),
             Some(original_model),
+            bundle.ocr_executable,
         );
         let results = semantic
             .query(SemanticQuery {

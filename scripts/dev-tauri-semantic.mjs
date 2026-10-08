@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { buildSemanticDeveloperBundle } from './build-semantic-developer-bundle.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const enableOcr = process.argv.includes('--ocr');
 const enableGemma = process.argv.includes('--gemma');
 const bundle = await buildSemanticDeveloperBundle();
 const result = spawnSync(
@@ -17,7 +16,7 @@ const result = spawnSync(
       ...process.env,
       PROCYON_SEMANTIC_COMPONENTS: '',
       PROCYON_SEMANTIC_DEVELOPER_BUNDLE: bundle,
-      PROCYON_SEMANTIC_OCRMYPDF: enableOcr ? '1' : '',
+      PROCYON_SEMANTIC_OCRMYPDF: '',
     },
     stdio: 'inherit',
   },

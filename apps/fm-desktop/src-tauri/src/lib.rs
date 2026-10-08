@@ -161,10 +161,12 @@ pub fn run() {
                     &bundle.native_library_directory,
                     Some(Arc::clone(&bundle.active_model_pack)),
                     bundle.original_model,
+                    bundle.ocr_executable,
                 );
                 service = service
                     .with_semantic_component_capability(bundle.components)
-                    .with_semantic_capability(Arc::new(semantic));
+                    .with_semantic_capability(Arc::new(semantic))
+                    .with_semantic_ocr_service(bundle.ocr);
                 semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
             }
             if !semantic_managed_components

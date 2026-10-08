@@ -418,7 +418,9 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
               ])
             : m('.fm-semantic-ocr-unavailable', { role: 'status' }, [
                 m('strong', unavailableReason(current.availability.reason)),
-                m('p', current.availability.guidance),
+                current.availability.reason.code === 'hostUnavailable'
+                  ? m('p', t('semanticOcr', 'hostUnavailableGuidance'))
+                  : m('p', current.availability.guidance),
                 current.availability.reason.code === 'hostUnavailable'
                   ? undefined
                   : m(

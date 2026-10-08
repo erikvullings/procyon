@@ -80,21 +80,21 @@ describe('SemanticOcrManagement', () => {
     expect(consent?.type).toBe('checkbox');
     consent?.click();
     await vi.waitFor(() => expect(setConsent).toHaveBeenCalledWith(true));
-    await vi.waitFor(() => expect(button('Run OCR for this file').disabled).toBe(false));
+    await vi.waitFor(() => expect(button('Make this PDF searchable').disabled).toBe(false));
 
-    button('Run OCR for this file').click();
+    button('Make this PDF searchable').click();
     await vi.waitFor(() =>
       expect(start).toHaveBeenCalledWith({ scope: 'oneFile', file: reportedFiles[0] }),
     );
-    await vi.waitFor(() => expect(button('Run OCR for selected files').disabled).toBe(true));
+    await vi.waitFor(() => expect(button('Make selected PDFs searchable').disabled).toBe(true));
 
     const selections = root.querySelectorAll<HTMLInputElement>(
       '.fm-semantic-ocr-file input[type="checkbox"]',
     );
     selections[0]?.click();
     selections[1]?.click();
-    await vi.waitFor(() => expect(button('Run OCR for selected files').disabled).toBe(false));
-    button('Run OCR for selected files').click();
+    await vi.waitFor(() => expect(button('Make selected PDFs searchable').disabled).toBe(false));
+    button('Make selected PDFs searchable').click();
     await vi.waitFor(() =>
       expect(start).toHaveBeenCalledWith({
         scope: 'selectedFiles',
@@ -111,17 +111,19 @@ describe('SemanticOcrManagement', () => {
     await vi.waitFor(() =>
       expect(start).toHaveBeenCalledWith({ scope: 'enrolledRoot', rootId: 'root-a' }),
     );
-    await vi.waitFor(() => expect(button('Run OCR for all reported files').disabled).toBe(false));
-    button('Run OCR for all reported files').click();
+    await vi.waitFor(() =>
+      expect(button('Make all reported PDFs searchable').disabled).toBe(false),
+    );
+    button('Make all reported PDFs searchable').click();
     await vi.waitFor(() => expect(start).toHaveBeenCalledWith({ scope: 'allReported' }));
 
     expect(root.querySelector('.fm-semantic-ocr-jobs[aria-live="polite"]')).not.toBeNull();
     expect(root.querySelectorAll('fieldset legend').length).toBeGreaterThan(0);
-    expect(button('Run OCR for this file').type).toBe('button');
-    expect(button('Run OCR for this file').getAttribute('aria-label')).toContain(
+    expect(button('Make this PDF searchable').type).toBe('button');
+    expect(button('Make this PDF searchable').getAttribute('aria-label')).toContain(
       '/Documents/Invoice 1.pdf',
     );
-    expect(consent?.closest('label')?.textContent).toContain('Enable OCR remediation');
+    expect(consent?.closest('label')?.textContent).toContain('Allow OCRmyPDF for selected PDFs');
     const accessibility = await axe(root, {
       rules: {
         'color-contrast': { enabled: false },
@@ -144,7 +146,7 @@ describe('SemanticOcrManagement', () => {
     });
     await mount(missing);
 
-    expect(root.textContent).toContain('OCRmyPDF is not installed');
+    expect(root.textContent).toContain('OCRmyPDF was not found');
     expect(root.textContent).toContain('trusted platform documentation');
     expect(root.querySelector<HTMLInputElement>('#fm-semantic-ocr-consent')?.disabled).toBe(true);
 
@@ -161,6 +163,26 @@ describe('SemanticOcrManagement', () => {
     });
     await mount(unsupported);
     expect(root.textContent).toContain('OCRmyPDF 18.0.0 is outside the supported version range');
+  });
+
+  it('explains unavailable PDF text recognition once with a useful next step', async () => {
+    const client = new MockFileManagerClient({
+      semanticLifecycle: 'installedEnabled',
+      semanticOcrStatus: status({
+        availability: {
+          state: 'unavailable',
+          reason: { code: 'hostUnavailable' },
+          guidance: 'OCR remediation is not available in this host.',
+        },
+      }),
+    });
+    await mount(client);
+
+    expect(root.textContent).toContain('searchable text');
+    expect(root.textContent).not.toContain('remediation');
+    expect(root.querySelectorAll('.fm-semantic-ocr-unavailable strong')).toHaveLength(1);
+    expect(root.querySelectorAll('.fm-semantic-ocr-unavailable p')).toHaveLength(1);
+    expect(root.textContent).toContain('index the file again');
   });
 
   it('announces success, execution failure, and post-OCR no-text outcomes and can cancel work', async () => {
@@ -197,9 +219,9 @@ describe('SemanticOcrManagement', () => {
     await mount(client);
 
     expect(root.textContent).toContain('Successfully ingested');
-    expect(root.textContent).toContain('OCR execution failed');
-    expect(root.textContent).toContain('OCR completed but no searchable text was found');
-    button('Cancel OCR job').click();
+    expect(root.textContent).toContain('PDF text recognition failed');
+    expect(root.textContent).toContain('Text recognition finished but found no searchable text');
+    button('Cancel PDF text job').click();
     await vi.waitFor(() =>
       expect(cancel).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000001'),
     );

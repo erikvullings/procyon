@@ -190,9 +190,9 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Source unavailable');
     expect(root.textContent).toContain('removable volume is offline');
     expect(root.textContent).toContain('vocabulary-1');
-    expect(root.textContent).toContain('Files requiring OCR');
+    expect(root.textContent).toContain('Scanned PDFs without searchable text');
     expect(root.textContent).toContain('/docs/Scanned reference.pdf');
-    expect(root.textContent).toContain('OCR remediation controls below');
+    expect(root.textContent).toContain('which scanned PDFs to make searchable');
     expect(root.querySelectorAll('.fm-semantic-library-override')).toHaveLength(7);
     expect(
       [...root.querySelectorAll<HTMLSelectElement>('.fm-semantic-library-override select')].every(

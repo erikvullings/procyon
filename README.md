@@ -156,6 +156,14 @@ permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
 development bundle. Standard release builds remain Gemma-disabled.
 
+To make scanned PDFs searchable, install OCRmyPDF 16.x or 17.x on the desktop,
+then open **Settings → Make scanned PDFs searchable** and allow OCRmyPDF.
+Procyon runs it only for reported PDFs you explicitly select, without replacing
+the original PDF. The development launcher (including
+`pnpm dev:tauri:semantic:ocr`) follows this Settings consent; its former
+`--ocr` environment opt-in does not override it. If an installed OCRmyPDF is
+not found, launch the desktop from a shell where `ocrmypdf` is on `PATH`.
+
 ### HTTP development
 
 Run the server and frontend in separate terminals:

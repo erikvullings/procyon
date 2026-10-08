@@ -349,7 +349,7 @@ pub(crate) fn gemma_library_settings(
     ))
 }
 
-fn configured_ocrmypdf_executable(
+pub(crate) fn configured_ocrmypdf_executable(
     policy: &OcrPolicyStore,
     probe: &dyn OcrExecutableProbe,
 ) -> Option<PathBuf> {

@@ -14,6 +14,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
                 &arguments.runtime_directory,
                 &semantic_data_directory,
                 arguments.semantic_model_pack.as_deref(),
+                arguments.ocrmypdf_executable.as_deref(),
                 arguments.idle_timeout,
             )
             .await;

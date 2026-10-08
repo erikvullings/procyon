@@ -437,6 +437,7 @@ enum ConnectorSource {
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
+        developer_ocr_executable: Option<DeveloperOcrExecutableResolver>,
     },
 }
 
@@ -447,6 +448,9 @@ enum ConnectorSource {
 /// supply this: nothing reachable from a frontend request contributes to it.
 pub type DeveloperModelPackResolver =
     Arc<dyn Fn() -> Result<Option<PathBuf>, String> + Send + Sync>;
+
+/// Resolves OCRmyPDF from host-owned consent and executable discovery at launch.
+pub type DeveloperOcrExecutableResolver = Arc<dyn Fn() -> Option<PathBuf> + Send + Sync>;
 
 /// Resolves a development-only managed model when the active profile needs
 /// original files instead of a model pack.
@@ -587,6 +591,7 @@ impl WorkerConnector {
                 developer_data_directory: None,
                 developer_native_library_directory: None,
                 developer_model_pack: None,
+                developer_ocr_executable: None,
             },
         }
     }
@@ -717,6 +722,22 @@ impl WorkerConnector {
         self
     }
 
+    /// Uses host consent and safe discovery instead of the legacy developer environment opt-in.
+    #[must_use]
+    pub fn with_developer_ocr_executable_resolver(
+        mut self,
+        resolver: DeveloperOcrExecutableResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_ocr_executable,
+            ..
+        } = &mut self.source
+        {
+            *developer_ocr_executable = Some(resolver);
+        }
+        self
+    }
+
     /// Selects a host-verified original-file development model at launch time.
     #[must_use]
     pub fn with_developer_managed_worker_resolver(
@@ -841,6 +862,7 @@ impl WorkerConnector {
                 developer_data_directory,
                 developer_native_library_directory,
                 developer_model_pack,
+                developer_ocr_executable,
             } => {
                 ensure_runtime_directory(runtime_directory)?;
                 let secret_path = runtime_directory.join("launch.secret");
@@ -904,6 +926,9 @@ impl WorkerConnector {
                     if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
                     {
                         command.arg("--developer-model-pack").arg(pack);
+                    }
+                    if let Some(resolver) = developer_ocr_executable {
+                        configure_developer_ocr(&mut command, resolver);
                     }
                 }
                 if let Some(directory) = managed_launch
@@ -1150,11 +1175,55 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
     arguments
 }
 
+fn configure_developer_ocr(
+    command: &mut std::process::Command,
+    resolver: &DeveloperOcrExecutableResolver,
+) {
+    command.env_remove(fm_semantic_docling::OCRMYPDF_ENABLED_ENV);
+    if let Some(path) = sanitize_ocrmypdf_executable(resolver()) {
+        command.arg("--ocrmypdf-executable").arg(path);
+    }
+}
+
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt as _;
+
+    #[test]
+    fn developer_ocr_launch_uses_only_the_host_resolver() {
+        let directory = tempfile::tempdir().expect("directory");
+        let executable = directory.path().join("ocrmypdf");
+        std::fs::write(&executable, b"#!/bin/sh\n").expect("executable");
+        let selected = Arc::new(std::sync::Mutex::new(None::<PathBuf>));
+        let current = Arc::clone(&selected);
+        let resolver: DeveloperOcrExecutableResolver =
+            Arc::new(move || current.lock().expect("selection").clone());
+
+        let mut disabled = std::process::Command::new("worker");
+        configure_developer_ocr(&mut disabled, &resolver);
+        assert!(disabled.get_args().next().is_none());
+        assert!(disabled.get_envs().any(|(key, value)| {
+            key == fm_semantic_docling::OCRMYPDF_ENABLED_ENV && value.is_none()
+        }));
+
+        *selected.lock().expect("selection") = Some(executable.clone());
+        let mut enabled = std::process::Command::new("worker");
+        configure_developer_ocr(&mut enabled, &resolver);
+        assert_eq!(
+            enabled.get_args().collect::<Vec<_>>(),
+            vec![
+                std::ffi::OsStr::new("--ocrmypdf-executable"),
+                executable.as_os_str()
+            ]
+        );
+
+        *selected.lock().expect("selection") = Some(directory.path().join("missing"));
+        let mut stale = std::process::Command::new("worker");
+        configure_developer_ocr(&mut stale, &resolver);
+        assert!(stale.get_args().next().is_none());
+    }
 
     #[cfg(unix)]
     #[test]
