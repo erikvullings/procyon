@@ -1336,7 +1336,7 @@ export const nl = {
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
     gemmaFreshLibraryExplanation:
-      'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen dimensie en mediatoestemmingen kunnen alleen met een nieuwe index worden gewijzigd.',
+      'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen dimensie en mediatoestemmingen kunnen alleen met een nieuwe index worden gewijzigd. Instellingen opslaan installeert Gemma niet. Met Accepteren en installeren wordt de nieuwe bibliotheek gemaakt en begint het downloaden van het model.',
     gemmaDimensions: 'Dimensies van de embeddings',
     gemmaSelectDimension: 'Kies een dimensie',
     gemmaDimensionTradeoff:
@@ -1376,6 +1376,11 @@ export const nl = {
     consentInstruction:
       'Accepteer pas na controle van elk onderdeel, elke licentie, grootte, locatie en privacyverklaring.',
     acceptAndInstall: 'Accepteren en installeren',
+    installing: 'Installeren…',
+    installStarting:
+      'Het downloaden en installeren van de ondertekende onderdelen wordt gestart. Houd Instellingen open tot het is voltooid.',
+    gemmaInstallStarting:
+      'Het downloaden en installeren van het ondertekende model wordt gestart. Houd Instellingen open tot het is voltooid.',
     actionsHeading: 'Acties voor onderdelen',
     pauseIndexing: 'Indexeren pauzeren',
     resumeIndexing: 'Indexeren hervatten',

@@ -1672,6 +1672,19 @@ main.fm-workspace {
   outline: 1px solid var(--fm-accent);
 }
 
+.fm-semantic-gemma-setup > p,
+.fm-semantic-gemma-setup > .fm-semantic-field {
+  grid-column: 1 / -1;
+}
+
+:where(.fm-semantic-gemma-setup)
+  .fm-semantic-confirmation
+  input[type="checkbox"]
+  + span:not(.lever) {
+  height: auto;
+  min-height: 20px;
+}
+
 .fm-semantic-uninstall-options {
   display: grid;
   gap: 0.5rem;

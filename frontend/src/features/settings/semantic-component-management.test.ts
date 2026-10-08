@@ -86,6 +86,10 @@ describe('SemanticComponentManagement', () => {
     expect(button('Accept and install').disabled).toBe(true);
     const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
     if (dimensions === null) throw new Error('Gemma dimensions missing');
+    expect(dimensions.classList).toContain('browser-default');
+    expect(root.textContent).toContain(
+      'Saving Settings does not install Gemma. Accept and install creates the new library and starts the model download.',
+    );
     dimensions.value = '256';
     dimensions.dispatchEvent(new Event('change', { bubbles: true }));
     root.querySelector<HTMLInputElement>('#fm-semantic-gemma-images')?.click();
@@ -106,6 +110,49 @@ describe('SemanticComponentManagement', () => {
       video: true,
       confirmFreshIndex: true,
     });
+  });
+
+  it('announces Gemma installation immediately while the model download is pending', async () => {
+    const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
+    vi.spyOn(client, 'initializeGemmaLibrary').mockResolvedValue();
+    const accept = client.acceptSemanticComponentInstallationOffer.bind(client);
+    let finishInstall: (() => void) | undefined;
+    vi.spyOn(client, 'acceptSemanticComponentInstallationOffer').mockImplementation(
+      async (request) => {
+        await new Promise<void>((resolve) => {
+          finishInstall = resolve;
+        });
+        return accept(request);
+      },
+    );
+    mountComponent(client);
+    await waitForLoaded();
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+      ?.click();
+    button('Review installation').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
+    const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
+    if (dimensions === null) throw new Error('Gemma dimensions missing');
+    dimensions.value = '256';
+    dimensions.dispatchEvent(new Event('change', { bubbles: true }));
+    const consent = [
+      ...root.querySelectorAll<HTMLInputElement>('.fm-semantic-gemma-setup input[type="checkbox"]'),
+    ].at(-1);
+    consent?.click();
+    m.redraw.sync();
+    button('Accept and install').click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-semantic-offer [role="status"]')?.textContent).toContain(
+      'Starting the signed model download',
+    );
+    expect(button('Installing…').disabled).toBe(true);
+    await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
+    finishInstall?.();
+    await vi.waitFor(() => expect(root.textContent).toContain('Installed and enabled'));
+    expect(root.querySelector('.fm-semantic-offer [role="status"]')).toBeNull();
   });
 
   it('shows persisted Gemma choices as locked when retrying an installation', async () => {

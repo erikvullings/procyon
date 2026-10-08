@@ -1333,7 +1333,7 @@ export const en = {
       'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
     gemmaSetupTitle: 'New EmbeddingGemma 2 library',
     gemmaFreshLibraryExplanation:
-      'This starts an empty library. Your E5 library and its index stay intact. The selected dimension and media permissions cannot change without creating a new index.',
+      'This starts an empty library. Your E5 library and its index stay intact. The selected dimension and media permissions cannot change without creating a new index. Saving Settings does not install Gemma. Accept and install creates the new library and starts the model download.',
     gemmaDimensions: 'Embedding dimensions',
     gemmaSelectDimension: 'Select a dimension',
     gemmaDimensionTradeoff:
@@ -1372,6 +1372,11 @@ export const en = {
     consentInstruction:
       'Accept only after reviewing every component, license, size, location, and privacy disclosure.',
     acceptAndInstall: 'Accept and install',
+    installing: 'Installing…',
+    installStarting:
+      'Starting the signed component download and installation. Keep Settings open until it finishes.',
+    gemmaInstallStarting:
+      'Starting the signed model download and installation. Keep Settings open until it finishes.',
     actionsHeading: 'Component actions',
     pauseIndexing: 'Pause indexing',
     resumeIndexing: 'Resume indexing',

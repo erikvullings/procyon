@@ -483,6 +483,16 @@ function offerView(
     ]),
     setup,
     m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
+    busy === 'install'
+      ? m(
+          'p.fm-semantic-install-progress',
+          { role: 'status' },
+          t(
+            'semanticComponents',
+            offer.profile === 'embeddingGemma2' ? 'gemmaInstallStarting' : 'installStarting',
+          ),
+        )
+      : undefined,
     m(
       'button.btn.fm-semantic-action.fm-semantic-accept',
       {
@@ -491,7 +501,7 @@ function offerView(
         onclick: onAccept,
       },
       busy === 'install'
-        ? t('semanticComponents', 'working')
+        ? t('semanticComponents', 'installing')
         : t('semanticComponents', 'acceptAndInstall'),
     ),
   ]);
@@ -1170,31 +1180,37 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 ? m('fieldset.fm-semantic-form-grid.fm-semantic-gemma-setup', [
                     m('legend', t('semanticComponents', 'gemmaSetupTitle')),
                     m('p', t('semanticComponents', 'gemmaFreshLibraryExplanation')),
-                    m(
-                      'label',
-                      { for: 'fm-semantic-gemma-dimensions' },
-                      t('semanticComponents', 'gemmaDimensions'),
-                    ),
-                    m(
-                      'select#fm-semantic-gemma-dimensions',
-                      {
-                        value: gemmaDimensions === undefined ? '' : String(gemmaDimensions),
-                        onchange: (event: Event) => {
-                          const value = Number((event.target as HTMLSelectElement).value);
-                          gemmaDimensions =
-                            value === 128 || value === 256 || value === 512 || value === 768
-                              ? value
-                              : undefined;
+                    m('.fm-semantic-field', [
+                      m(
+                        'label',
+                        { for: 'fm-semantic-gemma-dimensions' },
+                        t('semanticComponents', 'gemmaDimensions'),
+                      ),
+                      m(
+                        'select#fm-semantic-gemma-dimensions.browser-default',
+                        {
+                          value: gemmaDimensions === undefined ? '' : String(gemmaDimensions),
+                          onchange: (event: Event) => {
+                            const value = Number((event.target as HTMLSelectElement).value);
+                            gemmaDimensions =
+                              value === 128 || value === 256 || value === 512 || value === 768
+                                ? value
+                                : undefined;
+                          },
                         },
-                      },
-                      [
-                        m('option', { value: '' }, t('semanticComponents', 'gemmaSelectDimension')),
-                        ...([128, 256, 512, 768] as const).map((dimension) =>
-                          m('option', { value: String(dimension) }, String(dimension)),
-                        ),
-                      ],
-                    ),
-                    m('p', t('semanticComponents', 'gemmaDimensionTradeoff')),
+                        [
+                          m(
+                            'option',
+                            { value: '' },
+                            t('semanticComponents', 'gemmaSelectDimension'),
+                          ),
+                          ...([128, 256, 512, 768] as const).map((dimension) =>
+                            m('option', { value: String(dimension) }, String(dimension)),
+                          ),
+                        ],
+                      ),
+                      m('span', t('semanticComponents', 'gemmaDimensionTradeoff')),
+                    ]),
                     ...(
                       [
                         [
