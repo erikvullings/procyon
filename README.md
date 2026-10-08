@@ -122,6 +122,7 @@ Run commands from the repository root.
 | `pnpm dev:http` | Start Vite against the Axum backend |
 | `pnpm dev:server` | Start the Axum backend with automatic rebuilds |
 | `pnpm dev:tauri` | Launch the Tauri desktop app |
+| `pnpm dev:tauri:semantic:gemma` | Launch a local desktop with the optional Gemma development catalog |
 | `pnpm test` | Run Rust, frontend, and script tests |
 | `pnpm test:rust` | Run the Rust suite and doctests |
 | `pnpm test:frontend` | Run Vitest |
@@ -129,6 +130,28 @@ Run commands from the repository root.
 | `pnpm build` | Build the production Rust and frontend targets |
 | `pnpm build:tauri` | Package the desktop application |
 | `pnpm api:check` | Verify the OpenAPI document and generated client are current |
+
+### Try EmbeddingGemma 2 on your own folder
+
+Run `pnpm dev:tauri:semantic:gemma` from the repository root on macOS arm64
+(the locally verified target; other platforms are not yet qualified). The command verifies the
+pinned E5 and EmbeddingGemma 2 files, builds an optimized native Gemma worker,
+and launches the development desktop with a **development-key-signed**, local
+installation catalog. It needs about 1.5 GiB for the Gemma checkpoint plus
+space for the catalog and installed copies; the UI discloses an 8 GiB RAM
+estimate. The model download may require access to Google's gated Hugging Face
+repository. To build the bundle without launching Tauri, run
+`pnpm semantic:bundle:dev --gemma`.
+
+In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
+2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
+and video checkboxes, acknowledge the fresh index, then install. Open the folder
+you want to compare in a pane; in **Settings → Semantic library**, review its
+inclusion and choose **Include and index folder**. Once indexing progresses,
+search or Ask within the indexed folder. The selected dimensions and media
+permissions cannot be changed for that Gemma library. Existing E5 data is not
+deleted; no migration or representative quality result is implied by this
+development bundle. Standard release builds remain Gemma-disabled.
 
 ### HTTP development
 

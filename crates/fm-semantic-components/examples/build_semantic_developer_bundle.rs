@@ -12,7 +12,8 @@ use fm_semantic_components::{
     CatalogManifest, ComponentId, ComponentResources, EmbeddingNormalization, LicenseInfo,
     ManifestRevision, ModelId, ModelIdentity, ModelManifest, ModelMetadata, ModelPack,
     ModelPackKind, ModelPackSpec, ModelRevision, ProtocolRange, RuntimeCompatibility,
-    SemanticProfile, Sha256Digest, TargetTriple, TokenizerId, write_model_pack,
+    SemanticProfile, Sha256Digest, TargetTriple, TokenizerId, VerifiedGemmaOriginalFile,
+    verify_gemma_original_files, write_model_pack,
 };
 use semver::{Version, VersionReq};
 
@@ -39,6 +40,9 @@ const MULTILINGUAL_PASSAGE_PREFIX: &str = "passage: ";
 /// 1,600 MiB, rounded up from the observed peak so the free-space and memory
 /// disclosures never understate what selecting the profile costs.
 const MULTILINGUAL_RAM_BYTES: u64 = 1_600 * 1024 * 1024;
+const GEMMA_MODEL_ID: &str = "google-embeddinggemma-2";
+const GEMMA_REVISION: &str = "914f7f89142e33e77833254d9c9b90c3cef7303b";
+const GEMMA_RAM_ESTIMATE: u64 = 8 * 1024 * 1024 * 1024;
 const MULTILINGUAL_FILES: [PinnedModelFile; 5] = [
     PinnedModelFile {
         name: "model.onnx",
@@ -104,8 +108,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .next()
         .map(PathBuf::from)
         .ok_or("bundle output directory is required")?;
+    let gemma_original_files = arguments.next().map(PathBuf::from);
     if arguments.next().is_some() {
-        return Err("expected a worker path, Zvec runtime path, model cache directory, and output directory".into());
+        return Err("expected worker, runtime, model cache, output, and optional Gemma original-files directory".into());
     }
     if !worker.is_file() {
         return Err(format!("semantic worker does not exist: {}", worker.display()).into());
@@ -118,7 +123,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
     let model_cache = verify_multilingual_cache(&model_cache)?;
-    build_bundle(&worker, &native_runtime, &model_cache, &output)?;
+    build_bundle(
+        &worker,
+        &native_runtime,
+        &model_cache,
+        &output,
+        gemma_original_files.as_deref(),
+    )?;
     println!("{}", output.display());
     Ok(())
 }
@@ -128,8 +139,16 @@ fn build_bundle(
     native_runtime: &Path,
     model_cache: &VerifiedModelCache,
     output: &Path,
+    gemma_original_files: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    build_bundle_inner(worker, native_runtime, model_cache, output, true)
+    build_bundle_inner(
+        worker,
+        native_runtime,
+        model_cache,
+        output,
+        true,
+        gemma_original_files,
+    )
 }
 
 fn build_bundle_inner(
@@ -138,7 +157,11 @@ fn build_bundle_inner(
     model_cache: &VerifiedModelCache,
     output: &Path,
     verify_pinned_pack: bool,
+    gemma_original_files: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let verified_gemma = gemma_original_files
+        .map(verify_gemma_original_files)
+        .transpose()?;
     let target = TargetTriple::new(std::env::consts::OS, std::env::consts::ARCH)?;
     let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
     let target_label = format!("{}-{}", target.operating_system(), target.architecture());
@@ -296,9 +319,9 @@ fn build_bundle_inner(
     )?;
     let runtime_artifact = CatalogArtifact::new(
         runtime_id.clone(),
-        runtime_component,
+        runtime_component.clone(),
         ArtifactKind::Runtime,
-        version,
+        version.clone(),
         development_location(&runtime_id)?,
         LicenseInfo::new(
             "Apache-2.0",
@@ -349,7 +372,7 @@ fn build_bundle_inner(
     // The compact profiles keep the zero-download deterministic fixture so the
     // pipeline stays testable offline; only the explicit quality profile pulls
     // the real multi-hundred-megabyte multilingual model.
-    let profiles = BTreeMap::from([
+    let mut profiles = BTreeMap::from([
         (
             SemanticProfile::CompactMultilingual,
             model_manifest.metadata().identity().clone(),
@@ -363,7 +386,14 @@ fn build_bundle_inner(
             multilingual_manifest.metadata().identity().clone(),
         ),
     ]);
-    let mut revision_material = Vec::with_capacity(4 * 32);
+    let mut artifacts = vec![
+        worker_artifact,
+        runtime_artifact,
+        model_artifact,
+        multilingual_artifact,
+    ];
+    let mut models = vec![model_manifest, multilingual_manifest];
+    let mut revision_material = Vec::with_capacity(9 * 32);
     for checksum in [
         worker_checksum,
         runtime_checksum,
@@ -372,6 +402,19 @@ fn build_bundle_inner(
     ] {
         revision_material.extend_from_slice(checksum.as_bytes());
     }
+    if let (Some(directory), Some(files)) = (gemma_original_files, verified_gemma.as_deref()) {
+        let (gemma_artifacts, gemma_model) =
+            append_gemma_original_files(&staging, directory, files, &runtime_component, &version)?;
+        for artifact in &gemma_artifacts {
+            revision_material.extend_from_slice(artifact.checksum().as_bytes());
+        }
+        profiles.insert(
+            SemanticProfile::EmbeddingGemma2,
+            gemma_model.metadata().identity().clone(),
+        );
+        artifacts.extend(gemma_artifacts);
+        models.push(gemma_model);
+    }
     let revision_checksum = Sha256Digest::calculate(&revision_material);
     let manifest = CatalogManifest::new(
         ManifestRevision::new(format!(
@@ -379,13 +422,8 @@ fn build_bundle_inner(
             env!("CARGO_PKG_VERSION"),
             digest_prefix(revision_checksum)
         ))?,
-        vec![
-            worker_artifact,
-            runtime_artifact,
-            model_artifact,
-            multilingual_artifact,
-        ],
-        vec![model_manifest, multilingual_manifest],
+        artifacts,
+        models,
         profiles,
     )?;
     let signature =
@@ -405,6 +443,91 @@ It is not an evaluated or supported production semantic component pack.\n",
     remove_existing(output)?;
     fs::rename(staging, output)?;
     Ok(())
+}
+
+fn append_gemma_original_files(
+    staging: &Path,
+    directory: &Path,
+    files: &[VerifiedGemmaOriginalFile],
+    runtime_component: &ComponentId,
+    runtime_version: &Version,
+) -> Result<(Vec<CatalogArtifact>, ModelManifest), Box<dyn std::error::Error>> {
+    let identity = ModelIdentity::new(
+        ModelId::new(GEMMA_MODEL_ID)?,
+        ModelRevision::new(GEMMA_REVISION)?,
+    );
+    let license = LicenseInfo::new(
+        "Apache-2.0",
+        "Original google/embeddinggemma-2 files at the pinned upstream revision.",
+    )?;
+    let compatibility = RuntimeCompatibility::new(
+        runtime_component.clone(),
+        VersionReq::parse(&format!("={runtime_version}"))?,
+    );
+    let mut artifacts = Vec::with_capacity(files.len());
+    let mut additional = BTreeMap::new();
+    let mut primary = None;
+    let mut disk_bytes = 0_u64;
+    for (index, file) in files.iter().enumerate() {
+        let is_primary = file.name == "model.safetensors";
+        let component = ComponentId::new(if is_primary {
+            "procyon.dev.model.embeddinggemma-2".to_owned()
+        } else {
+            format!("procyon.dev.model.embeddinggemma-2.file-{index}")
+        })?;
+        let id = content_addressed_id(component.as_str(), file.checksum)?;
+        let destination = staging.join("artifacts").join(id.as_str());
+        fs::copy(directory.join(file.name), &destination)?;
+        if fs::metadata(&destination)?.len() != file.bytes
+            || digest_of(&destination)? != file.checksum
+        {
+            return Err(format!("Gemma original file changed while copying: {}", file.name).into());
+        }
+        let kind = if is_primary {
+            primary = Some(id.clone());
+            ArtifactKind::OriginalModel(identity.clone())
+        } else {
+            additional.insert(file.name.to_owned(), id.clone());
+            ArtifactKind::ModelFile(identity.clone())
+        };
+        disk_bytes = disk_bytes
+            .checked_add(file.bytes)
+            .ok_or("Gemma file sizes overflow")?;
+        artifacts.push(CatalogArtifact::new(
+            id.clone(),
+            component,
+            kind,
+            Version::new(1, 0, 0),
+            development_location(&id)?,
+            license.clone(),
+            file.checksum,
+            ComponentResources::new(
+                file.bytes,
+                file.bytes,
+                if is_primary { GEMMA_RAM_ESTIMATE } else { 1 },
+            )?,
+            ArtifactCompatibility::new(
+                None,
+                None,
+                vec![compatibility.clone()],
+                INDEX_SCHEMA_VERSION,
+            ),
+        )?);
+    }
+    let metadata = ModelMetadata::new(
+        identity,
+        license,
+        TokenizerId::new("embeddinggemma-2-tokenizer")?,
+        768,
+        EmbeddingNormalization::UnitLength,
+        compatibility,
+        MULTILINGUAL_LANGUAGES,
+        disk_bytes,
+        GEMMA_RAM_ESTIMATE,
+    )?;
+    let model = ModelManifest::new(primary.ok_or("Gemma weights are missing")?, metadata)
+        .with_original_files("model.safetensors", additional);
+    Ok((artifacts, model))
 }
 
 fn development_location(id: &ArtifactId) -> Result<ArtifactLocation, Box<dyn std::error::Error>> {
@@ -620,7 +743,7 @@ mod tests {
         cache: &VerifiedModelCache,
         output: &Path,
     ) {
-        build_bundle_inner(worker, runtime, cache, output, false).unwrap();
+        build_bundle_inner(worker, runtime, cache, output, false, None).unwrap();
     }
 
     #[test]

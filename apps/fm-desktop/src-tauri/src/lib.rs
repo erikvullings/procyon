@@ -160,6 +160,7 @@ pub fn run() {
                     &bundle.worker_data_directory,
                     &bundle.native_library_directory,
                     Some(Arc::clone(&bundle.active_model_pack)),
+                    bundle.original_model,
                 );
                 service = service
                     .with_semantic_component_capability(bundle.components)

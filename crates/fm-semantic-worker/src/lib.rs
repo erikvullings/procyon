@@ -433,6 +433,7 @@ enum ConnectorSource {
         idle_timeout: Duration,
         startup_timeout: Duration,
         managed_worker: Option<ManagedWorkerResolver>,
+        developer_managed_worker: Option<DeveloperManagedWorkerResolver>,
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
@@ -446,6 +447,11 @@ enum ConnectorSource {
 /// supply this: nothing reachable from a frontend request contributes to it.
 pub type DeveloperModelPackResolver =
     Arc<dyn Fn() -> Result<Option<PathBuf>, String> + Send + Sync>;
+
+/// Resolves a development-only managed model when the active profile needs
+/// original files instead of a model pack.
+pub type DeveloperManagedWorkerResolver =
+    Arc<dyn Fn() -> Result<Option<ManagedWorkerLaunch>, String> + Send + Sync>;
 
 /// The installed model shape selected by the trusted host for a managed worker.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -475,6 +481,12 @@ pub struct ManagedWorkerLaunch {
 }
 
 impl ManagedWorkerLaunch {
+    /// The verified model selected for this launch.
+    #[must_use]
+    pub const fn model(&self) -> &ManagedModel {
+        &self.model
+    }
+
     /// Records paths selected exclusively from verified managed component state.
     #[must_use]
     pub fn new(
@@ -571,6 +583,7 @@ impl WorkerConnector {
                 idle_timeout: Duration::from_secs(30),
                 startup_timeout: Duration::from_secs(2),
                 managed_worker: None,
+                developer_managed_worker: None,
                 developer_data_directory: None,
                 developer_native_library_directory: None,
                 developer_model_pack: None,
@@ -704,6 +717,22 @@ impl WorkerConnector {
         self
     }
 
+    /// Selects a host-verified original-file development model at launch time.
+    #[must_use]
+    pub fn with_developer_managed_worker_resolver(
+        mut self,
+        resolver: DeveloperManagedWorkerResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_managed_worker,
+            ..
+        } = &mut self.source
+        {
+            *developer_managed_worker = Some(resolver);
+        }
+        self
+    }
+
     /// Connects only to an already-running worker, never starting one.
     ///
     /// Hosts use this to act on a worker that is currently serving — for
@@ -808,6 +837,7 @@ impl WorkerConnector {
                 idle_timeout,
                 startup_timeout,
                 managed_worker,
+                developer_managed_worker,
                 developer_data_directory,
                 developer_native_library_directory,
                 developer_model_pack,
@@ -846,10 +876,16 @@ impl WorkerConnector {
                     return Ok(client);
                 }
 
-                let managed_launch = managed_worker
-                    .as_ref()
-                    .map(resolve_managed_worker)
-                    .transpose()?;
+                let managed_launch = if let Some(resolver) = managed_worker.as_ref() {
+                    Some(resolve_managed_worker(resolver)?)
+                } else if let Some(resolver) = developer_managed_worker.as_ref() {
+                    resolver()
+                        .map_err(ClientError::InvalidManagedComponents)?
+                        .map(validate_managed_launch)
+                        .transpose()?
+                } else {
+                    None
+                };
                 let launch_executable = managed_launch
                     .as_ref()
                     .map_or(executable.as_path(), |launch| launch.executable.as_path());
@@ -984,7 +1020,12 @@ fn resolve_developer_model_pack(
 fn resolve_managed_worker(
     resolver: &ManagedWorkerResolver,
 ) -> Result<ManagedWorkerLaunch, ClientError> {
-    let mut launch = resolver().map_err(ClientError::InvalidManagedComponents)?;
+    validate_managed_launch(resolver().map_err(ClientError::InvalidManagedComponents)?)
+}
+
+fn validate_managed_launch(
+    mut launch: ManagedWorkerLaunch,
+) -> Result<ManagedWorkerLaunch, ClientError> {
     for (label, path, file) in [
         ("worker executable", &launch.executable, true),
         ("semantic data directory", &launch.data_directory, false),

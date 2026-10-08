@@ -318,7 +318,7 @@ fn managed_worker_resolver(
 }
 
 #[cfg(feature = "semantic-gemma")]
-fn gemma_library_settings(
+pub(crate) fn gemma_library_settings(
     configuration_directory: &Path,
     identity: &fm_semantic_components::ModelIdentity,
 ) -> Result<(usize, GemmaMedia), String> {

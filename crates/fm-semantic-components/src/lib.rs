@@ -71,8 +71,9 @@ pub use qualification::{
     QualificationProfileError, install_macos_qualification,
 };
 pub use release_bundle::{
-    ProductionBundleError, ProductionBundleSpec, build_production_release_bundle,
-    build_production_release_bundle_with_optional_gemma,
+    ProductionBundleError, ProductionBundleSpec, VerifiedGemmaOriginalFile,
+    build_production_release_bundle, build_production_release_bundle_with_optional_gemma,
+    verify_gemma_original_files,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,

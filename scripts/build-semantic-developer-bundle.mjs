@@ -2,8 +2,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import { fetchMultilingualModel } from './fetch-semantic-model.mjs';
+import { EMBEDDINGGEMMA_PROBE } from './fetch-embeddinggemma-probe.mjs';
+import { fetchMultilingualModel, fetchPinnedModel } from './fetch-semantic-model.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -75,18 +75,25 @@ export async function buildSemanticDeveloperBundle() {
       encoding: 'utf8',
     }),
   );
-  const profile = process.argv.includes('--release') ? 'release' : 'debug';
+  const gemma = process.argv.includes('--gemma');
+  const profile = process.argv.includes('--release') || gemma ? 'release' : 'debug';
   // Fetched and verified before the long compile so a bad or missing download
   // fails in seconds rather than after a full ONNX Runtime build.
   const modelCache = await fetchMultilingualModel(
     path.join(metadata.target_directory, 'semantic-model-cache'),
   );
+  const gemmaFiles = gemma
+    ? await fetchPinnedModel(
+        EMBEDDINGGEMMA_PROBE,
+        path.join(metadata.target_directory, 'embeddinggemma-probe'),
+      )
+    : undefined;
   const buildArgs = [
     'build',
     '-p',
     'fm-semantic-worker',
     '--features',
-    'developer-bundle',
+    gemma ? 'developer-bundle,gemma-native' : 'developer-bundle',
     '--bin',
     'fm-semantic-worker',
   ];
@@ -101,10 +108,10 @@ export async function buildSemanticDeveloperBundle() {
   const output = path.join(
     metadata.target_directory,
     'semantic-developer-bundle',
-    `${process.platform}-${process.arch}`,
+    `${process.platform}-${process.arch}${gemma ? '-gemma' : ''}`,
   );
   const nativeRuntime = findZvecNativeLibrary(metadata.target_directory, profile);
-  run('cargo', [
+  const bundleArgs = [
     'run',
     '-p',
     'fm-semantic-components',
@@ -115,7 +122,9 @@ export async function buildSemanticDeveloperBundle() {
     nativeRuntime,
     modelCache,
     output,
-  ]);
+  ];
+  if (gemmaFiles) bundleArgs.push(gemmaFiles);
+  run('cargo', bundleArgs);
   installNativeRuntimeAlias(nativeRuntime, output);
   return output;
 }

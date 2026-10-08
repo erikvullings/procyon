@@ -164,6 +164,37 @@ const GEMMA_MODEL_FILES: [PinnedModelFile; 5] = [
     },
 ];
 
+/// One verified original EmbeddingGemma 2 file for local bundle assembly.
+pub struct VerifiedGemmaOriginalFile {
+    /// Upstream filename, used by the native loader.
+    pub name: &'static str,
+    /// Exact pinned byte length.
+    pub bytes: u64,
+    /// Exact pinned SHA-256 digest.
+    pub checksum: Sha256Digest,
+}
+
+/// Verifies the five native Gemma inputs against the pinned upstream revision.
+///
+/// # Errors
+///
+/// Returns an error if a file is missing, changed, or not a regular file.
+pub fn verify_gemma_original_files(
+    directory: &Path,
+) -> Result<Vec<VerifiedGemmaOriginalFile>, ProductionBundleError> {
+    GEMMA_MODEL_FILES
+        .iter()
+        .map(|file| {
+            verify_original_file(directory, file)?;
+            Ok(VerifiedGemmaOriginalFile {
+                name: file.name,
+                bytes: file.bytes,
+                checksum: digest_of(&directory.join(file.name))?,
+            })
+        })
+        .collect()
+}
+
 /// Explicit inputs to one production semantic release bundle build.
 ///
 /// The builder never accepts a payload size or checksum: every artifact's

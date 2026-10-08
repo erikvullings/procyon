@@ -335,3 +335,11 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   Gemma retrieval quality. Cross-platform and independently labelled Gemma
   comparisons, installed signed-catalog lifecycle, and release feature
   qualification remain open; keep this option hidden in standard releases.
+- 2026-10-08: Added a development-only, locally signed Gemma catalog alongside
+  the existing E5 options. `pnpm dev:tauri:semantic:gemma` verifies pinned
+  upstream files, builds an optimized native worker, and exposes the existing
+  immutable setup/installation and folder-enrolment UI in a Tauri debug host.
+  The developer host resolves installed original files and library policy at
+  each worker launch. A local isolated install and native query succeeded;
+  testing a representative user-selected folder is the purpose of this opt-in
+  build, not a production quality or cross-platform qualification result.
