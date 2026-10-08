@@ -896,6 +896,8 @@ export const nl = {
   knowledgeSearch: {
     title: 'Semantisch zoeken',
     openTitle: 'Semantisch zoeken…',
+    openWithAskTitle: 'Semantisch zoeken & vragen',
+    checkingAvailability: 'Semantisch zoeken controleren…',
     openDescription: 'Doorzoek geïndexeerde documenten zonder taalmodel',
     settings: 'Zoekinstellingen',
     close: 'Semantisch zoeken sluiten',
@@ -1041,7 +1043,7 @@ export const nl = {
     allowModelKnowledgeHint:
       'Algemene modelkennis toestaan. Uitspraken die niet door je documenten worden ondersteund, worden duidelijk gemarkeerd.',
     modelKnowledgeUsed:
-      'Dit antwoord mocht algemene modelkennis gebruiken, die de citaten niet ondersteunen.',
+      'Algemene modelkennis was toegestaan. Uitspraken met [MODEL] worden niet door je bestanden ondersteund.',
     generatingAnswer: 'Antwoord genereren…',
     cancelAnswer: 'Antwoord annuleren',
     answerCancelled: 'Het antwoord is geannuleerd.',

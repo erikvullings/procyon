@@ -4468,6 +4468,31 @@ describe('AppShell', () => {
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
   });
 
+  it('shows one disabled search control immediately while worker availability is checked', async () => {
+    const client = new MockFileManagerClient();
+    let resolveCapabilities:
+      | ((value: { fullText: boolean; semantic: boolean; answerGeneration: boolean }) => void)
+      | undefined;
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve;
+        }),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    m.redraw.sync();
+
+    const trigger = root.querySelector<HTMLButtonElement>('.fm-knowledge-search-trigger');
+    expect(trigger?.disabled).toBe(true);
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
+    resolveCapabilities?.({ fullText: true, semantic: true, answerGeneration: false });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-search-trigger')?.disabled).toBe(
+        false,
+      ),
+    );
+  });
+
   it('hides semantic chat while semantic components are inactive', async () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
@@ -4499,6 +4524,7 @@ describe('AppShell', () => {
     // Ask needs a generation profile; knowledge search must not.
     expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
     const trigger = await toolbarButton('Semantic Search…');
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
 
     trigger.click();
 
@@ -4639,7 +4665,8 @@ describe('AppShell', () => {
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
-    expect(await toolbarButton('Ask your files')).toBeInstanceOf(HTMLButtonElement);
+    expect(await toolbarButton('Semantic search & Ask')).toBeInstanceOf(HTMLButtonElement);
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() =>
@@ -4713,7 +4740,7 @@ describe('AppShell', () => {
       redactFilenames: false,
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    (await toolbarButton('Ask your files')).click();
+    (await toolbarButton('Semantic search & Ask')).click();
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );

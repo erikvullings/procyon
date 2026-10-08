@@ -903,6 +903,8 @@ export const en = {
   knowledgeSearch: {
     title: 'Semantic Search',
     openTitle: 'Semantic Search…',
+    openWithAskTitle: 'Semantic search & Ask',
+    checkingAvailability: 'Checking semantic search…',
     openDescription: 'Search indexed documents without a language model',
     settings: 'Search settings',
     close: 'Close Semantic Search',
@@ -1045,7 +1047,7 @@ export const en = {
     allowModelKnowledgeHint:
       'Allow general model knowledge. Statements not supported by your documents are clearly labelled.',
     modelKnowledgeUsed:
-      'This answer was permitted to use general model knowledge, which the citations do not support.',
+      'General model knowledge was allowed. Claims labelled [MODEL] are not backed by your files.',
     generatingAnswer: 'Generating answer…',
     cancelAnswer: 'Cancel answer',
     answerCancelled: 'The answer was cancelled.',

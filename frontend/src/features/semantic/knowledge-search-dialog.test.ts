@@ -2058,7 +2058,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     expect(generate.mock.calls[0]?.[0]?.allowModelKnowledge).toBe(true);
     expect(root.querySelector('.fm-knowledge-answer')?.textContent).toContain(
-      'permitted to use general model knowledge',
+      'General model knowledge was allowed',
     );
   });
 

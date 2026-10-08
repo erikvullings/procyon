@@ -18,7 +18,6 @@ import {
   cornerLeftUpIcon,
   layoutGridIcon,
   listIcon,
-  messageCircleIcon,
   plusIcon,
   searchIcon,
   settingsIcon,
@@ -459,6 +458,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let shortcutsHelpOpen = false;
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
+  let knowledgeSearchChecked = false;
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
@@ -2303,8 +2303,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
     } catch {
       knowledgeSearchAvailable = false;
+    } finally {
+      knowledgeSearchChecked = true;
+      m.redraw();
     }
-    m.redraw();
   }
 
   async function refreshSemanticAssistantAvailability(
@@ -4807,38 +4809,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   searchIcon(),
                 ),
               ),
-              knowledgeSearchAvailable
+              knowledgeSearchAvailable || !knowledgeSearchChecked
                 ? tooltip(
                     labelWithShortcut(
-                      t('knowledgeSearch', 'openTitle'),
+                      !knowledgeSearchChecked
+                        ? t('knowledgeSearch', 'checkingAvailability')
+                        : t(
+                            'knowledgeSearch',
+                            semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                          ),
                       shortcutFor('client.searchKnowledge'),
                     ),
                     m(
                       IconButton,
                       {
                         className: 'fm-knowledge-search-trigger',
-                        'aria-label': t('knowledgeSearch', 'openTitle'),
+                        disabled: !knowledgeSearchAvailable,
+                        'aria-label': !knowledgeSearchChecked
+                          ? t('knowledgeSearch', 'checkingAvailability')
+                          : t(
+                              'knowledgeSearch',
+                              semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                            ),
                         onclick: openKnowledgeSearch,
                       },
                       contentSearchIcon(),
-                    ),
-                  )
-                : undefined,
-              semanticAssistantAvailable
-                ? tooltip(
-                    labelWithShortcut(
-                      t('ragAsk', 'openAssistant'),
-                      shortcutFor('client.semanticAssistant'),
-                    ),
-                    m(
-                      IconButton,
-                      {
-                        className: 'fm-rag-ask-trigger',
-                        disabled: activeDirectory() === undefined,
-                        'aria-label': t('ragAsk', 'openAssistant'),
-                        onclick: openSemanticAssistant,
-                      },
-                      messageCircleIcon(),
                     ),
                   )
                 : undefined,

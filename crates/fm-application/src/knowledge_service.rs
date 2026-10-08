@@ -2611,6 +2611,49 @@ mod answer_flow_tests {
         );
     }
 
+    #[tokio::test]
+    async fn opted_in_answer_uses_model_knowledge_after_an_empty_search() {
+        let fixture = fixture(r#"{"answer":"Wind turbines use moving air [MODEL]."}"#).await;
+        fixture.capability.set_evidence(Vec::new());
+        let result = fixture
+            .knowledge
+            .execute(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                search_request(fixture.workspace_id),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("empty search");
+        assert!(result.evidence.is_empty());
+
+        let mut request = answer_request(
+            fixture.workspace_id,
+            fixture.profile_id,
+            &result.evidence_fingerprint,
+        );
+        request.allow_model_knowledge = true;
+        let answer = fixture
+            .knowledge
+            .answer(
+                fixture.authority.clone(),
+                &SemanticAccessContext::Host,
+                request,
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("model-only answer");
+
+        assert_eq!(fixture.capability.requests().len(), 1);
+        assert_eq!(fixture.transport.generations().len(), 1);
+        assert!(answer.model_knowledge_allowed);
+        assert!(answer.insufficient);
+        assert!(answer.citations.is_empty());
+        assert!(answer.text.contains("[MODEL]"));
+    }
+
     /// The same fingerprint must keep producing the same citation identities,
     /// and answering twice must still never retrieve again.
     #[tokio::test]
