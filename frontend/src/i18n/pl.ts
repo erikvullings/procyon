@@ -414,6 +414,8 @@ export const pl = {
     fileName: 'Nazwa pliku',
     applyToAllSimilar: 'Zastosuj do wszystkich podobnych konfliktów',
     permanentDeleteSummary: 'Spowoduje to trwałe usunięcie {count} elementów ({size}).',
+    permanentDeleteBeforePlanning:
+      'Wybrane elementy i cała ich zawartość zostaną trwale usunięte. Zliczanie rozpocznie się po potwierdzeniu.',
     irreversible: 'Ta czynność jest nieodwracalna.',
     completedWithWarnings: 'Zakończono z ostrzeżeniami.',
     showWarning: 'Pokaż ostrzeżenie',

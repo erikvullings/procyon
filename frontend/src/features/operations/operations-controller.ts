@@ -18,7 +18,7 @@ export interface OperationsController {
     permanentDeleteConfirmed: boolean,
     overrideReadOnly: boolean,
     signal?: AbortSignal,
-  ): Promise<Operation>;
+  ): Promise<Operation | undefined>;
   /** Extracts a single archive entry by copying it to the destination. */
   extract(source: Location, destination: Location, signal?: AbortSignal): Promise<Operation>;
   pack(
@@ -91,6 +91,87 @@ export function withOperationConfirmation(
       ),
     trash: (sources, signal) =>
       confirmed({ kind: 'trash', sources }, signal, () => delegate.trash(sources, signal)),
+  };
+}
+
+export function withPermanentDeleteConfirmation(
+  delegate: OperationsController,
+  confirm: (sources: readonly Location[]) => Promise<boolean>,
+): OperationsController {
+  return {
+    ...delegate,
+    async delete(sources, permanentDeleteConfirmed, overrideReadOnly, signal) {
+      if (signal?.aborted) return undefined;
+      if (!permanentDeleteConfirmed && !(await confirm(sources))) return undefined;
+      if (signal?.aborted) return undefined;
+      return delegate.delete(sources, true, overrideReadOnly, signal);
+    },
+  };
+}
+
+export function withActiveSourceGuard(
+  delegate: OperationsController,
+  active: () => readonly Operation[],
+): OperationsController {
+  const pending: (readonly Location[])[] = [];
+  const submitted: { readonly operation: Operation; readonly at: number }[] = [];
+  const overlaps = (left: Location, right: Location) => {
+    if (left.providerId !== right.providerId) return false;
+    const a = left.uri.replace(/\/+$/, '');
+    const b = right.uri.replace(/\/+$/, '');
+    return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+  };
+  const guarded = (
+    sources: readonly Location[],
+    start: () => Promise<Operation | undefined>,
+  ): Promise<Operation | undefined> => {
+    const current = active();
+    for (let index = submitted.length - 1; index >= 0; index--) {
+      const candidate = submitted[index];
+      if (
+        candidate === undefined ||
+        Date.now() - candidate.at > 5_000 ||
+        current.some((operation) => operation.id === candidate.operation.id)
+      ) {
+        submitted.splice(index, 1);
+      }
+    }
+    const existing = [...current, ...submitted.map(({ operation }) => operation)].find(
+      (operation) =>
+        ['delete', 'copy', 'move'].includes(operation.kind) &&
+        !['completed', 'completedWithWarnings', 'cancelled', 'failed', 'interrupted'].includes(
+          operation.state,
+        ) &&
+        sources.some((source) =>
+          operation.sources.some((entry) => overlaps(source, entry.location)),
+        ),
+    );
+    if (existing !== undefined) return Promise.resolve(existing);
+    if (
+      pending.some((locations) =>
+        sources.some((source) => locations.some((location) => overlaps(source, location))),
+      )
+    ) {
+      return Promise.resolve(undefined);
+    }
+    pending.push(sources);
+    return start()
+      .then((operation) => {
+        if (operation !== undefined) submitted.push({ operation, at: Date.now() });
+        return operation;
+      })
+      .finally(() => {
+        pending.splice(pending.indexOf(sources), 1);
+      });
+  };
+  return {
+    ...delegate,
+    copy: (sources, destination, signal) =>
+      guarded(sources, () => delegate.copy(sources, destination, signal)),
+    move: (sources, destination, signal) =>
+      guarded(sources, () => delegate.move(sources, destination, signal)),
+    delete: (sources, confirmed, overrideReadOnly, signal) =>
+      guarded(sources, () => delegate.delete(sources, confirmed, overrideReadOnly, signal)),
   };
 }
 

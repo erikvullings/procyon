@@ -432,6 +432,8 @@ export const en = {
     fileName: 'File name',
     applyToAllSimilar: 'Apply to all similar conflicts',
     permanentDeleteSummary: 'This will permanently delete {count} items ({size}).',
+    permanentDeleteBeforePlanning:
+      'The selected items and everything inside them will be permanently deleted. Counting will begin after you confirm.',
     irreversible: 'This action is irreversible.',
     completedWithWarnings: 'Completed with warnings.',
     showWarning: 'Show warning',

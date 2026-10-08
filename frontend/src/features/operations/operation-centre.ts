@@ -226,6 +226,7 @@ function itemProgressSummary(operation: Operation): string {
 function estimatedTimeRemaining(operation: Operation): string | undefined {
   const { completedBytes, totalBytes, bytesPerSecond } = operation.progress;
   if (
+    operation.kind === 'delete' ||
     operation.state !== 'running' ||
     !hasValue(totalBytes) ||
     !hasValue(bytesPerSecond) ||
@@ -327,7 +328,10 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                                   : ''
                               }`,
                         ),
-                    !terminal && hasValue(progress.bytesPerSecond) && !hidesByteProgress
+                    !terminal &&
+                    operation.kind !== 'delete' &&
+                    hasValue(progress.bytesPerSecond) &&
+                    !hidesByteProgress
                       ? m('span', `${formatBytes(progress.bytesPerSecond, formatSettings)}/s`)
                       : undefined,
                     m(

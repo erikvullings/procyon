@@ -2,7 +2,6 @@
 
 #![allow(clippy::unwrap_used, missing_docs)]
 
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -118,14 +117,7 @@ impl SemanticCapability for RecordingCapability {
 }
 
 fn project_temp_dir(prefix: &str) -> TempDir {
-    let parent =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/application-model-change-tests");
-    std::fs::create_dir_all(&parent).unwrap();
-    let parent = std::fs::canonicalize(parent).unwrap();
-    tempfile::Builder::new()
-        .prefix(prefix)
-        .tempdir_in(parent)
-        .unwrap()
+    tempfile::Builder::new().prefix(prefix).tempdir().unwrap()
 }
 
 fn library(directory: &TempDir) -> SemanticLibraryService {

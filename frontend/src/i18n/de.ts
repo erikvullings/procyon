@@ -419,6 +419,8 @@ export const de = {
     fileName: 'Dateiname',
     applyToAllSimilar: 'Auf alle ähnlichen Konflikte anwenden',
     permanentDeleteSummary: 'Dadurch werden {count} Elemente ({size}) endgültig gelöscht.',
+    permanentDeleteBeforePlanning:
+      'Die ausgewählten Elemente und ihr gesamter Inhalt werden endgültig gelöscht. Die Zählung beginnt nach der Bestätigung.',
     irreversible: 'Diese Aktion kann nicht rückgängig gemacht werden.',
     completedWithWarnings: 'Mit Warnungen abgeschlossen.',
     showWarning: 'Warnung anzeigen',

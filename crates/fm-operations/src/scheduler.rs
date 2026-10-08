@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -97,10 +97,14 @@ pub enum ExecutionError {
 }
 
 /// Result of executing one plan item.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionOutcome {
     /// The item was applied and contributes its planned bytes.
     Completed,
+    /// The item completed as far as possible, with independent entry failures.
+    CompletedWithWarnings(Vec<crate::OperationEntryError>),
+    /// A provider completed a tree in one pass and reported its own item count.
+    BulkCompleted(Vec<crate::OperationEntryError>),
     /// The item was deliberately skipped and contributes no bytes.
     Skipped,
 }
@@ -109,6 +113,8 @@ pub enum ExecutionOutcome {
 pub trait OperationProgressReporter: Send + Sync {
     /// Adds newly processed bytes to the operation's progress.
     fn report_bytes(&self, additional_bytes: u64);
+    /// Reports a batch of completed entries without publishing one event per entry.
+    fn report_items(&self, _additional_items: u64) {}
 }
 
 impl<F> OperationProgressReporter for F
@@ -140,6 +146,16 @@ pub trait OperationExecutor: Send + Sync + 'static {
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError>;
+
+    /// Discovers children after a directory has been created, avoiding an up-front tree count.
+    async fn expand(
+        &self,
+        _operation: &Operation,
+        _item: &PlanItem,
+        _cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        Ok(Vec::new())
+    }
 
     /// Removes any private/temporary destination after cancellation or failure.
     async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError>;
@@ -205,6 +221,16 @@ impl ItemProgressReporter<'_> {
 }
 
 impl OperationProgressReporter for ItemProgressReporter<'_> {
+    fn report_items(&self, additional_items: u64) {
+        let mut state = self.job.lock();
+        state.operation.progress.completed_items = state
+            .operation
+            .progress
+            .completed_items
+            .saturating_add(additional_items);
+        self.scheduler.publish_progress(&state.operation);
+    }
+
     fn report_bytes(&self, additional_bytes: u64) {
         if additional_bytes == 0 {
             return;
@@ -619,91 +645,16 @@ impl Scheduler {
         }
         let progress = Mutex::new(ProgressPublisher::new(Duration::from_millis(100), 0.25));
         let mut deferred = Vec::new();
-        for item in &plan.items {
-            self.wait_while_blocked(&job).await;
-            if job.is_cancelled() {
-                self.finish_cancelled(&job, executor.as_ref()).await?;
-                return Ok(());
-            }
-            let snapshot = job.snapshot();
-            let resolution = job.lock().apply_to_all;
-            let reporter = ItemProgressReporter {
-                scheduler: self,
-                job: &job,
-                publisher: &progress,
-                current_entry: item.entry.clone(),
-                reported_bytes: AtomicU64::new(0),
-            };
-            let execution = executor
-                .execute(
-                    &snapshot,
-                    item,
-                    resolution,
-                    &reporter,
-                    &job.pause,
-                    &job.cancellation,
-                )
-                .await;
-            if job.is_cancelled() && execution.is_err() {
-                self.finish_cancelled(&job, executor.as_ref()).await?;
-                return Ok(());
-            }
-            match execution {
-                Ok(ExecutionOutcome::Completed) => reporter.finish_completed(item.bytes),
-                Ok(ExecutionOutcome::Skipped) => {}
-                Err(error) => match error {
-                    ExecutionError::Warning { entry, message } => {
-                        reporter.rollback();
-                        job.lock()
-                            .operation
-                            .errors
-                            .push(crate::OperationEntryError { entry, message });
-                    }
-                    ExecutionError::Conflict(conflict) => {
-                        reporter.rollback();
-                        if job.lock().pending_conflict.is_none() {
-                            self.register_conflict(&job, conflict.clone())?;
-                        }
-                        deferred.push((item.clone(), conflict));
-                        continue;
-                    }
-                    other => return Err(other.into()),
-                },
-            }
-            {
-                let mut state = job.lock();
-                state.operation.progress.completed_items =
-                    state.operation.progress.completed_items.saturating_add(1);
-                state.operation.progress.current_entry = Some(item.entry.clone());
-            }
-            if job.is_cancelled() {
-                self.finish_cancelled(&job, executor.as_ref()).await?;
-                return Ok(());
-            }
-        }
-        for (item, known_conflict) in deferred {
-            loop {
-                let sticky_resolution = {
-                    let mut state = job.lock();
-                    let resolution = state.apply_to_all;
-                    if resolution.is_some() && state.pending_conflict.take().is_some() {
-                        self.transition_and_publish(&mut state.operation, OperationState::Running)?;
-                    }
-                    resolution
-                };
-                let resolution = if let Some(resolution) = sticky_resolution {
-                    resolution
-                } else {
-                    if job.lock().pending_conflict.is_none() {
-                        self.register_conflict(&job, known_conflict.clone())?;
-                    }
-                    self.wait_for_conflict_decision(&job).await?
-                };
+        let mut pending: VecDeque<PlanItem> = plan.items.into();
+        loop {
+            while let Some(item) = pending.pop_front() {
+                self.wait_while_blocked(&job).await;
                 if job.is_cancelled() {
                     self.finish_cancelled(&job, executor.as_ref()).await?;
                     return Ok(());
                 }
                 let snapshot = job.snapshot();
+                let resolution = job.lock().apply_to_all;
                 let reporter = ItemProgressReporter {
                     scheduler: self,
                     job: &job,
@@ -711,34 +662,152 @@ impl Scheduler {
                     current_entry: item.entry.clone(),
                     reported_bytes: AtomicU64::new(0),
                 };
-                match executor
+                let execution = executor
                     .execute(
                         &snapshot,
                         &item,
-                        Some(resolution),
+                        resolution,
                         &reporter,
                         &job.pause,
                         &job.cancellation,
                     )
-                    .await
-                {
-                    Ok(outcome) => {
-                        if outcome == ExecutionOutcome::Completed {
-                            reporter.finish_completed(item.bytes);
+                    .await;
+                let expand = matches!(&execution, Ok(ExecutionOutcome::Completed));
+                let bulk = matches!(&execution, Ok(ExecutionOutcome::BulkCompleted(_)));
+                if job.is_cancelled() && execution.is_err() {
+                    self.finish_cancelled(&job, executor.as_ref()).await?;
+                    return Ok(());
+                }
+                match execution {
+                    Ok(ExecutionOutcome::Completed) => reporter.finish_completed(item.bytes),
+                    Ok(ExecutionOutcome::CompletedWithWarnings(errors)) => {
+                        reporter.finish_completed(item.bytes);
+                        job.lock().operation.errors.extend(errors);
+                    }
+                    Ok(ExecutionOutcome::BulkCompleted(errors)) => {
+                        job.lock().operation.errors.extend(errors);
+                    }
+                    Ok(ExecutionOutcome::Skipped) => {}
+                    Err(error) => match error {
+                        ExecutionError::Warning { entry, message } => {
+                            reporter.rollback();
+                            job.lock()
+                                .operation
+                                .errors
+                                .push(crate::OperationEntryError { entry, message });
                         }
-                        break;
+                        ExecutionError::Conflict(conflict) => {
+                            reporter.rollback();
+                            if job.lock().pending_conflict.is_none() {
+                                self.register_conflict(&job, conflict.clone())?;
+                            }
+                            deferred.push((item, conflict));
+                            continue;
+                        }
+                        other => return Err(other.into()),
+                    },
+                }
+                {
+                    let mut state = job.lock();
+                    if !bulk {
+                        state.operation.progress.completed_items =
+                            state.operation.progress.completed_items.saturating_add(1);
                     }
-                    Err(ExecutionError::Conflict(conflict)) => {
-                        reporter.rollback();
-                        self.register_conflict(&job, conflict)?;
+                    state.operation.progress.current_entry = Some(item.entry.clone());
+                }
+                if expand {
+                    let children = executor
+                        .expand(&job.snapshot(), &item, &job.cancellation)
+                        .await?;
+                    for child in children.into_iter().rev() {
+                        pending.push_front(child);
                     }
-                    Err(error) => return Err(error.into()),
+                }
+                if job.is_cancelled() {
+                    self.finish_cancelled(&job, executor.as_ref()).await?;
+                    return Ok(());
                 }
             }
-            let mut state = job.lock();
-            state.operation.progress.completed_items =
-                state.operation.progress.completed_items.saturating_add(1);
-            state.operation.progress.current_entry = Some(item.entry);
+            if deferred.is_empty() {
+                break;
+            }
+            let conflicts = std::mem::take(&mut deferred);
+            for (item, known_conflict) in conflicts {
+                loop {
+                    let sticky_resolution = {
+                        let mut state = job.lock();
+                        let resolution = state.apply_to_all;
+                        if resolution.is_some() && state.pending_conflict.take().is_some() {
+                            self.transition_and_publish(
+                                &mut state.operation,
+                                OperationState::Running,
+                            )?;
+                        }
+                        resolution
+                    };
+                    let resolution = if let Some(resolution) = sticky_resolution {
+                        resolution
+                    } else {
+                        if job.lock().pending_conflict.is_none() {
+                            self.register_conflict(&job, known_conflict.clone())?;
+                        }
+                        self.wait_for_conflict_decision(&job).await?
+                    };
+                    if job.is_cancelled() {
+                        self.finish_cancelled(&job, executor.as_ref()).await?;
+                        return Ok(());
+                    }
+                    let snapshot = job.snapshot();
+                    let reporter = ItemProgressReporter {
+                        scheduler: self,
+                        job: &job,
+                        publisher: &progress,
+                        current_entry: item.entry.clone(),
+                        reported_bytes: AtomicU64::new(0),
+                    };
+                    match executor
+                        .execute(
+                            &snapshot,
+                            &item,
+                            Some(resolution),
+                            &reporter,
+                            &job.pause,
+                            &job.cancellation,
+                        )
+                        .await
+                    {
+                        Ok(ExecutionOutcome::Completed) => {
+                            reporter.finish_completed(item.bytes);
+                            let children = executor
+                                .expand(&job.snapshot(), &item, &job.cancellation)
+                                .await?;
+                            for child in children.into_iter().rev() {
+                                pending.push_front(child);
+                            }
+                            break;
+                        }
+                        Ok(ExecutionOutcome::CompletedWithWarnings(errors)) => {
+                            reporter.finish_completed(item.bytes);
+                            job.lock().operation.errors.extend(errors);
+                            break;
+                        }
+                        Ok(ExecutionOutcome::BulkCompleted(errors)) => {
+                            job.lock().operation.errors.extend(errors);
+                            break;
+                        }
+                        Ok(ExecutionOutcome::Skipped) => break,
+                        Err(ExecutionError::Conflict(conflict)) => {
+                            reporter.rollback();
+                            self.register_conflict(&job, conflict)?;
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                }
+                let mut state = job.lock();
+                state.operation.progress.completed_items =
+                    state.operation.progress.completed_items.saturating_add(1);
+                state.operation.progress.current_entry = Some(item.entry);
+            }
         }
         self.wait_while_blocked(&job).await;
         if job.is_cancelled() {

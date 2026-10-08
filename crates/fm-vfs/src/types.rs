@@ -56,6 +56,17 @@ pub struct RemoveOptions {
     pub use_trash: bool,
 }
 
+/// Outcome of a single-pass recursive removal.
+#[derive(Debug)]
+pub struct RemoveReport {
+    /// Entries successfully removed, including directories.
+    pub removed_items: u64,
+    /// Entries that could not be removed without stopping unrelated siblings.
+    pub failures: Vec<(EntryRef, String)>,
+    /// Cancellation observed between filesystem entries.
+    pub cancelled: bool,
+}
+
 /// Controls creation of a provider write stream.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct WriteOptions {

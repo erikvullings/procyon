@@ -56,12 +56,20 @@ async fn requires_confirmation_then_deletes_a_planned_tree_and_audits_it() {
     loop {
         let operation = service.get_operation(awaiting.id.into()).unwrap();
         if operation.state == OperationStateDto::WaitingForConflictResolution {
-            assert_eq!(operation.progress.total_items, Some(3));
+            assert_eq!(operation.progress.total_items, None);
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    service.cancel_operation(awaiting.id.into()).unwrap();
+    loop {
+        if service.get_operation(awaiting.id.into()).unwrap().state == OperationStateDto::Cancelled
+        {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    service.cancel_operation(awaiting.id.into()).unwrap();
     assert!(source.exists());
 
     let started = service
@@ -79,12 +87,90 @@ async fn requires_confirmation_then_deletes_a_planned_tree_and_audits_it() {
     };
 
     assert_eq!(result.state, OperationStateDto::Completed);
-    assert_eq!(result.progress.total_items, Some(3));
-    assert_eq!(result.progress.total_bytes, Some(FILE_CONTENT.len() as u64));
+    assert_eq!(result.progress.total_items, None);
+    assert_eq!(result.progress.completed_items, 3);
+    assert_eq!(result.progress.total_bytes, None);
     assert!(!source.exists());
     let audit = fs::read_to_string(root.path().join("settings/audit.jsonl")).unwrap();
     assert!(audit.contains("permanentDelete"));
     assert!(!audit.contains(std::str::from_utf8(FILE_CONTENT).unwrap()));
+}
+
+#[tokio::test]
+async fn repeated_delete_of_an_active_source_reuses_its_job() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("delete-once");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("file"), b"data").unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        root.path().join("workspaces"),
+        root.path().join("settings"),
+    );
+
+    let first = service
+        .start_operation(request(&source, false, false), None)
+        .unwrap();
+    let second = service
+        .start_operation(request(&source, false, false), None)
+        .unwrap();
+    assert_eq!(first.id, second.id, "a second prompt must not be queued");
+    let mut copy = request(&source.join("file"), false, false);
+    copy.operation_type = OperationKindDto::Copy;
+    copy.destination = Some(Location::from_native_path(root.path()).unwrap().into());
+    assert!(
+        service.start_operation(copy, None).is_err(),
+        "a descendant of a pending delete cannot also be copied"
+    );
+    service.cancel_operation(first.id.into()).unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn single_pass_delete_reports_failed_children_and_continues_with_siblings() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("delete-tree");
+    fs::create_dir(&source).unwrap();
+    let readonly = source.join("readonly");
+    fs::write(&readonly, b"keep").unwrap();
+    fs::set_permissions(&readonly, fs::Permissions::from_mode(0o444)).unwrap();
+    fs::write(source.join("removable"), b"remove").unwrap();
+    let outside = root.path().join("outside");
+    fs::write(&outside, b"untouched").unwrap();
+    symlink(&outside, source.join("link")).unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        root.path().join("workspaces"),
+        root.path().join("settings"),
+    );
+
+    let started = service
+        .start_operation(request(&source, true, false), None)
+        .unwrap();
+    let finished = loop {
+        let operation = service.get_operation(started.id.into()).unwrap();
+        if matches!(
+            operation.state,
+            OperationStateDto::CompletedWithWarnings | OperationStateDto::Failed
+        ) {
+            break operation;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    assert_eq!(finished.state, OperationStateDto::CompletedWithWarnings);
+    assert_eq!(finished.progress.completed_items, 2);
+    assert!(
+        finished
+            .errors
+            .iter()
+            .any(|error| error.entry.location.uri.ends_with("/readonly"))
+    );
+    assert!(!source.join("removable").exists());
+    assert!(fs::symlink_metadata(source.join("link")).is_err());
+    assert_eq!(fs::read(&outside).unwrap(), b"untouched");
+    assert!(readonly.exists());
 }
 
 #[cfg(unix)]
@@ -152,7 +238,7 @@ async fn read_only_descendants_do_not_prevent_the_confirmation_prompt() {
     loop {
         let operation = service.get_operation(started.id.into()).unwrap();
         if operation.state == OperationStateDto::WaitingForConflictResolution {
-            assert_eq!(operation.progress.total_items, Some(5));
+            assert_eq!(operation.progress.total_items, None);
             break;
         }
         assert_ne!(operation.state, OperationStateDto::Failed);
