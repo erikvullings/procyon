@@ -418,12 +418,14 @@ function offerView(
     m('dl.fm-semantic-definition-list', [
       m('dt', t('semanticComponents', 'profile')),
       m('dd', profileName(offer.profile)),
-      m('dt', t('semanticComponents', 'catalogRevision')),
-      m('dd', offer.catalogRevision),
-      m('dt', t('semanticComponents', 'modelId')),
-      m('dd', offer.resolvedModel.modelId),
-      m('dt', t('semanticComponents', 'exactModelRevision')),
-      m('dd', offer.resolvedModel.revision),
+      m('dt', t('semanticComponents', 'totalDownload')),
+      m('dd', formatBytes(totals.download)),
+      m('dt', t('semanticComponents', 'totalInstalled')),
+      m('dd', formatBytes(totals.installed)),
+      m('dt', t('semanticComponents', 'peakRam')),
+      m('dd', formatBytes(totals.ram)),
+      m('dt', t('semanticComponents', 'license')),
+      m('dd', [...new Set(offer.components.map((component) => component.license.spdx))].join(', ')),
       m('dt', t('semanticComponents', 'localOnly')),
       m('dd', [
         `${offer.embeddingsStayLocal ? t('semanticComponents', 'yes') : t('semanticComponents', 'no')} · `,
@@ -431,57 +433,59 @@ function offerView(
       ]),
       m('dt', t('semanticComponents', 'dataRoot')),
       m('dd', offer.dataRoot),
-      m('dt', t('semanticComponents', 'minimumReserve')),
-      m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
-    ]),
-    m('h6', t('semanticComponents', 'offerComponentsHeading')),
-    m(
-      'div.fm-semantic-table-wrap',
-      m('table.fm-semantic-component-table', [
-        m('thead', [
-          m('tr', [
-            m('th', t('semanticComponents', 'kind')),
-            m('th', t('semanticComponents', 'component')),
-            m('th', t('semanticComponents', 'signedArtifact')),
-            m('th', t('semanticComponents', 'version')),
-            m('th', t('semanticComponents', 'license')),
-            m('th', t('semanticComponents', 'downloadSize')),
-            m('th', t('semanticComponents', 'estimatedInstalledSize')),
-            m('th', t('semanticComponents', 'estimatedRam')),
-          ]),
-        ]),
-        m(
-          'tbody',
-          offer.components.map((component) =>
-            m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
-              m('td', componentKindLabel(component.kind)),
-              m('td', [
-                component.componentId,
-                component.model == null
-                  ? undefined
-                  : m('small', `${component.model.modelId} · ${component.model.revision}`),
-              ]),
-              m('td', component.artifactId),
-              m('td', component.version),
-              m('td', [m('span', component.license.spdx), m('small', component.license.notice)]),
-              m('td', formatBytes(component.downloadBytes)),
-              m('td', formatBytes(component.estimatedInstalledBytes)),
-              m('td', formatBytes(component.estimatedRamBytes)),
-            ]),
-          ),
-        ),
-      ]),
-    ),
-    m('h6', t('semanticComponents', 'aggregateSizes')),
-    m('dl.fm-semantic-definition-list', [
-      m('dt', t('semanticComponents', 'totalDownload')),
-      m('dd', formatBytes(totals.download)),
-      m('dt', t('semanticComponents', 'totalInstalled')),
-      m('dd', formatBytes(totals.installed)),
-      m('dt', t('semanticComponents', 'peakRam')),
-      m('dd', formatBytes(totals.ram)),
     ]),
     setup,
+    m('details.fm-semantic-offer-details', [
+      m('summary', t('semanticComponents', 'technicalDetails')),
+      m('dl.fm-semantic-definition-list', [
+        m('dt', t('semanticComponents', 'catalogRevision')),
+        m('dd', offer.catalogRevision),
+        m('dt', t('semanticComponents', 'modelId')),
+        m('dd', offer.resolvedModel.modelId),
+        m('dt', t('semanticComponents', 'exactModelRevision')),
+        m('dd', offer.resolvedModel.revision),
+        m('dt', t('semanticComponents', 'minimumReserve')),
+        m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
+      ]),
+      m('h6', t('semanticComponents', 'offerComponentsHeading')),
+      m(
+        'div.fm-semantic-table-wrap',
+        m('table.fm-semantic-component-table', [
+          m('thead', [
+            m('tr', [
+              m('th', t('semanticComponents', 'kind')),
+              m('th', t('semanticComponents', 'component')),
+              m('th', t('semanticComponents', 'signedArtifact')),
+              m('th', t('semanticComponents', 'version')),
+              m('th', t('semanticComponents', 'license')),
+              m('th', t('semanticComponents', 'downloadSize')),
+              m('th', t('semanticComponents', 'estimatedInstalledSize')),
+              m('th', t('semanticComponents', 'estimatedRam')),
+            ]),
+          ]),
+          m(
+            'tbody',
+            offer.components.map((component) =>
+              m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
+                m('td', componentKindLabel(component.kind)),
+                m('td', [
+                  component.componentId,
+                  component.model == null
+                    ? undefined
+                    : m('small', `${component.model.modelId} · ${component.model.revision}`),
+                ]),
+                m('td', component.artifactId),
+                m('td', component.version),
+                m('td', [m('span', component.license.spdx), m('small', component.license.notice)]),
+                m('td', formatBytes(component.downloadBytes)),
+                m('td', formatBytes(component.estimatedInstalledBytes)),
+                m('td', formatBytes(component.estimatedRamBytes)),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    ]),
     m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
     busy === 'install'
       ? m(
@@ -748,6 +752,14 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       loaded = { capabilities, status, profiles, gemmaSetup };
       onStatusChange?.(status);
       loadState = 'loaded';
+      if (
+        installProfile === 'embeddingGemma2' &&
+        capabilities.operations.includes('createInstallationOffer') &&
+        (capabilities.runtimeExecutableDownload === 'directDistribution' ||
+          capabilities.runtimeExecutableDownload === 'simulated')
+      ) {
+        createOffer();
+      }
     } catch (error: unknown) {
       if (loadController.signal.aborted) return;
       loadError = errorMessage(error);
@@ -1138,29 +1150,40 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m('fieldset.fm-semantic-install', [
             m('legend', t('semanticComponents', 'installEnableLegend')),
-            status.lifecycle.state === 'offered' && offer === undefined
+            status.lifecycle.state === 'offered' && offer === undefined && busy !== 'offer'
               ? m('p', t('semanticComponents', 'existingOffer'))
-              : m('p', t('semanticComponents', 'reviewInstallation')),
+              : installProfile === 'embeddingGemma2'
+                ? undefined
+                : m('p', t('semanticComponents', 'reviewInstallation')),
             profileChoices(
               'fm-semantic-install-profile',
               switchProfiles,
               installProfile,
               (profile) => {
+                if (busy !== undefined) return;
                 installProfile = profile;
                 offer = undefined;
+                if (profile === 'embeddingGemma2') createOffer();
               },
             ),
-            m(
-              'button.btn.fm-semantic-action',
-              {
-                type: 'button',
-                disabled: busy !== undefined || switchProfiles.length === 0,
-                onclick: createOffer,
-              },
-              busy === 'offer'
-                ? t('semanticComponents', 'working')
-                : t('semanticComponents', 'installEnableAction'),
-            ),
+            installProfile === 'embeddingGemma2' && busy === 'offer'
+              ? m('p', { role: 'status' }, t('semanticComponents', 'loadingOffer'))
+              : undefined,
+            installProfile !== 'embeddingGemma2' || (offer === undefined && busy !== 'offer')
+              ? m(
+                  'button.btn.fm-semantic-action',
+                  {
+                    type: 'button',
+                    disabled: busy !== undefined || switchProfiles.length === 0,
+                    onclick: createOffer,
+                  },
+                  busy === 'offer'
+                    ? t('semanticComponents', 'working')
+                    : installProfile === 'embeddingGemma2'
+                      ? t('semanticComponents', 'retryOffer')
+                      : t('semanticComponents', 'installEnableAction'),
+                )
+              : undefined,
           ])
         : undefined,
       !canOffer &&

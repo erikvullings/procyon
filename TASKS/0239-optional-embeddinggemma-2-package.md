@@ -343,3 +343,13 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   each worker launch. A local isolated install and native query succeeded;
   testing a representative user-selected folder is the purpose of this opt-in
   build, not a production quality or cross-platform qualification result.
+- 2026-10-08: Fixed development installation beside an active E5 embedding space:
+  signed Gemma artifacts are staged before atomically activating the separately
+  initialized empty library, without deleting E5's package or library. Direct
+  installation requires a matching Gemma library policy, and a new signed offer
+  can retry after a failed attempt. Settings now loads Gemma's offer on selection,
+  keeps dimensions and media consent in the primary view, and collapses the
+  artifact inventory into optional technical details. An isolated macOS
+  developer-bundle test installed E5 followed by signed Gemma originals and
+  launched a native Gemma worker query; representative folder quality and
+  other platform qualification remain open.

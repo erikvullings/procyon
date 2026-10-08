@@ -147,6 +147,7 @@ impl DeveloperSemanticBundle {
                 ),
                 distribution: DesktopSemanticDistribution::Direct,
                 minimum_free_space_reserve_bytes: 64 * 1024 * 1024,
+                gemma_library_configuration_directory: configuration_directory.to_path_buf(),
             },
             ManagedSemanticComponentAdapters {
                 artifact_source: Arc::new(BundleArtifactSource {
@@ -504,7 +505,7 @@ mod tests {
         use fm_semantic_library::{
             DeviceLibraryIdentity, GemmaMediaSelection, LibraryId,
             ModelIdentity as LibraryModelIdentity, ResourceBudgets, ResourceProfile,
-            ResourceProfileKind, SemanticLibraryPolicy, SemanticLibraryPolicyStore,
+            ResourceProfileKind, SemanticLibraryCoordinator, SemanticLibraryPolicy,
         };
         use fm_semantic_worker::ManagedModel;
 
@@ -522,18 +523,22 @@ mod tests {
             video: true,
         };
         let model = LibraryModelIdentity::embeddinggemma_2(128, media).expect("Gemma model");
-        SemanticLibraryPolicyStore::new(data.path().join("semantic-library-gemma"))
-            .save(
-                &SemanticLibraryPolicy::new(
-                    DeviceLibraryIdentity::new(LibraryId::new(), model),
-                    ResourceProfile {
-                        kind: ResourceProfileKind::Balanced,
-                        budgets: ResourceBudgets::default(),
-                    },
-                )
-                .expect("library policy"),
-            )
-            .expect("persist fresh Gemma library");
+        let policy = SemanticLibraryPolicy::new(
+            DeviceLibraryIdentity::new(LibraryId::new(), model),
+            ResourceProfile {
+                kind: ResourceProfileKind::Balanced,
+                budgets: ResourceBudgets::default(),
+            },
+        )
+        .expect("library policy");
+        SemanticLibraryCoordinator::new(
+            data.path().join("semantic-library-gemma"),
+            data.path().join("semantic/library-gemma"),
+        )
+        .lock()
+        .expect("lock Gemma library")
+        .initialize(&policy)
+        .expect("initialize fresh Gemma library");
         let bundle =
             DeveloperSemanticBundle::load(&bundle_path, data.path(), data.path()).expect("bundle");
         let profiles = bundle
@@ -546,6 +551,16 @@ mod tests {
                 .iter()
                 .any(|profile| profile.profile == SemanticProfile::EmbeddingGemma2)
         );
+        let e5 = bundle
+            .components
+            .installation_offer(SemanticProfile::CompactMultilingual)
+            .await
+            .expect("signed E5 offer");
+        bundle
+            .components
+            .install_or_enable(e5.consent())
+            .await
+            .expect("install E5 first");
         let offer = bundle
             .components
             .installation_offer(SemanticProfile::EmbeddingGemma2)

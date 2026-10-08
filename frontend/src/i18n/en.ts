@@ -1353,6 +1353,9 @@ export const en = {
     existingOffer:
       'A previous offer is pending. Create a fresh offer to review its complete current disclosure.',
     offerHeading: 'Installation disclosure',
+    loadingOffer: 'Loading model installation details…',
+    retryOffer: 'Retry loading model details',
+    technicalDetails: 'Technical file and revision details',
     catalogRevision: 'Catalog revision',
     exactModelRevision: 'Exact model revision',
     localOnly: 'Local-only processing',
@@ -1370,7 +1373,7 @@ export const en = {
     totalInstalled: 'Total installed',
     peakRam: 'Peak RAM',
     consentInstruction:
-      'Accept only after reviewing every component, license, size, location, and privacy disclosure.',
+      'Review the model, licenses, sizes, location, and privacy information above before installing.',
     acceptAndInstall: 'Accept and install',
     installing: 'Installing…',
     installStarting:

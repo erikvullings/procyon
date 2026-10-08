@@ -64,6 +64,30 @@ async function withGemmaProfile(client: MockFileManagerClient): Promise<void> {
 }
 
 describe('SemanticComponentManagement', () => {
+  it('offers Gemma choices directly and hides artifact files behind optional details', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    const createOffer = vi.spyOn(client, 'createSemanticComponentInstallationOffer');
+    mountComponent(client);
+    await waitForLoaded();
+
+    await vi.waitFor(() =>
+      expect(createOffer).toHaveBeenCalledWith({ profile: 'embeddingGemma2' }),
+    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
+    expect(root.querySelector('#fm-semantic-gemma-dimensions')).not.toBeNull();
+    expect(button('Accept and install').disabled).toBe(true);
+    expect(
+      [...root.querySelectorAll('button')].some(
+        (item) => item.textContent?.trim() === 'Review installation',
+      ),
+    ).toBe(false);
+    const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-offer-details');
+    expect(details?.open).toBe(false);
+    expect(details?.querySelectorAll('.fm-semantic-offer-component')).toHaveLength(3);
+    expect(root.querySelector('.fm-semantic-offer')?.textContent).toContain('Total download');
+  });
+
   it('requires immutable Gemma choices and fresh-index consent before installing beside E5', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
@@ -81,7 +105,6 @@ describe('SemanticComponentManagement', () => {
       '.fm-semantic-install input[type="radio"]',
     );
     expect([...selectable].map((option) => option.value)).toEqual(['embeddingGemma2']);
-    button('Review installation').click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
     expect(button('Accept and install').disabled).toBe(true);
     const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
@@ -131,7 +154,6 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
       ?.click();
-    button('Review installation').click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
     const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
     if (dimensions === null) throw new Error('Gemma dimensions missing');
@@ -171,7 +193,6 @@ describe('SemanticComponentManagement', () => {
       '.fm-semantic-install input[value="embeddingGemma2"]',
     );
     gemma?.click();
-    button('Review installation').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Existing library: 512 dimensions'));
     expect(root.querySelector('#fm-semantic-gemma-dimensions')).toBeNull();
     expect(button('Accept and install').disabled).toBe(false);

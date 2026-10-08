@@ -2482,6 +2482,8 @@ pub struct ManagedSemanticComponentConfiguration {
     pub distribution: DesktopSemanticDistribution,
     /// Bytes that must remain free beyond installed-size estimates.
     pub minimum_free_space_reserve_bytes: u64,
+    /// Configuration root containing the separately initialized Gemma library.
+    pub gemma_library_configuration_directory: PathBuf,
 }
 
 /// Injected host adapters used by the synchronous component engine.
@@ -2787,20 +2789,90 @@ impl SemanticComponentCapability for ManagedSemanticComponentCapability {
         let manager = self.manager.clone();
         let catalog = Arc::clone(&self.catalog);
         let environment = self.configuration.environment.clone();
+        let gemma_library_configuration_directory = self
+            .configuration
+            .gemma_library_configuration_directory
+            .clone();
         let source = Arc::clone(&self.adapters.artifact_source);
         let free_space = Arc::clone(&self.adapters.free_space);
         let activation = Arc::clone(&self.adapters.activation);
         let result = run_component_blocking(move || {
-            manager
-                .install(
-                    pending.offer.consent(),
+            let profile = pending.offer.profile();
+            let selected_model = pending.offer.resolved_model().clone();
+            let consent = pending.offer.consent();
+            let state = manager.state().map_err(map_install_error)?;
+            let active = state.active_model();
+            let fresh_gemma = profile == SemanticProfile::EmbeddingGemma2
+                && active.is_some_and(|selection| {
+                    selection.profile() != profile || selection.identity() != &selected_model
+                });
+            if profile == SemanticProfile::EmbeddingGemma2 {
+                let coordinator = fm_semantic_library::SemanticLibraryCoordinator::new(
+                    gemma_library_configuration_directory.join("semantic-library-gemma"),
+                    state.data_root().path().join("library-gemma"),
+                );
+                let policy = coordinator
+                    .load()
+                    .map_err(|error| SemanticComponentError::State {
+                        message: format!(
+                            "Gemma library must be initialized before installation: {error}"
+                        ),
+                    })?
+                    .policy;
+                let library_model = policy.library().model();
+                if library_model.model_id() != selected_model.model_id().as_str()
+                    || library_model.revision() != selected_model.revision().as_str()
+                {
+                    return Err(SemanticComponentError::State {
+                        message: "Gemma library identity does not match the offered model"
+                            .to_owned(),
+                    });
+                }
+            }
+            let receipt = if fresh_gemma {
+                manager.install_for_model_migration(
+                    consent,
                     &catalog,
                     &environment,
                     source.as_ref(),
                     free_space.as_ref(),
                     activation.as_ref(),
                 )
-                .map_err(map_install_error)
+            } else {
+                manager.install(
+                    consent,
+                    &catalog,
+                    &environment,
+                    source.as_ref(),
+                    free_space.as_ref(),
+                    activation.as_ref(),
+                )
+            }
+            .map_err(map_install_error)?;
+            if fresh_gemma {
+                let model = catalog
+                    .artifacts()
+                    .iter()
+                    .find(|artifact| {
+                        matches!(
+                            artifact.kind(),
+                            core::ArtifactKind::Model(identity)
+                                | core::ArtifactKind::OriginalModel(identity)
+                                if identity == &selected_model
+                        )
+                    })
+                    .ok_or_else(|| SemanticComponentError::Catalog {
+                        message: "Gemma offer has no signed model artifact".to_owned(),
+                    })?;
+                manager
+                    .activate_fresh_library_model(
+                        SemanticProfile::EmbeddingGemma2,
+                        selected_model,
+                        model.compatibility().index_schema_version(),
+                    )
+                    .map_err(map_state_error)?;
+            }
+            Ok(receipt)
         })
         .await;
         match result {

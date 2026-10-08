@@ -117,6 +117,7 @@ impl ProductionSemanticBundle {
                 environment: InstallEnvironment::new(target, 1, BTreeMap::new()),
                 distribution: DesktopSemanticDistribution::Direct,
                 minimum_free_space_reserve_bytes: 64 * 1024 * 1024,
+                gemma_library_configuration_directory: configuration_directory.to_path_buf(),
             },
             ManagedSemanticComponentAdapters {
                 artifact_source: Arc::new(source),

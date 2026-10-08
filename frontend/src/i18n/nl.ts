@@ -1357,6 +1357,9 @@ export const nl = {
     existingOffer:
       'Er staat een eerder aanbod open. Maak een nieuw aanbod om de volledige actuele informatie te controleren.',
     offerHeading: 'Installatie-informatie',
+    loadingOffer: 'Installatiegegevens van het model laden…',
+    retryOffer: 'Modelgegevens opnieuw laden',
+    technicalDetails: 'Technische bestands- en revisiegegevens',
     catalogRevision: 'Catalogusrevisie',
     exactModelRevision: 'Exacte modelrevisie',
     localOnly: 'Alleen lokale verwerking',
@@ -1374,7 +1377,7 @@ export const nl = {
     totalInstalled: 'Totaal geïnstalleerd',
     peakRam: 'Piek-RAM',
     consentInstruction:
-      'Accepteer pas na controle van elk onderdeel, elke licentie, grootte, locatie en privacyverklaring.',
+      'Controleer vóór installatie het model, de licenties, de groottes, de locatie en de privacygegevens hierboven.',
     acceptAndInstall: 'Accepteren en installeren',
     installing: 'Installeren…',
     installStarting:

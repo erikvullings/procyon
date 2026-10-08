@@ -470,6 +470,22 @@ impl SemanticState {
         Ok(())
     }
 
+    pub(crate) fn activate_fresh_library_model(
+        &mut self,
+        profile: SemanticProfile,
+        identity: ModelIdentity,
+        index_schema_version: u32,
+    ) -> Result<(), SemanticStateError> {
+        if index_schema_version == 0 {
+            return Err(SemanticStateError::InvalidIndexSchemaVersion);
+        }
+        let plan = self.plan_model_migration(profile, identity, ReindexEstimate::new(0, 0))?;
+        self.begin_model_migration(plan.confirm())?;
+        self.complete_model_migration()?;
+        self.active_index_schema_version = Some(index_schema_version);
+        Ok(())
+    }
+
     /// Returns installed component records.
     #[must_use]
     pub fn installed_components(&self) -> &[InstalledComponent] {
@@ -1277,6 +1293,9 @@ pub enum SemanticStateError {
     /// Replacing an active embedding space requires an explicit migration.
     #[error("an active embedding space can only be replaced by a model migration")]
     ModelMigrationRequired,
+    /// An empty library cannot activate a model whose package is not installed.
+    #[error("the fresh library model is not installed")]
+    FreshLibraryModelNotInstalled,
     /// Replacing an active index schema requires an explicit migration.
     #[error(
         "active index schema {active_version} can only be replaced by an explicit migration to {offered_version}"

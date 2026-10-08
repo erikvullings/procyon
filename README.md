@@ -145,7 +145,10 @@ repository. To build the bundle without launching Tauri, run
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
-and video checkboxes, acknowledge the fresh index, then install. Open the folder
+and video checkboxes, acknowledge the fresh index, then select **Accept and install**.
+The signed offer loads automatically; individual artifact files are available under
+**Technical details** if needed. Installation retains the existing E5 library and
+activates the separately initialized Gemma library. Open the folder
 you want to compare in a pane; in **Settings → Semantic library**, review its
 inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media

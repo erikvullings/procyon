@@ -166,6 +166,10 @@ impl SemanticIndexInventory for FixtureIndexInventory {
 }
 
 fn signed_catalog() -> TrustedCatalog {
+    signed_catalog_with_gemma(false)
+}
+
+fn signed_catalog_with_gemma(include_gemma: bool) -> TrustedCatalog {
     let target = TargetTriple::new("macos", "aarch64").unwrap();
     let runtime_compatibility = RuntimeCompatibility::new(
         ComponentId::new("fixture.runtime").unwrap(),
@@ -217,7 +221,7 @@ fn signed_catalog() -> TrustedCatalog {
         ArtifactCompatibility::new(Some(target), None, Vec::new(), 1),
     )
     .unwrap();
-    let models = [
+    let mut models = vec![
         (
             fm_semantic_components::SemanticProfile::CompactMultilingual,
             "fixture.multilingual",
@@ -243,6 +247,16 @@ fn signed_catalog() -> TrustedCatalog {
             ["en", "nl", "ja"].as_slice(),
         ),
     ];
+    if include_gemma {
+        models.push((
+            fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+            "google-embeddinggemma-2",
+            "914f7f89142e33e77833254d9c9b90c3cef7303b",
+            "fixture-model-gemma",
+            b"gemma".as_slice(),
+            ["en", "nl"].as_slice(),
+        ));
+    }
     let mut artifacts = vec![worker, worker_patch, runtime];
     let mut manifests = Vec::new();
     let mut profiles = BTreeMap::new();
@@ -378,6 +392,10 @@ fn managed_capability_with_catalog(
                 b"quality-model".to_vec(),
             ),
             (
+                ArtifactId::new("fixture-model-gemma").unwrap(),
+                b"gemma".to_vec(),
+            ),
+            (
                 ArtifactId::new("fixture-worker-patch").unwrap(),
                 b"patch".to_vec(),
             ),
@@ -403,6 +421,7 @@ fn managed_capability_with_catalog(
             ),
             distribution,
             minimum_free_space_reserve_bytes: 100,
+            gemma_library_configuration_directory: directory.path().join("settings"),
         },
         ManagedSemanticComponentAdapters {
             artifact_source: source.clone(),
@@ -417,6 +436,169 @@ fn managed_capability_with_catalog(
         },
     );
     (Arc::new(capability), source)
+}
+
+#[tokio::test]
+async fn gemma_offer_activates_a_fresh_model_beside_an_existing_e5_installation() {
+    let directory = project_temp_dir("gemma-beside-e5-");
+    let (capability, _) = managed_capability_with_catalog(
+        &directory,
+        DesktopSemanticDistribution::Direct,
+        u64::MAX,
+        true,
+        signed_catalog_with_gemma(true),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        directory.path().join("workspaces"),
+        directory.path().join("settings"),
+    )
+    .with_semantic_component_capability(capability);
+    let e5 = service
+        .semantic_component_installation_offer(
+            fm_semantic_components::SemanticProfile::CompactMultilingual,
+        )
+        .await
+        .unwrap();
+    service
+        .semantic_component_install_or_enable(e5.consent())
+        .await
+        .unwrap();
+    let e5_index = directory
+        .path()
+        .join("app-data/semantic/library/e5-index-marker");
+    std::fs::create_dir_all(e5_index.parent().unwrap()).unwrap();
+    std::fs::write(&e5_index, b"existing E5 data").unwrap();
+    service
+        .initialize_semantic_gemma_library(
+            256,
+            fm_semantic_library::GemmaMediaSelection {
+                images: true,
+                audio: false,
+                video: true,
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    let gemma = service
+        .semantic_component_installation_offer(
+            fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+        )
+        .await
+        .unwrap();
+    service
+        .semantic_component_install_or_enable(gemma.consent())
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&e5_index).unwrap(), b"existing E5 data");
+    assert_eq!(
+        service
+            .semantic_gemma_library_setup()
+            .await
+            .unwrap()
+            .unwrap()
+            .dimensions,
+        256
+    );
+    let state = ComponentManager::new(
+        SemanticStateStore::new(directory.path().join("config")),
+        directory.path().join("app-data"),
+    )
+    .state()
+    .unwrap();
+    assert_eq!(
+        state.active_model().unwrap().profile(),
+        fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+    );
+    assert!(
+        state
+            .installed_model(
+                &signed_catalog()
+                    .resolve_profile(fm_semantic_components::SemanticProfile::CompactMultilingual)
+                    .unwrap()
+                    .clone()
+            )
+            .is_some(),
+        "the E5 package must remain available",
+    );
+}
+
+#[tokio::test]
+async fn gemma_offer_requires_matching_library_before_activation_and_can_be_retried() {
+    let directory = project_temp_dir("gemma-library-required-");
+    let (capability, source) = managed_capability_with_catalog(
+        &directory,
+        DesktopSemanticDistribution::Direct,
+        u64::MAX,
+        true,
+        signed_catalog_with_gemma(true),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        directory.path().join("workspaces"),
+        directory.path().join("settings"),
+    )
+    .with_semantic_component_capability(capability);
+    let e5 = service
+        .semantic_component_installation_offer(
+            fm_semantic_components::SemanticProfile::CompactMultilingual,
+        )
+        .await
+        .unwrap();
+    service
+        .semantic_component_install_or_enable(e5.consent())
+        .await
+        .unwrap();
+    let original_downloads = source.calls.load(Ordering::SeqCst);
+    let gemma = service
+        .semantic_component_installation_offer(
+            fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+        )
+        .await
+        .unwrap();
+    let error = service
+        .semantic_component_install_or_enable(gemma.consent())
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Gemma library must be initialized")
+    );
+    assert_eq!(source.calls.load(Ordering::SeqCst), original_downloads);
+    service
+        .initialize_semantic_gemma_library(
+            256,
+            fm_semantic_library::GemmaMediaSelection {
+                images: false,
+                audio: false,
+                video: false,
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    let gemma = service
+        .semantic_component_installation_offer(
+            fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+        )
+        .await
+        .unwrap();
+    service
+        .semantic_component_install_or_enable(gemma.consent())
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .semantic_component_status()
+            .await
+            .unwrap()
+            .active_model()
+            .unwrap()
+            .profile(),
+        fm_semantic_components::SemanticProfile::EmbeddingGemma2,
+    );
 }
 
 #[tokio::test]
@@ -1441,6 +1623,7 @@ async fn managed_worker_patch_failure_reports_rollback_to_the_working_version() 
             ),
             distribution: DesktopSemanticDistribution::Direct,
             minimum_free_space_reserve_bytes: 100,
+            gemma_library_configuration_directory: directory.path().join("settings"),
         },
         ManagedSemanticComponentAdapters {
             artifact_source: source,

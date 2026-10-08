@@ -820,6 +820,24 @@ impl ComponentManager {
         })
     }
 
+    /// Activates an installed model for a separately initialized empty library.
+    /// E5's installed package and its separate library data remain untouched.
+    pub fn activate_fresh_library_model(
+        &self,
+        profile: crate::SemanticProfile,
+        identity: crate::ModelIdentity,
+        index_schema_version: u32,
+    ) -> Result<(), crate::SemanticStateError> {
+        self.store.with_exclusive_lock(|| {
+            let mut state = self.store.load_or_default_unlocked(&self.app_data)?;
+            if state.installed_model(&identity).is_none() {
+                return Err(crate::SemanticStateError::FreshLibraryModelNotInstalled);
+            }
+            state.activate_fresh_library_model(profile, identity, index_schema_version)?;
+            self.store.save_unlocked(&state)
+        })
+    }
+
     fn install_locked(
         &self,
         consent: InstallationConsent,
