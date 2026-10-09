@@ -31,6 +31,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             &model,
             arguments.ocrmypdf_executable.as_deref(),
             arguments.idle_timeout,
+            arguments.metal_images,
         )
         .await;
     }
@@ -51,6 +52,8 @@ struct Arguments {
     ocrmypdf_executable: Option<PathBuf>,
     #[cfg(feature = "semantic-runtime")]
     development_mode: bool,
+    #[cfg(feature = "semantic-runtime")]
+    metal_images: bool,
 }
 
 fn arguments_from(
@@ -75,6 +78,10 @@ fn arguments_from(
     };
     #[cfg(feature = "gemma-native")]
     let mut gemma_selected = false;
+    #[cfg(feature = "gemma-native")]
+    let mut metal_images = false;
+    #[cfg(all(feature = "semantic-runtime", not(feature = "gemma-native")))]
+    let metal_images = false;
     #[cfg(feature = "semantic-runtime")]
     let mut ocrmypdf_executable = None;
     #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
@@ -199,6 +206,14 @@ fn arguments_from(
                                 )
                             })?,
                     );
+                } else if flag == "--gemma-metal-images" {
+                    if !cfg!(all(target_os = "macos", feature = "gemma-metal")) || metal_images {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "Metal images require a macOS gemma-metal worker and one opt-in flag",
+                        ));
+                    }
+                    metal_images = true;
                 } else {
                     let enabled = match flag.as_ref() {
                         "--gemma-images" => &mut gemma_media.images,
@@ -274,6 +289,13 @@ fn arguments_from(
     #[cfg(feature = "semantic-runtime")]
     let managed_model = {
         #[cfg(feature = "gemma-native")]
+        if metal_images && !gemma_selected {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Metal images require a Gemma managed model",
+            ));
+        }
+        #[cfg(feature = "gemma-native")]
         if gemma_selected {
             if semantic_model_pack.is_some()
                 || development_mode
@@ -339,6 +361,8 @@ fn arguments_from(
         semantic_model_pack,
         #[cfg(feature = "semantic-runtime")]
         managed_model,
+        #[cfg(feature = "semantic-runtime")]
+        metal_images,
         #[cfg(feature = "semantic-runtime")]
         ocrmypdf_executable,
         #[cfg(feature = "semantic-runtime")]
@@ -481,6 +505,7 @@ mod tests {
             "--gemma-video",
         ];
         let complete = arguments_from(base.into_iter().chain(files).map(Into::into)).unwrap();
+        assert!(!complete.metal_images);
         assert!(matches!(
             complete.managed_model,
             Some(fm_semantic_worker::ManagedModel::Gemma {
@@ -493,6 +518,26 @@ mod tests {
                 base.into_iter()
                     .chain(files[..8].iter().copied())
                     .chain(files[10..].iter().copied())
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        let selected = arguments_from(
+            base.into_iter()
+                .chain(files)
+                .chain(["--gemma-metal-images"])
+                .map(Into::into),
+        );
+        if cfg!(all(target_os = "macos", feature = "gemma-metal")) {
+            assert!(selected.unwrap().metal_images);
+        } else {
+            assert!(selected.is_err());
+        }
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--gemma-metal-images", "--gemma-metal-images"])
                     .map(Into::into)
             )
             .is_err()

@@ -5,7 +5,14 @@ pub(crate) enum GemmaCompute {
     #[default]
     Cpu,
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-    Metal(std::sync::Arc<std::sync::atomic::AtomicUsize>),
+    Metal(std::sync::Arc<MetalStats>),
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[derive(Default)]
+pub(crate) struct MetalStats {
+    dispatches: std::sync::atomic::AtomicUsize,
+    fallback_reported: std::sync::atomic::AtomicBool,
 }
 
 impl GemmaCompute {
@@ -19,7 +26,7 @@ impl GemmaCompute {
         match self {
             Self::Cpu => 0,
             #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-            Self::Metal(count) => count.load(std::sync::atomic::Ordering::Relaxed),
+            Self::Metal(stats) => stats.dispatches.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 
@@ -33,13 +40,23 @@ impl GemmaCompute {
         output: usize,
     ) {
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-        if let Self::Metal(count) = self
-            && lattice_inference::forward::metal_gemm::metal_matmul_bt(
+        if let Self::Metal(stats) = self {
+            if lattice_inference::forward::metal_gemm::metal_matmul_bt(
                 input, weights, result, rows, cols, output,
-            )
-        {
-            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            return;
+            ) {
+                stats
+                    .dispatches
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+            if !stats
+                .fallback_reported
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+            {
+                eprintln!(
+                    "Procyon Gemma Metal: a GEMM did not dispatch; using FP32 CPU for that shape"
+                );
+            }
         }
 
         matmul_bt(input, weights, result, rows, cols, output);

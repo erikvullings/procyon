@@ -151,10 +151,24 @@ impl GemmaNativeEncoder {
         self.compute.dispatches()
     }
 
-    /// Explicit local-only Metal probe; the managed worker always uses `open_files`.
+    /// Explicit local-only Metal probe.
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
     pub fn open_metal(
         directory: &Path,
+        dimensions: usize,
+        media: GemmaMedia,
+    ) -> Result<Self, GemmaNativeError> {
+        Self::open_metal_files(
+            &GemmaNativeFiles::from_directory(directory),
+            dimensions,
+            media,
+        )
+    }
+
+    /// Load host-verified original files for an explicitly selected macOS Metal image worker.
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    pub fn open_metal_files(
+        files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
     ) -> Result<Self, GemmaNativeError> {
@@ -163,14 +177,8 @@ impl GemmaNativeEncoder {
                 "Metal probe supports standalone images only",
             ));
         }
-        let compute = GemmaCompute::metal()
-            .ok_or(GemmaNativeError::Input("Metal FP32 GEMM is unavailable"))?;
-        Self::open_files_with_compute(
-            &GemmaNativeFiles::from_directory(directory),
-            dimensions,
-            media,
-            compute,
-        )
+        let compute = GemmaCompute::metal().ok_or(GemmaNativeError::MetalUnavailable)?;
+        Self::open_files_with_compute(files, dimensions, media, compute)
     }
 
     /// Load the pinned local BF16/F32 checkpoint for FP32 CPU inference.
@@ -551,6 +559,10 @@ pub enum GemmaNativeError {
     /// The owning job no longer permits inference.
     #[error("Gemma inference cancelled")]
     Cancelled,
+    /// No Metal device supports the required FP32 GEMM path.
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    #[error("Metal FP32 GEMM is unavailable")]
+    MetalUnavailable,
     /// Checkpoint file could not be read.
     #[error(transparent)]
     Io(#[from] std::io::Error),

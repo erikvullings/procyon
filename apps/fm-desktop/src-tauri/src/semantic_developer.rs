@@ -286,16 +286,23 @@ fn original_model_resolver(
             .ok_or_else(|| "Gemma original files are incomplete".to_owned())?;
         let files =
             GemmaNativeFiles::from_original_files(&original).map_err(|error| error.to_string())?;
+        let launch = fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
+            installed_worker.clone(),
+            data_directory.clone(),
+            native_library_directory.clone(),
+            files,
+            dimensions,
+            media,
+        )
+        .with_ocrmypdf_executable(ocr_executable());
         Ok(Some(
-            fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
-                installed_worker.clone(),
-                data_directory.clone(),
-                native_library_directory.clone(),
-                files,
-                dimensions,
-                media,
-            )
-            .with_ocrmypdf_executable(ocr_executable()),
+            if std::env::var_os("PROCYON_SEMANTIC_GEMMA_METAL_IMAGES")
+                .is_some_and(|value| value == "1")
+            {
+                launch.with_development_metal_images()
+            } else {
+                launch
+            },
         ))
     })
 }
@@ -532,7 +539,11 @@ mod tests {
             ModelIdentity as LibraryModelIdentity, ResourceBudgets, ResourceProfile,
             ResourceProfileKind, SemanticLibraryCoordinator, SemanticLibraryPolicy,
         };
-        use fm_semantic_worker::ManagedModel;
+        use fm_semantic_worker::semantic_storage::SemanticCatalog;
+        use fm_semantic_worker::{
+            IngestionScope, IngestionState, ManagedModel, ManagedWorkerLaunch,
+            ManagedWorkerResolver, WorkerConnector,
+        };
 
         let bundle_path = std::env::var_os("PROCYON_GEMMA_DEVELOPER_BUNDLE")
             .map(PathBuf::from)
@@ -542,10 +553,11 @@ mod tests {
         fs::create_dir_all(&parent).expect("test parent");
         let data = tempfile::tempdir_in(parent.canonicalize().expect("canonical test parent"))
             .expect("isolated development data");
+        let metal_integration = std::env::var_os("PROCYON_GEMMA_METAL_INTEGRATION").is_some();
         let media = GemmaMediaSelection {
             images: true,
-            audio: true,
-            video: true,
+            audio: !metal_integration,
+            video: !metal_integration,
         };
         let model = LibraryModelIdentity::embeddinggemma_2(128, media).expect("Gemma model");
         let policy = SemanticLibraryPolicy::new(
@@ -625,24 +637,26 @@ mod tests {
                 .dimensions,
             128
         );
-        assert!(
-            matches!(
-                service.semantic_ocr_status().availability,
-                fm_application::semantic_ocr::OcrAvailability::Available { .. }
-            ),
-            "installed OCRmyPDF must be discoverable in the Gemma development desktop",
-        );
-        assert!(ocr_executable().is_none(), "OCR requires explicit consent");
-        service
-            .set_semantic_ocr_consent(true)
-            .await
-            .expect("enable installed OCRmyPDF");
-        assert!(ocr_executable().is_some(), "worker launch sees consent");
-        service
-            .set_semantic_ocr_consent(false)
-            .await
-            .expect("disable OCRmyPDF");
-        assert!(ocr_executable().is_none(), "worker launch sees revocation");
+        if !metal_integration {
+            assert!(
+                matches!(
+                    service.semantic_ocr_status().availability,
+                    fm_application::semantic_ocr::OcrAvailability::Available { .. }
+                ),
+                "installed OCRmyPDF must be discoverable in the Gemma development desktop",
+            );
+            assert!(ocr_executable().is_none(), "OCR requires explicit consent");
+            service
+                .set_semantic_ocr_consent(true)
+                .await
+                .expect("enable installed OCRmyPDF");
+            assert!(ocr_executable().is_some(), "worker launch sees consent");
+            service
+                .set_semantic_ocr_consent(false)
+                .await
+                .expect("disable OCRmyPDF");
+            assert!(ocr_executable().is_none(), "worker launch sees revocation");
+        }
         let original_model = bundle.original_model.expect("Gemma resolver");
         let launch = original_model()
             .expect("verified development model")
@@ -681,6 +695,189 @@ mod tests {
             .shutdown(std::time::Duration::from_secs(10))
             .await
             .expect("stop development worker");
+
+        if metal_integration {
+            use image::{ImageBuffer, ImageFormat, Rgb};
+
+            let image = ImageBuffer::from_fn(128, 96, |x, y| {
+                Rgb([
+                    ((x * 2 + y) % 256) as u8,
+                    ((x + y * 2) % 256) as u8,
+                    ((x + y) % 256) as u8,
+                ])
+            });
+            let mut png = std::io::Cursor::new(Vec::new());
+            image.write_to(&mut png, ImageFormat::Png).unwrap();
+            let png = png.into_inner();
+            let reference: serde_json::Value = serde_json::from_str(include_str!(
+                "../../../../crates/fm-semantic-worker/tests/embeddinggemma-image-reference-v1.json"
+            ))
+            .unwrap();
+            assert_eq!(
+                reference["revision"],
+                "914f7f89142e33e77833254d9c9b90c3cef7303b"
+            );
+            let reference: Vec<f32> = serde_json::from_value(reference["vector"].clone()).unwrap();
+            let ManagedModel::Gemma { files, media, .. } = launch.model() else {
+                panic!("installed Gemma original files");
+            };
+            for dimensions in [128, 256, 512, 768] {
+                let mut cpu_vector: Option<Vec<f32>> = None;
+                for metal in [false, true] {
+                    let label = format!("{dimensions}-{}", if metal { "metal" } else { "cpu" });
+                    let runtime = data.path().join(format!("runtime-{label}"));
+                    let index = data.path().join(format!("index-{label}"));
+                    fs::create_dir_all(&runtime).unwrap();
+                    fs::create_dir_all(&index).unwrap();
+                    let mut selected = ManagedWorkerLaunch::new_gemma(
+                        bundle.installed_worker.clone(),
+                        index,
+                        bundle.native_library_directory.clone(),
+                        files.clone(),
+                        dimensions,
+                        *media,
+                    );
+                    if metal {
+                        selected = selected.with_development_metal_images();
+                    }
+                    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(selected.clone()));
+                    let connector = WorkerConnector::desktop_managed_resolved(&runtime, resolver)
+                        .with_startup_timeout(std::time::Duration::from_secs(120));
+                    let peak = Arc::new(std::sync::atomic::AtomicU64::new(0));
+                    let stop = Arc::new(AtomicBool::new(false));
+                    let sample_peak = Arc::clone(&peak);
+                    let sample_stop = Arc::clone(&stop);
+                    let pid_path = runtime.join("worker.pid");
+                    let sampler = tokio::spawn(async move {
+                        while !sample_stop.load(Ordering::Relaxed) {
+                            if let Ok(pid) = fs::read_to_string(&pid_path) {
+                                let output = std::process::Command::new("ps")
+                                    .args(["-o", "rss=", "-p", pid.trim()])
+                                    .output()
+                                    .expect("sample worker RSS");
+                                if let Ok(kib) = String::from_utf8_lossy(&output.stdout)
+                                    .trim()
+                                    .parse::<u64>()
+                                {
+                                    sample_peak.fetch_max(kib * 1024, Ordering::Relaxed);
+                                }
+                            }
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                    });
+                    let start = std::time::Instant::now();
+                    let client = connector.connect().await.expect("installed worker startup");
+                    let startup_time = start.elapsed();
+                    let ingest_start = std::time::Instant::now();
+                    let job = client
+                        .ingest(
+                            &label,
+                            IngestionScope::new("metal-test", "metal-test"),
+                            &label,
+                            BTreeMap::from([
+                                ("occurrence_id".into(), format!("occurrence-{label}")),
+                                ("source_id".into(), format!("source-{label}")),
+                                ("root_id".into(), "root".into()),
+                                ("title".into(), "Gemma metal image".into()),
+                            ]),
+                            "image/png",
+                            png.clone(),
+                        )
+                        .await
+                        .expect("submit installed-worker image");
+                    let state = loop {
+                        let state = client
+                            .ingestion_job("metal-test", "metal-test", &job)
+                            .await
+                            .expect("poll image ingestion")
+                            .state;
+                        if matches!(
+                            state,
+                            IngestionState::Completed
+                                | IngestionState::Failed
+                                | IngestionState::Cancelled
+                                | IngestionState::Skipped
+                        ) {
+                            break state;
+                        }
+                        assert!(
+                            ingest_start.elapsed().as_secs() < 120,
+                            "image ingestion timed out"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    };
+                    assert_eq!(state, IngestionState::Completed, "{label}");
+                    let ingestion_time = ingest_start.elapsed();
+                    let query_start = std::time::Instant::now();
+                    let results = client
+                        .query("metal-test", "metal-test", "Gemma metal image", 10)
+                        .await
+                        .expect("query installed-worker image");
+                    let query_time = query_start.elapsed();
+                    assert!(
+                        results.iter().any(|result| result.document_id == label),
+                        "{label}"
+                    );
+                    stop.store(true, Ordering::Relaxed);
+                    sampler.await.unwrap();
+                    assert!(peak.load(Ordering::Relaxed) > 0, "{label} RSS not sampled");
+                    eprintln!(
+                        "installed Gemma image {label}: startup={startup_time:?} ingest={ingestion_time:?} query={query_time:?} sampled_peak_rss={} bytes",
+                        peak.load(Ordering::Relaxed),
+                    );
+                    client
+                        .shutdown(std::time::Duration::from_secs(10))
+                        .await
+                        .unwrap();
+                    connector
+                        .wait_until_stopped(std::time::Duration::from_secs(12))
+                        .await
+                        .unwrap();
+                    let index = fs::read_dir(data.path().join(format!("index-{label}/indexes")))
+                        .unwrap()
+                        .map(|entry| entry.unwrap().path())
+                        .collect::<Vec<_>>();
+                    assert_eq!(index.len(), 1, "{label} has one embedding space");
+                    let catalog = SemanticCatalog::open(index[0].join("catalog.sqlite")).unwrap();
+                    let records = catalog.derived_index_record_batch(None, 100).unwrap();
+                    let vector = records
+                        .iter()
+                        .find(|record| record.media_type == "image/png")
+                        .unwrap_or_else(|| panic!("{label} has an image vector"));
+                    assert_eq!(vector.vector.len(), dimensions);
+                    let mut golden = reference[..dimensions].to_vec();
+                    let norm = golden
+                        .iter()
+                        .map(|value| f64::from(*value).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    for value in &mut golden {
+                        *value = (f64::from(*value) / norm) as f32;
+                    }
+                    let cosine = |a: &[f32], b: &[f32]| -> f64 {
+                        a.iter()
+                            .zip(b)
+                            .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                            .sum()
+                    };
+                    let reference_cosine = cosine(&vector.vector, &golden);
+                    assert!(
+                        reference_cosine > 0.99999,
+                        "{label} reference cosine {reference_cosine}"
+                    );
+                    if metal {
+                        let parity = cosine(cpu_vector.as_ref().unwrap(), &vector.vector);
+                        assert!(parity > 0.99999, "{label} CPU cosine {parity}");
+                        eprintln!(
+                            "installed Gemma image {label}: CPU={parity:.9} reference={reference_cosine:.9}"
+                        );
+                    } else {
+                        cpu_vector = Some(vector.vector.clone());
+                        eprintln!("installed Gemma image {label}: reference={reference_cosine:.9}");
+                    }
+                }
+            }
+        }
     }
 
     fn model_artifact(model_id: &str, revision: &str) -> CatalogArtifact {

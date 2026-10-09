@@ -89,6 +89,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation"] }
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
 chrono.workspace = true
+image.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
 

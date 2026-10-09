@@ -7,10 +7,11 @@ query/key and probability/value products also run through that primitive;
 bicubic preprocessing, attention softmax, normalization, pooling, and fusion
 attention remain on CPU. BF16 checkpoint weights are decoded to FP32; there
 is no FP16 inference.
-Small matrices below Lattice's dispatch threshold use its CPU GEMM. The managed
-worker still constructs the CPU encoder, even when built with `gemma-metal`:
-this is an explicitly selected, image-only local parity probe, not a user-facing
-GPU mode. Audio and video remain unqualified on this path.
+Small matrices below Lattice's dispatch threshold use its CPU GEMM. Managed
+workers construct the CPU encoder by default. An explicitly opted-in **macOS
+development** worker can use the same path for image-only libraries; standard
+bundles and production releases do not include `gemma-metal`. Audio and video
+remain unqualified on this path.
 
 The real-checkpoint test `metal_image_matches_cpu_and_upstream_at_every_dimension`
 uses the pinned revision `914f7f89142e33e77833254d9c9b90c3cef7303b`
@@ -32,9 +33,72 @@ PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/semantic-model-cache/google--embeddin
 `/usr/bin/time -l` reports process peak resident bytes. Run once to compile,
 then execute the built test binary directly for an inference-process reading.
 This is one PNG on one machine; dispatch counts alone do not establish a
-speedup or memory limits across supported targets. Do not enable GPU in installed
-workers or reuse existing indexed vectors until cross-platform quality,
-resource, and CPU-fallback qualification is complete.
+speedup or memory limits across supported targets. Do not enable GPU in
+production workers until cross-platform quality, resource, and CPU-fallback
+qualification is complete.
+
+## Installed development worker (opt-in only)
+
+`pnpm dev:tauri:semantic:gemma:metal` builds a separately signed development
+bundle with `developer-bundle,gemma-native,gemma-metal`, then passes a fixed
+`--gemma-metal-images` flag only when launching the Gemma worker from verified
+installed originals. `pnpm dev:tauri:semantic:gemma` remains CPU-only. No
+environment variable in the worker can select Metal; a production worker
+without the feature rejects the flag. The backend decision is printed to the
+development terminal. When Metal is unavailable, or the library enables
+audio/video, the worker prints the reason and uses CPU. A failed checkpoint
+load remains an error rather than a successful-looking fallback. If a GPU
+GEMM cannot dispatch during inference, the first such CPU fallback is also
+reported. Existing cancellation checks are shared by both backends. This
+mode is not exposed in the app's user-facing settings.
+
+The ignored desktop integration test
+`installed_development_gemma_resolves_verified_original_files` first
+installs the signed original checkpoint through the development component
+manager, then launches the **installed** optimized worker from those verified
+file paths. With `PROCYON_GEMMA_METAL_INTEGRATION=1` and
+`PROCYON_SEMANTIC_GEMMA_METAL_IMAGES=1`, it ingests the same patterned PNG
+into separate CPU and opt-in Metal indexes at all four widths, queries it
+through worker IPC, and compares the actual persisted image vectors with each
+other and the checked-in pinned Python reference. Run against a built signed
+development bundle:
+
+```sh
+PROCYON_GEMMA_DEVELOPER_BUNDLE="$PWD/target/semantic-developer-bundle/darwin-arm64-gemma-metal" \
+PROCYON_GEMMA_METAL_INTEGRATION=1 PROCYON_SEMANTIC_GEMMA_METAL_IMAGES=1 \
+  cargo test -p fm-desktop --features semantic-gemma --lib \
+  installed_development_gemma_resolves_verified_original_files -- --ignored --nocapture
+```
+
+On the local M4 Max with the large competing LLM unloaded, pinned checkpoint
+`914f7f89142e33e77833254d9c9b90c3cef7303b` and 128 x 96 PNG:
+
+| Width | CPU ingest | Metal ingest | CPU query | Metal query | CPU sampled peak RSS | Metal sampled peak RSS | Metal/CPU cosine |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 28.34 s | 5.67 s | 63 ms | 66 ms | 2.35 GB | 2.35 GB | 0.999999989 |
+| 256 | 28.30 s | 5.86 s | 55 ms | 76 ms | 2.35 GB | 2.44 GB | 1.000000001 |
+| 512 | 29.10 s | 5.79 s | 54 ms | 69 ms | 2.38 GB | 2.47 GB | 0.999999997 |
+| 768 | 28.16 s | 5.92 s | 60 ms | 74 ms | 2.35 GB | 2.36 GB | 1.000000006 |
+
+These are wall times from IPC submission through completed image ingestion
+and from query submission through response. Worker startup took 1.36-1.67
+seconds separately; the memory figures are each worker's highest RSS sampled
+with `ps` every 100 ms from startup through query, not a GPU-memory high-water
+mark. CPU/Python cosine was 0.999999868 or better, and Metal/Python was
+0.999999878 or better at all widths. Metal's selected backend was reported
+by the launched worker; the direct parity test above separately confirmed
+1,004 successful GPU dispatches per image on this checkpoint. This is a
+development-only single-image result, **not** a release resource, device,
+fallback, or retrieval-quality qualification.
+
+The same test passed again after rebuilding the final signed bundle. In that
+run CPU ingestion was 31.08/31.28/80.00/85.11 seconds and Metal ingestion
+was 9.79/8.77/9.07/15.64 seconds at 128/256/512/768. All persisted vectors
+retained the same CPU/Metal/Python parity. Startup varied from 1.40 to 4.21
+seconds; sampled RSS remained between 2.35 and 2.46 GB. The large wall-time
+variation, especially at 512/768 CPU, means these numbers are not an
+uncontended hardware throughput guarantee. Both runs favored Metal for this
+one image; further device/load coverage is required before product exposure.
 
 ## Initial GEMM-only measurements (2026-10-09)
 
@@ -122,4 +186,5 @@ Metal/CPU cosine >0.99999998, and 2,523,824,128 bytes peak resident memory
 for the direct test process. On this one image and M4 Max this is roughly
 4.8-5.0x faster end to end, excluding model loading. It does not qualify
 other image shapes, devices, installed-worker GPU fallback, memory ceilings,
-or retrieval quality; the feature remains a local-only opt-in probe.
+or retrieval quality; the standard release remains CPU-only, while the
+opt-in installed development worker is evaluated separately above.

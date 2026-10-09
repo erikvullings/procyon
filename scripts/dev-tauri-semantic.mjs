@@ -6,6 +6,8 @@ import { buildSemanticDeveloperBundle } from './build-semantic-developer-bundle.
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const enableGemma = process.argv.includes('--gemma');
+const metalImages = process.argv.includes('--metal-images');
+if (metalImages && !enableGemma) throw new Error('--metal-images requires --gemma');
 const bundle = await buildSemanticDeveloperBundle();
 const result = spawnSync(
   'pnpm',
@@ -17,6 +19,7 @@ const result = spawnSync(
       PROCYON_SEMANTIC_COMPONENTS: '',
       PROCYON_SEMANTIC_DEVELOPER_BUNDLE: bundle,
       PROCYON_SEMANTIC_OCRMYPDF: '',
+      PROCYON_SEMANTIC_GEMMA_METAL_IMAGES: metalImages ? '1' : '',
     },
     stdio: 'inherit',
   },
