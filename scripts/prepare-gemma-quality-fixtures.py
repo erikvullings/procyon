@@ -28,6 +28,18 @@ PHOTOS = {
     "43": ("179174", "db596b78008223a6d9d85f972d4ebd2afd74537eff9de803e93c4cf63de8de07", "33979492@N00", "https://www.flickr.com/photos/33979492@N00/7611201536/", "CC BY 2.0"),
     "44": ("7511", "105e70c573b87d7e3f034e1dc08cedcced39be4e52197139f52616c920dda3d7", "pajp", "https://www.flickr.com/photos/pajp/173980729/", "CC BY-SA 2.0"),
 }
+MEDIA_PHOTO_SOURCES = {
+    "swap_obj": "073cdb8e253d053614e80710834d9773b09dbc1dd0a412f6f9492262caa1dcad",
+    "swap_att": "7a7ce04e5c4c80412b48c6f0c1347fb1a2f5d54c0be6aa429b64d390e442f8d0",
+    "replace_obj": "9d299600639947e9d15281a9ded1382b376cf4ea088a8d08a1314bfe76e81898",
+}
+ADDITIONAL_MEDIA_PHOTOS = {
+    ("swap_obj", "45"): ("102805", "66e6c4530c4a84e97b77bf32227f5f7dfebb1c22accb0e7fa5dbd009308a8c0a", "danhurt", "https://www.flickr.com/photos/danhurt/6101493857/", "CC BY-SA 2.0"),
+    ("swap_obj", "92"): ("11511", "4e24ed1528891621658ff01d23e8a74735cd18720d41f7fd2264044497ad2a0e", "William Murphy (infomatique)", "https://www.flickr.com/photos/infomatique/7556029168/", "CC BY-SA 2.0"),
+    ("swap_obj", "231"): ("563349", "c0cae527104995431e0e90c67a0805089e2ccfeabcc968ac67f0c5290b783792", "Konstantin Zamkov", "https://www.flickr.com/photos/zamkov/5588983985/", "CC BY 2.0"),
+    ("swap_att", "192"): ("175364", "badb2570222f6900a65bfc9d39615216c683ce3c5d03afb85c692a3cf08f323c", "Eric Audige-Soutter (YHA Rowen)", "https://www.flickr.com/photos/yhaconwy-yharowen/6267025876/", "CC BY 2.0"),
+    ("replace_obj", "93"): ("447314", "3fb6b82c5c04e6fd280a51bc5a17331c3f1c799531eb294873802f34e85c7c97", "Dan Hughes (dghughes)", "https://www.flickr.com/photos/dghughes/263967623/", "CC BY-SA 2.0"),
+}
 CODE_QUERIES = (
     "priority queue",
     "how to reverse a string",
@@ -216,7 +228,40 @@ def code(root, queries=CODE_QUERIES, licenses=CODE_LICENSES, per_grade_cap=None)
     }
 
 
+def media_photos(root):
+    sources = {}
+    for category, expected in MEDIA_PHOTO_SOURCES.items():
+        path = root / f"{category}-media.json"
+        if digest(path) != expected:
+            raise ValueError(f"pinned media annotations differ: {category}")
+        sources[category] = json.loads(path.read_text())
+    selected = {
+        ("swap_obj", key): photo for key, photo in PHOTOS.items()
+    } | ADDITIONAL_MEDIA_PHOTOS
+    photos = []
+    for (category, key), (identifier, expected, author, page, license_name) in selected.items():
+        image = root / "photos" / f"{identifier}.jpg"
+        if digest(image) != expected or sources[category][key]["filename"] != f"{int(identifier):012d}.jpg":
+            raise ValueError(f"pinned media photograph differs: {category}/{key}")
+        pair = sources[category][key]
+        photos.append({
+            "id": identifier, "path": str(image.resolve()), "sha256": expected,
+            "positiveCaption": pair["caption"], "negativeCaption": pair["negative_caption"],
+            "category": category, "pairId": key,
+            "flickrAuthor": author, "flickrPage": page, "license": license_name,
+        })
+    if len({photo["id"] for photo in photos}) != len(photos):
+        raise ValueError("duplicate media photograph")
+    return photos
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[2] == "--media-photos":
+        root = Path(sys.argv[1])
+        fixture = root / "media-photos-fixture.json"
+        fixture.write_text(json.dumps(media_photos(root), indent=2) + "\n")
+        print(fixture.name, digest(fixture))
+        return
     if len(sys.argv) == 3 and sys.argv[2] == "--expanded-code":
         root = Path(sys.argv[1])
         if digest(root / "code-annotations.csv") != HASHES["code-annotations.csv"]:
@@ -230,7 +275,7 @@ def main():
         print(fixture.name, digest(fixture))
         return
     if len(sys.argv) not in (1, 2):
-        raise ValueError("usage: prepare-gemma-quality-fixtures.py [DATA_DIR [--expanded-code]]")
+        raise ValueError("usage: prepare-gemma-quality-fixtures.py [DATA_DIR [--expanded-code|--media-photos]]")
     root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path("target/gemma-quality-data")
     for name, expected in HASHES.items():
         if digest(root / name) != expected:

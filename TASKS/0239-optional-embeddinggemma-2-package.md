@@ -556,3 +556,20 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   code labels, untested installed-target quality, and still-small 4/5 photo
   evidence **do not qualify Gemma for release**. Do not enable, publish or
   change the guard.
+- 2026-10-10: The [bounded real-photo media follow-up](../docs/evaluations/embeddinggemma-media-2026-10-10.md)
+  added five distinct, individually live Flickr CC BY/BY-SA-verified COCO
+  photographs with human-validated SugarCrepe hard-negative captions (ten
+  photos total, three pinned annotation categories). Exact signed candidate
+  11640886748 ran natively on macOS ARM at 128/256/512/768 dimensions:
+  **8/10** correct caption preferences at each dimension. The prior
+  teddy-bear/sheep failure and a new kitchen attribute swap both ranked
+  their negative higher at every dimension. The committed per-pair report
+  and source/image hashes permit replay, but this opportunistic tiny sample
+  is not representative image retrieval or E5-matched evidence. No
+  independently judged, rights-verified photo-to-photo hard negatives
+  were obtained. Winoground Getty images returned HTTP 401 without accepting
+  gated terms; Clotho's positive audio captions lack judged hard negatives
+  (and require individual source-rights checks), while examined Charades-STA
+  temporal annotations lack judged negative intervals and verified clip
+  rights. No audio/video results were fabricated. These are still open
+  quality/release gates; do not enable, publish or change the guard.
