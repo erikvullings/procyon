@@ -34,6 +34,22 @@ CODE_QUERIES = (
     "buffered file reader read text",
     "parse binary file to custom class",
 )
+EXPANDED_CODE_QUERIES = (
+    "aes encryption",
+    "binomial distribution",
+    "buffered file reader read text",
+    "convert a date string into yyyymmdd",
+    "convert json to csv",
+    "convert string to number",
+    "deducting the median from each column",
+    "find int in string",
+    "fuzzy match ranking",
+    "get current ip address",
+    "hash set for counting distinct elements",
+    "how to reverse a string",
+    "parse binary file to custom class",
+    "priority queue",
+)
 # Checked against the GitHub license endpoint at each annotation's commit.
 CODE_LICENSES = {
     "FreshXOpenSource/wallaby-base": "BSD-2-Clause",
@@ -120,11 +136,11 @@ def multilingual(root, language):
     }
 
 
-def code(root):
+def code(root, queries=CODE_QUERIES, licenses=CODE_LICENSES, per_grade_cap=None):
     judgements = defaultdict(list)
     with (root / "code-annotations.csv").open(newline="") as stream:
         for row in csv.DictReader(stream):
-            if row["Language"] == "Python" and row["Query"] in CODE_QUERIES:
+            if row["Language"] == "Python" and row["Query"] in queries:
                 judgements[(row["Query"], row["GitHubUrl"])].append(int(row["Relevance"]))
     grouped = defaultdict(list)
     for (query, url), grades in judgements.items():
@@ -135,16 +151,33 @@ def code(root):
     files = {}
     documents = {}
     cases = []
-    for query in CODE_QUERIES:
+    for query in queries:
         relevant, eligible = [], []
-        for url, positive in grouped[query]:
+        entries = grouped[query]
+        if per_grade_cap is not None:
+            permitted = []
+            for url, positive in entries:
+                match = re.fullmatch(
+                    r"https://github.com/([^/]+/[^/]+)/blob/([0-9a-f]{40})/(.+)#L(\d+)-L(\d+)",
+                    url,
+                )
+                if match and f"{match[1]}@{match[2]}" in licenses:
+                    permitted.append((url, positive))
+            entries = (
+                sorted((url, grade) for url, grade in permitted if grade)[:per_grade_cap]
+                + sorted((url, grade) for url, grade in permitted if not grade)[:per_grade_cap]
+            )
+        for url, positive in entries:
             match = re.fullmatch(
                 r"https://github.com/([^/]+/[^/]+)/blob/([0-9a-f]{40})/(.+)#L(\d+)-L(\d+)",
                 url,
             )
-            if not match or match[1] not in CODE_LICENSES:
+            if not match:
                 continue
             repo, commit, filename, first, last = match.groups()
+            license_name = licenses.get(f"{repo}@{commit}" if per_grade_cap is not None else repo)
+            if license_name is None:
+                continue
             first, last = int(first), int(last)
             if first < 1 or last < first or last - first > 130:
                 continue
@@ -162,7 +195,7 @@ def code(root):
                 "id": identifier,
                 "text": "\n".join(files[source][1][first - 1:last]),
                 "source": url,
-                "license": CODE_LICENSES[repo],
+                "license": license_name,
             }
             eligible.append(identifier)
             if positive:
@@ -184,6 +217,20 @@ def code(root):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[2] == "--expanded-code":
+        root = Path(sys.argv[1])
+        if digest(root / "code-annotations.csv") != HASHES["code-annotations.csv"]:
+            raise ValueError("pinned code annotations differ")
+        manifest = Path(__file__).parent / "fixtures" / "embedding-code-licenses-v2.json"
+        licenses = json.loads(manifest.read_text())
+        fixture = root / "code-expanded-fixture.json"
+        fixture.write_text(json.dumps(
+            code(root, EXPANDED_CODE_QUERIES, licenses, per_grade_cap=2), indent=2
+        ) + "\n")
+        print(fixture.name, digest(fixture))
+        return
+    if len(sys.argv) not in (1, 2):
+        raise ValueError("usage: prepare-gemma-quality-fixtures.py [DATA_DIR [--expanded-code]]")
     root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path("target/gemma-quality-data")
     for name, expected in HASHES.items():
         if digest(root / name) != expected:

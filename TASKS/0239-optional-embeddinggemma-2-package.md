@@ -531,3 +531,28 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   hard-negative pool, broader code/photo coverage including photo-to-photo
   negatives, lawful media labels, and installed-target matched quality
   remain open. Preserve the release guard and default-hidden Gemma.
+- 2026-10-10: The [larger human-judged retrieval slice](../docs/evaluations/embeddinggemma-judged-2026-10-10.md)
+  replaced unjudged multilingual distractors with **explicit grade-0,
+  native-speaker-annotated MIRACL negatives**: 50 Swahili and 50 Bengali dev
+  questions, one judged positive and three pooled/judged hard negatives each,
+  from pinned ~70 MiB source archives. It expanded realistic CodeSearchNet
+  code from four to **14** human-graded queries, 48 snippets from
+  47 exact-revision permissively licensed repository sources; no external
+  passage, code, or photo bytes were checked in. The exact signed candidate
+  Gemma native CPU at 128/256/512/768d and E5 ONNX at 384d ranked identical
+  inputs locally on macOS ARM. At 768d Swahili hit@1 was **.86 Gemma / .72
+  E5** and Bengali **.80 / .66** over four judged candidates/query. Paired
+  per-query wins/ties/losses were 8/41/1 and 11/35/4; conditional bootstrap
+  intervals for Gemma-minus-E5 were [+.04,+.26] and [.00,+.28] (not
+  population-wide confidence). Code hit@1 was **.857/.857** at 768d, with
+  wide paired interval [-.214,+.214]; at 128d Gemma fell to .714. The
+  buffered-reader code failure persisted at every Gemma dimension despite
+  production-matching prompt roles and no token truncation of decisive
+  snippets. Its highest-ranked grade-0 distractor has only one annotator,
+  so attribution to model quality versus judgement/document context remains
+  uncertain. All per-query failures and the exact pinned-source hashes are
+  retained in machine reports. These deterministic four-candidate pools,
+  one-host model/runtime confound, Wikipedia source-rights caveat, sparse
+  code labels, untested installed-target quality, and still-small 4/5 photo
+  evidence **do not qualify Gemma for release**. Do not enable, publish or
+  change the guard.

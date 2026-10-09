@@ -1,0 +1,467 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+  "runtime": "Python onnxruntime 1.22.1 CPU mean-pooling",
+  "dimensions": 384,
+  "corpusSha256": "be5e544d9864ae60152184dc9c8bed4c00f8f811eb04896fc0cb2ba74b012f41",
+  "documentCount": 197,
+  "queryCount": 50,
+  "result": {
+    "positiveCases": 50,
+    "hitAt1": 0.66,
+    "hitAt3": 0.96,
+    "mrr": 0.8033333333333332,
+    "cases": [
+      {
+        "id": "bn-4",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "717942#0",
+          "626097#0",
+          "659471#0"
+        ]
+      },
+      {
+        "id": "bn-7",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "625049#0",
+          "625049#11",
+          "272865#2"
+        ]
+      },
+      {
+        "id": "bn-21",
+        "firstRelevantRank": 4,
+        "topIds": [
+          "452067#21",
+          "378894#79",
+          "579216#0"
+        ]
+      },
+      {
+        "id": "bn-23",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "264520#2",
+          "264520#11",
+          "264520#13"
+        ]
+      },
+      {
+        "id": "bn-36",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "108310#0",
+          "6025#0",
+          "108248#0"
+        ]
+      },
+      {
+        "id": "bn-42",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "252004#2",
+          "4428#1",
+          "63977#12"
+        ]
+      },
+      {
+        "id": "bn-53",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "435865#3",
+          "435865#5",
+          "294449#2"
+        ]
+      },
+      {
+        "id": "bn-56",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "2139#1",
+          "1526#4",
+          "16160#2"
+        ]
+      },
+      {
+        "id": "bn-57",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "420649#0",
+          "460414#3",
+          "465067#5"
+        ]
+      },
+      {
+        "id": "bn-63",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "11825#0",
+          "15844#79",
+          "306492#0"
+        ]
+      },
+      {
+        "id": "bn-64",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "4710#2",
+          "4710#14",
+          "4710#0"
+        ]
+      },
+      {
+        "id": "bn-67",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "487074#0",
+          "486957#11",
+          "486957#12"
+        ]
+      },
+      {
+        "id": "bn-69",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "4763#10",
+          "12113#6",
+          "8289#9"
+        ]
+      },
+      {
+        "id": "bn-72",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "1528#25",
+          "177624#0",
+          "177624#7"
+        ]
+      },
+      {
+        "id": "bn-90",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "15596#1",
+          "2522#2",
+          "15596#2"
+        ]
+      },
+      {
+        "id": "bn-93",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "4763#2",
+          "111756#0",
+          "64215#0"
+        ]
+      },
+      {
+        "id": "bn-102",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "80727#3",
+          "274199#1",
+          "283338#1"
+        ]
+      },
+      {
+        "id": "bn-103",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "4520#1",
+          "370400#10",
+          "370400#9"
+        ]
+      },
+      {
+        "id": "bn-115",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "3134#5",
+          "3134#6",
+          "18340#0"
+        ]
+      },
+      {
+        "id": "bn-116",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "453826#0",
+          "453826#10",
+          "416061#0"
+        ]
+      },
+      {
+        "id": "bn-128",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "282430#4",
+          "282430#0",
+          "282430#2"
+        ]
+      },
+      {
+        "id": "bn-129",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "105741#0",
+          "105741#1",
+          "76161#0"
+        ]
+      },
+      {
+        "id": "bn-149",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "64498#0",
+          "296930#9",
+          "433835#0"
+        ]
+      },
+      {
+        "id": "bn-161",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "370400#27",
+          "4763#2",
+          "4763#4"
+        ]
+      },
+      {
+        "id": "bn-168",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "419647#1",
+          "419647#0",
+          "420158#0"
+        ]
+      },
+      {
+        "id": "bn-174",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "1366#0",
+          "463481#1",
+          "354685#6"
+        ]
+      },
+      {
+        "id": "bn-175",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "138716#0",
+          "582696#1",
+          "138716#13"
+        ]
+      },
+      {
+        "id": "bn-177",
+        "firstRelevantRank": 4,
+        "topIds": [
+          "1497#21",
+          "1497#20",
+          "80801#0"
+        ]
+      },
+      {
+        "id": "bn-178",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "83491#1",
+          "35404#1",
+          "286173#18"
+        ]
+      },
+      {
+        "id": "bn-181",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "1612#0",
+          "10991#0",
+          "446228#1"
+        ]
+      },
+      {
+        "id": "bn-182",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "256809#1",
+          "256809#2",
+          "286173#5"
+        ]
+      },
+      {
+        "id": "bn-183",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "6468#0",
+          "6468#2",
+          "6468#15"
+        ]
+      },
+      {
+        "id": "bn-184",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "324714#2",
+          "394246#0",
+          "364709#0"
+        ]
+      },
+      {
+        "id": "bn-191",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "12079#0",
+          "64741#5",
+          "348032#1"
+        ]
+      },
+      {
+        "id": "bn-195",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "494154#0",
+          "547902#1",
+          "547902#13"
+        ]
+      },
+      {
+        "id": "bn-204",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "83947#0",
+          "465344#16",
+          "465344#0"
+        ]
+      },
+      {
+        "id": "bn-206",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "508288#1",
+          "6629#0",
+          "6634#0"
+        ]
+      },
+      {
+        "id": "bn-208",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "249249#3",
+          "63623#9",
+          "79939#1"
+        ]
+      },
+      {
+        "id": "bn-210",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2656#3",
+          "263098#3",
+          "398524#0"
+        ]
+      },
+      {
+        "id": "bn-213",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "260034#1",
+          "260034#2",
+          "3120#5"
+        ]
+      },
+      {
+        "id": "bn-220",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "2730#11",
+          "105741#1",
+          "76161#1"
+        ]
+      },
+      {
+        "id": "bn-226",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "107671#0",
+          "112527#0",
+          "107698#0"
+        ]
+      },
+      {
+        "id": "bn-231",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "17736#0",
+          "17736#5",
+          "17736#6"
+        ]
+      },
+      {
+        "id": "bn-238",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "5210#6",
+          "5210#2",
+          "389021#11"
+        ]
+      },
+      {
+        "id": "bn-241",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "4318#0",
+          "483238#0",
+          "428019#2"
+        ]
+      },
+      {
+        "id": "bn-246",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "33117#1",
+          "540267#0",
+          "407539#0"
+        ]
+      },
+      {
+        "id": "bn-248",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "575675#0",
+          "575675#3",
+          "575675#7"
+        ]
+      },
+      {
+        "id": "bn-259",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "113557#0",
+          "2965#3",
+          "17791#3"
+        ]
+      },
+      {
+        "id": "bn-262",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "96096#2",
+          "474411#1",
+          "18096#5"
+        ]
+      },
+      {
+        "id": "bn-263",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "369720#16",
+          "9989#1",
+          "9989#16"
+        ]
+      }
+    ]
+  }
+}
