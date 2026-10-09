@@ -396,3 +396,15 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   Gemma for product release: independently labelled model-specific retrieval
   quality, per-dimension/platform latency and peak RAM, signed installed
   offline lifecycle and release decision remain open.
+- 2026-10-09: A separate [native CPU retrieval probe](../docs/evaluations/embeddinggemma-native-qualification.md)
+  uses the candidate's hash-verified originals and the same labelled
+  multilingual and generated-code fixtures as the exploratory E5 comparison.
+  This macOS M4 Max run measured knowledge MRR 0.95 (E5's earlier Python
+  baseline was 1.0) and code MRR 1.0 at all four Gemma dimensions. Four
+  synthetic text-to-image queries each ranked their labelled colored shape
+  above same-color or same-shape distractors. The mixed run peaked at
+  2,583,347,200 bytes RSS; image throughput was 0.039/s. The probe records
+  per-case misses and unanswerable queries without pretending to qualify
+  rejection. Broader independent labels, photographic/media negatives,
+  platform/dimension resource data, matched packaged E5 comparison and
+  installed/offline lifecycle remain open; Gemma stays hidden.
