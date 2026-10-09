@@ -1306,12 +1306,30 @@ impl OperationExecutor for DeleteExecutor {
         cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
         let mut items = Vec::new();
+        let mut unknown_totals = false;
         for source in &operation.sources {
             let provider = self
                 .providers
                 .get(&source.location.provider_id)
                 .ok_or_else(|| ExecutionError::Failed("delete provider is missing".into()))?;
             let root = provider.inspect(source, cancellation.clone()).await?;
+            if source.location.provider_id.as_str() == "local" {
+                if root.read_only && !self.override_read_only && !self.requires_confirmation {
+                    return Err(ExecutionError::Failed(format!(
+                        "read-only entry requires explicit override: {}",
+                        root.location.uri
+                    )));
+                }
+                items.push(PlanItem::new(
+                    EntryRef {
+                        id: root.id,
+                        location: root.location,
+                    },
+                    0,
+                ));
+                unknown_totals = true;
+                continue;
+            }
             let mut stack = vec![(root, false)];
             while let Some((summary, visited)) = stack.pop() {
                 if cancellation.is_cancelled() {
@@ -1335,7 +1353,11 @@ impl OperationExecutor for DeleteExecutor {
                             .list(
                                 &summary.location,
                                 ListOptions {
-                                    page_size: 512,
+                                    page_size: if summary.location.provider_id.as_str() == "local" {
+                                        8192
+                                    } else {
+                                        512
+                                    },
                                     continuation_token,
                                 },
                                 cancellation.clone(),
@@ -1354,7 +1376,12 @@ impl OperationExecutor for DeleteExecutor {
                 }
             }
         }
-        Ok(OperationPlan::new(items))
+        let mut plan = OperationPlan::new(items);
+        if unknown_totals {
+            plan.total_items = None;
+            plan.total_bytes = None;
+        }
+        Ok(plan)
     }
 
     async fn execute(
@@ -1362,7 +1389,7 @@ impl OperationExecutor for DeleteExecutor {
         _operation: &Operation,
         item: &PlanItem,
         _resolution: Option<fm_operations::ConflictResolution>,
-        _progress: &dyn OperationProgressReporter,
+        progress: &dyn OperationProgressReporter,
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<fm_operations::ExecutionOutcome, ExecutionError> {
@@ -1370,6 +1397,45 @@ impl OperationExecutor for DeleteExecutor {
             .providers
             .get(&item.entry.location.provider_id)
             .ok_or_else(|| ExecutionError::Failed("delete provider is missing".into()))?;
+        if item.entry.location.provider_id.as_str() == "local" {
+            let removed = Arc::new(AtomicU64::new(0));
+            let removal = provider.remove_tree(
+                &item.entry,
+                self.override_read_only || self.requires_confirmation,
+                cancellation.clone(),
+                Arc::clone(&removed),
+            );
+            tokio::pin!(removal);
+            let mut ticker = tokio::time::interval(std::time::Duration::from_millis(250));
+            let mut published = 0;
+            let report = loop {
+                tokio::select! {
+                    result = &mut removal => break result?,
+                    _ = ticker.tick() => {
+                        let current = removed.load(Ordering::Relaxed);
+                        if current > published {
+                            progress.report_items(current - published);
+                            published = current;
+                        }
+                    }
+                }
+            };
+            self.deleted
+                .fetch_add(report.removed_items, Ordering::Relaxed);
+            if report.removed_items > published {
+                progress.report_items(report.removed_items - published);
+            }
+            if report.cancelled {
+                return Err(fm_vfs::VfsError::Cancelled.into());
+            }
+            return Ok(ExecutionOutcome::BulkCompleted(
+                report
+                    .failures
+                    .into_iter()
+                    .map(|(entry, message)| fm_operations::OperationEntryError { entry, message })
+                    .collect(),
+            ));
+        }
         match provider
             .remove(
                 &item.entry,
@@ -1514,9 +1580,13 @@ impl OperationExecutor for CopyGroupExecutor {
         cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
         let mut items = Vec::new();
+        let mut unknown_totals = false;
         for executor in &self.copies {
             match executor.plan(operation, cancellation).await {
-                Ok(plan) => items.extend(plan.items),
+                Ok(plan) => {
+                    unknown_totals |= plan.total_items.is_none();
+                    items.extend(plan.items);
+                }
                 Err(ExecutionError::Provider(fm_vfs::VfsError::NotFound { .. })) => {
                     let source = executor.source_override.clone().ok_or_else(|| {
                         ExecutionError::Failed("copy source is missing from its plan".into())
@@ -1534,7 +1604,12 @@ impl OperationExecutor for CopyGroupExecutor {
                 Err(error) => return Err(error),
             }
         }
-        Ok(OperationPlan::new(items))
+        let mut plan = OperationPlan::new(items);
+        if unknown_totals {
+            plan.total_items = None;
+            plan.total_bytes = None;
+        }
+        Ok(plan)
     }
 
     async fn execute(
@@ -1572,6 +1647,25 @@ impl OperationExecutor for CopyGroupExecutor {
         Err(ExecutionError::Failed("copy plan entry is missing".into()))
     }
 
+    async fn expand(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        for copy in &self.copies {
+            if copy
+                .planned
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .contains_key(&item.entry.location.uri)
+            {
+                return copy.expand(operation, item, cancellation).await;
+            }
+        }
+        Ok(Vec::new())
+    }
+
     async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError> {
         for executor in &self.copies {
             executor.cleanup_partial(operation).await?;
@@ -1607,9 +1701,13 @@ impl OperationExecutor for MoveGroupExecutor {
         cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
         let mut items = Vec::new();
+        let mut unknown_totals = false;
         for executor in &self.moves {
             match executor.plan(operation, cancellation).await {
-                Ok(plan) => items.extend(plan.items),
+                Ok(plan) => {
+                    unknown_totals |= plan.total_items.is_none();
+                    items.extend(plan.items);
+                }
                 Err(ExecutionError::Provider(fm_vfs::VfsError::NotFound { .. })) => {
                     let entry = EntryRef {
                         id: EntryId::new(),
@@ -1624,7 +1722,12 @@ impl OperationExecutor for MoveGroupExecutor {
                 Err(error) => return Err(error),
             }
         }
-        Ok(OperationPlan::new(items))
+        let mut plan = OperationPlan::new(items);
+        if unknown_totals {
+            plan.total_items = None;
+            plan.total_bytes = None;
+        }
+        Ok(plan)
     }
 
     async fn execute(
@@ -1662,6 +1765,26 @@ impl OperationExecutor for MoveGroupExecutor {
             }
         }
         Err(ExecutionError::Failed("move plan entry is missing".into()))
+    }
+
+    async fn expand(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        for executor in &self.moves {
+            if executor
+                .copy
+                .planned
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .contains_key(&item.entry.location.uri)
+            {
+                return executor.expand(operation, item, cancellation).await;
+            }
+        }
+        Ok(Vec::new())
     }
 
     async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError> {
@@ -1707,6 +1830,7 @@ impl OperationExecutor for DuplicateExecutor {
         cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
         let mut items = Vec::new();
+        let mut unknown_totals = false;
         for copy in &self.copies {
             let source_location = copy
                 .source_override
@@ -1739,9 +1863,16 @@ impl OperationExecutor for DuplicateExecutor {
                     Err(error) => return Err(error.into()),
                 }
             }
-            items.extend(copy.plan(operation, cancellation).await?.items);
+            let plan = copy.plan(operation, cancellation).await?;
+            unknown_totals |= plan.total_items.is_none();
+            items.extend(plan.items);
         }
-        Ok(OperationPlan::new(items))
+        let mut plan = OperationPlan::new(items);
+        if unknown_totals {
+            plan.total_items = None;
+            plan.total_bytes = None;
+        }
+        Ok(plan)
     }
 
     async fn execute(
@@ -1768,6 +1899,25 @@ impl OperationExecutor for DuplicateExecutor {
         Err(ExecutionError::Failed(
             "duplicate plan entry is missing".into(),
         ))
+    }
+
+    async fn expand(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        for copy in &self.copies {
+            if copy
+                .planned
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .contains_key(&item.entry.location.uri)
+            {
+                return copy.expand(operation, item, cancellation).await;
+            }
+        }
+        Ok(Vec::new())
     }
 
     async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError> {
@@ -1924,6 +2074,23 @@ impl OperationExecutor for MoveExecutor {
             .unwrap_or_else(|error| error.into_inner()) =
             Some(fingerprint(&self.destination_provider, &moved.location, cancellation).await?);
         Ok(ExecutionOutcome::Completed)
+    }
+
+    async fn expand(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        if *self
+            .fallback
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+        {
+            self.copy.expand(operation, item, cancellation).await
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     async fn cleanup_partial(&self, operation: &Operation) -> Result<(), ExecutionError> {
@@ -2093,6 +2260,40 @@ impl OperationExecutor for CopyExecutor {
         if source.location.provider_id == root_destination.provider_id {
             fm_operations::validate_paths(&source.location, &root_destination, cfg!(not(windows)))
                 .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        }
+        if self.symlink_policy == SymlinkPolicyDto::CopyLink && summary.kind == EntryKind::Directory
+        {
+            let entry = EntryRef {
+                id: summary.id,
+                location: summary.location,
+            };
+            self.planned
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(
+                    entry.location.uri.clone(),
+                    PlannedCopyEntry {
+                        kind: EntryKind::Directory,
+                        destination: root_destination.clone(),
+                        source: entry.clone(),
+                        is_root: true,
+                    },
+                );
+            self.directories
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((
+                    entry.clone(),
+                    EntryRef {
+                        id: EntryId::new(),
+                        location: root_destination,
+                    },
+                ));
+            return Ok(OperationPlan {
+                items: vec![PlanItem::new(entry, 0)],
+                total_items: None,
+                total_bytes: None,
+            });
         }
         let root_source_uri = source.location.uri.clone();
         let mut stack = vec![(summary, root_destination)];
@@ -2321,6 +2522,85 @@ impl OperationExecutor for CopyExecutor {
                 .unwrap_or_else(|e| e.into_inner()) = Some(planned.destination);
         }
         outcome
+    }
+
+    async fn expand(
+        &self,
+        _operation: &Operation,
+        item: &PlanItem,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<PlanItem>, ExecutionError> {
+        if self.symlink_policy != SymlinkPolicyDto::CopyLink {
+            return Ok(Vec::new());
+        }
+        let planned = self
+            .planned
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(&item.entry.location.uri)
+            .cloned();
+        let Some(parent) = planned.filter(|planned| planned.kind == EntryKind::Directory) else {
+            return Ok(Vec::new());
+        };
+        let mut items = Vec::new();
+        let mut continuation_token = None;
+        loop {
+            let page = self
+                .source_provider
+                .list(
+                    &parent.source.location,
+                    ListOptions {
+                        page_size: if parent.source.location.provider_id.as_str() == "local" {
+                            8192
+                        } else {
+                            512
+                        },
+                        continuation_token,
+                    },
+                    cancellation.clone(),
+                )
+                .await?;
+            for child in page.entries {
+                let destination = parent
+                    .destination
+                    .join(&child.name)
+                    .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+                let source = EntryRef {
+                    id: child.id,
+                    location: child.location,
+                };
+                self.planned
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(
+                        source.location.uri.clone(),
+                        PlannedCopyEntry {
+                            kind: child.kind,
+                            destination: destination.clone(),
+                            source: source.clone(),
+                            is_root: false,
+                        },
+                    );
+                if child.kind == EntryKind::Directory {
+                    self.directories
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push((
+                            source.clone(),
+                            EntryRef {
+                                id: EntryId::new(),
+                                location: destination,
+                            },
+                        ));
+                }
+                items.push(PlanItem::new(source, child.size.unwrap_or(0)));
+            }
+            if !page.has_more {
+                break;
+            }
+            continuation_token = page.continuation_token;
+        }
+        Ok(items)
     }
 
     async fn cleanup_partial(&self, _operation: &Operation) -> Result<(), ExecutionError> {

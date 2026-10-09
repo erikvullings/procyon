@@ -2569,11 +2569,80 @@ describe('AppShell', () => {
       new KeyboardEvent('keydown', { key: 'F8', shiftKey: true, bubbles: true }),
     );
 
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector('.fm-permanent-delete-modal')
+          ?.closest('[role="dialog"]')
+          ?.getAttribute('aria-hidden'),
+      ).toBe('false'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'delete',
       sources: [{ uri: 'mock:///.env' }],
       conflictPolicy: 'ask',
+    });
+  });
+
+  it('confirms permanent deletion before starting a large directory plan', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    const folder = [...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].find(
+      (row) => row.textContent?.includes('Documents'),
+    );
+    if (folder === undefined) throw new Error('fixture directory row missing');
+    folder.click();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F8', shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector('.fm-permanent-delete-modal')
+          ?.closest('[role="dialog"]')
+          ?.getAttribute('aria-hidden'),
+      ).toBe('false'),
+    );
+    expect(startOperation).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-permanent-delete-modal')?.textContent).not.toContain('0 items');
+
+    root.querySelector<HTMLButtonElement>('.fm-permanent-delete-cancel')?.click();
+    expect(startOperation).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector('.fm-permanent-delete-modal')
+          ?.closest('[role="dialog"]')
+          ?.getAttribute('aria-hidden'),
+      ).toBe('true'),
+    );
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F8', shiftKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector('.fm-permanent-delete-modal')
+          ?.closest('[role="dialog"]')
+          ?.getAttribute('aria-hidden'),
+      ).toBe('false'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(
+      root
+        .querySelector('.fm-permanent-delete-modal')
+        ?.closest('[role="dialog"]')
+        ?.getAttribute('aria-hidden'),
+    ).toBe('true');
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'delete',
+      permanentDeleteConfirmed: true,
     });
   });
 
@@ -5436,6 +5505,15 @@ describe('AppShell', () => {
     resultRow()?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8', bubbles: true }));
 
+    await vi.waitFor(() =>
+      expect(
+        root
+          .querySelector('.fm-permanent-delete-modal')
+          ?.closest('[role="dialog"]')
+          ?.getAttribute('aria-hidden'),
+      ).toBe('false'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
     const operation = await startOperation.mock.results[0]?.value;
     if (operation === undefined) throw new Error('trash operation missing');

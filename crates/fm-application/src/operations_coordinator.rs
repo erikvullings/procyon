@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use fm_domain::{EntryId, OperationId};
+use fm_domain::{EntryId, Location, OperationId};
 use fm_operations::{
     ConflictPolicy, ConflictResolution, Operation, OperationKind, Scheduler, SchedulerError,
 };
@@ -63,9 +63,9 @@ impl OperationsCoordinator {
         {
             return self.get(existing);
         }
-        let destination = request.destination.clone().map(Into::into);
+        let destination: Option<Location> = request.destination.clone().map(Into::into);
         let executor = self.planner.plan(request.operation_type, &request)?;
-        let sources = request
+        let sources: Vec<EntryRef> = request
             .sources
             .into_iter()
             .map(|location| EntryRef {
@@ -73,8 +73,45 @@ impl OperationsCoordinator {
                 location: location.into(),
             })
             .collect();
+        let kind = operation_kind(request.operation_type);
+        if matches!(
+            kind,
+            OperationKind::Delete | OperationKind::Copy | OperationKind::Move
+        ) {
+            for active in self.scheduler.list().into_iter().filter(|operation| {
+                !operation.state.is_terminal()
+                    && matches!(
+                        operation.kind,
+                        OperationKind::Delete | OperationKind::Copy | OperationKind::Move
+                    )
+            }) {
+                if !sources.iter().any(|source| {
+                    active
+                        .sources
+                        .iter()
+                        .any(|other| paths_overlap(&source.location, &other.location))
+                }) {
+                    continue;
+                }
+                if active.kind == kind
+                    && active.destination == destination
+                    && sources.len() == active.sources.len()
+                    && sources.iter().all(|source| {
+                        active
+                            .sources
+                            .iter()
+                            .any(|other| other.location == source.location)
+                    })
+                {
+                    return self.get(active.id);
+                }
+                return Err(ApplicationError::InvalidRequest(
+                    "another delete, copy, or move is already active for this path".into(),
+                ));
+            }
+        }
         let operation = Operation::new(
-            operation_kind(request.operation_type),
+            kind,
             sources,
             destination,
             conflict_policy(request.conflict_policy),
@@ -217,6 +254,21 @@ impl OperationsCoordinator {
     pub(crate) fn republish_pending_conflicts(&self) {
         self.scheduler.republish_pending_conflicts();
     }
+}
+
+fn paths_overlap(left: &Location, right: &Location) -> bool {
+    if left.provider_id != right.provider_id {
+        return false;
+    }
+    let left = left.uri.trim_end_matches('/');
+    let right = right.uri.trim_end_matches('/');
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|remaining| remaining.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|remaining| remaining.starts_with('/'))
 }
 
 #[cfg(test)]

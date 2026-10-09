@@ -420,6 +420,8 @@ export const nl = {
     fileName: 'Bestandsnaam',
     applyToAllSimilar: 'Toepassen op alle vergelijkbare conflicten',
     permanentDeleteSummary: 'Dit verwijdert permanent {count} items ({size}).',
+    permanentDeleteBeforePlanning:
+      'De geselecteerde items en alles daarin worden permanent verwijderd. Het tellen begint na bevestiging.',
     irreversible: 'Deze actie kan niet ongedaan worden gemaakt.',
     completedWithWarnings: 'Voltooid met waarschuwingen.',
     showWarning: 'Waarschuwing tonen',

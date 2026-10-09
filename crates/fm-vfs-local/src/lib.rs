@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -32,7 +32,7 @@ use fm_domain::{
 use fm_vfs::{
     CopyCommitOptions, DirectoryPage, EntryRef, FileSystemProvider, ListOptions,
     ProviderCapabilities, ProviderChange, ProviderChangeStream, ProviderReadStream,
-    ProviderWriteStream, RemoveOptions, VfsError, WriteOptions,
+    ProviderWriteStream, RemoveOptions, RemoveReport, VfsError, WriteOptions,
 };
 use futures::stream;
 use notify::{Event, RecursiveMode, Watcher};
@@ -275,6 +275,7 @@ impl FileSystemProvider for LocalFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
+
         if options.use_trash {
             return unsupported(ProviderCapabilities::TRASH);
         }
@@ -282,6 +283,22 @@ impl FileSystemProvider for LocalFileSystemProvider {
             .location
             .to_native_path()
             .map_err(|_| invalid_location(&entry.location))?;
+        if !options.recursive {
+            match tokio::fs::remove_file(&path).await {
+                Ok(()) => return Ok(()),
+                Err(file_error) => {
+                    let metadata = tokio::fs::symlink_metadata(&path)
+                        .await
+                        .map_err(|error| map_io_error(error, &entry.location.uri))?;
+                    if metadata.is_dir() || is_directory_link(&metadata) {
+                        return tokio::fs::remove_dir(path)
+                            .await
+                            .map_err(|error| map_io_error(error, &entry.location.uri));
+                    }
+                    return Err(map_io_error(file_error, &entry.location.uri));
+                }
+            }
+        }
         let metadata = tokio::fs::symlink_metadata(&path)
             .await
             .map_err(|error| map_io_error(error, &entry.location.uri))?;
@@ -304,6 +321,146 @@ impl FileSystemProvider for LocalFileSystemProvider {
                 .await
                 .map_err(|error| map_io_error(error, &entry.location.uri))
         }
+    }
+
+    async fn remove_tree(
+        &self,
+        entry: &EntryRef,
+        override_read_only: bool,
+        cancellation: CancellationToken,
+        removed: Arc<AtomicU64>,
+    ) -> Result<RemoveReport, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let root = entry
+            .location
+            .to_native_path()
+            .map_err(|_| invalid_location(&entry.location))?;
+        let entry = entry.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut report = RemoveReport {
+                removed_items: 0,
+                failures: Vec::new(),
+                cancelled: false,
+            };
+            enum Step {
+                Visit(PathBuf, Option<std::fs::FileType>),
+                Children(PathBuf, std::fs::ReadDir),
+                Complete(PathBuf),
+            }
+            let mut stack = vec![Step::Visit(root, None)];
+            while let Some(step) = stack.pop() {
+                if cancellation.is_cancelled() {
+                    report.cancelled = true;
+                    break;
+                }
+                if let Step::Children(path, mut children) = step {
+                    if let Some(child) = children.next() {
+                        stack.push(Step::Children(path.clone(), children));
+                        match child {
+                            Ok(child) => {
+                                let file_type = child.file_type().ok();
+                                stack.push(Step::Visit(child.path(), file_type));
+                            }
+                            Err(error) => {
+                                let location = Location::from_native_path(&path)
+                                    .unwrap_or_else(|_| entry.location.clone());
+                                report.failures.push((
+                                    EntryRef {
+                                        id: EntryId::new(),
+                                        location,
+                                    },
+                                    format!("{}: {error}", path.display()),
+                                ));
+                            }
+                        }
+                    }
+                    continue;
+                }
+                let (path, visited, cached_type) = match step {
+                    Step::Visit(path, file_type) => (path, false, file_type),
+                    Step::Complete(path) => (path, true, None),
+                    Step::Children(..) => unreachable!("processed above"),
+                };
+                let mut failed = |error: String| {
+                    let location = Location::from_native_path(&path)
+                        .unwrap_or_else(|_| entry.location.clone());
+                    report.failures.push((
+                        EntryRef {
+                            id: EntryId::new(),
+                            location,
+                        },
+                        format!("{}: {error}", path.display()),
+                    ));
+                };
+                if visited {
+                    match std::fs::remove_dir(&path) {
+                        Ok(()) => {
+                            report.removed_items += 1;
+                            removed.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(error) => failed(error.to_string()),
+                    }
+                    continue;
+                }
+                let metadata = if cfg!(windows) || !override_read_only || cached_type.is_none() {
+                    match std::fs::symlink_metadata(&path) {
+                        Ok(metadata) => Some(metadata),
+                        Err(error) => {
+                            failed(error.to_string());
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+                if metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.permissions().readonly())
+                    && !override_read_only
+                {
+                    failed("read-only entry requires explicit override".into());
+                    continue;
+                }
+                let file_type = cached_type.unwrap_or_else(|| {
+                    metadata
+                        .as_ref()
+                        .expect("uncached entries have metadata")
+                        .file_type()
+                });
+                let directory_link = metadata.as_ref().is_some_and(is_directory_link);
+                if file_type.is_dir() && !directory_link {
+                    let directory = match std::fs::read_dir(&path) {
+                        Ok(directory) => directory,
+                        Err(error) => {
+                            failed(error.to_string());
+                            continue;
+                        }
+                    };
+                    stack.push(Step::Complete(path.clone()));
+                    stack.push(Step::Children(path, directory));
+                } else {
+                    let result = if directory_link {
+                        std::fs::remove_dir(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                    match result {
+                        Ok(()) => {
+                            report.removed_items += 1;
+                            removed.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(error) => failed(error.to_string()),
+                    }
+                }
+            }
+            report
+        })
+        .await
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })
     }
 
     async fn open_read(

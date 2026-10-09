@@ -418,6 +418,8 @@ export const pt = {
     fileName: 'Nome do ficheiro',
     applyToAllSimilar: 'Aplicar a todos os conflitos semelhantes',
     permanentDeleteSummary: 'Isto irá eliminar permanentemente {count} itens ({size}).',
+    permanentDeleteBeforePlanning:
+      'Os itens selecionados e todo o seu conteúdo serão eliminados permanentemente. A contagem começará após a confirmação.',
     irreversible: 'Esta ação é irreversível.',
     completedWithWarnings: 'Concluído com avisos.',
     showWarning: 'Mostrar aviso',

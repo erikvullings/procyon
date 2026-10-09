@@ -5,7 +5,7 @@ use std::fs;
 use fm_domain::{EntryKind, Location, ProviderId};
 use fm_vfs::{
     CopyCommitOptions, EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities,
-    ProviderChange, ProviderRegistry, TransferEndpoint, VfsError, WriteOptions,
+    ProviderChange, ProviderRegistry, RemoveOptions, TransferEndpoint, VfsError, WriteOptions,
 };
 use fm_vfs_local::{LocalFileSystemProvider, stable_filesystem_identity};
 use futures::StreamExt;
@@ -84,6 +84,33 @@ async fn creates_one_unicode_child_directory_without_creating_parents() {
         Err(VfsError::PathTraversalName)
     ));
     assert!(!root.path().join("missing").exists());
+}
+
+#[tokio::test]
+async fn non_recursive_remove_deletes_files_and_empty_directories() {
+    let root = tempdir().expect("temporary directory");
+    let file = root.path().join("file");
+    let directory = root.path().join("directory");
+    fs::write(&file, b"data").expect("file fixture");
+    fs::create_dir(&directory).expect("directory fixture");
+    let provider = LocalFileSystemProvider::new();
+    for path in [&file, &directory] {
+        provider
+            .remove(
+                &EntryRef {
+                    id: fm_domain::EntryId::new(),
+                    location: Location::from_native_path(path).expect("local location"),
+                },
+                RemoveOptions {
+                    recursive: false,
+                    use_trash: false,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .expect("remove entry");
+        assert!(!path.exists());
+    }
 }
 
 #[tokio::test]

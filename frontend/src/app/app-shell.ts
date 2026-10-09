@@ -138,7 +138,9 @@ import {
   createOperationsController,
   type OperationConfirmationRequest,
   type OperationsController,
+  withActiveSourceGuard,
   withOperationConfirmation,
+  withPermanentDeleteConfirmation,
 } from '../features/operations/operations-controller';
 import type { PaneRenameRequest } from '../features/panes/pane';
 import { isParentEntry } from '../features/panes/parent-entry';
@@ -2873,6 +2875,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         readonly resolve: (confirmed: boolean) => void;
       }
     | undefined;
+  let pendingPermanentDelete:
+    | {
+        readonly sources: readonly Location[];
+        readonly resolve: (confirmed: boolean) => void;
+      }
+    | undefined;
   let workspaceController: WorkspaceController;
   let tabController: TabController;
   let settingsController: SettingsController;
@@ -4303,6 +4311,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       pending?.resolve(confirmed);
       m.redraw();
     },
+    getPermanentDeleteRequest: () => pendingPermanentDelete?.sources,
+    resolvePermanentDeleteRequest: (confirmed) => {
+      const pending = pendingPermanentDelete;
+      pendingPermanentDelete = undefined;
+      pending?.resolve(confirmed);
+      m.redraw();
+    },
     getFormatSettings: () => currentEntryFormatSettings,
     getFindFilesController: () => findFilesController,
     getTabController: () => tabController,
@@ -4356,16 +4371,28 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         ops: {
           create: () => {
             rawOpsController = createOperationsController(attrs.client);
-            return withOperationConfirmation(
-              rawOpsController,
-              () => currentSettings?.confirmFileOperations !== false,
-              (request) => {
-                pendingOperationConfirmation?.resolve(false);
-                return new Promise<boolean>((resolve) => {
-                  pendingOperationConfirmation = { request, resolve };
-                  m.redraw();
-                });
-              },
+            return withActiveSourceGuard(
+              withPermanentDeleteConfirmation(
+                withOperationConfirmation(
+                  rawOpsController,
+                  () => currentSettings?.confirmFileOperations !== false,
+                  (request) => {
+                    pendingOperationConfirmation?.resolve(false);
+                    return new Promise<boolean>((resolve) => {
+                      pendingOperationConfirmation = { request, resolve };
+                      m.redraw();
+                    });
+                  },
+                ),
+                (sources) => {
+                  pendingPermanentDelete?.resolve(false);
+                  return new Promise<boolean>((resolve) => {
+                    pendingPermanentDelete = { sources, resolve };
+                    m.redraw();
+                  });
+                },
+              ),
+              () => Object.values(operations.byId).filter((operation) => operation !== undefined),
             );
           },
         },
@@ -4599,6 +4626,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       removed = true;
       pendingOperationConfirmation?.resolve(false);
       pendingOperationConfirmation = undefined;
+      pendingPermanentDelete?.resolve(false);
+      pendingPermanentDelete = undefined;
       dialogs.getState().pendingArchiveCredential?.resolve(false);
       dialogs.clearArchiveCredential();
       systemThemeQuery?.removeEventListener('change', handleSystemThemeChange);

@@ -1,10 +1,12 @@
+use std::sync::{Arc, atomic::AtomicU64};
+
 use async_trait::async_trait;
 use fm_domain::{EntryMetadata, EntrySummary, Location, ProviderId};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     ChangeTracking, CopyCommitOptions, DirectoryPage, EntryRef, ListOptions, ProviderCapabilities,
-    ProviderChangeStream, ProviderReadStream, ProviderWriteStream, RemoveOptions,
+    ProviderChangeStream, ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport,
     TransferCapabilities, TransferEndpoint, VfsError, WriteOptions,
 };
 
@@ -153,6 +155,33 @@ pub trait FileSystemProvider: Send + Sync {
         options: RemoveOptions,
         cancellation: CancellationToken,
     ) -> Result<(), VfsError>;
+
+    /// Deletes a tree without a separate counting pass. Providers without a single-pass
+    /// implementation retain their recursive removal behavior.
+    async fn remove_tree(
+        &self,
+        entry: &EntryRef,
+        override_read_only: bool,
+        cancellation: CancellationToken,
+        removed: Arc<AtomicU64>,
+    ) -> Result<RemoveReport, VfsError> {
+        let _ = override_read_only;
+        self.remove(
+            entry,
+            RemoveOptions {
+                recursive: true,
+                use_trash: false,
+            },
+            cancellation,
+        )
+        .await?;
+        removed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(RemoveReport {
+            removed_items: 1,
+            failures: Vec::new(),
+            cancelled: false,
+        })
+    }
 
     /// Opens an entry as a streaming reader.
     async fn open_read(

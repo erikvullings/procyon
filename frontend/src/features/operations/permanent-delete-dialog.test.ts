@@ -17,6 +17,26 @@ afterEach(() => {
 });
 
 describe('PermanentDeleteDialog', () => {
+  it('shows the selected sources without inventing totals before planning', () => {
+    m.mount(root, {
+      view: () =>
+        m(PermanentDeleteDialog, {
+          open: true,
+          sources: [{ providerId: 'local', uri: 'file:///tmp/cache/uv' }],
+          formatSettings,
+          onConfirm: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    const dialog = root.querySelector('.fm-permanent-delete-modal');
+    expect(dialog?.textContent).toContain('Counting will begin after you confirm');
+    expect(dialog?.textContent).toContain('uv');
+    expect(dialog?.textContent).not.toContain('0 items');
+    expect(dialog?.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.disabled).toBe(
+      false,
+    );
+  });
   it('states exact totals and defaults focus to permanent delete', () => {
     m.mount(root, {
       view: () =>
@@ -111,6 +131,39 @@ describe('PermanentDeleteDialog', () => {
 
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(root.querySelector('[role="dialog"]')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('closes immediately when confirming before planning finishes', () => {
+    let open = true;
+    let finish: (() => void) | undefined;
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    m.mount(root, {
+      view: () =>
+        m(PermanentDeleteDialog, {
+          open,
+          sources: [{ providerId: 'local', uri: 'file:///tmp/cache/uv' }],
+          formatSettings,
+          onConfirm,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
+    m.redraw.sync();
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(root.querySelector('[role="dialog"]')?.getAttribute('aria-hidden')).toBe('true');
+    open = false;
+    m.redraw.sync();
+    open = true;
+    m.redraw.sync();
+    expect(root.querySelector('[role="dialog"]')?.getAttribute('aria-hidden')).toBe('false');
+    finish?.();
   });
 
   it('reopens when the backend rejects the confirmation', async () => {

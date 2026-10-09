@@ -28,5 +28,5 @@ pub use registry::ProviderRegistry;
 pub use transfer::{TransferCapabilities, TransferEndpoint};
 pub use types::{
     CopyCommitOptions, DirectoryPage, EntryRef, ListOptions, ProviderChange, ProviderChangeStream,
-    ProviderReadStream, ProviderWriteStream, RemoveOptions, WriteOptions,
+    ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport, WriteOptions,
 };

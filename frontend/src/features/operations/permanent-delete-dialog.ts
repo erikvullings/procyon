@@ -8,8 +8,8 @@ import { affectedItems } from './affected-items';
 export interface PermanentDeleteDialogAttrs {
   readonly open: boolean;
   readonly operationId?: string;
-  readonly itemCount: number;
-  readonly totalBytes: number;
+  readonly itemCount?: number;
+  readonly totalBytes?: number;
   /** Top-level items the user selected; named so the confirmation is about files, not a count. */
   readonly sources?: readonly Location[];
   readonly formatSettings: EntryFormatSettings;
@@ -17,10 +17,11 @@ export interface PermanentDeleteDialogAttrs {
   readonly onCancel: () => void;
 }
 
-/** Irreversible-delete confirmation shown only after backend planning completes. */
+/** Irreversible-delete confirmation, before planning or for an existing pending job. */
 export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs> = () => {
   let keydownHandler: ((event: KeyboardEvent) => void) | undefined;
   let hiddenOperationId: string | undefined;
+  let hidden = false;
 
   const removeFocusTrap = () => {
     if (keydownHandler !== undefined) document.removeEventListener('keydown', keydownHandler);
@@ -53,11 +54,16 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
 
   return {
     view: ({ attrs }) => {
-      const formattedSize = formatEntrySize(
-        { kind: 'file', size: attrs.totalBytes },
-        attrs.formatSettings,
-      );
-      const hidden = attrs.operationId !== undefined && attrs.operationId === hiddenOperationId;
+      if (
+        !attrs.open ||
+        (attrs.operationId !== undefined && attrs.operationId !== hiddenOperationId)
+      ) {
+        hidden = false;
+      }
+      const formattedSize =
+        attrs.totalBytes === undefined
+          ? undefined
+          : formatEntrySize({ kind: 'file', size: attrs.totalBytes }, attrs.formatSettings);
       return m(ModalPanel, {
         className: 'fm-permanent-delete-modal',
         title: t('operation', 'confirmDeleteTitle'),
@@ -71,10 +77,12 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
           [
             m(
               'p',
-              t('operation', 'permanentDeleteSummary', {
-                count: attrs.itemCount,
-                size: formattedSize,
-              }),
+              attrs.itemCount === undefined || formattedSize === undefined
+                ? t('operation', 'permanentDeleteBeforePlanning')
+                : t('operation', 'permanentDeleteSummary', {
+                    count: attrs.itemCount,
+                    size: formattedSize,
+                  }),
             ),
             (attrs.sources ?? []).length === 0
               ? undefined
@@ -98,9 +106,10 @@ export const PermanentDeleteDialog: FactoryComponent<PermanentDeleteDialogAttrs>
             onclick: () => {
               const operationId = attrs.operationId;
               hiddenOperationId = operationId;
+              hidden = true;
               m.redraw();
               void Promise.resolve(attrs.onConfirm()).catch(() => {
-                if (hiddenOperationId === operationId) hiddenOperationId = undefined;
+                if (hiddenOperationId === operationId) hidden = false;
                 m.redraw();
               });
             },

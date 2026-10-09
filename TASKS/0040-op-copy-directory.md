@@ -11,8 +11,9 @@ Depends on: 0039
 `file-manager-coding-agent-spec.md` §33 step 7 item 4, §16 milestone 2 and §17 safety requirements.
 
 ## Acceptance Criteria
-- Recursive copy driven by the engine's planning phase: enumerate the tree, compute total items and
-  bytes, then execute — with the enumeration itself cancellable and progress-reported.
+- Recursive copy begins with the selected root and discovers children as their parent directories
+  are copied. Total items and bytes are unknown up front for the default copy-link policy.
+  Explicit copy-target traversal retains its cycle-protected planning pass.
 - Rejects destination-inside-source before any bytes are written (§17); integration test asserts.
 - Symbolic links are not followed recursively by default (§6, §35); the policy (copy the link vs
   copy the target) is explicit in the request and documented.
@@ -37,3 +38,7 @@ Depends on: 0039
   destination-inside-source rejection, and the 10,000-file fixture in temporary roots.
 - 2026-07-31: Local-provider native copy avoids per-file process spawning; macOS clone attempts are
   reserved for files >= 1 MiB. Windows behavior compiles but was not exercised on a Windows host.
+- 2026-10-07: The default copy-link path and copy-then-delete move fallback now discover each
+  directory during execution, rather than recursively counting the whole tree before the first
+  write. File copies still use the existing atomic temporary-file and conflict-resolution path;
+  same-filesystem moves still use native rename.

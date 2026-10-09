@@ -5,7 +5,9 @@ import type { Location } from '../../models';
 import {
   createOperationsController,
   type OperationsController,
+  withActiveSourceGuard,
   withOperationConfirmation,
+  withPermanentDeleteConfirmation,
 } from './operations-controller';
 
 const src: Location = { providerId: 'local', uri: 'file:///src/a.txt' };
@@ -58,6 +60,61 @@ describe('OperationsController', () => {
       },
       undefined,
     );
+  });
+
+  it('does not queue a second confirmation for the same pending delete', async () => {
+    let answer: ((accepted: boolean) => void) | undefined;
+    const confirm = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const guarded = withActiveSourceGuard(
+      withPermanentDeleteConfirmation(controller, confirm),
+      () => [],
+    );
+    const first = guarded.delete([src], false, false);
+    const second = guarded.delete([src], false, false);
+    expect(confirm).toHaveBeenCalledOnce();
+    answer?.(false);
+    await Promise.all([first, second]);
+    expect(client.startOperation).not.toHaveBeenCalled();
+  });
+
+  it('blocks overlapping copy and move while a source is awaiting confirmation', async () => {
+    let answer: ((accepted: boolean) => void) | undefined;
+    const guarded = withActiveSourceGuard(
+      withOperationConfirmation(
+        controller,
+        () => true,
+        () =>
+          new Promise<boolean>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+      () => [],
+    );
+    const first = guarded.copy([src], dest);
+    const second = await guarded.move([src], dest);
+    expect(second).toBeUndefined();
+    answer?.(false);
+    await first;
+    expect(client.startOperation).not.toHaveBeenCalled();
+  });
+
+  it('reuses a running job without prompting again for a descendant path', async () => {
+    const existing = await controller.delete([src], true, false);
+    if (existing === undefined) throw new Error('mock operation missing');
+    const confirm = vi.fn(() => Promise.resolve(true));
+    const guarded = withActiveSourceGuard(
+      withPermanentDeleteConfirmation(controller, confirm),
+      () => [{ ...existing, state: 'running' }],
+    );
+    const descendant = { ...src, uri: `${src.uri}/nested` };
+    expect(await guarded.delete([descendant], false, false)).toBeDefined();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(client.startOperation).toHaveBeenCalledTimes(1);
   });
 
   it('extract uses type copy with a single-element sources array', async () => {
@@ -230,6 +287,42 @@ describe('OperationsController', () => {
 
     const unguarded = withOperationConfirmation(controller, () => false, confirm);
     await unguarded.copy([src], dest);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(client.startOperation).toHaveBeenCalledOnce();
+  });
+
+  it('confirms permanent delete before submitting the job, without waiting for planning', async () => {
+    let decide: ((confirmed: boolean) => void) | undefined;
+    const confirm = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          decide = resolve;
+        }),
+    );
+    const guarded = withPermanentDeleteConfirmation(controller, confirm);
+    const operation = guarded.delete([src], false, false);
+    expect(confirm).toHaveBeenCalledWith([src]);
+    expect(client.startOperation).not.toHaveBeenCalled();
+
+    decide?.(true);
+    await operation;
+    expect(client.startOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'delete',
+        sources: [src],
+        permanentDeleteConfirmed: true,
+      }),
+      undefined,
+    );
+  });
+
+  it('does not submit a cancelled permanent delete and skips the prompt when disabled', async () => {
+    const confirm = vi.fn().mockResolvedValue(false);
+    const guarded = withPermanentDeleteConfirmation(controller, confirm);
+    await expect(guarded.delete([src], false, false)).resolves.toBeUndefined();
+    expect(client.startOperation).not.toHaveBeenCalled();
+
+    await guarded.delete([src2], true, false);
     expect(confirm).toHaveBeenCalledOnce();
     expect(client.startOperation).toHaveBeenCalledOnce();
   });
