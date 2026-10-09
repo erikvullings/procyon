@@ -382,7 +382,17 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   ingestion smoke at its 60-second per-job test deadline; therefore catalog
   signing and aggregate collection were skipped and no release was published.
   The Gemma-specific smoke deadline is now 300 seconds, with per-media elapsed
-  times logged, while the E5 deadline stays at 60 seconds. A fresh four-target
-  run on this change is required to distinguish slow inference from a stalled
-  job; neither the Windows result nor E5 evaluation qualifies Gemma retrieval
-  quality, resources, or installation across supported targets.
+  times logged, while the E5 deadline stays at 60 seconds. The initial
+  Windows result and E5 evaluation alone do not qualify Gemma.
+- 2026-10-09: Read-only rerun 37974984924 on the bounded-smoke commit
+  d3f921fe08e4994a905727a71af102979f4fbe23 succeeded on all four
+  supported targets: packaged smoke, lifecycle/privacy checks, signed
+  per-target catalog, aggregate E5 evaluation, and fingerprint-locked
+  candidate collection. The retained candidate artifact is
+  `semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23`
+  (ID 11640886748; expires 2026-10-23). The Linux ARM signed catalog contains
+  both E5 and the pinned Gemma original-file profile (`embedding-gemma2`).
+  Publication was skipped. This qualifies the candidate workflow path, not
+  Gemma for product release: independently labelled model-specific retrieval
+  quality, per-dimension/platform latency and peak RAM, signed installed
+  offline lifecycle and release decision remain open.
