@@ -603,7 +603,7 @@ mod tests {
     fn dense_backend_uses_each_requested_text_role_without_changing_search_default() {
         let directory = tempfile::Builder::new()
             .prefix("intent-search-")
-            .tempdir_in("target")
+            .tempdir()
             .unwrap();
         let catalog = SemanticCatalog::open(directory.path().join("catalog.sqlite")).unwrap();
         let role = |role| {
